@@ -1,0 +1,20 @@
+thesis/*
+
+
+# Ignore Python virtual environments
+thesis/lib/
+thesis/bin/
+thesis/include/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore installed dependencies
+site-packages/
+*.egg-info/
+
+# Ignore Hugging Face cache
+~/.cache/huggingface/
