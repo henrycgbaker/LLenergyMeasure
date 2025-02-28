@@ -1,5 +1,5 @@
 thesis/*
-
+emissions.csv
 
 # Ignore Python virtual environments
 thesis/lib/
