@@ -1,0 +1,71 @@
+[
+    {
+        "experiment_setup": {
+            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+            "task_type": "text_generation",
+            "cpu_count": 128,
+            "cpu_model": "AMD EPYC 7742 64-Core Processor",
+            "gpu_count": 4,
+            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+            "total_runs": 1,
+            "date": "2025-03-03"
+        },
+        "experiment_results": {
+            "total_inference_time_sec": 3.2583537199534476,
+            "average_latency_ms_per_batch": 3258.3537199534476,
+            "average_ttft_ms": 30.811988282948732,
+            "throughput_queries_per_sec": 0.306903450621772,
+            "throughput_tokens_per_sec": 15.3451725310886,
+            "total_tokens_generated": 50,
+            "energy_consumed_kwh": 0.0005607713338283634,
+            "energy_consumed_joules": 2018.7768017821084,
+            "energy_efficiency_tokens_per_joule": 0.024767473034097518
+        }
+    },
+    {
+        "experiment_setup": {
+            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+            "task_type": "text_generation",
+            "cpu_count": 128,
+            "cpu_model": "AMD EPYC 7742 64-Core Processor",
+            "gpu_count": 4,
+            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+            "total_runs": 2,
+            "date": "2025-03-03"
+        },
+        "experiment_results": {
+            "total_inference_time_sec": 2.9895807951688766,
+            "average_latency_ms_per_batch": 2989.5807951688766,
+            "average_ttft_ms": 31.013576313853264,
+            "throughput_queries_per_sec": 0.6689901150127716,
+            "throughput_tokens_per_sec": 33.44950575063858,
+            "total_tokens_generated": 100,
+            "energy_consumed_kwh": 0.0005031272693872277,
+            "energy_consumed_joules": 1811.2581697940198,
+            "energy_efficiency_tokens_per_joule": 0.055210240962707276
+        }
+    },
+    {
+        "experiment_setup": {
+            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+            "task_type": "text_generation",
+            "total_runs": 3,
+            "cpu_count": 128,
+            "cpu_model": "AMD EPYC 7742 64-Core Processor",
+            "gpu_count": 4,
+            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+            "date": "2025-03-03"
+        },
+        "experiment_results": {
+            "total_inference_time_sec": 4.09140178700909,
+            "average_latency_ms_per_batch": 4091.40178700909,
+            "average_ttft_ms": 104.6776189468801,
+            "throughput_queries_per_sec": 0.7332450236311476,
+            "throughput_tokens_per_sec": 36.66225118155738,
+            "total_tokens_generated": 150,
+            "energy_consumed_kwh": 0.0008540026943333823,
+            "energy_consumed_joules": 3074.4096996001763,
+            "energy_efficiency_tokens_per_joule": 0.04878985387650427
+        }
+    }
+]
