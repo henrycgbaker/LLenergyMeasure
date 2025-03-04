@@ -3,26 +3,28 @@ import json
 import sys
 import time
 import logging
+import uuid
 from datetime import datetime
 from contextlib import redirect_stdout
 from io import StringIO
+
+import torch
+import torch.nn as nn
+import torch.distributed as dist
+import psutil
+
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from accelerate import Accelerator, notebook_launcher
 from codecarbon import EmissionsTracker
-import torch
+from fvcore.nn import FlopCountAnalysis
+
+# Optional: if using optimum benchmark branch
 from optimum_benchmark import Benchmark, BenchmarkConfig, TorchrunConfig, InferenceConfig, PyTorchConfig
 from optimum_benchmark.logging_utils import setup_logging
-import psutil
-from fvcore.nn import FlopCountAnalysis
-import torch.nn as nn
-import torch.distributed as dist
-import uuid
-from datetime import datetime
-
 
 # -----------------------------------------------------------------------------
-# for the FLOP counter:
-
+# For the FLOP counter:
+# -----------------------------------------------------------------------------
 class ModelWrapper(nn.Module):
     def __init__(self, model):
         super().__init__()
@@ -42,47 +44,38 @@ def load_model_tokenizer_backend(model_name, backend="pytorch"):
     return model, tokenizer
 
 # -----------------------------------------------------------------------------
-# Accelerator 
+# Accelerator (Distributed Environment Setup)
 # -----------------------------------------------------------------------------
-def prep_distributed_env(model, tokenizer, placement):
-    """Prepares model and tokenizer for FSDP distributed inference using Accelerate."""
-    accelerator = Accelerator(device_placement=True)
-    device = torch.device("cuda", accelerator.process_index % 2)  
-    print(f"Using device: {device}")
-
-    
-    model, tokenizer = accelerator.prepare(model, tokenizer)
-    accelerator.print(f"Using {accelerator.num_processes} GPUs")
-    print(f"Model is on {next(model.parameters()).device}") 
-    return model, tokenizer, accelerator
-
-
-
 def prep_distributed_env(model, tokenizer, gpu_list=[0, 1]):
-    """Prepares model and tokenizer for FSDP distributed inference using Accelerate, 
-    """
-    
+    """Prepares model and tokenizer for distributed inference using Accelerate."""
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, gpu_list))
-
     accelerator = Accelerator(device_placement=True)
-
     local_rank = accelerator.local_process_index  # Get local process index
     selected_device = gpu_list[local_rank % len(gpu_list)]  # Cycle through provided GPUs
     device = torch.device(f"cuda:{selected_device}")
-
     accelerator.print(f"Using device: {device} (Local Rank: {local_rank})")
-
     model, tokenizer = accelerator.prepare(model, tokenizer)
-
     accelerator.print(f"Using {accelerator.num_processes} GPUs: {gpu_list}")
     print(f"Model is on {next(model.parameters()).device}") 
-
     return model, tokenizer, accelerator
-
 
 # -----------------------------------------------------------------------------
 # Energy tracking functions 
 # -----------------------------------------------------------------------------
+
+def detect_cpu_vendor():
+    """Detects the CPU vendor by reading /proc/cpuinfo."""
+    try:
+        with open("/proc/cpuinfo", "r") as f:
+            cpuinfo = f.read()
+        if "AuthenticAMD" in cpuinfo:
+            return "AMD"
+        elif "GenuineIntel" in cpuinfo:
+            return "Intel"
+    except Exception as e:
+        print("Error reading /proc/cpuinfo:", e)
+    return "Unknown"
+
 def start_energy_tracking():
     """Starts CodeCarbon energy tracking."""
     tracker = EmissionsTracker(measure_power_secs=1, allow_multiple_runs=True)
@@ -99,7 +92,7 @@ def stop_energy_tracking(tracker):
 # Inference function that measures performance metrics.
 # -----------------------------------------------------------------------------
 def run_gen_inference_with_metrics(model, tokenizer, accelerator, prompts, 
-                                   max_input_tokens=512, max_output_tokens=50, batch_size=8):
+                                   max_input_tokens, max_output_tokens, batch_size):
     """
     Runs inference and returns performance metrics.
     """
@@ -166,10 +159,16 @@ def run_gen_inference_with_metrics(model, tokenizer, accelerator, prompts,
 def get_compute_performance_metrics(model=None, tokenizer=None, device=None, input_length=128):
     """
     Returns a dictionary of low-level compute metrics.
-    If model, tokenizer, and device are provided, attempts to compute FLOPs using fvcore.
+    Attempts to compute FLOPs using fvcore if possible.
     Also reports GPU memory usage, GPU utilization, and CPU usage.
     """
     compute_metrics = {}
+    
+    cpu_vendor = detect_cpu_vendor() # NEED TO BUILD OUT LOGIC AND TOOLING FOR THIS
+    
+
+    # Always set a "gpu" key: if a device is provided, use its string representation.
+    compute_metrics["gpu"] = str(device) if device is not None else "No device provided"
 
     # GPU memory metrics (if CUDA is available)
     if torch.cuda.is_available() and device is not None:
@@ -188,13 +187,11 @@ def get_compute_performance_metrics(model=None, tokenizer=None, device=None, inp
             compute_metrics["gpu_utilization_percent"] = gpu_util
         except Exception as e:
             compute_metrics["gpu_utilization_percent"] = f"Error: {str(e)}"
-    else:
-        compute_metrics["gpu"] = "CUDA not available or device not provided"
-
+    # (No need for an else block since we already set "gpu")
+    
     # CPU metrics using psutil
     try:
         process = psutil.Process(os.getpid())
-        # Measure CPU usage over a short interval
         cpu_usage = process.cpu_percent(interval=1.0)
         compute_metrics["cpu_usage_percent"] = cpu_usage
         cpu_mem = process.memory_info().rss
@@ -202,19 +199,14 @@ def get_compute_performance_metrics(model=None, tokenizer=None, device=None, inp
     except ImportError:
         compute_metrics["cpu_usage_percent"] = "psutil not installed"
 
-    # FLOPs estimation fvcore 
+    # FLOPs estimation using fvcore 
     if model is not None and tokenizer is not None and device is not None:
         try:
             from fvcore.nn import FlopCountAnalysis
-            # Use the underlying model if it is wrapped (e.g. in DistributedDataParallel)
             model_to_trace = model.module if hasattr(model, "module") else model
-            # Set to eval mode to disable any training-specific branches
             model_to_trace.eval()
-            # Wrap the model in our custom wrapper
             wrapped_model = ModelWrapper(model_to_trace)
-            # Create a dummy input tensor of shape (1, input_length)
             dummy_input_ids = torch.ones((1, input_length), dtype=torch.long).to(device)
-            # Run FLOP analysis on the wrapped model.
             flops_analyzer = FlopCountAnalysis(wrapped_model, dummy_input_ids)
             compute_metrics["flops_forward_pass"] = flops_analyzer.total()
         except ImportError:
@@ -256,13 +248,12 @@ def extract_experiment_results(metrics, codecarbon_data, model=None, tokenizer=N
     CodeCarbon energy data. Also extracts low-level compute performance metrics.
     """
     energy_kwh = codecarbon_data.energy_consumed
-    energy_joules = energy_kwh * 3.6e6  # kWh to Joules
+    energy_joules = energy_kwh * 3.6e6  # Convert kWh to Joules
     tokens_per_joule = (metrics["total_generated_tokens"] / energy_joules) if energy_joules > 0 else 0
 
-    # Placeholder for task-specific performance (e.g., text-generation vs summarization)
+    # Placeholder for task-specific performance
     task_specific_performance = {}
 
-    # Gather compute performance metrics (pass model, tokenizer, and accelerator device if available)
     compute_metrics = get_compute_performance_metrics(model=model, tokenizer=tokenizer, device=device)
 
     return {
@@ -272,8 +263,6 @@ def extract_experiment_results(metrics, codecarbon_data, model=None, tokenizer=N
             "average_ttft_ms": metrics["avg_ttft_ms"],
             "throughput_queries_per_sec": metrics["throughput_qps"],
             "throughput_tokens_per_sec": metrics["tokens_per_sec"],
-            #"total_tokens_generated": metrics["total_generated_tokens"],
-            #"num_runs": metrics["num_runs"]
         },
         "energy_performance": {
             "cpu_power": codecarbon_data.cpu_power,
@@ -295,7 +284,6 @@ def save_results(task_type, benchmark_results):
     """
     Saves the benchmark results to a JSON file. Appends new experiments if the file exists.
     """
-    # output directory
     output_dir = "benchmark_results"
     os.makedirs(output_dir, exist_ok=True)
     output_json_path = os.path.join(output_dir, f"{task_type}_results.json")
@@ -311,73 +299,110 @@ def save_results(task_type, benchmark_results):
     else:
         existing_data = []
     
-    # save it to that
     existing_data.append(benchmark_results)
     with open(output_json_path, "w") as json_file:
         json.dump(existing_data, json_file, indent=4)
     
     return output_json_path
 
+# -----------------------------------------------------------------------------
+# Aggregate the metrics (provided earlier)
+# -----------------------------------------------------------------------------
+def aggregate_experiments(results):
+    """
+    Aggregates results across multiple processes.
+    Assumes `results` is a list of dictionaries, one per process.
+    Keeps variables & set up constant across runs, avgs rates and latencies, sums counts and consumption measures.
+    """
+    aggregated = {}
+
+    # Use the first process's setup and variables (they are shared)
+    aggregated["experiment_setup"] = results[0]["experiment_setup"].copy()
+    if "accelerate_config" in aggregated["experiment_setup"]:
+        aggregated["experiment_setup"]["accelerate_config"].pop("local_process_index", None)
+    aggregated["experiment_variables"] = results[0]["experiment_variables"]
+
+    # Aggregate inference performance by averaging
+    inf_keys = ["total_inference_time_sec", "average_latency_ms_per_batch", 
+                "average_ttft_ms", "throughput_queries_per_sec", "throughput_tokens_per_sec"]
+    agg_inference = {key: sum(proc["experiment_results"]["inference_performance"][key] for proc in results) / len(results)
+                     for key in inf_keys}
+
+    # Aggregate energy performance: average for power/efficiency; sum for energies/emissions
+    energy_keys_avg = ["cpu_power", "gpu_power", "ram_power", "energy_efficiency_tokens_per_joule"]
+    energy_keys_sum = ["cpu_energy", "gpu_energy", "ram_energy", 
+                       "total_energy_consumed_kwh", "total_energy_consumed_joules", "final_emissions"]
+    agg_energy = {}
+    for key in energy_keys_avg:
+        agg_energy[key] = sum(proc["experiment_results"]["energy_performance"][key] for proc in results) / len(results)
+    for key in energy_keys_sum:
+        agg_energy[key] = sum(proc["experiment_results"]["energy_performance"][key] for proc in results)
+
+    # Aggregate compute performance: assume string fields are identical; average numeric ones
+    compute_setup = results[0]["experiment_results"]["compute_performance"]
+    agg_compute = {
+        "gpu": compute_setup["gpu"],
+        "flops_forward_pass": compute_setup["flops_forward_pass"],
+    }
+    numeric_compute_keys = ["cpu_usage_percent", "cpu_memory_usage_bytes"]
+    for key in numeric_compute_keys:
+        agg_compute[key] = sum(proc["experiment_results"]["compute_performance"][key] for proc in results) / len(results)
+    
+    task_perf = results[0]["experiment_results"].get("task-specific_performance", {})
+
+    aggregated["experiment_results"] = {
+        "inference_performance": agg_inference,
+        "energy_performance": agg_energy,
+        "compute_performance": agg_compute,
+        "task-specific_performance": task_perf
+    }
+    return aggregated
 
 # -----------------------------------------------------------------------------
-# Experiment runner with optional optimum_benchmark integration.
+# Persistent Experiment ID
 # -----------------------------------------------------------------------------
-
 ID_FILE = "experiment_id.txt"
-
 def get_persistent_unique_id():
-    # Check if file exists, if not, start at 1
     if os.path.exists(ID_FILE):
         with open(ID_FILE, "r") as f:
-            last_id = int(f.read().strip())  # Read last used ID
+            last_id = int(f.read().strip())
     else:
-        last_id = 0  # Start from 1 when file is missing
-
-    new_id = last_id + 1  # Increment ID
+        last_id = 0
+    new_id = last_id + 1
     with open(ID_FILE, "w") as f:
-        f.write(str(new_id))  # Save new ID
+        f.write(str(new_id))
+    return f"{new_id:04d}"
 
-    return f"{new_id:04d}"  # Format as four-digit number
-
-
+# -----------------------------------------------------------------------------
+# Experiment runner with aggregation integration.
+# -----------------------------------------------------------------------------
 def run_experiment(model_name, prompts, inference_fn, task_type, 
                    backend="pytorch", use_optimum=False, **inference_kwargs):
     """
     Runs an experiment in one of two modes.
     
-    In the standard mode (use_optimum=False), this function:
-      1. Loads the model via the specified backend.
+    For the standard mode (use_optimum=False):
+      1. Loads the model.
       2. Prepares the distributed environment.
       3. Starts energy tracking, runs inference, and stops tracking.
       4. Extracts per-process experiment results.
-      5. Aggregates the per-process results.
+      5. Gathers & aggregates per-process results across all processes.
       6. Saves the aggregated benchmark results.
-    
-    The final saved JSON structure nests the aggregated results (experiment_results) along
-    with common experiment_setup and experiment_variables.
     """
     if use_optimum:
-        # --- Optimum benchmark branch (unchanged) ---
+        # --- Optimum benchmark branch ---
         setup_logging(level="INFO")
-
         launcher_config = TorchrunConfig(nproc_per_node=1)
-        scenario_config = InferenceConfig(
-            latency=True, 
-            memory=True, 
-            input_shapes={"sequence_length": 128} 
-        )
+        scenario_config = InferenceConfig(latency=True, memory=True, input_shapes={"sequence_length": 128})
         backend_config = PyTorchConfig(model=model_name, device="cuda", device_ids="0", no_weights=True)
-
         benchmark_config = BenchmarkConfig(
             name=f"{backend}_{model_name}",
             scenario=scenario_config,
             launcher=launcher_config,
             backend=backend_config,
         )
-
         benchmark_report = Benchmark.launch(benchmark_config)
         benchmark_results = benchmark_report.to_dict()
-
         print(json.dumps({
             "model": model_name,
             "optimum_benchmark_results": benchmark_results
@@ -389,35 +414,47 @@ def run_experiment(model_name, prompts, inference_fn, task_type,
         model, tokenizer, accelerator = prep_distributed_env(model, tokenizer)
         tracker = start_energy_tracking()
         
-        # Run inference (assumed to be executed in a distributed fashion)
+        # Run inference (this runs on each process)
         inference_metrics = inference_fn(model, tokenizer, accelerator, prompts, **inference_kwargs)
-        
         codecarbon_data = stop_energy_tracking(tracker)
-        experiment_results = extract_experiment_results(inference_metrics, codecarbon_data)
-
-
+        experiment_results = extract_experiment_results(inference_metrics, codecarbon_data, model=model, tokenizer=tokenizer, device=accelerator.device)
+        
         # Extract common experimental setup and variables
         experiment_setup = extract_experiment_setup(model_name, codecarbon_data, accelerator, task_type)
-        
         experiment_variables = {
-            "input_tokens": inference_metrics["total_input_tokens"],
-            "output_tokens": inference_metrics["total_generated_tokens"],
+            "total_token_inputted": inference_metrics["total_input_tokens"],
+            "total_tokens_outputted": inference_metrics["total_generated_tokens"],
             "number_runs": inference_metrics["num_runs"]
         }
-        unique_id = get_persistent_unique_id()
-        current_time = datetime.now().strftime("%B %d, %Y at %I:%M:%S %p")
-        experiment_title = f"EXPERIMENT {unique_id}: {current_time}"
         
-        # Compose the final benchmark_results structure
-        benchmark_results = {
-            experiment_title: {
-                "experiment_setup": experiment_setup,
-                "experiment_variables": experiment_variables,
-                "experiment_results": experiment_results 
-            }
+        # Build the local result dictionary for this process
+        local_result = {
+            "experiment_setup": experiment_setup,
+            "experiment_variables": experiment_variables,
+            "experiment_results": experiment_results
         }
         
-        # Save the aggregated results 
-        output_json_path = save_results(task_type, benchmark_results)
+        # Gather results from all processes if running distributed
+        if dist.is_available() and dist.is_initialized():
+            world_size = dist.get_world_size()
+            all_results = [None] * world_size
+            # Gather local_result from each process into all_results
+            dist.all_gather_object(all_results, local_result)
+        else:
+            all_results = [local_result]
         
-        return
+        # Only the main process (local rank 0) aggregates and saves the results.
+        if accelerator.local_process_index == 0:
+            aggregated_result = aggregate_experiments(all_results)
+            unique_id = get_persistent_unique_id()
+            current_time = datetime.now().strftime("%B %d, %Y at %I:%M:%S %p")
+            experiment_title = f"EXPERIMENT #{unique_id}"
+            
+            benchmark_results = {
+                experiment_title: aggregated_result
+            }
+            output_json_path = save_results(task_type, benchmark_results)
+            print(f"Aggregated benchmark results saved to {output_json_path}")
+            return benchmark_results
+        else:
+            return None
