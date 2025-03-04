@@ -3,973 +3,53 @@
         "experiment_setup": {
             "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             "task_type": "text_generation",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "total_runs": 1,
-            "date": "2025-03-03"
-        },
-        "experiment_results": {
-            "total_inference_time_sec": 3.2583537199534476,
-            "average_latency_ms_per_batch": 3258.3537199534476,
-            "average_ttft_ms": 30.811988282948732,
-            "throughput_queries_per_sec": 0.306903450621772,
-            "throughput_tokens_per_sec": 15.3451725310886,
-            "total_tokens_generated": 50,
-            "energy_consumed_kwh": 0.0005607713338283634,
-            "energy_consumed_joules": 2018.7768017821084,
-            "energy_efficiency_tokens_per_joule": 0.024767473034097518
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "total_runs": 2,
-            "date": "2025-03-03"
-        },
-        "experiment_results": {
-            "total_inference_time_sec": 2.9895807951688766,
-            "average_latency_ms_per_batch": 2989.5807951688766,
-            "average_ttft_ms": 31.013576313853264,
-            "throughput_queries_per_sec": 0.6689901150127716,
-            "throughput_tokens_per_sec": 33.44950575063858,
-            "total_tokens_generated": 100,
-            "energy_consumed_kwh": 0.0005031272693872277,
-            "energy_consumed_joules": 1811.2581697940198,
-            "energy_efficiency_tokens_per_joule": 0.055210240962707276
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "total_runs": 3,
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "date": "2025-03-03"
-        },
-        "experiment_results": {
-            "total_inference_time_sec": 4.09140178700909,
-            "average_latency_ms_per_batch": 4091.40178700909,
-            "average_ttft_ms": 104.6776189468801,
-            "throughput_queries_per_sec": 0.7332450236311476,
-            "throughput_tokens_per_sec": 36.66225118155738,
-            "total_tokens_generated": 150,
-            "energy_consumed_kwh": 0.0008540026943333823,
-            "energy_consumed_joules": 3074.4096996001763,
-            "energy_efficiency_tokens_per_joule": 0.04878985387650427
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-03",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": null,
-            "output_tokens": 150
-        },
-        "experiment_results": {
-            "performance": {
-                "total_inference_time_sec": 5.807851883582771,
-                "average_latency_ms_per_batch": 5807.851883582771,
-                "average_ttft_ms": 47.99634125083685,
-                "throughput_queries_per_sec": 0.5165420985476903,
-                "throughput_tokens_per_sec": 25.82710492738451,
-                "total_tokens_generated": 150,
-                "num_runs": 3
-            },
-            "energy": {
-                "cpu_power": 112.5,
-                "gpu_power": 668.6884726542255,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00018183166041853838,
-                "gpu_energy": 0.0010694230777588132,
-                "ram_energy": 0.00030468873722414974,
-                "total_energy_consumed_kwh": 0.001555943475401501,
-                "total_energy_consumed_joules": 5601.396511445404,
-                "energy_efficiency_tokens_per_joule": 0.02677903620882812,
-                "final_emissions": 0.0005927366669542019
-            }
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-03",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": null,
-            "output_tokens": 150
-        },
-        "experiment_results": {
-            "performance": {
-                "total_inference_time_sec": 3.690832010935992,
-                "average_latency_ms_per_batch": 3690.832010935992,
-                "average_ttft_ms": 46.87858512625098,
-                "throughput_queries_per_sec": 0.8128248565935686,
-                "throughput_tokens_per_sec": 40.641242829678426,
-                "total_tokens_generated": 150,
-                "num_runs": 3
-            },
-            "energy": {
-                "cpu_power": 112.5,
-                "gpu_power": 558.0228417622959,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00011694990037358367,
-                "gpu_energy": 0.00048769205682930306,
-                "ram_energy": 0.00019592496704536663,
-                "total_energy_consumed_kwh": 0.0008005669242482534,
-                "total_energy_consumed_joules": 2882.0409272937122,
-                "energy_efficiency_tokens_per_joule": 0.05204645033991681,
-                "final_emissions": 0.00030497596979237214
-            }
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-03",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": null,
-            "output_tokens": 150
-        },
-        "experiment_results": {
-            "performance": {
-                "total_inference_time_sec": 2.7755715209059417,
-                "average_latency_ms_per_batch": 2775.5715209059417,
-                "average_ttft_ms": 106.01719096302986,
-                "throughput_queries_per_sec": 1.080858474517279,
-                "throughput_tokens_per_sec": 54.04292372586395,
-                "total_tokens_generated": 150,
-                "num_runs": 3
-            },
-            "energy": {
-                "cpu_power": 112.5,
-                "gpu_power": 361.3660819318235,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 9.137811111577322e-05,
-                "gpu_energy": 0.0003476483336868341,
-                "ram_energy": 0.0001530362434789017,
-                "total_energy_consumed_kwh": 0.000592062688281509,
-                "total_energy_consumed_joules": 2131.4256778134322,
-                "energy_efficiency_tokens_per_joule": 0.07037543066192233,
-                "final_emissions": 0.00022554628110084087
-            }
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
             "date": "2025-03-04",
             "cpu_count": 128,
             "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 1536,
-            "output_tokens": 150
-        },
-        "experiment_results": {
-            "performance": {
-                "total_inference_time_sec": 3.829248495399952,
-                "average_latency_ms_per_batch": 3829.248495399952,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 0.7834435408419897,
-                "throughput_tokens_per_sec": 39.172177042099484,
-                "total_tokens_generated": 150,
-                "num_runs": 3
-            },
-            "energy": {
-                "cpu_power": 112.5,
-                "gpu_power": 385.8889433525045,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00012065025488846005,
-                "gpu_energy": 0.00048775539020340375,
-                "ram_energy": 0.00020212489598916896,
-                "total_energy_consumed_kwh": 0.0008105305410810327,
-                "total_energy_consumed_joules": 2917.909947891718,
-                "energy_efficiency_tokens_per_joule": 0.05140665842288236,
-                "final_emissions": 0.00030877160962481943
-            }
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 1536,
-            "output_tokens": 150
-        },
-        "experiment_results": {
-            "performance": {
-                "total_inference_time_sec": 5.020318424794823,
-                "average_latency_ms_per_batch": 5020.318424794823,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 0.5975716570453612,
-                "throughput_tokens_per_sec": 29.87858285226806,
-                "total_tokens_generated": 150,
-                "num_runs": 3
-            },
-            "energy": {
-                "cpu_power": 112.5,
-                "gpu_power": 79.66679341501025,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00015547567908652125,
-                "gpu_energy": 0.000698870836870924,
-                "ram_energy": 0.00026043882954315296,
-                "total_energy_consumed_kwh": 0.0011147853455005983,
-                "total_energy_consumed_joules": 4013.2272438021537,
-                "energy_efficiency_tokens_per_joule": 0.03737640330027491,
-                "final_emissions": 0.0004246774773684529
-            }
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 1536,
-            "output_tokens": 150
-        },
-        "experiment_results": {
-            "performance": {
-                "total_inference_time_sec": 4.405871281400323,
-                "average_latency_ms_per_batch": 4405.871281400323,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 0.6809095882271229,
-                "throughput_tokens_per_sec": 34.04547941135614,
-                "total_tokens_generated": 150,
-                "num_runs": 3
-            },
-            "energy": {
-                "cpu_power": 112.5,
-                "gpu_power": 285.69904483545696,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00013808324276760685,
-                "gpu_energy": 0.0005983296453280218,
-                "ram_energy": 0.00023123652108647606,
-                "total_energy_consumed_kwh": 0.0009676494091821048,
-                "total_energy_consumed_joules": 3483.537873055577,
-                "energy_efficiency_tokens_per_joule": 0.043059672512883534,
-                "final_emissions": 0.0003686260424279228
-            }
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference performance": {
-                "total_inference_time_sec": 7.624095981940627,
-                "average_latency_ms_per_batch": 3812.0479909703135,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 1.3116309164637003,
-                "throughput_tokens_per_sec": 65.58154582318501,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 289.4098363220737,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.0002417430438217707,
-                "gpu_energy": 0.0009724424446062585,
-                "ram_energy": 0.00040493145420702483,
-                "total_energy_consumed_kwh": 0.001619116942635054,
-                "total_energy_consumed_joules": 5828.820993486194,
-                "energy_efficiency_tokens_per_joule": 0.08578064081205418,
-                "final_emissions": 0.0006168025992968239
-            },
-            "task-specific performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 8.15219265408814,
-                "average_latency_ms_per_batch": 4076.0963270440698,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 1.2266638466873359,
-                "throughput_tokens_per_sec": 61.3331923343668,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 354.3198812821852,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00026088926970260215,
-                "gpu_energy": 0.001044465835569497,
-                "ram_energy": 0.00043583109710925534,
-                "total_energy_consumed_kwh": 0.0017411862023813543,
-                "total_energy_consumed_joules": 6268.270328572876,
-                "energy_efficiency_tokens_per_joule": 0.07976682143410958,
-                "final_emissions": 0.0006633048837971769
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 8.155038401018828,
-                "average_latency_ms_per_batch": 4077.519200509414,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 1.2262357953765952,
-                "throughput_tokens_per_sec": 61.31178976882976,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 371.7806942617151,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.0002603725245426176,
-                "gpu_energy": 0.0010486991722800099,
-                "ram_energy": 0.00043334235302526985,
-                "total_energy_consumed_kwh": 0.0017424140498478974,
-                "total_energy_consumed_joules": 6272.690579452431,
-                "energy_efficiency_tokens_per_joule": 0.07971061120691324,
-                "final_emissions": 0.0006637726322895565
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 8.235722966957837,
-                "average_latency_ms_per_batch": 4117.861483478919,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 1.214222484185121,
-                "throughput_tokens_per_sec": 60.71112420925605,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 362.7514906195493,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00026200044872530276,
-                "gpu_energy": 0.0010490605614705828,
-                "ram_energy": 0.000436041728255414,
-                "total_energy_consumed_kwh": 0.0017471027384512998,
-                "total_energy_consumed_joules": 6289.569858424679,
-                "energy_efficiency_tokens_per_joule": 0.07949669234220617,
-                "final_emissions": 0.0006655587882130226
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 10.103197081014514,
-                "average_latency_ms_per_batch": 5051.598540507257,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 0.9897857004879735,
-                "throughput_tokens_per_sec": 49.489285024398676,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 603.0694346966926,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00031733668019296606,
-                "gpu_energy": 0.0018836767847290048,
-                "ram_energy": 0.0005316183382532099,
-                "total_energy_consumed_kwh": 0.00273263180317518,
-                "total_energy_consumed_joules": 9837.474491430648,
-                "energy_efficiency_tokens_per_joule": 0.050826053011425475,
-                "final_emissions": 0.0010409960854195848
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 10.230211943853647,
-                "average_latency_ms_per_batch": 5115.105971926823,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 0.9774968548924385,
-                "throughput_tokens_per_sec": 48.87484274462193,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 589.8162551984462,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00031913396042364186,
-                "gpu_energy": 0.0019027534666520296,
-                "ram_energy": 0.0005346544814609824,
-                "total_energy_consumed_kwh": 0.002756541908536654,
-                "total_energy_consumed_joules": 9923.550870731953,
-                "energy_efficiency_tokens_per_joule": 0.0503851903933577,
-                "final_emissions": 0.0010501046400570382
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 9.609458426013589,
-                "average_latency_ms_per_batch": 4804.729213006794,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 1.0406413719350909,
-                "throughput_tokens_per_sec": 52.03206859675454,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 445.2114011423819,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.0003038457370712422,
-                "gpu_energy": 0.0017807775357425726,
-                "ram_energy": 0.0005088604282156486,
-                "total_energy_consumed_kwh": 0.0025934837010294634,
-                "total_energy_consumed_joules": 9336.541323706067,
-                "energy_efficiency_tokens_per_joule": 0.053553021688070766,
-                "final_emissions": 0.000987987615907174
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 9.98050385992974,
-                "average_latency_ms_per_batch": 4990.25192996487,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 1.0019534224267508,
-                "throughput_tokens_per_sec": 50.09767112133754,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 715.5292116126603,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.0003129972505266778,
-                "gpu_energy": 0.001865626770282347,
-                "ram_energy": 0.0005242497198840961,
-                "total_energy_consumed_kwh": 0.002702873740693121,
-                "total_energy_consumed_joules": 9730.345466495237,
-                "energy_efficiency_tokens_per_joule": 0.05138563699733618,
-                "final_emissions": 0.0010296597515170446
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 9.516558612696826,
-                "average_latency_ms_per_batch": 4758.279306348413,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 1.050800022043491,
-                "throughput_tokens_per_sec": 52.54000110217455,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 635.3290238620494,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00029986698781431193,
-                "gpu_energy": 0.0017491250104058054,
-                "ram_energy": 0.0005023431127653182,
-                "total_energy_consumed_kwh": 0.0025513351109854353,
-                "total_energy_consumed_joules": 9184.806399547568,
-                "energy_efficiency_tokens_per_joule": 0.054437728815343284,
-                "final_emissions": 0.0009719311105299016
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.NO",
-                "num_processes": 1,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 8.909039220772684,
-                "average_latency_ms_per_batch": 4454.519610386342,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 1.1224554917979919,
-                "throughput_tokens_per_sec": 56.12277458989959,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 778.8182806478335,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.0002807138858770486,
-                "gpu_energy": 0.0016325474171381416,
-                "ram_energy": 0.0004702775552068521,
-                "total_energy_consumed_kwh": 0.002383538858222042,
-                "total_energy_consumed_joules": 8580.739889599352,
-                "energy_efficiency_tokens_per_joule": 0.058270033404234305,
-                "final_emissions": 0.000908009128039687
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
+            "gpu_count": 2,
             "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
             "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
             "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
             "accelerate_config": {
                 "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 2.635169151239097,
-                "average_latency_ms_per_batch": 1317.5845756195486,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 3.7948228087361473,
-                "throughput_tokens_per_sec": 189.74114043680737,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 698.0864273696374,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 9.070010569121222e-05,
-                "gpu_energy": 0.0005859335242988095,
-                "ram_energy": 0.0001518640137964447,
-                "total_energy_consumed_kwh": 0.0008284976437864665,
-                "total_energy_consumed_joules": 2982.591517631279,
-                "energy_efficiency_tokens_per_joule": 0.1676394494667815,
-                "final_emissions": 0.0003156161774004544
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 3
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 3.246740653179586,
-                "average_latency_ms_per_batch": 1623.370326589793,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 3.080011946814057,
-                "throughput_tokens_per_sec": 154.00059734070285,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 750.0642018177916,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00010821487262728624,
-                "gpu_energy": 0.000703449173862225,
-                "ram_energy": 0.00018113642741445396,
-                "total_energy_consumed_kwh": 0.0009928004739039654,
-                "total_energy_consumed_joules": 3574.0817060542754,
-                "energy_efficiency_tokens_per_joule": 0.13989607432673704,
-                "final_emissions": 0.0003782073405337156
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
+                "num_processes": 2,
                 "local_process_index": 1
             },
             "country": "Germany",
             "region": "mecklenburg-vorpommern"
         },
         "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
+            "input_tokens": 2560,
+            "output_tokens": 250,
+            "number_runs": 5
         },
         "experiment_results": {
             "inference_performance": {
-                "total_inference_time_sec": 3.4434093511663377,
-                "average_latency_ms_per_batch": 1721.7046755831689,
+                "total_inference_time_sec": 1.6303716260008514,
+                "average_latency_ms_per_batch": 1630.3716260008514,
                 "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 2.9040985198616713,
-                "throughput_tokens_per_sec": 145.20492599308358,
-                "total_tokens_generated": 500,
-                "num_runs": 10
+                "throughput_queries_per_sec": 3.0667854618302766,
+                "throughput_tokens_per_sec": 153.33927309151383,
+                "total_tokens_generated": 250,
+                "num_runs": 5
             },
             "energy_performance": {
                 "cpu_power": 112.5,
-                "gpu_power": 755.8817175114579,
+                "gpu_power": 206.7211472465922,
                 "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00011429962785041425,
-                "gpu_energy": 0.0007476347647781267,
-                "ram_energy": 0.00019131300056627178,
-                "total_energy_consumed_kwh": 0.0010532473931948129,
-                "total_energy_consumed_joules": 3791.690615501326,
-                "energy_efficiency_tokens_per_joule": 0.13186729897104,
-                "final_emissions": 0.000401234594437564
+                "cpu_energy": 5.5131682282080874e-05,
+                "gpu_energy": 8.077867573064168e-05,
+                "ram_energy": 9.229300790318006e-05,
+                "total_energy_consumed_kwh": 0.0002282033659159026,
+                "total_energy_consumed_joules": 821.5321172972493,
+                "energy_efficiency_tokens_per_joule": 0.3043094661015477,
+                "final_emissions": 8.69340722456631e-05
+            },
+            "compute_performance": {
+                "gpu": "CUDA not available or device not provided",
+                "cpu_usage_percent": 0.0,
+                "cpu_memory_usage_bytes": 2866872320,
+                "flops_forward_pass": "model, tokenizer, or device not provided"
             },
             "task-specific_performance": {}
         }
@@ -981,102 +61,50 @@
             "date": "2025-03-04",
             "cpu_count": 128,
             "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
+            "gpu_count": 2,
             "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
             "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
             "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
             "accelerate_config": {
                 "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 2
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 3.457033898681402,
-                "average_latency_ms_per_batch": 1728.516949340701,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 2.8926531509610727,
-                "throughput_tokens_per_sec": 144.63265754805363,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 755.4807256456219,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00011523479368770496,
-                "gpu_energy": 0.0007489180991342437,
-                "ram_energy": 0.00019291064778252832,
-                "total_energy_consumed_kwh": 0.001057063540604477,
-                "total_energy_consumed_joules": 3805.4287461761173,
-                "energy_efficiency_tokens_per_joule": 0.13139123955544424,
-                "final_emissions": 0.00040268835579327554
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
+                "num_processes": 2,
                 "local_process_index": 0
             },
             "country": "Germany",
             "region": "mecklenburg-vorpommern"
         },
         "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
+            "input_tokens": 2560,
+            "output_tokens": 250,
+            "number_runs": 5
         },
         "experiment_results": {
             "inference_performance": {
-                "total_inference_time_sec": 2.79115789802745,
-                "average_latency_ms_per_batch": 1395.578949013725,
+                "total_inference_time_sec": 1.6500603151507676,
+                "average_latency_ms_per_batch": 1650.0603151507676,
                 "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 3.582742490873461,
-                "throughput_tokens_per_sec": 179.13712454367305,
-                "total_tokens_generated": 500,
-                "num_runs": 10
+                "throughput_queries_per_sec": 3.030192262725345,
+                "throughput_tokens_per_sec": 151.50961313626723,
+                "total_tokens_generated": 250,
+                "num_runs": 5
             },
             "energy_performance": {
                 "cpu_power": 112.5,
-                "gpu_power": 0.0,
+                "gpu_power": 198.39541982451755,
                 "ram_power": 188.8243260383606,
-                "cpu_energy": 9.376109375443775e-05,
-                "gpu_energy": 0.0005198306936549102,
-                "ram_energy": 0.00015689692905505073,
-                "total_energy_consumed_kwh": 0.0007704887164643986,
-                "total_energy_consumed_joules": 2773.759379271835,
-                "energy_efficiency_tokens_per_joule": 0.18026076945840183,
-                "final_emissions": 0.00029351767653711266
+                "cpu_energy": 5.6137621388188566e-05,
+                "gpu_energy": 8.077867573064168e-05,
+                "ram_energy": 9.398215838464865e-05,
+                "total_energy_consumed_kwh": 0.0002308984555034789,
+                "total_energy_consumed_joules": 831.234439812524,
+                "energy_efficiency_tokens_per_joule": 0.3007575095858454,
+                "final_emissions": 8.796076662405028e-05
             },
             "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6746537984,
-                "max_memory_reserved_bytes": 6746537984,
-                "gpu_utilization_percent": "Error: could not convert string to float: '30\\n100\\n100\\n100'",
+                "gpu": "CUDA not available or device not provided",
                 "cpu_usage_percent": 0.0,
-                "cpu_memory_usage_bytes": 2872692736,
-                "flops_forward_pass": "fvcore not installed",
-                "additional_metric_placeholder": "Additional metrics can be added here"
+                "cpu_memory_usage_bytes": 2867286016,
+                "flops_forward_pass": "model, tokenizer, or device not provided"
             },
             "task-specific_performance": {}
         }
@@ -1088,113 +116,50 @@
             "date": "2025-03-04",
             "cpu_count": 128,
             "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
+            "gpu_count": 2,
             "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
             "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
             "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
             "accelerate_config": {
                 "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
+                "num_processes": 2,
                 "local_process_index": 1
             },
             "country": "Germany",
             "region": "mecklenburg-vorpommern"
         },
         "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
+            "input_tokens": 2560,
+            "output_tokens": 250,
+            "number_runs": 5
         },
         "experiment_results": {
             "inference_performance": {
-                "total_inference_time_sec": 3.0664715780876577,
-                "average_latency_ms_per_batch": 1533.2357890438288,
+                "total_inference_time_sec": 1.6470338897779584,
+                "average_latency_ms_per_batch": 1647.0338897779584,
                 "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 3.2610770213746103,
-                "throughput_tokens_per_sec": 163.05385106873052,
-                "total_tokens_generated": 500,
-                "num_runs": 10
+                "throughput_queries_per_sec": 3.035760242112605,
+                "throughput_tokens_per_sec": 151.78801210563023,
+                "total_tokens_generated": 250,
+                "num_runs": 5
             },
             "energy_performance": {
                 "cpu_power": 112.5,
-                "gpu_power": 730.3068631768879,
+                "gpu_power": 215.91758236010517,
                 "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00010211127072398086,
-                "gpu_energy": 0.0005802929642300114,
-                "ram_energy": 0.00017093573790795971,
-                "total_energy_consumed_kwh": 0.000853339972861952,
-                "total_energy_consumed_joules": 3072.023902303027,
-                "energy_efficiency_tokens_per_joule": 0.16275915028693666,
-                "final_emissions": 0.0003250798626617606
+                "cpu_energy": 5.554491277143825e-05,
+                "gpu_energy": 8.709062522171962e-05,
+                "ram_energy": 9.29786668583825e-05,
+                "total_energy_consumed_kwh": 0.00023561420485154034,
+                "total_energy_consumed_joules": 848.2111374655452,
+                "energy_efficiency_tokens_per_joule": 0.294737936060354,
+                "final_emissions": 8.975723133819429e-05
             },
             "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6746537984,
-                "max_memory_reserved_bytes": 6746537984,
-                "gpu_utilization_percent": "Error: could not convert string to float: '0\\n100\\n100\\n100'",
-                "cpu_usage_percent": 0.0,
-                "cpu_memory_usage_bytes": 2874163200,
-                "flops_forward_pass": "fvcore not installed",
-                "additional_metric_placeholder": "Additional metrics can be added here"
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 2
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 3.4072210611775517,
-                "average_latency_ms_per_batch": 1703.6105305887759,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 2.934943116530265,
-                "throughput_tokens_per_sec": 146.74715582651325,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 740.8883099777396,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.0001124428369803354,
-                "gpu_energy": 0.0006492696860931346,
-                "ram_energy": 0.00018824858124380918,
-                "total_energy_consumed_kwh": 0.0009499611043172794,
-                "total_energy_consumed_joules": 3419.8599755422056,
-                "energy_efficiency_tokens_per_joule": 0.1462048164474123,
-                "final_emissions": 0.0003618876826896676
-            },
-            "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6746537984,
-                "max_memory_reserved_bytes": 6746537984,
-                "gpu_utilization_percent": "Error: could not convert string to float: '0\\n100\\n100\\n100'",
+                "gpu": "CUDA not available or device not provided",
                 "cpu_usage_percent": 1.0,
-                "cpu_memory_usage_bytes": 2873163776,
-                "flops_forward_pass": "fvcore not installed",
-                "additional_metric_placeholder": "Additional metrics can be added here"
+                "cpu_memory_usage_bytes": 2875604992,
+                "flops_forward_pass": "model, tokenizer, or device not provided"
             },
             "task-specific_performance": {}
         }
@@ -1206,585 +171,13 @@
             "date": "2025-03-04",
             "cpu_count": 128,
             "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
+            "gpu_count": 2,
             "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
             "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
             "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
             "accelerate_config": {
                 "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 3
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 3.523285952862352,
-                "average_latency_ms_per_batch": 1761.642976431176,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 2.8382595491222906,
-                "throughput_tokens_per_sec": 141.91297745611453,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 723.3729136785014,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00011679937939334197,
-                "gpu_energy": 0.000671527481671319,
-                "ram_energy": 0.00019554582178890145,
-                "total_energy_consumed_kwh": 0.0009838726828535625,
-                "total_energy_consumed_joules": 3541.941658272825,
-                "energy_efficiency_tokens_per_joule": 0.1411655098361551,
-                "final_emissions": 0.0003748062985330647
-            },
-            "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6746537984,
-                "max_memory_reserved_bytes": 6746537984,
-                "gpu_utilization_percent": "Error: could not convert string to float: '0\\n100\\n100\\n100'",
-                "cpu_usage_percent": 0.0,
-                "cpu_memory_usage_bytes": 2874355712,
-                "flops_forward_pass": "fvcore not installed",
-                "additional_metric_placeholder": "Additional metrics can be added here"
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 2.9213318270631135,
-                "average_latency_ms_per_batch": 1460.6659135315567,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 3.423096242392034,
-                "throughput_tokens_per_sec": 171.15481211960173,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 507.08781138553326,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 9.761873177194501e-05,
-                "gpu_energy": 0.0005618223938910205,
-                "ram_energy": 0.0001634698659417158,
-                "total_energy_consumed_kwh": 0.0008229109916046813,
-                "total_energy_consumed_joules": 2962.4795697768527,
-                "energy_efficiency_tokens_per_joule": 0.16877753524479572,
-                "final_emissions": 0.00031348794225180337
-            },
-            "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6746537984,
-                "max_memory_reserved_bytes": 6746537984,
-                "gpu_utilization_percent": "Error: could not convert string to float: '24\\n35\\n100\\n100'",
-                "cpu_usage_percent": 0.0,
-                "cpu_memory_usage_bytes": 2874155008,
-                "flops_forward_pass": "Error: embedding(): argument 'indices' (position 2) must be Tensor, not dict"
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 2
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 3.0499373730272055,
-                "average_latency_ms_per_batch": 1524.9686865136027,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 3.278755848706012,
-                "throughput_tokens_per_sec": 163.9377924353006,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 553.5525347788156,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00010213974605721888,
-                "gpu_energy": 0.0005860599132745392,
-                "ram_energy": 0.0001709659525214725,
-                "total_energy_consumed_kwh": 0.0008591656118532307,
-                "total_energy_consumed_joules": 3092.9962026716303,
-                "energy_efficiency_tokens_per_joule": 0.16165554925936093,
-                "final_emissions": 0.0003272991398354882
-            },
-            "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6746537984,
-                "max_memory_reserved_bytes": 6746537984,
-                "gpu_utilization_percent": "Error: could not convert string to float: '0\\n35\\n100\\n100'",
-                "cpu_usage_percent": 0.0,
-                "cpu_memory_usage_bytes": 2872442880,
-                "flops_forward_pass": "Error: embedding(): argument 'indices' (position 2) must be Tensor, not dict"
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 1
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 3.1983757405541837,
-                "average_latency_ms_per_batch": 1599.1878702770919,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 3.1265869963943937,
-                "throughput_tokens_per_sec": 156.32934981971968,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 505.283265627027,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00010642243301845156,
-                "gpu_energy": 0.0006037774274645358,
-                "ram_energy": 0.00017815633732152467,
-                "total_energy_consumed_kwh": 0.0008883561978045119,
-                "total_energy_consumed_joules": 3198.0823120962427,
-                "energy_efficiency_tokens_per_joule": 0.1563436932529312,
-                "final_emissions": 0.0003384192935536288
-            },
-            "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6746537984,
-                "max_memory_reserved_bytes": 6746537984,
-                "gpu_utilization_percent": "Error: could not convert string to float: '0\\n36\\n100\\n100'",
-                "cpu_usage_percent": 0.0,
-                "cpu_memory_usage_bytes": 2873008128,
-                "flops_forward_pass": "Error: embedding(): argument 'indices' (position 2) must be Tensor, not dict"
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 3
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 3.5367066087201238,
-                "average_latency_ms_per_batch": 1768.3533043600619,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 2.8274892735925405,
-                "throughput_tokens_per_sec": 141.374463679627,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 533.5205292473541,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00011685550879337824,
-                "gpu_energy": 0.0006535627450716675,
-                "ram_energy": 0.00019563601257949887,
-                "total_energy_consumed_kwh": 0.0009660542664445445,
-                "total_energy_consumed_joules": 3477.7953592003605,
-                "energy_efficiency_tokens_per_joule": 0.1437692412456849,
-                "final_emissions": 0.0003680183728020492
-            },
-            "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6746537984,
-                "max_memory_reserved_bytes": 6746537984,
-                "gpu_utilization_percent": "Error: could not convert string to float: '0\\n24\\n100\\n100'",
-                "cpu_usage_percent": 0.0,
-                "cpu_memory_usage_bytes": 2872819712,
-                "flops_forward_pass": "Error: embedding(): argument 'indices' (position 2) must be Tensor, not dict"
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 2.8035366497933865,
-                "average_latency_ms_per_batch": 1401.7683248966932,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 3.5669232291780366,
-                "throughput_tokens_per_sec": 178.34616145890183,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 1031.274027790927,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 9.44351623475086e-05,
-                "gpu_energy": 0.0005878554702789529,
-                "ram_energy": 0.00015805353612277496,
-                "total_energy_consumed_kwh": 0.0008403441687492364,
-                "total_energy_consumed_joules": 3025.239007497251,
-                "energy_efficiency_tokens_per_joule": 0.16527619760319198,
-                "final_emissions": 0.0003201291110850216
-            },
-            "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6746537984,
-                "max_memory_reserved_bytes": 6746537984,
-                "gpu_utilization_percent": "Error: could not convert string to float: '35\\n100\\n100\\n100'",
-                "cpu_usage_percent": 0.0,
-                "cpu_memory_usage_bytes": 2872893440,
-                "flops_forward_pass": "Error: 'function' object has no attribute '_modules'"
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 1
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 3.017092785332352,
-                "average_latency_ms_per_batch": 1508.546392666176,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 3.314448945228059,
-                "throughput_tokens_per_sec": 165.72244726140295,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 794.4432586681111,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00010176217208208982,
-                "gpu_energy": 0.0006340563405728972,
-                "ram_energy": 0.00017035799828681727,
-                "total_energy_consumed_kwh": 0.0009061765109418043,
-                "total_energy_consumed_joules": 3262.2354393904957,
-                "energy_efficiency_tokens_per_joule": 0.15326913378557933,
-                "final_emissions": 0.0003452079418432804
-            },
-            "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6746537984,
-                "max_memory_reserved_bytes": 6746537984,
-                "gpu_utilization_percent": "Error: could not convert string to float: '0\\n100\\n100\\n100'",
-                "cpu_usage_percent": 0.0,
-                "cpu_memory_usage_bytes": 2872651776,
-                "flops_forward_pass": "Error: 'function' object has no attribute '_modules'"
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 3
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 3.4940015701577067,
-                "average_latency_ms_per_batch": 1747.0007850788534,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 2.8620479410799566,
-                "throughput_tokens_per_sec": 143.10239705399783,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 675.1696404512937,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00011611318388895599,
-                "gpu_energy": 0.0007116341804263016,
-                "ram_energy": 0.0001944231212190948,
-                "total_energy_consumed_kwh": 0.0010221704855343523,
-                "total_energy_consumed_joules": 3679.8137479236684,
-                "energy_efficiency_tokens_per_joule": 0.1358764421927943,
-                "final_emissions": 0.0003893958464643115
-            },
-            "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6746537984,
-                "max_memory_reserved_bytes": 6746537984,
-                "gpu_utilization_percent": "Error: could not convert string to float: '0\\n100\\n100\\n88'",
-                "cpu_usage_percent": 0.0,
-                "cpu_memory_usage_bytes": 2873479168,
-                "flops_forward_pass": "Error: 'function' object has no attribute '_modules'"
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 2
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 5120,
-            "output_tokens": 500
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 3.5562863247469068,
-                "average_latency_ms_per_batch": 1778.1431623734534,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 2.8119220689328714,
-                "throughput_tokens_per_sec": 140.59610344664358,
-                "total_tokens_generated": 500,
-                "num_runs": 10
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 662.5713408470895,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 0.00011780651700973977,
-                "gpu_energy": 0.00071915307532322,
-                "ram_energy": 0.00019728191387654057,
-                "total_energy_consumed_kwh": 0.0010342415062095005,
-                "total_energy_consumed_joules": 3723.2694223542017,
-                "energy_efficiency_tokens_per_joule": 0.13429057725396967,
-                "final_emissions": 0.00039399430179050925
-            },
-            "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6746537984,
-                "max_memory_reserved_bytes": 6746537984,
-                "gpu_utilization_percent": "Error: could not convert string to float: '0\\n100\\n100\\n88'",
-                "cpu_usage_percent": 0.0,
-                "cpu_memory_usage_bytes": 2871660544,
-                "flops_forward_pass": "Error: 'function' object has no attribute '_modules'"
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 1
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 2560,
-            "output_tokens": 250
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 1.7718305848538876,
-                "average_latency_ms_per_batch": 1771.8305848538876,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 2.8219402254038415,
-                "throughput_tokens_per_sec": 141.09701127019207,
-                "total_tokens_generated": 250,
-                "num_runs": 5
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 649.6509680171946,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 5.9386045875726276e-05,
-                "gpu_energy": 0.0002878799525447562,
-                "ram_energy": 9.94336690739109e-05,
-                "total_energy_consumed_kwh": 0.00044669966749439336,
-                "total_energy_consumed_joules": 1608.118802979816,
-                "energy_efficiency_tokens_per_joule": 0.15546115096518637,
-                "final_emissions": 0.00017017023833198916
-            },
-            "compute_performance": null,
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
+                "num_processes": 2,
                 "local_process_index": 0
             },
             "country": "Germany",
@@ -1792,362 +185,753 @@
         },
         "experiment_variables": {
             "input_tokens": 2560,
-            "output_tokens": 250
+            "output_tokens": 250,
+            "number_runs": 5
         },
         "experiment_results": {
             "inference_performance": {
-                "total_inference_time_sec": 1.7156551158986986,
-                "average_latency_ms_per_batch": 1715.6551158986986,
+                "total_inference_time_sec": 1.6728255939669907,
+                "average_latency_ms_per_batch": 1672.8255939669907,
                 "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 2.9143386416452866,
-                "throughput_tokens_per_sec": 145.71693208226432,
+                "throughput_queries_per_sec": 2.9889547470055406,
+                "throughput_tokens_per_sec": 149.44773735027704,
                 "total_tokens_generated": 250,
                 "num_runs": 5
             },
             "energy_performance": {
                 "cpu_power": 112.5,
-                "gpu_power": 696.9654036751415,
+                "gpu_power": 208.44271144407816,
                 "ram_power": 188.8243260383606,
-                "cpu_energy": 5.7707916916115214e-05,
-                "gpu_energy": 0.00028637911800899474,
-                "ram_energy": 9.663037101640193e-05,
-                "total_energy_consumed_kwh": 0.0004407174059415119,
-                "total_energy_consumed_joules": 1586.5826613894428,
-                "energy_efficiency_tokens_per_joule": 0.15757136774775013,
-                "final_emissions": 0.00016789129579341896
-            },
-            "compute_performance": null,
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 3
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 2560,
-            "output_tokens": 250
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 2.0247010202147067,
-                "average_latency_ms_per_batch": 2024.7010202147067,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 2.4695004102234224,
-                "throughput_tokens_per_sec": 123.47502051117112,
-                "total_tokens_generated": 250,
-                "num_runs": 5
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 989.3543720226647,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 6.635896123771092e-05,
-                "gpu_energy": 0.0003507136139049294,
-                "ram_energy": 0.00011106242389632237,
-                "total_energy_consumed_kwh": 0.0005281349990389626,
-                "total_energy_consumed_joules": 1901.2859965402656,
-                "energy_efficiency_tokens_per_joule": 0.13148994967349484,
-                "final_emissions": 0.00020119302788389282
-            },
-            "compute_performance": null,
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 2
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 2560,
-            "output_tokens": 250
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 2.055415445007384,
-                "average_latency_ms_per_batch": 2055.415445007384,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 2.4325982429221447,
-                "throughput_tokens_per_sec": 121.62991214610723,
-                "total_tokens_generated": 250,
-                "num_runs": 5
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 900.8815845035301,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 6.763695587869734e-05,
-                "gpu_energy": 0.0003564605629478024,
-                "ram_energy": 0.00011320498142926686,
-                "total_energy_consumed_kwh": 0.0005373025002557665,
-                "total_energy_consumed_joules": 1934.2890009207595,
-                "energy_efficiency_tokens_per_joule": 0.12924645690535133,
-                "final_emissions": 0.00020468538747243426
-            },
-            "compute_performance": null,
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 0
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 2560,
-            "output_tokens": 250
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 1.5945560950785875,
-                "average_latency_ms_per_batch": 1594.5560950785875,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 3.1356689271904075,
-                "throughput_tokens_per_sec": 156.78344635952038,
-                "total_tokens_generated": 250,
-                "num_runs": 5
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 757.3240782344283,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 5.32764702802524e-05,
-                "gpu_energy": 0.0003548033393983019,
-                "ram_energy": 8.920244091414075e-05,
-                "total_energy_consumed_kwh": 0.000497282250592695,
-                "total_energy_consumed_joules": 1790.216102133702,
-                "energy_efficiency_tokens_per_joule": 0.13964794512910084,
-                "final_emissions": 0.00018943967336328715
+                "cpu_energy": 5.63171154644806e-05,
+                "gpu_energy": 8.709062522171962e-05,
+                "ram_energy": 9.430324090332102e-05,
+                "total_energy_consumed_kwh": 0.00023771098158952123,
+                "total_energy_consumed_joules": 855.7595337222764,
+                "energy_efficiency_tokens_per_joule": 0.2921381417891789,
+                "final_emissions": 9.055599843652812e-05
             },
             "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6715080704,
-                "max_memory_reserved_bytes": 6715080704,
-                "gpu_utilization_percent": "Error: could not convert string to float: '38\\n100\\n100\\n100'",
-                "cpu_usage_percent": 1.0,
-                "cpu_memory_usage_bytes": 2868162560,
-                "flops_forward_pass": "Error: Tried to trace <__torch__.torch.classes.c10d.ProcessGroup object at 0x14812dc0> but it is not part of the active trace. Modules that are called during a trace must be registered as submodules of the thing being traced."
-            },
-            "task-specific_performance": {}
-        }
-    },
-    {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 1
-            },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 2560,
-            "output_tokens": 250
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 1.9721107250079513,
-                "average_latency_ms_per_batch": 1972.1107250079513,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 2.5353546008324868,
-                "throughput_tokens_per_sec": 126.76773004162433,
-                "total_tokens_generated": 250,
-                "num_runs": 5
-            },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 839.2161834546296,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 6.501556966395583e-05,
-                "gpu_energy": 0.0004290656210343968,
-                "ram_energy": 0.00010874317419971391,
-                "total_energy_consumed_kwh": 0.0006028243648980666,
-                "total_energy_consumed_joules": 2170.1677136330395,
-                "energy_efficiency_tokens_per_joule": 0.11519846988299325,
-                "final_emissions": 0.00022964594180791847
-            },
-            "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6715080704,
-                "max_memory_reserved_bytes": 6715080704,
-                "gpu_utilization_percent": "Error: could not convert string to float: '0\\n100\\n100\\n100'",
+                "gpu": "CUDA not available or device not provided",
                 "cpu_usage_percent": 0.0,
-                "cpu_memory_usage_bytes": 2869555200,
-                "flops_forward_pass": "Error: Tried to trace <__torch__.torch.classes.c10d.ProcessGroup object at 0x15e18750> but it is not part of the active trace. Modules that are called during a trace must be registered as submodules of the thing being traced."
+                "cpu_memory_usage_bytes": 2875355136,
+                "flops_forward_pass": "model, tokenizer, or device not provided"
             },
             "task-specific_performance": {}
         }
     },
     {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 3
+        "EXPERIMENT_42fd24e5-f643-4993-8de0-6ae1f698c9e2_20250304_182901": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "20250304_182901",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 1
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
             },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 2560,
-            "output_tokens": 250
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 1.9805642259307206,
-                "average_latency_ms_per_batch": 1980.5642259307206,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 2.524533127750687,
-                "throughput_tokens_per_sec": 126.22665638753435,
-                "total_tokens_generated": 250,
-                "num_runs": 5
+            "experiment_variables": {
+                "input_tokens": 2560,
+                "output_tokens": 250,
+                "number_runs": 5
             },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 674.9706827624764,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 6.495414860546589e-05,
-                "gpu_energy": 0.0004291681211086029,
-                "ram_energy": 0.0001086827909151617,
-                "total_energy_consumed_kwh": 0.0006028050606292305,
-                "total_energy_consumed_joules": 2170.0982182652297,
-                "energy_efficiency_tokens_per_joule": 0.11520215900635561,
-                "final_emissions": 0.00022963858784670534
-            },
-            "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6715080704,
-                "max_memory_reserved_bytes": 6715080704,
-                "gpu_utilization_percent": "Error: could not convert string to float: '0\\n100\\n100\\n100'",
-                "cpu_usage_percent": 0.0,
-                "cpu_memory_usage_bytes": 2870255616,
-                "flops_forward_pass": "Error: Tried to trace <__torch__.torch.classes.c10d.ProcessGroup object at 0x16416950> but it is not part of the active trace. Modules that are called during a trace must be registered as submodules of the thing being traced."
-            },
-            "task-specific_performance": {}
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.773410006891936,
+                    "average_latency_ms_per_batch": 1773.410006891936,
+                    "average_ttft_ms": 0.0,
+                    "throughput_queries_per_sec": 2.8194269687036217,
+                    "throughput_tokens_per_sec": 140.97134843518108
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 194.40360844864827,
+                    "ram_power": 188.8243260383606,
+                    "cpu_energy": 5.921935330843553e-05,
+                    "gpu_energy": 8.020700861521846e-05,
+                    "ram_energy": 9.914916428680165e-05,
+                    "total_energy_consumed_kwh": 0.00023857552621045562,
+                    "total_energy_consumed_joules": 858.8718943576403,
+                    "energy_efficiency_tokens_per_joule": 0.2910794981677422,
+                    "final_emissions": 9.088534670987307e-05
+                },
+                "compute_performance": {
+                    "gpu": "CUDA not available or device not provided",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2885021696,
+                    "flops_forward_pass": "model, tokenizer, or device not provided"
+                },
+                "task-specific_performance": {}
+            }
         }
     },
     {
-        "experiment_setup": {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "task_type": "text_generation",
-            "date": "2025-03-04",
-            "cpu_count": 128,
-            "cpu_model": "AMD EPYC 7742 64-Core Processor",
-            "gpu_count": 4,
-            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
-            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
-            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
-            "accelerate_config": {
-                "distributed_type": "DistributedType.MULTI_GPU",
-                "num_processes": 4,
-                "local_process_index": 2
+        "EXPERIMENT_a1e139b7-4b4f-44e8-a9e9-1ad015fded74_20250304_182901": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "20250304_182901",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
             },
-            "country": "Germany",
-            "region": "mecklenburg-vorpommern"
-        },
-        "experiment_variables": {
-            "input_tokens": 2560,
-            "output_tokens": 250
-        },
-        "experiment_results": {
-            "inference_performance": {
-                "total_inference_time_sec": 1.988009656779468,
-                "average_latency_ms_per_batch": 1988.009656779468,
-                "average_ttft_ms": 0.0,
-                "throughput_queries_per_sec": 2.5150783261787018,
-                "throughput_tokens_per_sec": 125.75391630893509,
-                "total_tokens_generated": 250,
-                "num_runs": 5
+            "experiment_variables": {
+                "input_tokens": 2560,
+                "output_tokens": 250,
+                "number_runs": 5
             },
-            "energy_performance": {
-                "cpu_power": 112.5,
-                "gpu_power": 991.6103202306932,
-                "ram_power": 188.8243260383606,
-                "cpu_energy": 6.508694446529262e-05,
-                "gpu_energy": 0.0004359095153958492,
-                "ram_energy": 0.00010893408630383934,
-                "total_energy_consumed_kwh": 0.0006099305461649811,
-                "total_energy_consumed_joules": 2195.7499661939323,
-                "energy_efficiency_tokens_per_joule": 0.11385631508552171,
-                "final_emissions": 0.00023235304156154956
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.805005384143442,
+                    "average_latency_ms_per_batch": 1805.005384143442,
+                    "average_ttft_ms": 0.0,
+                    "throughput_queries_per_sec": 2.770074839623113,
+                    "throughput_tokens_per_sec": 138.50374198115563
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 190.57845741913948,
+                    "ram_power": 188.8243260383606,
+                    "cpu_energy": 6.020010827342049e-05,
+                    "gpu_energy": 8.161756529290187e-05,
+                    "ram_energy": 0.00010084008561736555,
+                    "total_energy_consumed_kwh": 0.0002426577591836879,
+                    "total_energy_consumed_joules": 873.5679330612764,
+                    "energy_efficiency_tokens_per_joule": 0.28618266598215863,
+                    "final_emissions": 9.244047336102592e-05
+                },
+                "compute_performance": {
+                    "gpu": "CUDA not available or device not provided",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2884984832,
+                    "flops_forward_pass": "model, tokenizer, or device not provided"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT_e58281aa-c71d-4e7b-8d0f-6365becb06d3_20250304_183131": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "20250304_183131",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 1
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
             },
-            "compute_performance": {
-                "current_memory_allocated_bytes": 4410810880,
-                "max_memory_allocated_bytes": 4410810880,
-                "current_memory_reserved_bytes": 6715080704,
-                "max_memory_reserved_bytes": 6715080704,
-                "gpu_utilization_percent": "Error: could not convert string to float: '0\\n100\\n100\\n100'",
-                "cpu_usage_percent": 0.0,
-                "cpu_memory_usage_bytes": 2869899264,
-                "flops_forward_pass": "Error: Tried to trace <__torch__.torch.classes.c10d.ProcessGroup object at 0x15e1cbc0> but it is not part of the active trace. Modules that are called during a trace must be registered as submodules of the thing being traced."
+            "experiment_variables": {
+                "input_tokens": 2560,
+                "output_tokens": 250,
+                "number_runs": 5
             },
-            "task-specific_performance": {}
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.7632975638844073,
+                    "average_latency_ms_per_batch": 1763.2975638844073,
+                    "average_ttft_ms": 0.0,
+                    "throughput_queries_per_sec": 2.8355962728068365,
+                    "throughput_tokens_per_sec": 141.7798136403418
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 199.1171416662947,
+                    "ram_power": 188.8243260383606,
+                    "cpu_energy": 5.889073769503739e-05,
+                    "gpu_energy": 8.434673414825511e-05,
+                    "ram_energy": 9.863548574168303e-05,
+                    "total_energy_consumed_kwh": 0.00024187295758497555,
+                    "total_energy_consumed_joules": 870.742647305912,
+                    "energy_efficiency_tokens_per_joule": 0.2871112386346333,
+                    "final_emissions": 9.214150319199644e-05
+                },
+                "compute_performance": {
+                    "gpu": "CUDA not available or device not provided",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2883403776,
+                    "flops_forward_pass": "model, tokenizer, or device not provided"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT_ee3b45cc-0b1c-4785-a9e1-165b5c33877a_20250304_183131": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "20250304_183131",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
+            },
+            "experiment_variables": {
+                "input_tokens": 2560,
+                "output_tokens": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.8207062962464988,
+                    "average_latency_ms_per_batch": 1820.7062962464988,
+                    "average_ttft_ms": 0.0,
+                    "throughput_queries_per_sec": 2.7461870211070374,
+                    "throughput_tokens_per_sec": 137.30935105535187
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 205.55547666582515,
+                    "ram_power": 188.8243260383606,
+                    "cpu_energy": 6.068196777778212e-05,
+                    "gpu_energy": 8.903423789519138e-05,
+                    "ram_energy": 0.00010159901734653934,
+                    "total_energy_consumed_kwh": 0.00025131522301951285,
+                    "total_energy_consumed_joules": 904.7348028702463,
+                    "energy_efficiency_tokens_per_joule": 0.2763240666843829,
+                    "final_emissions": 9.573853420928343e-05
+                },
+                "compute_performance": {
+                    "gpu": "CUDA not available or device not provided",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2883305472,
+                    "flops_forward_pass": "model, tokenizer, or device not provided"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT_05afc2f5-d8d5-4855-812a-b2bf06e322b5_20250304_183201": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "20250304_183201",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
+            },
+            "experiment_variables": {
+                "input_tokens": 2560,
+                "output_tokens": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.7899251747876406,
+                    "average_latency_ms_per_batch": 1789.9251747876406,
+                    "average_ttft_ms": 0.0,
+                    "throughput_queries_per_sec": 2.793412859056082,
+                    "throughput_tokens_per_sec": 139.6706429528041
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 189.883845812888,
+                    "ram_power": 188.8243260383606,
+                    "cpu_energy": 5.9703480816097e-05,
+                    "gpu_energy": 8.565617962830174e-05,
+                    "ram_energy": 9.996694014218333e-05,
+                    "total_energy_consumed_kwh": 0.00024532660058658207,
+                    "total_energy_consumed_joules": 883.1757621116955,
+                    "energy_efficiency_tokens_per_joule": 0.2830693625493568,
+                    "final_emissions": 9.345716849345844e-05
+                },
+                "compute_performance": {
+                    "gpu": "CUDA not available or device not provided",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2868449280,
+                    "flops_forward_pass": "model, tokenizer, or device not provided"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT_54278272-e7f7-4c0b-add1-0724d0f8cf2d_20250304_183201": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "20250304_183201",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 1
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
+            },
+            "experiment_variables": {
+                "input_tokens": 2560,
+                "output_tokens": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.7825209712609649,
+                    "average_latency_ms_per_batch": 1782.5209712609649,
+                    "average_ttft_ms": 0.0,
+                    "throughput_queries_per_sec": 2.805016087111151,
+                    "throughput_tokens_per_sec": 140.25080435555753
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 196.066180149622,
+                    "ram_power": 188.8243260383606,
+                    "cpu_energy": 5.92859975877218e-05,
+                    "gpu_energy": 8.725090313532746e-05,
+                    "ram_energy": 9.930160471081846e-05,
+                    "total_energy_consumed_kwh": 0.00024583850543386773,
+                    "total_energy_consumed_joules": 885.0186195619239,
+                    "energy_efficiency_tokens_per_joule": 0.28247993259593535,
+                    "final_emissions": 9.365217864503192e-05
+                },
+                "compute_performance": {
+                    "gpu": "CUDA not available or device not provided",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2867257344,
+                    "flops_forward_pass": "model, tokenizer, or device not provided"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT_1e8e86ec-e734-49ad-aa5b-0937886200c1_20250304_183253": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "20250304_183253",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
+            },
+            "experiment_variables": {
+                "input_tokens": 2560,
+                "output_tokens": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.6352338432334363,
+                    "average_latency_ms_per_batch": 1635.2338432334363,
+                    "average_ttft_ms": 0.0,
+                    "throughput_queries_per_sec": 3.0576666577015246,
+                    "throughput_tokens_per_sec": 152.88333288507621
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 181.94907551345807,
+                    "ram_power": 188.8243260383606,
+                    "cpu_energy": 5.489727115491405e-05,
+                    "gpu_energy": 6.660366439348309e-05,
+                    "ram_energy": 9.193603642367802e-05,
+                    "total_energy_consumed_kwh": 0.00021343697197207515,
+                    "total_energy_consumed_joules": 768.3730990994706,
+                    "energy_efficiency_tokens_per_joule": 0.32536277010868647,
+                    "final_emissions": 8.130881447276204e-05
+                },
+                "compute_performance": {
+                    "gpu": "CUDA not available or device not provided",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2872942592,
+                    "flops_forward_pass": "model, tokenizer, or device not provided"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT_51445436-717b-4515-8f28-af606e9f03b9_20250304_183253": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "20250304_183253",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 1
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
+            },
+            "experiment_variables": {
+                "input_tokens": 2560,
+                "output_tokens": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.6480088378302753,
+                    "average_latency_ms_per_batch": 1648.0088378302753,
+                    "average_ttft_ms": 0.0,
+                    "throughput_queries_per_sec": 3.0339643120985125,
+                    "throughput_tokens_per_sec": 151.69821560492562
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 186.6175786983122,
+                    "ram_power": 188.8243260383606,
+                    "cpu_energy": 5.592793130199425e-05,
+                    "gpu_energy": 6.931366656459659e-05,
+                    "ram_energy": 9.366238948854215e-05,
+                    "total_energy_consumed_kwh": 0.00021890398735513298,
+                    "total_energy_consumed_joules": 788.0543544784788,
+                    "energy_efficiency_tokens_per_joule": 0.3172370009495675,
+                    "final_emissions": 8.339147398293792e-05
+                },
+                "compute_performance": {
+                    "gpu": "CUDA not available or device not provided",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2874048512,
+                    "flops_forward_pass": "model, tokenizer, or device not provided"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT_#:_7423ee9a-c873-4256-98e4-c9be4ed1d1d7_March 04, 2025 at 06:36:20 PM": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "March 04, 2025 at 06:36:20 PM",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 1
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
+            },
+            "experiment_variables": {
+                "input_tokens": 2560,
+                "output_tokens": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.6316884350962937,
+                    "average_latency_ms_per_batch": 1631.6884350962937,
+                    "average_ttft_ms": 0.0,
+                    "throughput_queries_per_sec": 3.0643104973069972,
+                    "throughput_tokens_per_sec": 153.21552486534986
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 189.32311420334852,
+                    "ram_power": 188.8243260383606,
+                    "cpu_energy": 5.4881963034858936e-05,
+                    "gpu_energy": 6.596171944295293e-05,
+                    "ram_energy": 9.186116614124594e-05,
+                    "total_energy_consumed_kwh": 0.0002127048486190578,
+                    "total_energy_consumed_joules": 765.7374550286081,
+                    "energy_efficiency_tokens_per_joule": 0.3264826584598241,
+                    "final_emissions": 8.102991208143008e-05
+                },
+                "compute_performance": {
+                    "gpu": "CUDA not available or device not provided",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2872250368,
+                    "flops_forward_pass": "model, tokenizer, or device not provided"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT_#:_a16385ee-ca6e-4231-aefd-4cf343c4cd5f_March 04, 2025 at 06:36:20 PM": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "March 04, 2025 at 06:36:20 PM",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
+            },
+            "experiment_variables": {
+                "input_tokens": 2560,
+                "output_tokens": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.5965052996762097,
+                    "average_latency_ms_per_batch": 1596.5052996762097,
+                    "average_ttft_ms": 0.0,
+                    "throughput_queries_per_sec": 3.1318405275660903,
+                    "throughput_tokens_per_sec": 156.59202637830452
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 189.52167282302247,
+                    "ram_power": 188.8243260383606,
+                    "cpu_energy": 5.460946550010704e-05,
+                    "gpu_energy": 6.764755412547174e-05,
+                    "ram_energy": 9.143829784074396e-05,
+                    "total_energy_consumed_kwh": 0.00021369531746632273,
+                    "total_energy_consumed_joules": 769.3031428787618,
+                    "energy_efficiency_tokens_per_joule": 0.3249694250103937,
+                    "final_emissions": 8.140723118879565e-05
+                },
+                "compute_performance": {
+                    "gpu": "CUDA not available or device not provided",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2869456896,
+                    "flops_forward_pass": "model, tokenizer, or device not provided"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT: March 04, 2025 at 06:38:54 PM \n ID: 8b01537a-f91f-11ef-a85e-cbbe500cca96": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "March 04, 2025 at 06:38:54 PM",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
+            },
+            "experiment_variables": {
+                "input_tokens": 2560,
+                "output_tokens": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.6656757169403136,
+                    "average_latency_ms_per_batch": 1665.6757169403136,
+                    "average_ttft_ms": 0.0,
+                    "throughput_queries_per_sec": 3.0017847706782446,
+                    "throughput_tokens_per_sec": 150.08923853391224
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 201.32623291549658,
+                    "ram_power": 188.8243260383606,
+                    "cpu_energy": 5.560845782747492e-05,
+                    "gpu_energy": 7.182589079235413e-05,
+                    "ram_energy": 9.310749995860429e-05,
+                    "total_energy_consumed_kwh": 0.00022054184857843334,
+                    "total_energy_consumed_joules": 793.95065488236,
+                    "energy_efficiency_tokens_per_joule": 0.3148810300270394,
+                    "final_emissions": 8.401541721595418e-05
+                },
+                "compute_performance": {
+                    "gpu": "CUDA not available or device not provided",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2867339264,
+                    "flops_forward_pass": "model, tokenizer, or device not provided"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT 0001: March 04, 2025 at 06:43:32 PM": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "March 04, 2025 at 06:43:32 PM",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
+            },
+            "experiment_variables": {
+                "input_tokens": 2560,
+                "output_tokens": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.5662524909712374,
+                    "average_latency_ms_per_batch": 1566.2524909712374,
+                    "average_ttft_ms": 0.0,
+                    "throughput_queries_per_sec": 3.192333310767465,
+                    "throughput_tokens_per_sec": 159.61666553837327
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 174.25080381844407,
+                    "ram_power": 188.8243260383606,
+                    "cpu_energy": 5.284149837098084e-05,
+                    "gpu_energy": 6.018032592436384e-05,
+                    "ram_energy": 8.842511986124117e-05,
+                    "total_energy_consumed_kwh": 0.00020144694415658585,
+                    "total_energy_consumed_joules": 725.2089989637091,
+                    "energy_efficiency_tokens_per_joule": 0.3447282098777576,
+                    "final_emissions": 7.674121337645138e-05
+                },
+                "compute_performance": {
+                    "gpu": "CUDA not available or device not provided",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2868092928,
+                    "flops_forward_pass": "model, tokenizer, or device not provided"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT 0002: March 04, 2025 at 06:43:32 PM": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "March 04, 2025 at 06:43:32 PM",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 1
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
+            },
+            "experiment_variables": {
+                "input_tokens": 2560,
+                "output_tokens": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.5849249451421201,
+                    "average_latency_ms_per_batch": 1584.9249451421201,
+                    "average_ttft_ms": 0.0,
+                    "throughput_queries_per_sec": 3.1547235188172587,
+                    "throughput_tokens_per_sec": 157.73617594086295
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 168.46367801198286,
+                    "ram_power": 188.8243260383606,
+                    "cpu_energy": 5.376596910355147e-05,
+                    "gpu_energy": 6.018032592436384e-05,
+                    "ram_energy": 9.000267199595343e-05,
+                    "total_energy_consumed_kwh": 0.00020394896702386874,
+                    "total_energy_consumed_joules": 734.2162812859275,
+                    "energy_efficiency_tokens_per_joule": 0.3404991231768149,
+                    "final_emissions": 7.76943589877428e-05
+                },
+                "compute_performance": {
+                    "gpu": "CUDA not available or device not provided",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2868019200,
+                    "flops_forward_pass": "model, tokenizer, or device not provided"
+                },
+                "task-specific_performance": {}
+            }
         }
     }
 ]

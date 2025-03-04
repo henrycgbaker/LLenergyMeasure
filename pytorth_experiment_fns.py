@@ -15,6 +15,10 @@ from optimum_benchmark.logging_utils import setup_logging
 import psutil
 from fvcore.nn import FlopCountAnalysis
 import torch.nn as nn
+import torch.distributed as dist
+import uuid
+from datetime import datetime
+
 
 # -----------------------------------------------------------------------------
 # for the FLOP counter:
@@ -230,7 +234,7 @@ def extract_experiment_setup(model_name, codecarbon_data, accelerator, task_type
     return {
         "model": model_name,
         "task_type": task_type,
-        "date": datetime.today().strftime("%Y-%m-%d"),
+        "date": datetime.now().strftime("%B %d, %Y at %I:%M:%S %p"),
         "cpu_count": codecarbon_data.cpu_count,
         "cpu_model": codecarbon_data.cpu_model,
         "gpu_count": codecarbon_data.gpu_count,
@@ -268,8 +272,8 @@ def extract_experiment_results(metrics, codecarbon_data, model=None, tokenizer=N
             "average_ttft_ms": metrics["avg_ttft_ms"],
             "throughput_queries_per_sec": metrics["throughput_qps"],
             "throughput_tokens_per_sec": metrics["tokens_per_sec"],
-            "total_tokens_generated": metrics["total_generated_tokens"],
-            "num_runs": metrics["num_runs"]
+            #"total_tokens_generated": metrics["total_generated_tokens"],
+            #"num_runs": metrics["num_runs"]
         },
         "energy_performance": {
             "cpu_power": codecarbon_data.cpu_power,
@@ -315,53 +319,26 @@ def save_results(task_type, benchmark_results):
     return output_json_path
 
 
-def aggregate_process_results(results_list):
-    """
-    Aggregate a list of experiment_results (one per process) into a single dictionary.
-    
-    For example, this function sums total inference time, total tokens, and energy,
-    and averages the latency. Adjust as needed for your metrics.
-    """
-    aggregated = {
-        "inference_performance": {},
-        "energy_performance": {},
-        "compute_performance": {}
-    }
-    
-    # Aggregate inference performance
-    total_time = sum(r["inference_performance"].get("total_inference_time_sec", 0) for r in results_list)
-    total_tokens = sum(r["inference_performance"].get("total_tokens_generated", 0) for r in results_list)
-    total_runs = sum(r["inference_performance"].get("num_runs", 0) for r in results_list)
-    avg_latency = sum(r["inference_performance"].get("average_latency_ms_per_batch", 0) for r in results_list) / len(results_list)
-    total_throughput = sum(r["inference_performance"].get("throughput_tokens_per_sec", 0) for r in results_list)
-    
-    aggregated["inference_performance"] = {
-        "total_inference_time_sec": total_time,
-        "total_tokens_generated": total_tokens,
-        "num_runs": total_runs,
-        "average_latency_ms_per_batch": avg_latency,
-        "throughput_tokens_per_sec": total_throughput
-    }
-    
-    # Aggregate energy performance: sum energy consumed and recalc tokens per joule.
-    total_energy_kwh = sum(r["energy_performance"].get("total_energy_consumed_kwh", 0) for r in results_list)
-    total_energy_joules = sum(r["energy_performance"].get("total_energy_consumed_joules", 0) for r in results_list)
-    tokens_per_joule = total_tokens / total_energy_joules if total_energy_joules > 0 else 0
-    
-    aggregated["energy_performance"] = {
-        "total_energy_consumed_kwh": total_energy_kwh,
-        "total_energy_consumed_joules": total_energy_joules,
-        "energy_efficiency_tokens_per_joule": tokens_per_joule
-    }
-    
-    # For compute performance, you might choose to average metrics or simply take the first process’ values.
-    aggregated["compute_performance"] = results_list[0].get("compute_performance", {})
-    
-    return aggregated
-
 # -----------------------------------------------------------------------------
 # Experiment runner with optional optimum_benchmark integration.
 # -----------------------------------------------------------------------------
+
+ID_FILE = "experiment_id.txt"
+
+def get_persistent_unique_id():
+    # Check if file exists, if not, start at 1
+    if os.path.exists(ID_FILE):
+        with open(ID_FILE, "r") as f:
+            last_id = int(f.read().strip())  # Read last used ID
+    else:
+        last_id = 0  # Start from 1 when file is missing
+
+    new_id = last_id + 1  # Increment ID
+    with open(ID_FILE, "w") as f:
+        f.write(str(new_id))  # Save new ID
+
+    return f"{new_id:04d}"  # Format as four-digit number
+
 
 def run_experiment(model_name, prompts, inference_fn, task_type, 
                    backend="pytorch", use_optimum=False, **inference_kwargs):
@@ -416,40 +393,31 @@ def run_experiment(model_name, prompts, inference_fn, task_type,
         inference_metrics = inference_fn(model, tokenizer, accelerator, prompts, **inference_kwargs)
         
         codecarbon_data = stop_energy_tracking(tracker)
-        
-        # Each process computes its own local result.
-        local_result = extract_experiment_results(
-            inference_metrics, codecarbon_data, model=model, tokenizer=tokenizer, device=accelerator.device
-        )
-        # Gather the local_result from all processes into a list.
-        # accelerator.gather will collect the data from each process.
-        all_results = accelerator.gather_object(local_result)
+        experiment_results = extract_experiment_results(inference_metrics, codecarbon_data)
 
-        
-        # Now aggregate the actual results from each process.
-        aggregated_results = aggregate_process_results(all_results)
-        
+
         # Extract common experimental setup and variables
         experiment_setup = extract_experiment_setup(model_name, codecarbon_data, accelerator, task_type)
+        
         experiment_variables = {
             "input_tokens": inference_metrics["total_input_tokens"],
-            "output_tokens": inference_metrics["total_generated_tokens"]
+            "output_tokens": inference_metrics["total_generated_tokens"],
+            "number_runs": inference_metrics["num_runs"]
         }
+        unique_id = get_persistent_unique_id()
+        current_time = datetime.now().strftime("%B %d, %Y at %I:%M:%S %p")
+        experiment_title = f"EXPERIMENT {unique_id}: {current_time}"
         
         # Compose the final benchmark_results structure
         benchmark_results = {
-            "experiment_setup": experiment_setup,
-            "experiment_variables": experiment_variables,
-            "experiment_results": aggregated_results
+            experiment_title: {
+                "experiment_setup": experiment_setup,
+                "experiment_variables": experiment_variables,
+                "experiment_results": experiment_results 
+            }
         }
         
-        # Save the aggregated results using your save_results function
+        # Save the aggregated results 
         output_json_path = save_results(task_type, benchmark_results)
         
-        results_summary = {
-            "model": benchmark_results["experiment_setup"]["model"],
-            "energy_consumed_kwh": benchmark_results["experiment_results"]["energy_performance"]["total_energy_consumed_kwh"],
-            "energy_efficiency_tokens_per_joule": benchmark_results["experiment_results"]["energy_performance"]["energy_efficiency_tokens_per_joule"]
-        }
-        print(json.dumps(results_summary, indent=4))
-        return benchmark_results
+        return
