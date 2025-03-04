@@ -1,0 +1,41 @@
+{
+    "aggregated_results": {
+        "experiment_setup": {
+            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+            "task_type": "text_generation",
+            "date": "2025-03-04",
+            "cpu_count": 128,
+            "cpu_model": "AMD EPYC 7742 64-Core Processor",
+            "gpu_count": 4,
+            "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+            "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+            "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+            "accelerate_config": {
+                "distributed_type": "DistributedType.MULTI_GPU",
+                "num_processes": 4,
+                "local_process_index": 0
+            },
+            "country": "Germany",
+            "region": "mecklenburg-vorpommern"
+        },
+        "experiment_variables": {
+            "total_input_tokens": 10240,
+            "total_output_tokens": 1000
+        },
+        "inference_performance": {
+            "total_inference_time_sec": 7.707031700294465,
+            "total_tokens_generated": 1000,
+            "num_runs": 20,
+            "average_latency_ms_per_batch": 1926.7579250736162
+        },
+        "energy_performance": {
+            "total_energy_consumed_kwh": 0.002379380286646525,
+            "total_energy_consumed_joules": 8565.769031927492,
+            "energy_efficiency_tokens_per_joule": 0.11674375018432845
+        },
+        "compute_performance": {
+            "total_current_memory_allocated_bytes": 17643243520,
+            "total_max_memory_allocated_bytes": 17643243520
+        }
+    }
+}
