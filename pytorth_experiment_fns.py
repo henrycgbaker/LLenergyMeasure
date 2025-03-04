@@ -78,7 +78,11 @@ def detect_cpu_vendor():
 
 def start_energy_tracking():
     """Starts CodeCarbon energy tracking."""
-    tracker = EmissionsTracker(measure_power_secs=1, allow_multiple_runs=True)
+    tracker = EmissionsTracker(
+        measure_power_secs=1, 
+        allow_multiple_runs=True, #change
+        tracking_mode="machine", # change
+        log_level=logging.ERROR)
     tracker.start()
     return tracker
 
@@ -303,7 +307,7 @@ def save_results(task_type, benchmark_results):
     return output_json_path
 
 # -----------------------------------------------------------------------------
-# Aggregate the metrics (provided earlier)
+# Aggregate the metrics
 # -----------------------------------------------------------------------------
 def aggregate_experiments(results):
     """

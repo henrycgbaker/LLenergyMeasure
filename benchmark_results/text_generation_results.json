@@ -445,5 +445,261 @@
                 "task-specific_performance": {}
             }
         }
+    },
+    {
+        "EXPERIMENT #0009": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "March 04, 2025 at 11:55:15 PM",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
+            },
+            "experiment_variables": {
+                "total_token_inputted": 2560,
+                "total_tokens_outputted": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.986807068111375,
+                    "average_latency_ms_per_batch": 1986.807068111375,
+                    "throughput_queries_per_sec": 2.51661070851567,
+                    "throughput_tokens_per_sec": 125.83053542578351
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 502.8708709741203,
+                    "ram_power": 188.8243260383606,
+                    "energy_efficiency_tokens_per_joule": 0.15596191286041672,
+                    "cpu_energy": 0.00013075814796320627,
+                    "gpu_energy": 0.0005410354328461153,
+                    "ram_energy": 0.00021873723186499898,
+                    "total_energy_consumed_kwh": 0.0008905308126743207,
+                    "total_energy_consumed_joules": 3205.910925627554,
+                    "final_emissions": 0.0003392477130882824
+                },
+                "compute_performance": {
+                    "gpu": "cuda:0",
+                    "flops_forward_pass": "Error: Only tuples, lists and Variables are supported as JIT inputs/outputs. Dictionaries and strings are also accepted, but their usage is not recommended. Here, received an input of unsupported type: DynamicCache",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2870417408.0,
+                    "gpu_utilization_percent": [
+                        100.0,
+                        100.0,
+                        100.0,
+                        100.0
+                    ],
+                    "current_memory_allocated_bytes": 4410810880.0,
+                    "max_memory_allocated_bytes": 4410810880.0,
+                    "current_memory_reserved_bytes": 6715080704.0,
+                    "max_memory_reserved_bytes": 6715080704.0,
+                    "cpu_vendor": "AMD"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT #0010": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "March 05, 2025 at 12:24:41 AM",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
+            },
+            "experiment_variables": {
+                "total_token_inputted": 2560,
+                "total_tokens_outputted": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.5723746016155928,
+                    "average_latency_ms_per_batch": 1572.3746016155928,
+                    "throughput_queries_per_sec": 3.1799208211494445,
+                    "throughput_tokens_per_sec": 158.9960410574722
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 199.8140015806576,
+                    "ram_power": 188.8243260383606,
+                    "energy_efficiency_tokens_per_joule": 0.28316376801069204,
+                    "cpu_energy": 0.00010661004384746775,
+                    "gpu_energy": 0.00020545377546454802,
+                    "ram_energy": 0.0001784967024653698,
+                    "total_energy_consumed_kwh": 0.0004905605217773855,
+                    "total_energy_consumed_joules": 1766.017878398588,
+                    "final_emissions": 0.00018687903077109502
+                },
+                "compute_performance": {
+                    "gpu": "cuda:0",
+                    "flops_forward_pass": "Error: Only tuples, lists and Variables are supported as JIT inputs/outputs. Dictionaries and strings are also accepted, but their usage is not recommended. Here, received an input of unsupported type: DynamicCache",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2879932416.0,
+                    "gpu_utilization_percent": [
+                        32.0,
+                        28.5,
+                        1.0,
+                        100.0
+                    ],
+                    "current_memory_allocated_bytes": 4410810880.0,
+                    "max_memory_allocated_bytes": 4410810880.0,
+                    "current_memory_reserved_bytes": 6715080704.0,
+                    "max_memory_reserved_bytes": 6715080704.0,
+                    "cpu_vendor": "AMD"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT #0011": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "March 05, 2025 at 12:30:29 AM",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
+            },
+            "experiment_variables": {
+                "total_token_inputted": 2560,
+                "total_tokens_outputted": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.6368350298143923,
+                    "average_latency_ms_per_batch": 1636.8350298143923,
+                    "throughput_queries_per_sec": 3.0548034648276503,
+                    "throughput_tokens_per_sec": 152.7401732413825
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 165.20222764533247,
+                    "ram_power": 2.2502517700195312,
+                    "energy_efficiency_tokens_per_joule": 0.5720718752591025,
+                    "cpu_energy": 0.00011490836001757998,
+                    "gpu_energy": 0.00012589398957629783,
+                    "ram_energy": 2.0122285016936767e-06,
+                    "total_energy_consumed_kwh": 0.0002428145780955715,
+                    "total_energy_consumed_joules": 874.1324811440574,
+                    "final_emissions": 9.250021352550796e-05
+                },
+                "compute_performance": {
+                    "gpu": "cuda:0",
+                    "flops_forward_pass": "Error: Only tuples, lists and Variables are supported as JIT inputs/outputs. Dictionaries and strings are also accepted, but their usage is not recommended. Here, received an input of unsupported type: DynamicCache",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2878892032.0,
+                    "gpu_utilization_percent": [
+                        13.0,
+                        20.0,
+                        100.0,
+                        0.0
+                    ],
+                    "current_memory_allocated_bytes": 4410810880.0,
+                    "max_memory_allocated_bytes": 4410810880.0,
+                    "current_memory_reserved_bytes": 6715080704.0,
+                    "max_memory_reserved_bytes": 6715080704.0,
+                    "cpu_vendor": "AMD"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT #0012": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "March 05, 2025 at 12:32:11 AM",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2
+                },
+                "country": "Germany",
+                "region": "mecklenburg-vorpommern"
+            },
+            "experiment_variables": {
+                "total_token_inputted": 2560,
+                "total_tokens_outputted": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.5809939389582723,
+                    "average_latency_ms_per_batch": 1580.9939389582723,
+                    "throughput_queries_per_sec": 3.1625887450195975,
+                    "throughput_tokens_per_sec": 158.1294372509799
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 189.88546301955205,
+                    "ram_power": 188.8243260383606,
+                    "energy_efficiency_tokens_per_joule": 0.334706456263862,
+                    "cpu_energy": 0.00010619419757858849,
+                    "gpu_energy": 0.00013063010449343437,
+                    "ram_energy": 0.00017814167439401382,
+                    "total_energy_consumed_kwh": 0.0004149659764660367,
+                    "total_energy_consumed_joules": 1493.877515277732,
+                    "final_emissions": 0.00015808128873473666
+                },
+                "compute_performance": {
+                    "gpu": "cuda:0",
+                    "flops_forward_pass": "Error: Only tuples, lists and Variables are supported as JIT inputs/outputs. Dictionaries and strings are also accepted, but their usage is not recommended. Here, received an input of unsupported type: DynamicCache",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2884755456.0,
+                    "gpu_utilization_percent": [
+                        28.0,
+                        41.0,
+                        100.0,
+                        0.0
+                    ],
+                    "current_memory_allocated_bytes": 4410810880.0,
+                    "max_memory_allocated_bytes": 4410810880.0,
+                    "current_memory_reserved_bytes": 6715080704.0,
+                    "max_memory_reserved_bytes": 6715080704.0,
+                    "cpu_vendor": "AMD"
+                },
+                "task-specific_performance": {}
+            }
+        }
     }
 ]
