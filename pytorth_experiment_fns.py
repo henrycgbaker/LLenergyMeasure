@@ -107,7 +107,6 @@ def run_gen_inference_with_metrics(model, tokenizer, accelerator, prompts,
     # Sort prompts by token length for efficient batching
     sorted_prompts = sorted(truncated_prompts, key=lambda x: len(tokenizer.tokenize(x)))
     latencies = []
-    ttft_values = []  # (time-to-first-token, not currently measured)
     total_tokens = 0
     total_input_tokens = 0  # Track input tokens
     device = accelerator.device
@@ -137,14 +136,12 @@ def run_gen_inference_with_metrics(model, tokenizer, accelerator, prompts,
             total_tokens += gen_len
 
     avg_latency_ms = sum(latencies) / len(latencies) if latencies else 0.0
-    avg_ttft_ms = sum(ttft_values) / len(ttft_values) if ttft_values else 0.0
     total_time_sec = sum(latencies) / 1000.0
     throughput_qps = len(sorted_prompts) / total_time_sec if total_time_sec > 0 else 0.0
     tokens_per_sec = total_tokens / total_time_sec if total_time_sec > 0 else 0.0
 
     return {
         "avg_latency_ms": avg_latency_ms,
-        "avg_ttft_ms": avg_ttft_ms,
         "throughput_qps": throughput_qps,
         "tokens_per_sec": tokens_per_sec,
         "total_generated_tokens": total_tokens,
@@ -160,14 +157,15 @@ def get_compute_performance_metrics(model=None, tokenizer=None, device=None, inp
     """
     Returns a dictionary of low-level compute metrics.
     Attempts to compute FLOPs using fvcore if possible.
-    Also reports GPU memory usage, GPU utilization, and CPU usage.
+    Also reports GPU memory usage, GPU utilization (as a list), and CPU usage.
     """
     compute_metrics = {}
     
-    cpu_vendor = detect_cpu_vendor() # NEED TO BUILD OUT LOGIC AND TOOLING FOR THIS
-    
+    # CPU vendor detection (already in your code)
+    cpu_vendor = detect_cpu_vendor()
+    compute_metrics["cpu_vendor"] = cpu_vendor
 
-    # Always set a "gpu" key: if a device is provided, use its string representation.
+    # Always set a "gpu" key based on the provided device.
     compute_metrics["gpu"] = str(device) if device is not None else "No device provided"
 
     # GPU memory metrics (if CUDA is available)
@@ -177,18 +175,18 @@ def get_compute_performance_metrics(model=None, tokenizer=None, device=None, inp
         compute_metrics["max_memory_allocated_bytes"] = torch.cuda.max_memory_allocated(device)
         compute_metrics["current_memory_reserved_bytes"] = torch.cuda.memory_reserved(device)
         compute_metrics["max_memory_reserved_bytes"] = torch.cuda.max_memory_reserved(device)
-        # GPU utilization using nvidia-smi
+        # GPU utilization using nvidia-smi:
         import subprocess
         try:
             result = subprocess.check_output(
                 ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"]
             )
-            gpu_util = float(result.decode("utf-8").strip())
-            compute_metrics["gpu_utilization_percent"] = gpu_util
+            # Split the result into a list of lines, then convert each to a float.
+            lines = result.decode("utf-8").strip().splitlines()
+            gpu_utils = [float(line.strip()) for line in lines if line.strip()]
+            compute_metrics["gpu_utilization_percent"] = gpu_utils
         except Exception as e:
             compute_metrics["gpu_utilization_percent"] = f"Error: {str(e)}"
-    # (No need for an else block since we already set "gpu")
-    
     # CPU metrics using psutil
     try:
         process = psutil.Process(os.getpid())
@@ -260,7 +258,6 @@ def extract_experiment_results(metrics, codecarbon_data, model=None, tokenizer=N
         "inference_performance": {
             "total_inference_time_sec": metrics["total_time"],
             "average_latency_ms_per_batch": metrics["avg_latency_ms"],
-            "average_ttft_ms": metrics["avg_ttft_ms"],
             "throughput_queries_per_sec": metrics["throughput_qps"],
             "throughput_tokens_per_sec": metrics["tokens_per_sec"],
         },
@@ -312,41 +309,64 @@ def aggregate_experiments(results):
     """
     Aggregates results across multiple processes.
     Assumes `results` is a list of dictionaries, one per process.
-    Keeps variables & set up constant across runs, avgs rates and latencies, sums counts and consumption measures.
     """
     aggregated = {}
 
-    # Use the first process's setup and variables (they are shared)
     aggregated["experiment_setup"] = results[0]["experiment_setup"].copy()
     if "accelerate_config" in aggregated["experiment_setup"]:
         aggregated["experiment_setup"]["accelerate_config"].pop("local_process_index", None)
     aggregated["experiment_variables"] = results[0]["experiment_variables"]
 
     # Aggregate inference performance by averaging
-    inf_keys = ["total_inference_time_sec", "average_latency_ms_per_batch", 
-                "average_ttft_ms", "throughput_queries_per_sec", "throughput_tokens_per_sec"]
+    inf_keys = ["total_inference_time_sec", "average_latency_ms_per_batch", "throughput_queries_per_sec", "throughput_tokens_per_sec"]
     agg_inference = {key: sum(proc["experiment_results"]["inference_performance"][key] for proc in results) / len(results)
                      for key in inf_keys}
 
-    # Aggregate energy performance: average for power/efficiency; sum for energies/emissions
+    # Aggregate energy performance (averaging some keys, summing others)
     energy_keys_avg = ["cpu_power", "gpu_power", "ram_power", "energy_efficiency_tokens_per_joule"]
-    energy_keys_sum = ["cpu_energy", "gpu_energy", "ram_energy", 
-                       "total_energy_consumed_kwh", "total_energy_consumed_joules", "final_emissions"]
+    energy_keys_sum = ["cpu_energy", "gpu_energy", "ram_energy", "total_energy_consumed_kwh", "total_energy_consumed_joules", "final_emissions"]
     agg_energy = {}
     for key in energy_keys_avg:
         agg_energy[key] = sum(proc["experiment_results"]["energy_performance"][key] for proc in results) / len(results)
     for key in energy_keys_sum:
         agg_energy[key] = sum(proc["experiment_results"]["energy_performance"][key] for proc in results)
 
-    # Aggregate compute performance: assume string fields are identical; average numeric ones
+    # Aggregate compute performance.
     compute_setup = results[0]["experiment_results"]["compute_performance"]
     agg_compute = {
-        "gpu": compute_setup["gpu"],
-        "flops_forward_pass": compute_setup["flops_forward_pass"],
+        "gpu": compute_setup.get("gpu", "N/A"),
+        "flops_forward_pass": compute_setup.get("flops_forward_pass", "N/A"),
     }
-    numeric_compute_keys = ["cpu_usage_percent", "cpu_memory_usage_bytes"]
+    # Define numeric keys to average; note that gpu_utilization_percent is now a list.
+    numeric_compute_keys = [
+        "cpu_usage_percent",
+        "cpu_memory_usage_bytes",
+        "gpu_utilization_percent",
+        "current_memory_allocated_bytes",
+        "max_memory_allocated_bytes",
+        "current_memory_reserved_bytes",
+        "max_memory_reserved_bytes"
+    ]
     for key in numeric_compute_keys:
-        agg_compute[key] = sum(proc["experiment_results"]["compute_performance"][key] for proc in results) / len(results)
+        values = []
+        for proc in results:
+            val = proc["experiment_results"]["compute_performance"].get(key)
+            if isinstance(val, list):
+                values.append(val)
+            elif isinstance(val, (int, float)):
+                values.append(val)
+        if values:
+            # If the first value is a list, assume all are lists of the same length and average element-wise.
+            if isinstance(values[0], list):
+                list_length = len(values[0])
+                averaged = [sum(v[i] for v in values) / len(values) for i in range(list_length)]
+                agg_compute[key] = averaged
+            else:
+                agg_compute[key] = sum(values) / len(values)
+    
+    for extra_key in ["cpu_vendor", "AMD_CONSTANT_POWER"]:
+        if extra_key in compute_setup:
+            agg_compute[extra_key] = compute_setup[extra_key]
     
     task_perf = results[0]["experiment_results"].get("task-specific_performance", {})
 
