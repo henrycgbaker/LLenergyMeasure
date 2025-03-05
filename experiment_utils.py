@@ -13,11 +13,13 @@ import psutil
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from accelerate import Accelerator
 
-def load_model_tokenizer_backend(model_name, backend="pytorch"):
+def load_model_tokenizer_backend(model_name, backend="pytorch", fp_precision="float16"):
+    if fp_precision == "float32":
+        dtype = torch.float32
+    else:
+        dtype = torch.float16
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name, torch_dtype=torch.float16
-    )
+    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=dtype)
     model.eval()
     return model, tokenizer
 

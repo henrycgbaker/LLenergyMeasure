@@ -1277,5 +1277,306 @@
                 "task-specific_performance": {}
             }
         }
+    },
+    {
+        "EXPERIMENT #0022": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "March 05, 2025 at 08:49:13 PM",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2
+                },
+                "country": "Germany",
+                "region": "north rhine-westphalia"
+            },
+            "experiment_variables": {
+                "total_token_inputted": 2560,
+                "total_tokens_outputted": 250,
+                "number_runs": 5
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.5769661308731884,
+                    "average_latency_ms_per_batch": 1576.9661308731884,
+                    "throughput_queries_per_sec": 3.171545941178989,
+                    "throughput_tokens_per_sec": 158.57729705894945
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 104.94575837775582,
+                    "ram_power": 188.8243260383606,
+                    "energy_efficiency_tokens_per_joule": 0.21648605357603376,
+                    "cpu_energy": 0.0001678856836660998,
+                    "gpu_energy": 0.00019215848706721772,
+                    "ram_energy": 0.00028161486978163416,
+                    "total_energy_consumed_kwh": 0.0006416590405149516,
+                    "total_energy_consumed_joules": 2309.972545853826,
+                    "final_emissions": 0.00024444001148417083
+                },
+                "compute_performance": {
+                    "gpu": "cuda:0",
+                    "flops_forward_pass": "Error: Only tuples, lists and Variables are supported as JIT inputs/outputs. Dictionaries and strings are also accepted, but their usage is not recommended. Here, received an input of unsupported type: DynamicCache",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2950612992.0,
+                    "gpu_utilization_percent": [
+                        0.0,
+                        0.0,
+                        0.0,
+                        100.0
+                    ],
+                    "current_memory_allocated_bytes": 4410810880.0,
+                    "max_memory_allocated_bytes": 4410810880.0,
+                    "current_memory_reserved_bytes": 6715080704.0,
+                    "max_memory_reserved_bytes": 6715080704.0,
+                    "cpu_vendor": "AMD"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT #0023": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "March 05, 2025 at 08:57:35 PM",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2
+                },
+                "country": "Germany",
+                "region": "north rhine-westphalia"
+            },
+            "experiment_variables": {
+                "total_token_inputted": 2560,
+                "total_tokens_outputted": 250,
+                "number_runs": 5,
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "batch_size": 8,
+                "gpu_list": [
+                    0,
+                    1
+                ],
+                "decoder_temperature": 1.0,
+                "query_rate": 1.0,
+                "fp_precision": "float16",
+                "inference_type": "purely_generative",
+                "quantisation": false,
+                "batching_options": {},
+                "sharding_config": {},
+                "is_encoder_decoder": "na"
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.5317176724784076,
+                    "average_latency_ms_per_batch": 1531.7176724784076,
+                    "throughput_queries_per_sec": 3.2643098890419715,
+                    "throughput_tokens_per_sec": 163.2154944520986
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 113.66237254155376,
+                    "ram_power": 188.8243260383606,
+                    "energy_efficiency_tokens_per_joule": 0.21789325807439647,
+                    "cpu_energy": 0.00016621336690150203,
+                    "gpu_energy": 0.00019239682060856467,
+                    "ram_energy": 0.0002788082870204614,
+                    "total_energy_consumed_kwh": 0.0006374184745305281,
+                    "total_energy_consumed_joules": 2294.706508309901,
+                    "final_emissions": 0.0002428245678724047
+                },
+                "compute_performance": {
+                    "gpu": "cuda:0",
+                    "flops_forward_pass": "Error: Only tuples, lists and Variables are supported as JIT inputs/outputs. Dictionaries and strings are also accepted, but their usage is not recommended. Here, received an input of unsupported type: DynamicCache",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2925209600.0,
+                    "gpu_utilization_percent": [
+                        0.0,
+                        0.0,
+                        0.0,
+                        100.0
+                    ],
+                    "current_memory_allocated_bytes": 4410810880.0,
+                    "max_memory_allocated_bytes": 4410810880.0,
+                    "current_memory_reserved_bytes": 6715080704.0,
+                    "max_memory_reserved_bytes": 6715080704.0,
+                    "cpu_vendor": "AMD"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT #0024": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "March 05, 2025 at 09:04:22 PM",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2
+                },
+                "country": "Germany",
+                "region": "north rhine-westphalia"
+            },
+            "experiment_variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_runs": 5,
+                "total_token_inputted": 2560,
+                "total_tokens_outputted": 250,
+                "batch_size": 8,
+                "gpu_list": [
+                    0,
+                    1
+                ],
+                "decoder_temperature": 1.0,
+                "query_rate": 1.0,
+                "fp_precision": "float16",
+                "inference_type": "purely_generative",
+                "quantisation": false,
+                "batching_options": {},
+                "sharding_config": {},
+                "is_encoder_decoder": "na"
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.537309342296794,
+                    "average_latency_ms_per_batch": 1537.309342296794,
+                    "throughput_queries_per_sec": 3.2527143337053697,
+                    "throughput_tokens_per_sec": 162.6357166852685
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 102.57981315294741,
+                    "ram_power": 188.8243260383606,
+                    "energy_efficiency_tokens_per_joule": 0.21907936501838463,
+                    "cpu_energy": 0.00016611575611750597,
+                    "gpu_energy": 0.00018922404028387518,
+                    "ram_energy": 0.00027864262383480354,
+                    "total_energy_consumed_kwh": 0.0006339824202361848,
+                    "total_energy_consumed_joules": 2282.336712850265,
+                    "final_emissions": 0.00024151560298897457
+                },
+                "compute_performance": {
+                    "gpu": "cuda:0",
+                    "flops_forward_pass": "Error: Only tuples, lists and Variables are supported as JIT inputs/outputs. Dictionaries and strings are also accepted, but their usage is not recommended. Here, received an input of unsupported type: DynamicCache",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2933473280.0,
+                    "gpu_utilization_percent": [
+                        0.0,
+                        0.0,
+                        0.0,
+                        100.0
+                    ],
+                    "current_memory_allocated_bytes": 4410810880.0,
+                    "max_memory_allocated_bytes": 4410810880.0,
+                    "current_memory_reserved_bytes": 6715080704.0,
+                    "max_memory_reserved_bytes": 6715080704.0,
+                    "cpu_vendor": "AMD"
+                },
+                "task-specific_performance": {}
+            }
+        }
+    },
+    {
+        "EXPERIMENT #0025": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "March 05, 2025 at 09:08:30 PM",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2
+                },
+                "country": "Germany",
+                "region": "north rhine-westphalia"
+            },
+            "experiment_variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_runs": 5,
+                "total_token_inputted": 2560,
+                "total_tokens_outputted": 250,
+                "batch_size": 8,
+                "gpu_list": [
+                    0,
+                    1
+                ],
+                "decoder_temperature": 1.0,
+                "query_rate": 1.0,
+                "fp_precision": "float16",
+                "inference_type": "purely_generative",
+                "quantisation": false,
+                "batching_options": {},
+                "sharding_config": {},
+                "is_encoder_decoder": "decoder_only"
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 1.5747146089561284,
+                    "average_latency_ms_per_batch": 1574.7146089561284,
+                    "throughput_queries_per_sec": 3.1762513142970183,
+                    "throughput_tokens_per_sec": 158.8125657148509
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 105.49291292472772,
+                    "ram_power": 188.8243260383606,
+                    "energy_efficiency_tokens_per_joule": 0.21604217804380937,
+                    "cpu_energy": 0.00016770636997534896,
+                    "gpu_energy": 0.00019389571068018085,
+                    "ram_energy": 0.00028131791082286397,
+                    "total_energy_consumed_kwh": 0.0006429199914783938,
+                    "total_energy_consumed_joules": 2314.5119693222177,
+                    "final_emissions": 0.0002449203707536941
+                },
+                "compute_performance": {
+                    "gpu": "cuda:0",
+                    "flops_forward_pass": "Error: Only tuples, lists and Variables are supported as JIT inputs/outputs. Dictionaries and strings are also accepted, but their usage is not recommended. Here, received an input of unsupported type: DynamicCache",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2957121536.0,
+                    "gpu_utilization_percent": [
+                        0.0,
+                        0.0,
+                        0.0,
+                        100.0
+                    ],
+                    "current_memory_allocated_bytes": 4410810880.0,
+                    "max_memory_allocated_bytes": 4410810880.0,
+                    "current_memory_reserved_bytes": 6715080704.0,
+                    "max_memory_reserved_bytes": 6715080704.0,
+                    "cpu_vendor": "AMD"
+                },
+                "task-specific_performance": {}
+            }
+        }
     }
 ]
