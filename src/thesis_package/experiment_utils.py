@@ -12,6 +12,14 @@ import psutil
 
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from accelerate import Accelerator
+import yaml
+
+def load_experiment_config(config_path="experiment_configs.yaml"):
+    """Loads experiment configuration settings from a YAML file."""
+    with open(config_path, "r") as file:
+        config = yaml.safe_load(file)
+    return config
+
 
 def load_model_tokenizer_backend(model_name, backend="pytorch", fp_precision="float16"):
     if fp_precision == "float32":
@@ -22,8 +30,7 @@ def load_model_tokenizer_backend(model_name, backend="pytorch", fp_precision="fl
     model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=dtype)
     model.eval()
     return model, tokenizer
-
-### ---    
+   
 
 def prep_distributed_env(model, tokenizer, gpu_list=[0, 1]):
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, gpu_list))
@@ -37,7 +44,6 @@ def prep_distributed_env(model, tokenizer, gpu_list=[0, 1]):
     print(f"Model is on {next(model.parameters()).device}")
     return model, tokenizer, accelerator
 
-### ---
 
 def extract_experiment_setup(model_name, codecarbon_data, accelerator, task_type):
     return {
@@ -59,7 +65,6 @@ def extract_experiment_setup(model_name, codecarbon_data, accelerator, task_type
         "region": codecarbon_data.region,
     }
 
-### ---
 
 def extract_experiment_results(metrics, codecarbon_data, model=None, tokenizer=None, device=None):
     energy_kwh = codecarbon_data.energy_consumed
@@ -96,7 +101,6 @@ def extract_experiment_results(metrics, codecarbon_data, model=None, tokenizer=N
         "task-specific_performance": task_specific_performance
     }
 
-### ---
 
 def aggregate_experiments(results):
     aggregated = {}

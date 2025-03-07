@@ -1,0 +1,11 @@
+data:
+  raw_data: "data/raw_data.csv"
+  processed_data: "data/processed_data.csv"
+
+model:
+  learning_rate: 0.001
+  batch_size: 32
+  epochs: 10
+
+logging:
+  level: "INFO"
