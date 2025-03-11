@@ -18,9 +18,6 @@ def detect_cpu_vendor():
 
 def get_compute_performance_metrics(model=None, tokenizer=None, device=None, input_length=128):
     compute_metrics = {}
-    cpu_vendor = detect_cpu_vendor()
-    compute_metrics["cpu_vendor"] = cpu_vendor
-    compute_metrics["gpu"] = str(device) if device is not None else "No device provided"
     
     if torch.cuda.is_available() and device is not None:
         torch.cuda.reset_peak_memory_stats(device)

@@ -9,11 +9,11 @@ import torch.distributed as dist
 import uuid
 from datetime import datetime
 import psutil
-
+from torch.distributed.fsdp import FullyShardedDataParallel
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from accelerate import Accelerator
 import yaml
-from helper_functions.metrics import get_compute_performance_metrics  
+from helper_functions.metrics_results import get_compute_performance_metrics  
 
 
 def load_experiment_config(config_path="experiment_configs.yaml"):
@@ -22,12 +22,16 @@ def load_experiment_config(config_path="experiment_configs.yaml"):
         config = yaml.safe_load(file)
     return config
 
-
-def load_model_tokenizer_backend(model_name, backend="pytorch", fp_precision="float16"):
-    if fp_precision == "float32":
-        dtype = torch.float32
-    else:
+def load_model_tokenizer_backend(model_name, backend="pytorch", fp_precision="float32"):
+    if fp_precision == "float8":
+        raise ValueError("PyTorch does not support float8. Use 'float16' or 'bfloat16' instead.")
+    elif fp_precision == "float16":
         dtype = torch.float16
+    elif fp_precision == "bfloat16":
+        dtype = torch.bfloat16
+    else:
+        dtype = torch.float32  
+        
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=dtype)
     model.eval()
@@ -35,38 +39,77 @@ def load_model_tokenizer_backend(model_name, backend="pytorch", fp_precision="fl
    
 
 def prep_distributed_env(model, tokenizer, gpu_list=[0, 1]):
-    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, gpu_list))
+    # Set CUDA_VISIBLE_DEVICES
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_list)
+    
     accelerator = Accelerator(device_placement=True)
-    local_rank = accelerator.local_process_index
-    selected_device = gpu_list[local_rank % len(gpu_list)]
-    device = torch.device(f"cuda:{selected_device}")
-    accelerator.print(f"Using device: {device} (Local Rank: {local_rank})")
     model, tokenizer = accelerator.prepare(model, tokenizer)
-    accelerator.print(f"Using {accelerator.num_processes} GPUs: {gpu_list}")
-    print(f"Model is on {next(model.parameters()).device}")
+    
+    # Use accelerator.device to get the device assigned to this process.
+    print(f"[Process {os.getpid()}] Model is on device: {accelerator.device}\n")
+    
     return model, tokenizer, accelerator
 
-
-def extract_experiment_setup(model_name, codecarbon_data, accelerator, task_type):
-    return {
+def extract_experiment_setup(model_name, 
+                             codecarbon_data, 
+                             task_type, 
+                             is_encoder_decoder):
+    setup = {
         "model": model_name,
+        "is_encoder_decoder": is_encoder_decoder,
         "task_type": task_type,
-        "date": datetime.now().strftime("%B %d, %Y at %I:%M:%S %p"),
-        "cpu_count": codecarbon_data.cpu_count,
-        "cpu_model": codecarbon_data.cpu_model,
         "gpu_count": codecarbon_data.gpu_count,
         "gpu_model": codecarbon_data.gpu_model,
+        "cpu_count": codecarbon_data.cpu_count,
+        "cpu_model": codecarbon_data.cpu_model,
         "os": codecarbon_data.os,
         "python_version": sys.version,
-        "accelerate_config": {
-            "distributed_type": str(accelerator.distributed_type),
-            "num_processes": accelerator.num_processes,
-            "local_process_index": accelerator.local_process_index
-        },
         "country": codecarbon_data.country_name,
         "region": codecarbon_data.region,
-    }
+        "date": datetime.now().strftime("%B %d, %Y at %I:%M:%S %p"),
 
+    }
+    return setup
+
+def extract_experimental_variables(model, accelerator, config, inference_metrics):
+    used_gpu = str(accelerator.device)
+    first_param = next(model.parameters())
+    effective_fp_precision = str(first_param.dtype)
+    effective_batch_size = config.batching_options.get("max_batch_size", 6)
+    sharding_config = None
+    try:
+        from torch.distributed.fsdp import FullyShardedDataParallel
+        if isinstance(model, FullyShardedDataParallel):
+            sharding_config = {
+                "reshard_after_forward": str(getattr(model, "reshard_after_forward", None)),
+                "cpu_offload": str(getattr(model, "cpu_offload", None)),
+                "backward_prefetch": str(getattr(model, "backward_prefetch", None)),
+            }
+    except ImportError:
+        pass
+
+    return {
+         "max_input_tokens": config.max_input_tokens,
+         "max_output_tokens": config.max_output_tokens,
+         "number_runs": inference_metrics["num_runs"],
+         "total_token_inputted": inference_metrics["total_input_tokens"],
+         "total_tokens_outputted": inference_metrics["total_generated_tokens"],
+         "effective_batch_size": effective_batch_size,
+         "used_gpu": used_gpu,
+         "decoder_temperature": config.decoder_temperature,
+         "query_rate": config.query_rate,
+         "fp_precision": effective_fp_precision,
+         "quantisation": config.quantisation,
+         "batching_options": config.batching_options,
+         "sharding_config": sharding_config,
+         "accelerate_config": {
+              "distributed_type": str(accelerator.distributed_type),
+              "num_processes": accelerator.num_processes,
+              "local_process_index": accelerator.local_process_index
+         },
+        "inference_type": config.inference_type,
+        "backend": config.backend,
+    }
 
 def extract_experiment_results(metrics, codecarbon_data, model=None, tokenizer=None, device=None):
     energy_kwh = codecarbon_data.energy_consumed
@@ -102,14 +145,30 @@ def extract_experiment_results(metrics, codecarbon_data, model=None, tokenizer=N
         "task-specific_performance": task_specific_performance
     }
 
+def make_json_serializable(obj):
+    """Recursively convert non-JSON-serializable objects to strings."""
+    if isinstance(obj, dict):
+        return {k: make_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [make_json_serializable(item) for item in obj]
+    else:
+        try:
+            json.dumps(obj)
+            return obj
+        except (TypeError, OverflowError):
+            return str(obj)
 
-def aggregate_experiments(results):
+def aggregate_experiment_results(results):
     aggregated = {}
 
     aggregated["experiment_setup"] = results[0]["experiment_setup"].copy()
     if "accelerate_config" in aggregated["experiment_setup"]:
         aggregated["experiment_setup"]["accelerate_config"].pop("local_process_index", None)
     aggregated["experiment_variables"] = results[0]["experiment_variables"]
+
+    # Aggregate the 'used_gpu' field across processes:
+    gpu_set = {str(proc["experiment_variables"].get("used_gpu", "N/A")) for proc in results}
+    aggregated["experiment_variables"]["used_gpu"] = list(gpu_set)
 
     # Aggregate inference performance by averaging
     inf_keys = ["total_inference_time_sec", "average_latency_ms_per_batch", "throughput_queries_per_sec", "throughput_tokens_per_sec"]
@@ -168,7 +227,10 @@ def aggregate_experiments(results):
         "compute_performance": agg_compute,
         "task-specific_performance": task_perf
     }
-    return aggregated
+
+    # Convert the aggregated dictionary to a fully JSON-serializable form.
+    return make_json_serializable(aggregated)
+
 
 ### ---
 
