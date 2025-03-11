@@ -1815,5 +1815,84 @@
                 "task-specific_performance": {}
             }
         }
+    },
+    {
+        "EXPERIMENT #0029": {
+            "experiment_setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "task_type": "text_generation",
+                "date": "March 11, 2025 at 03:56:12 PM",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2
+                },
+                "country": "Germany",
+                "region": "north rhine-westphalia"
+            },
+            "experiment_variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_runs": 5,
+                "total_token_inputted": 2560,
+                "total_tokens_outputted": 250,
+                "batch_size": 8,
+                "gpu_list": [
+                    1,
+                    2
+                ],
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "float16",
+                "inference_type": "purely_generative",
+                "quantisation": false,
+                "batching_options": {},
+                "sharding_config": {},
+                "is_encoder_decoder": "decoder_only"
+            },
+            "experiment_results": {
+                "inference_performance": {
+                    "total_inference_time_sec": 3.061804956989363,
+                    "average_latency_ms_per_batch": 3061.804956989363,
+                    "throughput_queries_per_sec": 1.6335062361384378,
+                    "throughput_tokens_per_sec": 81.6753118069219
+                },
+                "energy_performance": {
+                    "cpu_power": 112.5,
+                    "gpu_power": 2853.378562805508,
+                    "ram_power": 188.8243260383606,
+                    "energy_efficiency_tokens_per_joule": 0.151836428193442,
+                    "cpu_energy": 0.0002424484434450278,
+                    "gpu_energy": 0.0002852577282084212,
+                    "ram_energy": 0.00040675174932283627,
+                    "total_energy_consumed_kwh": 0.0009344579209762853,
+                    "total_energy_consumed_joules": 3364.048515514627,
+                    "final_emissions": 0.0003559817449959159
+                },
+                "compute_performance": {
+                    "gpu": "cuda:0",
+                    "flops_forward_pass": "Error: name 'ModelWrapper' is not defined",
+                    "cpu_usage_percent": 0.0,
+                    "cpu_memory_usage_bytes": 2939246592.0,
+                    "gpu_utilization_percent": [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "current_memory_allocated_bytes": 4410810880.0,
+                    "max_memory_allocated_bytes": 4410810880.0,
+                    "current_memory_reserved_bytes": 6715080704.0,
+                    "max_memory_reserved_bytes": 6715080704.0,
+                    "cpu_vendor": "AMD"
+                },
+                "task-specific_performance": {}
+            }
+        }
     }
 ]

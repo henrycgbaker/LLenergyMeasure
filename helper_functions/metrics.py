@@ -3,7 +3,6 @@ import torch
 import psutil
 import subprocess
 from fvcore.nn import FlopCountAnalysis
-from src.thesis_package.model_wrapper import ModelWrapper
 
 def detect_cpu_vendor():
     try:

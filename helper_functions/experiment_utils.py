@@ -13,6 +13,8 @@ import psutil
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from accelerate import Accelerator
 import yaml
+from helper_functions.metrics import get_compute_performance_metrics  
+
 
 def load_experiment_config(config_path="experiment_configs.yaml"):
     """Loads experiment configuration settings from a YAML file."""
@@ -75,7 +77,6 @@ def extract_experiment_results(metrics, codecarbon_data, model=None, tokenizer=N
     task_specific_performance = {}
 
     # Import the metrics function from your metrics module
-    from metrics import get_compute_performance_metrics  
     compute_metrics = get_compute_performance_metrics(model=model, tokenizer=tokenizer, device=device)
 
     return {
