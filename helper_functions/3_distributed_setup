@@ -1,0 +1,17 @@
+import os
+import torch
+from accelerate import Accelerator
+
+def distributed_env_torch(model, tokenizer, gpu_list=None):
+    
+    # Only set CUDA_VISIBLE_DEVICES if a gpu_list is provided.
+    if gpu_list is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_list)
+    
+    accelerator = Accelerator(device_placement=True)
+    
+    model, tokenizer = accelerator.prepare(model, tokenizer)
+    
+    print(f"[Process {os.getpid()}] Model is on device: {accelerator.device}")
+    
+    return model, tokenizer, accelerator

@@ -13,7 +13,7 @@ from torch.distributed.fsdp import FullyShardedDataParallel
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from accelerate import Accelerator
 import yaml
-from helper_functions.metrics_results import get_compute_performance_metrics  
+from helper_functions.getter_utils import get_compute_performance_metrics  
 
 
 def load_experiment_config(config_path="experiment_configs.yaml"):
@@ -75,7 +75,7 @@ def extract_experimental_variables(model, accelerator, config, inference_metrics
     used_gpu = str(accelerator.device)
     first_param = next(model.parameters())
     effective_fp_precision = str(first_param.dtype)
-    effective_batch_size = config.batching_options.get("max_batch_size", 6)
+    effective_batch_size = config.batching_options.get("max_batch_size")
     sharding_config = None
     try:
         from torch.distributed.fsdp import FullyShardedDataParallel
@@ -119,7 +119,7 @@ def extract_experiment_results(metrics, codecarbon_data, model=None, tokenizer=N
     # Placeholder for task-specific performance
     task_specific_performance = {}
 
-    # Import the metrics function from your metrics module
+    # Import the metrics function from metrics module
     compute_metrics = get_compute_performance_metrics(model=model, tokenizer=tokenizer, device=device)
 
     return {
@@ -158,7 +158,7 @@ def make_json_serializable(obj):
         except (TypeError, OverflowError):
             return str(obj)
 
-def aggregate_experiment_results(results):
+def aggregate_process_results(results):
     aggregated = {}
 
     aggregated["experiment_setup"] = results[0]["experiment_setup"].copy()

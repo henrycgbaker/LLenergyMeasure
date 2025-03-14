@@ -1,0 +1,104 @@
+import os
+import torch
+import torch.distributed as dist
+import time
+from model_loader import load_model_tokenizer_backend
+from distributed_setup import prep_distributed_env
+from energy_tracking import start_energy_tracking, stop_energy_tracking
+from extraction import (get_experiment_setup,
+                                           get_experimental_variables,
+                                           get_experiment_results,
+                                           aggregate_process_results,
+                                           get_persistent_unique_id,
+                                           save_results)
+
+class ExperimentRunner: # COME BACK TO: THIS NEEDS TO PULL FROM THE ORIGINAL 
+    def __init__(self, experiment_config, prompts, inference_fn, use_optimum=False, **inference_kwargs):
+        self.config = experiment_config
+        self.prompts = prompts
+        self.inference_fn = inference_fn
+        self.use_optimum = use_optimum
+        self.inference_kwargs = inference_kwargs
+
+    def run(self):
+        model_name = self.config.model_name
+        task_type = self.config.task_type.value if hasattr(self.config.task_type, "value") else self.config.task_type
+        # Load model & tokenizer
+        model, tokenizer = load_model_tokenizer_backend(model_name, backend=self.config.backend, fp_precision=self.config.fp_precision)
+        print(f"[Process {os.getpid()}] Loaded model on device: {next(model.parameters()).device}")
+
+        # (Optional) Save original generate method, apply quantisation, etc.
+        if hasattr(model, "generate"):
+            orig_generate = model.generate
+        elif hasattr(model, "module") and hasattr(model.module, "generate"):
+            orig_generate = model.module.generate
+        else:
+            orig_generate = None
+            print(f"[Process {os.getpid()}] Warning: original generate method not found.")
+
+        # Initialize distributed environment
+        model, tokenizer, accelerator = prep_distributed_env(model, tokenizer, gpu_list=self.config.gpu_list)
+
+        # (Optional) Sharding configuration using FSDP can go here
+
+        # Reassign generate method if necessary
+        if orig_generate:
+            if hasattr(model, "module"):
+                model.module.generate = orig_generate
+            model.generate = orig_generate
+
+        # Run a dummy forward pass for lazy allocation
+        dummy_input = tokenizer("Hello world", return_tensors="pt", truncation=True, max_length=self.config.max_input_tokens).input_ids.to(accelerator.device)
+        with torch.no_grad():
+            _ = model(dummy_input)
+        print(f"[Process {os.getpid()}] Dummy forward pass complete.")
+
+        # Start energy tracking
+        tracker = start_energy_tracking()
+        effective_batch_size = self.config.batching_options.get("max_batch_size", 6)
+        print(f"[Process {os.getpid()}] Effective batch size: {effective_batch_size}")
+
+        # Run inference
+        inference_metrics = self.inference_fn(
+            model, tokenizer, accelerator, self.prompts,
+            self.config.max_input_tokens,
+            self.config.max_output_tokens,
+            effective_batch_size,
+            decoder_temperature=self.config.decoder_temperature,
+            inference_type=self.config.inference_type,
+            query_rate=self.config.query_rate,
+            **self.inference_kwargs
+        )
+        print(f"[Process {os.getpid()}] Inference complete.")
+        codecarbon_data = stop_energy_tracking(tracker)
+        experiment_results = get_experiment_results(inference_metrics, codecarbon_data, model=model, tokenizer=tokenizer, device=accelerator.device)
+
+        experiment_setup = get_experiment_setup(model_name, codecarbon_data, task_type, self.config.is_encoder_decoder)
+        experiment_variables = get_experimental_variables(model, accelerator, self.config, inference_metrics)
+
+        local_result = {
+            "experiment_setup": experiment_setup,
+            "experiment_variables": experiment_variables,
+            "experiment_results": experiment_results
+        }
+        
+        # Synchronize processes
+        accelerator.wait_for_everyone()
+        if dist.is_available() and dist.is_initialized():
+            world_size = dist.get_world_size()
+            all_results = [None] * world_size
+            print(f"[Process {os.getpid()}] Waiting to gather results.")
+            dist.all_gather_object(all_results, local_result)
+        else:
+            all_results = [local_result]
+
+        if accelerator.local_process_index == 0:
+            aggregated_result = aggregate_process_results(all_results)
+            unique_id = get_persistent_unique_id()
+            experiment_title = f"EXPERIMENT #{unique_id}"
+            benchmark_results = {experiment_title: aggregated_result}
+            output_json_path = save_results(task_type, benchmark_results)
+            print(f"[Process {os.getpid()}] Aggregated benchmark results saved to {output_json_path}")
+            return benchmark_results
+        else:
+            return None
