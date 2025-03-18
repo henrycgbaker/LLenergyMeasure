@@ -74,3 +74,118 @@
 [RANK-PROCESS-0][[36m2025-03-14 11:09:00,995[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Exiting rank process[0m
 [ISOLATED-PROCESS][[36m2025-03-14 11:09:24,151[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Sending outputs to main process[0m
 [ISOLATED-PROCESS][[36m2025-03-14 11:09:24,153[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Exiting isolated process[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:26:02,219[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Setting torch.distributed cuda device to 0[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:26:02,311[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Initializing torch.distributed process group[0m
+[ISOLATED-PROCESS][[36m2025-03-14 15:26:46,615[0m][[34mtorchrun[0m][[31mERROR[0m] - 	+ Sending traceback to main process[0m
+[ISOLATED-PROCESS][[36m2025-03-14 15:26:46,625[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Exiting isolated process[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:15,481[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Setting torch.distributed cuda device to 0[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:15,591[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Initializing torch.distributed process group[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:17,238[0m][[34mdatasets[0m][[32mINFO[0m] - PyTorch version 2.1.2 available.[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:20,021[0m][[34mpytorch[0m][[32mINFO[0m] - Allocating pytorch backend[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:20,022[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Seeding backend with 42[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:20,023[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Benchmarking a Transformers model[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:21,275[0m][[34minference[0m][[32mINFO[0m] - Allocating inference scenario[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:21,277[0m][[34minference[0m][[32mINFO[0m] - 	+ Updating Text Generation kwargs with default values[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:21,277[0m][[34minference[0m][[32mINFO[0m] - 	+ Initializing Text Generation report[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:21,278[0m][[34minference[0m][[32mINFO[0m] - 	+ Initializing Latency tracker[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:21,279[0m][[34mlatency[0m][[32mINFO[0m] - 		+ Tracking latency using Pytorch CUDA events[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:21,279[0m][[34minference[0m][[32mINFO[0m] - 	+ Initializing Per-Token Latency tracker[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:21,279[0m][[34mlatency[0m][[32mINFO[0m] - 		+ Tracking latency using Pytorch CUDA events[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:21,279[0m][[34minference[0m][[32mINFO[0m] - 	+ Initializing Memory tracker[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:21,279[0m][[34mmemory[0m][[32mINFO[0m] - 		+ Tracking RAM memory of process 3147208[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:21,280[0m][[34mmemory[0m][[32mINFO[0m] - 		+ Tracking GPU memory of devices [0, 1][0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:21,280[0m][[34mmemory[0m][[32mINFO[0m] - 		+ Tracking Allocated/Reserved memory of 2 Pytorch CUDA devices[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:21,280[0m][[34minference[0m][[32mINFO[0m] - 	+ Generating inputs for task text-generation[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:21,309[0m][[34minference[0m][[32mINFO[0m] - 	+ Running model loading tracking[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:40,859[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Creating backend temporary directory[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:40,861[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Creating no weights model[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:40,863[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Creating no weights model directory[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:40,864[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Creating no weights model state dict[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:40,867[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Saving no weights model safetensors[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:40,870[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Saving no weights model pretrained config[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:40,876[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Loading model with random weights[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:40,878[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Loading Transformers model using device context manager for fast initialization[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:41,433[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Enabling eval mode[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:41,435[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Cleaning up backend temporary directory[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:41,493[0m][[34minference[0m][[32mINFO[0m] - 	+ Preparing inputs for backend pytorch[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:41,633[0m][[34minference[0m][[32mINFO[0m] - 	+ Warming up backend for Text Generation[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:27:46,915[0m][[34minference[0m][[32mINFO[0m] - 	+ Running Per-Token Text Generation latency tracking[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:28:12,233[0m][[34minference[0m][[32mINFO[0m] - 	+ Running Text Generation memory tracking[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:28:46,418[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Benchmark completed successfully[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:28:46,426[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Destroying torch.distributed process group[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:28:46,427[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Exiting rank process[0m
+[ISOLATED-PROCESS][[36m2025-03-14 15:29:11,049[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Sending outputs to main process[0m
+[ISOLATED-PROCESS][[36m2025-03-14 15:29:11,050[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Exiting isolated process[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:06,184[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Setting torch.distributed cuda device to 0[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:06,289[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Initializing torch.distributed process group[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:07,119[0m][[34mdatasets[0m][[32mINFO[0m] - PyTorch version 2.1.2 available.[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:08,452[0m][[34mpytorch[0m][[32mINFO[0m] - Allocating pytorch backend[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:08,452[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Seeding backend with 42[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:08,453[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Benchmarking a Transformers model[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:09,656[0m][[34minference[0m][[32mINFO[0m] - Allocating inference scenario[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:09,657[0m][[34minference[0m][[32mINFO[0m] - 	+ Updating Text Generation kwargs with default values[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:09,657[0m][[34minference[0m][[32mINFO[0m] - 	+ Initializing Text Generation report[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:09,658[0m][[34minference[0m][[32mINFO[0m] - 	+ Initializing Latency tracker[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:09,659[0m][[34mlatency[0m][[32mINFO[0m] - 		+ Tracking latency using Pytorch CUDA events[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:09,659[0m][[34minference[0m][[32mINFO[0m] - 	+ Initializing Per-Token Latency tracker[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:09,659[0m][[34mlatency[0m][[32mINFO[0m] - 		+ Tracking latency using Pytorch CUDA events[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:09,659[0m][[34minference[0m][[32mINFO[0m] - 	+ Initializing Memory tracker[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:09,659[0m][[34mmemory[0m][[32mINFO[0m] - 		+ Tracking RAM memory of process 3154938[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:09,659[0m][[34mmemory[0m][[32mINFO[0m] - 		+ Tracking GPU memory of devices [0, 1][0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:09,659[0m][[34mmemory[0m][[32mINFO[0m] - 		+ Tracking Allocated/Reserved memory of 2 Pytorch CUDA devices[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:09,659[0m][[34minference[0m][[32mINFO[0m] - 	+ Generating inputs for task text-generation[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:09,688[0m][[34minference[0m][[32mINFO[0m] - 	+ Running model loading tracking[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:26,242[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Creating backend temporary directory[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:26,243[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Creating no weights model[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:26,244[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Creating no weights model directory[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:26,244[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Creating no weights model state dict[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:26,245[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Saving no weights model safetensors[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:26,246[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Saving no weights model pretrained config[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:26,248[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Loading model with random weights[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:26,249[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Loading Transformers model using device context manager for fast initialization[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:26,556[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Enabling eval mode[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:26,558[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Cleaning up backend temporary directory[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:26,597[0m][[34minference[0m][[32mINFO[0m] - 	+ Preparing inputs for backend pytorch[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:26,671[0m][[34minference[0m][[32mINFO[0m] - 	+ Warming up backend for Text Generation[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:35:31,212[0m][[34minference[0m][[32mINFO[0m] - 	+ Running Per-Token Text Generation latency tracking[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:36:00,572[0m][[34minference[0m][[32mINFO[0m] - 	+ Running Text Generation memory tracking[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:36:52,091[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Benchmark completed successfully[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:36:52,128[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Destroying torch.distributed process group[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:36:52,130[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Exiting rank process[0m
+[ISOLATED-PROCESS][[36m2025-03-14 15:37:04,279[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Sending outputs to main process[0m
+[ISOLATED-PROCESS][[36m2025-03-14 15:37:04,283[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Exiting isolated process[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:45,775[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Setting torch.distributed cuda device to 0[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:45,853[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Initializing torch.distributed process group[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:51,667[0m][[34mdatasets[0m][[32mINFO[0m] - PyTorch version 2.1.2 available.[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:53,513[0m][[34mpytorch[0m][[32mINFO[0m] - Allocating pytorch backend[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:53,515[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Seeding backend with 42[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:53,517[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Benchmarking a Transformers model[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:56,662[0m][[34minference[0m][[32mINFO[0m] - Allocating inference scenario[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:56,663[0m][[34minference[0m][[32mINFO[0m] - 	+ Updating Text Generation kwargs with default values[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:56,664[0m][[34minference[0m][[32mINFO[0m] - 	+ Initializing Text Generation report[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:56,667[0m][[34minference[0m][[32mINFO[0m] - 	+ Initializing Latency tracker[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:56,668[0m][[34mlatency[0m][[32mINFO[0m] - 		+ Tracking latency using Pytorch CUDA events[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:56,668[0m][[34minference[0m][[32mINFO[0m] - 	+ Initializing Per-Token Latency tracker[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:56,669[0m][[34mlatency[0m][[32mINFO[0m] - 		+ Tracking latency using Pytorch CUDA events[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:56,669[0m][[34minference[0m][[32mINFO[0m] - 	+ Initializing Memory tracker[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:56,669[0m][[34mmemory[0m][[32mINFO[0m] - 		+ Tracking RAM memory of process 3158236[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:56,670[0m][[34mmemory[0m][[32mINFO[0m] - 		+ Tracking GPU memory of devices [0, 1][0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:56,670[0m][[34mmemory[0m][[32mINFO[0m] - 		+ Tracking Allocated/Reserved memory of 2 Pytorch CUDA devices[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:56,670[0m][[34minference[0m][[32mINFO[0m] - 	+ Generating inputs for task text-generation[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:37:56,678[0m][[34minference[0m][[32mINFO[0m] - 	+ Running model loading tracking[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:38:25,360[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Creating backend temporary directory[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:38:25,362[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Creating no weights model[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:38:25,362[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Creating no weights model directory[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:38:25,362[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Creating no weights model state dict[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:38:25,364[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Saving no weights model safetensors[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:38:25,365[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Saving no weights model pretrained config[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:38:25,367[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Loading model with random weights[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:38:25,367[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Loading Transformers model using device context manager for fast initialization[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:38:26,163[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Enabling eval mode[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:38:26,167[0m][[34mpytorch[0m][[32mINFO[0m] - 	+ Cleaning up backend temporary directory[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:38:26,411[0m][[34minference[0m][[32mINFO[0m] - 	+ Preparing inputs for backend pytorch[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:38:26,632[0m][[34minference[0m][[32mINFO[0m] - 	+ Warming up backend for Text Generation[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:38:34,954[0m][[34minference[0m][[32mINFO[0m] - 	+ Running Per-Token Text Generation latency tracking[0m
+[RANK-PROCESS-0][[36m2025-03-14 15:39:38,166[0m][[34minference[0m][[32mINFO[0m] - 	+ Running Text Generation memory tracking[0m
+[ISOLATED-PROCESS][[36m2025-03-14 15:40:20,942[0m][[34mtorchrun[0m][[31mERROR[0m] - 	+ Sending traceback to main process[0m
+[ISOLATED-PROCESS][[36m2025-03-14 15:40:20,943[0m][[34mtorchrun[0m][[32mINFO[0m] - 	+ Exiting isolated process[0m
