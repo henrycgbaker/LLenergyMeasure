@@ -6,29 +6,29 @@ import ptflops
 import logging
 logger = logging.getLogger(__name__)
 
-def get_flops(model, input_ids):
-    """
-    Computes the FLOPs for a given model and a batch of inputs.
-    
-    Parameters:
-      - model: The neural network model.
-      - input_ids: A tensor of shape (batch_size, sequence_length)
-      
-    Returns:
-      The number of FLOPs (as a float) for that batch, or None if computation fails.
-    """
-    batch_size, sequence_length = input_ids.shape
-    flops_single, _ = ptflops.get_model_complexity_info(
-        model,
-        input_res=(sequence_length,),  # input resolution for a single sample
-        as_strings=False,
-        print_per_layer_stat=False,
-        verbose=False
-    )
-    if flops_single is None:
-        logger.warning("ptflops returned None for model complexity. Unable to compute FLOPs.")
-        return None
-    return flops_single * batch_size
+def get_flops(model, input_ids_batch):
+    total_flops = 0.0
+    batch_size, _ = input_ids_batch.shape
+    for i in range(batch_size):
+        sample_length = input_ids_batch[i:i+1].shape[1]
+        def input_constructor(input_res):
+            # Create a dummy input for this single sample.
+            dummy_input = torch.zeros((1,) + input_res, dtype=torch.long)
+            return {"input_ids": dummy_input}
+        
+        flops_single, _ = ptflops.get_model_complexity_info(
+            model,
+            input_res=(sample_length,),
+            as_strings=False,
+            print_per_layer_stat=False,
+            verbose=False,
+            input_constructor=input_constructor
+        )
+        if flops_single is None:
+            # handle this case differently.
+            continue
+        total_flops += flops_single
+    return total_flops
 
 
 def get_memory(device):

@@ -64,7 +64,8 @@ class ExperimentRunner:
 
         # Load model and tokenizer
         model_undistributed, tokenizer = load_model_tokenizer(model_name, self.config.backend, self.config.fp_precision)
-        logger.info(f"{model_name} loaded using backend {self.config.backend} with precision {self.config.fp_precision}.")
+        if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
+            print(f"{model_name} loaded using backend {self.config.backend} with precision {self.config.fp_precision}.")
             
         # Save original generate method before distribution
         orig_generate_method = get_original_generate_method(model_undistributed)
@@ -120,7 +121,7 @@ class ExperimentRunner:
         accelerator.print("Energy tracking stopped")
         
         # Collect per-process results 
-        process_inference_metrics = combine_inference_metrics(raw_inference_results, codecarbon_data)
+        process_inference_metrics = combine_inference_metrics(raw_inference_results)
         process_power_energy_metrics = combine_energy_metrics(codecarbon_data, raw_inference_results)
         process_comp_metrics = combine_comp_metrics(model=model, device=accelerator.device, tokenised_input_ids=input_ids)
 
