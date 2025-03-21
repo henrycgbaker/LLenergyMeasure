@@ -42,28 +42,16 @@ def adaptive_batching(prompts: List[str], tokenizer: Any, adaptive_max_tokens: i
     
     return batches
 
-def calculate_inference_metrics(num_input_prompts: int, latencies: list, total_input_tokens: int, total_generated_tokens: int):
-    """
-    Calculates inference metrics.
-    
-    Parameters:
-        num_prompts: Number of prompts processed.
-        latencies: List of latency measurements in milliseconds.
-        total_input_tokens: Total number of input tokens processed.
-        total_generated_tokens: Total number of tokens generated.
-        
-    Returns:
-        A dictionary containing computed metrics.
-    """
-    avg_latency_ms = sum(latencies) / len(latencies) if latencies else 0.0
+def calculate_inference_metrics(num_input_prompts, latencies, total_input_tokens, total_generated_tokens):
     total_time_sec = sum(latencies) / 1000.0 if latencies else 0.0
+    avg_latency_ms = sum(latencies) / len(latencies) if latencies else 0.0
     throughput_qps = num_input_prompts / total_time_sec if total_time_sec > 0 else 0.0
     tokens_per_sec = total_generated_tokens / total_time_sec if total_time_sec > 0 else 0.0
 
     return {
+        "num_input_prompts": num_input_prompts,
         "total_input_tokens": total_input_tokens,
         "total_generated_tokens": total_generated_tokens,
-        "num_input_prompts": num_input_prompts,
         "total_time_sec": total_time_sec,
         "avg_latency_ms": avg_latency_ms,
         "throughput_qps": throughput_qps,

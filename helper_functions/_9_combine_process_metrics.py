@@ -1,7 +1,6 @@
 from _8_get_compute_info import get_flops, get_memory, get_gpu_cpu_utilisation
 
-def combine_inference_metrics(inference_results, codecarbon_data):
-    
+def combine_inference_metrics(inference_results):
     raw_metrics = {
         "number_input_prompts": inference_results.get("num_input_prompts", 0),
         "total_input_tokens": inference_results.get("total_input_tokens", 0),
@@ -9,15 +8,14 @@ def combine_inference_metrics(inference_results, codecarbon_data):
     }
     
     performance_metrics = {
-        "total_inference_codecarbon": codecarbon_data.duration,
         "total_inference_time_sec": inference_results.get("total_time_sec", 0),
         "average_latency_ms_per_batch": inference_results.get("avg_latency_ms", 0),
         "throughput_queries_per_sec": inference_results.get("throughput_qps", 0),
         "throughput_tokens_per_sec": inference_results.get("tokens_per_sec", 0),
     }
     
-    return {"raw_inference_metrics": raw_metrics, 
-            "inference_performance": performance_metrics}
+    return {"raw_inference_metrics": raw_metrics, "inference_performance": performance_metrics}
+
 
     
 def combine_energy_metrics(codecarbon_data, inference_results):
