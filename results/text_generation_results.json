@@ -826,5 +826,61 @@
                 }
             }
         }
+    },
+    {
+        "EXPERIMENT_0077": {
+            "setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony",
+                "date": "March 22, 2025 at 01:17:14 PM"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_input_prompts": null,
+                "used_gpu": "cuda:0",
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "torch.float16",
+                "quantisation": null,
+                "batching_options": {
+                    "fixed_max_batch_size": 2,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 256
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "inference_metrics": "inference_metrics.json",
+                "compute_metrics": "compute_metrics.json",
+                "energy_metrics": "local_energy_results_*.json"
+            }
+        }
     }
 ]

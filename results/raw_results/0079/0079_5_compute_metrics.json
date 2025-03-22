@@ -8,12 +8,12 @@
   },
   "Compute_utilisation": {
     "gpu_utilization_percent": [
-      32.0,
-      68.0,
+      31.0,
+      91.0,
       0.0,
       0.0
     ],
-    "cpu_usage_percent": 95.3,
-    "cpu_memory_usage_bytes": 2966900736
+    "cpu_usage_percent": 97.5,
+    "cpu_memory_usage_bytes": 2968723456
   }
 }

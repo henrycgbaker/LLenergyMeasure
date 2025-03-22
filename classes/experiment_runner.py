@@ -39,7 +39,7 @@ from _8_get_inference_results import combine_inference_metrics
 from _9_get_compute_info import get_flops, get_memory, get_gpu_cpu_utilisation, combine_comp_metrics
 from _10_get_energy_metrics import combine_energy_metrics
 from _11_aggregate_experiment_results import make_json_serializable, aggregate_experiments
-from _12_save_results import get_persistent_unique_id, save_raw_results, save_final_results
+from _12_save_results import save_raw_results, save_final_results
 
 # --------------------------------------------------
 

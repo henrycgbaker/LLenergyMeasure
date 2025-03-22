@@ -1,31 +1,12 @@
 import os
 import json
 
-def get_persistent_unique_id():
-    """
-    Retrieves a persistent unique ID from a local file and increments it.
-    """
-    ID_FILE = "experiment_id.txt"
-    if os.path.exists(ID_FILE):
-        with open(ID_FILE, "r") as f:
-            try:
-                last_id = int(f.read().strip())
-            except ValueError:
-                last_id = 0
-    else:
-        last_id = 0
-    new_id = last_id + 1
-    with open(ID_FILE, "w") as f:
-        f.write(str(new_id))
-    return f"{new_id:04d}"
-
-
 def save_raw_results(unique_id, type, results, pid=None):
-    output_dir = os.path.join(os.getcwd(), f"raw_results/{unique_id}")    
+    output_dir = os.path.join(os.getcwd(), f"results/raw_results/{unique_id}")    
     os.makedirs(output_dir, exist_ok=True)
     
     if pid is not None:
-        output_json_path = os.path.join(output_dir, f"{unique_id}_{type}_{pid}.json")  
+        output_json_path = os.path.join(output_dir, f"{unique_id}_process_{pid}_{type}.json")  
 
     else:
         output_json_path = os.path.join(output_dir, f"{unique_id}_{type}.json") 
@@ -47,7 +28,7 @@ def save_final_results(task_type, benchmark_results):
     Returns:
       The file path where the results were saved.
     """
-    output_dir = "benchmark_results"
+    output_dir = "results"
     os.makedirs(output_dir, exist_ok=True)
     output_json_path = os.path.join(output_dir, f"{task_type}_results.json")
     

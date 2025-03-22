@@ -3,6 +3,14 @@ from datetime import datetime
 import json
 import os
 
+def aggregate_results(results_dir):
+    files = glob.glob(os.path.join(results_dir, "energy_metrics_rank_*.json"))
+    aggregated = []
+    for file in files:
+        with open(file, "r") as f:
+            aggregated.append(json.load(f))
+    return aggregated
+
 def make_json_serializable(obj):
     """Recursively convert non-JSON-serializable objects to strings."""
     if isinstance(obj, dict):

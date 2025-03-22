@@ -37,11 +37,11 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
         adaptive_max_tokens = experiment_config.batching_options.get("adaptive_max_tokens", max_input_tokens)
         # Pass max_input_tokens as the cap for each prompt's token count.
         batches = adaptive_batching(prompts, tokenizer, adaptive_max_tokens, max_prompt_tokens=max_input_tokens, max_batch_size=fixed_max_batch_size)
-        accelerator.print(f"Adaptive batching: created {len(batches)} batches.")
+        accelerator.print(f"Using adaptive batching: created {len(batches)} batches.")
     else:
         # Fixed batching: partition the prompts into fixed-size chunks.
         batches = [prompts[i:i+fixed_max_batch_size] for i in range(0, len(prompts), fixed_max_batch_size)]
-        accelerator.print(f"Fixed batching (non-adaptive): created {len(batches)} batches.")
+        accelerator.print(f"Using fixed batching (non-adaptive): created {len(batches)} batches.")
     
     # Process each batch: tokenise and run inference immediately.
     for batch in batches:

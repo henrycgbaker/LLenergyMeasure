@@ -25,7 +25,7 @@ def get_region_info(codecarbon_data):
         "region": getattr(codecarbon_data, "region", "Unknown"),
     }
 
-def get_experiment_setup(experiment_config, model, codecarbon_data):
+def get_experiment_setup(experiment_config, model, codecarbon_data, unique_id):
     """
     Gathers experiment setup information.
     
@@ -45,6 +45,8 @@ def get_experiment_setup(experiment_config, model, codecarbon_data):
     is_encoder_decoder = getattr(model_config, "is_encoder_decoder", experiment_config.is_encoder_decoder)
     
     setup_info = {
+        "exp_id": unique_id,
+        "date": datetime.now().strftime("%B %d, %Y at %I:%M:%S %p"),
         "model": experiment_config.model_name,
         "is_encoder_decoder": is_encoder_decoder,
         "task_type": experiment_config.task_type,
@@ -56,7 +58,6 @@ def get_experiment_setup(experiment_config, model, codecarbon_data):
         "python_version": sys.version,
         "country": region_info["country_name"],
         "region": region_info["region"],
-        "date": datetime.now().strftime("%B %d, %Y at %I:%M:%S %p"),
     }
     return setup_info
 
@@ -72,14 +73,12 @@ def get_experimental_variables(experiment_config, model, accelerator):
     Returns:
       A dictionary of experimental variables.
     """
-    used_gpu = str(accelerator.device)
     effective_fp_precision = str(next(model.parameters()).dtype)
     
     experimental_variables = {
         "max_input_tokens": experiment_config.max_input_tokens,
         "max_output_tokens": experiment_config.max_output_tokens,
-        "number_input_prompts": getattr(experiment_config, "num_inputs", None),
-        "used_gpu": used_gpu,
+        "number_input_prompts": getattr(experiment_config, "num_input_prompts", None),
         "decoder_temperature": experiment_config.decoder_temperature,
         "query_rate": experiment_config.query_rate,
         "fp_precision": effective_fp_precision,
@@ -89,7 +88,6 @@ def get_experimental_variables(experiment_config, model, accelerator):
         "accelerate_config": {
             "distributed_type": str(accelerator.distributed_type),
             "num_processes": accelerator.num_processes,
-            "local_process_index": accelerator.local_process_index,
         },
         "inference_type": experiment_config.inference_type,
         "backend": experiment_config.backend,
