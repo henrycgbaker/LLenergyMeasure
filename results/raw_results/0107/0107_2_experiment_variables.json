@@ -1,0 +1,27 @@
+{
+  "max_input_tokens": 512,
+  "max_output_tokens": 50,
+  "number_input_prompts": 5,
+  "decoder_temperature": 1.0,
+  "query_rate": 1,
+  "fp_precision": "torch.float32",
+  "quantisation": null,
+  "batching_options": {
+    "fixed_max_batch_size": 2,
+    "adaptive_batching": true,
+    "adaptive_max_tokens": 256
+  },
+  "sharding_config": {
+    "fsdp_config": {
+      "use_orig_params": true,
+      "cpu_offload": true
+    },
+    "sharding_strategy": "NO_SHARD"
+  },
+  "accelerate_config": {
+    "distributed_type": "DistributedType.NO",
+    "num_processes": 1
+  },
+  "inference_type": "pure_generative",
+  "backend": "pytorch"
+}

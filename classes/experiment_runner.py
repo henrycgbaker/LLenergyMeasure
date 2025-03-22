@@ -5,6 +5,8 @@ import logging
 import torch.distributed as dist
 import logging
 
+logging.getLogger("codecarbon").setLevel(logging.ERROR)
+
 # Adjust paths -> import helper functions
 project_root = os.getcwd()  
 if project_root not in sys.path:
