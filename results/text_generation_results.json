@@ -1,0 +1,886 @@
+[
+    {
+        "EXPERIMENT_0032": {
+            "setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony",
+                "date": "March 21, 2025 at 07:14:47 PM"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_input_prompts": null,
+                "used_gpu": "cuda:0",
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "torch.float16",
+                "quantisation": null,
+                "batching_options": {
+                    "fixed_max_batch_size": 2,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 256
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "experiment_results": {
+                    "inference_performance": {
+                        "total_inference_time_sec": 0.0,
+                        "average_latency_ms_per_batch": 0.0,
+                        "throughput_queries_per_sec": 0.0,
+                        "throughput_tokens_per_sec": 0.0
+                    },
+                    "energy_performance": {
+                        "cpu_power": 112.5,
+                        "gpu_power": 181.0947542903656,
+                        "ram_power": 188.82433032989502,
+                        "energy_efficiency_tokens_per_joule": 0.17342641423261113,
+                        "cpu_energy": 0.00019769544134760512,
+                        "gpu_energy": 0.00027154799501616367,
+                        "ram_energy": 0.000331608613801129,
+                        "total_energy_kwh": 0.0008008520501648979,
+                        "total_energy_joules": 2883.067380593632,
+                        "final_emissions": [
+                            0.000152584240533434,
+                            0.00015250034797688385
+                        ]
+                    },
+                    "compute_performance": {
+                        "FLOPs": 2648432967680.0,
+                        "cpu_usage_percent": 0,
+                        "gpu_utilization_percent": 0,
+                        "current_memory_allocated_bytes": 0,
+                        "max_memory_allocated_bytes": 0,
+                        "current_memory_reserved_bytes": 0,
+                        "max_memory_reserved_bytes": 0
+                    },
+                    "task_specific_performance": {}
+                }
+            }
+        }
+    },
+    {
+        "EXPERIMENT_0033": {
+            "setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony",
+                "date": "March 21, 2025 at 07:14:47 PM"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_input_prompts": null,
+                "used_gpu": "cuda:1",
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "torch.float16",
+                "quantisation": null,
+                "batching_options": {
+                    "fixed_max_batch_size": 2,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 256
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 1
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": null
+        }
+    },
+    {
+        "EXPERIMENT_0034": {
+            "setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony",
+                "date": "March 21, 2025 at 07:17:16 PM"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_input_prompts": null,
+                "used_gpu": "cuda:1",
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "torch.float16",
+                "quantisation": null,
+                "batching_options": {
+                    "fixed_max_batch_size": 2,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 256
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 1
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": null
+        }
+    },
+    {
+        "EXPERIMENT_0035": {
+            "setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony",
+                "date": "March 21, 2025 at 07:17:16 PM"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_input_prompts": null,
+                "used_gpu": "cuda:0",
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "torch.float16",
+                "quantisation": null,
+                "batching_options": {
+                    "fixed_max_batch_size": 2,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 256
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "experiment_results": {
+                    "inference_performance": {
+                        "total_inference_time_sec": 0.0,
+                        "average_latency_ms_per_batch": 0.0,
+                        "throughput_queries_per_sec": 0.0,
+                        "throughput_tokens_per_sec": 0.0
+                    },
+                    "energy_performance": {
+                        "cpu_power": 112.5,
+                        "gpu_power": 158.57151443245334,
+                        "ram_power": 188.82433032989502,
+                        "energy_efficiency_tokens_per_joule": 0.1712294093803672,
+                        "cpu_energy": 0.00020534324846994425,
+                        "gpu_energy": 0.00026137909799217596,
+                        "ram_energy": 0.00034445951085775755,
+                        "total_energy_kwh": 0.0008111818573198776,
+                        "total_energy_joules": 2920.2546863515595,
+                        "final_emissions": [
+                            0.00015577425998184485,
+                            0.00015324546856416253
+                        ]
+                    },
+                    "compute_performance": {
+                        "FLOPs": 2648432967680.0,
+                        "cpu_usage_percent": 0,
+                        "gpu_utilization_percent": 0,
+                        "current_memory_allocated_bytes": 0,
+                        "max_memory_allocated_bytes": 0,
+                        "current_memory_reserved_bytes": 0,
+                        "max_memory_reserved_bytes": 0
+                    },
+                    "task_specific_performance": {}
+                }
+            }
+        }
+    },
+    {
+        "EXPERIMENT_0036": {
+            "setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony",
+                "date": "March 21, 2025 at 07:37:51 PM"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_input_prompts": null,
+                "used_gpu": "cuda:1",
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "torch.float16",
+                "quantisation": null,
+                "batching_options": {
+                    "fixed_max_batch_size": 2,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 256
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 1
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": null
+        }
+    },
+    {
+        "EXPERIMENT_0037": {
+            "setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony",
+                "date": "March 21, 2025 at 07:38:01 PM"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_input_prompts": null,
+                "used_gpu": "cuda:0",
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "torch.float16",
+                "quantisation": null,
+                "batching_options": {
+                    "fixed_max_batch_size": 2,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 256
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "experiment_results": {
+                    "inference_performance": {
+                        "total_inference_time_sec": 0.0,
+                        "average_latency_ms_per_batch": 0.0,
+                        "throughput_queries_per_sec": 0.0,
+                        "throughput_tokens_per_sec": 0.0
+                    },
+                    "energy_performance": {
+                        "cpu_power": 112.5,
+                        "gpu_power": 132.0185114573548,
+                        "ram_power": 188.82433032989502,
+                        "energy_efficiency_tokens_per_joule": 0.1744085700862521,
+                        "cpu_energy": 0.0002021782228457596,
+                        "gpu_energy": 0.00025505075959753043,
+                        "ram_energy": 0.0003391239971659946,
+                        "total_energy_kwh": 0.0007963529796092847,
+                        "total_energy_joules": 2866.8707265934245,
+                        "final_emissions": [
+                            0.00015112496151629165,
+                            0.00015224570606586535
+                        ]
+                    },
+                    "compute_performance": {
+                        "FLOPs": 0.0,
+                        "cpu_usage_percent": 0,
+                        "gpu_utilization_percent": 0,
+                        "current_memory_allocated_bytes": 0,
+                        "max_memory_allocated_bytes": 0,
+                        "current_memory_reserved_bytes": 0,
+                        "max_memory_reserved_bytes": 0
+                    },
+                    "task_specific_performance": {}
+                }
+            }
+        }
+    },
+    {
+        "EXPERIMENT_0038": {
+            "setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony",
+                "date": "March 21, 2025 at 07:39:41 PM"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_input_prompts": null,
+                "used_gpu": "cuda:0",
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "torch.float16",
+                "quantisation": null,
+                "batching_options": {
+                    "fixed_max_batch_size": 2,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 256
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "experiment_results": {
+                    "inference_performance": {
+                        "total_inference_time_sec": 0.0,
+                        "average_latency_ms_per_batch": 0.0,
+                        "throughput_queries_per_sec": 0.0,
+                        "throughput_tokens_per_sec": 0.0
+                    },
+                    "energy_performance": {
+                        "cpu_power": 112.5,
+                        "gpu_power": 127.50633426740302,
+                        "ram_power": 188.82433032989502,
+                        "energy_efficiency_tokens_per_joule": 0.16066588025914047,
+                        "cpu_energy": 0.00022331513981225728,
+                        "gpu_energy": 0.00026715021372059056,
+                        "ram_energy": 0.00037399256268177874,
+                        "total_energy_kwh": 0.0008644579162146266,
+                        "total_energy_joules": 3112.0484983726556,
+                        "final_emissions": [
+                            0.0001646327586404052,
+                            0.00016468248454155681
+                        ]
+                    },
+                    "compute_performance": {
+                        "FLOPs": 0.0,
+                        "cpu_usage_percent": 0,
+                        "gpu_utilization_percent": 0,
+                        "current_memory_allocated_bytes": 0,
+                        "max_memory_allocated_bytes": 0,
+                        "current_memory_reserved_bytes": 0,
+                        "max_memory_reserved_bytes": 0
+                    },
+                    "task_specific_performance": {}
+                }
+            }
+        }
+    },
+    {
+        "EXPERIMENT_0039": {
+            "setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony",
+                "date": "March 21, 2025 at 07:39:42 PM"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_input_prompts": null,
+                "used_gpu": "cuda:1",
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "torch.float16",
+                "quantisation": null,
+                "batching_options": {
+                    "fixed_max_batch_size": 2,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 256
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 1
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": null
+        }
+    },
+    {
+        "EXPERIMENT_0040": {
+            "setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony",
+                "date": "March 21, 2025 at 07:42:17 PM"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_input_prompts": null,
+                "used_gpu": "cuda:1",
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "torch.float16",
+                "quantisation": null,
+                "batching_options": {
+                    "fixed_max_batch_size": 2,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 256
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 1
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": null
+        }
+    },
+    {
+        "EXPERIMENT_0041": {
+            "setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony",
+                "date": "March 21, 2025 at 07:42:17 PM"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_input_prompts": null,
+                "used_gpu": "cuda:0",
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "torch.float16",
+                "quantisation": null,
+                "batching_options": {
+                    "fixed_max_batch_size": 2,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 256
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "experiment_results": {
+                    "inference_performance": {
+                        "total_inference_time_sec": 0.0,
+                        "average_latency_ms_per_batch": 0.0,
+                        "throughput_queries_per_sec": 0.0,
+                        "throughput_tokens_per_sec": 0.0
+                    },
+                    "energy_performance": {
+                        "cpu_power": 112.5,
+                        "gpu_power": 145.02761350921702,
+                        "ram_power": 188.82433032989502,
+                        "energy_efficiency_tokens_per_joule": 0.17469584095345622,
+                        "cpu_energy": 0.00019981938428281865,
+                        "gpu_energy": 0.00026004576359284215,
+                        "ram_energy": 0.0003351777916345454,
+                        "total_energy_kwh": 0.0007950429395102061,
+                        "total_energy_joules": 2862.1545822367425,
+                        "final_emissions": [
+                            0.0001519818805760859,
+                            0.00015088972723032714
+                        ]
+                    },
+                    "compute_performance": {
+                        "FLOPs": 0.0,
+                        "cpu_usage_percent": 0,
+                        "gpu_utilization_percent": 0,
+                        "current_memory_allocated_bytes": 0,
+                        "max_memory_allocated_bytes": 0,
+                        "current_memory_reserved_bytes": 0,
+                        "max_memory_reserved_bytes": 0
+                    },
+                    "task_specific_performance": {}
+                }
+            }
+        }
+    },
+    {
+        "EXPERIMENT_0042": {
+            "setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony",
+                "date": "March 21, 2025 at 07:42:49 PM"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_input_prompts": null,
+                "used_gpu": "cuda:1",
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "torch.float16",
+                "quantisation": null,
+                "batching_options": {
+                    "fixed_max_batch_size": 2,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 256
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 1
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": null
+        }
+    },
+    {
+        "EXPERIMENT_0043": {
+            "setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony",
+                "date": "March 21, 2025 at 07:42:49 PM"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_input_prompts": null,
+                "used_gpu": "cuda:0",
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "torch.float16",
+                "quantisation": null,
+                "batching_options": {
+                    "fixed_max_batch_size": 2,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 256
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "experiment_results": {
+                    "inference_performance": {
+                        "total_inference_time_sec": 0.0,
+                        "average_latency_ms_per_batch": 0.0,
+                        "throughput_queries_per_sec": 0.0,
+                        "throughput_tokens_per_sec": 0.0
+                    },
+                    "energy_performance": {
+                        "cpu_power": 112.5,
+                        "gpu_power": 188.31003006612355,
+                        "ram_power": 188.82433032989502,
+                        "energy_efficiency_tokens_per_joule": 0.17411254185192282,
+                        "cpu_energy": 0.00019726025478121305,
+                        "gpu_energy": 0.00026958299344492787,
+                        "ram_energy": 0.00033088216789045117,
+                        "total_energy_kwh": 0.0007977254161165919,
+                        "total_energy_joules": 2871.811498019731,
+                        "final_emissions": [
+                            0.00015286847726833096,
+                            0.00015102502000128475
+                        ]
+                    },
+                    "compute_performance": {
+                        "FLOPs": 0.0,
+                        "cpu_usage_percent": 0,
+                        "gpu_utilization_percent": 0,
+                        "current_memory_allocated_bytes": 0,
+                        "max_memory_allocated_bytes": 0,
+                        "current_memory_reserved_bytes": 0,
+                        "max_memory_reserved_bytes": 0
+                    },
+                    "task_specific_performance": {}
+                }
+            }
+        }
+    },
+    {
+        "EXPERIMENT_0077": {
+            "setup": {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "gpu_count": 2,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony",
+                "date": "March 22, 2025 at 01:17:14 PM"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 50,
+                "number_input_prompts": null,
+                "used_gpu": "cuda:0",
+                "decoder_temperature": 1,
+                "query_rate": 1,
+                "fp_precision": "torch.float16",
+                "quantisation": null,
+                "batching_options": {
+                    "fixed_max_batch_size": 2,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 256
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 2,
+                    "local_process_index": 0
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "inference_metrics": "inference_metrics.json",
+                "compute_metrics": "compute_metrics.json",
+                "energy_metrics": "local_energy_results_*.json"
+            }
+        }
+    }
+]

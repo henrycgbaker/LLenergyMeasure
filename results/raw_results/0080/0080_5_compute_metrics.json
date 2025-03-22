@@ -1,0 +1,14 @@
+{
+  "FLOPs": 2648432967680.0,
+  "Memory": {
+    "current_memory_allocated_bytes": 4411094528,
+    "max_memory_allocated_bytes": 4411094528,
+    "current_memory_reserved_bytes": 6752829440,
+    "max_memory_reserved_bytes": 6752829440
+  },
+  "Compute_utilisation": {
+    "gpu_utilization_percent": "Error: Process 1444706 got signal: 15",
+    "cpu_usage_percent": 97.7,
+    "cpu_memory_usage_bytes": 2969550848
+  }
+}
