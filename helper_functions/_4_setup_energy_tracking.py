@@ -5,7 +5,7 @@ def start_energy_tracking():
     tracker = EmissionsTracker(
         measure_power_secs=1, 
         allow_multiple_runs=True,
-        tracking_mode="machine", # try this with "process"
+        tracking_mode="process", # try this with "machine"
         log_level=logging.ERROR
     )
     tracker.start()

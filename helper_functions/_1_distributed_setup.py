@@ -1,5 +1,8 @@
+import os
+from accelerate import Accelerator
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
+
 
 class ModelWrapper(torch.nn.Module):
     """
@@ -11,6 +14,21 @@ class ModelWrapper(torch.nn.Module):
         
     def forward(self, input_ids):
         return self.model(input_ids=input_ids)
+    
+
+    
+def get_accelerator(gpu_list=None):
+    """
+    Sets up a distributed environment using Accelerate 
+    """
+    # Set CUDA_VISIBLE_DEVICES if a gpu_list is provided.
+    if gpu_list is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_list)
+    
+    accelerator = Accelerator(device_placement=True)
+    
+    return accelerator
+
 
 def load_model_tokenizer(model_name: str, backend, fp_precision: str = "float32"):
     """
@@ -24,8 +42,9 @@ def load_model_tokenizer(model_name: str, backend, fp_precision: str = "float32"
         A tuple (model, tokenizer).
     """
     
-    # TO DO: HERE ADD NEW BACKEND OPTIONS
+    # ADD BACKEND
     
+    # chose precision    
     if fp_precision == "float8":
         dtype = torch.float8
     elif fp_precision == "float16":
@@ -37,6 +56,23 @@ def load_model_tokenizer(model_name: str, backend, fp_precision: str = "float32"
     
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=dtype)
-    model.eval()
     
     return model, tokenizer
+
+def get_original_generate_method(model):
+    """
+    Recursively searches for a callable 'generate' method within a model,
+    checking through wrappers like DataParallel or FSDP.
+    
+    NB: this is needed BEFORE the model is wrapped up and distributed
+    
+    Returns:
+      The original generate method if found, or None otherwise.
+    """
+    if hasattr(model, "generate") and callable(model.generate):
+        return model.generate
+    elif hasattr(model, "module"):
+        return get_original_generate_method(model.module)
+    else:
+        return None
+

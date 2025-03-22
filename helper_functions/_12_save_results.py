@@ -19,7 +19,24 @@ def get_persistent_unique_id():
         f.write(str(new_id))
     return f"{new_id:04d}"
 
-def save_results(task_type, benchmark_results):
+
+def save_raw_results(unique_id, type, results, pid=None):
+    output_dir = os.path.join(os.getcwd(), f"raw_results/{unique_id}")    
+    os.makedirs(output_dir, exist_ok=True)
+    
+    if pid is not None:
+        output_json_path = os.path.join(output_dir, f"{unique_id}_{type}_{pid}.json")  
+
+    else:
+        output_json_path = os.path.join(output_dir, f"{unique_id}_{type}.json") 
+
+    with open(output_json_path, "w") as json_file:
+        json.dump(results, json_file, indent=2) 
+
+    return output_json_path
+
+
+def save_final_results(task_type, benchmark_results):
     """
     Saves benchmark results as a JSON log.
     

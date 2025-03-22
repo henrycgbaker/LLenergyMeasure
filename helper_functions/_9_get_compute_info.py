@@ -1,3 +1,5 @@
+import io
+import contextlib
 import os
 import torch
 import psutil
@@ -6,28 +8,48 @@ import ptflops
 import logging
 logger = logging.getLogger(__name__)
 
+
 def get_flops(model, input_ids_batch):
+    """
+    Computes total FLOPs for a batch of tokenised input samples.
+    Each sample is measured individually to account for variable sequence lengths.
+
+    Parameters:
+        model: The model to measure.
+        input_ids_batch: Tensor of shape (batch_size, seq_len)
+
+    Returns:
+        Total estimated FLOPs (float) for the batch.
+    """
     total_flops = 0.0
-    batch_size, _ = input_ids_batch.shape
+    batch_size = input_ids_batch.shape[0]
+
+
     for i in range(batch_size):
-        sample_length = input_ids_batch[i:i+1].shape[1]
+        sample_length = input_ids_batch[i].shape[0]
+
         def input_constructor(input_res):
-            # Create a dummy input for this single sample.
-            dummy_input = torch.zeros((1,) + input_res, dtype=torch.long)
+            dummy_input = torch.zeros((1,) + input_res, dtype=torch.long).to(input_ids_batch.device)
             return {"input_ids": dummy_input}
-        
-        flops_single, _ = ptflops.get_model_complexity_info(
-            model,
-            input_res=(sample_length,),
-            as_strings=False,
-            print_per_layer_stat=False,
-            verbose=False,
-            input_constructor=input_constructor
-        )
-        if flops_single is None:
-            # handle this case differently.
+
+        try:
+            with io.StringIO() as buf, contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+                flops_single, _ = ptflops.get_model_complexity_info(
+                    model,
+                    input_res=(sample_length,),
+                    as_strings=False,
+                    print_per_layer_stat=False,
+                    verbose=False,
+                    input_constructor=input_constructor
+                )
+            if flops_single is None:
+                logger.warning(f"FLOPs computation returned None for sample {i}. Skipping this sample.")
+                continue
+            total_flops += flops_single
+        except Exception as e:
+            logger.warning(f"FLOPs computation failed for sample {i}: {e}")
             continue
-        total_flops += flops_single
+
     return total_flops
 
 
@@ -74,4 +96,25 @@ def get_gpu_cpu_utilisation(device):
     
     return utilisation_info
 
+
+def combine_comp_metrics(model, device, tokenised_input_ids, accelerator):
+    """
+    Combines compute-related metrics: FLOPs, memory stats, and device utilisation.
+    Only process 0 computes FLOPs and utilisation (to avoid duplication).
+    """
+    flops = None
+    utilisation = None
+
+    if accelerator.local_process_index == 0:
+        flops = get_flops(model, tokenised_input_ids)
+    
+    memory = get_memory(device)
+
+    utilisation = get_gpu_cpu_utilisation(device)
+
+    return {
+        "FLOPs": flops,
+        "Memory": memory,
+        "Compute_utilisation": utilisation,
+    }
 

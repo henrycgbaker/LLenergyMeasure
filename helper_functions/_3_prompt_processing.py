@@ -2,6 +2,7 @@ from typing import List, Union, Any, Dict
 import torch
 
 
+
 def filter_n_prompts(prompts: Union[List[str], Any], num_input_prompts: int) -> Union[List[str], Any]:
     """
     Shortens the number of prompts based on num_input_prompts.

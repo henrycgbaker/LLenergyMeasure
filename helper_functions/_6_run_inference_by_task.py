@@ -74,6 +74,7 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
         start_time = time.perf_counter()
         with torch.no_grad():
             batch_output = model.generate(batch_encoded["input_ids"], **generation_kwargs)
+        torch.cuda.synchronize(device)
         end_time = time.perf_counter()
         latencies.append((end_time - start_time) * 1000.0)  # in milliseconds
         

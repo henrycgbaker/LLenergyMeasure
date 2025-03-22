@@ -1,0 +1,11 @@
+{
+  "process_id": null,
+  "energy_results": {
+    "cpu_energy": 0.00016343610671901845,
+    "gpu_energy": 0.00014348344811976332,
+    "ram_energy": 2.7023515306630094e-06,
+    "total_energy_kwh": 0.00030962190636944477,
+    "total_energy_joules": 1114.638862930001,
+    "final_emissions": 0.00011795046523144
+  }
+}
