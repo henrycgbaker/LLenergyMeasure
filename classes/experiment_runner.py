@@ -39,6 +39,7 @@ class ExperimentRunner:
         # Safely destroy any existing distributed setup from a previous run
         if dist.is_available() and dist.is_initialized():
             dist.destroy_process_group()
+        torch.cuda.empty_cache()
         
         # Extract configuration parameters.
         model_name       = self.config.model_name
@@ -158,7 +159,7 @@ class ExperimentRunner:
                 save_raw_results(experiment_id, "8_text_output", outputs)
                 accelerator.print("Saved text outputs")
             else:
-                outputs = token_id_outputs
+                outputs = [tensor.tolist() for tensor in token_id_outputs]
                 save_raw_results(experiment_id, "8_token_output", outputs)
                 accelerator.print("Saved token outputs")
         else:
