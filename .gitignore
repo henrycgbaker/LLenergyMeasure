@@ -18,3 +18,5 @@ site-packages/
 
 # Ignore Hugging Face cache
 ~/.cache/huggingface/
+
+results/

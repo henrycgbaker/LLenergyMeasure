@@ -115,8 +115,8 @@ def combine_comp_metrics(model, device, tokenised_input_ids, accelerator):
     utilisation = get_gpu_cpu_utilisation(device)
 
     return {
-        "FLOPs": flops,
-        "Memory": memory,
-        "Compute_utilisation": utilisation,
+        "flops": flops,
+        "memory": memory,
+        "compute_utilisation": utilisation,
     }
 

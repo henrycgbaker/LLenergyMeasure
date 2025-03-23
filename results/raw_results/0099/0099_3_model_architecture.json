@@ -1,7 +1,0 @@
-{
-  "total_params": 1100048384,
-  "num_hidden_layers": 22,
-  "hidden_size": 2048,
-  "num_attention_heads": 32,
-  "intermediate_size": 5632
-}

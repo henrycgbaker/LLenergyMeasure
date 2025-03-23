@@ -2,30 +2,29 @@ import os
 import glob
 import json
 
+
 def load_local_energy_results(experiment_id):
     """
-    Loads per-process energy results saved as JSON files from the raw_results folder.
-    Expects filenames like: raw_results/<unique_id>/local_energy_results_<pid>.json
-    Returns a dictionary keyed by process index.
+    Loads per-process energy results from JSON files in results/raw_results/<experiment_id>/.
+    Expects filenames like: <experiment_id>_6_local_energy_results_#<pid>.json
+    Returns a dict keyed by process index.
     """
-    folder = os.path.join(os.getcwd(), "raw_results", experiment_id)
     results = {}
-    # Adjust pattern if you use a different naming scheme.
-    for f in glob.glob(os.path.join(folder, "local_energy_results_*.json")):
-        # Assuming filename pattern: <unique_id>_local_energy_results_<pid>.json
-        basename = os.path.basename(f)
-        # Extract pid from filename
+    folder = os.path.join(os.getcwd(), "results", "raw_results", experiment_id)
+    pattern = os.path.join(folder, f"{experiment_id}_6_local_energy_results_#*.json")
+    for filepath in glob.glob(pattern):
+        basename = os.path.basename(filepath)
         try:
-            pid_str = basename.split("_")[-1].split(".json")[0]
-            pid = int(pid_str)
-        except Exception:
+            pid_str = basename.split("_")[-1].split(".json")[0]  # yields "#1"
+            pid = int(pid_str.lstrip("#"))  # remove '#' then convert to int (cleaner for downstream key-value in dict)
+        except Exception as e:
             continue
-        with open(f, "r") as file:
-            results[pid] = json.load(file)
+        with open(filepath, "r") as f:
+            results[pid] = json.load(f)
     return results
 
 
-
+# DEGRADED: -----
 
 def make_json_serializable(obj):
     """Recursively convert non-JSON-serializable objects to strings."""
@@ -93,4 +92,5 @@ def aggregate_experiments(all_results):
     }
     
     return make_json_serializable(aggregated)
+
 

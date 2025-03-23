@@ -6,7 +6,7 @@ def save_raw_results(experiment_id, type, results, pid=None):
     os.makedirs(output_dir, exist_ok=True)
     
     if pid is not None:
-        output_json_path = os.path.join(output_dir, f"{experiment_id}_{type}_process_#{pid}.json")  
+        output_json_path = os.path.join(output_dir, f"{experiment_id}_{type}_#{pid}.json")  
 
     else:
         output_json_path = os.path.join(output_dir, f"{experiment_id}_{type}.json") 
