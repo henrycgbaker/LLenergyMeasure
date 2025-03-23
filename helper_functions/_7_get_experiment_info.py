@@ -25,7 +25,7 @@ def get_region_info(codecarbon_data):
         "region": getattr(codecarbon_data, "region", "Unknown"),
     }
 
-def get_experiment_setup(experiment_config, model, codecarbon_data, unique_id):
+def get_experiment_setup(experiment_config, model, codecarbon_data, experiment_id):
     """
     Gathers experiment setup information.
     
@@ -45,14 +45,14 @@ def get_experiment_setup(experiment_config, model, codecarbon_data, unique_id):
     is_encoder_decoder = getattr(model_config, "is_encoder_decoder", experiment_config.is_encoder_decoder)
     
     setup_info = {
-        "exp_id": unique_id,
+        "experiment_id": experiment_id,
         "date": datetime.now().strftime("%B %d, %Y at %I:%M:%S %p"),
         "model": experiment_config.model_name,
         "is_encoder_decoder": is_encoder_decoder,
         "task_type": experiment_config.task_type,
-        "gpu_count": cores_info["gpu_count"],
+        "available_gpu_count": cores_info["gpu_count"],
         "gpu_model": cores_info["gpu_model"],
-        "cpu_count": cores_info["cpu_count"],
+        "available_cpu_count": cores_info["cpu_count"],
         "cpu_model": cores_info["cpu_model"],
         "os": cores_info["os"],
         "python_version": sys.version,

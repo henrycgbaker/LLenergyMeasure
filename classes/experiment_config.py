@@ -10,6 +10,8 @@ class ExperimentConfig:
     max_input_tokens: int = 512
     max_output_tokens: int = 128
     num_input_prompts: int = 1 
+    save_outputs: bool = False
+    decode_token_to_text: bool = False
     gpu_list: List[int] = field(default_factory=lambda: [0])
     num_processes: int = 1  
     batching_options: dict = field(default_factory=dict)

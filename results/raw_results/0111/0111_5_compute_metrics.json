@@ -1,0 +1,19 @@
+{
+  "FLOPs": 2648432967680.0,
+  "Memory": {
+    "gpu_current_memory_allocated_bytes": 8809450496,
+    "gpu_max_memory_allocated_bytes": 8809450496,
+    "gpu_current_memory_reserved_bytes": 13021216768,
+    "gpu_max_memory_reserved_bytes": 13021216768
+  },
+  "Compute_utilisation": {
+    "gpu_utilization_percent": [
+      99.0,
+      100.0,
+      99.0,
+      0.0
+    ],
+    "cpu_usage_percent": 7.6,
+    "cpu_memory_usage_bytes": 1922248704
+  }
+}
