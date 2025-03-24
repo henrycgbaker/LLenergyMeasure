@@ -146,10 +146,16 @@ class ExperimentRunner:
         else:
             text_outputs = None
 
+        # Wait for decoding to be done
+        accelerator.wait_for_everyone()
         
         # Stop energy tracking.
-        codecarbon_data = stop_energy_tracking(tracker)
-        accelerator.print("Energy tracking stopped")
+        try:
+            codecarbon_data = stop_energy_tracking(tracker)
+            accelerator.print("Energy tracking stopped")
+        except Exception as e:
+            accelerator.print(f"Error stopping energy tracker: {e}")
+            codecarbon_data = {}      
         
         accelerator.wait_for_everyone()
 
@@ -179,22 +185,34 @@ class ExperimentRunner:
         save_raw_results(experiment_id, "3_model_architecture", self.model_architecture)
 
         # Save experiment-wide results (only main process): inference & compute
-        # TO DO: *SHOULD* BE PER PROCESS (THEN AVERAGED OVER PROCESSES)
+        # Save experiment-wide results (only main process): inference & compute
         if accelerator.is_main_process:
             self.inference_metrics = combine_inference_metrics(raw_inference_results, accelerator)
             save_raw_results(experiment_id, "4_inference_metrics", self.inference_metrics)
-            self.compute_metrics      = combine_comp_metrics(model=model, device=accelerator.device, tokenised_input_ids=input_ids, accelerator=accelerator)
+            self.compute_metrics = combine_comp_metrics(model=model, device=accelerator.device, tokenised_input_ids=input_ids, accelerator=accelerator)
             save_raw_results(experiment_id, "5_compute_metrics", self.compute_metrics)
             logger.info("Main process saved inference and computation metrics.")
-        accelerator.print("Experiment-wide inference and compute metrics saved")
-        accelerator.wait_for_everyone()
 
-        # Save per-process energy metrics.
+        accelerator.print("Experiment-wide inference and compute metrics saved")
+
+        # Save per-process energy metrics
         local_energy_results = combine_energy_metrics(codecarbon_data, accelerator)
         save_raw_results(experiment_id, "6_local_energy_results", local_energy_results, pid=accelerator.local_process_index)
         setattr(self, f"local_energy_results_{accelerator.local_process_index}", local_energy_results)
-        logger.info(f"Process {accelerator.local_process_index} saved its energy metrics.")
+        logger.info(f"[Process {accelerator.local_process_index}] Saved its energy metrics.")
+        
+        # Force all processes to synchronise
+        try:
+            dummy_tensor = torch.tensor([1.0], device=accelerator.device)
+            dist.all_reduce(dummy_tensor, op=dist.ReduceOp.SUM)
+            logger.info(f"[Process {accelerator.local_process_index}] Performed all_reduce sync")
+        except Exception as e:
+            logger.error(f"[Process {accelerator.local_process_index}] all_reduce failed: {e}")
+
+        # Final barrier 
         accelerator.wait_for_everyone()
+        logger.info(f"[Process {accelerator.local_process_index}] Passed final barrier")
+
         accelerator.print("All local process energy metrics saved")
         
         accelerator.print("Experiment finished")
