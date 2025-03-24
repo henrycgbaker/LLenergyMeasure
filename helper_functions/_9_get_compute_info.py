@@ -6,6 +6,8 @@ import psutil
 import subprocess
 import ptflops
 import logging
+
+logging.getLogger("codecarbon").setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
 
@@ -60,10 +62,10 @@ def get_memory(device):
     torch.cuda.reset_peak_memory_stats(device)
     
     return {
-        "current_memory_allocated_bytes": torch.cuda.memory_allocated(device),
-        "max_memory_allocated_bytes": torch.cuda.max_memory_allocated(device),
-        "current_memory_reserved_bytes": torch.cuda.memory_reserved(device),
-        "max_memory_reserved_bytes": torch.cuda.max_memory_reserved(device),
+        "gpu_current_memory_allocated_bytes": torch.cuda.memory_allocated(device),
+        "gpu_max_memory_allocated_bytes": torch.cuda.max_memory_allocated(device),
+        "gpu_current_memory_reserved_bytes": torch.cuda.memory_reserved(device),
+        "gpu_max_memory_reserved_bytes": torch.cuda.max_memory_reserved(device),
     }
     
 
@@ -113,8 +115,8 @@ def combine_comp_metrics(model, device, tokenised_input_ids, accelerator):
     utilisation = get_gpu_cpu_utilisation(device)
 
     return {
-        "FLOPs": flops,
-        "Memory": memory,
-        "Compute_utilisation": utilisation,
+        "flops": flops,
+        "memory": memory,
+        "compute_utilisation": utilisation,
     }
 

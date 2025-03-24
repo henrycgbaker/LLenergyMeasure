@@ -1,15 +1,30 @@
-import sys
-from datetime import datetime
-import json
 import os
+import glob
+import json
 
-def aggregate_results(results_dir):
-    files = glob.glob(os.path.join(results_dir, "energy_metrics_rank_*.json"))
-    aggregated = []
-    for file in files:
-        with open(file, "r") as f:
-            aggregated.append(json.load(f))
-    return aggregated
+
+def load_local_energy_results(experiment_id):
+    """
+    Loads per-process energy results from JSON files in results/raw_results/<experiment_id>/.
+    Expects filenames like: <experiment_id>_6_local_energy_results_#<pid>.json
+    Returns a dict keyed by process index.
+    """
+    results = {}
+    folder = os.path.join(os.getcwd(), "results", "raw_results", experiment_id)
+    pattern = os.path.join(folder, f"{experiment_id}_6_local_energy_results_#*.json")
+    for filepath in glob.glob(pattern):
+        basename = os.path.basename(filepath)
+        try:
+            pid_str = basename.split("_")[-1].split(".json")[0]  # yields "#1"
+            pid = int(pid_str.lstrip("#"))  # remove '#' then convert to int (cleaner for downstream key-value in dict)
+        except Exception as e:
+            continue
+        with open(filepath, "r") as f:
+            results[pid] = json.load(f)
+    return results
+
+
+# DEGRADED: -----
 
 def make_json_serializable(obj):
     """Recursively convert non-JSON-serializable objects to strings."""
@@ -77,4 +92,5 @@ def aggregate_experiments(all_results):
     }
     
     return make_json_serializable(aggregated)
+
 

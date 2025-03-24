@@ -1,15 +1,15 @@
 import os
 import json
 
-def save_raw_results(unique_id, type, results, pid=None):
-    output_dir = os.path.join(os.getcwd(), f"results/raw_results/{unique_id}")    
+def save_raw_results(experiment_id, type, results, pid=None):
+    output_dir = os.path.join(os.getcwd(), f"results/raw_results/{experiment_id}")    
     os.makedirs(output_dir, exist_ok=True)
     
     if pid is not None:
-        output_json_path = os.path.join(output_dir, f"{unique_id}_process_{pid}_{type}.json")  
+        output_json_path = os.path.join(output_dir, f"{experiment_id}_{type}_#{pid}.json")  
 
     else:
-        output_json_path = os.path.join(output_dir, f"{unique_id}_{type}.json") 
+        output_json_path = os.path.join(output_dir, f"{experiment_id}_{type}.json") 
 
     with open(output_json_path, "w") as json_file:
         json.dump(results, json_file, indent=2) 

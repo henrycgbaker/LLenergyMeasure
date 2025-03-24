@@ -6,16 +6,12 @@ from typing import List, Any
 
 def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator):
     """
-    Runs text generation inference and measures metrics using on-the-fly tokenisation and batching.
-    
-    Parameters:
-        experiment_config: The experiment configuration object.
-        prompts: List of sorted prompt strings.
-        tokenizer: The tokenizer instance.
-        accelerator: The accelerator instance for device placement.
+    Runs text generation inference and measures metrics.
     
     Returns:
-        A tuple (text_outputs, concatenated_input_ids, inference_results).
+        a tuple:
+        text_outputs (if save_raw_text_outputs is True, else None),
+        concatenated_input_ids, inference_results.
     """
     max_input_tokens = experiment_config.max_input_tokens 
     max_output_tokens = experiment_config.max_output_tokens
@@ -24,19 +20,19 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
     use_adaptive = experiment_config.batching_options.get("adaptive_batching", False)
         
     # Initialize metrics and outputs
-    text_outputs = []
+    token_id_outputs = []
     latencies = []
     total_generated_tokens = 0
     total_input_tokens = 0  
     all_input_ids_batches = []
     device = accelerator.device
 
-    # Decide batching strategy
+    # Decide batching strategy externally in run_torch method workflow
     if use_adaptive:
         # Retrieve adaptive_max_tokens from the config, defaulting to max_input_tokens if not set.
         adaptive_max_tokens = experiment_config.batching_options.get("adaptive_max_tokens", max_input_tokens)
         # Pass max_input_tokens as the cap for each prompt's token count.
-        batches = adaptive_batching(prompts, tokenizer, adaptive_max_tokens, max_prompt_tokens=max_input_tokens, max_batch_size=fixed_max_batch_size)
+        batches = adaptive_batching(prompts, tokenizer, adaptive_max_tokens, max_prompt_tokens=max_input_tokens, max_batch_size=fixed_batch_size)
         accelerator.print(f"Using adaptive batching: created {len(batches)} batches.")
     else:
         # Fixed batching: partition the prompts into fixed-size chunks.
@@ -70,10 +66,10 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
         else:
             generation_kwargs = {"max_new_tokens": max_output_tokens, "do_sample": False}
         
-        # Run inference on the batch
+        # Run timed inference on the batch
         start_time = time.perf_counter()
         with torch.no_grad():
-            batch_output = model.generate(batch_encoded["input_ids"], **generation_kwargs)
+            token_id_batch_output = model.generate(batch_encoded["input_ids"], **generation_kwargs)
         torch.cuda.synchronize(device)
         end_time = time.perf_counter()
         latencies.append((end_time - start_time) * 1000.0)  # in milliseconds
@@ -81,10 +77,12 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
         # Count generated tokens for each prompt in the batch.
         for j in range(batch_input_ids.size(0)):
             prompt_len = batch_input_ids[j].shape[0]
-            gen_len = batch_output[j].shape[0] - prompt_len
+            gen_len = token_id_batch_output[j].shape[0] - prompt_len
             total_generated_tokens += gen_len
         
-        text_outputs.append(batch_output)
+        # Conditionally store the outputs.
+        if experiment_config.save_outputs:
+            token_id_outputs.append(token_id_batch_output)
     
     # Concatenate all input_ids batches
     concatenated_input_ids = torch.cat(all_input_ids_batches, dim=0)
@@ -97,4 +95,8 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
         total_generated_tokens=total_generated_tokens
     )
     
-    return text_outputs, concatenated_input_ids, inference_results
+    # If not saving raw text outputs, set text_outputs to None.
+    if not experiment_config.save_outputs:
+        token_id_outputs = None
+        
+    return token_id_outputs, concatenated_input_ids, inference_results
