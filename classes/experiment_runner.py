@@ -118,7 +118,7 @@ class ExperimentRunner:
                 experiment_config=self.config,
                 prompts=prompts_sorted,
                 tokenizer=tokenizer,
-                accelerator=accelerator
+                accelerator=accelerator,
             )
         logger.info(f"[Process {os.getpid()}] Inference complete")
         
@@ -156,13 +156,16 @@ class ExperimentRunner:
         #  Conditionally save outputs.
         if self.config.save_outputs:
             if self.config.decode_token_to_text:
-                outputs = text_outputs
-                save_raw_results(experiment_id, "8_text_output", outputs)
-                accelerator.print("Saved text outputs")
+                outputs = text_outputs if text_outputs else []
             else:
-                outputs = [tensor.tolist() for tensor in token_id_outputs]
-                save_raw_results(experiment_id, "8_token_output", outputs)
-                accelerator.print("Saved token outputs")
+                outputs = [tensor.tolist() for tensor in token_id_outputs] if token_id_outputs else []
+
+            if not isinstance(outputs, list):
+                logger.error(f"[{experiment_id}] Outputs not a list before saving: type={type(outputs)}")
+                outputs = []
+
+            save_raw_results(experiment_id, "8_text_output" if self.config.decode_token_to_text else "8_token_output", outputs)
+            accelerator.print("Saved outputs")
         else:
             self.outputs = None
             accelerator.print("Did not save output")

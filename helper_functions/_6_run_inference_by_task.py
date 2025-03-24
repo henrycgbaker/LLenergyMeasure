@@ -1,8 +1,12 @@
+import os
 import time
 import torch
 from _5_inference_helper_fns import adaptive_batching, calculate_inference_metrics
 from _3_prompt_processing import batch_tokenise_truncate  
 from typing import List, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator):
     """
@@ -32,7 +36,7 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
         # Retrieve adaptive_max_tokens from the config, defaulting to max_input_tokens if not set.
         adaptive_max_tokens = experiment_config.batching_options.get("adaptive_max_tokens", max_input_tokens)
         # Pass max_input_tokens as the cap for each prompt's token count.
-        batches = adaptive_batching(prompts, tokenizer, adaptive_max_tokens, max_prompt_tokens=max_input_tokens, max_batch_size=fixed_batch_size)
+        batches = adaptive_batching(prompts, tokenizer, adaptive_max_tokens, max_prompt_tokens=max_input_tokens, max_batch_size=fixed_max_batch_size)
         accelerator.print(f"Using adaptive batching: created {len(batches)} batches.")
     else:
         # Fixed batching: partition the prompts into fixed-size chunks.
@@ -40,7 +44,7 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
         accelerator.print(f"Using fixed batching (non-adaptive): created {len(batches)} batches.")
     
     # Process each batch: tokenise and run inference immediately.
-    for batch in batches:
+    for batch_idx, batch in enumerate(batches):
         tokenised_batch = batch_tokenise_truncate(
             prompts=batch,
             tokenizer=tokenizer,
@@ -60,6 +64,9 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
         else:
             batch_encoded = {"input_ids": batch_input_ids.to(device)}
         
+        gpu_id = accelerator.device.index
+        logger.info(f"[Process {os.getpid()}] is on GPU ({gpu_id}) — Completed tokenisation of batch {batch_idx + 1}/{len(batches)}")
+
         # Build generation kwargs based on decoder_temperature
         if decoder_temperature is not None and decoder_temperature > 0:
             generation_kwargs = {"max_new_tokens": max_output_tokens, "do_sample": True, "temperature": decoder_temperature}
