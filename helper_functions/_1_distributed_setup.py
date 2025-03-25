@@ -3,6 +3,8 @@ from accelerate import Accelerator
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import torch.distributed as dist
+import threading
+
     
 def get_accelerator(gpu_list=None):
     """
@@ -94,6 +96,31 @@ def get_original_generate_method(model):
         return get_original_generate_method(model.module)
     else:
         return None
+    
+
+def safe_wait(accelerator, description="", timeout=10):
+    accelerator.print(f"Entering wait barrier: {description}")
+    
+    # wrap the blocking call.
+    def wait_func():
+        try:
+            accelerator.wait_for_everyone()
+        except Exception as e:
+            accelerator.print(f"Error during wait_for_everyone at {description}: {e}")
+    
+    # run the wait function in a daemon thread.
+    t = threading.Thread(target=wait_func, daemon=True)
+    t.start()
+    t.join(timeout)
+    
+    if t.is_alive():
+        accelerator.print(f"Timeout reached: wait_for_everyone did not finish within {timeout} seconds for {description}.")
+    else:
+        accelerator.print(f"wait_for_everyone completed within {timeout} seconds for {description}.")
+    
+    accelerator.print(f"Exiting wait barrier: {description}")
+
+
 
 class ModelWrapper(torch.nn.Module):
     """

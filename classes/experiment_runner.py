@@ -18,7 +18,7 @@ if helper_functions_path not in sys.path:
     sys.path.append(helper_functions_path)
 
 # from parallel subdirectory:
-from _1_distributed_setup import get_accelerator, get_persistent_unique_id, get_shared_unique_id, load_model_tokenizer, get_original_generate_method
+from _1_distributed_setup import get_accelerator, get_persistent_unique_id, get_shared_unique_id, load_model_tokenizer, get_original_generate_method, safe_wait
 from _3_prompt_processing import filter_n_prompts, sort_prompts
 from _4_setup_energy_tracking import start_energy_tracking, stop_energy_tracking
 from _6_run_inference_by_task import run_gen_inference
@@ -35,15 +35,7 @@ class ExperimentRunner:
     def __init__(self, experiment_config, prompts, **inference_kwargs):
         self.config = experiment_config
         self.prompts = prompts
-        self.inference_kwargs = inference_kwargs
-        
-    def safe_wait(self, accelerator, description=""):
-        accelerator.print(f"Entering wait barrier: {description}")
-        try:
-            accelerator.wait_for_everyone()  # If your accelerator supports a timeout, add it here.
-        except Exception as e:
-            accelerator.print(f"Error during wait_for_everyone at {description}: {e}")
-        accelerator.print(f"Exiting wait barrier: {description}")
+        self.inference_kwargs = inference_kwargs # if i build in non-text gen tasks types (e.g sumamrization etc)
 
     def run_torch(self):
         # Safely destroy any existing distributed setup from a previous run.
@@ -61,7 +53,6 @@ class ExperimentRunner:
         num_input_prompts = self.config.num_input_prompts
         max_input_tokens  = self.config.max_input_tokens
         gpu_list          = self.config.gpu_list
-        prompts           = self.prompts
 
         # Initialize Accelerator.
         accelerator = get_accelerator(gpu_list)
@@ -93,9 +84,9 @@ class ExperimentRunner:
         model, tokenizer = accelerator.prepare(model_undistributed, tokenizer)
         accelerator.print("Model and tokenizer prepared")
         
-        self.safe_wait(accelerator, "after model preparation")
+        safe_wait(accelerator, "after model preparation")
         logger.info(f"[Process {os.getpid()}] Model is on device: {accelerator.device}")
-        self.safe_wait(accelerator, "after logging device info")
+        safe_wait(accelerator, "after logging device info")
 
         # Reassign generate method.
         if orig_generate_method:
@@ -109,10 +100,10 @@ class ExperimentRunner:
         with torch.no_grad():
             _ = model(dummy_input)
         logger.info(f"[Process {os.getpid()}] Dummy forward pass complete")
-        self.safe_wait(accelerator, "after dummy forward pass")
+        safe_wait(accelerator, "after dummy forward pass")
 
         # Filter & sort prompts based on non-tokenised string length.
-        prompts_n_filtered = filter_n_prompts(prompts=prompts, num_input_prompts=num_input_prompts)
+        prompts_n_filtered = filter_n_prompts(prompts=self.prompts, num_input_prompts=num_input_prompts)
         prompts_sorted = sort_prompts(prompts_n_filtered)
         accelerator.print(f"Prompts processed: {len(prompts_sorted)} prompts.")
 
@@ -158,7 +149,7 @@ class ExperimentRunner:
         # Stop energy tracking.
         codecarbon_data = stop_energy_tracking(tracker)
         accelerator.print("Energy tracking stopped")
-        self.safe_wait(accelerator, "after energy tracking stop")
+        safe_wait(accelerator, "after energy tracking stop")
 
         # Conditionally save text/token outputs.
         if accelerator.is_main_process:
@@ -204,7 +195,7 @@ class ExperimentRunner:
             logger.info("Main process saved inference and computation metrics.")
             
         accelerator.print("Experiment-wide inference and compute metrics saved")
-        self.safe_wait(accelerator, "after saving experiment metrics")
+        safe_wait(accelerator, "after saving experiment metrics")
         
         # Save per-process energy metrics.
         try:

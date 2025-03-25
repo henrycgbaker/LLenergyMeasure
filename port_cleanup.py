@@ -3,7 +3,7 @@ import os
 import signal
 import time
 
-def cleanup_port(port, wait_seconds=1):
+def cleanup_port(port, wait_seconds=0.5):
     try:
         # Get the list of PIDs using the port.
         result = subprocess.check_output(["lsof", "-ti", f":{port}"])
