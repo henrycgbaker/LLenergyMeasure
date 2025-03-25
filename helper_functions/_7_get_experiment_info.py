@@ -90,7 +90,7 @@ def get_experimental_variables(experiment_config, model, accelerator):
         "decoder_temperature": experiment_config.decoder_temperature,
         "query_rate": experiment_config.query_rate,
         "fp_precision": effective_fp_precision,
-        "quantisation": getattr(experiment_config, "quantisation", None),
+        "quantisation": experiment_config.quantization_config,
         "batching_options": experiment_config.batching_options,
         "sharding_config": experiment_config.sharding_config,
         "accelerate_config": {
