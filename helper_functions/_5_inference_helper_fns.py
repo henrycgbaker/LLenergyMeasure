@@ -1,25 +1,22 @@
-from typing import List, Any
-
-from typing import List, Any
+from typing import List, Any, Dict
 
 def adaptive_batching(
     prompts: List[str],
     tokenizer: Any,
     adaptive_max_tokens: int,
-    max_prompt_tokens: int,  # new parameter to cap each prompt’s token count
+    grouping_token_limit: int,  # Use this for estimation of each prompt’s token count.
     max_batch_size: int = None
 ) -> List[List[str]]:
     """
-    Groups prompts into batches such that the total estimated token count per batch is below adaptive_max_tokens.
-    
-    Each prompt's token count is capped at max_prompt_tokens to reflect the truncation that will be applied later.
+    Groups prompts into batches such that the sum of the estimated token counts (using full tokenization)
+    per batch is below adaptive_max_tokens. Each prompt’s token count is capped at grouping_token_limit.
     
     Parameters:
         prompts (list[str]): List of prompt strings.
-        tokenizer: Tokenizer with a .tokenize() method.
-        adaptive_max_tokens (int): Maximum total tokens allowed per batch.
-        max_prompt_tokens (int): The maximum tokens each prompt will have after tokenization (e.g., experiment_config.max_input_tokens).
-        max_batch_size (int, optional): Optional limit on the number of prompts per batch.
+        tokenizer: Tokenizer (e.g., Hugging Face tokenizer).
+        adaptive_max_tokens (int): Maximum total tokens allowed per adaptive batch.
+        grouping_token_limit (int): The cap for each prompt’s token count when grouping.
+        max_batch_size (int, optional): Maximum number of prompts per batch.
         
     Returns:
         List of batches, where each batch is a list of prompt strings.
@@ -29,18 +26,19 @@ def adaptive_batching(
     current_tokens = 0
 
     for prompt in prompts:
-        # Estimate token count but cap it at max_prompt_tokens.
-        raw_token_count = len(tokenizer.tokenize(prompt))
-        token_count = min(raw_token_count, max_prompt_tokens)
+        # Use full tokenization (without truncation) for accurate estimation.
+        encoded = tokenizer(prompt, add_special_tokens=True, truncation=False)
+        raw_token_count = len(encoded["input_ids"])
+        # Cap the token count for grouping purposes.
+        token_count = min(raw_token_count, grouping_token_limit)
         
-        # If a max_batch_size is specified and reached, finalize the current batch.
+        # If max_batch_size is reached, finalize current batch.
         if max_batch_size is not None and len(current_batch) >= max_batch_size:
             batches.append(current_batch)
             current_batch = []
             current_tokens = 0
         
-        # If adding this prompt exceeds the batch token budget and the batch is not empty,
-        # then start a new batch.
+        # If adding this prompt exceeds the batch token budget and the batch isn't empty, start a new batch.
         if current_batch and (current_tokens + token_count > adaptive_max_tokens):
             batches.append(current_batch)
             current_batch = [prompt]

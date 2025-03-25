@@ -31,6 +31,9 @@ def sort_prompts(prompts: List[str]) -> List[str]:
 
 
 def batch_tokenise_truncate(prompts: List[str], tokenizer: Any, max_input_tokens: int, batch_size: int = 32) -> Dict[str, torch.Tensor]:
+    # Cap max_input_tokens to the model's maximum if necessary.
+    max_input_tokens = min(max_input_tokens, tokenizer.model_max_length)
+    
     all_input_ids = []
     all_attention_mask = []
     
@@ -43,11 +46,6 @@ def batch_tokenise_truncate(prompts: List[str], tokenizer: Any, max_input_tokens
             padding="max_length", 
             return_tensors="pt"
         )
-        # Extra safeguard: (as wasn't truncating properly) slice in case truncation isn’t applied as expected.
-        encoded["input_ids"] = encoded["input_ids"][:, :max_input_tokens]
-        if "attention_mask" in encoded:
-            encoded["attention_mask"] = encoded["attention_mask"][:, :max_input_tokens]
-            
         all_input_ids.append(encoded["input_ids"])
         if "attention_mask" in encoded:
             all_attention_mask.append(encoded["attention_mask"])
@@ -57,5 +55,6 @@ def batch_tokenise_truncate(prompts: List[str], tokenizer: Any, max_input_tokens
         tokenised_inputs["attention_mask"] = torch.cat(all_attention_mask, dim=0)
     
     return tokenised_inputs
+
 
 
