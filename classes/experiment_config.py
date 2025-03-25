@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Literal
+from typing import List, Literal, Any, Optional, Dict
 
 @dataclass
 class ExperimentConfig:
@@ -19,6 +19,7 @@ class ExperimentConfig:
     query_rate: float = 1.0
     decoder_temperature: float = 1.0
     fp_precision: str = "float32"  # "float8" / "float16"
+    quantization_config: Optional[Dict[str, Any]] = field(default_factory=dict)
     backend: str = "pytorch"  # "tensorRT" / "deepserve" / "vllm"
 
 def load_experiment_config(config_path: str = "experiment_configs.yaml") -> ExperimentConfig:

@@ -18,7 +18,8 @@ if helper_functions_path not in sys.path:
     sys.path.append(helper_functions_path)
 
 # from parallel subdirectory:
-from _1_distributed_setup import get_accelerator, get_persistent_unique_id, get_shared_unique_id, load_model_tokenizer, get_original_generate_method, safe_wait
+from _1_distributed_setup import get_accelerator, get_persistent_unique_id, get_shared_unique_id, get_original_generate_method, safe_wait
+from _2_model_loader import load_model_tokenizer
 from _3_prompt_processing import filter_n_prompts, sort_prompts
 from _4_setup_energy_tracking import start_energy_tracking, stop_energy_tracking
 from _6_run_inference_by_task import run_gen_inference
@@ -48,7 +49,6 @@ class ExperimentRunner:
         
         # Extract configuration parameters.
         model_name        = self.config.model_name
-        fp_precision      = self.config.fp_precision
         inference_type    = self.config.inference_type 
         num_input_prompts = self.config.num_input_prompts
         max_input_tokens  = self.config.max_input_tokens
@@ -69,9 +69,10 @@ class ExperimentRunner:
             model_undistributed, tokenizer = load_model_tokenizer(
                 model_name=model_name, 
                 backend=None, 
-                fp_precision=fp_precision
+                fp_precision=self.config.fp_precision,
+                quantization_config=self.config.quantization_config
             )
-        accelerator.print(f"{model_name} loaded using {self.config.backend}, with precision {fp_precision}")
+        accelerator.print(f"{model_name} loaded using {self.config.backend}, with precision {self.config.fp_precision}")
 
         # Save original generate method.
         orig_generate_method = get_original_generate_method(model_undistributed)
