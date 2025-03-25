@@ -5,15 +5,17 @@ def combine_energy_metrics(codecarbon_data, accelerator):
     """
     per process energy metrics
     """
+    
+    print(f"[DEBUG] Enter combine_energy_metrics: Process ID: {os.getpid()}, Local process index: {accelerator.local_process_index}")
+    
     energy_kwh = getattr(codecarbon_data, "energy_consumed", 0)
     energy_joules = energy_kwh * 3.6e6  # 1 kWh = 3.6e6 joules
-        
-    process_id = os.getpid()
-    local_process_index = accelerator.local_process_index
+    
+    print(f"[DEBUG] Energy consumed: {energy_kwh} kWh, which equals {energy_joules} joules.")
 
-    return {
-        "process_id": process_id,
-        "local_process_index": local_process_index,
+    result = {
+        "process_id": os.getpid(),
+        "local_process_index": accelerator.local_process_index,
         "energy_results": {
             "cpu_power": getattr(codecarbon_data, "cpu_power", None),
             "gpu_power": getattr(codecarbon_data, "gpu_power", None),
@@ -26,3 +28,6 @@ def combine_energy_metrics(codecarbon_data, accelerator):
             "final_emissions": getattr(codecarbon_data, "emissions", None),
         }
     }
+    print(f"[DEBUG] Exiting combine_energy_metrics with result: {result}")
+    return result
+

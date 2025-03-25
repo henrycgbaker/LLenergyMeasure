@@ -1,4 +1,7 @@
 def combine_inference_metrics(inference_results, accelerator):
+    
+    print(f"[DEBUG] Enter combine_inference_metrics: Accelerator index: {accelerator.local_process_index}")
+
     raw_metrics = {
         "number_input_prompts": inference_results.get("num_input_prompts", 0),
         "total_input_tokens": inference_results.get("total_input_tokens", 0),
@@ -10,5 +13,7 @@ def combine_inference_metrics(inference_results, accelerator):
         "throughput_queries_per_sec": inference_results.get("throughput_qps", 0),
         "throughput_tokens_per_sec": inference_results.get("tokens_per_sec", 0),
     }
+    print(f"[DEBUG] Exiting combine_inference_metrics with result: {raw_metrics} & {performance_metrics}")
+
     return {"raw_inference_metrics": raw_metrics, 
             "inference_performance": performance_metrics}

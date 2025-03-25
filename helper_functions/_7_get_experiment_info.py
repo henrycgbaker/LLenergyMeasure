@@ -37,6 +37,8 @@ def get_experiment_setup(experiment_config, model, codecarbon_data, experiment_i
     Returns:
       A dictionary containing setup information.
     """
+    print(f"[DEBUG] Enter get_experiment_setup: Experiment ID: {experiment_id}")
+
     cores_info = get_cores_info(codecarbon_data)
     region_info = get_region_info(codecarbon_data)
     
@@ -46,7 +48,7 @@ def get_experiment_setup(experiment_config, model, codecarbon_data, experiment_i
     
     setup_info = {
         "experiment_id": experiment_id,
-        "date": datetime.now().strftime("%B %d, %Y at %I:%M:%S %p"),
+        "date_time": datetime.now().strftime("%B %d, %Y at %I:%M:%S %p"),
         "model": experiment_config.model_name,
         "is_encoder_decoder": is_encoder_decoder,
         "task_type": experiment_config.task_type,
@@ -59,6 +61,9 @@ def get_experiment_setup(experiment_config, model, codecarbon_data, experiment_i
         "country": region_info["country_name"],
         "region": region_info["region"],
     }
+    
+    print(f"[DEBUG] Exiting get_experiment_setup with result: {setup_info}")
+
     return setup_info
 
 def get_experimental_variables(experiment_config, model, accelerator):
@@ -73,12 +78,15 @@ def get_experimental_variables(experiment_config, model, accelerator):
     Returns:
       A dictionary of experimental variables.
     """
+    print(f"[DEBUG] Enter get_experimental_variables: Accelerator index: {accelerator.local_process_index}")
+
     effective_fp_precision = str(next(model.parameters()).dtype)
     
     experimental_variables = {
         "max_input_tokens": experiment_config.max_input_tokens,
         "max_output_tokens": experiment_config.max_output_tokens,
         "number_input_prompts": getattr(experiment_config, "num_input_prompts", None),
+        "decode_token_to_text": getattr(experiment_config, "decode_token_to_text", None),
         "decoder_temperature": experiment_config.decoder_temperature,
         "query_rate": experiment_config.query_rate,
         "fp_precision": effective_fp_precision,
@@ -92,6 +100,9 @@ def get_experimental_variables(experiment_config, model, accelerator):
         "inference_type": experiment_config.inference_type,
         "backend": experiment_config.backend,
     }
+
+    print(f"[DEBUG] Exiting get_experimental_variables with result: {experimental_variables}")
+
     return experimental_variables
 
 def get_model_architecture(model):
@@ -104,6 +115,8 @@ def get_model_architecture(model):
     Returns:
       A dictionary containing architecture details.
     """
+    print(f"[DEBUG] Enter get_model_architecture: Process ID: {os.getpid()}")
+
     model_features = {}
     total_params = sum(p.numel() for p in model.parameters())
     model_features["total_params"] = total_params
@@ -116,4 +129,8 @@ def get_model_architecture(model):
         model_features["intermediate_size"] = getattr(config, "intermediate_size", None)
     else:
         model_features["architecture"] = "Unknown (no config attribute)"
+        
+    print(f"[DEBUG] Exiting get_model_architecture with result: {model_features}")
+
     return model_features
+

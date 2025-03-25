@@ -65,7 +65,7 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
             batch_encoded = {"input_ids": batch_input_ids.to(device)}
         
         gpu_id = accelerator.device.index
-        logger.info(f"[Process {os.getpid()}] is on GPU ({gpu_id}) — Completed tokenisation of batch {batch_idx + 1}/{len(batches)}")
+        logger.info(f"[Process {os.getpid()}][GPU {gpu_id}] — Completed tokenisation of batch {batch_idx + 1}/{len(batches)}")
 
         # Build generation kwargs based on decoder_temperature
         if decoder_temperature is not None and decoder_temperature > 0:
@@ -80,6 +80,8 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
         torch.cuda.synchronize(device)
         end_time = time.perf_counter()
         latencies.append((end_time - start_time) * 1000.0)  # in milliseconds
+        logger.info(f"[Process {os.getpid()}][GPU {gpu_id}] — Completed batch inference {batch_idx + 1}/{len(batches)}")
+
         
         # Count generated tokens for each prompt in the batch.
         for j in range(batch_input_ids.size(0)):
