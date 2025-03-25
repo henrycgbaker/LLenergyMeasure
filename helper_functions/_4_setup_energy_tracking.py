@@ -1,5 +1,6 @@
-import logging
 from codecarbon import EmissionsTracker
+import logging
+logger = logging.getLogger(__name__)
 
 def start_energy_tracking():
     tracker = EmissionsTracker(
@@ -12,5 +13,9 @@ def start_energy_tracking():
     return tracker
 
 def stop_energy_tracking(tracker):
-    tracker.stop()
-    return tracker.final_emissions_data
+    try:
+        tracker.stop()
+        return tracker._prepare_emissions_data()
+    except AttributeError as e:
+        logger.error(f"Failed to get emissions data: {e}")
+        return {}
