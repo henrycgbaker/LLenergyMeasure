@@ -68,6 +68,7 @@ class ExperimentRunner:
         with accelerator.main_process_first():
             model_undistributed, tokenizer = load_model_tokenizer(self.config)
         accelerator.print(f"{model_name} loaded using {self.config.backend}, with precision {self.config.fp_precision}")
+        safe_wait(accelerator, "after load_model_tokenizer")
 
         # Save original generate method.
         orig_generate_method = get_original_generate_method(model_undistributed)
@@ -144,8 +145,7 @@ class ExperimentRunner:
 
         # Stop energy tracking.
         codecarbon_data = stop_energy_tracking(tracker)
-        accelerator.print("Energy tracking stopped")
-        safe_wait(accelerator, "after energy tracking stop")
+        logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}]: Energy tracking stopped")
 
         # Conditionally save text/token outputs.
         if accelerator.is_main_process:
@@ -178,7 +178,6 @@ class ExperimentRunner:
             logger.info("Main process saved (i) experiment setup, (ii) variables, (iii) model architecture.")
             
         accelerator.print("Experiment-wide meta info saved")
-
 
         # Save experiment-wide results (only main process).
         if accelerator.is_main_process:
