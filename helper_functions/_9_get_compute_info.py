@@ -7,6 +7,7 @@ import subprocess
 import ptflops
 import logging
 import concurrent.futures
+from transformers import AutoModelForCausalLM
 
 from _2_model_loader import load_model_tokenizer
 
@@ -69,25 +70,6 @@ def get_flops(model, input_ids, timeout_per_sample=10):
         print(f"[DEBUG] get_flops: Total FLOPs computed: {total_flops}")
         return total_flops
 
-def get_flops_quantized(model, input_ids, timeout_per_sample=0):
-    """
-    For a quantized model, side-load an unquantized (full-precision) version solely for FLOPs
-    computation. This version is loaded on the CPU to avoid GPU sync issues. Since FLOPs are
-    architecture dependent, the value will be the same.
-    """
-    unquantized_model, _ = load_model_tokenizer(
-        model_name=model.config.model_name,
-        backend=model.config.backend,
-        fp_precision=model.config.fp_precision,
-        quantization_config=None  # !! load in full precision
-    )
-    # Put the model in evaluation mode.
-    unquantized_model.eval()
-    # Move the model to CPU.
-    unquantized_model.to("cpu")
-    # Also bring the input_ids to CPU.
-    input_ids_cpu = input_ids.cpu()
-    return get_flops(unquantized_model, input_ids_cpu, timeout_per_sample)
 
 def get_memory(device):
     """
@@ -137,56 +119,32 @@ def combine_comp_metrics(model, device, tokenised_input_ids, accelerator, experi
     """
     Combines compute-related metrics: FLOPs, memory stats, and device utilisation.
     Only process 0 computes FLOPs to avoid duplication.
-    If the model is encoder-decoder, we compute FLOPs for both encoder and decoder parts.
+    If the model is quantized, uses a cached FLOPs value since the full-precision FLOPs
+    are architecture-dependent.
     """
     print(f"[DEBUG] Enter combine_comp_metrics: Accelerator index: {accelerator.local_process_index}")
-
+    
     flops = 0.0
-    # Only compute FLOPs on one process to avoid redundant computation.
     if accelerator.is_main_process:
-            quantised = experiment_config.quantization_config and experiment_config.quantization_config.get("quantization", False)
-            if experiment_config.is_encoder_decoder:
-                if quantised:
-                    flops_encoder = get_flops_quantized(model, tokenised_input_ids)
-                else:
-                    flops_encoder = get_flops(model, tokenised_input_ids)
-                if flops_encoder is None:
-                    print("[DEBUG] FLOPs computation failed for encoder. Falling back to 0.0.")
-                    flops_encoder = 0.0
-
-                batch_size = tokenised_input_ids.shape[0]
-                max_output_tokens = experiment_config.max_output_tokens  
-                dummy_decoder_input = torch.zeros((batch_size, max_output_tokens), dtype=torch.long, device=tokenised_input_ids.device)
-                
-                if quantised:
-                    flops_decoder = get_flops_quantized(model, dummy_decoder_input)
-                else:
-                    flops_decoder = get_flops(model, dummy_decoder_input)
-                if flops_decoder is None:
-                    print("[DEBUG] FLOPs computation failed for decoder. Falling back to 0.0.")
-                    flops_decoder = 0.0
-
-                flops = flops_encoder + flops_decoder
-                print(f"[DEBUG] Encoder FLOPs: {flops_encoder}, Decoder FLOPs: {flops_decoder}")
-            else:
-                if quantised:
-                    computed_flops = get_flops_quantized(model, tokenised_input_ids)
-                else:
-                    computed_flops = get_flops(model, tokenised_input_ids)
-                if computed_flops is None:
-                    print("[DEBUG] FLOPs computation failed for sample. Falling back to 0.0.")
-                    flops = 0.0
-                else:
-                    flops = computed_flops
+        # Check if quantization is enabled.
+        quantised = experiment_config.quantization_config and experiment_config.quantization_config.get("quantization", False)
+        if quantised:
+            # Use cached FLOPs value for quantized models!!!!
+            flops = experiment_config.quantization_config.get("cached_flops_for_quantised_models", 0.0)
+            print(f"[DEBUG] Using cached FLOPs for quantized model: {flops}")
+        else:
+            # If unquantized, compute FLOPs normally.
+            flops = get_flops(model, tokenised_input_ids)
+            if flops is None:
+                print("[DEBUG] FLOPs computation failed. Falling back to 0.0.")
+                flops = 0.0
 
     memory = get_memory(device)
     utilisation = get_gpu_cpu_utilisation(device)
-
+    
     print(f"[DEBUG] Exiting combine_comp_metrics with result: flops = {flops}; memory = {memory}; compute_util = {utilisation}")
     return {
         "flops": flops,
         "memory": memory,
         "compute_utilisation": utilisation,
     }
-
-
