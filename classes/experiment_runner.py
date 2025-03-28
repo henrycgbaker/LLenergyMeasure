@@ -21,7 +21,7 @@ if helper_functions_path not in sys.path:
 from _1_distributed_setup import get_accelerator, get_persistent_unique_id, get_shared_unique_id, get_original_generate_method, safe_wait
 from _2_model_loader import load_model_tokenizer
 from _3_prompt_processing import filter_n_prompts, sort_prompts
-from _4_setup_energy_tracking import start_energy_tracking, stop_energy_tracking
+from _4_setup_energy_tracking import warm_up, start_energy_tracking, stop_energy_tracking
 from _6_run_inference_by_task import run_gen_inference
 from _7_get_experiment_info import get_experiment_setup, get_experimental_variables, get_model_architecture
 from _8_get_inference_results import combine_inference_metrics
@@ -98,6 +98,10 @@ class ExperimentRunner:
             _ = model(dummy_input)
         logger.info(f"[Process {os.getpid()}] Dummy forward pass complete")
         safe_wait(accelerator, "after dummy forward pass")
+        
+        # Warm-up here on all processes
+        warm_up(model, tokenizer, self.config, num_warmup_runs=3)
+        safe_wait(accelerator, "after warm up")
 
         # Filter & sort prompts based on non-tokenised string length.
         prompts_n_filtered = filter_n_prompts(prompts=self.prompts, num_input_prompts=num_input_prompts)
