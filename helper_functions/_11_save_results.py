@@ -1,7 +1,6 @@
 import os
 import json
-
-
+import torch
 
 def save_raw_results(experiment_id, type, results, pid=None):
     output_dir = os.path.join(os.getcwd(), f"results/raw_results/{experiment_id}")    
@@ -19,6 +18,18 @@ def save_raw_results(experiment_id, type, results, pid=None):
     return output_json_path
 
 
+def make_json_serializable(obj):
+    if isinstance(obj, dict):
+        # Ensure keys are strings and process values recursively.
+        return {str(k): make_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [make_json_serializable(item) for item in obj]
+    elif isinstance(obj, torch.dtype):
+        return str(obj)
+    else:
+        return obj
+    
+    
 def save_final_results(task_type, benchmark_results):
     """
     Saves benchmark results as a JSON log.
@@ -46,7 +57,11 @@ def save_final_results(task_type, benchmark_results):
         existing_data = []
     
     existing_data.append(benchmark_results)
+    
+    #make serialisable
+    serializable_results = make_json_serializable(existing_data)
+    
     with open(output_json_path, "w") as json_file:
-        json.dump(existing_data, json_file, indent=4)
+        json.dump(serializable_results, json_file, indent=4, default=str)
     
     return output_json_path

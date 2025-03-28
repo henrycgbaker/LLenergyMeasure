@@ -66,12 +66,7 @@ class ExperimentRunner:
 
         # Load model and tokenizer on main process first.
         with accelerator.main_process_first():
-            model_undistributed, tokenizer = load_model_tokenizer(
-                model_name=model_name, 
-                backend=None, 
-                fp_precision=self.config.fp_precision,
-                quantization_config=self.config.quantization_config
-            )
+            model_undistributed, tokenizer = load_model_tokenizer(self.config)
         accelerator.print(f"{model_name} loaded using {self.config.backend}, with precision {self.config.fp_precision}")
 
         # Save original generate method.

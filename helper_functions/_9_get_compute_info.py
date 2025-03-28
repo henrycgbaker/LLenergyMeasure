@@ -126,7 +126,7 @@ def combine_comp_metrics(model, device, tokenised_input_ids, accelerator, experi
     
     flops = 0.0
     if accelerator.is_main_process:
-        # Check if quantization is enabled.
+        # Check if quantization is enabled. (TO DO: MOVE THIS TO 'GET_FLOPS')
         quantised = experiment_config.quantization_config and experiment_config.quantization_config.get("quantization", False)
         if quantised:
             # Use cached FLOPs value for quantized models!!!!
