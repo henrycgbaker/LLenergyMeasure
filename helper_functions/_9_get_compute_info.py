@@ -6,18 +6,11 @@ import psutil
 import subprocess
 import ptflops
 import logging
+import concurrent.futures
+
+from _2_model_loader import load_model_tokenizer
 
 logging.getLogger("codecarbon").setLevel(logging.ERROR)
-logger = logging.getLogger(__name__)
-
-
-import io
-import contextlib
-import torch
-import concurrent.futures
-import logging
-import ptflops
-
 logger = logging.getLogger(__name__)
 
 def get_flops_for_sample(model, sample_length, device):
@@ -35,20 +28,20 @@ def get_flops_for_sample(model, sample_length, device):
         )
     return flops_single
 
-def get_flops(model, input_ids_batch, timeout_per_sample=10):
+def get_flops(model, input_ids, timeout_per_sample=10):
     """
     Computes total FLOPs for a batch of tokenised input samples.
     If all samples are the same length, compute FLOPs for one sample and multiply.
     Otherwise, fall back to per-sample computation with a timeout.
     """
-    batch_size = input_ids_batch.shape[0]
-    sample_lengths = [input_ids_batch[i].shape[0] for i in range(batch_size)]
+    batch_size = input_ids.shape[0]
+    sample_lengths = [input_ids[i].shape[0] for i in range(batch_size)]
     if len(set(sample_lengths)) == 1:
         # All samples have the same length. Compute once and multiply.
         print(f"[DEBUG] All samples have length {sample_lengths[0]}. Computing FLOPs for one sample.")
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(get_flops_for_sample, model, sample_lengths[0], input_ids_batch.device)
+                future = executor.submit(get_flops_for_sample, model, sample_lengths[0], input_ids.device)
                 flops_single = future.result(timeout=timeout_per_sample)
             print(f"[DEBUG] Computed FLOPs for one sample: {flops_single}")
             return flops_single * batch_size
@@ -59,11 +52,11 @@ def get_flops(model, input_ids_batch, timeout_per_sample=10):
         # Fallback: compute each sample individually.
         total_flops = 0.0
         for i in range(batch_size):
-            sample_length = input_ids_batch[i].shape[0]
+            sample_length = input_ids[i].shape[0]
             print(f"[DEBUG] get_flops: Processing sample {i} with sample_length {sample_length}")
             try:
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(get_flops_for_sample, model, sample_length, input_ids_batch.device)
+                    future = executor.submit(get_flops_for_sample, model, sample_length, input_ids.device)
                     flops_single = future.result(timeout=timeout_per_sample)
                 if flops_single is None:
                     print(f"[DEBUG] FLOPs computation returned None for sample {i}. Skipping.")
@@ -75,6 +68,26 @@ def get_flops(model, input_ids_batch, timeout_per_sample=10):
                 continue
         print(f"[DEBUG] get_flops: Total FLOPs computed: {total_flops}")
         return total_flops
+
+def get_flops_quantized(model, input_ids, timeout_per_sample=0):
+    """
+    For a quantized model, side-load an unquantized (full-precision) version solely for FLOPs
+    computation. This version is loaded on the CPU to avoid GPU sync issues. Since FLOPs are
+    architecture dependent, the value will be the same.
+    """
+    unquantized_model, _ = load_model_tokenizer(
+        model_name=model.config.model_name,
+        backend=model.config.backend,
+        fp_precision=model.config.fp_precision,
+        quantization_config=None  # !! load in full precision
+    )
+    # Put the model in evaluation mode.
+    unquantized_model.eval()
+    # Move the model to CPU.
+    unquantized_model.to("cpu")
+    # Also bring the input_ids to CPU.
+    input_ids_cpu = input_ids.cpu()
+    return get_flops(unquantized_model, input_ids_cpu, timeout_per_sample)
 
 def get_memory(device):
     """
@@ -128,25 +141,43 @@ def combine_comp_metrics(model, device, tokenised_input_ids, accelerator, experi
     """
     print(f"[DEBUG] Enter combine_comp_metrics: Accelerator index: {accelerator.local_process_index}")
 
-    flops = None
+    flops = 0.0
     # Only compute FLOPs on one process to avoid redundant computation.
     if accelerator.is_main_process:
-        if experiment_config.is_encoder_decoder:
-            # Compute FLOPs for the encoder using the tokenised input_ids.
-            flops_encoder = get_flops(model, tokenised_input_ids)
-            
-            # Create a dummy decoder input based on max_output_tokens from the config.
-            batch_size = tokenised_input_ids.shape[0]
-            max_output_tokens = experiment_config.max_output_tokens  
-            dummy_decoder_input = torch.zeros((batch_size, max_output_tokens), dtype=torch.long, device=tokenised_input_ids.device)
-            
-            # Compute FLOPs for the decoder.
-            flops_decoder = get_flops(model, dummy_decoder_input)
-            
-            flops = flops_encoder + flops_decoder
-            print(f"[DEBUG] Encoder FLOPs: {flops_encoder}, Decoder FLOPs: {flops_decoder}")
-        else:
-            flops = get_flops(model, tokenised_input_ids)
+            quantised = experiment_config.quantization_config and experiment_config.quantization_config.get("quantization", False)
+            if experiment_config.is_encoder_decoder:
+                if quantised:
+                    flops_encoder = get_flops_quantized(model, tokenised_input_ids)
+                else:
+                    flops_encoder = get_flops(model, tokenised_input_ids)
+                if flops_encoder is None:
+                    print("[DEBUG] FLOPs computation failed for encoder. Falling back to 0.0.")
+                    flops_encoder = 0.0
+
+                batch_size = tokenised_input_ids.shape[0]
+                max_output_tokens = experiment_config.max_output_tokens  
+                dummy_decoder_input = torch.zeros((batch_size, max_output_tokens), dtype=torch.long, device=tokenised_input_ids.device)
+                
+                if quantised:
+                    flops_decoder = get_flops_quantized(model, dummy_decoder_input)
+                else:
+                    flops_decoder = get_flops(model, dummy_decoder_input)
+                if flops_decoder is None:
+                    print("[DEBUG] FLOPs computation failed for decoder. Falling back to 0.0.")
+                    flops_decoder = 0.0
+
+                flops = flops_encoder + flops_decoder
+                print(f"[DEBUG] Encoder FLOPs: {flops_encoder}, Decoder FLOPs: {flops_decoder}")
+            else:
+                if quantised:
+                    computed_flops = get_flops_quantized(model, tokenised_input_ids)
+                else:
+                    computed_flops = get_flops(model, tokenised_input_ids)
+                if computed_flops is None:
+                    print("[DEBUG] FLOPs computation failed for sample. Falling back to 0.0.")
+                    flops = 0.0
+                else:
+                    flops = computed_flops
 
     memory = get_memory(device)
     utilisation = get_gpu_cpu_utilisation(device)
