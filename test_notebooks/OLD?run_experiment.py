@@ -29,8 +29,8 @@ project_root = os.getcwd()
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-from classes.experiment_config import ExperimentConfig
-from classes.experiment_runner import ExperimentRunner
+from configs.experiment_config import ExperimentConfig
+from experiments.experiment_runner import ExperimentRunner
 
 
 # ------------------------------

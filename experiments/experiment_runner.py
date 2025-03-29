@@ -385,11 +385,8 @@ class ExperimentRunner:
 
         print("Teardown process complete.")
 
-        
-    
     def inspect_attributes(self):
             """Prints all attributes of the ExperimentRunner for inspection."""
             print("ExperimentRunner Attributes:")
             for attr, value in self.__dict__.items():
                 print(f"  {attr}: {value}")
-                
