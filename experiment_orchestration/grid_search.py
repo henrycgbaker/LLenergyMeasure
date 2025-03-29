@@ -52,16 +52,16 @@ def generate_configurations(base_config, grid_params):
     for combo in value_combinations:
         config = copy.deepcopy(base_config)
         for key, value in zip(keys, combo):
-            # Update nested dictionaries if necessary.
             if key in config and isinstance(config[key], dict) and isinstance(value, dict):
                 config[key].update(value)
             else:
                 config[key] = value
-        # Optionally validate the configuration here to enforce derived constraints.
-        # For example: ensure total output tokens remain 100,000, etc.
         if validate_config(config):
             configs.append(config)
+        else:
+            logger.warning(f"Configuration rejected by validate_config: {config}")
     return configs
+
 
 def validate_config(config):
     """
@@ -97,23 +97,20 @@ def run_grid_search(base_config, grid_params, prompts, num_repeats=3, max_retrie
       max_retries (int): Maximum retries per configuration.
       retry_delay (int): Delay (seconds) between retries.
     """
-    # Generate all configurations (assuming you have a generate_configurations() defined elsewhere)
     config_list = generate_configurations(base_config, grid_params)
     if not config_list:
-        print("No valid configurations generated!")
-        return
+        logger.error("No valid configurations generated!")
+        return []
     
     all_results = []
-    
     for cycle in range(num_repeats):
-        print(f"\n=== Grid Search Cycle {cycle+1}/{num_repeats} ===")
-        # Shuffle to interleave order.
+        logger.info(f"=== Grid Search Cycle {cycle+1}/{num_repeats} ===")
         random.shuffle(config_list)
         for config in config_list:
-            print(f"\nRunning configuration: {config}")
-            # Pass prompts to the ExperimentRunner.
+            logger.info(f"Running configuration: {config}")
             from experiment_orchestration.experiment_runner import ExperimentRunner
-            runner = ExperimentRunner(config, prompts)
+            from configs.experiment_config import ExperimentConfig
+            runner = ExperimentRunner(ExperimentConfig.from_dict(config), prompts)
             success, result = run_single_experiment_with_retries(runner, max_retries=max_retries, retry_delay=retry_delay)
             all_results.append({
                 "config": config,
@@ -121,5 +118,5 @@ def run_grid_search(base_config, grid_params, prompts, num_repeats=3, max_retrie
                 "result": result
             })
             time.sleep(2)
-    
     return all_results
+

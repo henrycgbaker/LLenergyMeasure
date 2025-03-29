@@ -6994,5 +6994,147 @@
                 }
             }
         }
+    },
+    {
+        "EXPERIMENT_#0276": {
+            "setup": {
+                "experiment_id": "0276",
+                "date_time": "March 29, 2025 at 02:02:34 PM",
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "available_gpu_count": 4,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "available_cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony"
+            },
+            "variables": {
+                "max_input_tokens": 256,
+                "max_output_tokens": 100,
+                "number_input_prompts": 1000,
+                "decode_token_to_text": false,
+                "decoder_temperature": 0.0,
+                "query_rate": 0.5,
+                "fp_precision": "torch.float32",
+                "quantisation": {
+                    "quantization": false,
+                    "load_in_8bit": false,
+                    "load_in_4bit": false,
+                    "cached_flops_for_quantised_models": null
+                },
+                "batching_options": {
+                    "batch_size___fixed_batching": 16,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 3000,
+                    "max_batch_size___adaptive_batching": 100
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.NO",
+                    "num_processes": 1
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "num_hidden_layers": 22,
+                "hidden_size": 2048,
+                "num_attention_heads": 32,
+                "intermediate_size": 5632
+            },
+            "results": {
+                "inference_metrics": {
+                    "raw_inference_metrics": {
+                        "number_input_prompts": 238,
+                        "total_input_tokens": 60928,
+                        "total_generated_tokens": 23800
+                    },
+                    "inference_performance": {
+                        "total_inference_time_sec": 66.66246875387151,
+                        "average_latency_ms_per_batch": 4444.164583591434,
+                        "throughput_queries_per_sec": 3.5702248123863227,
+                        "throughput_tokens_per_sec": 357.0224812386323
+                    }
+                },
+                "compute_metrics": {
+                    "flops": 0.0,
+                    "memory": {
+                        "gpu_current_memory_allocated_bytes": 4409233408,
+                        "gpu_max_memory_allocated_bytes": 4409233408,
+                        "gpu_current_memory_reserved_bytes": 5140119552,
+                        "gpu_max_memory_reserved_bytes": 5140119552
+                    },
+                    "compute_utilisation": {
+                        "gpu_utilization_percent": [
+                            27.0,
+                            0.0,
+                            100.0,
+                            100.0
+                        ],
+                        "cpu_usage_percent": 3.6,
+                        "cpu_memory_usage_bytes": 2311184384
+                    }
+                },
+                "energy_metrics": {
+                    "experiment_id": "0276",
+                    "local_process_results": {
+                        "cpu_power": {
+                            "0": 112.5
+                        },
+                        "gpu_power": {
+                            "0": 627.0705651393948
+                        },
+                        "ram_power": {
+                            "0": 0.8041863441467285
+                        },
+                        "cpu_energy": {
+                            "0": 0.0020824569950891607
+                        },
+                        "gpu_energy": {
+                            "0": 0.011877776446649335
+                        },
+                        "ram_energy": {
+                            "0": 1.107906548115406e-05
+                        },
+                        "total_energy_kwh": {
+                            "0": 0.013971312507219648
+                        },
+                        "total_energy_joules": {
+                            "0": 50296.72502599073
+                        }
+                    },
+                    "global_experiment_results": {
+                        "cpu_power_avg": 112.5,
+                        "gpu_power_avg": 627.0705651393948,
+                        "ram_power_avg": 0.8041863441467285,
+                        "cpu_energy_total": 0.0020824569950891607,
+                        "gpu_energy_total": 0.011877776446649335,
+                        "ram_energy_total": 1.107906548115406e-05,
+                        "total_energy_kwh": 0.013971312507219648,
+                        "total_energy_joules": 50296.72502599073
+                    },
+                    "global_derived_quantities": {
+                        "tokens_per_joule": 0.4731918427631501,
+                        "joules_per_token": 2.113307774201291,
+                        "flops_per_joule": 0.0,
+                        "joules_per_flop": 0
+                    },
+                    "per-process_emissions": [
+                        0.005322371499625325
+                    ]
+                }
+            }
+        }
     }
 ]

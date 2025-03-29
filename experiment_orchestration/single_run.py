@@ -14,7 +14,7 @@ def run_single_experiment_with_retries(runner, max_retries=3, retry_delay=5):
         try:
             logger.info(f"Starting experiment run attempt {attempt+1}/{max_retries}")
             result = runner.run_torch()
-            # If this is not the main process, return immediately.
+            # If not main process, return immediately.
             if not runner.accelerator.is_main_process:
                 return True, result
             # Only main process continues aggregation and saving.
