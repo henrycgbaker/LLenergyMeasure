@@ -1,8 +1,8 @@
-from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import importlib
 import warnings
 from packaging import version
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
 class ModelWrapper(torch.nn.Module):
     """
@@ -14,24 +14,6 @@ class ModelWrapper(torch.nn.Module):
         
     def forward(self, input_ids):
         return self.model(input_ids=input_ids)
-
-
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
-from transformers import BitsAndBytesConfig
-
-
-class ModelWrapper(torch.nn.Module):
-    """
-    Models loaded from Hugging Face transformers lib, not always in a standard nn.Module format.
-    """
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-        
-    def forward(self, input_ids):
-        return self.model(input_ids=input_ids)
-
 
 def detect_supported_quant_types():
     try:

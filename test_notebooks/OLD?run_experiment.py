@@ -30,7 +30,7 @@ if project_root not in sys.path:
     sys.path.append(project_root)
 
 from configs.experiment_config import ExperimentConfig
-from experiments.experiment_runner import ExperimentRunner
+from experiment_orchestration.experiment_runner import ExperimentRunner
 
 
 # ------------------------------

@@ -17,18 +17,18 @@ helper_functions_path = os.path.join(project_root, "helper_functions")
 if helper_functions_path not in sys.path:
     sys.path.append(helper_functions_path)
 
-# from parallel subdirectory:
-from _1_distributed_setup import get_accelerator, get_persistent_unique_id, get_shared_unique_id, get_original_generate_method, safe_wait
-from _2_model_loader import load_model_tokenizer
-from _3_prompt_processing import filter_n_prompts, sort_prompts
-from _4_setup_energy_tracking import warm_up, start_energy_tracking, stop_energy_tracking
-from _6_run_inference_by_task import run_gen_inference
-from _7_get_experiment_info import get_experiment_setup, get_experimental_variables, get_model_architecture
-from _8_get_inference_results import combine_inference_metrics
-from _9_get_compute_info import combine_comp_metrics
-from _10_get_energy_metrics import combine_energy_metrics
-from _11_save_results import save_raw_results, save_final_results
-from _12_aggregate_experiment_results import load_local_energy_results
+# from experiment_core's helper functions
+from experiment_core.a_distributed import get_accelerator, get_shared_unique_id, get_original_generate_method, safe_wait
+from experiment_core.b_model_loader import load_model_tokenizer
+from experiment_core.c_prompt_processing import filter_n_prompts, sort_prompts
+from experiment_core.d_energy_tracking import warm_up, start_energy_tracking, stop_energy_tracking
+from experiment_core.e_inference import run_gen_inference
+from experiment_core.f_experiment_info import get_experiment_setup, get_experimental_variables, get_model_architecture
+from experiment_core.g_metrics_inference import combine_inference_metrics
+from experiment_core.h_metrics_compute import combine_comp_metrics
+from experiment_core.i_metrics_energy import combine_energy_metrics
+from experiment_core.j_results_saving import save_raw_results, save_final_results
+from experiment_core.k_results_aggregation import load_local_energy_results
 
 logger = logging.getLogger(__name__)
 

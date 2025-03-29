@@ -4,7 +4,6 @@ import torch
 
 logger = logging.getLogger(__name__)
 
-
 def warm_up(model, tokenizer, config, num_warmup_runs=3):
     """
     Run a number of dummy forward passes to warm up the model,

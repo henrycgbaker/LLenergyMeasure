@@ -2,7 +2,6 @@ import sys
 import os
 from datetime import datetime
 from transformers import AutoConfig
-import psutil
 
 def get_cores_info(codecarbon_data):
     """

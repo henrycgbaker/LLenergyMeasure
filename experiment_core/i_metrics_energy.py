@@ -1,4 +1,3 @@
-from helper_functions._9_get_compute_info import get_flops, get_memory, get_gpu_cpu_utilisation
 import os
 
 def combine_energy_metrics(codecarbon_data, accelerator):

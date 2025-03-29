@@ -1,10 +1,10 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import List, Literal, Any, Optional, Dict
 
 @dataclass
 class ExperimentConfig:
     model_name: str
-    is_encoder_decoder: Literal["decoder_only", "encoder_decoder"] = "decoder_only"
+    is_encoder_decoder: bool = False
     task_type: Literal["text_generation", "translation", "summarisation"] = "text_generation"
     inference_type: Literal["pure_generative", "reasoning"] = "pure_generative"
     max_input_tokens: int = 512
@@ -18,9 +18,17 @@ class ExperimentConfig:
     sharding_config: dict = field(default_factory=dict)
     query_rate: float = 1.0
     decoder_temperature: float = 1.0
-    fp_precision: str = "float32"  # "float8" / "float16"
+    fp_precision: Literal["float32", "float16", "float8"] = "float32"
     quantization_config: Optional[Dict[str, Any]] = field(default_factory=dict)
-    backend: str = "pytorch"  # "tensorRT" / "deepserve" / "vllm"
+    backend: Literal["pytorch", "tensorRT", "deepserve", "vllm"] = "pytorch"  
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ExperimentConfig":
+        return cls(**d)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
 
 def load_experiment_config(config_path: str = "experiment_configs.yaml") -> ExperimentConfig:
     """

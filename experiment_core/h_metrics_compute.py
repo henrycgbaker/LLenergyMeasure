@@ -7,9 +7,6 @@ import subprocess
 import ptflops
 import logging
 import concurrent.futures
-from transformers import AutoModelForCausalLM
-
-from _2_model_loader import load_model_tokenizer
 
 logging.getLogger("codecarbon").setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
