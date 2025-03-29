@@ -7136,5 +7136,1315 @@
                 }
             }
         }
+    },
+    {
+        "EXPERIMENT_#0280": {
+            "setup": {
+                "experiment_id": "0280",
+                "date_time": "March 29, 2025 at 02:51:13 PM",
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "available_gpu_count": 4,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "available_cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony"
+            },
+            "variables": {
+                "max_input_tokens": 500,
+                "max_output_tokens": 200,
+                "number_input_prompts": 500,
+                "decode_token_to_text": true,
+                "decoder_temperature": 1.0,
+                "query_rate": 1.0,
+                "fp_precision": "torch.float32",
+                "quantisation": {
+                    "quantization": false,
+                    "load_in_8bit": false,
+                    "load_in_4bit": false,
+                    "cached_flops_for_quantised_models": null
+                },
+                "batching_options": {
+                    "batch_size___fixed_batching": 16,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 3000,
+                    "max_batch_size___adaptive_batching": 100
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 4
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "inference_metrics": {
+                    "raw_inference_metrics": {
+                        "number_input_prompts": 238,
+                        "total_input_tokens": 119000,
+                        "total_generated_tokens": 47600
+                    },
+                    "inference_performance": {
+                        "total_inference_time_sec": 160.81955344392918,
+                        "average_latency_ms_per_batch": 10721.303562928611,
+                        "throughput_queries_per_sec": 1.4799195427624434,
+                        "throughput_tokens_per_sec": 295.9839085524887
+                    }
+                },
+                "compute_metrics": {
+                    "flops": 123110751232000,
+                    "memory": {
+                        "gpu_current_memory_allocated_bytes": 8817947136,
+                        "gpu_max_memory_allocated_bytes": 8817947136,
+                        "gpu_current_memory_reserved_bytes": 12998148096,
+                        "gpu_max_memory_reserved_bytes": 12998148096
+                    },
+                    "compute_utilisation": {
+                        "gpu_utilization_percent": [
+                            100.0,
+                            0.0,
+                            100.0,
+                            100.0
+                        ],
+                        "cpu_usage_percent": 96.7,
+                        "cpu_memory_usage_bytes": 2570665984
+                    }
+                },
+                "energy_metrics": {
+                    "experiment_id": "0280",
+                    "local_process_results": {
+                        "cpu_power": {
+                            "3": 112.5,
+                            "1": 112.5,
+                            "0": 112.5
+                        },
+                        "gpu_power": {
+                            "3": 690.3473937963424,
+                            "1": 958.5270601402924,
+                            "0": 956.919519594477
+                        },
+                        "ram_power": {
+                            "3": 0.8561854362487793,
+                            "1": 0.8449616432189943,
+                            "0": 0.8967618942260742
+                        },
+                        "cpu_energy": {
+                            "3": 0.00440309497825001,
+                            "1": 0.0028681650938997333,
+                            "0": 0.005038316921221848
+                        },
+                        "gpu_energy": {
+                            "3": 0.03485514093965136,
+                            "1": 0.024288364430677944,
+                            "0": 0.038576281138780644
+                        },
+                        "ram_energy": {
+                            "3": 2.3616251899860006e-05,
+                            "1": 1.4527769764375061e-05,
+                            "0": 2.9065291521302287e-05
+                        },
+                        "total_energy_kwh": {
+                            "3": 0.03928185216980121,
+                            "1": 0.02717105729434205,
+                            "0": 0.04364366335152378
+                        },
+                        "total_energy_joules": {
+                            "3": 141414.66781128434,
+                            "1": 97815.80625963138,
+                            "0": 157117.18806548562
+                        }
+                    },
+                    "global_experiment_results": {
+                        "cpu_power_avg": 112.5,
+                        "gpu_power_avg": 868.5979911770373,
+                        "ram_power_avg": 0.8659696578979492,
+                        "cpu_energy_total": 0.012309576993371592,
+                        "gpu_energy_total": 0.09771978650910995,
+                        "ram_energy_total": 6.720931318553736e-05,
+                        "total_energy_kwh": 0.11009657281566704,
+                        "total_energy_joules": 396347.66213640134
+                    },
+                    "global_derived_quantities": {
+                        "tokens_per_joule": 0.12009658324569268,
+                        "joules_per_token": 8.326631557487422,
+                        "flops_per_joule": 310613037.47423637,
+                        "joules_per_flop": 3.2194398797022308e-09
+                    },
+                    "per-process_emissions": [
+                        0.01496442158408577,
+                        0.010350814276279603,
+                        0.016626053553762985
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "EXPERIMENT_#0281": {
+            "setup": {
+                "experiment_id": "0281",
+                "date_time": "March 29, 2025 at 03:03:52 PM",
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "available_gpu_count": 4,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "available_cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 512,
+                "number_input_prompts": 500,
+                "decode_token_to_text": true,
+                "decoder_temperature": 1.0,
+                "query_rate": 1.0,
+                "fp_precision": "torch.float32",
+                "quantisation": {
+                    "quantization": false,
+                    "load_in_8bit": false,
+                    "load_in_4bit": false,
+                    "cached_flops_for_quantised_models": null
+                },
+                "batching_options": {
+                    "batch_size___fixed_batching": 16,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 3000,
+                    "max_batch_size___adaptive_batching": 100
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 4
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "inference_metrics": {
+                    "raw_inference_metrics": {
+                        "number_input_prompts": 238,
+                        "total_input_tokens": 121856,
+                        "total_generated_tokens": 121856
+                    },
+                    "inference_performance": {
+                        "total_inference_time_sec": 407.9917843739968,
+                        "average_latency_ms_per_batch": 27199.452291599784,
+                        "throughput_queries_per_sec": 0.583345079767172,
+                        "throughput_tokens_per_sec": 298.67268084079205
+                    }
+                },
+                "compute_metrics": {
+                    "flops": 126065409261568,
+                    "memory": {
+                        "gpu_current_memory_allocated_bytes": 8817947136,
+                        "gpu_max_memory_allocated_bytes": 8817947136,
+                        "gpu_current_memory_reserved_bytes": 12998148096,
+                        "gpu_max_memory_reserved_bytes": 12998148096
+                    },
+                    "compute_utilisation": {
+                        "gpu_utilization_percent": [
+                            85.0,
+                            0.0,
+                            100.0,
+                            0.0
+                        ],
+                        "cpu_usage_percent": 96.7,
+                        "cpu_memory_usage_bytes": 2549805056
+                    }
+                },
+                "energy_metrics": {
+                    "experiment_id": "0281",
+                    "local_process_results": {
+                        "cpu_power": {
+                            "0": 112.5,
+                            "3": 112.5,
+                            "1": 112.5
+                        },
+                        "gpu_power": {
+                            "0": 674.8297528982145,
+                            "3": 819.992468435744,
+                            "1": 989.3252394742476
+                        },
+                        "ram_power": {
+                            "0": 0.8896908760070801,
+                            "3": 0.8474879264831544,
+                            "1": 0.8400564193725586
+                        },
+                        "cpu_energy": {
+                            "0": 0.012602458959081566,
+                            "3": 0.01100822019926636,
+                            "1": 0.007050385874288622
+                        },
+                        "gpu_energy": {
+                            "0": 0.09808953847156587,
+                            "3": 0.08865040258692858,
+                            "1": 0.061220808698831064
+                        },
+                        "ram_energy": {
+                            "0": 7.306456850474448e-05,
+                            "3": 5.8777045104424214e-05,
+                            "1": 3.497729118619325e-05
+                        },
+                        "total_energy_kwh": {
+                            "0": 0.11076506199915226,
+                            "3": 0.0997173998312992,
+                            "1": 0.06830617186430582
+                        },
+                        "total_energy_joules": {
+                            "0": 398754.2231969481,
+                            "3": 358982.6393926771,
+                            "1": 245902.21871150096
+                        }
+                    },
+                    "global_experiment_results": {
+                        "cpu_power_avg": 112.5,
+                        "gpu_power_avg": 828.0491536027354,
+                        "ram_power_avg": 0.8590784072875977,
+                        "cpu_energy_total": 0.030661065032636547,
+                        "gpu_energy_total": 0.24796074975732552,
+                        "ram_energy_total": 0.00016681890479536193,
+                        "total_energy_kwh": 0.27878863369475726,
+                        "total_energy_joules": 1003639.0813011262
+                    },
+                    "global_derived_quantities": {
+                        "tokens_per_joule": 0.12141416398614616,
+                        "joules_per_token": 8.236271347337235,
+                        "flops_per_joule": 125608310.40789658,
+                        "joules_per_flop": 7.96125667762452e-09
+                    },
+                    "per-process_emissions": [
+                        0.042195950368577054,
+                        0.03798734346573343,
+                        0.026021236171707304
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "EXPERIMENT_#0295": {
+            "setup": {
+                "experiment_id": "0295",
+                "date_time": "March 29, 2025 at 03:53:39 PM",
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "available_gpu_count": 4,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "available_cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 512,
+                "number_input_prompts": 500,
+                "decode_token_to_text": true,
+                "decoder_temperature": 1.0,
+                "query_rate": 1.0,
+                "fp_precision": "torch.float32",
+                "quantisation": {
+                    "quantization": false,
+                    "load_in_8bit": false,
+                    "load_in_4bit": false,
+                    "cached_flops_for_quantised_models": null
+                },
+                "batching_options": {
+                    "batch_size___fixed_batching": 16,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 3000,
+                    "max_batch_size___adaptive_batching": 100
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 4
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "inference_metrics": {
+                    "raw_inference_metrics": {
+                        "number_input_prompts": 238,
+                        "total_input_tokens": 121856,
+                        "total_generated_tokens": 121856
+                    },
+                    "inference_performance": {
+                        "total_inference_time_sec": 409.5496600319166,
+                        "average_latency_ms_per_batch": 27303.31066879444,
+                        "throughput_queries_per_sec": 0.5811261080804033,
+                        "throughput_tokens_per_sec": 297.5365673371665
+                    }
+                },
+                "compute_metrics": {
+                    "flops": 126065409261568,
+                    "memory": {
+                        "gpu_current_memory_allocated_bytes": 8817947136,
+                        "gpu_max_memory_allocated_bytes": 8817947136,
+                        "gpu_current_memory_reserved_bytes": 12998148096,
+                        "gpu_max_memory_reserved_bytes": 12998148096
+                    },
+                    "compute_utilisation": {
+                        "gpu_utilization_percent": [
+                            100.0,
+                            100.0,
+                            100.0,
+                            100.0
+                        ],
+                        "cpu_usage_percent": 96.4,
+                        "cpu_memory_usage_bytes": 2593886208
+                    }
+                },
+                "energy_metrics": {
+                    "experiment_id": "0295",
+                    "local_process_results": {
+                        "cpu_power": {
+                            "2": 112.5,
+                            "1": 112.5,
+                            "0": 112.5,
+                            "3": 112.5
+                        },
+                        "gpu_power": {
+                            "2": 727.898289475871,
+                            "1": 1133.7295394653584,
+                            "0": 657.633035852801,
+                            "3": 814.7596121944257
+                        },
+                        "ram_power": {
+                            "2": 0.8406085968017578,
+                            "1": 0.855926513671875,
+                            "0": 0.9049773216247559,
+                            "3": 0.8270401954650879
+                        },
+                        "cpu_energy": {
+                            "2": 0.014843002410849295,
+                            "1": 0.007096831551476499,
+                            "0": 0.012662062120361953,
+                            "3": 0.01099976342152513
+                        },
+                        "gpu_energy": {
+                            "2": 0.11134742602231995,
+                            "1": 0.06162641430109517,
+                            "0": 0.09969988003762253,
+                            "3": 0.08947873769404424
+                        },
+                        "ram_energy": {
+                            "2": 8.135652417750897e-05,
+                            "1": 3.5283328204208e-05,
+                            "0": 7.383537967303433e-05,
+                            "3": 5.749011017133819e-05
+                        },
+                        "total_energy_kwh": {
+                            "2": 0.12627178495734667,
+                            "1": 0.06875852918077587,
+                            "0": 0.11243577753765752,
+                            "3": 0.10053599122574076
+                        },
+                        "total_energy_joules": {
+                            "2": 454578.425846448,
+                            "1": 247530.70505079313,
+                            "0": 404768.79913556704,
+                            "3": 361929.56841266673
+                        }
+                    },
+                    "global_experiment_results": {
+                        "cpu_power_avg": 112.5,
+                        "gpu_power_avg": 833.5051192471141,
+                        "ram_power_avg": 0.8571381568908691,
+                        "cpu_energy_total": 0.045601659504212876,
+                        "gpu_energy_total": 0.3621524580550819,
+                        "ram_energy_total": 0.0002479653422260895,
+                        "total_energy_kwh": 0.40800208290152085,
+                        "total_energy_joules": 1468807.498445475
+                    },
+                    "global_derived_quantities": {
+                        "tokens_per_joule": 0.08296253942668957,
+                        "joules_per_token": 12.053632963871085,
+                        "flops_per_joule": 85828408.00785019,
+                        "joules_per_flop": 1.1651154008455294e-08
+                    },
+                    "per-process_emissions": [
+                        0.04810323647950122,
+                        0.026193561691416567,
+                        0.042832409452970635,
+                        0.03829918585744595
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "EXPERIMENT_#0299": {
+            "setup": {
+                "experiment_id": "0299",
+                "date_time": "March 29, 2025 at 04:11:08 PM",
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "available_gpu_count": 4,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "available_cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 512,
+                "number_input_prompts": 500,
+                "decode_token_to_text": true,
+                "decoder_temperature": 1.0,
+                "query_rate": 1.0,
+                "fp_precision": "torch.float32",
+                "quantisation": {
+                    "quantization": false,
+                    "load_in_8bit": false,
+                    "load_in_4bit": false,
+                    "cached_flops_for_quantised_models": null
+                },
+                "batching_options": {
+                    "batch_size___fixed_batching": 16,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 3000,
+                    "max_batch_size___adaptive_batching": 100
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 4
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "inference_metrics": {
+                    "raw_inference_metrics": {
+                        "number_input_prompts": 238,
+                        "total_input_tokens": 121856,
+                        "total_generated_tokens": 121856
+                    },
+                    "inference_performance": {
+                        "total_inference_time_sec": 263.881221126765,
+                        "average_latency_ms_per_batch": 17592.081408451002,
+                        "throughput_queries_per_sec": 0.9019209437630576,
+                        "throughput_tokens_per_sec": 461.7835232066855
+                    }
+                },
+                "compute_metrics": {
+                    "flops": 126065409261568,
+                    "memory": {
+                        "gpu_current_memory_allocated_bytes": 8817947136,
+                        "gpu_max_memory_allocated_bytes": 8817947136,
+                        "gpu_current_memory_reserved_bytes": 12998148096,
+                        "gpu_max_memory_reserved_bytes": 12998148096
+                    },
+                    "compute_utilisation": {
+                        "gpu_utilization_percent": [
+                            12.0,
+                            100.0,
+                            100.0,
+                            100.0
+                        ],
+                        "cpu_usage_percent": 6.1,
+                        "cpu_memory_usage_bytes": 2543460352
+                    }
+                },
+                "energy_metrics": {
+                    "experiment_id": "0299",
+                    "local_process_results": {
+                        "cpu_power": {
+                            "2": 112.5,
+                            "3": 112.5,
+                            "1": 112.5,
+                            "0": 112.5
+                        },
+                        "gpu_power": {
+                            "2": 511.339808867546,
+                            "3": 567.7187739005465,
+                            "1": 1194.7273909735595,
+                            "0": 842.3231514564676
+                        },
+                        "ram_power": {
+                            "2": 0.8387918472290039,
+                            "3": 0.8419203758239746,
+                            "1": 0.8532614707946777,
+                            "0": 0.8880500793457031
+                        },
+                        "cpu_energy": {
+                            "2": 0.014698364463154588,
+                            "3": 0.010987286282321285,
+                            "1": 0.007473545232736796,
+                            "0": 0.008196585274446982
+                        },
+                        "gpu_energy": {
+                            "2": 0.10000764750605029,
+                            "3": 0.08410764728606424,
+                            "1": 0.06365603842479217,
+                            "0": 0.06882667589462699
+                        },
+                        "ram_energy": {
+                            "2": 7.77862809847899e-05,
+                            "3": 5.48682327951051e-05,
+                            "1": 3.426414558818419e-05,
+                            "0": 4.059956994917854e-05
+                        },
+                        "total_energy_kwh": {
+                            "2": 0.1147837982501895,
+                            "3": 0.09514980180118057,
+                            "1": 0.07116384780311716,
+                            "0": 0.07706386073902322
+                        },
+                        "total_energy_joules": {
+                            "2": 413221.6737006822,
+                            "3": 342539.28648425004,
+                            "1": 256189.85209122178,
+                            "0": 277429.8986604836
+                        }
+                    },
+                    "global_experiment_results": {
+                        "cpu_power_avg": 112.5,
+                        "gpu_power_avg": 779.0272812995299,
+                        "ram_power_avg": 0.8555059432983398,
+                        "cpu_energy_total": 0.04135578125265965,
+                        "gpu_energy_total": 0.3165980091115337,
+                        "ram_energy_total": 0.00020751822931725772,
+                        "total_energy_kwh": 0.3581613085935104,
+                        "total_energy_joules": 1289380.7109366376
+                    },
+                    "global_derived_quantities": {
+                        "tokens_per_joule": 0.09450738557387044,
+                        "joules_per_token": 10.581183617849245,
+                        "flops_per_joule": 97772060.79807958,
+                        "joules_per_flop": 1.0227870741777816e-08
+                    },
+                    "per-process_emissions": [
+                        0.04372688794340969,
+                        0.03624731699615974,
+                        0.02710986782059748,
+                        0.029357477748530893
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "EXPERIMENT_#0302": {
+            "setup": {
+                "experiment_id": "0302",
+                "date_time": "March 29, 2025 at 04:23:28 PM",
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "available_gpu_count": 4,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "available_cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony"
+            },
+            "variables": {
+                "max_input_tokens": 100,
+                "max_output_tokens": 100,
+                "number_input_prompts": 50,
+                "decode_token_to_text": true,
+                "decoder_temperature": 1.0,
+                "query_rate": 1.0,
+                "fp_precision": "torch.float32",
+                "quantisation": {
+                    "quantization": false,
+                    "load_in_8bit": false,
+                    "load_in_4bit": false,
+                    "cached_flops_for_quantised_models": null
+                },
+                "batching_options": {
+                    "batch_size___fixed_batching": 16,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 3000,
+                    "max_batch_size___adaptive_batching": 100
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 4
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "inference_metrics": {
+                    "raw_inference_metrics": {
+                        "number_input_prompts": 50,
+                        "total_input_tokens": 5000,
+                        "total_generated_tokens": 5000
+                    },
+                    "inference_performance": {
+                        "total_inference_time_sec": 15.232579434174113,
+                        "average_latency_ms_per_batch": 3808.1448585435282,
+                        "throughput_queries_per_sec": 3.282438159345855,
+                        "throughput_tokens_per_sec": 328.2438159345855
+                    }
+                },
+                "compute_metrics": {
+                    "flops": 5172720640000,
+                    "memory": {
+                        "gpu_current_memory_allocated_bytes": 8818027520,
+                        "gpu_max_memory_allocated_bytes": 8818027520,
+                        "gpu_current_memory_reserved_bytes": 13203668992,
+                        "gpu_max_memory_reserved_bytes": 13203668992
+                    },
+                    "compute_utilisation": {
+                        "gpu_utilization_percent": [
+                            100.0,
+                            100.0,
+                            100.0,
+                            100.0
+                        ],
+                        "cpu_usage_percent": 96.3,
+                        "cpu_memory_usage_bytes": 2231468032
+                    }
+                },
+                "energy_metrics": {
+                    "experiment_id": "0302",
+                    "local_process_results": {
+                        "cpu_power": {
+                            "0": 112.5,
+                            "1": 112.5,
+                            "3": 112.5,
+                            "2": 112.5
+                        },
+                        "gpu_power": {
+                            "0": 710.7532436833312,
+                            "1": 698.7751390019121,
+                            "3": 573.0007375930578,
+                            "2": 695.0581087579745
+                        },
+                        "ram_power": {
+                            "0": 0.7775931358337402,
+                            "1": 0.7266626358032227,
+                            "3": 0.7186017036437988,
+                            "2": 0.7177104949951173
+                        },
+                        "cpu_energy": {
+                            "0": 0.0005022620168056165,
+                            "1": 0.00037464696913957595,
+                            "3": 0.0004474875643136329,
+                            "2": 0.0005128699514352776
+                        },
+                        "gpu_energy": {
+                            "0": 0.0032603073304606767,
+                            "1": 0.00257773400661776,
+                            "3": 0.0030266918657950725,
+                            "2": 0.0033266837724497123
+                        },
+                        "ram_energy": {
+                            "0": 2.9207104766697783e-06,
+                            "1": 1.8297545622164126e-06,
+                            "3": 2.248349480828566e-06,
+                            "2": 2.570932784949815e-06
+                        },
+                        "total_energy_kwh": {
+                            "0": 0.003765490057742962,
+                            "1": 0.0029542107303195514,
+                            "3": 0.0034764277795895342,
+                            "2": 0.0038421246566699395
+                        },
+                        "total_energy_joules": {
+                            "0": 13555.764207874663,
+                            "1": 10635.158629150385,
+                            "3": 12515.140006522322,
+                            "2": 13831.648764011783
+                        }
+                    },
+                    "global_experiment_results": {
+                        "cpu_power_avg": 112.5,
+                        "gpu_power_avg": 669.3968072590689,
+                        "ram_power_avg": 0.7351419925689697,
+                        "cpu_energy_total": 0.0018372665016941029,
+                        "gpu_energy_total": 0.012191416975323222,
+                        "ram_energy_total": 9.56974730466457e-06,
+                        "total_energy_kwh": 0.014038253224321987,
+                        "total_energy_joules": 50537.711607559155
+                    },
+                    "global_derived_quantities": {
+                        "tokens_per_joule": 0.09893601908267108,
+                        "joules_per_token": 10.107542321511831,
+                        "flops_per_joule": 102353677.58967331,
+                        "joules_per_flop": 9.770044648604714e-09
+                    },
+                    "per-process_emissions": [
+                        0.0014344634374971815,
+                        0.001125406577715233,
+                        0.0013243451626346332,
+                        0.0014636573879584136
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "EXPERIMENT_#0306": {
+            "setup": {
+                "experiment_id": "0306",
+                "date_time": "March 29, 2025 at 04:38:34 PM",
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "available_gpu_count": 4,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "available_cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony"
+            },
+            "variables": {
+                "max_input_tokens": 100,
+                "max_output_tokens": 100,
+                "number_input_prompts": 10,
+                "decode_token_to_text": true,
+                "decoder_temperature": 1.0,
+                "query_rate": 1.0,
+                "fp_precision": "torch.float32",
+                "quantisation": {
+                    "quantization": false,
+                    "load_in_8bit": false,
+                    "load_in_4bit": false,
+                    "cached_flops_for_quantised_models": null
+                },
+                "batching_options": {
+                    "batch_size___fixed_batching": 16,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 3000,
+                    "max_batch_size___adaptive_batching": 100
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 4
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "inference_metrics": {
+                    "raw_inference_metrics": {
+                        "number_input_prompts": 10,
+                        "total_input_tokens": 1000,
+                        "total_generated_tokens": 1000
+                    },
+                    "inference_performance": {
+                        "total_inference_time_sec": 3.850699662929401,
+                        "average_latency_ms_per_batch": 3850.699662929401,
+                        "throughput_queries_per_sec": 2.5969306555558656,
+                        "throughput_tokens_per_sec": 259.6930655555866
+                    }
+                },
+                "compute_metrics": {
+                    "flops": 1034544128000,
+                    "memory": {
+                        "gpu_current_memory_allocated_bytes": 8817963520,
+                        "gpu_max_memory_allocated_bytes": 8817963520,
+                        "gpu_current_memory_reserved_bytes": 13203668992,
+                        "gpu_max_memory_reserved_bytes": 13203668992
+                    },
+                    "compute_utilisation": {
+                        "gpu_utilization_percent": [
+                            100.0,
+                            99.0,
+                            100.0,
+                            100.0
+                        ],
+                        "cpu_usage_percent": 96.3,
+                        "cpu_memory_usage_bytes": 2066878464
+                    }
+                },
+                "energy_metrics": {
+                    "experiment_id": "0306",
+                    "local_process_results": {
+                        "cpu_power": {
+                            "3": 112.5,
+                            "2": 112.5,
+                            "1": 112.5,
+                            "0": 112.5
+                        },
+                        "gpu_power": {
+                            "3": 721.2937793834902,
+                            "2": 578.1906873153557,
+                            "1": 795.2072766070081,
+                            "0": 0.0
+                        },
+                        "ram_power": {
+                            "3": 0.6633181571960449,
+                            "2": 0.6607661247253418,
+                            "1": 0.6655941009521484,
+                            "0": 0.7207703590393066
+                        },
+                        "cpu_energy": {
+                            "3": 0.00012123778109526028,
+                            "2": 0.00013484354684260323,
+                            "1": 0.00010042531487852102,
+                            "0": 0.0001331339453754481
+                        },
+                        "gpu_energy": {
+                            "3": 0.0008158417637851301,
+                            "2": 0.000886797098324621,
+                            "1": 0.0006865486047935576,
+                            "0": 0.0008787598696713417
+                        },
+                        "ram_energy": {
+                            "3": 5.930455538141804e-07,
+                            "2": 6.377101783662004e-07,
+                            "1": 6.197861644201816e-07,
+                            "0": 8.574240753141247e-07
+                        },
+                        "total_energy_kwh": {
+                            "3": 0.0009376725904342044,
+                            "2": 0.0010222783553455904,
+                            "1": 0.0007875937058364988,
+                            "0": 0.0010127512391221037
+                        },
+                        "total_energy_joules": {
+                            "3": 3375.621325563136,
+                            "2": 3680.2020792441253,
+                            "1": 2835.3373410113954,
+                            "0": 3645.9044608395734
+                        }
+                    },
+                    "global_experiment_results": {
+                        "cpu_power_avg": 112.5,
+                        "gpu_power_avg": 523.6729358264636,
+                        "ram_power_avg": 0.6776121854782104,
+                        "cpu_energy_total": 0.0004896405881918327,
+                        "gpu_energy_total": 0.0032679473365746503,
+                        "ram_energy_total": 2.707965971914687e-06,
+                        "total_energy_kwh": 0.0037602958907383974,
+                        "total_energy_joules": 13537.06520665823
+                    },
+                    "global_derived_quantities": {
+                        "tokens_per_joule": 0.07387125530784533,
+                        "joules_per_token": 13.537065206658228,
+                        "flops_per_joule": 76423073.4067202,
+                        "joules_per_flop": 1.3085053445548366e-08
+                    },
+                    "per-process_emissions": [
+                        0.00035720637332591017,
+                        0.00038943693946890263,
+                        0.00030003382223841424,
+                        0.0003858075845435654
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "EXPERIMENT_#0307": {
+            "setup": {
+                "experiment_id": "0307",
+                "date_time": "March 29, 2025 at 04:47:58 PM",
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "available_gpu_count": 4,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "available_cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 512,
+                "number_input_prompts": 500,
+                "decode_token_to_text": true,
+                "decoder_temperature": 1.0,
+                "query_rate": 1.0,
+                "fp_precision": "torch.float32",
+                "quantisation": {
+                    "quantization": false,
+                    "load_in_8bit": false,
+                    "load_in_4bit": false,
+                    "cached_flops_for_quantised_models": null
+                },
+                "batching_options": {
+                    "batch_size___fixed_batching": 16,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 3000,
+                    "max_batch_size___adaptive_batching": 100
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 4
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "inference_metrics": {
+                    "raw_inference_metrics": {
+                        "number_input_prompts": 238,
+                        "total_input_tokens": 121856,
+                        "total_generated_tokens": 121856
+                    },
+                    "inference_performance": {
+                        "total_inference_time_sec": 455.3185599609278,
+                        "average_latency_ms_per_batch": 30354.570664061855,
+                        "throughput_queries_per_sec": 0.5227109565233261,
+                        "throughput_tokens_per_sec": 267.62800973994297
+                    }
+                },
+                "compute_metrics": {
+                    "flops": 126065409261568,
+                    "memory": {
+                        "gpu_current_memory_allocated_bytes": 8819896832,
+                        "gpu_max_memory_allocated_bytes": 8819896832,
+                        "gpu_current_memory_reserved_bytes": 13000245248,
+                        "gpu_max_memory_reserved_bytes": 13000245248
+                    },
+                    "compute_utilisation": {
+                        "gpu_utilization_percent": [
+                            100.0,
+                            100.0,
+                            100.0,
+                            100.0
+                        ],
+                        "cpu_usage_percent": 6.1,
+                        "cpu_memory_usage_bytes": 2578391040
+                    }
+                },
+                "energy_metrics": {
+                    "experiment_id": "0307",
+                    "local_process_results": {
+                        "cpu_power": {
+                            "2": 112.5,
+                            "3": 112.5,
+                            "0": 112.5,
+                            "1": 112.5
+                        },
+                        "gpu_power": {
+                            "2": 446.4489007012995,
+                            "3": 810.5317893412916,
+                            "0": 765.0031640074441,
+                            "1": 1006.814140059653
+                        },
+                        "ram_power": {
+                            "2": 0.8428688049316406,
+                            "3": 0.8439574241638184,
+                            "0": 0.8992366790771484,
+                            "1": 0.8365530967712403
+                        },
+                        "cpu_energy": {
+                            "2": 0.014860718098629154,
+                            "3": 0.010958657830455206,
+                            "0": 0.014065036247375247,
+                            "1": 0.007134458393724346
+                        },
+                        "gpu_energy": {
+                            "2": 0.1121610175065264,
+                            "3": 0.08918993551855436,
+                            "0": 0.10800947696306906,
+                            "1": 0.06182906418543155
+                        },
+                        "ram_energy": {
+                            "2": 8.085871665258167e-05,
+                            "3": 5.792107021364376e-05,
+                            "0": 8.211239311199908e-05,
+                            "1": 3.5022513997992285e-05
+                        },
+                        "total_energy_kwh": {
+                            "2": 0.12710259432180818,
+                            "3": 0.10020651441922324,
+                            "0": 0.12215662560355645,
+                            "1": 0.06899854509315392
+                        },
+                        "total_energy_joules": {
+                            "2": 457569.3395585094,
+                            "3": 360743.45190920366,
+                            "0": 439763.8521728032,
+                            "1": 248394.7623353541
+                        }
+                    },
+                    "global_experiment_results": {
+                        "cpu_power_avg": 112.5,
+                        "gpu_power_avg": 757.1994985274221,
+                        "ram_power_avg": 0.8556540012359619,
+                        "cpu_energy_total": 0.04701887057018395,
+                        "gpu_energy_total": 0.3711894941735814,
+                        "ram_energy_total": 0.00025591469397621676,
+                        "total_energy_kwh": 0.4184642794377418,
+                        "total_energy_joules": 1506471.4059758703
+                    },
+                    "global_derived_quantities": {
+                        "tokens_per_joule": 0.08088835905986776,
+                        "joules_per_token": 12.362718339481603,
+                        "flops_per_joule": 83682576.88894178,
+                        "joules_per_flop": 1.1949918814368452e-08
+                    },
+                    "per-process_emissions": [
+                        0.04841973330689282,
+                        0.03817367166800309,
+                        0.046535566523674826,
+                        0.02628499575323699
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "EXPERIMENT_#0309": {
+            "setup": {
+                "experiment_id": "0309",
+                "date_time": "March 29, 2025 at 05:09:10 PM",
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "is_encoder_decoder": false,
+                "task_type": "text_generation",
+                "available_gpu_count": 4,
+                "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+                "available_cpu_count": 128,
+                "cpu_model": "AMD EPYC 7742 64-Core Processor",
+                "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+                "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+                "country": "Germany",
+                "region": "saxony"
+            },
+            "variables": {
+                "max_input_tokens": 512,
+                "max_output_tokens": 512,
+                "number_input_prompts": 500,
+                "decode_token_to_text": true,
+                "decoder_temperature": 1.0,
+                "query_rate": 1.0,
+                "fp_precision": "torch.float32",
+                "quantisation": {
+                    "quantization": false,
+                    "load_in_8bit": false,
+                    "load_in_4bit": false,
+                    "cached_flops_for_quantised_models": null
+                },
+                "batching_options": {
+                    "batch_size___fixed_batching": 16,
+                    "adaptive_batching": false,
+                    "adaptive_max_tokens": 3000,
+                    "max_batch_size___adaptive_batching": 100
+                },
+                "sharding_config": {
+                    "fsdp_config": {
+                        "use_orig_params": true,
+                        "cpu_offload": true
+                    },
+                    "sharding_strategy": "NO_SHARD"
+                },
+                "accelerate_config": {
+                    "distributed_type": "DistributedType.MULTI_GPU",
+                    "num_processes": 4
+                },
+                "inference_type": "pure_generative",
+                "backend": "pytorch"
+            },
+            "model_architecture": {
+                "total_params": 1100048384,
+                "architecture": "Unknown (no config attribute)"
+            },
+            "results": {
+                "inference_metrics": {
+                    "raw_inference_metrics": {
+                        "number_input_prompts": 238,
+                        "total_input_tokens": 121856,
+                        "total_generated_tokens": 121856
+                    },
+                    "inference_performance": {
+                        "total_inference_time_sec": 493.82576475606766,
+                        "average_latency_ms_per_batch": 32921.71765040451,
+                        "throughput_queries_per_sec": 0.4819513621723717,
+                        "throughput_tokens_per_sec": 246.75909743225432
+                    }
+                },
+                "compute_metrics": {
+                    "flops": 126065409261568,
+                    "memory": {
+                        "gpu_current_memory_allocated_bytes": 8819896832,
+                        "gpu_max_memory_allocated_bytes": 8819896832,
+                        "gpu_current_memory_reserved_bytes": 13000245248,
+                        "gpu_max_memory_reserved_bytes": 13000245248
+                    },
+                    "compute_utilisation": {
+                        "gpu_utilization_percent": [
+                            60.0,
+                            100.0,
+                            100.0,
+                            100.0
+                        ],
+                        "cpu_usage_percent": 99.9,
+                        "cpu_memory_usage_bytes": 2590752768
+                    }
+                },
+                "energy_metrics": {
+                    "experiment_id": "0309",
+                    "local_process_results": {
+                        "cpu_power": {
+                            "0": 112.5,
+                            "2": 112.5,
+                            "3": 112.5,
+                            "1": 112.5
+                        },
+                        "gpu_power": {
+                            "0": 569.124476899584,
+                            "2": 610.7833935957374,
+                            "3": 819.8672615542697,
+                            "1": 850.2363951503712
+                        },
+                        "ram_power": {
+                            "0": 0.9035754203796387,
+                            "2": 0.8449187278747559,
+                            "3": 0.8353672027587891,
+                            "1": 0.8492074012756349
+                        },
+                        "cpu_energy": {
+                            "0": 0.015406781910409346,
+                            "2": 0.015713350715068363,
+                            "3": 0.01308306550202178,
+                            "1": 0.011592474813671285
+                        },
+                        "gpu_energy": {
+                            "0": 0.10902455444180248,
+                            "2": 0.11080184225252054,
+                            "3": 0.09590009949780054,
+                            "1": 0.08579419696863866
+                        },
+                        "ram_energy": {
+                            "0": 6.78090962875697e-05,
+                            "2": 6.541218131052548e-05,
+                            "3": 5.809735129385076e-05,
+                            "1": 5.2498495804350766e-05
+                        },
+                        "total_energy_kwh": {
+                            "0": 0.1244991454484995,
+                            "2": 0.12658060514889946,
+                            "3": 0.1090412623511162,
+                            "1": 0.09743917027811429
+                        },
+                        "total_energy_joules": {
+                            "0": 448196.9236145982,
+                            "2": 455690.17853603803,
+                            "3": 392548.5444640183,
+                            "1": 350781.01300121145
+                        }
+                    },
+                    "global_experiment_results": {
+                        "cpu_power_avg": 112.5,
+                        "gpu_power_avg": 712.5028817999905,
+                        "ram_power_avg": 0.8582671880722046,
+                        "cpu_energy_total": 0.05579567294117077,
+                        "gpu_energy_total": 0.4015206931607622,
+                        "ram_energy_total": 0.0002438171246962967,
+                        "total_energy_kwh": 0.45756018322662945,
+                        "total_energy_joules": 1647216.659615866
+                    },
+                    "global_derived_quantities": {
+                        "tokens_per_joule": 0.07397691086272588,
+                        "joules_per_token": 13.517731253412766,
+                        "flops_per_joule": 76532378.74061248,
+                        "joules_per_flop": 1.3066365066075523e-08
+                    },
+                    "per-process_emissions": [
+                        0.047427949458605886,
+                        0.048220881531473254,
+                        0.04153926889265772,
+                        0.037119451917447636
+                    ]
+                }
+            }
+        }
     }
 ]

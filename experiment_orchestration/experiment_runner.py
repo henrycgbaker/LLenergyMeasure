@@ -38,7 +38,7 @@ class ExperimentRunner:
         self.prompts = prompts
         self.inference_kwargs = inference_kwargs # if i build in non-text gen tasks types (e.g sumamrization etc)
 
-    def run_torch(self):
+    def run_setup(self):
         # Safely destroy any existing distributed setup from a previous run.
         if dist.is_available() and dist.is_initialized():
             try:
@@ -46,16 +46,10 @@ class ExperimentRunner:
             except Exception as e:
                 print(f"Warning: could not destroy previous process group: {e}")
         torch.cuda.empty_cache()
-        
-        # Extract configuration parameters.
-        model_name        = self.config.model_name
-        inference_type    = self.config.inference_type 
-        num_input_prompts = self.config.num_input_prompts
-        max_input_tokens  = self.config.max_input_tokens
-        gpu_list          = self.config.gpu_list
 
+    def unique_id(self):
         # Initialize Accelerator.
-        accelerator = get_accelerator(gpu_list)
+        accelerator = get_accelerator(self.config.gpu_list)
         self.accelerator = accelerator
         accelerator.print("Accelerator set up")
 
@@ -63,6 +57,17 @@ class ExperimentRunner:
         experiment_id = get_shared_unique_id(accelerator)
         self.experiment_id = experiment_id
         accelerator.print(f"Unique experiment id: {experiment_id}")
+
+    def run_torch(self):
+
+        # Extract configuration parameters.
+        model_name        = self.config.model_name
+        inference_type    = self.config.inference_type 
+        num_input_prompts = self.config.num_input_prompts
+        max_input_tokens  = self.config.max_input_tokens
+        
+        accelerator = self.accelerator
+        experiment_id = self.experiment_id
 
         # Load model and tokenizer on main process first.
         with accelerator.main_process_first():
@@ -127,6 +132,12 @@ class ExperimentRunner:
                 accelerator.print(f"Error during inference: {e}")
                 raise
         logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}]: Inference complete")
+
+        # Stop energy tracking.
+        codecarbon_data = stop_energy_tracking(tracker)
+        logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}]: Energy tracking stopped")
+
+        safe_wait(accelerator, "after energy tracking stopped")
         
         # Conditionally decode token_id output (only main process).
         if accelerator.is_main_process:
@@ -146,10 +157,6 @@ class ExperimentRunner:
                 text_outputs = None
         else:
             text_outputs = None
-
-        # Stop energy tracking.
-        codecarbon_data = stop_energy_tracking(tracker)
-        logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}]: Energy tracking stopped")
 
         # Conditionally save text/token outputs.
         if accelerator.is_main_process:
@@ -356,18 +363,22 @@ class ExperimentRunner:
     def teardown(self):
         print("Starting teardown process...")
 
-        # Clean up distributed resources if available.
-        try:
-            if dist.is_available():
-                if dist.is_initialized():
+        # Only the main process destroys the distributed process group.
+        if dist.is_available() and dist.is_initialized():
+            if self.accelerator.is_main_process:
+                try:
                     print("Destroying distributed process group...")
                     dist.destroy_process_group()
-                else:
-                    print("Process group not initialized.")
+                except Exception as e:
+                    print(f"Exception during process group destruction: {e}")
             else:
-                print("Distributed package is not available.")
-        except Exception as e:
-            print(f"Exception during process group destruction: {e}")
+                # Non-main processes wait for the main process to destroy the group.
+                try:
+                    dist.barrier()
+                except Exception as e:
+                    print(f"Exception during barrier wait in teardown: {e}")
+        else:
+            print("Distributed package is not available or process group not initialized.")
 
         # Clean up GPU memory.
         try:
@@ -376,7 +387,7 @@ class ExperimentRunner:
         except Exception as e:
             print(f"Exception while emptying CUDA cache: {e}")
 
-        # Run garbage collection to free any remaining resources.
+        # Run garbage collection.
         try:
             print("Running garbage collection...")
             gc.collect()

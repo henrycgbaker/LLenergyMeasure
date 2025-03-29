@@ -31,18 +31,13 @@ def main():
     runner = ExperimentRunner(experiment_config, prompts)
     
     # Run the grid search.
-    results = run_single_experiment_with_retries(
+    run_single_experiment_with_retries(
         runner,  
         max_retries=3,
         retry_delay=5
     )
     
-    # Save the aggregated results to a JSON file.
-    output_path = "grid_search_results.json"
-    with open(output_path, "w") as f:
-        json.dump(results, f, indent=2)
-    
-    print(f"Grid search completed. Results saved to {output_path}.")
+    print(f"Single run completed.")
 
 if __name__ == "__main__":
     main()

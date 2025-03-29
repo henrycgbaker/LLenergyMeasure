@@ -6,11 +6,11 @@ base_config = {
     "inference_type": "pure_generative",
     "gpu_list": [0, 1, 2, 3],
     "backend": "pytorch",
-    "save_outputs": False,
+    "save_outputs": True,
     
     # Default values that will be overridden by the grid:
-    "max_input_tokens": 500, #2048 is Llama's limit
-    "max_output_tokens": 200,
+    "max_input_tokens": 512, #2048 is Llama's limit
+    "max_output_tokens": 512,
     "num_input_prompts": 500,  # 500 * 200 = 100,000 output tokens.
     "decode_token_to_text": True,
     "num_processes": 4,

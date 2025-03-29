@@ -4,34 +4,9 @@ import random
 import time
 import logging
 
-logger = logging.getLogger(__name__)
+from experiment_orchestration.single_run import run_single_experiment_with_retries
 
-def run_single_experiment_with_retries(runner, max_retries=3, retry_delay=5):
-    """
-    Attempts to run a single experiment (i.e. one configuration) using runner.run_torch() 
-    up to max_retries times.
-    """
-    attempt = 0
-    result = None
-    while attempt < max_retries:
-        try:
-            logger.info(f"Starting experiment run attempt {attempt+1}/{max_retries}")
-            result = runner.run_torch()
-            # If this is not the main process, return immediately.
-            if not runner.accelerator.is_main_process:
-                return True, result
-            # Only main process continues aggregation and saving.
-            runner.aggregate_results()
-            runner.save_experiment_results()
-            runner.teardown()
-            logger.info("Experiment run succeeded.")
-            return True, result
-        except Exception as e:
-            attempt += 1
-            logger.error(f"Experiment run failed on attempt {attempt}: {e}", exc_info=True)
-            time.sleep(retry_delay)
-    logger.error("Experiment run failed after maximum attempts.")
-    return False, None
+logger = logging.getLogger(__name__)
 
 def generate_configurations(base_config, grid_params):
     """
@@ -63,25 +38,23 @@ def generate_configurations(base_config, grid_params):
     return configs
 
 
-def validate_config(config):
-    """
-    Validate and normalize the configuration.
-    For instance, ensure that the total output tokens remain 100,000 and FLOPs remain constant.
-    This function should also enforce dependencies (e.g., quantization disables fp_precision).
-    
-    Returns True if valid; False otherwise.
-    """
-    # Example: Ensure that output tokens (max_output_tokens * num_input_prompts) equals 100,000.
+def validate_config(config: dict) -> bool:
+    # Ensure total output tokens equal 100,000.
     total_output_tokens = config.get("max_output_tokens", 0) * config.get("num_input_prompts", 0)
     if total_output_tokens != 100000:
-        # Optionally adjust one parameter to meet the requirement,
-        # or simply return False to discard this configuration.
         return False
-    # Additional dependency checks:
-    if config.get("quantization_config", {}).get("quantization", False):
-        # If quantization is enabled, maybe fp_precision is irrelevant:
-        config["fp_precision"] = "float16"  # or enforce a default.
+
+    # If quantization is enabled, reject if no cached FLOPs value is provided.
+    quant_config = config.get("quantization_config", {})
+    if quant_config.get("quantization", False):
+        if quant_config.get("cached_flops_for_quantised_models") in (None, 0):
+            # You might even log a warning here.
+            return False
+        # Optionally enforce that fp_precision is set appropriately.
+        config["fp_precision"] = "float16"
+        
     return True
+
 
 
 def run_grid_search(base_config, grid_params, prompts, num_repeats=3, max_retries=3, retry_delay=5):
@@ -117,6 +90,6 @@ def run_grid_search(base_config, grid_params, prompts, num_repeats=3, max_retrie
                 "success": success,
                 "result": result
             })
-            time.sleep(2)
+            time.sleep(5)
     return all_results
 

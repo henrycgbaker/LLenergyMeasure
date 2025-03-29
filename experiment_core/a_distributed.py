@@ -67,7 +67,7 @@ def get_original_generate_method(model):
         return None
     
 
-def safe_wait(accelerator, description="", timeout=10):
+def safe_wait(accelerator, description="", timeout=600):
     accelerator.print(f"Entering wait barrier: {description}")
     
     # wrap the blocking call.
