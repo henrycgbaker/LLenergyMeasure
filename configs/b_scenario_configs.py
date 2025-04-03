@@ -2,38 +2,40 @@
 
 scenario_a_max_throughput_exploit = {
     "config_name": "max_throughput_exploit",
+    
     "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
     "is_encoder_decoder": False,
     "task_type": "text_generation",
     "inference_type": "pure_generative",
+    "gpu_list": [0, 1, 2, 3],
+
     "max_input_tokens": 100,
     "max_output_tokens": 100,
     "num_input_prompts": 100,
     "save_outputs": True,
     "decode_token_to_text": True,
-    "gpu_list": [0, 1, 2, 3],
     "num_processes": 4,
     "batching_options": {
-        "batch_size___fixed_batching": 256,
+        "batch_size___fixed_batching": 256, # this 
         "adaptive_batching": False,
         "adaptive_max_tokens": 3000,
         "max_batch_size___adaptive_batching": 100
     },
     "sharding_config": {
         "fsdp_config": {
-            "use_orig_params": True,
-            "cpu_offload": True
+            "use_orig_params": False,
+            "cpu_offload": False
         },
         "sharding_strategy": "NO_SHARD"
     },
     "query_rate": 1.0,
     "latency_simulation": {
         "simulate": False,
-        "delay_min": 0.05,
-        "delay_max": 0.3,
-        "simulate_burst": True,
-        "burst_interval": 1.0,
-        "burst_size": 5
+        "delay_min": 0,
+        "delay_max": 0,
+        "simulate_burst": False,
+        "burst_interval": 0,
+        "burst_size": 0
     },
     "decoder_temperature": 1.0,
     "fp_precision": "float16",
@@ -41,7 +43,7 @@ scenario_a_max_throughput_exploit = {
         "quantization": True,
         "load_in_8bit": True,
         "load_in_4bit": False,
-        "cached_flops_for_quantised_models": None
+        "cached_flops_for_quantised_models": 10345441280000
     },
     "backend": "pytorch"
 }
@@ -59,13 +61,13 @@ scenario_b_precision_gaming = {
         "quantization": True,
         "load_in_8bit": False,
         "load_in_4bit": True,
-        "cached_flops_for_quantised_models": None
+        "cached_flops_for_quantised_models": 10345441280000
     }
 }
 
 scenario_c_gpu_overdrive = {
     **scenario_a_max_throughput_exploit,
-    "config_name": "max_throughput_exploit",
+    "config_name": "gpu_overdrive",
     "batching_options": {
         "batch_size___fixed_batching": 128,
         "adaptive_batching": False,
@@ -80,7 +82,7 @@ scenario_c_gpu_overdrive = {
     },
     "sharding_config": {
         "fsdp_config": {
-            "use_orig_params": True,
+            "use_orig_params": False,
             "cpu_offload": False
         },
         "sharding_strategy": "NO_SHARD"
@@ -110,18 +112,18 @@ scenario_d_standard_production = {
     },
     "sharding_config": {
         "fsdp_config": {
-            "use_orig_params": True,
-            "cpu_offload": True
+            "use_orig_params": False,
+            "cpu_offload": False
         },
         "sharding_strategy": "NO_SHARD"
     },
     "query_rate": 1.0,
     "latency_simulation": {
         "simulate": True,
-        "delay_min": 0.05,
-        "delay_max": 0.2,
+        "delay_min": 1,
+        "delay_max": 2,
         "simulate_burst": True,
-        "burst_interval": 2.0,
+        "burst_interval": 4.0,
         "burst_size": 5
     },
     "decoder_temperature": 1.0,
@@ -166,7 +168,7 @@ scenario_f_balanced_performance_mode = {
         "quantization": True,
         "load_in_8bit": True,
         "load_in_4bit": False,
-        "cached_flops_for_quantised_models": None
+        "cached_flops_for_quantised_models": 10345441280000
     },
     "latency_simulation": {
         "simulate": True,

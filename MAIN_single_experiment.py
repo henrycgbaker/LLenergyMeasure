@@ -3,6 +3,7 @@ import sys, os
 os.chdir(os.path.abspath(os.path.dirname(__file__)))
 sys.path.insert(0, os.path.abspath(os.getcwd()))
 
+
 from datasets import load_dataset
 from configs.experiment_config_class import ExperimentConfig
 from configs.a_default_config import base_config
@@ -11,8 +12,8 @@ from experiment_orchestration_utils.a_run_single_experiment import run_single_ex
 
 import logging
 logging.basicConfig(
-    level=logging.DEBUG,
-    format="[%(asctime)s] [%(levelname)s] [%(process)d] - %(message)s",
+    level=logging.INFO,
+    format="[%(process)d] - %(message)s",
 )
 
 
@@ -33,7 +34,7 @@ def main():
         max_retries=3,
         retry_delay=5
     )
-    h
+    
     print(f"Single run completed.")
 
 if __name__ == "__main__":

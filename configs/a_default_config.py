@@ -46,26 +46,3 @@ base_config = {
         "cached_flops_for_quantised_models": None # For quantized models, store a cached FLOPs value!
     }
 }
-
-grid_params = {
-    "max_input_tokens": [256, 512, 768],
-    "max_output_tokens": [100, 200, 300],
-    "num_input_prompts": [1000, 500, 250],  
-    # The product of max_output_tokens and num_input_prompts should equal 100,000.
-    "decode_token_to_text": [True, False],
-    "batching_options": [
-        {"batch_size___fixed_batching": 16, "adaptive_batching": False},
-        {"batch_size___fixed_batching": 32, "adaptive_batching": False},
-    ],
-    "sharding_config": [
-        {"fsdp_config": {"use_orig_params": True, "cpu_offload": True}, "sharding_strategy": "NO_SHARD"},
-        {"fsdp_config": {"use_orig_params": True, "cpu_offload": False}, "sharding_strategy": "FULL_SHARD"}
-    ],
-    "query_rate": [0.5, 1, 1.2, 1.5, 2, 4, 8],
-    "decoder_temperature": [0.0, 1.0, 2.0],
-    "fp_precision": ["float16", "float32"],
-    "quantization_config": [
-        {"quantization": False, "load_in_8bit": False, "load_in_4bit": False},
-        {"quantization": True, "load_in_8bit": True, "load_in_4bit": False},
-    ]
-}
