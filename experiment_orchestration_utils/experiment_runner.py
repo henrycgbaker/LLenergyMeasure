@@ -197,7 +197,7 @@ class ExperimentRunner:
         if accelerator.is_main_process:
             self.inference_metrics = combine_inference_metrics(raw_inference_results, accelerator)
             save_raw_results(experiment_id, "4_inference_metrics", self.inference_metrics)
-            self.compute_metrics = combine_comp_metrics_fvcore(
+            self.compute_metrics = combine_comp_metrics(
                 model=model, device=accelerator.device, tokenised_input_ids=input_ids, accelerator=accelerator, experiment_config=self.config
             )
             save_raw_results(experiment_id, "5_compute_metrics", self.compute_metrics)
