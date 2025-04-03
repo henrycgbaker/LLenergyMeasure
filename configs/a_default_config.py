@@ -1,5 +1,6 @@
 base_config = {
     # Default values that will be remain constant across experiments 
+    "config_name": "na",
     "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
     "is_encoder_decoder": False,
     "task_type": "text_generation",
@@ -22,15 +23,15 @@ base_config = {
     },
     "sharding_config": {
         "fsdp_config": {
-            "use_orig_params": True,
-            "cpu_offload": True
+            "use_orig_params": False,
+            "cpu_offload": False
         },
         "sharding_strategy": "NO_SHARD" #FULL_SHARD doesn't work
     },
     "query_rate": 1.0,
     "latency_simulation" : {
-        "simulate": False,         # If True, introduce artificial delays.
-        "delay_min": 4,        # Minimum delay (in seconds, e.g. 50ms).
+        "simulate": False,        # If True, introduce artificial delays.
+        "delay_min": 4,           # Minimum delay (in seconds, e.g. 50ms).
         "delay_max": 0.3,         # Maximum delay (e.g. 300ms).
         "simulate_burst": True,   # If True, simulate burst traffic conditions.
         "burst_interval": 4.0,    # After a burst, wait for this many seconds.

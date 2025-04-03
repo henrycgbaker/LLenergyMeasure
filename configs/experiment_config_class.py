@@ -3,6 +3,7 @@ from typing import List, Literal, Any, Optional, Dict
 
 @dataclass
 class ExperimentConfig:
+    config_name: str
     model_name: str
     is_encoder_decoder: bool = False
     task_type: Literal["text_generation", "translation", "summarisation"] = "text_generation"

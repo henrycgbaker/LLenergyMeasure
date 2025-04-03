@@ -82,23 +82,24 @@ def get_experimental_variables(experiment_config, model, accelerator):
     effective_fp_precision = str(next(model.parameters()).dtype)
     
     experimental_variables = {
-        "max_input_tokens": experiment_config.max_input_tokens,
-        "max_output_tokens": experiment_config.max_output_tokens,
-        "number_input_prompts": getattr(experiment_config, "num_input_prompts", None),
-        "decode_token_to_text": getattr(experiment_config, "decode_token_to_text", None),
-        "decoder_temperature": experiment_config.decoder_temperature,
-        "query_rate": experiment_config.query_rate,
-        "latency_simulation": experiment_config.latency_simulation,
-        "fp_precision": effective_fp_precision,
-        "quantisation": experiment_config.quantization_config,
-        "batching_options": experiment_config.batching_options,
-        "sharding_config": experiment_config.sharding_config,
-        "accelerate_config": {
-            "distributed_type": str(accelerator.distributed_type),
-            "num_processes": accelerator.num_processes,
-        },
-        "inference_type": experiment_config.inference_type,
-        "backend": experiment_config.backend,
+      "config_name": experiment_config.config_name,
+      "max_input_tokens": experiment_config.max_input_tokens,
+      "max_output_tokens": experiment_config.max_output_tokens,
+      "number_input_prompts": getattr(experiment_config, "num_input_prompts", None),
+      "decode_token_to_text": getattr(experiment_config, "decode_token_to_text", None),
+      "decoder_temperature": experiment_config.decoder_temperature,
+      "query_rate": experiment_config.query_rate,
+      "latency_simulation": experiment_config.latency_simulation,
+      "fp_precision": effective_fp_precision,
+      "quantisation": experiment_config.quantization_config,
+      "batching_options": experiment_config.batching_options,
+      "sharding_config": experiment_config.sharding_config,
+      "accelerate_config": {
+          "distributed_type": str(accelerator.distributed_type),
+          "num_processes": accelerator.num_processes,
+      },
+      "inference_type": experiment_config.inference_type,
+      "backend": experiment_config.backend,
     }
 
     print(f"[DEBUG] Exiting get_experimental_variables with result: {experimental_variables}")

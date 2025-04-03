@@ -1,6 +1,6 @@
 import random, logging
-from experiment_orchestration.experiment_runner import ExperimentRunner 
-from experiment_orchestration.a_run_single_experiment import run_single_experiment_with_retries
+from experiment_orchestration_utils.experiment_runner import ExperimentRunner 
+from experiment_orchestration_utils.a_run_single_experiment import run_single_experiment_with_retries
 from configs.experiment_config_class import ExperimentConfig
 
 

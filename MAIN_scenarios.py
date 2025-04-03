@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import sys, os, json, logging
-from experiment_orchestration.b_run_scenarios import run_scenarios
+from experiment_orchestration_utils.b_run_scenarios import run_scenarios
 
 # Ensure the current directory (project root) is in sys.path.
 os.chdir(os.path.abspath(os.path.dirname(__file__)))

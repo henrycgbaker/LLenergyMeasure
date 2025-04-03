@@ -18,17 +18,17 @@ if helper_functions_path not in sys.path:
     sys.path.append(helper_functions_path)
 
 # from experiment_core's helper functions
-from experiment_core.a_distributed import get_accelerator, get_shared_unique_id, get_original_generate_method, safe_wait
-from experiment_core.b_model_loader import load_model_tokenizer
-from experiment_core.c_prompt_processing import filter_n_prompts, sort_prompts
-from experiment_core.d_energy_tracking import warm_up, start_energy_tracking, stop_energy_tracking
-from experiment_core.e_inference import run_gen_inference
-from experiment_core.f_experiment_info import get_experiment_setup, get_experimental_variables, get_model_architecture
-from experiment_core.g_metrics_inference import combine_inference_metrics
-from experiment_core.h_metrics_compute import combine_comp_metrics
-from experiment_core.i_metrics_energy import combine_energy_metrics
-from experiment_core.j_results_saving import save_raw_results, save_final_results
-from experiment_core.k_results_aggregation import load_local_energy_results
+from experiment_core_utils.a_distributed import get_accelerator, get_shared_unique_id, get_original_generate_method, safe_wait
+from experiment_core_utils.b_model_loader import load_model_tokenizer
+from experiment_core_utils.c_prompt_processing import filter_n_prompts, sort_prompts
+from experiment_core_utils.d_energy_tracking import warm_up, start_energy_tracking, stop_energy_tracking
+from experiment_core_utils.e_inference import run_gen_inference
+from experiment_core_utils.f_experiment_info import get_experiment_setup, get_experimental_variables, get_model_architecture
+from experiment_core_utils.g_metrics_inference import combine_inference_metrics
+from experiment_core_utils.h_metrics_compute import combine_comp_metrics, combine_comp_metrics_fvcore
+from experiment_core_utils.i_metrics_energy import combine_energy_metrics
+from experiment_core_utils.j_results_saving import save_raw_results, save_final_results
+from experiment_core_utils.k_results_aggregation import load_local_energy_results
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +168,10 @@ class ExperimentRunner:
                 if not isinstance(outputs, list):
                     logger.error(f"[{experiment_id}] Outputs not a list before saving: type={type(outputs)}")
                     outputs = []
-                save_raw_results(experiment_id, "8_text_output" if self.config.decode_token_to_text else "8_token_output", outputs)
+                save_raw_results(experiment_id=experiment_id, 
+                                 type="8_text_output" if self.config.decode_token_to_text else "8_token_output", 
+                                 results=outputs, 
+                                 pid=None)
                 accelerator.print("Saved outputs")
             else:
                 self.outputs = None
@@ -194,7 +197,7 @@ class ExperimentRunner:
         if accelerator.is_main_process:
             self.inference_metrics = combine_inference_metrics(raw_inference_results, accelerator)
             save_raw_results(experiment_id, "4_inference_metrics", self.inference_metrics)
-            self.compute_metrics = combine_comp_metrics(
+            self.compute_metrics = combine_comp_metrics_fvcore(
                 model=model, device=accelerator.device, tokenised_input_ids=input_ids, accelerator=accelerator, experiment_config=self.config
             )
             save_raw_results(experiment_id, "5_compute_metrics", self.compute_metrics)

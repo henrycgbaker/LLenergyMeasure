@@ -115,7 +115,7 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
         accelerator.print(f"Using fixed batching (non-adaptive): created {len(batches)} batches.")
 
     # Process each batch: tokenize and run inference.
-    from experiment_core.c_prompt_processing import batch_tokenise_truncate  
+    from experiment_core_utils.c_prompt_processing import batch_tokenise_truncate  
     for batch_idx, batch in enumerate(batches):
         tokenised_batch = batch_tokenise_truncate(
             prompts=batch,

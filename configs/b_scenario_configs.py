@@ -1,6 +1,7 @@
 # Artificially Optimised Scenarios
 
 scenario_a_max_throughput_exploit = {
+    "config_name": "max_throughput_exploit",
     "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
     "is_encoder_decoder": False,
     "task_type": "text_generation",
@@ -47,6 +48,7 @@ scenario_a_max_throughput_exploit = {
 
 scenario_b_precision_gaming = {
     **scenario_a_max_throughput_exploit,
+    "config_name": "precision_gaming",
     "batching_options": {
         "batch_size___fixed_batching": 128,
         "adaptive_batching": False,
@@ -63,6 +65,7 @@ scenario_b_precision_gaming = {
 
 scenario_c_gpu_overdrive = {
     **scenario_a_max_throughput_exploit,
+    "config_name": "max_throughput_exploit",
     "batching_options": {
         "batch_size___fixed_batching": 128,
         "adaptive_batching": False,
@@ -87,6 +90,7 @@ scenario_c_gpu_overdrive = {
 # Realistic Deployment Scenarios
 
 scenario_d_standard_production = {
+    "config_name": "standard_production",
     "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
     "is_encoder_decoder": False,
     "task_type": "text_generation",
@@ -133,6 +137,7 @@ scenario_d_standard_production = {
 
 scenario_e_low_latency_real_time = {
     **scenario_d_standard_production,
+    "config_name": "latency_real_time",
     "batching_options": {
         "batch_size___fixed_batching": 4,
         "adaptive_batching": False,
@@ -149,6 +154,7 @@ scenario_e_low_latency_real_time = {
 
 scenario_f_balanced_performance_mode = {
     **scenario_d_standard_production,
+    "config_name": "balanced_performance_mode",
     "batching_options": {
         "batch_size___fixed_batching": 32,
         "adaptive_batching": False,

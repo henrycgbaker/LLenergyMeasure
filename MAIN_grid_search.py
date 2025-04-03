@@ -11,7 +11,7 @@ from datasets import load_dataset
 from configs.experiment_config_class import ExperimentConfig
 from configs.a_default_config import base_config, grid_params
 
-from experiment_orchestration.c_run_grid_search import run_grid_search
+from experiment_orchestration_utils.c_run_grid_search import run_grid_search
 
 import logging
 logging.basicConfig(

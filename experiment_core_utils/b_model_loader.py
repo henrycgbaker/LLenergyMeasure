@@ -60,8 +60,10 @@ def load_model_tokenizer(configs):
         dtype = torch.float16
     elif fp_precision == "bfloat16":
         dtype = torch.bfloat16
+    elif fp_precision == "float32":
+        dtype = torch.float32
     else:
-        dtype = torch.float32  
+        dtype = torch.float16  
     
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     

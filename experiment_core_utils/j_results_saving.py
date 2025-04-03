@@ -3,7 +3,7 @@ import json
 import torch
 
 def save_raw_results(experiment_id, type, results, pid=None):
-    output_dir = os.path.join(os.getcwd(), f"results/raw_results/{experiment_id}")    
+    output_dir = os.path.join(os.getcwd(), f"results/raw_results/{experiment_id}")  
     os.makedirs(output_dir, exist_ok=True)
     
     if pid is not None:
