@@ -88,6 +88,7 @@ def get_experimental_variables(experiment_config, model, accelerator):
         "decode_token_to_text": getattr(experiment_config, "decode_token_to_text", None),
         "decoder_temperature": experiment_config.decoder_temperature,
         "query_rate": experiment_config.query_rate,
+        "latency_simulation": experiment_config.latency_simulation,
         "fp_precision": effective_fp_precision,
         "quantisation": experiment_config.quantization_config,
         "batching_options": experiment_config.batching_options,

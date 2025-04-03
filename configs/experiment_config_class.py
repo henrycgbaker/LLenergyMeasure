@@ -17,6 +17,7 @@ class ExperimentConfig:
     batching_options: dict = field(default_factory=dict)
     sharding_config: dict = field(default_factory=dict)
     query_rate: float = 1.0
+    latency_simulation: Optional[Dict[str, Any]] = field(default_factory=dict)
     decoder_temperature: float = 1.0
     fp_precision: Literal["float32", "float16", "float8"] = "float32"
     quantization_config: Optional[Dict[str, Any]] = field(default_factory=dict)

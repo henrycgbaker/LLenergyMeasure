@@ -9,9 +9,9 @@ base_config = {
     "save_outputs": True,
     
     # Default values that will be overridden by the grid:
-    "max_input_tokens": 512, #2048 is Llama's limit
-    "max_output_tokens": 512,
-    "num_input_prompts": 500,  # 500 * 200 = 100,000 output tokens.
+    "max_input_tokens": 100, #2048 is Llama's limit
+    "max_output_tokens": 100,
+    "num_input_prompts": 100,  # 500 * 200 = 100,000 output tokens.
     "decode_token_to_text": True,
     "num_processes": 4,
     "batching_options": {
@@ -28,6 +28,14 @@ base_config = {
         "sharding_strategy": "NO_SHARD" #FULL_SHARD doesn't work
     },
     "query_rate": 1.0,
+    "latency_simulation" : {
+        "simulate": True,         # If True, introduce artificial delays.
+        "delay_min": 4,        # Minimum delay (in seconds, e.g. 50ms).
+        "delay_max": 0.3,         # Maximum delay (e.g. 300ms).
+        "simulate_burst": True,   # If True, simulate burst traffic conditions.
+        "burst_interval": 4.0,    # After a burst, wait for this many seconds.
+        "burst_size": 5           # Define a burst as every 5 batches.
+    },
     "decoder_temperature": 1.0,
     "fp_precision": "float32",
     "quantization_config": {
@@ -38,7 +46,6 @@ base_config = {
         "cached_flops_for_quantised_models": None
     }
 }
-
 
 grid_params = {
     "max_input_tokens": [256, 512, 768],

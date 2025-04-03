@@ -3,6 +3,8 @@ import time
 import torch
 import logging
 from typing import List, Any
+import random
+
 
 def adaptive_batching(
     prompts: List[str],
@@ -88,11 +90,6 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
     max_output_tokens = experiment_config.max_output_tokens
     decoder_temperature = experiment_config.decoder_temperature
     
-    # For fixed batching.
-    fixed_batch_size = experiment_config.batching_options.get("batch_size___fixed_batching", 8)
-    # Adaptive batching flag.
-    use_adaptive = experiment_config.batching_options.get("adaptive_batching", False)
-    
     # Initialize metrics and outputs.
     token_id_outputs = []
     latencies = []
@@ -101,22 +98,19 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
     all_input_ids_batches = []
     device = accelerator.device
 
-    if use_adaptive:
-        # Retrieve adaptive parameters from config.
-        adaptive_max_tokens = experiment_config.batching_options.get("adaptive_max_tokens", max_input_tokens)
-        max_batch_size_adaptive = experiment_config.batching_options.get("max_batch_size___adaptive_batching", 100)
-        # Use the experiment_config.max_input_tokens as the grouping token limit,
-        # or adjust this value if you want grouping to be based on a different cap.
+    # Determine batching strategy (adaptive or fixed)
+    if experiment_config.batching_options.get("adaptive_batching", False):
         batches = adaptive_batching(
             prompts=prompts, 
             tokenizer=tokenizer, 
-            adaptive_max_tokens=adaptive_max_tokens, 
-            grouping_token_limit=max_input_tokens,  
-            max_batch_size=max_batch_size_adaptive
+            adaptive_max_tokens=experiment_config.max_input_tokens, 
+            grouping_token_limit=experiment_config.max_input_tokens,  
+            max_batch_size=experiment_config.batching_options.get("max_batch_size___adaptive_batching", 100)
         )
         accelerator.print(f"Using adaptive batching: created {len(batches)} batches.")
     else:
         # Fixed batching: simply split the prompts into fixed-size chunks.
+        fixed_batch_size = experiment_config.batching_options.get("batch_size___fixed_batching", 8)
         batches = [prompts[i:i+fixed_batch_size] for i in range(0, len(prompts), fixed_batch_size)]
         accelerator.print(f"Using fixed batching (non-adaptive): created {len(batches)} batches.")
 
@@ -157,6 +151,22 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
         
         # Run timed inference on the batch.
         start_time = time.perf_counter()
+        
+        # Latency simulation: delay between request arrivals
+        if experiment_config.latency_simulation.get("simulate", False):
+            delay = random.uniform(
+                experiment_config.latency_simulation.get("delay_min", 0),
+                experiment_config.latency_simulation.get("delay_max", 0)
+            )
+            time.sleep(delay)
+
+        # Burst simulation: extra pause after bursts
+        if experiment_config.latency_simulation.get("simulate_burst", False):
+            burst_size = experiment_config.latency_simulation.get("burst_size", 1)
+            if (batch_idx + 1) % burst_size == 0:
+                burst_interval = experiment_config.latency_simulation.get("burst_interval", 0)
+                time.sleep(burst_interval)
+        
         with torch.no_grad():
             token_id_batch_output = model.generate(batch_encoded["input_ids"], **generation_kwargs)
         torch.cuda.synchronize(device)

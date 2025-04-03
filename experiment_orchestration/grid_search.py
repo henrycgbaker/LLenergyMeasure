@@ -82,7 +82,7 @@ def run_grid_search(base_config, grid_params, prompts, num_repeats=3, max_retrie
         for config in config_list:
             logger.info(f"Running configuration: {config}")
             from experiment_orchestration.experiment_runner import ExperimentRunner
-            from configs.experiment_config import ExperimentConfig
+            from configs.experiment_config_class import ExperimentConfig
             runner = ExperimentRunner(ExperimentConfig.from_dict(config), prompts)
             success, result = run_single_experiment_with_retries(runner, max_retries=max_retries, retry_delay=retry_delay)
             all_results.append({

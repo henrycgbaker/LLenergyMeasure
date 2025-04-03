@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.getcwd()))
 import json
 from datasets import load_dataset
 
-from configs.experiment_config import ExperimentConfig
+from configs.experiment_config_class import ExperimentConfig
 from configs.default_config import base_config, grid_params
 
 from experiment_orchestration.grid_search import run_grid_search
