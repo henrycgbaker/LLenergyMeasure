@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields
 from typing import List, Literal, Any, Optional, Dict
 
 @dataclass
@@ -24,8 +24,10 @@ class ExperimentConfig:
     backend: Literal["pytorch", "tensorRT", "deepserve", "vllm"] = "pytorch"  
 
     @classmethod
-    def from_dict(cls, d: dict) -> "ExperimentConfig":
-        return cls(**d)
+    def from_dict(cls, d: Dict[str, Any]) -> "ExperimentConfig":
+        valid_keys = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in d.items() if k in valid_keys}
+        return cls(**filtered)
 
     def to_dict(self) -> dict:
         return asdict(self)

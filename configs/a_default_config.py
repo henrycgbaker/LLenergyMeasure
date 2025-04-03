@@ -29,7 +29,7 @@ base_config = {
     },
     "query_rate": 1.0,
     "latency_simulation" : {
-        "simulate": True,         # If True, introduce artificial delays.
+        "simulate": False,         # If True, introduce artificial delays.
         "delay_min": 4,        # Minimum delay (in seconds, e.g. 50ms).
         "delay_max": 0.3,         # Maximum delay (e.g. 300ms).
         "simulate_burst": True,   # If True, simulate burst traffic conditions.
@@ -37,13 +37,12 @@ base_config = {
         "burst_size": 5           # Define a burst as every 5 batches.
     },
     "decoder_temperature": 1.0,
-    "fp_precision": "float32",
+    "fp_precision": "float32", # float16
     "quantization_config": {
         "quantization": False,
         "load_in_8bit": False,
         "load_in_4bit": False,
-        # For quantized models, store a cached FLOPs value:
-        "cached_flops_for_quantised_models": None
+        "cached_flops_for_quantised_models": None # For quantized models, store a cached FLOPs value!
     }
 }
 

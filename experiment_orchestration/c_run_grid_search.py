@@ -4,7 +4,7 @@ import random
 import time
 import logging
 
-from experiment_orchestration.single_run import run_single_experiment_with_retries
+from experiment_orchestration.a_run_single_experiment import run_single_experiment_with_retries
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +90,5 @@ def run_grid_search(base_config, grid_params, prompts, num_repeats=3, max_retrie
                 "success": success,
                 "result": result
             })
-            time.sleep(5)
     return all_results
 
