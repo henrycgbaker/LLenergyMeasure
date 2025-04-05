@@ -1,13 +1,5 @@
 #!/usr/bin/env python
-import subprocess
 import os
-import json
-import tempfile
-
-# Ensure the current directory (project root) is in sys.path.
-os.chdir(os.path.abspath(os.path.dirname(__file__)))
-
-# Import scenarios
 from configs.b_scenario_configs import (
     scenario_a1_max_throughput_exploit,
     scenario_a2_precision_minimalist,
@@ -21,8 +13,12 @@ from configs.b_scenario_configs import (
     scenario_r5_real_time_mobile,
     scenario_r6_medium_scale_serving,
 )
+from experiment_orchestration_utils.c_experiment_launcher import run_experiment_from_config
 
-# List of configuration dictionaries
+# Ensure we run from the project root.
+os.chdir(os.path.abspath(os.path.dirname(__file__)))
+
+# List of configuration dictionaries.
 scenarios_list = [
     scenario_a1_max_throughput_exploit,
     scenario_a2_precision_minimalist,
@@ -37,27 +33,26 @@ scenarios_list = [
     scenario_r6_medium_scale_serving,
 ]
 
+# Load prompts for scenarios (if they share the same dataset)
+# modify this if each scenario should use a different dataset.
+from datasets import load_dataset
+ds = load_dataset("lighteval/pile_helm", "arxiv")["test"]
+prompts = [sample["text"] for sample in ds]
 
-# Loop over each configuration.
+
+# Loop over each scenario configuration.
 for config in scenarios_list:
-    # Write config to a temporary JSON file.
-    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".json") as temp_config_file:
-        json.dump(config, temp_config_file, indent=2)
-        temp_config_path = temp_config_file.name
+    # Ensure the number of processes matches the available GPUs.
+    config["num_processes"] = len(config["gpu_list"])
 
     print(f"Launching experiment with config: {config['config_name']}")
     
-    # need to allocate correct GPUs BEFORE launching accelerate !!
-    config["num_processes"] = len(config["gpu_list"])
+    # Run the experiment directly using the common launcher.
+    success, result = run_experiment_from_config(config, prompts, max_retries=3)
+    
+    if success:
+        print(f"Configuration with {config['config_name']} completed successfully.\n")
+    else:
+        print(f"Configuration with {config['config_name']} failed.\n")
 
-    # Launch the single config run script using 'accelerate launch'
-    result = subprocess.run([
-        "accelerate", "launch",
-        "--num_processes", str(config["num_processes"]),
-        "run_single_experiment.py",
-        "--config", temp_config_path
-    ], check=True)
-
-    print(f"Experiment with {config['config_name']} completed.\n")
-
-print("All experiments have been executed sequentially.")
+print("Full experiment complete: All Configuration have been executed sequentially.")

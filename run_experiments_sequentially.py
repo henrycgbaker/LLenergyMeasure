@@ -4,8 +4,8 @@ import os
 import sys, os, json, logging
 from experiment_orchestration_utils.b_run_scenarios import run_scenarios
 import random, logging
-from experiment_orchestration_utils.experiment_runner import ExperimentRunner 
-from experiment_orchestration_utils.a_run_single_configuration import run_single_configuration
+from experiment_orchestration_utils.a_experiment_runner_class import ExperimentRunner 
+from experiment_orchestration_utils.b_run_single_configuration import run_single_configuration
 from configs.experiment_config_class import ExperimentConfig
 import subprocess
 

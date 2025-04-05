@@ -1,34 +1,39 @@
-# single_experiment.py
 import argparse
 import json
-import sys, os
+import os
 from datasets import load_dataset
-from configs.experiment_config_class import ExperimentConfig
-from experiment_orchestration_utils.experiment_runner import ExperimentRunner 
-from experiment_orchestration_utils.a_run_single_configuration import run_single_configuration
+from experiment_orchestration_utils.c_experiment_launcher import run_experiment_from_config, run_experiment_from_file
+from configs.a_default_config import base_config  # <<<<<< Import the base_config Python dict
 import logging
 
 logging.basicConfig(level=logging.INFO, format="[%(process)d] - %(message)s")
 
-def main(config):
-    # Load prompts from a dataset.
+def main(config_path=None):
+    # Load prompts from the dataset
     ds = load_dataset("lighteval/pile_helm", "arxiv")["test"]
     prompts = [sample["text"] for sample in ds]
 
-    # Load config from file.
-    with open(config, "r") as f:
-        base_config = json.load(f)
-    
-    # Convert base_config dict to dataclass.
-    experiment_config = ExperimentConfig(**base_config)
-    runner = ExperimentRunner(experiment_config, prompts)
-    
-    # Run the experiment.
-    run_single_configuration(runner, max_retries=3, retry_delay=5)
-    print("Single run completed.")
+    if config_path is not None:
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Config file {config_path} does not exist!")
+        print(f"Loading configuration from {config_path}")
+        success, result = run_experiment_from_file(config_path, prompts)
+    else:
+        print("No config path provided, using base_config from default_config.py")
+        success, result = run_experiment_from_config(base_config, prompts)
+
+    if success:
+        print("Single run completed successfully.")
+    else:
+        print("Single run failed.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, required=True, help="Path to experiment configuration JSON file.")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,   
+        help="Optional: Path to experiment configuration JSON file. If not provided, uses base_config from default_config.py."
+    )
     args = parser.parse_args()
     main(args.config)
