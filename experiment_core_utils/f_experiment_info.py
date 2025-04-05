@@ -24,7 +24,7 @@ def get_region_info(codecarbon_data):
         "region": getattr(codecarbon_data, "region", "Unknown"),
     }
 
-def get_experiment_setup(experiment_config, model, codecarbon_data, experiment_id):
+def get_experiment_setup(experiment_config, codecarbon_data, experiment_id):
     """
     Gathers experiment setup information.
     
@@ -87,7 +87,7 @@ def get_experimental_variables(experiment_config, model, accelerator):
       "max_output_tokens": experiment_config.max_output_tokens,
       "number_input_prompts": getattr(experiment_config, "num_input_prompts", None),
       "decode_token_to_text": getattr(experiment_config, "decode_token_to_text", None),
-      "decoder_temperature": experiment_config.decoder_temperature,
+      "decoder_config": experiment_config.decoder_config,
       "query_rate": experiment_config.query_rate,
       "latency_simulation": experiment_config.latency_simulation,
       "fp_precision": effective_fp_precision,

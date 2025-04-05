@@ -1,19 +1,44 @@
 import os
+import yaml
 from accelerate import Accelerator
 import torch.distributed as dist
 import threading
 
+def delete_accelerator_cli_configs():
+    """
+    they clash
+    """
+    config_path = os.path.expanduser("~/.cache/huggingface/accelerate/default_config.yaml")
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+        # Remove GPU-related settings if they exist
+        config.pop("gpu_list", None)
+        config.pop("num_processes", None)
+        with open(config_path, "w") as f:
+            yaml.dump(config, f)
+        print("Modified Accelerate CLI config to remove gpu_list and num_processes.")
+    else:
+        print("No Accelerate CLI config file found.")
+
+def get_accelerator(gpu_list=None, num_processes=None):
     
-def get_accelerator(gpu_list=None):
-    """
-    Sets up a distributed environment using Accelerate 
-    """
-    # Set CUDA_VISIBLE_DEVICES if a gpu_list is provided.
+    delete_accelerator_cli_configs()
+    
+    os.environ["ACCELERATE_CONFIG_FILE"] = ""   # disables the CLI config so the script settings take priority
+    
     if gpu_list is not None:
         os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_list)
+        
+        if num_processes is not None:
+            available = len(gpu_list)
+            if num_processes > available:
+                print(f"Warning: num_processes ({num_processes}) exceeds available GPUs ({available}). Using {available} processes instead.")
+                num_processes = available
+            os.environ["ACCELERATE_NUM_PROCESSES"] = str(num_processes)
     
+    from accelerate import Accelerator  # Import AFTER setting the environment variables
     accelerator = Accelerator(device_placement=True)
-    
     return accelerator
 
 def get_persistent_unique_id():

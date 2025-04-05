@@ -5,7 +5,7 @@ base_config = {
     "is_encoder_decoder": False,
     "task_type": "text_generation",
     "inference_type": "pure_generative",
-    "gpu_list": [0, 1, 2, 3],
+    "gpu_list": [1, 2, 3],
     "backend": "pytorch",
     "save_outputs": True,
     
@@ -14,7 +14,7 @@ base_config = {
     "max_output_tokens": 100,
     "num_input_prompts": 100,  # 500 * 200 = 100,000 output tokens.
     "decode_token_to_text": True,
-    "num_processes": 4,
+    "num_processes": 3,
     "batching_options": {
         "batch_size___fixed_batching": 16,
         "adaptive_batching": False,
@@ -37,7 +37,11 @@ base_config = {
         "burst_interval": 4.0,    # After a burst, wait for this many seconds.
         "burst_size": 5           # Define a burst as every 5 batches.
     },
-    "decoder_temperature": 1.0,
+    "decoder_config":{
+        "decoder_temperature": 1.0,
+        "decoder_top_k": 50,      
+        "decoder_top_p": 0.95
+    }, 
     "fp_precision": "float32", # float16
     "quantization_config": {
         "quantization": False,

@@ -50,7 +50,7 @@ class ExperimentRunner:
 
     def unique_id(self):
         # Initialize Accelerator.
-        accelerator = get_accelerator(self.config.gpu_list)
+        accelerator = get_accelerator(self.config.gpu_list, self.config.num_processes)
         self.accelerator = accelerator
         accelerator.print("Accelerator set up")
 
@@ -181,7 +181,7 @@ class ExperimentRunner:
         # Save experiment-wide meta info (only main process).
         if accelerator.is_main_process:
             self.experiment_setup = get_experiment_setup(
-                experiment_config=self.config, model=model, codecarbon_data=codecarbon_data, experiment_id=experiment_id
+                experiment_config=self.config, codecarbon_data=codecarbon_data, experiment_id=experiment_id
             )
             save_raw_results(experiment_id, "1_experiment_setup", self.experiment_setup)
             self.experiment_variables = get_experimental_variables(

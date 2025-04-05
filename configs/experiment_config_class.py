@@ -19,7 +19,7 @@ class ExperimentConfig:
     sharding_config: dict = field(default_factory=dict)
     query_rate: float = 1.0
     latency_simulation: Optional[Dict[str, Any]] = field(default_factory=dict)
-    decoder_temperature: float = 1.0
+    decoder_config: dict = field(default_factory=dict) 
     fp_precision: Literal["float32", "float16", "float8"] = "float32"
     quantization_config: Optional[Dict[str, Any]] = field(default_factory=dict)
     backend: Literal["pytorch", "tensorRT", "deepserve", "vllm"] = "pytorch"  
