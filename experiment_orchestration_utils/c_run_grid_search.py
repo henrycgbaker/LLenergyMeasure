@@ -4,7 +4,7 @@ import random
 import time
 import logging
 
-from experiment_orchestration_utils.a_run_single_experiment import run_single_experiment_with_retries
+from experiment_orchestration_utils.a_run_single_configuration import run_single_configuration
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ def run_grid_search(base_config, grid_params, prompts, num_repeats=3, max_retrie
             from experiment_orchestration_utils.experiment_runner import ExperimentRunner
             from configs.experiment_config_class import ExperimentConfig
             runner = ExperimentRunner(ExperimentConfig.from_dict(config), prompts)
-            success, result = run_single_experiment_with_retries(runner, max_retries=max_retries, retry_delay=retry_delay)
+            success, result = run_single_configuration(runner, max_retries=max_retries, retry_delay=retry_delay)
             all_results.append({
                 "config": config,
                 "success": success,

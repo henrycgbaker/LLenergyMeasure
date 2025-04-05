@@ -3,7 +3,7 @@ import sys, os, json, logging
 from experiment_orchestration_utils.b_run_scenarios import run_scenarios
 import random, logging
 from experiment_orchestration_utils.experiment_runner import ExperimentRunner 
-from experiment_orchestration_utils.a_run_single_experiment import run_single_experiment_with_retries
+from experiment_orchestration_utils.a_run_single_configuration import run_single_experiment_with_retries
 from configs.experiment_config_class import ExperimentConfig
 import subprocess
 import time

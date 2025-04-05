@@ -1,61 +1,31 @@
-# Artificially Optimised Scenarios
+from configs.a_default_config import base_config
 
-scenario_a_max_throughput_exploit = {
-    "config_name": "max_throughput_exploit",
-    
-    "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-    "is_encoder_decoder": False,
-    "task_type": "text_generation",
-    "inference_type": "pure_generative",
-    "gpu_list": [0, 1, 2, 3],
+# ARTIFICIAL
 
-    "max_input_tokens": 100,
-    "max_output_tokens": 100,
-    "num_input_prompts": 100,
-    "save_outputs": True,
-    "decode_token_to_text": True,
-    "num_processes": 4,
+scenario_a1_max_throughput_exploit = {
+    **base_config,
+    "config_name": "a1_max_throughput_exploit",
     "batching_options": {
-        "batch_size___fixed_batching": 256, # this 
+        "batch_size___fixed_batching": 256,
         "adaptive_batching": False,
         "adaptive_max_tokens": 3000,
         "max_batch_size___adaptive_batching": 100
     },
-    "sharding_config": {
-        "fsdp_config": {
-            "use_orig_params": False,
-            "cpu_offload": False
-        },
-        "sharding_strategy": "NO_SHARD"
-    },
-    "query_rate": 1.0,
-    "latency_simulation": {
-        "simulate": False,
-        "delay_min": 0,
-        "delay_max": 0,
-        "simulate_burst": False,
-        "burst_interval": 0,
-        "burst_size": 0
-    },
-    "decoder_temperature": 1.0,
     "fp_precision": "float16",
     "quantization_config": {
         "quantization": True,
         "load_in_8bit": True,
         "load_in_4bit": False,
         "cached_flops_for_quantised_models": 10345441280000
-    },
-    "backend": "pytorch"
+    }
 }
 
-scenario_b_precision_gaming = {
-    **scenario_a_max_throughput_exploit,
-    "config_name": "precision_gaming",
+scenario_a2_precision_minimalist = {
+    **scenario_a1_max_throughput_exploit,
+    "config_name": "a2_precision_minimalist",
+    "gpu_list": [0, 1],
     "batching_options": {
-        "batch_size___fixed_batching": 128,
-        "adaptive_batching": False,
-        "adaptive_max_tokens": 3000,
-        "max_batch_size___adaptive_batching": 100
+        "batch_size___fixed_batching": 128
     },
     "quantization_config": {
         "quantization": True,
@@ -65,86 +35,79 @@ scenario_b_precision_gaming = {
     }
 }
 
-scenario_c_gpu_overdrive = {
-    **scenario_a_max_throughput_exploit,
-    "config_name": "gpu_overdrive",
+scenario_a3_quantisation_gaming = {
+    **scenario_a1_max_throughput_exploit,
+    "config_name": "a3_quantisation_gaming",
+    "gpu_list": [0],
     "batching_options": {
-        "batch_size___fixed_batching": 128,
-        "adaptive_batching": False,
-        "adaptive_max_tokens": 3000,
-        "max_batch_size___adaptive_batching": 100
+        "batch_size___fixed_batching": 64
+    },
+    "decoder_config": {
+        "decoder_temperature": 0.7,
+        "decoder_top_k": 50,
+        "decoder_top_p": 0.95
+    },
+    "quantization_config": {
+        "quantization": True,
+        "load_in_8bit": False,
+        "load_in_4bit": True,
+        "cached_flops_for_quantised_models": 10345441280000
+    }
+}
+
+scenario_a4_latency_ignorance_exploit = {
+    **scenario_a1_max_throughput_exploit,
+    "config_name": "a4_latency_ignorance_exploit",
+    "gpu_list": [0],
+    "batching_options": {
+        "batch_size___fixed_batching": 32
+    }
+}
+
+scenario_a5_parallel_overdrive = {
+    **scenario_a1_max_throughput_exploit,
+    "config_name": "a5_parallel_overdrive",
+    "gpu_list": [0, 1, 2, 3],
+    "batching_options": {
+        "batch_size___fixed_batching": 64
     },
     "quantization_config": {
         "quantization": False,
         "load_in_8bit": False,
         "load_in_4bit": False,
         "cached_flops_for_quantised_models": None
-    },
-    "sharding_config": {
-        "fsdp_config": {
-            "use_orig_params": False,
-            "cpu_offload": False
-        },
-        "sharding_strategy": "NO_SHARD"
     }
 }
 
-# Realistic Deployment Scenarios
+# REALISTIC
 
-scenario_d_standard_production = {
-    "config_name": "standard_production",
-    "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-    "is_encoder_decoder": False,
-    "task_type": "text_generation",
-    "inference_type": "pure_generative",
-    "max_input_tokens": 100,
-    "max_output_tokens": 100,
-    "num_input_prompts": 100,
-    "save_outputs": True,
-    "decode_token_to_text": True,
-    "gpu_list": [0, 1, 2, 3],
-    "num_processes": 4,
+scenario_r1_standard_production = {
+    **base_config,
+    "config_name": "r1_standard_production",
+    "gpu_list": [0, 1],
+    "num_processes": 2,
     "batching_options": {
         "batch_size___fixed_batching": 16,
         "adaptive_batching": False,
         "adaptive_max_tokens": 3000,
         "max_batch_size___adaptive_batching": 100
     },
-    "sharding_config": {
-        "fsdp_config": {
-            "use_orig_params": False,
-            "cpu_offload": False
-        },
-        "sharding_strategy": "NO_SHARD"
-    },
-    "query_rate": 1.0,
     "latency_simulation": {
         "simulate": True,
-        "delay_min": 1,
-        "delay_max": 2,
+        "delay_min": 0.5,
+        "delay_max": 1.5,
         "simulate_burst": True,
         "burst_interval": 4.0,
         "burst_size": 5
-    },
-    "decoder_temperature": 1.0,
-    "fp_precision": "float32",
-    "quantization_config": {
-        "quantization": False,
-        "load_in_8bit": False,
-        "load_in_4bit": False,
-        "cached_flops_for_quantised_models": None
-    },
-    "backend": "pytorch"
+    }
 }
 
-scenario_e_low_latency_real_time = {
-    **scenario_d_standard_production,
-    "config_name": "latency_real_time",
+scenario_r2_low_latency_chatbot = {
+    **scenario_r1_standard_production,
+    "config_name": "r2_low_latency_chatbot",
+    "gpu_list": [0],
     "batching_options": {
-        "batch_size___fixed_batching": 4,
-        "adaptive_batching": False,
-        "adaptive_max_tokens": 3000,
-        "max_batch_size___adaptive_batching": 100
+        "batch_size___fixed_batching": 4
     },
     "latency_simulation": {
         "simulate": True,
@@ -154,14 +117,11 @@ scenario_e_low_latency_real_time = {
     }
 }
 
-scenario_f_balanced_performance_mode = {
-    **scenario_d_standard_production,
-    "config_name": "balanced_performance_mode",
+scenario_r3_balanced_enterprise_service = {
+    **scenario_r1_standard_production,
+    "config_name": "r3_balanced_enterprise_service",
     "batching_options": {
-        "batch_size___fixed_batching": 32,
-        "adaptive_batching": False,
-        "adaptive_max_tokens": 3000,
-        "max_batch_size___adaptive_batching": 100
+        "batch_size___fixed_batching": 32
     },
     "fp_precision": "float16",
     "quantization_config": {
@@ -169,13 +129,61 @@ scenario_f_balanced_performance_mode = {
         "load_in_8bit": True,
         "load_in_4bit": False,
         "cached_flops_for_quantised_models": 10345441280000
+    }
+}
+
+scenario_r4_high_load_api = {
+    **scenario_r1_standard_production,
+    "config_name": "r4_high_load_api",
+    "gpu_list": [0],
+    "batching_options": {
+        "batch_size___fixed_batching": 8
     },
     "latency_simulation": {
         "simulate": True,
-        "delay_min": 0.02,
-        "delay_max": 0.1,
+        "delay_min": 0.05,
+        "delay_max": 0.2,
         "simulate_burst": True,
-        "burst_interval": 1.5,
-        "burst_size": 3
+        "burst_interval": 2.0,
+        "burst_size": 5
+    }
+}
+
+scenario_r5_real_time_mobile = {
+    **scenario_r1_standard_production,
+    "config_name": "r5_real_time_mobile",
+    "gpu_list": [0],
+    "batching_options": {
+        "batch_size___fixed_batching": 1
+    },
+    "fp_precision": "float16",
+    "latency_simulation": {
+        "simulate": True,
+        "delay_min": 0.2,
+        "delay_max": 0.6,
+        "simulate_burst": True,
+        "burst_interval": 5.0,
+        "burst_size": 8
+    },
+    "quantization_config": {
+        "quantization": True,
+        "load_in_8bit": True,
+        "load_in_4bit": False,
+        "cached_flops_for_quantised_models": 10345441280000
+    }
+}
+
+scenario_r6_medium_scale_serving = {
+    **scenario_r1_standard_production,
+    "config_name": "r6_medium_scale_serving",
+    "gpu_list": [0, 1, 2, 3],
+    "batching_options": {
+        "batch_size___fixed_batching": 32
+    },
+    "latency_simulation": {
+        "simulate": True,
+        "delay_min": 0.01,
+        "delay_max": 0.1,
+        "simulate_burst": False
     }
 }

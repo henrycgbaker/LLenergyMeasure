@@ -5,7 +5,7 @@ base_config = {
     "is_encoder_decoder": False,
     "task_type": "text_generation",
     "inference_type": "pure_generative",
-    "gpu_list": [1, 2, 3],
+    "gpu_list": [0, 1, 2, 3],
     "backend": "pytorch",
     "save_outputs": True,
     
@@ -14,7 +14,7 @@ base_config = {
     "max_output_tokens": 100,
     "num_input_prompts": 100,  # 500 * 200 = 100,000 output tokens.
     "decode_token_to_text": True,
-    "num_processes": 3,
+    "num_processes": 4,
     "batching_options": {
         "batch_size___fixed_batching": 16,
         "adaptive_batching": False,

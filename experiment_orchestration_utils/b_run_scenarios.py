@@ -1,6 +1,6 @@
 import random, logging
 from experiment_orchestration_utils.experiment_runner import ExperimentRunner 
-from experiment_orchestration_utils.a_run_single_experiment import run_single_experiment_with_retries
+from experiment_orchestration_utils.a_run_single_configuration import run_single_configuration
 from configs.experiment_config_class import ExperimentConfig
 
 
@@ -23,7 +23,7 @@ def run_scenarios(scenario_list, prompts, num_repeats=3, max_retries=3, retry_de
         for scenario in scenario_list:
             # Instantiate an ExperimentRunner from the scenario dict
             runner = ExperimentRunner(ExperimentConfig.from_dict(scenario), prompts)
-            success, result = run_single_experiment_with_retries(
+            success, result = run_single_configuration(
                 runner, max_retries=max_retries, retry_delay=retry_delay
             )
             scenario_results.append({

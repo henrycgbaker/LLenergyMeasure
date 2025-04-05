@@ -4,7 +4,7 @@ import torch.distributed as dist
 
 logger = logging.getLogger(__name__)
 
-def run_single_experiment_with_retries(runner, max_retries=3, retry_delay=5):
+def run_single_configuration(runner, max_retries=3, retry_delay=5):
     """
     Attempts to run a single experiment using runner.run_torch() up to max_retries times.
     """
@@ -12,7 +12,7 @@ def run_single_experiment_with_retries(runner, max_retries=3, retry_delay=5):
     result = None
     while attempt < max_retries:
         try:
-            logger.info(f"Starting experiment - run attempt {attempt+1}/{max_retries}")
+            logger.info(f"Starting configuration run - run attempt {attempt+1}/{max_retries}")
             
             runner.run_setup()
             runner.unique_id()

@@ -2,7 +2,7 @@ import os
 import json
 import torch
 
-def save_raw_results(experiment_id, type, results, pid=None):
+def save_raw_results_json(experiment_id, type, results, pid=None):
     output_dir = os.path.join(os.getcwd(), f"results/raw_results/{experiment_id}")  
     os.makedirs(output_dir, exist_ok=True)
     
@@ -17,7 +17,6 @@ def save_raw_results(experiment_id, type, results, pid=None):
 
     return output_json_path
 
-
 def make_json_serializable(obj):
     if isinstance(obj, dict):
         # Ensure keys are strings and process values recursively.
@@ -30,17 +29,8 @@ def make_json_serializable(obj):
         return obj
     
     
-def save_final_results(task_type, benchmark_results):
-    """
-    Saves benchmark results as a JSON log.
+def save_final_results_json(task_type, benchmark_results):
     
-    Parameters:
-      - task_type: A string representing the type of task.
-      - benchmark_results: A dictionary of results to save.
-      
-    Returns:
-      The file path where the results were saved.
-    """
     output_dir = "results"
     os.makedirs(output_dir, exist_ok=True)
     output_json_path = os.path.join(output_dir, f"{task_type}_results.json")

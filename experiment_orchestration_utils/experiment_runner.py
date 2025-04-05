@@ -27,7 +27,7 @@ from experiment_core_utils.f_experiment_info import get_experiment_setup, get_ex
 from experiment_core_utils.g_metrics_inference import combine_inference_metrics
 from experiment_core_utils.h_metrics_compute import combine_comp_metrics, combine_comp_metrics_fvcore
 from experiment_core_utils.i_metrics_energy import combine_energy_metrics
-from experiment_core_utils.j_results_saving import save_raw_results, save_final_results
+from experiment_core_utils.j_results_saving import save_raw_results_json, save_final_results_json
 from experiment_core_utils.k_results_aggregation import load_local_energy_results
 
 logger = logging.getLogger(__name__)
@@ -169,7 +169,7 @@ class ExperimentRunner:
                 if not isinstance(outputs, list):
                     logger.error(f"[{experiment_id}] Outputs not a list before saving: type={type(outputs)}")
                     outputs = []
-                save_raw_results(experiment_id=experiment_id, 
+                save_raw_results_json(experiment_id=experiment_id, 
                                  type="8_text_output" if self.config.decode_token_to_text else "8_token_output", 
                                  results=outputs, 
                                  pid=None)
@@ -183,13 +183,13 @@ class ExperimentRunner:
             self.experiment_setup = get_experiment_setup(
                 experiment_config=self.config, codecarbon_data=codecarbon_data, experiment_id=experiment_id
             )
-            save_raw_results(experiment_id, "1_experiment_setup", self.experiment_setup)
+            save_raw_results_json(experiment_id, "1_experiment_setup", self.experiment_setup)
             self.experiment_variables = get_experimental_variables(
                 experiment_config=self.config, model=model, accelerator=accelerator
             )
-            save_raw_results(experiment_id, "2_experiment_variables", self.experiment_variables)
+            save_raw_results_json(experiment_id, "2_experiment_variables", self.experiment_variables)
             self.model_architecture = get_model_architecture(model=model)
-            save_raw_results(experiment_id, "3_model_architecture", self.model_architecture)
+            save_raw_results_json(experiment_id, "3_model_architecture", self.model_architecture)
             logger.info("Main process saved (i) experiment setup, (ii) variables, (iii) model architecture.")
             
         accelerator.print("Experiment-wide meta info saved")
@@ -197,11 +197,11 @@ class ExperimentRunner:
         # Save experiment-wide results (only main process).
         if accelerator.is_main_process:
             self.inference_metrics = combine_inference_metrics(raw_inference_results, accelerator)
-            save_raw_results(experiment_id, "4_inference_metrics", self.inference_metrics)
+            save_raw_results_json(experiment_id, "4_inference_metrics", self.inference_metrics)
             self.compute_metrics = combine_comp_metrics(
                 model=model, device=accelerator.device, tokenised_input_ids=input_ids, accelerator=accelerator, experiment_config=self.config
             )
-            save_raw_results(experiment_id, "5_compute_metrics", self.compute_metrics)
+            save_raw_results_json(experiment_id, "5_compute_metrics", self.compute_metrics)
             logger.info("Main process saved inference and computation metrics.")
             
         accelerator.print("Experiment-wide inference and compute metrics saved")
@@ -215,7 +215,7 @@ class ExperimentRunner:
             logger.error(f"Process {accelerator.local_process_index}: Error in combine_energy_metrics: {e}")
             local_energy_results = None
             
-        save_raw_results(experiment_id, "6_local_energy_results", local_energy_results, pid=accelerator.local_process_index)
+        save_raw_results_json(experiment_id, "6_local_energy_results", local_energy_results, pid=accelerator.local_process_index)
         setattr(self, f"local_energy_results_{accelerator.local_process_index}", local_energy_results)
         logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}] saved its energy metrics.")
                 
@@ -332,7 +332,7 @@ class ExperimentRunner:
         self.global_energy_results = global_energy_results
 
         # Save the aggregated results as JSON.
-        save_raw_results(experiment_id, "7_global_energy_results", global_energy_results)
+        save_raw_results_json(experiment_id, "7_global_energy_results", global_energy_results)
         logger.info("Aggregated global energy results successfully from disk.")
         
         return global_energy_results
@@ -358,9 +358,11 @@ class ExperimentRunner:
         experiment_results = {experiment_title: experiment_results}
         
         # save as JSON
-        output_json_path = save_final_results(self.config.task_type, experiment_results)
-        
+        output_json_path = save_final_results_json(self.config.task_type, experiment_results)
         logger.info(f"Experiment results saved to {output_json_path}")
+        
+        # save as tabular row
+        # INSERT HERE
 
         return experiment_results
 
