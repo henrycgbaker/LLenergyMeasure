@@ -32,7 +32,8 @@ def run_single_configuration(runner, max_retries=3, retry_delay=5):
             
             # Main process: aggregate results and save.
             runner.aggregate_results()
-            runner.save_experiment_results()
+            runner.save_configuration_run_results_json()
+            runner.save_configuration_run_results_tabular()
             runner.teardown()  # Call with parentheses.
 
             # Final barrier to ensure all processes have cleaned up.

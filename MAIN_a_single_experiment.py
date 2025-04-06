@@ -2,8 +2,8 @@ import argparse
 import json
 import os
 from datasets import load_dataset
-from experiment_orchestration_utils.c_experiment_launcher import run_experiment_from_config, run_experiment_from_file
-from configs.a_default_config import base_config  # <<<<<< Import the base_config Python dict
+from experiment_orchestration_utils.c_launch_single_configuration import run_from_config, run_from_file
+from configs.a_default_config import base_config 
 import logging
 
 logging.basicConfig(level=logging.INFO, format="[%(process)d] - %(message)s")
@@ -17,10 +17,10 @@ def main(config_path=None):
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"Config file {config_path} does not exist!")
         print(f"Loading configuration from {config_path}")
-        success, result = run_experiment_from_file(config_path, prompts)
+        success, result = run_from_file(config_path, prompts)
     else:
         print("No config path provided, using base_config from default_config.py")
-        success, result = run_experiment_from_config(base_config, prompts)
+        success, result = run_from_config(base_config, prompts)
 
     if success:
         print("Single run completed successfully.")

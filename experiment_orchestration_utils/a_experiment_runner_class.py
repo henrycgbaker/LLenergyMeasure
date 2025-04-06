@@ -25,10 +25,11 @@ from experiment_core_utils.d_energy_tracking import warm_up, start_energy_tracki
 from experiment_core_utils.e_inference import run_gen_inference
 from experiment_core_utils.f_experiment_info import get_experiment_setup, get_experimental_variables, get_model_architecture
 from experiment_core_utils.g_metrics_inference import combine_inference_metrics
-from experiment_core_utils.h_metrics_compute import combine_comp_metrics, combine_comp_metrics_fvcore
+from experiment_core_utils.h_metrics_compute import combine_comp_metrics
 from experiment_core_utils.i_metrics_energy import combine_energy_metrics
-from experiment_core_utils.j_results_saving import save_raw_results_json, save_final_results_json
+from experiment_core_utils.j_results_saving import save_raw_results_json, save_final_results_json, save_final_results_tabular, flatten_configuration_run_json
 from experiment_core_utils.k_results_aggregation import load_local_energy_results
+
 
 logger = logging.getLogger(__name__)
 
@@ -338,33 +339,51 @@ class ExperimentRunner:
         return global_energy_results
     
         
-    def save_experiment_results(self):
-        
-        logger.info(f"Saving experiment results")
-        
-        experiment_id = self.experiment_id
-        experiment_title = f"EXPERIMENT_#{experiment_id}"
+    def save_configuration_run_results_json(self):
+        logger.info("Saving configuration run results")
+                
+        configuration_run_id = self.experiment_id
+        configuration_run_title = f"CONFIGURATION_RUN_#{configuration_run_id}"
 
-        experiment_results = {
+        # Dynamically gather local energy results from each process.
+        local_energy_results = {}
+        i = 0
+        while hasattr(self, f"local_energy_results_{i}"):
+            local_energy_results[f"process_{i}"] = getattr(self, f"local_energy_results_{i}")
+            i += 1
+
+        run_results = {
             "setup": self.experiment_setup,
             "variables": self.experiment_variables,
             "model_architecture": self.model_architecture,
             "results": {
                 "inference_metrics": self.inference_metrics,  
                 "compute_metrics": self.compute_metrics,
-                "energy_metrics": self.global_energy_results
+                "global_energy_metrics": self.global_energy_results,
+                "local_energy_results": local_energy_results  # Per-process energy metrics
             }
         }
-        experiment_results = {experiment_title: experiment_results}
+        run_results_json = {configuration_run_title: run_results}
         
-        # save as JSON
-        output_json_path = save_final_results_json(self.config.task_type, experiment_results)
-        logger.info(f"Experiment results saved to {output_json_path}")
+        # Save as JSON using your existing helper function.
+        output_json_path = save_final_results_json(self.config.task_type, run_results_json)
+        logger.info(f"Configuration run results saved to {output_json_path}")
         
-        # save as tabular row
-        # INSERT HERE
-
-        return experiment_results
+        return run_results_json
+    
+    def save_configuration_run_results_tabular(self):
+        logger.info("Saving configuration run results in tabular format")
+        
+        run_results_json = self.save_configuration_run_results_json()
+        
+        flattened_row = flatten_configuration_run_json(run_results_json)
+        
+        output_tabular_path = save_final_results_tabular(self.config.task_type, flattened_row)
+        
+        logger.info(f"Configuration run tabular results saved to {output_tabular_path}")
+        
+        return 
+        
 
     def teardown(self):
         print("Starting teardown process...")
@@ -401,6 +420,8 @@ class ExperimentRunner:
             print(f"Exception during garbage collection: {e}")
 
         print("Teardown process complete.")
+
+
 
     def inspect_attributes(self):
             """Prints all attributes of the ExperimentRunner for inspection."""

@@ -13,7 +13,7 @@ from configs.b_scenario_configs import (
     scenario_r5_real_time_mobile,
     scenario_r6_medium_scale_serving,
 )
-from experiment_orchestration_utils.c_experiment_launcher import run_experiment_from_config
+from experiment_orchestration_utils.c_launch_single_configuration import run_from_config
 
 # Ensure we run from the project root.
 os.chdir(os.path.abspath(os.path.dirname(__file__)))
@@ -48,7 +48,7 @@ for config in scenarios_list:
     print(f"Launching experiment with config: {config['config_name']}")
     
     # Run the experiment directly using the common launcher.
-    success, result = run_experiment_from_config(config, prompts, max_retries=3)
+    success, result = run_from_config(config, prompts, max_retries=3)
     
     if success:
         print(f"Configuration with {config['config_name']} completed successfully.\n")
