@@ -8,13 +8,11 @@ logger = logging.getLogger(__name__)
 
 
 def save_raw_results_json(experiment_id, type, results, pid=None):
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    output_dir = os.path.join(project_root, "results", "raw_results", str(experiment_id))
+    output_dir = os.path.join(os.getcwd(), f"results/raw_results/{experiment_id}")  
     os.makedirs(output_dir, exist_ok=True)
     
     if pid is not None:
-        output_json_path = os.path.join(output_dir, f"{experiment_id}_{type}_#{pid}.json")  
-
+        output_json_path = os.path.join(output_dir, f"{experiment_id}_{type}_{pid}.json")  
     else:
         output_json_path = os.path.join(output_dir, f"{experiment_id}_{type}.json") 
 
@@ -158,44 +156,40 @@ def flatten_dict(d, prefix=""):
 
 
 def flatten_configuration_run_json(run_json):
-
-    # Drop the top-level key. (Assumes there is only one key like "CONFIGURATION_RUN_#123".)
+    """
+    Flattens the configuration run JSON into a single dictionary for tabular output.
+    Processes all keys normally and handles local energy results by looking for keys like "process_0", "process_1", etc.
+    """
+    # Assume run_json is structured like: { "CONFIGURATION_RUN_#<id>": { ... } }
     config_run_data = next(iter(run_json.values()))
     flattened = {}
     
-    # Process all second-level keys except "results" first.
+    # Process all keys in the configuration except "results" first.
     for key, value in config_run_data.items():
         if key != "results":
-            # We drop this level’s key (e.g. "setup", "variables", "model_architecture")
-            # and flatten their contents so that the keys from their inner dictionaries become columns.
             flattened.update(flatten_dict({key: value}))
     
-    # Process "results" separately.
-    if "results" in config_run_data and "local_energy_results" in config_run_data["results"]:
-        local_energy = config_run_data["results"]["local_energy_results"]
-        for proc_key, proc_data in local_energy.items():
-            proc_flat = flatten_dict({proc_key: proc_data})
-            flattened.update(proc_flat)
+    # Process "results" (excluding local_energy_results)
+    if "results" in config_run_data:
+        results_section = config_run_data["results"]
+        for subkey, subvalue in results_section.items():
+            if subkey != "local_energy_results":
+                flattened.update(flatten_dict({subkey: subvalue}))
     
-    # Handle local energy results separately.
-    # We expect local_energy_results to be a dict with keys like "process_0", "process_1", etc.
+    # Process local energy results specifically.
     if "results" in config_run_data and "local_energy_results" in config_run_data["results"]:
         local_energy = config_run_data["results"]["local_energy_results"]
-        # For each expected process (max 4), flatten if present; otherwise add a fixed column with "NA".
+        # For a fixed number of processes (say, up to 4)
         for i in range(4):
             process_key = f"process_{i}"
             if process_key in local_energy:
-                # Instead of flattening all the nested metrics, you may choose to keep them as one JSON string,
-                # or—as shown here—flatten them so that each nested metric becomes its own column.
                 proc_flat = flatten_dict({process_key: local_energy[process_key]})
                 flattened.update(proc_flat)
             else:
-                # If the process did not run, add a placeholder column.
-                # (If multiple energy metrics are expected per process, you could add one combined column.)
                 flattened[f"{process_key}_energy"] = "NA"
     
-    # (Optionally, you could enforce a fixed set of columns here if needed.)
     return flattened
+
 
 def save_final_results_tabular(task_type, new_row, ordering_json=None):
     """

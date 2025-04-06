@@ -215,9 +215,14 @@ class ExperimentRunner:
         except Exception as e:
             logger.error(f"Process {accelerator.local_process_index}: Error in combine_energy_metrics: {e}")
             local_energy_results = None
-            
-        save_raw_results_json(experiment_id, "6_local_energy_results", local_energy_results, pid=accelerator.local_process_index)
-        setattr(self, f"local_energy_results_{accelerator.local_process_index}", local_energy_results)
+
+        # Save to a shared directory with a standardized filename.
+        save_raw_results_json(
+            experiment_id, 
+            "6_local_energy_results", 
+            local_energy_results, 
+            pid=f"process_{accelerator.local_process_index}"
+        )
         logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}] saved its energy metrics.")
                 
         accelerator.print("All local process energy metrics saved")
