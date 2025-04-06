@@ -10,9 +10,9 @@ base_config = {
     "save_outputs": True,
     
     # Default values that will be overridden by the grid:
-    "max_input_tokens": 100, #2048 is Llama's limit
-    "max_output_tokens": 100,
-    "num_input_prompts": 100,  # 500 * 200 = 100,000 output tokens.
+    "max_input_tokens": 50, #2048 is Llama's limit
+    "max_output_tokens": 50,
+    "num_input_prompts": 10,  # 500 * 200 = 100,000 output tokens.
     "decode_token_to_text": True,
     "num_processes": 4,
     "batching_options": {
