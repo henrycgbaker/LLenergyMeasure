@@ -191,7 +191,7 @@ def flatten_configuration_run_json(run_json):
     return flattened
 
 
-def save_final_results_tabular(task_type, new_row, ordering_json=None):
+def save_final_results_tabular(task_type, new_row, ordering_json=None, experiment_suite=None):
     """
     Reads any existing rows from the CSV file for this task_type,
     appends the new row, computes the union of all keys, normalizes each row,
@@ -215,7 +215,7 @@ def save_final_results_tabular(task_type, new_row, ordering_json=None):
     os.makedirs(results_dir, exist_ok=True)
     
     # Construct the full path to the CSV file.
-    filename = f"{task_type}_results.csv"
+    filename = f"{experiment_suite}_results.csv" if experiment_suite else f"{task_type}_results.csv"
     file_path = os.path.join(results_dir, filename)
     
     # Read existing rows if the file exists.
@@ -267,18 +267,19 @@ def save_configuration_run_results_tabular(self):
     run_results_json = self.save_configuration_run_results_json()
     
     # Flatten the nested JSON into a single dictionary.
-    flattened = flatten_configuration_run_json(run_results_json)
+    flattened_row = flatten_configuration_run_json(run_results_json)
     
     # (Optional) Enforce fixed columns for local energy results if desired.
     for i in range(4):
         prefix = f"process_{i}_"
-        if not any(key.startswith(prefix) for key in flattened.keys()):
-            flattened[f"process_{i}_energy"] = "NA"
+        if not any(key.startswith(prefix) for key in flattened_row.keys()):
+            flattened_row[f"process_{i}_energy"] = "NA"
     
     # Save the normalized flattened row to CSV.
     # Use run_results_json as the representative JSON for ordering.
-    output_tabular_path = save_final_results_tabular(self.config.task_type, flattened, ordering_json=run_results_json)
+    experiment_suite = self.config.get("suite", self.config.task_type)
+    output_tabular_path = save_final_results_tabular(self.config.task_type, flattened_row, experiment_suite=experiment_suite)
     logger.info(f"Configuration run tabular results saved to {output_tabular_path}")
     
-    return flattened
+    return flattened_row
 

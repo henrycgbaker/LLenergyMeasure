@@ -4,7 +4,7 @@ import sys
 import argparse
 import logging
 from datasets import load_dataset
-from experiment_orchestration_utils.c_acc_launcher_single_configuration import (
+from experiment_orchestration_utils.c_launcher_utils import (
     launch_config_accelerate_cli, run_from_file, run_from_config
 )
 from configs.a_default_config import base_config

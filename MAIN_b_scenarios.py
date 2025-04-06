@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 import logging
 import os
-from experiment_orchestration_utils.c_acc_launcher_single_configuration import launch_config_accelerate_cli
-from configs.b_scenario_configs import (
+from experiment_orchestration_utils.c_launcher_utils import launch_config_accelerate_cli
+from configs.c_scenario_configs import (
     scenario_a1_max_throughput_exploit,
     scenario_a2_precision_minimalist,
     scenario_a3_quantisation_gaming,

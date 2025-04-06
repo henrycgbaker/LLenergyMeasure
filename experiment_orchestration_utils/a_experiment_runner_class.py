@@ -379,11 +379,13 @@ class ExperimentRunner:
     def save_configuration_run_results_tabular(self):
         logger.info("Saving configuration run results in tabular format")
         
+        experiment_suite = self.config.extra_metadata.get("suite") if "suite" in self.config.extra_metadata else self.config.task_type
+
         run_results_json = self.save_configuration_run_results_json()
         
         flattened_row = flatten_configuration_run_json(run_results_json)
         
-        output_tabular_path = save_final_results_tabular(self.config.task_type, flattened_row)
+        output_tabular_path = save_final_results_tabular(self.config.task_type, flattened_row, experiment_suite=experiment_suite)
         
         logger.info(f"Configuration run tabular results saved to {output_tabular_path}")
         
