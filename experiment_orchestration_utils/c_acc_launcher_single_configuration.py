@@ -12,11 +12,10 @@ from experiment_orchestration_utils.b_run_single_configuration import run_single
 
 def get_config_file_path(config):
     """
-    Accepts either a file path (str) or a configuration dictionary.
-    If a dictionary is provided, dumps it to a temporary JSON file and returns the file path.
+    If config is a dict, write it to a temporary JSON file and return its path.
+    Otherwise, assume it's a file path and return it.
     """
     if isinstance(config, dict):
-        # Create a temporary file and dump the configuration into it.
         tmp = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json")
         json.dump(config, tmp, indent=2)
         tmp.close()
@@ -51,14 +50,17 @@ def run_from_file(config_path, prompts):
     return run_from_config(config_data, prompts)
 
 
-def launch_config_accelerate_cli(config_file: str, script_path: str) -> None:
-    config_file = get_config_file_path(config_file)
-    
-    # Load configuration data from file.
+def launch_config_accelerate_cli(config, script_path: str, extra_args=None) -> None:
+    """
+    Launch a single experiment configuration using Accelerate's CLI.
+    Reads gpu_list and num_processes from the config, sets environment variables,
+    and calls Accelerate CLI to launch the given script. Optionally, extra_args are
+    appended to the command line.
+    """
+    config_file = get_config_file_path(config)
     with open(config_file, "r") as f:
         config_data = json.load(f)
     
-    # Extract gpu_list and num_processes from config.
     gpu_list = config_data.get("gpu_list", [])
     num_processes = config_data.get("num_processes", len(gpu_list))
     available = len(gpu_list)
@@ -66,14 +68,11 @@ def launch_config_accelerate_cli(config_file: str, script_path: str) -> None:
         logger.warning("num_processes (%s) exceeds available GPUs (%s). Using available GPUs instead.", num_processes, available)
         num_processes = available
 
-    # Prepare environment variables for the subprocess.
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_list)
     env["ACCELERATE_NUM_PROCESSES"] = str(num_processes)
-    # Disable any pre-existing Accelerate CLI config so our settings take priority.
-    env["ACCELERATE_CONFIG_FILE"] = ""
+    env["ACCELERATE_CONFIG_FILE"] = ""  # Disable any pre-existing Accelerate config
 
-    # Build the Accelerate CLI command.
     cmd = [
         "accelerate",
         "launch",
@@ -81,14 +80,12 @@ def launch_config_accelerate_cli(config_file: str, script_path: str) -> None:
         script_path,
         "--config", config_file
     ]
+    if extra_args:
+        cmd.extend(extra_args)
     
     logger.info("Launching experiment with command: %s", " ".join(cmd))
+    subprocess.run(cmd, env=env, check=True)
     
-    try:
-        subprocess.run(cmd, env=env, check=True)
-    except subprocess.CalledProcessError as e:
-        logger.error("Experiment launch failed for config %s: %s", config_file, e)
-        raise
 
 if __name__ == "__main__":
     import argparse

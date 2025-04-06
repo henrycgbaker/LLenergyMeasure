@@ -1,14 +1,15 @@
-# MAIN_a_single_experiment.py
+#!/usr/bin/env python
+import os
+import sys
 import argparse
 import logging
-import json
-import os
-
 from datasets import load_dataset
-from experiment_orchestration_utils.c_acc_launcher_single_configuration import run_from_file, run_from_config
+from experiment_orchestration_utils.c_acc_launcher_single_configuration import (
+    launch_config_accelerate_cli, run_from_file, run_from_config
+)
 from configs.a_default_config import base_config
 
-# Set up logging with process id
+# Set up logging (including process id for distributed debugging)
 logging.basicConfig(level=logging.INFO, format="[%(process)d] - %(message)s")
 
 def load_prompts():
@@ -21,10 +22,22 @@ def main():
     )
     parser.add_argument("--config", type=str, default=None,
                         help="Path to the experiment configuration JSON file.")
+    # This flag indicates that the script has been launched via Accelerate CLI.
+    parser.add_argument("--launched", action="store_true",
+                        help="Indicates that the script is running in distributed mode.")
     args = parser.parse_args()
 
-    prompts = load_prompts()
+    # If not launched in distributed mode, re-launch using Accelerate CLI.
+    if not args.launched:
+        script_path = os.path.abspath(__file__)
+        logging.info("Not running in distributed mode. Re-launching via Accelerate CLI...")
+        # Pass "--launched" so that the re-launched script skips re-launching.
+        launch_config_accelerate_cli(args.config if args.config else base_config, script_path, extra_args=["--launched"])
+        sys.exit(0)
 
+    # If we get here, we're running under Accelerate (distributed mode).
+    logging.info("Running distributed experiment.")
+    prompts = load_prompts()
     if args.config:
         logging.info("Loading configuration from %s", args.config)
         success, result = run_from_file(args.config, prompts)
