@@ -171,7 +171,10 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
                 time.sleep(burst_interval)
         
         with torch.no_grad():
-            token_id_batch_output = model.generate(batch_encoded["input_ids"], **generation_kwargs)
+            token_id_batch_output = model.generate(batch_encoded["input_ids"], 
+                                                   attention_mask=batch_encoded.get("attention_mask"),  
+                                                   pad_token_id=tokenizer.pad_token_id,
+                                                   **generation_kwargs)
         torch.cuda.synchronize(device)
         end_time = time.perf_counter()
         latencies.append((end_time - start_time) * 1000.0)  # in milliseconds.

@@ -21,9 +21,10 @@ import time
 from experiment_orchestration_utils.c_launcher_utils import launch_config_accelerate_cli
 
 # Import configuration lists for each suite
-from configs.b_controlled_configs import controlled_config_list   
-from configs.c_scenario_configs import scenario_config_list         
-from configs.d_grid_configs import grid_config_list    
+
+from configs.c_controlled_configs import controlled_config_list   
+from configs.d_scenario_configs import scenario_config_list         
+from configs.e_grid_configs import grid_config_list    
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="[%(process)d] - %(asctime)s - %(levelname)s - %(message)s")

@@ -1,10 +1,7 @@
 base_config = {
     # Default values that will be remain constant across experiments 
     "config_name": "default",
-    "model_name": 
-        #"TinyLlama/TinyLlama-1.1B-Chat-v1.0", 
-        #"meta-llama/Llama-3.2-1B",
-        "meta-llama/Llama-3.2-3B",
+    "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0", 
     "is_encoder_decoder": False,
     "task_type": "text_generation",
     "inference_type": "pure_generative",

@@ -11,7 +11,7 @@ from datasets import load_dataset
 from configs.config_class import ExperimentConfig
 from configs.a_default_config import base_config, grid_params
 
-from experiment_orchestration_utils.c_run_grid_search import run_grid_search
+from experiment_orchestration_utils.e_run_grid_search import run_grid_search
 
 import logging
 logging.basicConfig(
@@ -27,7 +27,6 @@ def main():
     experiment_config = ExperimentConfig(**base_config)
     
     # Run grid search.
-    # Note: run_grid_search() expects base_config as a plain dict,
     results = run_grid_search(
         base_config=experiment_config.to_dict(),
         grid_params=grid_params,

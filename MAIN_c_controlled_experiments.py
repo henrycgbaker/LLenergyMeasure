@@ -2,7 +2,7 @@
 import logging
 import os
 from experiment_orchestration_utils.c_launcher_utils import launch_config_accelerate_cli
-from configs.b_controlled_configs import controlled_config_list
+from configs.c_controlled_configs import controlled_config_list
 
 logging.basicConfig(level=logging.INFO, format="[%(process)d] - %(message)s")
 

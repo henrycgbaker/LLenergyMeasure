@@ -43,7 +43,8 @@ def batch_tokenise_truncate(prompts: List[str], tokenizer: Any, max_input_tokens
             truncation=True,
             max_length=max_input_tokens,
             padding="max_length", 
-            return_tensors="pt"
+            return_tensors="pt",
+            return_attention_mask=True,
         )
         all_input_ids.append(encoded["input_ids"])
         if "attention_mask" in encoded:

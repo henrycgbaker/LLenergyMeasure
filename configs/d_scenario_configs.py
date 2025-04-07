@@ -1,31 +1,6 @@
 # scenario_configs.py
-
-import copy
 from configs.a_default_config import base_config
-
-def update_nested_dict(d, key_path, value):
-    """
-    Given a dictionary d, returns a deep copy in which the nested key specified by the dot-separated key_path
-    is set to the given value.
-    """
-    keys = key_path.split(".")
-    new_d = copy.deepcopy(d)
-    current = new_d
-    for key in keys[:-1]:
-        if key not in current:
-            current[key] = {}
-        current = current[key]
-    current[keys[-1]] = value
-    return new_d
-
-def update_multiple_config(base_config, updates):
-    """
-    Applies multiple updates (a dict mapping dot-separated key paths to values) to a copy of base_config.
-    """
-    new_config = copy.deepcopy(base_config)
-    for key_path, value in updates.items():
-        new_config = update_nested_dict(new_config, key_path, value)
-    return new_config
+from configs.config_utils import update_nested_dict, update_multiple_config, generate_config_name_from_variation
 
 # -----------------------------------------
 # Artificial (Non-realistic) Scenarios

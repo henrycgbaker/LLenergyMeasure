@@ -14,7 +14,7 @@ os.chdir(os.path.abspath(os.path.dirname(__file__)))
 sys.path.insert(0, os.path.abspath(os.getcwd()))
 
 from datasets import load_dataset
-from configs.c_scenario_configs import (
+from configs.d_scenario_configs import (
     scenario_a_max_throughput_exploit,
     scenario_b_precision_gaming,
     scenario_c_gpu_overdrive,
