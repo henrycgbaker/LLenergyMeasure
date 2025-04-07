@@ -21,7 +21,6 @@ import time
 from experiment_orchestration_utils.c_launcher_utils import launch_config_accelerate_cli
 
 # Import configuration lists for each suite
-# (These modules should define lists of configuration dictionaries.)
 from configs.b_controlled_configs import controlled_config_list   
 from configs.c_scenario_configs import scenario_config_list         
 from configs.d_grid_configs import grid_config_list    
@@ -58,7 +57,6 @@ def run_cycle(config_list, suite_name, cycle_num):
         except Exception as e:
             logging.error("Cycle %s: Configuration-run for '%s' failed: %s", cycle_num, config_name, e)
         
-        # Optional: Wait a short time between runs to allow system cooling/reset.
         time.sleep(2)
     
     logging.info("Completed Cycle %s for suite '%s'", cycle_num, suite_name)

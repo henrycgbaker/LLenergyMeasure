@@ -34,6 +34,7 @@ def update_multiple_config(base_config, updates):
 # A1: Max Throughput Exploit
 #  - Batch size 256, FP16, INT8 quantisation, Greedy, No latency, 4 GPUs.
 updates_a1 = {
+    "config_name": "A1_Max_Throughput_Exploit",
     "batching_options.batch_size___fixed_batching": 256,
     "fp_precision": "float16",
     "quantization_config.quantization": True,
@@ -54,6 +55,7 @@ scenario_a1["suite"] = "scenarios"
 # A2: Precision Minimalist
 #  - Batch size 128, FP16, INT4 quantisation, Greedy, No latency, 2 GPUs.
 updates_a2 = {
+    "config_name": "A2_Precision_Minimalist",
     "batching_options.batch_size___fixed_batching": 128,
     "fp_precision": "float16",
     "quantization_config.quantization": True,
@@ -74,6 +76,7 @@ scenario_a2["suite"] = "scenarios"
 # A3: Quantisation Gaming
 #  - Batch size 64, FP16, INT4 quantisation, Top-k sampling (k=50), No latency, 1 GPU.
 updates_a3 = {
+    "config_name": "A3_Quantisation_Gaming",
     "batching_options.batch_size___fixed_batching": 64,
     "fp_precision": "float16",
     "quantization_config.quantization": True,
@@ -95,6 +98,7 @@ scenario_a3["suite"] = "scenarios"
 # A4: Latency Ignorance Exploit
 #  - Batch size 32, FP16, INT8 quantisation, Greedy, No latency, 1 GPU.
 updates_a4 = {
+    "config_name: A4_Latency_Ignorance_Exploit"
     "batching_options.batch_size___fixed_batching": 32,
     "fp_precision": "float16",
     "quantization_config.quantization": True,
@@ -115,6 +119,7 @@ scenario_a4["suite"] = "scenarios"
 # A5: Parallel Overdrive
 #  - Batch size 64, FP16, no quantisation, Greedy, No latency, 4 GPUs.
 updates_a5 = {
+    "config_name": "A5_Parallel_Overdrive",
     "batching_options.batch_size___fixed_batching": 64,
     "fp_precision": "float16",
     "quantization_config.quantization": False,   # no quantisation
@@ -141,6 +146,7 @@ scenario_a5["suite"] = "scenarios"
 #    Latency: simulate True, delay_min=0.5, delay_max=1.5, simulate_burst True, burst_interval=4.0, burst_size=5,
 #    2 GPUs.
 updates_r1 = {
+    "config_name": "R1_Standard_Production_Config",
     "batching_options.batch_size___fixed_batching": 16,
     "fp_precision": "float32",
     "quantization_config.quantization": False,
@@ -168,6 +174,7 @@ scenario_r1["suite"] = "scenarios"
 #    Latency: simulate True, delay_min=0.01, delay_max=0.05, simulate_burst False,
 #    1 GPU.
 updates_r2 = {
+    "config_name": "R2_Low_Latency_Chatbot_Deployment",
     "batching_options.batch_size___fixed_batching": 4,
     "fp_precision": "float32",
     "quantization_config.quantization": False,
@@ -194,6 +201,7 @@ scenario_r2["suite"] = "scenarios"
 #    Latency: simulate True, delay_min=0.5, delay_max=1.5, simulate_burst True, burst_interval=4.0, burst_size=5,
 #    2 GPUs.
 updates_r3 = {
+    "config_name": "R3_Balanced_Enterprise_Service",
     "batching_options.batch_size___fixed_batching": 32,
     "fp_precision": "float16",
     "quantization_config.quantization": True,
@@ -222,6 +230,7 @@ scenario_r3["suite"] = "scenarios"
 #    Latency: simulate True, delay_min=0.05, delay_max=0.2, simulate_burst True, burst_interval=2.0, burst_size=5,
 #    1 GPU.
 updates_r4 = {
+    "config_name": "R4_High_Load_Cloud_API_Deployment",
     "batching_options.batch_size___fixed_batching": 8,
     "fp_precision": "float16",
     "quantization_config.quantization": False,
@@ -249,6 +258,7 @@ scenario_r4["suite"] = "scenarios"
 #    Latency: simulate True, delay_min=0.2, delay_max=0.6, simulate_burst True, burst_interval=5.0, burst_size=8,
 #    1 GPU.
 updates_r5 = {
+    "config_name": "R5_Real_Time_Mobile_Inference",
     "batching_options.batch_size___fixed_batching": 1,
     "fp_precision": "float16",
     "quantization_config.quantization": True,
@@ -277,6 +287,7 @@ scenario_r5["suite"] = "scenarios"
 #    Latency: simulate True, delay_min=0.01, delay_max=0.1, simulate_burst False,
 #    4 GPUs.
 updates_r6 = {
+    "config_name": "R6_Medium_Scale_Language_Model_Serving",
     "batching_options.batch_size___fixed_batching": 32,
     "fp_precision": "float16",
     "quantization_config.quantization": False,

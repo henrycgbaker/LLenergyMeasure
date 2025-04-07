@@ -3,6 +3,7 @@ import os
 import sys
 import argparse
 import logging
+import torch
 from datasets import load_dataset
 from experiment_orchestration_utils.c_launcher_utils import (
     launch_config_accelerate_cli, run_from_file, run_from_config
@@ -35,7 +36,7 @@ def main():
         launch_config_accelerate_cli(args.config if args.config else base_config, script_path, extra_args=["--launched"])
         sys.exit(0)
 
-    # If we get here, we're running under Accelerate (distributed mode).
+    # At this point, we expect Accelerate to have initialized the distributed group.
     logging.info("Running distributed experiment.")
     prompts = load_prompts()
     if args.config:

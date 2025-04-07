@@ -15,7 +15,7 @@ from experiment_orchestration_utils.c_run_grid_search import run_grid_search
 
 import logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="[%(asctime)s] [%(levelname)s] [%(process)d] - %(message)s",
 )
 
