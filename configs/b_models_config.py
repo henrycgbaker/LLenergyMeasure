@@ -8,17 +8,17 @@ huggingface_models = [
     "meta-llama/Llama-3.1-8B",
 ]
 
-model_variation_configs = []
+models_config_list = []
 
 for model in huggingface_models:
     cfg = copy.deepcopy(base_config)
     cfg["model_name"] = model
     cfg["config_name"] = f"model_variation_{model}"
     cfg["suite"] = "models"
-    model_variation_configs.append(cfg)
+    models_config_list.append(cfg)
 
-__all__ = ["model_variation_configs"]
+__all__ = ["models_configs"]
 
 if __name__ == "__main__":
-    for cfg in model_variation_configs:
+    for cfg in models_config_list:
         print(cfg["config_name"])

@@ -1,12 +1,12 @@
 import logging
 import os
 from experiment_orchestration_utils.c_launcher_utils import launch_config_accelerate_cli
-from configs.b_models_config import model_variation_configs
+from configs.b_models_config import models_config_list 
 
 logging.basicConfig(level=logging.INFO, format="[%(process)d] - %(message)s")
 
 def main():
-    config_list = model_variation_configs
+    config_list = models_config_list
     
     script_path = os.path.abspath("MAIN_a_single_experiment.py")
     
