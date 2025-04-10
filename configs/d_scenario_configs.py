@@ -119,7 +119,7 @@ scenario_a5["suite"] = "scenarios"
 # R1: Standard Production Config
 #  - Batch size 16, FP32, no quantisation, Greedy,
 #    Latency: simulate True, delay_min=0.5, delay_max=1.5, simulate_burst True, burst_interval=4.0, burst_size=5,
-#    2 GPUs.
+#    4 GPUs.
 updates_r1 = {
     "config_name": "R1_Standard_Production_Config",
     "batching_options.batch_size___fixed_batching": 16,
@@ -136,8 +136,8 @@ updates_r1 = {
     "latency_simulation.burst_size": 5,
 }
 scenario_r1 = update_multiple_config(base_config, updates_r1)
-scenario_r1["gpu_list"] = [0, 1]
-scenario_r1["num_processes"] = 2
+scenario_r1["gpu_list"] = [0, 1,3,4]
+scenario_r1["num_processes"] = 4
 scenario_r1["scenario_info"] = {
     "name": "R1_Standard_Production_Config",
     "realistic": True,
@@ -174,7 +174,7 @@ scenario_r2["suite"] = "scenarios"
 # R3: Balanced Enterprise Service
 #  - Batch size 32, FP16, INT8 quantisation, Top-k sampling (k=50),
 #    Latency: simulate True, delay_min=0.5, delay_max=1.5, simulate_burst True, burst_interval=4.0, burst_size=5,
-#    2 GPUs.
+#    4 GPUs.
 updates_r3 = {
     "config_name": "R3_Balanced_Enterprise_Service",
     "batching_options.batch_size___fixed_batching": 32,
@@ -192,8 +192,8 @@ updates_r3 = {
     "latency_simulation.burst_size": 5,
 }
 scenario_r3 = update_multiple_config(base_config, updates_r3)
-scenario_r3["gpu_list"] = [0, 1]
-scenario_r3["num_processes"] = 2
+scenario_r3["gpu_list"] = [0, 1, 2, 3]
+scenario_r3["num_processes"] = 4
 scenario_r3["scenario_info"] = {
     "name": "R3_Balanced_Enterprise_Service",
     "realistic": True,

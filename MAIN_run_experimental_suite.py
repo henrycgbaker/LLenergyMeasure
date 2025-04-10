@@ -71,16 +71,10 @@ def main():
     
     # Define a list of suites to run. Each suite is a tuple (suite_name, config_list)
     suites = [
-        ("Controlled", controlled_config_list),
-        #("Scenario", scenario_config_list),
-        #("GridSearch", grid_config_list),
+        #("Controlled", controlled_config_list),
+        ("Scenario", scenario_config_list),
+        ("GridSearch", grid_config_list),
     ]
-    
-    # Optionally, if you want to interleave cycles across suites, you could
-    # build a list of (suite_name, cycle_num, config_list) tuples and randomize the order.
-    # For simplicity, here we run each suite sequentially.
-    
-    # for model in huggingface_models:
 
     for suite_name, config_list in suites:
         run_suite(config_list, suite_name)

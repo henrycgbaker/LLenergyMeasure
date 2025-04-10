@@ -1,45 +1,25 @@
-#!/usr/bin/env python
-import sys, os
-
-# Ensure the current directory (project root) is in sys.path.
-os.chdir(os.path.abspath(os.path.dirname(__file__)))
-sys.path.insert(0, os.path.abspath(os.getcwd()))
-
-import json
-from datasets import load_dataset
-
-from configs.config_class import ExperimentConfig
-from configs.a_default_config import base_config, grid_params
-
-from experiment_orchestration_utils.e_run_grid_search import run_grid_search
 
 import logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s] [%(process)d] - %(message)s",
-)
+import os
+from experiment_orchestration_utils.c_launcher_utils import launch_config_accelerate_cli
+from configs.d_scenario_configs import grid_config_list
+
+logging.basicConfig(level=logging.INFO, format="[%(process)d] - %(message)s")
 
 def main():
-
-    ds = load_dataset("lighteval/pile_helm", "arxiv")["test"]
-    prompts = [sample["text"] for sample in ds]
+    config_list = grid_config_list
     
-    experiment_config = ExperimentConfig(**base_config)
+    script_path = os.path.abspath("MAIN_a_single_experiment.py")
     
-    # Run grid search.
-    results = run_grid_search(
-        base_config=experiment_config.to_dict(),
-        grid_params=grid_params,
-        prompts=prompts,
-        num_repeats=3,
-        max_retries=3,
-        retry_delay=5
-    )
+    for config in config_list:
+        logging.info("Launching experiment for configuration: %s", config["config_name"])
+        try:
+            launch_config_accelerate_cli(config, script_path, extra_args=["--launched"])
+            logging.info("Experiment for %s completed successfully.", config["config_name"])
+        except Exception as e:
+            logging.error("Experiment for %s failed: %s", config["config_name"], e)
     
-    output_path = "grid_search_results.json"
-    with open(output_path, "w") as f:
-        json.dump(results, f, indent=2)
-    print(f"Grid search completed. Results saved to {output_path}.")
+    print("Full experiment complete: all configurations have been executed.")
 
 if __name__ == "__main__":
     main()

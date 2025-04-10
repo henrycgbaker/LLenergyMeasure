@@ -14,7 +14,8 @@ from configs.a_default_config import base_config
 logging.basicConfig(level=logging.INFO, format="[%(process)d] - %(message)s")
 
 def load_prompts():
-    ds = load_dataset("lighteval/pile_helm", "arxiv")["test"]
+    ds_dict = load_dataset("AIEnergyScore/text_generation")
+    ds = ds_dict["train"]
     return [sample["text"] for sample in ds]
 
 def main():
