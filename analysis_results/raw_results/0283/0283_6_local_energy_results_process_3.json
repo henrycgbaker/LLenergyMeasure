@@ -1,0 +1,15 @@
+{
+  "process_id": 376547,
+  "local_process_index": 3,
+  "energy_results": {
+    "cpu_power": 112.5,
+    "gpu_power": 449.5710395670026,
+    "ram_power": 0.9601478576660156,
+    "cpu_energy": 0.0011334216451250542,
+    "gpu_energy": 0.004102067170540125,
+    "ram_energy": 7.645092022755634e-06,
+    "total_energy_kwh": 0.005243133907687937,
+    "total_energy_joules": 18875.282067676573,
+    "final_emissions": 0.0019973718621337194
+  }
+}
