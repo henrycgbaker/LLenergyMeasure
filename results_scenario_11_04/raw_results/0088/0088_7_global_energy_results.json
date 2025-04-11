@@ -1,0 +1,48 @@
+{
+  "experiment_id": "0088",
+  "local_process_results": {
+    "cpu_power": {
+      "process_0": 112.5
+    },
+    "gpu_power": {
+      "process_0": 80.62112165699624
+    },
+    "ram_power": {
+      "process_0": 1.08123779296875
+    },
+    "cpu_energy": {
+      "process_0": 0.0016576638684690577
+    },
+    "gpu_energy": {
+      "process_0": 0.0009904855146100622
+    },
+    "ram_energy": {
+      "process_0": 1.4060427717230866e-05
+    },
+    "total_energy_kwh": {
+      "process_0": 0.0026622098107963515
+    },
+    "total_energy_joules": {
+      "process_0": 9583.955318866865
+    }
+  },
+  "global_experiment_results": {
+    "cpu_power_avg": 112.5,
+    "gpu_power_avg": 80.62112165699624,
+    "ram_power_avg": 1.08123779296875,
+    "cpu_energy_total": 0.0016576638684690577,
+    "gpu_energy_total": 0.0009904855146100622,
+    "ram_energy_total": 1.4060427717230866e-05,
+    "total_energy_kwh": 0.0026622098107963515,
+    "total_energy_joules": 9583.955318866865
+  },
+  "global_derived_quantities": {
+    "tokens_per_joule": 1.7095238296600408,
+    "joules_per_token": 0.5849582103800577,
+    "flops_per_joule": 1768577839.6508675,
+    "joules_per_flop": 5.654260601825751e-10
+  },
+  "per-process_emissions": [
+    0.0010141688274228702
+  ]
+}

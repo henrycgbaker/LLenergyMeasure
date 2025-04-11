@@ -1,0 +1,13 @@
+{
+  "raw_inference_metrics": {
+    "number_input_prompts": 128,
+    "total_input_tokens": 16384,
+    "total_generated_tokens": 16384
+  },
+  "inference_performance": {
+    "total_inference_time_sec": 12.368554642009258,
+    "average_latency_ms_per_batch": 3092.1386605023145,
+    "throughput_queries_per_sec": 10.348824394182127,
+    "throughput_tokens_per_sec": 1324.6495224553123
+  }
+}

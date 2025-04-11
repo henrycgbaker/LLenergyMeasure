@@ -14,7 +14,7 @@ def generate_controlled_configs(base_config, controlled_variations):
             cfg = update_nested_dict(cfg, param, val)
             variation = {param: val}
             cfg["controlled_variation"] = variation
-            cfg["suite"] = "controlled"
+            cfg["suite"] = "grid"
             cfg["config_name"] = generate_config_name_from_variation(variation)
             configs.append(cfg)
     return configs
@@ -46,7 +46,7 @@ updates = {
 }
 cfg1 = update_multiple_config(base_config, updates)
 cfg1["controlled_variation"] = updates
-cfg1["suite"] = "controlled"   
+cfg1["suite"] = "grid"   
 cfg1["config_name"] = generate_config_name_from_variation(updates)
 precision_quantisation_configs.append(cfg1)
 
@@ -59,7 +59,7 @@ updates = {
 }
 cfg2 = update_multiple_config(base_config, updates)
 cfg2["controlled_variation"] = updates
-cfg2["suite"] = "controlled"    
+cfg2["suite"] = "grid"    
 cfg2["config_name"] = generate_config_name_from_variation(updates)
 precision_quantisation_configs.append(cfg2)
 
@@ -72,7 +72,7 @@ updates = {
 }
 cfg3 = update_multiple_config(base_config, updates)
 cfg3["controlled_variation"] = updates
-cfg3["suite"] = "controlled"    
+cfg3["suite"] = "grid"    
 cfg3["config_name"] = generate_config_name_from_variation(updates)
 precision_quantisation_configs.append(cfg3)
 
@@ -85,7 +85,7 @@ updates = {
 }
 cfg4 = update_multiple_config(base_config, updates)
 cfg4["controlled_variation"] = updates
-cfg4["suite"] = "controlled"    
+cfg4["suite"] = "grid"    
 cfg4["config_name"] = generate_config_name_from_variation(updates)
 precision_quantisation_configs.append(cfg4)
 
@@ -101,7 +101,7 @@ for temp in temperature_variations:
     }
     cfg = update_multiple_config(base_config, updates)
     cfg["controlled_variation"] = updates
-    cfg["suite"] = "controlled"    
+    cfg["suite"] = "grid"    
     cfg["config_name"] = generate_config_name_from_variation(updates)
     decoder_mode_configs.append(cfg)
 
@@ -114,7 +114,7 @@ for temp in temperature_variations:
     }
     cfg = update_multiple_config(base_config, updates)
     cfg["controlled_variation"] = updates
-    cfg["suite"] = "controlled"   
+    cfg["suite"] = "grid"   
     cfg["config_name"] = generate_config_name_from_variation(updates)
     decoder_mode_configs.append(cfg)
 
@@ -127,7 +127,7 @@ for temp in temperature_variations:
     }
     cfg = update_multiple_config(base_config, updates)
     cfg["controlled_variation"] = updates
-    cfg["suite"] = "controlled"   
+    cfg["suite"] = "grid"   
     cfg["config_name"] = generate_config_name_from_variation(updates)
     decoder_mode_configs.append(cfg)
 
@@ -140,7 +140,7 @@ updates = {
 }
 cfg_latency_baseline = update_multiple_config(base_config, updates)
 cfg_latency_baseline["controlled_variation"] = updates
-cfg_latency_baseline["suite"] = "controlled"
+cfg_latency_baseline["suite"] = "grid"
 cfg_latency_baseline["config_name"] = generate_config_name_from_variation(updates)
 latency_configs.append(cfg_latency_baseline)
 
@@ -153,7 +153,7 @@ updates = {
 }
 cfg_latency_mod = update_multiple_config(base_config, updates)
 cfg_latency_mod["controlled_variation"] = updates
-cfg_latency_mod["suite"] = "controlled"
+cfg_latency_mod["suite"] = "grid"
 cfg_latency_mod["config_name"] = generate_config_name_from_variation(updates)
 latency_configs.append(cfg_latency_mod)
 
@@ -166,7 +166,7 @@ updates = {
 }
 cfg_latency_high = update_multiple_config(base_config, updates)
 cfg_latency_high["controlled_variation"] = updates
-cfg_latency_high["suite"] = "controlled"
+cfg_latency_high["suite"] = "grid"
 cfg_latency_high["config_name"] = generate_config_name_from_variation(updates)
 latency_configs.append(cfg_latency_high)
 
@@ -181,7 +181,7 @@ updates = {
 }
 cfg_latency_bursty_mod = update_multiple_config(base_config, updates)
 cfg_latency_bursty_mod["controlled_variation"] = updates
-cfg_latency_bursty_mod["suite"] = "controlled"
+cfg_latency_bursty_mod["suite"] = "grid"
 cfg_latency_bursty_mod["config_name"] = generate_config_name_from_variation(updates)
 latency_configs.append(cfg_latency_bursty_mod)
 
@@ -196,7 +196,7 @@ updates = {
 }
 cfg_latency_bursty_high = update_multiple_config(base_config, updates)
 cfg_latency_bursty_high["controlled_variation"] = updates
-cfg_latency_bursty_high["suite"] = "controlled"
+cfg_latency_bursty_high["suite"] = "grid"
 cfg_latency_bursty_high["config_name"] = generate_config_name_from_variation(updates)
 latency_configs.append(cfg_latency_bursty_high)
 

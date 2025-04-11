@@ -90,10 +90,18 @@ precision_quantisation_configs.append(cfg4)
 
 
 # (iv) decoder mode Variations: ____________________________________________________
+# List to hold all decoder configuration variations
 decoder_mode_configs = []
-temperature_variations = [0, 0.7, 1.0, 1.3]
 
-# Variation A: Greedy decoding.
+# List of temperature values to test
+temperature_variations = [0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 14]
+
+# Values for top_k and top_p
+top_k_values = [20, 50, 100, 200, 500]
+top_p_values = [0.7, 0.8, 0.9, 0.98]
+
+### Variation A: Greedy Decoding
+# Greedy decoding always picks the highest probability token so only temperature is varied here.
 for temp in temperature_variations:
     updates = {
         "decoder_config.decoding_mode": "greedy",
@@ -101,37 +109,39 @@ for temp in temperature_variations:
     }
     cfg = update_multiple_config(base_config, updates)
     cfg["controlled_variation"] = updates
-    cfg["suite"] = "controlled"    
+    cfg["suite"] = "controlled"
     cfg["config_name"] = generate_config_name_from_variation(updates)
     decoder_mode_configs.append(cfg)
 
-# Variation B: Top-k sampling.
+### Variation B: Top-k Sampling
+# For top-k sampling, grid search over both temperature and top_k values.
 for temp in temperature_variations:
-    updates = {
-        "decoder_config.decoding_mode": "top_k",
-        "decoder_config.decoder_top_k": 50,
-        "decoder_config.decoder_temperature": temp,
-    }
-    cfg = update_multiple_config(base_config, updates)
-    cfg["controlled_variation"] = updates
-    cfg["suite"] = "controlled"   
-    cfg["config_name"] = generate_config_name_from_variation(updates)
-    decoder_mode_configs.append(cfg)
+    for top_k in top_k_values:
+        updates = {
+            "decoder_config.decoding_mode": "top_k",
+            "decoder_config.decoder_top_k": top_k,
+            "decoder_config.decoder_temperature": temp,
+        }
+        cfg = update_multiple_config(base_config, updates)
+        cfg["controlled_variation"] = updates
+        cfg["suite"] = "controlled"
+        cfg["config_name"] = generate_config_name_from_variation(updates)
+        decoder_mode_configs.append(cfg)
 
-# Variation C: Top-p sampling.
+### Variation C: Top-p (Nucleus) Sampling
+# For top-p sampling, grid search over both temperature and top_p values.
 for temp in temperature_variations:
-    updates = {
-        "decoder_config.decoding_mode": "top_p",
-        "decoder_config.decoder_top_p": 0.9,
-        "decoder_config.decoder_temperature": temp,
-    }
-    cfg = update_multiple_config(base_config, updates)
-    cfg["controlled_variation"] = updates
-    cfg["suite"] = "controlled"   
-    cfg["config_name"] = generate_config_name_from_variation(updates)
-    decoder_mode_configs.append(cfg)
-
-
+    for top_p in top_p_values:
+        updates = {
+            "decoder_config.decoding_mode": "top_p",
+            "decoder_config.decoder_top_p": top_p,
+            "decoder_config.decoder_temperature": temp,
+        }
+        cfg = update_multiple_config(base_config, updates)
+        cfg["controlled_variation"] = updates
+        cfg["suite"] = "controlled"
+        cfg["config_name"] = generate_config_name_from_variation(updates)
+        decoder_mode_configs.append(cfg)
 
 # (v) Latency Simulation Variations:____________________________________________________
 
