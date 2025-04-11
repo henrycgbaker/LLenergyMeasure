@@ -3,8 +3,8 @@ import sys, os, json, logging
 from experiment_orchestration_utils.b_run_scenarios import run_scenarios
 import random, logging
 from experiment_orchestration_utils.a_experiment_runner_class import ExperimentRunner 
-from experiment_orchestration_utils.b_run_single_configuration import run_single_experiment_with_retries
-from configs.experiment_config_class import ExperimentConfig
+from experiment_orchestration_utils.b_single_config_workflow import run_single_experiment_with_retries
+from configs.config_class import ExperimentConfig
 import subprocess
 import time
 
@@ -13,7 +13,7 @@ os.chdir(os.path.abspath(os.path.dirname(__file__)))
 sys.path.insert(0, os.path.abspath(os.getcwd()))
 
 from datasets import load_dataset
-from configs.b_scenario_configs import (
+from configs.d_scenario_configs import (
     scenario_a_max_throughput_exploit,
     scenario_b_precision_gaming,
     scenario_c_gpu_overdrive,

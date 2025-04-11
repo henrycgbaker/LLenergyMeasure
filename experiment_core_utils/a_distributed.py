@@ -6,7 +6,7 @@ import threading
 
 def delete_accelerator_cli_configs():
     """
-    they clash
+    can delete this i think - originally included as necessary override accelerate launcher configs - but I sorted that out with a workaround
     """
     config_path = os.path.expanduser("~/.cache/huggingface/accelerate/default_config.yaml")
     if os.path.exists(config_path):
@@ -23,7 +23,7 @@ def delete_accelerator_cli_configs():
 
 def get_accelerator(gpu_list=None, num_processes=None):
     
-    delete_accelerator_cli_configs()
+    #delete_accelerator_cli_configs()
     
     os.environ["ACCELERATE_CONFIG_FILE"] = ""   # disables the CLI config so the script settings take priority
     

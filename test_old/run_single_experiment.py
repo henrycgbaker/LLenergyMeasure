@@ -3,7 +3,7 @@ import argparse
 import json
 import sys, os
 from datasets import load_dataset
-from configs.experiment_config_class import ExperimentConfig
+from configs.config_class import ExperimentConfig
 from experiment_orchestration_utils.experiment_runner import ExperimentRunner 
 from experiment_orchestration_utils.a_run_single_configuration import run_single_configuration
 import logging

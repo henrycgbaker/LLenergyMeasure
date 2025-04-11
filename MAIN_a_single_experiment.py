@@ -1,39 +1,56 @@
-import argparse
-import json
+#!/usr/bin/env python
 import os
-from datasets import load_dataset
-from experiment_orchestration_utils.c_launch_single_configuration import run_from_config, run_from_file
-from configs.a_default_config import base_config 
+import sys
+import argparse
 import logging
+import torch
+from datasets import load_dataset
+from experiment_orchestration_utils.c_launcher_utils import (
+    launch_config_accelerate_cli, run_from_file, run_from_config
+)
+from configs.a_default_config import base_config
 
+# Set up logging (including process id for distributed debugging)
 logging.basicConfig(level=logging.INFO, format="[%(process)d] - %(message)s")
 
-def main(config_path=None):
-    # Load prompts from the dataset
-    ds = load_dataset("lighteval/pile_helm", "arxiv")["test"]
-    prompts = [sample["text"] for sample in ds]
+def load_prompts():
+    ds_dict = load_dataset("AIEnergyScore/text_generation")
+    ds = ds_dict["train"]
+    return [sample["text"] for sample in ds]
 
-    if config_path is not None:
-        if not os.path.exists(config_path):
-            raise FileNotFoundError(f"Config file {config_path} does not exist!")
-        print(f"Loading configuration from {config_path}")
-        success, result = run_from_file(config_path, prompts)
+def main():
+    parser = argparse.ArgumentParser(
+        description="Run a single experiment configuration using Accelerate."
+    )
+    parser.add_argument("--config", type=str, default=None,
+                        help="Path to the experiment configuration JSON file.")
+    # This flag indicates that the script has been launched via Accelerate CLI.
+    parser.add_argument("--launched", action="store_true",
+                        help="Indicates that the script is running in distributed mode.")
+    args = parser.parse_args()
+
+    # If not launched in distributed mode, re-launch using Accelerate CLI.
+    if not args.launched:
+        script_path = os.path.abspath(__file__)
+        logging.info("Not running in distributed mode. Re-launching via Accelerate CLI...")
+        # Pass "--launched" so that the re-launched script skips re-launching.
+        launch_config_accelerate_cli(args.config if args.config else base_config, script_path, extra_args=["--launched"])
+        sys.exit(0)
+
+    # At this point, we expect Accelerate to have initialized the distributed group.
+    logging.info("Running distributed experiment.")
+    prompts = load_prompts()
+    if args.config:
+        logging.info("Loading configuration from %s", args.config)
+        success, result = run_from_file(args.config, prompts)
     else:
-        print("No config path provided, using base_config from default_config.py")
+        logging.info("No config file provided, using default configuration.")
         success, result = run_from_config(base_config, prompts)
 
     if success:
-        print("Single run completed successfully.")
+        logging.info("Experiment run completed successfully.")
     else:
-        print("Single run failed.")
+        logging.error("Experiment run failed.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--config",
-        type=str,
-        default=None,   
-        help="Optional: Path to experiment configuration JSON file. If not provided, uses base_config from default_config.py."
-    )
-    args = parser.parse_args()
-    main(args.config)
+    main()

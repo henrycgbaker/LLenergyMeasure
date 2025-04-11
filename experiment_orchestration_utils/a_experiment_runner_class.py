@@ -215,9 +215,14 @@ class ExperimentRunner:
         except Exception as e:
             logger.error(f"Process {accelerator.local_process_index}: Error in combine_energy_metrics: {e}")
             local_energy_results = None
-            
-        save_raw_results_json(experiment_id, "6_local_energy_results", local_energy_results, pid=accelerator.local_process_index)
-        setattr(self, f"local_energy_results_{accelerator.local_process_index}", local_energy_results)
+
+        # Save to a shared directory with a standardized filename.
+        save_raw_results_json(
+            experiment_id, 
+            "6_local_energy_results", 
+            local_energy_results, 
+            pid=f"process_{accelerator.local_process_index}"
+        )
         logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}] saved its energy metrics.")
                 
         accelerator.print("All local process energy metrics saved")
@@ -246,97 +251,108 @@ class ExperimentRunner:
         - joules_per_flop: the reciprocal of flops_per_joule.
         The results are saved as a JSON file.
         """
-        
         logger.info("Aggregating per-process energy metrics from disk.")
-        # Get the unique experiment ID.
         experiment_id = self.experiment_id
 
-        # Load per-process energy results from JSON files.
-        per_process = load_local_energy_results(experiment_id)
-        if not per_process:
-            logger.warning("No per-process energy JSON files found!")
-            return {}
+        try:
+            per_process = load_local_energy_results(experiment_id)
+            if not per_process:
+                logger.warning("No per-process energy JSON files found!")
+                return {}
 
-        # List of metrics that are rates (to be averaged) and counts (to be summed).
-        energy_keys_avg = ["cpu_power", "gpu_power", "ram_power"]
-        energy_keys_sum = ["cpu_energy", "gpu_energy", "ram_energy"]
-        combined_keys_sum = ["total_energy_kwh", "total_energy_joules"]
-        
-        # Prepare dictionaries for per-process values.
-        per_process_results = {metric: {} for metric in energy_keys_avg + energy_keys_sum + combined_keys_sum}
-        for pid, energy_dict in per_process.items():
-            inner = energy_dict.get("energy_results", {})  # Access the nested dictionary.
-            for key in energy_keys_avg + energy_keys_sum + combined_keys_sum:
-                per_process_results[key][pid] = inner.get(key, 0)
-        
-        # Compute averages for power rate metrics and rename with "_avg" suffix
-        averages = {}
-        for key in energy_keys_avg:
-            values = list(per_process_results[key].values())
-            averages[f"{key}_avg"] = sum(values) / len(values) if values else 0
+            # List of metrics that are rates (to be averaged) and counts (to be summed).
+            energy_keys_avg = ["cpu_power", "gpu_power", "ram_power"]
+            energy_keys_sum = ["cpu_energy", "gpu_energy", "ram_energy"]
+            combined_keys_sum = ["total_energy_kwh", "total_energy_joules"]
 
-        # Sum for energy count metrics and rename with "_total" suffix
-        for key in energy_keys_sum:
-            values = list(per_process_results[key].values())
-            averages[f"{key}_total"] = sum(values)
-        
-        # Sum for combined count
-        for key in combined_keys_sum:
-            values = list(per_process_results[key].values())
-            averages[f"{key}"] = sum(values)    
-        
-        # At this point, averages["total_energy_joules"] is the sum of energy (in joules) over all processes.
-        total_energy_joules_sum = averages.get("total_energy_joules", 0)
-        
-        # Derived Metrics:
-        # Use inference_metrics from the main process to get total generated tokens.
-        if self.inference_metrics is not None:
-            raw_inf = self.inference_metrics.get("raw_inference_metrics", {})
-            total_generated_tokens = raw_inf.get("total_generated_tokens", 0)
-        else:
-            total_generated_tokens = 0
+            # Prepare dictionaries for per-process values.
+            per_process_results = {metric: {} for metric in energy_keys_avg + energy_keys_sum + combined_keys_sum}
+            for pid, energy_dict in per_process.items():
+                inner = energy_dict.get("energy_results", {})
+                for key in energy_keys_avg + energy_keys_sum + combined_keys_sum:
+                    per_process_results[key][pid] = inner.get(key, 0)
 
-        tokens_per_joule = total_generated_tokens / total_energy_joules_sum if total_energy_joules_sum > 0 else 0
-        joules_per_token = 1 / tokens_per_joule if tokens_per_joule > 0 else 0
+            # Compute averages for power rate metrics.
+            averages = {}
+            for key in energy_keys_avg:
+                values = list(per_process_results[key].values())
+                averages[f"{key}_avg"] = sum(values) / len(values) if values else 0
 
-        # self.flops is assumed to be computed on the main process.
-        flops = self.compute_metrics.get("flops", 0)
-        flops_per_joule = flops / total_energy_joules_sum if total_energy_joules_sum > 0 else 0
-        joules_per_flop = total_energy_joules_sum / flops if flops > 0 else 0
+            # Sum for energy count metrics.
+            for key in energy_keys_sum:
+                values = list(per_process_results[key].values())
+                averages[f"{key}_total"] = sum(values)
+            # Sum for combined metrics.
+            for key in combined_keys_sum:
+                values = list(per_process_results[key].values())
+                averages[key] = sum(values)
 
-        derived = {
-            "tokens_per_joule": tokens_per_joule,
-            "joules_per_token": joules_per_token,
-            "flops_per_joule": flops_per_joule,
-            "joules_per_flop": joules_per_flop,
-        }
+            total_energy_joules_sum = averages.get("total_energy_joules", 0)
 
-        # Aggregate emissions: flatten per-process emissions.
-        emissions = {}
-        all_emissions = []
-        for pid, energy_dict in per_process.items():
-            inner = energy_dict.get("energy_results", {})
-            em = inner.get("final_emissions")
-            emissions[pid] = em
-            if isinstance(em, list):
-                all_emissions.extend(em)
-            elif em is not None:
-                all_emissions.append(em)
-        
-        global_energy_results = {
-            "experiment_id": experiment_id,
-            "local_process_results": per_process_results,
-            "global_experiment_results": averages,
-            "global_derived_quantities": derived,
-            "per-process_emissions": all_emissions,
-        }
-        self.global_energy_results = global_energy_results
+            # Derived Metrics:
+            if self.inference_metrics is not None:
+                raw_inf = self.inference_metrics.get("raw_inference_metrics", {})
+                total_generated_tokens = raw_inf.get("total_generated_tokens", 0)
+            else:
+                total_generated_tokens = 0
+
+            tokens_per_joule = total_generated_tokens / total_energy_joules_sum if total_energy_joules_sum > 0 else 0
+            joules_per_token = 1 / tokens_per_joule if tokens_per_joule > 0 else 0
+
+            flops = self.compute_metrics.get("flops", 0)
+            flops_per_joule = flops / total_energy_joules_sum if total_energy_joules_sum > 0 else 0
+            joules_per_flop = total_energy_joules_sum / flops if flops > 0 else 0
+
+            derived = {
+                "tokens_per_joule": tokens_per_joule,
+                "joules_per_token": joules_per_token,
+                "flops_per_joule": flops_per_joule,
+                "joules_per_flop": joules_per_flop,
+            }
+
+            # Aggregate emissions.
+            emissions = {}
+            all_emissions = []
+            for pid, energy_dict in per_process.items():
+                inner = energy_dict.get("energy_results", {})
+                em = inner.get("final_emissions")
+                emissions[pid] = em
+                if isinstance(em, list):
+                    all_emissions.extend(em)
+                elif em is not None:
+                    all_emissions.append(em)
+
+            global_energy_results = {
+                "experiment_id": experiment_id,
+                "local_process_results": per_process_results,
+                "global_experiment_results": averages,
+                "global_derived_quantities": derived,
+                "per-process_emissions": all_emissions,
+            }
+            self.global_energy_results = global_energy_results
+
+        except Exception as agg_error:
+            logger.error("Aggregation failed: %s", agg_error, exc_info=True)
+            # Attempt to load raw per-process metrics, even if incomplete.
+            try:
+                per_process = load_local_energy_results(experiment_id)
+            except Exception:
+                per_process = {}
+            global_energy_results = {
+                "experiment_id": experiment_id,
+                "aggregation_error": str(agg_error),
+                "local_process_results": per_process,
+                "global_experiment_results": {},
+                "global_derived_quantities": {},
+                "per-process_emissions": []
+            }
+            self.global_energy_results = global_energy_results
 
         # Save the aggregated results as JSON.
-        save_raw_results_json(experiment_id, "7_global_energy_results", global_energy_results)
+        save_raw_results_json(experiment_id, "7_global_energy_results", self.global_energy_results)
         logger.info("Aggregated global energy results successfully from disk.")
-        
-        return global_energy_results
+        return self.global_energy_results
+
     
         
     def save_configuration_run_results_json(self):
@@ -374,11 +390,13 @@ class ExperimentRunner:
     def save_configuration_run_results_tabular(self):
         logger.info("Saving configuration run results in tabular format")
         
+        experiment_suite = self.config.extra_metadata.get("suite") if "suite" in self.config.extra_metadata else self.config.task_type
+
         run_results_json = self.save_configuration_run_results_json()
         
         flattened_row = flatten_configuration_run_json(run_results_json)
         
-        output_tabular_path = save_final_results_tabular(self.config.task_type, flattened_row)
+        output_tabular_path = save_final_results_tabular(self.config.task_type, flattened_row, experiment_suite=experiment_suite)
         
         logger.info(f"Configuration run tabular results saved to {output_tabular_path}")
         
@@ -387,8 +405,6 @@ class ExperimentRunner:
 
     def teardown(self):
         print("Starting teardown process...")
-
-        # Only the main process destroys the distributed process group.
         if dist.is_available() and dist.is_initialized():
             if self.accelerator.is_main_process:
                 try:
@@ -397,28 +413,26 @@ class ExperimentRunner:
                 except Exception as e:
                     print(f"Exception during process group destruction: {e}")
             else:
-                # Non-main processes wait for the main process to destroy the group.
                 try:
                     dist.barrier()
                 except Exception as e:
                     print(f"Exception during barrier wait in teardown: {e}")
         else:
             print("Distributed package is not available or process group not initialized.")
-
-        # Clean up GPU memory.
+        
         try:
             print("Emptying CUDA cache...")
             torch.cuda.empty_cache()
         except Exception as e:
             print(f"Exception while emptying CUDA cache: {e}")
-
-        # Run garbage collection.
+        
         try:
             print("Running garbage collection...")
+            import gc
             gc.collect()
         except Exception as e:
             print(f"Exception during garbage collection: {e}")
-
+        
         print("Teardown process complete.")
 
 

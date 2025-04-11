@@ -66,6 +66,7 @@ def load_model_tokenizer(configs):
         dtype = torch.float16  
     
     tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer.pad_token = tokenizer.eos_token
     
     qsupport = detect_supported_quant_types()
     
