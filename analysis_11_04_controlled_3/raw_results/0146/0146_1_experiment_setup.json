@@ -1,0 +1,15 @@
+{
+  "experiment_id": "0146",
+  "date_time": "April 11, 2025 at 02:25:08 PM",
+  "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+  "is_encoder_decoder": false,
+  "task_type": "text_generation",
+  "available_gpu_count": 4,
+  "gpu_model": "4 x NVIDIA A100-PCIE-40GB",
+  "available_cpu_count": 128,
+  "cpu_model": "AMD EPYC 7742 64-Core Processor",
+  "os": "Linux-5.15.0-113-generic-x86_64-with-glibc2.31",
+  "python_version": "3.10.14 (main, Apr  6 2024, 18:45:05) [GCC 9.4.0]",
+  "country": "Germany",
+  "region": "saxony"
+}

@@ -71,9 +71,10 @@ def main():
     
     # Define a list of suites to run. Each suite is a tuple (suite_name, config_list)
     suites = [
-        #("Controlled", controlled_config_list),
         ("Scenario", scenario_config_list),
-        ("GridSearch", grid_config_list),
+        ("Controlled", controlled_config_list),
+        #("Models", models_config_list),
+        #("GridSearch", grid_config_list),
     ]
 
     for suite_name, config_list in suites:
