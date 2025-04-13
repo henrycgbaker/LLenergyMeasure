@@ -1,0 +1,48 @@
+{
+  "config_name": "decoding_top_p_decoder_top_p_0.7_decoder_temperature_0.4",
+  "max_input_tokens": 128,
+  "max_output_tokens": 128,
+  "number_input_prompts": 128,
+  "decode_token_to_text": true,
+  "decoder_config": {
+    "decoder_temperature": 0.4,
+    "decoder_top_k": 0,
+    "decoder_top_p": 0.7,
+    "decoding_mode": "top_p"
+  },
+  "query_rate": 1.0,
+  "latency_simulation": {
+    "simulate": false,
+    "delay_min": 0,
+    "delay_max": 0,
+    "simulate_burst": false,
+    "burst_interval": 0.0,
+    "burst_size": 0
+  },
+  "fp_precision": "torch.float16",
+  "quantisation": {
+    "quantization": true,
+    "load_in_8bit": false,
+    "load_in_4bit": true,
+    "cached_flops_for_quantised_models": 16949970993152
+  },
+  "batching_options": {
+    "batch_size___fixed_batching": 16,
+    "adaptive_batching": false,
+    "adaptive_max_tokens": 0,
+    "max_batch_size___adaptive_batching": 0
+  },
+  "sharding_config": {
+    "fsdp_config": {
+      "use_orig_params": false,
+      "cpu_offload": false
+    },
+    "sharding_strategy": "NO_SHARD"
+  },
+  "accelerate_config": {
+    "distributed_type": "DistributedType.MULTI_GPU",
+    "num_processes": 4
+  },
+  "inference_type": "pure_generative",
+  "backend": "pytorch"
+}

@@ -67,6 +67,7 @@ def load_model_tokenizer(configs):
     
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = 'left'
     
     qsupport = detect_supported_quant_types()
     

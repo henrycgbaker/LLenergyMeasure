@@ -67,19 +67,45 @@ def run_suite(config_list, suite_name):
     logging.info("Completed Experimental Suite: '%s'", suite_name)
 
 
-def main():
-    
-    # Define a list of suites to run. Each suite is a tuple (suite_name, config_list)
-    suites = [
-        #("Controlled", controlled_config_list),
+
+huggingface_models = [
+    #"TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "meta-llama/Llama-3.2-1B",
+    "meta-llama/Llama-3.2-3B",
+    #"meta-llama/Llama-3.1-8B",
+]
+suites = [
         ("Scenario", scenario_config_list),
-        ("GridSearch", grid_config_list),
+        ("Controlled", controlled_config_list),
+        #("Models", models_config_list),
+        #("GridSearch", grid_config_list),
     ]
 
-    for suite_name, config_list in suites:
-        run_suite(config_list, suite_name)
+def main():
+    for model in huggingface_models:
+        logging.info("Starting experiments for model: %s", model)
+        
+        for suite_name, original_config_list in suites:
+
+            new_config_list = []
+        
+            for config in original_config_list:
+                new_config = config.copy()  # Create a shallow copy; use deepcopy() if nested objects exist.
+                new_config["model_name"] = model
+                if model == "TinyLlama/TinyLlama-1.1B-Chat-v1.0": 
+                    new_config["cached_flops_for_quantised_models"] = 16949970993152
+                elif model == "meta-llama/Llama-3.2-1B":
+                    new_config["cached_flops_for_quantised_models"] = 20248623316992
+                elif model == "meta-llama/Llama-3.2-3B":
+                    new_config["cached_flops_for_quantised_models"] = 52638582308864
+               
+                new_config_list.append(new_config)
+            
+            # Run the suite with the updated configuration list.
+            run_suite(new_config_list, f"{suite_name} ({model})")
     
     logging.info("All experimental suites have been executed.")
+    
 
 
 if __name__ == "__main__":

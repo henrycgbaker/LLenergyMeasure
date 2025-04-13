@@ -44,9 +44,9 @@ base_config = {
     }, 
     "fp_precision": "float32", # float16
     "quantization_config": {
-        "quantization": False,
+        "quantization": True,
         "load_in_8bit": False,
-        "load_in_4bit": False,
-        "cached_flops_for_quantised_models": 1034544128000 # For quantized models, store a cached FLOPs value!
+        "load_in_4bit": True,
+        "cached_flops_for_quantised_models": 16949970993152 # For quantized models, store a cached FLOPs value! 
     }
 }
