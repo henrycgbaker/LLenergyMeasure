@@ -1,0 +1,75 @@
+{
+  "experiment_id": "0389",
+  "local_process_results": {
+    "cpu_power": {
+      "process_3": 112.5,
+      "process_1": 112.5,
+      "process_0": 112.5,
+      "process_2": 112.5
+    },
+    "gpu_power": {
+      "process_3": 236.82020369150294,
+      "process_1": 0.0,
+      "process_0": 352.1756998884932,
+      "process_2": 266.4210037016145
+    },
+    "ram_power": {
+      "process_3": 0.7109098434448242,
+      "process_1": 0.7063236236572266,
+      "process_0": 0.6722187995910646,
+      "process_2": 0.7034282684326173
+    },
+    "cpu_energy": {
+      "process_3": 0.0016130517360334125,
+      "process_1": 0.0014727098343773832,
+      "process_0": 0.0014877229200928929,
+      "process_2": 0.0015690728412191676
+    },
+    "gpu_energy": {
+      "process_3": 0.003799635539705193,
+      "process_1": 0.003443957477385684,
+      "process_0": 0.003526431710031641,
+      "process_2": 0.0037049262972712604
+    },
+    "ram_energy": {
+      "process_3": 7.025460787348777e-06,
+      "process_1": 6.314767956783892e-06,
+      "process_0": 6.283779671441783e-06,
+      "process_2": 6.7373956284997425e-06
+    },
+    "total_energy_kwh": {
+      "process_3": 0.005419712736525955,
+      "process_1": 0.0049229820797198525,
+      "process_0": 0.005020438409795974,
+      "process_2": 0.00528073653411893
+    },
+    "total_energy_joules": {
+      "process_3": 19510.965851493438,
+      "process_1": 17722.73548699147,
+      "process_0": 18073.578275265507,
+      "process_2": 19010.651522828146
+    }
+  },
+  "global_experiment_results": {
+    "cpu_power_avg": 112.5,
+    "gpu_power_avg": 213.85422682040266,
+    "ram_power_avg": 0.6982201337814331,
+    "cpu_energy_total": 0.0061425573317228565,
+    "gpu_energy_total": 0.014474951024393778,
+    "ram_energy_total": 2.6361404044074193e-05,
+    "total_energy_kwh": 0.02064386976016071,
+    "total_energy_joules": 74317.93113657857
+  },
+  "global_derived_quantities": {
+    "tokens_per_joule": 0.2204582359792838,
+    "joules_per_token": 4.536006539097813,
+    "flops_per_joule": 228073773.50160637,
+    "joules_per_flop": 4.38454621347753e-09
+  },
+  "per-process_emissions": [
+    0.0020646395669795627,
+    0.0018754100232692779,
+    0.0019125360122117766,
+    0.0020116965826726062
+  ]
+}
