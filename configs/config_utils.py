@@ -37,32 +37,46 @@ def update_multiple_config(base_config, updates):
 
 def generate_config_name_from_variation(variation):
     """
-    Given a variation dictionary (e.g. {"batching_options.batch_size___fixed_batching": 16}),
-    returns a string that concatenates a simplified key and the value.
-    For example: "batching_16" for a batching variation.
+    Given a variation dictionary, returns a concise and human-readable config name.
     """
+    if any("latency_simulation" in k for k in variation):
+        sim = variation.get("latency_simulation.simulate", False)
+        if not sim:
+            return "latency_off"
+        dmin = variation.get("latency_simulation.delay_min", "NA")
+        dmax = variation.get("latency_simulation.delay_max", "NA")
+        burst = variation.get("latency_simulation.simulate_burst", False)
+        if burst:
+            interval = variation.get("latency_simulation.burst_interval", "NA")
+            size = variation.get("latency_simulation.burst_size", "NA")
+            return f"latency_burst_{dmin}_{dmax}_{interval}_{size}"
+        else:
+            return f"latency_const_{dmin}_{dmax}"
+
     parts = []
     for key, value in variation.items():
-        # Simplify the key: for example, if key contains "batching_options", use "batching"
+        # Simplify the key name
         if "batching_options" in key:
             short_key = "batching"
         elif "fp_precision" in key:
-            # For fp_precision, you might want "precis_fp32" or "precis_fp16"
             short_key = "precis"
+        elif "quantization_config.load_in_8bit" in key and value:
+            short_key = "quant8"
+        elif "quantization_config.load_in_4bit" in key and value:
+            short_key = "quant4"
         elif "quantization_config" in key:
-            # Remove common parts for clarity.
-            if "load_in_8bit" in key:
-                short_key = "quant8"
-            elif "load_in_4bit" in key:
-                short_key = "quant4"
-            else:
-                short_key = "quant"
+            short_key = "quant"
         elif "decoder_config.decoding_mode" in key:
             short_key = "decoding"
-        elif "latency_simulation" in key:
-            short_key = "latency"
+        elif "decoder_config.decoder_top_k" in key:
+            short_key = "topk"
+        elif "decoder_config.decoder_top_p" in key:
+            short_key = "topp"
+        elif "decoder_config.decoder_temperature" in key:
+            short_key = "temp"
+        elif "num_processes" in key:
+            short_key = "proc"
         else:
-            # Default: take the last segment of the key.
             short_key = key.split(".")[-1]
         parts.append(f"{short_key}_{value}")
     return "_".join(parts)
