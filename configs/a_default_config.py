@@ -12,6 +12,7 @@ base_config = {
     # Default values that will be overridden by the grid:
     "max_input_tokens": 128, #2048 is Llama's limit
     "max_output_tokens": 128,
+    "min_output_tokens": 128,
     "num_input_prompts": 128,  # 500 * 200 = 100,000 output tokens.
     "decode_token_to_text": True,
     "num_processes": 4,

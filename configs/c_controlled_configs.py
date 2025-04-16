@@ -2,6 +2,7 @@ import copy
 from configs.a_default_config import base_config
 from configs.config_utils import update_nested_dict, update_multiple_config, generate_config_name_from_variation
 import copy
+import numpy as np
 
 def generate_controlled_configs(base_config, controlled_variations):
     configs = []
@@ -94,7 +95,7 @@ precision_quantisation_configs.append(cfg4)
 decoder_mode_configs = []
 
 # List of temperature values to test
-temperature_variations = [0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 14]
+temperature_variations = np.arange(0, 1.5, 0.2).round(1).tolist()
 
 # Values for top_k and top_p
 top_k_values = [20, 50, 100, 200, 500]
