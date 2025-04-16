@@ -9,7 +9,7 @@ from configs.config_utils import update_nested_dict, update_multiple_config, gen
 # Scenario Configurations
 # ----------------------------
 
-scenario_configs = []
+scenario_config_list = []
 
 # IDEAL BASED ON INITAL FINDINGS FROM ANALYSIS
 updates_a0 = {
@@ -26,7 +26,7 @@ scenario_a0["gpu_list"] = [0, 1, 2, 3]
 scenario_a0["num_processes"] = 1
 scenario_a0["scenario_info"] = {"name": "A0_platonic_ideal", "realistic": False}
 scenario_a0["suite"] = "scenarios" 
-scenario_configs.append(scenario_a0)
+scenario_config_list.append(scenario_a0)
 
 # WORST BASED ON INITAL FINDINGS FROM ANALYSIS
 updates_r0 = {
@@ -51,7 +51,7 @@ scenario_r0["gpu_list"] = [0, 1, 2, 3]
 scenario_r0["num_processes"] = 4
 scenario_r0["scenario_info"] = {"name": "R7_anti_platonic_ideal", "realistic": True}
 scenario_r0["suite"] = "scenarios" 
-scenario_configs.append(scenario_r0)
+scenario_config_list.append(scenario_r0)
 
 # ------------------------------------------------------------------------------------------
 
@@ -71,7 +71,7 @@ scenario_a1["gpu_list"] = [0, 1, 2, 3]
 scenario_a1["num_processes"] = 4
 scenario_a1["scenario_info"] = {"name": "A1_Max_Throughput_Exploit", "realistic": False}
 scenario_a1["suite"] = "scenarios" 
-scenario_configs.append(scenario_a1)
+scenario_config_list.append(scenario_a1)
 
 # A2: Precision Minimalist
 updates_a2 = {
@@ -89,7 +89,7 @@ scenario_a2["gpu_list"] = [0, 1]
 scenario_a2["num_processes"] = 2
 scenario_a2["scenario_info"] = {"name": "A2_Precision_Minimalist", "realistic": False}
 scenario_a2["suite"] = "scenarios" 
-scenario_configs.append(scenario_a2)
+scenario_config_list.append(scenario_a2)
 
 # A3: Quantisation Gaming
 updates_a3 = {
@@ -108,7 +108,7 @@ scenario_a3["gpu_list"] = [0]
 scenario_a3["num_processes"] = 1
 scenario_a3["scenario_info"] = {"name": "A3_Quantisation_Gaming", "realistic": False}
 scenario_a3["suite"] = "scenarios" 
-scenario_configs.append(scenario_a3)
+scenario_config_list.append(scenario_a3)
 
 # A4: Latency Ignorance Exploit
 updates_a4 = {
@@ -126,7 +126,7 @@ scenario_a4["gpu_list"] = [0]
 scenario_a4["num_processes"] = 1
 scenario_a4["scenario_info"] = {"name": "A4_Latency_Ignorance_Exploit", "realistic": False}
 scenario_a4["suite"] = "scenarios" 
-scenario_configs.append(scenario_a4)
+scenario_config_list.append(scenario_a4)
 
 # A5: Parallel Overdrive
 updates_a5 = {
@@ -144,7 +144,7 @@ scenario_a5["gpu_list"] = [0, 1, 2, 3]
 scenario_a5["num_processes"] = 4
 scenario_a5["scenario_info"] = {"name": "A5_Parallel_Overdrive", "realistic": False}
 scenario_a5["suite"] = "scenarios" 
-scenario_configs.append(scenario_a5)
+scenario_config_list.append(scenario_a5)
 
 # Realistic Scenarios
 updates_r1 = {
@@ -167,7 +167,7 @@ scenario_r1["gpu_list"] = [0, 1, 3, 4]
 scenario_r1["num_processes"] = 4
 scenario_r1["scenario_info"] = {"name": "R1_Standard_Production_Config", "realistic": True}
 scenario_r1["suite"] = "scenarios" 
-scenario_configs.append(scenario_r1)
+scenario_config_list.append(scenario_r1)
 
 updates_r2 = {
     "config_name": "R2_Low_Latency_Chatbot_Deployment",
@@ -188,7 +188,7 @@ scenario_r2["gpu_list"] = [0]
 scenario_r2["num_processes"] = 1
 scenario_r2["scenario_info"] = {"name": "R2_Low_Latency_Chatbot_Deployment", "realistic": True}
 scenario_r2["suite"] = "scenarios" 
-scenario_configs.append(scenario_r2)
+scenario_config_list.append(scenario_r2)
 
 updates_r3 = {
     "config_name": "R3_Balanced_Enterprise_Service",
@@ -211,7 +211,7 @@ scenario_r3["gpu_list"] = [0, 1, 2, 3]
 scenario_r3["num_processes"] = 4
 scenario_r3["scenario_info"] = {"name": "R3_Balanced_Enterprise_Service", "realistic": True}
 scenario_r3["suite"] = "scenarios" 
-scenario_configs.append(scenario_r3)
+scenario_config_list.append(scenario_r3)
 
 updates_r4 = {
     "config_name": "R4_High_Load_Cloud_API_Deployment",
@@ -233,7 +233,7 @@ scenario_r4["gpu_list"] = [0]
 scenario_r4["num_processes"] = 1
 scenario_r4["scenario_info"] = {"name": "R4_High_Load_Cloud_API_Deployment", "realistic": True}
 scenario_r4["suite"] = "scenarios" 
-scenario_configs.append(scenario_r4)
+scenario_config_list.append(scenario_r4)
 
 updates_r5 = {
     "config_name": "R5_Real_Time_Mobile_Inference",
@@ -256,7 +256,7 @@ scenario_r5["gpu_list"] = [0]
 scenario_r5["num_processes"] = 1
 scenario_r5["scenario_info"] = {"name": "R5_Real_Time_Mobile_Inference", "realistic": True}
 scenario_r5["suite"] = "scenarios" 
-scenario_configs.append(scenario_r5)
+scenario_config_list.append(scenario_r5)
 
 updates_r6 = {
     "config_name": "R6_Medium_Scale_Language_Model_Serving",
@@ -276,13 +276,13 @@ scenario_r6["gpu_list"] = [0, 1, 2, 3]
 scenario_r6["num_processes"] = 4
 scenario_r6["scenario_info"] = {"name": "R6_Medium_Scale_Language_Model_Serving", "realistic": True}
 scenario_r6["suite"] = "scenarios" 
-scenario_configs.append(scenario_r6)
+scenario_config_list.append(scenario_r6)
 
 # -----------------------------------------
 # Combine All Scenarios
 # -----------------------------------------
 
-__all__ = ["scenario_configs"]
+__all__ = ["scenario_config_list"]
 
 # ----------------------------
 # Scenario Configuration Validation
@@ -343,7 +343,7 @@ def validate_scenario_config(cfg):
 # ----------------------------
 if __name__ == "__main__":
     # Validate each scenario configuration
-    for i, cfg in enumerate(scenario_configs):
+    for i, cfg in enumerate(scenario_config_list):
         try:
             validate_scenario_config(cfg)
         except AssertionError as e:
