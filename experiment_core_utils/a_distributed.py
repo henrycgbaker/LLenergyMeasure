@@ -3,6 +3,8 @@ import yaml
 from accelerate import Accelerator
 import torch.distributed as dist
 import threading
+import sys
+import torch
 
 def delete_accelerator_cli_configs():
     """
@@ -91,6 +93,17 @@ def get_original_generate_method(model):
     else:
         return None
     
+
+def check_failed_flag(accelerator):
+    flag = torch.tensor([0], device=accelerator.device)
+    # rank 0’s flag will be the “true” one if any rank broadcast 1
+    dist.broadcast(flag, src=0)
+    if flag.item() == 1:
+        accelerator.print("Detected failure on another rank – exiting.")
+        # clean up and exit
+        torch.cuda.empty_cache()
+        dist.destroy_process_group()
+        sys.exit(1)
 
 def safe_wait(accelerator, description="", timeout=600):
     accelerator.print(f"Entering wait barrier: {description}")

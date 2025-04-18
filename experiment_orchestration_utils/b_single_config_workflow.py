@@ -48,8 +48,8 @@ def run_single_configuration(runner, max_retries=3, retry_delay=5):
                 
         except Exception as e:
             attempt += 1
-            logger.error(f"Experiment #{runner.experiment_id} run failed on attempt {attempt}: {e}", exc_info=True)
+            logger.error(f"Experiment run failed on attempt {attempt}: {e}", exc_info=True)
             time.sleep(retry_delay)
     
-    logger.error(f"Experiment #{runner.experiment_id} run failed after maximum attempts.")
+    logger.error(f"Experiment run failed after maximum attempts.")
     return False, None

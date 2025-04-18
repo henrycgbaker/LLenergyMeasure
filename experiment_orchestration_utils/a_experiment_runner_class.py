@@ -18,7 +18,7 @@ if helper_functions_path not in sys.path:
     sys.path.append(helper_functions_path)
 
 # from experiment_core's helper functions
-from experiment_core_utils.a_distributed import get_accelerator, get_shared_unique_id, get_original_generate_method, safe_wait
+from experiment_core_utils.a_distributed import get_accelerator, get_shared_unique_id, get_original_generate_method, check_failed_flag, safe_wait
 from experiment_core_utils.b_model_loader import load_model_tokenizer
 from experiment_core_utils.c_prompt_processing import filter_n_prompts, sort_prompts
 from experiment_core_utils.d_energy_tracking import warm_up, start_energy_tracking, stop_energy_tracking
@@ -75,6 +75,8 @@ class ExperimentRunner:
         with accelerator.main_process_first():
             model_undistributed, tokenizer = load_model_tokenizer(self.config)
         accelerator.print(f"{model_name} loaded using {self.config.backend}, with precision {self.config.fp_precision}")
+        
+        check_failed_flag(accelerator)
         safe_wait(accelerator, "after load_model_tokenizer")
 
         # Save original generate method.
@@ -88,8 +90,11 @@ class ExperimentRunner:
         model, tokenizer = accelerator.prepare(model_undistributed, tokenizer)
         accelerator.print("Model and tokenizer prepared")
         
+        check_failed_flag(accelerator)
         safe_wait(accelerator, "after model preparation")
         logger.info(f"[Process {os.getpid()}] Model is on device: {accelerator.device}")
+        
+        check_failed_flag(accelerator)
         safe_wait(accelerator, "after logging device info")
 
         # Reassign generate method.
@@ -104,10 +109,14 @@ class ExperimentRunner:
         with torch.no_grad():
             _ = model(dummy_input)
         logger.info(f"[Process {os.getpid()}] Dummy forward pass complete")
+        
+        check_failed_flag(accelerator)
         safe_wait(accelerator, "after dummy forward pass")
         
         # Warm-up here on all processes
         warm_up(model, tokenizer, self.config, num_warmup_runs=3)
+        
+        check_failed_flag(accelerator)
         safe_wait(accelerator, "after warm up")
 
         # Filter & sort prompts based on non-tokenised string length.
@@ -133,12 +142,38 @@ class ExperimentRunner:
             except Exception as e:
                 accelerator.print(f"Error during inference: {e}")
                 raise
+            try:
+                token_id_outputs, input_ids, raw_inference_results = run_gen_inference(
+                    model=model,
+                    experiment_config=self.config,
+                    prompts=prompts_sorted,
+                    tokenizer=tokenizer,
+                    accelerator=accelerator,
+                )
+            except torch.cuda.OutOfMemoryError as oom:
+                accelerator.print(f"CUDA OOM on rank {accelerator.process_index}: {oom}")
+                torch.cuda.empty_cache()
+                # tell everyone we failed
+                failed = torch.tensor([1], device=accelerator.device)
+                dist.broadcast(failed, src=accelerator.process_index)
+                # tear down and abort
+                self.teardown()
+                sys.exit(1)
+            except Exception as e:
+                accelerator.print(f"Error during inference: {e}")
+                # same pattern: broadcast so no-one hangs
+                failed = torch.tensor([1], device=accelerator.device)
+                dist.broadcast(failed, src=accelerator.process_index)
+                self.teardown()
+                raise
+
         logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}]: Inference complete")
 
         # Stop energy tracking.
         codecarbon_data = stop_energy_tracking(tracker)
         logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}]: Energy tracking stopped")
 
+        check_failed_flag(accelerator)
         safe_wait(accelerator, "after energy tracking stopped")
         
         # Conditionally decode token_id output (only main process).
@@ -206,6 +241,7 @@ class ExperimentRunner:
             logger.info("Main process saved inference and computation metrics.")
             
         accelerator.print("Experiment-wide inference and compute metrics saved")
+        check_failed_flag(accelerator)
         safe_wait(accelerator, "after saving experiment metrics")
         
         # Save per-process energy metrics.
