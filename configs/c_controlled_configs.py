@@ -218,9 +218,9 @@ def validate_config(cfg):
         assert key in cfg, f"Missing required key '{key}' in config: {cfg}"
 
     # Optionally, check the 'suite' value is set correctly.
-    # (This might be updated later in the generation; otherwise you could allow "NA")
-    # For example, if a real config must have "controlled" and defaults should not be "NA":
-    assert cfg["suite"] in ["controlled", "NA"], f"Unexpected suite value: {cfg['suite']}"
+    # (This might be updated later in the generation; otherwise you could allow None)
+    # For example, if a real config must have "controlled" and defaults should not be None:
+    assert cfg["suite"] in ["controlled", None], f"Unexpected suite value: {cfg['suite']}"
 
     # --- Decoder Config ---
     decoder_cfg = cfg["decoder_config"]
@@ -229,22 +229,22 @@ def validate_config(cfg):
         assert key in decoder_cfg, f"Missing '{key}' in decoder_config"
     # If a decoder variation was applied, check for valid values;
     # Otherwise, they should remain as NA.
-    if decoder_cfg["decoding_mode"] != "NA":
+    if decoder_cfg["decoding_mode"] != None:
         valid_modes = ["greedy", "top_k", "top_p"]
         mode = decoder_cfg["decoding_mode"]
         assert mode in valid_modes, f"Invalid 'decoding_mode': {mode}"
-        assert isinstance(decoder_cfg["decoder_temperature"], (int, float)) or decoder_cfg["decoder_temperature"] != "NA", "Invalid decoder_temperature"
+        assert isinstance(decoder_cfg["decoder_temperature"], (int, float)) or decoder_cfg["decoder_temperature"] != None, "Invalid decoder_temperature"
         if mode == "top_k":
-            assert decoder_cfg["decoder_top_k"] != "NA", "Missing 'decoder_top_k' for top_k sampling"
+            assert decoder_cfg["decoder_top_k"] != None, "Missing 'decoder_top_k' for top_k sampling"
         elif mode == "top_p":
-            assert decoder_cfg["decoder_top_p"] != "NA", "Missing 'decoder_top_p' for top_p sampling"
+            assert decoder_cfg["decoder_top_p"] != None, "Missing 'decoder_top_p' for top_p sampling"
 
     # --- Quantization Config ---
     quant_cfg = cfg["quantization_config"]
     for key in ["quantization", "load_in_8bit", "load_in_4bit"]:
         assert key in quant_cfg, f"Missing '{key}' in quantization_config"
-    # If a quantization variation was applied, the values should be boolean; otherwise they remain "NA"
-    if quant_cfg["quantization"] != "NA":
+    # If a quantization variation was applied, the values should be boolean; otherwise they remain None
+    if quant_cfg["quantization"] != None:
         assert isinstance(quant_cfg["quantization"], bool), "quantization must be a bool"
         assert isinstance(quant_cfg["load_in_8bit"], bool), "load_in_8bit must be a bool"
         assert isinstance(quant_cfg["load_in_4bit"], bool), "load_in_4bit must be a bool"
@@ -255,14 +255,14 @@ def validate_config(cfg):
     for key in expected_latency_keys:
         assert key in latency_cfg, f"Missing '{key}' in latency_simulation"
     # If simulation is applicable, ensure delay_min and delay_max are set.
-    if latency_cfg["simulate"] != "NA" and latency_cfg["simulate"] is True:
-        assert latency_cfg["delay_min"] != "NA", "Missing delay_min in latency_simulation"
-        assert latency_cfg["delay_max"] != "NA", "Missing delay_max in latency_simulation"
+    if latency_cfg["simulate"] != None and latency_cfg["simulate"] is True:
+        assert latency_cfg["delay_min"] != None, "Missing delay_min in latency_simulation"
+        assert latency_cfg["delay_max"] != None, "Missing delay_max in latency_simulation"
     # For burst settings, you might add additional checks if simulate_burst is True.
     
     return True
 
-def fill_missing_keys(cfg, default_value="NA"):
+def fill_missing_keys(cfg, default_value=None):
     # Ensure the top-level sections exist:
     for key in ["suite", "config_name", "controlled_variation"]:
         if key not in cfg:

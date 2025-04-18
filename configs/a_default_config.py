@@ -1,6 +1,6 @@
 base_config = {
-    "config_name": "default",     # To be updated by experiments.
-    "suite": "NA",                # Will be updated when controlled variations apply.
+    "config_name": None,     # To be updated by experiments.
+    "suite": None,                # Will be updated when controlled variations apply.
     "controlled_variation": {},   # Holds details about the applied variation; default empty.
     "scenario_info": {},              # specific to scenario configs
         
@@ -42,16 +42,16 @@ base_config = {
         "burst_size": 0           # Number defining a burst.
     },
     "decoder_config": {
-        "decoding_mode": "NA",         # Default is "NA"; updated when decoder variations apply (e.g., "greedy", "top_k", "top_p").
+        "decoding_mode": None,         # Default is None; updated when decoder variations apply (e.g., "greedy", "top_k", "top_p").
         "decoder_temperature": 1.0,      # Default temperature.
-        "decoder_top_k": "NA",           # Set to "NA" if top_k sampling is not applicable.
-        "decoder_top_p": "NA"            # Set to "NA" if top_p sampling is not applicable.
+        "decoder_top_k": None,           # Set to None if top_k sampling is not applicable.
+        "decoder_top_p": None            # Set to None if top_p sampling is not applicable.
     },
     "fp_precision": "float32",           # Can be updated to float16 in experiments.
     "quantization_config": {
-        "quantization": "NA",          # Default "NA", updated when experiments specify quantisation settings.
-        "load_in_8bit": "NA",          # "NA" if not applicable.
-        "load_in_4bit": "NA",          # "NA" if not applicable.
+        "quantization": None,          # Default None, updated when experiments specify quantisation settings.
+        "load_in_8bit": None,          # None if not applicable.
+        "load_in_4bit": None,          # None if not applicable.
         "cached_flops_for_quantised_models": 16949970993152  # FLOPs value for quantized models.
     }
 }

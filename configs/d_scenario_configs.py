@@ -313,14 +313,14 @@ def validate_scenario_config(cfg):
     decoder_cfg = cfg["decoder_config"]
     for d_key in ["decoding_mode", "decoder_temperature", "decoder_top_k", "decoder_top_p"]:
         assert d_key in decoder_cfg, f"Missing '{d_key}' in decoder_config"
-    if decoder_cfg["decoding_mode"] != "NA":
+    if decoder_cfg["decoding_mode"] != None:
         valid_modes = ["greedy", "top_k", "top_p"]
         mode = decoder_cfg["decoding_mode"]
         assert mode in valid_modes, f"Invalid 'decoder_config.decoding_mode': {mode}"
         if mode == "top_k":
-            assert decoder_cfg["decoder_top_k"] != "NA", "For top_k sampling, decoder_top_k must be set"
+            assert decoder_cfg["decoder_top_k"] != None, "For top_k sampling, decoder_top_k must be set"
         if mode == "top_p":
-            assert decoder_cfg["decoder_top_p"] != "NA", "For top_p sampling, decoder_top_p must be set"
+            assert decoder_cfg["decoder_top_p"] != None, "For top_p sampling, decoder_top_p must be set"
     
     # Validate quantization_config
     quant_cfg = cfg["quantization_config"]
@@ -331,12 +331,14 @@ def validate_scenario_config(cfg):
     latency_cfg = cfg["latency_simulation"]
     for l_key in ["simulate", "delay_min", "delay_max", "simulate_burst", "burst_interval", "burst_size"]:
         assert l_key in latency_cfg, f"Missing '{l_key}' in latency_simulation"
-    if latency_cfg["simulate"] != "NA" and latency_cfg["simulate"] is True:
+    if latency_cfg["simulate"] != None and latency_cfg["simulate"] is True:
         # When simulation is active, delay_min and delay_max should be meaningful
-        assert latency_cfg["delay_min"] != "NA", "latency_simulation.delay_min must be set if simulation is enabled"
-        assert latency_cfg["delay_max"] != "NA", "latency_simulation.delay_max must be set if simulation is enabled"
+        assert latency_cfg["delay_min"] != None, "latency_simulation.delay_min must be set if simulation is enabled"
+        assert latency_cfg["delay_max"] != None, "latency_simulation.delay_max must be set if simulation is enabled"
     
     return True
+
+__all__ = ["scenario_config_list"]
 
 # ----------------------------
 # Validation and (Optional) File Output

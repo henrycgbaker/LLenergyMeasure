@@ -75,7 +75,7 @@ def generate_config_name_from_variation(variation):
         elif "decoder_config.decoder_temperature" in key:
             short_key = "temp"
         elif "num_processes" in key:
-            short_key = "proc"
+            short_key = "num_processes"
         else:
             short_key = key.split(".")[-1]
         parts.append(f"{short_key}_{value}")
