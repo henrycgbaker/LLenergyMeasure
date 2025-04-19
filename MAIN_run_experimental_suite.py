@@ -28,6 +28,7 @@ logging.basicConfig(
 CYCLES_OF_FULL_SUITE = 10
 
 SINGLE_EXP_SCRIPT = os.path.abspath("MAIN_a_single_experiment.py")
+
 PERSISTENT_TRACKER_DIR = "persistent_progress_trackers"
 PROGRESS_FILE = os.path.join(PERSISTENT_TRACKER_DIR,"configs_run_progress.json")
 CYCLE_ID_FILE = os.path.join(PERSISTENT_TRACKER_DIR, "cycle_id.txt")

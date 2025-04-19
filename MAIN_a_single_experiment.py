@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+# Ensure CUDA allocator config is set before any torch import
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128,garbage_collection_threshold:0.6")
 
 import sys
 import argparse
@@ -8,15 +9,11 @@ import logging
 import torch
 import signal
 import atexit
-from datetime import timedelta
 from datasets import load_dataset
 from experiment_orchestration_utils.c_launcher_utils import (
     launch_config_accelerate_cli, run_from_file, run_from_config
 )
 from configs.a_default_config import base_config
-
-# --- Environment tweaks for CUDA fragmentation ---
-os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128")
 
 # --- Logging setup ---
 logging.basicConfig(level=logging.INFO, format="[%(process)d] - %(message)s")
@@ -24,21 +21,24 @@ logging.basicConfig(level=logging.INFO, format="[%(process)d] - %(message)s")
 # --- Cleanup handlers ---
 def cleanup_distributed():
     """
-    Destroy the process group if initialized, to avoid NCCL hangs.
+    Destroy the process group if initialized and clear caches to avoid hangs.
     """
     if torch.distributed.is_initialized():
-        logging.info("Destroying process group...")
         try:
             torch.distributed.destroy_process_group()
+            logging.info("Destroyed process group.")
         except Exception as e:
             logging.warning(f"Error destroying process group: {e}")
+    torch.cuda.empty_cache()
+
 
 def handle_signal(signum, frame):
-    logging.warning(f"Received signal {signum}, performing cleanup...")
+    logging.warning(f"Received signal {signum}, performing cleanup and exiting.")
     cleanup_distributed()
-    sys.exit(1)
+    # use os._exit to kill all threads immediately
+    os._exit(1)
 
-# Register cleanup on exit and signals
+# Register cleanup on normal exit and signals
 atexit.register(cleanup_distributed)
 for sig in (signal.SIGINT, signal.SIGTERM):
     signal.signal(sig, handle_signal)
@@ -54,7 +54,7 @@ def main():
         description="Run a single experiment configuration using Accelerate."
     )
     parser.add_argument("--config", type=str, default=None,
-                        help="Path to the experiment configuration JSON file.")
+                        help="Path to JSON config file.")
     parser.add_argument("--launched", action="store_true",
                         help="Flag indicating distributed mode via Accelerate.")
     args = parser.parse_args()
@@ -62,47 +62,53 @@ def main():
     # Relaunch under Accelerate if needed
     if not args.launched:
         script = os.path.abspath(__file__)
-        logging.info("Not in distributed mode, re-launching via Accelerate CLI...")
+        logging.info("Relaunching script under accelerate...")
         launch_config_accelerate_cli(
-            args.config if args.config else base_config,
+            args.config or base_config,
             script,
             extra_args=["--launched"]
         )
         sys.exit(0)
 
-    # Distributed run
-    logging.info("Running distributed experiment...")
+    # In distributed mode
+    logging.info("Starting distributed experiment run...")
     prompts = load_prompts()
 
     try:
-        # Use config or default
         if args.config:
             logging.info("Loading configuration from %s", args.config)
             success, result = run_from_file(args.config, prompts)
         else:
-            logging.info("No config file, using default config.")
+            logging.info("No config file provided, using base config.")
             success, result = run_from_config(base_config, prompts)
 
     except torch.cuda.OutOfMemoryError as oom:
-        logging.error("CUDA OOM during experiment: %s", oom)
-        torch.cuda.empty_cache()
+        logging.error("CUDA OOM: %s", oom)
         cleanup_distributed()
-        sys.exit(1)
+        os._exit(1)
+
+    except RuntimeError as rt:
+        if "CUBLAS_STATUS_ALLOC_FAILED" in str(rt):
+            logging.error("CUBLAS alloc failed, treating as OOM: %s", rt)
+            cleanup_distributed()
+            os._exit(1)
+        else:
+            raise
 
     except Exception as ex:
         logging.error("Unexpected error during experiment: %s", ex)
         cleanup_distributed()
-        sys.exit(1)
+        os._exit(1)
 
     else:
         if success:
             logging.info("Experiment completed successfully.")
         else:
-            logging.error("Experiment failed (success flag is False).")
+            logging.error("Experiment reported failure (success=False).")
 
-    # Final cleanup
+    # Final cleanup and exit
     cleanup_distributed()
-
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()
