@@ -3,6 +3,7 @@ base_config = {
     "suite": None,                # Will be updated when controlled variations apply.
     "controlled_variation": {},   # Holds details about the applied variation; default empty.
     "scenario_info": {},              # specific to scenario configs
+    "cycle_id": None,            # to be injected later
         
     "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0", 
     "is_encoder_decoder": False,

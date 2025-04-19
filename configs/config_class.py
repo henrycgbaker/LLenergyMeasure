@@ -24,6 +24,7 @@ class ExperimentConfig:
     fp_precision: Literal["float32", "float16", "float8"] = "float32"
     quantization_config: Optional[Dict[str, Any]] = field(default_factory=dict)
     backend: Literal["pytorch", "tensorRT", "deepserve", "vllm"] = "pytorch"  
+    cycle_id: Optional[int] = None
 
     # Extra metadata fields will be stored here.
     extra_metadata: Dict[str, Any] = field(default_factory=dict, init=False)

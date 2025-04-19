@@ -61,221 +61,214 @@ class ExperimentRunner:
         accelerator.print(f"Unique experiment id: {experiment_id}")
 
     def run_torch(self):
+        try:
+            # Extract configuration parameters.
+            model_name        = self.config.model_name
+            inference_type    = self.config.inference_type 
+            num_input_prompts = self.config.num_input_prompts
+            max_input_tokens  = self.config.max_input_tokens
+            
+            accelerator = self.accelerator
+            experiment_id = self.experiment_id
 
-        # Extract configuration parameters.
-        model_name        = self.config.model_name
-        inference_type    = self.config.inference_type 
-        num_input_prompts = self.config.num_input_prompts
-        max_input_tokens  = self.config.max_input_tokens
-        
-        accelerator = self.accelerator
-        experiment_id = self.experiment_id
+            # Load model and tokenizer on main process first.
+            with accelerator.main_process_first():
+                model_undistributed, tokenizer = load_model_tokenizer(self.config)
+            accelerator.print(f"{model_name} loaded using {self.config.backend}, with precision {self.config.fp_precision}")
+            
+            check_failed_flag(accelerator)
+            safe_wait(accelerator, "after load_model_tokenizer")
 
-        # Load model and tokenizer on main process first.
-        with accelerator.main_process_first():
-            model_undistributed, tokenizer = load_model_tokenizer(self.config)
-        accelerator.print(f"{model_name} loaded using {self.config.backend}, with precision {self.config.fp_precision}")
-        
-        check_failed_flag(accelerator)
-        safe_wait(accelerator, "after load_model_tokenizer")
+            # Save original generate method.
+            orig_generate_method = get_original_generate_method(model_undistributed)
+            if orig_generate_method is None:
+                logger.warning("Could not locate the original generate method.")
+            else:
+                accelerator.print("Original generate method saved.")
 
-        # Save original generate method.
-        orig_generate_method = get_original_generate_method(model_undistributed)
-        if orig_generate_method is None:
-            logger.warning("Could not locate the original generate method.")
-        else:
-            accelerator.print("Original generate method saved.")
+            # Prepare model/tokenizer for distributed use.
+            model, tokenizer = accelerator.prepare(model_undistributed, tokenizer)
+            accelerator.print("Model and tokenizer prepared")
+            
+            check_failed_flag(accelerator)
+            safe_wait(accelerator, "after model preparation")
+            logger.info(f"[Process {os.getpid()}] Model is on device: {accelerator.device}")
+            
+            check_failed_flag(accelerator)
+            safe_wait(accelerator, "after logging device info")
 
-        # Prepare model/tokenizer for distributed use.
-        model, tokenizer = accelerator.prepare(model_undistributed, tokenizer)
-        accelerator.print("Model and tokenizer prepared")
-        
-        check_failed_flag(accelerator)
-        safe_wait(accelerator, "after model preparation")
-        logger.info(f"[Process {os.getpid()}] Model is on device: {accelerator.device}")
-        
-        check_failed_flag(accelerator)
-        safe_wait(accelerator, "after logging device info")
+            # Reassign generate method.
+            if orig_generate_method:
+                if hasattr(model, "module"):
+                    model.module.generate = orig_generate_method
+                model.generate = orig_generate_method
+                accelerator.print("Original generate method reassigned")
 
-        # Reassign generate method.
-        if orig_generate_method:
-            if hasattr(model, "module"):
-                model.module.generate = orig_generate_method
-            model.generate = orig_generate_method
-            accelerator.print("Original generate method reassigned")
+            # Dummy forward pass.
+            dummy_input = tokenizer("Hello world", return_tensors="pt", truncation=True, max_length=max_input_tokens).input_ids.to(accelerator.device)
+            with torch.no_grad():
+                _ = model(dummy_input)
+            logger.info(f"[Process {os.getpid()}] Dummy forward pass complete")
+            
+            check_failed_flag(accelerator)
+            safe_wait(accelerator, "after dummy forward pass")
+            
+            # Warm-up here on all processes
+            warm_up(model, tokenizer, self.config, num_warmup_runs=3)
+            
+            check_failed_flag(accelerator)
+            safe_wait(accelerator, "after warm up")
 
-        # Dummy forward pass.
-        dummy_input = tokenizer("Hello world", return_tensors="pt", truncation=True, max_length=max_input_tokens).input_ids.to(accelerator.device)
-        with torch.no_grad():
-            _ = model(dummy_input)
-        logger.info(f"[Process {os.getpid()}] Dummy forward pass complete")
-        
-        check_failed_flag(accelerator)
-        safe_wait(accelerator, "after dummy forward pass")
-        
-        # Warm-up here on all processes
-        warm_up(model, tokenizer, self.config, num_warmup_runs=3)
-        
-        check_failed_flag(accelerator)
-        safe_wait(accelerator, "after warm up")
+            # Filter & sort prompts based on non-tokenised string length.
+            prompts_n_filtered = filter_n_prompts(prompts=self.prompts, num_input_prompts=num_input_prompts)
+            prompts_sorted = sort_prompts(prompts_n_filtered)
+            accelerator.print(f"Prompts processed: {len(prompts_sorted)} prompts.")
 
-        # Filter & sort prompts based on non-tokenised string length.
-        prompts_n_filtered = filter_n_prompts(prompts=self.prompts, num_input_prompts=num_input_prompts)
-        prompts_sorted = sort_prompts(prompts_n_filtered)
-        accelerator.print(f"Prompts processed: {len(prompts_sorted)} prompts.")
-
-        # Start energy tracking.
-        tracker = start_energy_tracking()
-        accelerator.print("Energy tracking started")
-        
-        # Run inference.
-        if inference_type == "pure_generative":
-            accelerator.print(f"Task type: {inference_type}")
-            try:
-                token_id_outputs, input_ids, raw_inference_results = run_gen_inference(
-                    model=model,
-                    experiment_config=self.config,
-                    prompts=prompts_sorted,
-                    tokenizer=tokenizer,
-                    accelerator=accelerator,
-                )
-            except Exception as e:
-                accelerator.print(f"Error during inference: {e}")
-                raise
-            try:
-                token_id_outputs, input_ids, raw_inference_results = run_gen_inference(
-                    model=model,
-                    experiment_config=self.config,
-                    prompts=prompts_sorted,
-                    tokenizer=tokenizer,
-                    accelerator=accelerator,
-                )
-            except torch.cuda.OutOfMemoryError as oom:
-                accelerator.print(f"CUDA OOM on rank {accelerator.process_index}: {oom}")
-                torch.cuda.empty_cache()
-                # tell everyone we failed
-                failed = torch.tensor([1], device=accelerator.device)
-                dist.broadcast(failed, src=accelerator.process_index)
-                # tear down and abort
-                self.teardown()
-                sys.exit(1)
-            except Exception as e:
-                accelerator.print(f"Error during inference: {e}")
-                # same pattern: broadcast so no-one hangs
-                failed = torch.tensor([1], device=accelerator.device)
-                dist.broadcast(failed, src=accelerator.process_index)
-                self.teardown()
-                raise
-
-        logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}]: Inference complete")
-
-        # Stop energy tracking.
-        codecarbon_data = stop_energy_tracking(tracker)
-        logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}]: Energy tracking stopped")
-
-        check_failed_flag(accelerator)
-        safe_wait(accelerator, "after energy tracking stopped")
-        
-        # Conditionally decode token_id output (only main process).
-        if accelerator.is_main_process:
-            if self.config.decode_token_to_text:
+            # Start energy tracking.
+            tracker = start_energy_tracking()
+            accelerator.print("Energy tracking started")
+            
+            # Run inference.
+            if inference_type == "pure_generative":
+                accelerator.print(f"Task type: {inference_type}")
                 try:
-                    decoded_texts = []
-                    for batch in token_id_outputs:
-                        batch_list = batch.tolist() if isinstance(batch, torch.Tensor) else batch
-                        decoded_batch = tokenizer.batch_decode(batch_list, skip_special_tokens=True)
-                        decoded_texts.extend(decoded_batch)
-                    text_outputs = decoded_texts
-                    accelerator.print("Decoded token outputs successfully.")
+                    token_id_outputs, input_ids, raw_inference_results = run_gen_inference(
+                        model=model,
+                        experiment_config=self.config,
+                        prompts=prompts_sorted,
+                        tokenizer=tokenizer,
+                        accelerator=accelerator,
+                    )
+                except torch.cuda.OutOfMemoryError as oom:
+                    accelerator.print(f"CUDA OOM on rank {accelerator.process_index}: {oom}")
+                    torch.cuda.empty_cache()
+                    # broadcast a “failed” flag so no-one blocks
+                    failed = torch.tensor([1], device=accelerator.device)
+                    dist.broadcast(failed, src=0)
+                    self.teardown()
+                    sys.exit(1)
                 except Exception as e:
-                    accelerator.print(f"Error during batch decoding: {e}")
+                    accelerator.print(f"Error during inference: {e}")
+                    failed = torch.tensor([1], device=accelerator.device)
+                    dist.broadcast(failed, src=0)
+                    self.teardown()
+                    raise
+
+            logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}]: Inference complete")
+
+            # Stop energy tracking.
+            codecarbon_data = stop_energy_tracking(tracker)
+            logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}]: Energy tracking stopped")
+
+            check_failed_flag(accelerator)
+            safe_wait(accelerator, "after energy tracking stopped")
+            
+            # Conditionally decode token_id output (only main process).
+            if accelerator.is_main_process:
+                if self.config.decode_token_to_text:
+                    try:
+                        decoded_texts = []
+                        for batch in token_id_outputs:
+                            batch_list = batch.tolist() if isinstance(batch, torch.Tensor) else batch
+                            decoded_batch = tokenizer.batch_decode(batch_list, skip_special_tokens=True)
+                            decoded_texts.extend(decoded_batch)
+                        text_outputs = decoded_texts
+                        accelerator.print("Decoded token outputs successfully.")
+                    except Exception as e:
+                        accelerator.print(f"Error during batch decoding: {e}")
+                        text_outputs = None
+                else:
                     text_outputs = None
             else:
                 text_outputs = None
-        else:
-            text_outputs = None
 
-        # Conditionally save text/token outputs.
-        if accelerator.is_main_process:
-            if self.config.save_outputs:
-                if self.config.decode_token_to_text:
-                    outputs = text_outputs if text_outputs else []
+            # Conditionally save text/token outputs.
+            if accelerator.is_main_process:
+                if self.config.save_outputs:
+                    if self.config.decode_token_to_text:
+                        outputs = text_outputs if text_outputs else []
+                    else:
+                        outputs = [tensor.tolist() for tensor in token_id_outputs] if token_id_outputs else []
+                    if not isinstance(outputs, list):
+                        logger.error(f"[{experiment_id}] Outputs not a list before saving: type={type(outputs)}")
+                        outputs = []
+                    save_raw_results_json(experiment_id=experiment_id, 
+                                    type="8_text_output" if self.config.decode_token_to_text else "8_token_output", 
+                                    results=outputs, 
+                                    pid=None)
+                    accelerator.print("Saved outputs")
                 else:
-                    outputs = [tensor.tolist() for tensor in token_id_outputs] if token_id_outputs else []
-                if not isinstance(outputs, list):
-                    logger.error(f"[{experiment_id}] Outputs not a list before saving: type={type(outputs)}")
-                    outputs = []
-                save_raw_results_json(experiment_id=experiment_id, 
-                                 type="8_text_output" if self.config.decode_token_to_text else "8_token_output", 
-                                 results=outputs, 
-                                 pid=None)
-                accelerator.print("Saved outputs")
-            else:
-                self.outputs = None
-                accelerator.print("Did not save output")
-        
-        # Save experiment-wide meta info (only main process).
-        if accelerator.is_main_process:
-            self.experiment_setup = get_experiment_setup(
-                experiment_config=self.config, codecarbon_data=codecarbon_data, experiment_id=experiment_id
-            )
-            save_raw_results_json(experiment_id, "1_experiment_setup", self.experiment_setup)
-            self.experiment_variables = get_experimental_variables(
-                experiment_config=self.config, model=model, accelerator=accelerator
-            )
-            save_raw_results_json(experiment_id, "2_experiment_variables", self.experiment_variables)
-            self.model_architecture = get_model_architecture(model=model)
-            save_raw_results_json(experiment_id, "3_model_architecture", self.model_architecture)
-            logger.info("Main process saved (i) experiment setup, (ii) variables, (iii) model architecture.")
+                    self.outputs = None
+                    accelerator.print("Did not save output")
             
-        accelerator.print("Experiment-wide meta info saved")
-
-        # Save experiment-wide results (only main process).
-        if accelerator.is_main_process:
-            self.inference_metrics = combine_inference_metrics(raw_inference_results, accelerator)
-            save_raw_results_json(experiment_id, "4_inference_metrics", self.inference_metrics)
-            self.compute_metrics = combine_comp_metrics(
-                model=model, device=accelerator.device, tokenised_input_ids=input_ids, accelerator=accelerator, experiment_config=self.config
-            )
-            save_raw_results_json(experiment_id, "5_compute_metrics", self.compute_metrics)
-            logger.info("Main process saved inference and computation metrics.")
-            
-        accelerator.print("Experiment-wide inference and compute metrics saved")
-        check_failed_flag(accelerator)
-        safe_wait(accelerator, "after saving experiment metrics")
-        
-        # Save per-process energy metrics.
-        try:
-            local_energy_results = combine_energy_metrics(codecarbon_data, accelerator)
-            logger.info(f"Process {accelerator.local_process_index}: Energy metrics combined successfully.")
-        except Exception as e:
-            logger.error(f"Process {accelerator.local_process_index}: Error in combine_energy_metrics: {e}")
-            local_energy_results = None
-
-        # Save to a shared directory with a standardized filename.
-        save_raw_results_json(
-            experiment_id, 
-            "6_local_energy_results", 
-            local_energy_results, 
-            pid=f"process_{accelerator.local_process_index}"
-        )
-        logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}] saved its energy metrics.")
+            # Save experiment-wide meta info (only main process).
+            if accelerator.is_main_process:
+                self.experiment_setup = get_experiment_setup(
+                    experiment_config=self.config, codecarbon_data=codecarbon_data, experiment_id=experiment_id
+                )
+                save_raw_results_json(experiment_id, "1_experiment_setup", self.experiment_setup)
+                self.experiment_variables = get_experimental_variables(
+                    experiment_config=self.config, model=model, accelerator=accelerator
+                )
+                save_raw_results_json(experiment_id, "2_experiment_variables", self.experiment_variables)
+                self.model_architecture = get_model_architecture(model=model)
+                save_raw_results_json(experiment_id, "3_model_architecture", self.model_architecture)
+                logger.info("Main process saved (i) experiment setup, (ii) variables, (iii) model architecture.")
                 
-        accelerator.print("All local process energy metrics saved")
-        
-        accelerator.print("Experiment finished")
+            accelerator.print("Experiment-wide meta info saved")
 
-        # Final cleanup: attempt to destroy the process group.
-        if dist.is_available() and dist.is_initialized():
+            # Save experiment-wide results (only main process).
+            if accelerator.is_main_process:
+                self.inference_metrics = combine_inference_metrics(raw_inference_results, accelerator)
+                save_raw_results_json(experiment_id, "4_inference_metrics", self.inference_metrics)
+                self.compute_metrics = combine_comp_metrics(
+                    model=model, device=accelerator.device, tokenised_input_ids=input_ids, accelerator=accelerator, experiment_config=self.config
+                )
+                save_raw_results_json(experiment_id, "5_compute_metrics", self.compute_metrics)
+                logger.info("Main process saved inference and computation metrics.")
+                
+            accelerator.print("Experiment-wide inference and compute metrics saved")
+            check_failed_flag(accelerator)
+            safe_wait(accelerator, "after saving experiment metrics")
+            
+            # Save per-process energy metrics.
             try:
-                dist.destroy_process_group()
-                accelerator.print("Destroyed process group successfully")
+                local_energy_results = combine_energy_metrics(codecarbon_data, accelerator)
+                logger.info(f"Process {accelerator.local_process_index}: Energy metrics combined successfully.")
             except Exception as e:
-                accelerator.print(f"Error during process group destruction: {e}")
+                logger.error(f"Process {accelerator.local_process_index}: Error in combine_energy_metrics: {e}")
+                local_energy_results = None
+
+            # Save to a shared directory with a standardized filename.
+            save_raw_results_json(
+                experiment_id, 
+                "6_local_energy_results", 
+                local_energy_results, 
+                pid=f"process_{accelerator.local_process_index}"
+            )
+            logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}] saved its energy metrics.")
+                    
+            accelerator.print("All local process energy metrics saved")
+            
+            accelerator.print("Experiment finished")
+
+            # Final cleanup: attempt to destroy the process group.
+            if dist.is_available() and dist.is_initialized():
+                try:
+                    dist.destroy_process_group()
+                    accelerator.print("Destroyed process group successfully")
+                except Exception as e:
+                    accelerator.print(f"Error during process group destruction: {e}")
         
+        except Exception as e:
+            accelerator.print(f"run_torch() failed: {e}")
+            # make sure *every* process tears down:
+            self.teardown()
+            # re‑raise so that run_single_configuration can retry or give up
+            raise    
         return
     
-                
+            
     def aggregate_results(self):
         """
         Aggregates per-process energy metrics (loaded from JSON files) into a global energy results dict.
@@ -438,38 +431,51 @@ class ExperimentRunner:
         
         return 
         
-
+        
     def teardown(self):
         print("Starting teardown process...")
+        # 1) process‑group
         if dist.is_available() and dist.is_initialized():
-            if self.accelerator.is_main_process:
+            if hasattr(self, "accelerator") and self.accelerator.is_main_process:
                 try:
-                    print("Destroying distributed process group...")
+                    print("Destroying distributed process group…")
                     dist.destroy_process_group()
                 except Exception as e:
-                    print(f"Exception during process group destruction: {e}")
+                    print(f"Exception destroying process group: {e}", file=sys.stderr)
             else:
                 try:
+                    # allow others to exit before driver resets
                     dist.barrier()
                 except Exception as e:
-                    print(f"Exception during barrier wait in teardown: {e}")
+                    print(f"Exception during barrier wait in teardown: {e}", file=sys.stderr)
         else:
-            print("Distributed package is not available or process group not initialized.")
-        
+            print("No active process group to destroy.")
+
+        # 2) empty and reset PyTorch’s CUDA allocator
         try:
-            print("Emptying CUDA cache...")
+            print("Emptying CUDA cache…")
             torch.cuda.empty_cache()
+            print("Resetting peak memory stats…")
+            torch.cuda.reset_peak_memory_stats()
         except Exception as e:
-            print(f"Exception while emptying CUDA cache: {e}")
-        
+            print(f"Exception clearing CUDA cache or stats: {e}", file=sys.stderr)
+
+        # 3) collect any IPC shared handles
         try:
-            print("Running garbage collection...")
-            import gc
+            print("Collecting CUDA IPC handles…")
+            torch.cuda.ipc_collect()
+        except Exception as e:
+            print(f"Exception during ipc_collect: {e}", file=sys.stderr)
+
+        # 4) final Python GC
+        try:
+            print("Running Python garbage collection…")
             gc.collect()
         except Exception as e:
-            print(f"Exception during garbage collection: {e}")
-        
+            print(f"Exception during garbage collection: {e}", file=sys.stderr)
+
         print("Teardown process complete.")
+
 
 
 

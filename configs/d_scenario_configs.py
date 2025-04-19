@@ -163,7 +163,7 @@ updates_r1 = {
     "latency_simulation.burst_size": 5,
 }
 scenario_r1 = update_multiple_config(base_config, updates_r1)
-scenario_r1["gpu_list"] = [0, 1, 3, 4]
+scenario_r1["gpu_list"] = [0, 1, 2, 3]
 scenario_r1["num_processes"] = 4
 scenario_r1["scenario_info"] = {"name": "R1_Standard_Production_Config", "realistic": True}
 scenario_r1["suite"] = "scenarios" 

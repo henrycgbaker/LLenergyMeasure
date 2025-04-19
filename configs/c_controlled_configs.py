@@ -33,7 +33,7 @@ parallelisation_configs = generate_controlled_configs(base_config, parallelisati
 
 # (ii) Batching Strategies:
 batching_variations = {
-    "batching_options.batch_size___fixed_batching": [1, 2, 4, 8, 16, 32, 64, 128, 256]
+    "batching_options.batch_size___fixed_batching": [1, 2, 3, 4, 5, 6, 8, 10, 12, 14, 16, 20, 24, 28, 32, 40, 48, 56, 64]  # I also had 128, 256 - but it crashed the GPUs 
 }
 batching_configs = generate_controlled_configs(base_config, batching_variations)
 
