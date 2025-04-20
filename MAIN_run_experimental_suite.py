@@ -121,15 +121,15 @@ def run_cycle(config_list, suite_name, cycle_num, done_map, model_name):
 
 def main():
     models_list = [
-        "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-        #"meta-llama/Llama-3.2-1B",
-        #"meta-llama/Llama-3.2-3B",
-        #"meta-llama/Llama-3.1-8B",
+        #"TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+        "meta-llama/Llama-3.2-1B",
+        "meta-llama/Llama-3.2-3B",
+        "meta-llama/Llama-3.1-8B",
     ]
     
     suites = [
         ("Controlled", controlled_config_list),
-        #("Scenario", scenario_config_list),
+        ("Scenario", scenario_config_list),
         #("GridSearch", grid_config_list),
     ]
 

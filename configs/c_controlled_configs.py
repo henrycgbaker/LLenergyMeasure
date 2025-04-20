@@ -101,8 +101,8 @@ decoder_mode_configs = []
 temperature_variations = np.arange(0, 1.5, 0.2).round(1).tolist()
 
 # Values for top_k and top_p
-top_k_values = [20, 50, 100, 200, 500]
-top_p_values = [0.7, 0.8, 0.9, 0.98]
+top_k_values = [1, 5, 20, 50, 100, 200, 300, 400, 500]
+top_p_values = [0.1, 0.3, 0.5, 0.7, 0.8, 0.9, 0.98]
 
 ### Variation A: Greedy Decoding
 # Greedy decoding always picks the highest probability token so only temperature is varied here.

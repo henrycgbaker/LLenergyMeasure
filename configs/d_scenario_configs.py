@@ -14,9 +14,10 @@ scenario_config_list = []
 # IDEAL BASED ON INITAL FINDINGS FROM ANALYSIS
 updates_a0 = {
     "config_name": "A0_platonic_ideal",
-    "batching_options.batch_size___fixed_batching": 256,
+    "batching_options.batch_size___fixed_batching": 64,
     "fp_precision": "float16",
-    "quantization_config.quantization": False,
+    "quantization_config.quantization": True, 
+    "quantization_config.load_in_4bit": True, 
     "decoder_config.decoding_mode": "greedy",
     "decoder_config.decoder_temperature": 0,
     "latency_simulation.simulate": False,
@@ -33,20 +34,17 @@ updates_r0 = {
     "config_name": "R7_anti_platonic_ideal",
     "batching_options.batch_size___fixed_batching": 1,
     "fp_precision": "float32",
-    "quantization_config.quantization": False, #if i can properly implement quantisation it should be more efficient??
-    "quantization_config.load_in_8bit": False, 
-    "quantization_config.load_in_4bit": False,
+    "quantization_config.quantization": False,
     "decoder_config.decoding_mode": "greedy",
-    "decoder_config.decoder_temperature": 1.2,
-    "decoder_config.top_k": 200,
+    "decoder_config.decoder_temperature": 0.8,
     "latency_simulation.simulate": True,
     "latency_simulation.delay_min": 0.4,
     "latency_simulation.delay_max": 0.5,
     "latency_simulation.simulate_burst": True,
-    "latency_simulation.burst_interval": 6.0, # THESE ARE PRETTY UNREALISTIC?
-    "latency_simulation.burst_size": 20, # THESE ARE PRETTY UNREALISTIC?
+    "latency_simulation.burst_interval": 4.0, 
+    "latency_simulation.burst_size": 8, 
 }
-scenario_r0 = update_multiple_config(base_config, updates_r0)
+scenario_r0 = update_multiple_config(base_config, updates_r0) # include this because empirically int8 is worst (although theoretically it shouldn't be)
 scenario_r0["gpu_list"] = [0, 1, 2, 3]
 scenario_r0["num_processes"] = 4
 scenario_r0["scenario_info"] = {"name": "R7_anti_platonic_ideal", "realistic": True}
@@ -60,8 +58,8 @@ updates_a1 = {
     "config_name": "A1_Max_Throughput_Exploit",
     "batching_options.batch_size___fixed_batching": 256,
     "fp_precision": "float16",
-    "quantization_config.quantization": True,
-    "quantization_config.load_in_8bit": True,
+    "quantization_config.quantization": False,
+    "quantization_config.load_in_8bit": False,
     "quantization_config.load_in_4bit": False,
     "decoder_config.decoding_mode": "greedy",
     "latency_simulation.simulate": False,
@@ -115,8 +113,8 @@ updates_a4 = {
     "config_name": "A4_Latency_Ignorance_Exploit",  
     "batching_options.batch_size___fixed_batching": 32,
     "fp_precision": "float16",
-    "quantization_config.quantization": True,
-    "quantization_config.load_in_8bit": True,
+    "quantization_config.quantization": False,
+    "quantization_config.load_in_8bit": False,
     "quantization_config.load_in_4bit": False,
     "decoder_config.decoding_mode": "greedy",
     "latency_simulation.simulate": False,
