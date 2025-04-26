@@ -38,11 +38,6 @@ def handle_signal(signum, frame):
     # use os._exit to kill all threads immediately
     os._exit(1)
 
-# Register cleanup on normal exit and signals
-atexit.register(cleanup_distributed)
-for sig in (signal.SIGINT, signal.SIGTERM):
-    signal.signal(sig, handle_signal)
-
 
 def load_prompts():
     ds = load_dataset("AIEnergyScore/text_generation")
@@ -61,6 +56,12 @@ def main():
 
     # Relaunch under Accelerate if needed
     if not args.launched:
+        # we’re on the driver; make sure we clean up the process group
+        # if the driver is killed before Accelerate even launches.
+        atexit.register(cleanup_distributed)
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(sig, handle_signal)        
+            
         script = os.path.abspath(__file__)
         logging.info("Relaunching script under accelerate...")
         launch_config_accelerate_cli(

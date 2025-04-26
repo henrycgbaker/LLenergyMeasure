@@ -153,11 +153,15 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
         generation_kwargs = {
             "min_length": min_length_val,
             "max_new_tokens": min(max_output_tokens, allowed_new_tokens),
-            "do_sample": decoder_cfg.get("decoder_temperature", 0) > 0,
-            "temperature": decoder_cfg.get("decoder_temperature", None),
-            "top_k": decoder_cfg.get("decoder_top_k", None),
-            "top_p": decoder_cfg.get("decoder_top_p", None)
         }
+        temp = decoder_cfg.get("decoder_temperature", 0.0)
+        if temp and temp > 0:
+            # only include sampling args when temperature > 0
+            generation_kwargs["do_sample"] = True
+            generation_kwargs["temperature"] = temp
+            generation_kwargs["top_k"] = decoder_cfg.get("decoder_top_k", None)
+            generation_kwargs["top_p"] = decoder_cfg.get("decoder_top_p", None)
+        # else: leave do_sample=False (the default) and don't pass temperature
         
         # Run timed inference on the batch.
         start_time = time.perf_counter()

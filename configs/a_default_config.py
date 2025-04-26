@@ -53,6 +53,6 @@ base_config = {
         "quantization": None,          # Default None, updated when experiments specify quantisation settings.
         "load_in_8bit": None,          # None if not applicable.
         "load_in_4bit": None,          # None if not applicable.
-        "cached_flops_for_quantised_models": 16949970993152  # FLOPs value for quantized models.
+        "cached_flops_for_quantised_models": 52638582308864  # FLOPs value for quantized models.
     }
 }

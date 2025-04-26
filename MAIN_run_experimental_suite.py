@@ -2,7 +2,7 @@
 """
 run_experimental_suite.py
 
-Orchestrates large‑scale experimental suites.
+Orchestrates large-scale experimental suites.
 Persists cycle numbering across runs via progress_trackers/cycle_id.txt
 """
 
@@ -25,12 +25,12 @@ logging.basicConfig(
     format="[%(process)d] - %(asctime)s - %(levelname)s - %(message)s"
 )
 
-CYCLES_OF_FULL_SUITE = 10
+CYCLES_OF_FULL_SUITE = 1
 
 SINGLE_EXP_SCRIPT = os.path.abspath("MAIN_a_single_experiment.py")
 
 PERSISTENT_TRACKER_DIR = "persistent_progress_trackers"
-PROGRESS_FILE = os.path.join(PERSISTENT_TRACKER_DIR,"configs_run_progress.json")
+PROGRESS_FILE = os.path.join(PERSISTENT_TRACKER_DIR, "configs_run_progress.json")
 CYCLE_ID_FILE = os.path.join(PERSISTENT_TRACKER_DIR, "cycle_id.txt")
 
 
@@ -121,29 +121,30 @@ def run_cycle(config_list, suite_name, cycle_num, done_map, model_name):
 
 def main():
     models_list = [
-        #"TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-        "meta-llama/Llama-3.2-1B",
+        # "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+        #"meta-llama/Llama-3.2-1B",
         "meta-llama/Llama-3.2-3B",
-        "meta-llama/Llama-3.1-8B",
+        # "meta-llama/Llama-3.1-8B",
     ]
-    
+
     suites = [
-        ("Controlled", controlled_config_list),
-        ("Scenario", scenario_config_list),
-        #("GridSearch", grid_config_list),
+        #("Controlled", controlled_config_list),
+        #("Scenario",  scenario_config_list),
+         ("GridSearch", grid_config_list),
     ]
 
-    done_map = load_progress()
-    
+    done_map    = load_progress()
     start_cycle = load_cycle_id(default=1)
-    end_cycle = start_cycle + CYCLES_OF_FULL_SUITE
+    end_cycle   = start_cycle + CYCLES_OF_FULL_SUITE
 
-    for model in models_list:
-        logging.info("=== Model: %s ===", model)
+    # run exactly CYCLES_OF_FULL_SUITE cycles in total
+    for cycle in range(start_cycle, end_cycle):
+        logging.info("=== Starting full cycle %s ===", cycle)
 
-        for cycle in range(start_cycle, end_cycle):
-            for suite_name, original_list in tqdm(suites, desc=f"Cycle {cycle}", unit="suite"):
-                # expand per‑model
+        for model in models_list:
+            logging.info("--- Model: %s ---", model)
+            for suite_name, original_list in tqdm(suites, desc=f"Model {model}", unit="suite"):
+                # expand per-model
                 expanded = []
                 for cfg in original_list:
                     new = cfg.copy()
@@ -152,10 +153,10 @@ def main():
 
                 run_cycle(expanded, suite_name, cycle, done_map, model)
 
-            # after completing this cycle for all suites, bump and save
-            next_cycle = cycle + 1
-            save_cycle_id(next_cycle)
-            logging.info("Persisted next cycle as %s", next_cycle)
+        # after completing ALL models & suites, bump and save the cycle
+        next_cycle = cycle + 1
+        save_cycle_id(next_cycle)
+        logging.info("Persisted next cycle as %s", next_cycle)
 
     logging.info("All experimental suites have been executed.")
 
