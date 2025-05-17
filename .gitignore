@@ -12,6 +12,10 @@ __pycache__/
 *.pyo
 *.pyd
 
+# igore logs
+*.csv
+*.logs
+
 # Ignore installed dependencies
 site-packages/
 *.egg-info/
