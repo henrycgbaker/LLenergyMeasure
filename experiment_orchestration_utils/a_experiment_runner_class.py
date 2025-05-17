@@ -9,7 +9,7 @@ import gc
 
 logging.getLogger("codecarbon").setLevel(logging.ERROR)
 
-# Adjust paths -> import helper functions
+# adjust paths -> import helper functions
 project_root = os.getcwd()  
 if project_root not in sys.path:
     sys.path.append(project_root)
@@ -17,7 +17,6 @@ helper_functions_path = os.path.join(project_root, "helper_functions")
 if helper_functions_path not in sys.path:
     sys.path.append(helper_functions_path)
 
-# from experiment_core's helper functions
 from experiment_core_utils.a_distributed import get_accelerator, get_shared_unique_id, get_original_generate_method, check_failed_flag, safe_wait
 from experiment_core_utils.b_model_loader import load_model_tokenizer
 from experiment_core_utils.c_prompt_processing import filter_n_prompts, sort_prompts
@@ -40,7 +39,7 @@ class ExperimentRunner:
         self.inference_kwargs = inference_kwargs # if i build in non-text gen tasks types (e.g sumamrization etc)
 
     def run_setup(self):
-        # Safely destroy any existing distributed setup from a previous run.
+        # safely destroy any existing distributed setup from a previous run.
         if dist.is_available() and dist.is_initialized():
             try:
                 dist.destroy_process_group()
@@ -50,19 +49,19 @@ class ExperimentRunner:
         
 
     def unique_id(self):
-        # Initialize Accelerator.
+        # init Accelerator.
         accelerator = get_accelerator(self.config.gpu_list, self.config.num_processes)
         self.accelerator = accelerator
         accelerator.print("Accelerator set up")
 
-        # Generate and share unique ID across processes.
+        # generate and share unique ID across processes.
         experiment_id = get_shared_unique_id(accelerator)
         self.experiment_id = experiment_id
         accelerator.print(f"Unique experiment id: {experiment_id}")
 
     def run_torch(self):
         try:
-            # Extract configuration parameters.
+            # extract configuration parameters.
             model_name        = self.config.model_name
             inference_type    = self.config.inference_type 
             num_input_prompts = self.config.num_input_prompts
@@ -71,7 +70,7 @@ class ExperimentRunner:
             accelerator = self.accelerator
             experiment_id = self.experiment_id
 
-            # Load model and tokenizer on main process first.
+            # load model and tokenizer on main process first.
             with accelerator.main_process_first():
                 model_undistributed, tokenizer = load_model_tokenizer(self.config)
             accelerator.print(f"{model_name} loaded using {self.config.backend}, with precision {self.config.fp_precision}")
@@ -79,14 +78,14 @@ class ExperimentRunner:
             check_failed_flag(accelerator)
             safe_wait(accelerator, "after load_model_tokenizer")
 
-            # Save original generate method.
+            # save original generate method.
             orig_generate_method = get_original_generate_method(model_undistributed)
             if orig_generate_method is None:
                 logger.warning("Could not locate the original generate method.")
             else:
                 accelerator.print("Original generate method saved.")
 
-            # Prepare model/tokenizer for distributed use.
+            # prepare model/tokenizer for distributed use.
             model, tokenizer = accelerator.prepare(model_undistributed, tokenizer)
             accelerator.print("Model and tokenizer prepared")
             
@@ -97,14 +96,14 @@ class ExperimentRunner:
             check_failed_flag(accelerator)
             safe_wait(accelerator, "after logging device info")
 
-            # Reassign generate method.
+            # reassign generate method.
             if orig_generate_method:
                 if hasattr(model, "module"):
                     model.module.generate = orig_generate_method
                 model.generate = orig_generate_method
                 accelerator.print("Original generate method reassigned")
 
-            # Dummy forward pass.
+            # dummy forward pass.
             dummy_input = tokenizer("Hello world", return_tensors="pt", truncation=True, max_length=max_input_tokens).input_ids.to(accelerator.device)
             with torch.no_grad():
                 _ = model(dummy_input)
@@ -113,22 +112,22 @@ class ExperimentRunner:
             check_failed_flag(accelerator)
             safe_wait(accelerator, "after dummy forward pass")
             
-            # Warm-up here on all processes
+            # warm-up here on all processes
             warm_up(model, tokenizer, self.config, num_warmup_runs=3)
             
             check_failed_flag(accelerator)
             safe_wait(accelerator, "after warm up")
 
-            # Filter & sort prompts based on non-tokenised string length.
+            # filter & sort prompts based on non-tokenised string length.
             prompts_n_filtered = filter_n_prompts(prompts=self.prompts, num_input_prompts=num_input_prompts)
             prompts_sorted = sort_prompts(prompts_n_filtered)
             accelerator.print(f"Prompts processed: {len(prompts_sorted)} prompts.")
 
-            # Start energy tracking.
+            # start energy tracking.
             tracker = start_energy_tracking()
             accelerator.print("Energy tracking started")
             
-            # Run inference.
+            # run inference.
             if inference_type == "pure_generative":
                 accelerator.print(f"Task type: {inference_type}")
                 try:
@@ -156,14 +155,14 @@ class ExperimentRunner:
 
             logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}]: Inference complete")
 
-            # Stop energy tracking.
+            # stop energy tracking.
             codecarbon_data = stop_energy_tracking(tracker)
             logger.info(f"[Process {os.getpid()}][GPU {accelerator.device.index}]: Energy tracking stopped")
 
             check_failed_flag(accelerator)
             safe_wait(accelerator, "after energy tracking stopped")
             
-            # Conditionally decode token_id output (only main process).
+            # conditionally decode token_id output (only main process).
             if accelerator.is_main_process:
                 if self.config.decode_token_to_text:
                     try:
@@ -201,7 +200,7 @@ class ExperimentRunner:
                     self.outputs = None
                     accelerator.print("Did not save output")
             
-            # Save experiment-wide meta info (only main process).
+            # save experiment-wide meta info (only main process).
             if accelerator.is_main_process:
                 self.experiment_setup = get_experiment_setup(
                     experiment_config=self.config, codecarbon_data=codecarbon_data, experiment_id=experiment_id
@@ -217,7 +216,7 @@ class ExperimentRunner:
                 
             accelerator.print("Experiment-wide meta info saved")
 
-            # Save experiment-wide results (only main process).
+            # save experiment-wide results (only main process).
             if accelerator.is_main_process:
                 self.inference_metrics = combine_inference_metrics(raw_inference_results, accelerator)
                 save_raw_results_json(experiment_id, "4_inference_metrics", self.inference_metrics)
@@ -231,7 +230,7 @@ class ExperimentRunner:
             check_failed_flag(accelerator)
             safe_wait(accelerator, "after saving experiment metrics")
             
-            # Save per-process energy metrics.
+            # save per-process energy metrics.
             try:
                 local_energy_results = combine_energy_metrics(codecarbon_data, accelerator)
                 logger.info(f"Process {accelerator.local_process_index}: Energy metrics combined successfully.")
@@ -239,7 +238,7 @@ class ExperimentRunner:
                 logger.error(f"Process {accelerator.local_process_index}: Error in combine_energy_metrics: {e}")
                 local_energy_results = None
 
-            # Save to a shared directory with a standardized filename.
+            # save to a shared directory with a standardized filename.
             save_raw_results_json(
                 experiment_id, 
                 "6_local_energy_results", 
@@ -252,7 +251,7 @@ class ExperimentRunner:
             
             accelerator.print("Experiment finished")
 
-            # Final cleanup: attempt to destroy the process group.
+            # final cleanup: attempt to destroy the process group.
             if dist.is_available() and dist.is_initialized():
                 try:
                     dist.destroy_process_group()
@@ -475,7 +474,6 @@ class ExperimentRunner:
             print(f"Exception during garbage collection: {e}", file=sys.stderr)
 
         print("Teardown process complete.")
-
 
 
 

@@ -12,7 +12,7 @@ def main(scenario_config=None,
     if models_list is None:
         print("No models provided. Defaulting to TinyLlama")
         
-    # Configure logging to display INFO-level messages
+    # configure logging to display INFO-level messages
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     script_path = "MAIN_a_single_experiment.py"
     

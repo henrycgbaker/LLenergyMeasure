@@ -25,7 +25,7 @@ logging.basicConfig(
     format="[%(process)d] - %(asctime)s - %(levelname)s - %(message)s"
 )
 
-CYCLES_OF_FULL_SUITE = 1
+CYCLES_OF_FULL_SUITE = 5
 
 SINGLE_EXP_SCRIPT = os.path.abspath("MAIN_a_single_experiment.py")
 
@@ -121,7 +121,7 @@ def run_cycle(config_list, suite_name, cycle_num, done_map, model_name):
 
 def main():
     models_list = [
-        # "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+        #"TinyLlama/TinyLlama-1.1B-Chat-v1.0",
         #"meta-llama/Llama-3.2-1B",
         "meta-llama/Llama-3.2-3B",
         # "meta-llama/Llama-3.1-8B",
@@ -130,7 +130,7 @@ def main():
     suites = [
         #("Controlled", controlled_config_list),
         #("Scenario",  scenario_config_list),
-         ("GridSearch", grid_config_list),
+        ("GridSearch", grid_config_list),
     ]
 
     done_map    = load_progress()

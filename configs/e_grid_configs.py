@@ -45,7 +45,6 @@ burst_interval_vals = [4.0,  6.0]
 burst_size_vals     = [8, 16]
 
 latency_map = {
-    # no latency at all
     "no_latency": {
         "latency_simulation.simulate": False
     }
@@ -80,7 +79,7 @@ grid_variations = {
     "num_processes": [1, 2, 3, 4],
     "batching_options.batch_size___fixed_batching": [2, 4, 8, 16, 32, 64],
     "precision": list(precision_map.keys()),                       
-    "decoder_config.decoder_temperature": [0.0, 0.8],
+    "decoder_config.decoder_temperature": [0.8],
     "decoder_config.decoder_top_p": [0.8],                         
     "latency": list(latency_map.keys()),                            
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import os
-# Ensure CUDA allocator config is set before any torch import
+# NEED TO ensure CUDA allocator config is set before any torch import
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128,garbage_collection_threshold:0.6")
 
 import sys
@@ -35,7 +35,7 @@ def cleanup_distributed():
 def handle_signal(signum, frame):
     logging.warning(f"Received signal {signum}, performing cleanup and exiting.")
     cleanup_distributed()
-    # use os._exit to kill all threads immediately
+    # use os._exit to kill all threads immediately!!
     os._exit(1)
 
 
@@ -56,8 +56,7 @@ def main():
 
     # Relaunch under Accelerate if needed
     if not args.launched:
-        # we’re on the driver; make sure we clean up the process group
-        # if the driver is killed before Accelerate even launches.
+        # here we’re on the driver; make sure we clean up the process group if the driver is killed before Accelerate even launches.
         atexit.register(cleanup_distributed)
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, handle_signal)        
@@ -107,7 +106,7 @@ def main():
         else:
             logging.error("Experiment reported failure (success=False).")
 
-    # Final cleanup and exit
+    # final cleanup and exit
     cleanup_distributed()
     sys.exit(0)
 

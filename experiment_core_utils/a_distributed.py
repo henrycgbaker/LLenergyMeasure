@@ -69,7 +69,7 @@ def get_shared_unique_id(accelerator):
     """
     unique_id_list = [""]
     if accelerator.is_main_process:
-        unique_id_list[0] = get_persistent_unique_id()  # Your function that returns a unique string.
+        unique_id_list[0] = get_persistent_unique_id() 
     # Ensure the distributed group is initialized and all processes call this.
     if dist.is_available() and dist.is_initialized():
         dist.broadcast_object_list(unique_id_list, src=0)

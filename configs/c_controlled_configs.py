@@ -217,9 +217,6 @@ def validate_config(cfg):
     for key in required_top_level_keys:
         assert key in cfg, f"Missing required key '{key}' in config: {cfg}"
 
-    # Optionally, check the 'suite' value is set correctly.
-    # (This might be updated later in the generation; otherwise you could allow None)
-    # For example, if a real config must have "controlled" and defaults should not be None:
     assert cfg["suite"] in ["controlled", None], f"Unexpected suite value: {cfg['suite']}"
 
     # --- Decoder Config ---
@@ -286,7 +283,6 @@ __all__ = ["controlled_config_list"]
 if __name__ == "__main__":
     print("Validating all controlled configs...\n")
     
-    # If you didn't already pre-fill the config in generation, do it now:
     for cfg in controlled_config_list:
         fill_missing_keys(cfg)
     

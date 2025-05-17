@@ -26,7 +26,6 @@ class ExperimentConfig:
     backend: Literal["pytorch", "tensorRT", "deepserve", "vllm"] = "pytorch"  
     cycle_id: Optional[int] = None
 
-    # Extra metadata fields will be stored here.
     extra_metadata: Dict[str, Any] = field(default_factory=dict, init=False)
 
     def __init__(self, **kwargs):
