@@ -2,110 +2,163 @@
 """
 run_experimental_suite.py
 
-This script orchestrates large-scale experimental suites.
-It supports three types of experiments:
-  1. Controlled Experiments (isolating one parameter at a time)
-  2. Scenarios (realistic vs. artificially optimized deployment conditions)
-  3. Grid Search (exploring multiple models and parameter combinations)
-
-The script organizes runs into cycles, randomizes the order of configuration runs,
-and launches each configuration-run via the Accelerate CLI (using a dedicated launcher module).
-
-Results from each configuration-run are saved independently for later aggregation.
+Orchestrates large-scale experimental suites.
+Persists cycle numbering across runs via progress_trackers/cycle_id.txt
 """
 
 import os
 import random
 import logging
 import time
+import json
+from tqdm import tqdm
+
 from experiment_orchestration_utils.c_launcher_utils import launch_config_accelerate_cli
 
-from configs.b_models_config import huggingface_models, models_config_list
-from configs.c_controlled_configs import controlled_config_list   
-from configs.d_scenario_configs import scenario_config_list         
-from configs.e_grid_configs import grid_config_list    
+from configs.c_controlled_configs import controlled_config_list
+from configs.d_scenario_configs import scenario_config_list
+from configs.e_grid_configs import grid_config_list
 
-logging.basicConfig(level=logging.INFO, format="[%(process)d] - %(asctime)s - %(levelname)s - %(message)s")
+# Logging setup
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(process)d] - %(asctime)s - %(levelname)s - %(message)s"
+)
 
-CYCLES_PER_SUITE = 1   
+CYCLES_OF_FULL_SUITE = 5
 
-# Path to the single experiment script that runs one configuration-run.
 SINGLE_EXP_SCRIPT = os.path.abspath("MAIN_a_single_experiment.py")
-    
-def run_cycle(config_list, suite_name, cycle_num):
+
+PERSISTENT_TRACKER_DIR = "persistent_progress_trackers"
+PROGRESS_FILE = os.path.join(PERSISTENT_TRACKER_DIR, "configs_run_progress.json")
+CYCLE_ID_FILE = os.path.join(PERSISTENT_TRACKER_DIR, "cycle_id.txt")
+
+
+def load_progress():
     """
-    Runs one cycle of experiments for a given list of configurations.
-    Randomizes the order of configuration runs within the cycle.
+    Returns a dict mapping run_id -> experiment_id (or None).
     """
-    logging.info("Starting Cycle %s for suite '%s'", cycle_num, suite_name)
-    
-    # Randomize the order of configuration runs to avoid systematic bias.
-    randomized_configs = config_list.copy()
-    random.shuffle(randomized_configs)
-    
-    for config in randomized_configs:
-        config_name = config.get("config_name", "unnamed")
-        logging.info("Cycle %s: Launching configuration-run for '%s'", cycle_num, config_name)
+    if os.path.exists(PROGRESS_FILE):
+        with open(PROGRESS_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+
+def save_progress(done_map):
+    """
+    Atomically dump the entire progress map once per configuration run.
+    """
+    tmp = PROGRESS_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(done_map, f, indent=2)
+    os.replace(tmp, PROGRESS_FILE)
+
+
+def load_cycle_id(default=1):
+    os.makedirs(PERSISTENT_TRACKER_DIR, exist_ok=True)
+    if os.path.exists(CYCLE_ID_FILE):
         try:
-            launch_config_accelerate_cli(config, SINGLE_EXP_SCRIPT, extra_args=["--launched"])
-            logging.info("Cycle %s: Configuration-run for '%s' completed successfully.", cycle_num, config_name)
+            with open(CYCLE_ID_FILE, 'r') as f:
+                return int(f.read().strip())
+        except Exception:
+            logging.warning("Could not read cycle tracker; starting at %s", default)
+    # Initialize tracker file with default
+    save_cycle_id(default)
+    return default
+
+
+def save_cycle_id(next_cycle):
+    """
+    Persist the next cycle_id to tracker file.
+    Ensures tracker directory exists.
+    """
+    os.makedirs(PERSISTENT_TRACKER_DIR, exist_ok=True)
+    with open(CYCLE_ID_FILE, 'w') as f:
+        f.write(str(next_cycle))
+
+
+def run_cycle(config_list, suite_name, cycle_num, done_map, model_name):
+    logging.info("Starting Cycle %s for suite '%s' (model=%s)", cycle_num, suite_name, model_name)
+
+    randomized = config_list.copy()
+    random.shuffle(randomized)
+
+    for cfg in tqdm(randomized, desc=f"{suite_name} cycle {cycle_num}", unit="config"):
+        # embed cycle id into config
+        cfg['cycle_id'] = cycle_num
+
+        name = cfg.get("config_name", "unnamed")
+        run_id = f"{model_name}::{suite_name}::{name}::cycle_{cycle_num}"
+
+        if run_id in done_map:
+            tqdm.write(f"[SKIP] {run_id} already done")
+            continue
+
+        logging.info("Cycle %s: Launching %s", cycle_num, run_id)
+        try:
+            result = launch_config_accelerate_cli(
+                cfg, SINGLE_EXP_SCRIPT, extra_args=["--launched"]
+            )
+            exp_id = None
+            if isinstance(result, dict):
+                exp_id = result.get("experiment_id")
+
+            logging.info(
+                "Cycle %s: Completed %s (experiment_id=%s)",
+                cycle_num, run_id, exp_id
+            )
+
+            # record it
+            done_map[run_id] = exp_id
+            save_progress(done_map)
+            logging.info("Saved progress for %s (cycle %s)", run_id, cycle_num)
+
         except Exception as e:
-            logging.error("Cycle %s: Configuration-run for '%s' failed: %s", cycle_num, config_name, e)
-        
+            logging.error("Cycle %s: Run FAILED for %s: %s", cycle_num, run_id, e)
+
         time.sleep(2)
-    
-    logging.info("Completed Cycle %s for suite '%s'", cycle_num, suite_name)
 
-
-def run_suite(config_list, suite_name):
-    """
-    Runs a complete experimental suite by executing multiple cycles for a given set of configurations.
-    """
-    logging.info("Starting Experimental Suite: '%s'", suite_name)
-    for cycle in range(1, CYCLES_PER_SUITE + 1):
-        run_cycle(config_list, suite_name, cycle)
-    logging.info("Completed Experimental Suite: '%s'", suite_name)
-
-
-
-huggingface_models = [
-    #"TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-    "meta-llama/Llama-3.2-1B",
-    "meta-llama/Llama-3.2-3B",
-    #"meta-llama/Llama-3.1-8B",
-]
-suites = [
-        ("Scenario", scenario_config_list),
-        ("Controlled", controlled_config_list),
-        #("Models", models_config_list),
-        #("GridSearch", grid_config_list),
-    ]
 
 def main():
-    for model in huggingface_models:
-        logging.info("Starting experiments for model: %s", model)
-        
-        for suite_name, original_config_list in suites:
+    models_list = [
+        #"TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+        #"meta-llama/Llama-3.2-1B",
+        "meta-llama/Llama-3.2-3B",
+        # "meta-llama/Llama-3.1-8B",
+    ]
 
-            new_config_list = []
-        
-            for config in original_config_list:
-                new_config = config.copy()  # Create a shallow copy; use deepcopy() if nested objects exist.
-                new_config["model_name"] = model
-                if model == "TinyLlama/TinyLlama-1.1B-Chat-v1.0": 
-                    new_config["cached_flops_for_quantised_models"] = 16949970993152
-                elif model == "meta-llama/Llama-3.2-1B":
-                    new_config["cached_flops_for_quantised_models"] = 20248623316992
-                elif model == "meta-llama/Llama-3.2-3B":
-                    new_config["cached_flops_for_quantised_models"] = 52638582308864
-               
-                new_config_list.append(new_config)
-            
-            # Run the suite with the updated configuration list.
-            run_suite(new_config_list, f"{suite_name} ({model})")
-    
+    suites = [
+        #("Controlled", controlled_config_list),
+        #("Scenario",  scenario_config_list),
+        ("GridSearch", grid_config_list),
+    ]
+
+    done_map    = load_progress()
+    start_cycle = load_cycle_id(default=1)
+    end_cycle   = start_cycle + CYCLES_OF_FULL_SUITE
+
+    # run exactly CYCLES_OF_FULL_SUITE cycles in total
+    for cycle in range(start_cycle, end_cycle):
+        logging.info("=== Starting full cycle %s ===", cycle)
+
+        for model in models_list:
+            logging.info("--- Model: %s ---", model)
+            for suite_name, original_list in tqdm(suites, desc=f"Model {model}", unit="suite"):
+                # expand per-model
+                expanded = []
+                for cfg in original_list:
+                    new = cfg.copy()
+                    new["model_name"] = model
+                    expanded.append(new)
+
+                run_cycle(expanded, suite_name, cycle, done_map, model)
+
+        # after completing ALL models & suites, bump and save the cycle
+        next_cycle = cycle + 1
+        save_cycle_id(next_cycle)
+        logging.info("Persisted next cycle as %s", next_cycle)
+
     logging.info("All experimental suites have been executed.")
-    
 
 
 if __name__ == "__main__":

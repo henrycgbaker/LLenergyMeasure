@@ -142,15 +142,26 @@ def run_gen_inference(model, experiment_config, prompts, tokenizer, accelerator)
         total_allowed_length = tokenizer.model_max_length  # e.g., 2048 tokens.
         current_length = batch_encoded["input_ids"].shape[1]  # should be max_input_tokens (2048) due to truncation.
         allowed_new_tokens = max(0, total_allowed_length - current_length)
+        min_length = experiment_config.min_output_tokens or 0
+        min_length_val = batch_encoded["input_ids"].shape[1] + min_length
+        
+        if allowed_new_tokens < min_length:
+            raise ValueError("The prompt is too long; not enough space to generate the minimum required tokens.")
+
         decoder_cfg = experiment_config.decoder_config or {}
 
         generation_kwargs = {
+            "min_length": min_length_val,
             "max_new_tokens": min(max_output_tokens, allowed_new_tokens),
-            "do_sample": decoder_cfg.get("decoder_temperature", 0) > 0,
-            "temperature": decoder_cfg.get("decoder_temperature", None),
-            "top_k": decoder_cfg.get("decoder_top_k", None),
-            "top_p": decoder_cfg.get("decoder_top_p", None)
         }
+        temp = decoder_cfg.get("decoder_temperature", 0.0)
+        if temp and temp > 0:
+            # only include sampling args when temperature > 0
+            generation_kwargs["do_sample"] = True
+            generation_kwargs["temperature"] = temp
+            generation_kwargs["top_k"] = decoder_cfg.get("decoder_top_k", None)
+            generation_kwargs["top_p"] = decoder_cfg.get("decoder_top_p", None)
+        # else: leave do_sample=False (the default) and don't pass temperature
         
         # Run timed inference on the batch.
         start_time = time.perf_counter()

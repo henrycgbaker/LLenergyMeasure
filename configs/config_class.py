@@ -10,6 +10,7 @@ class ExperimentConfig:
     inference_type: Literal["pure_generative", "reasoning"] = "pure_generative"
     max_input_tokens: int = 512
     max_output_tokens: int = 128
+    min_output_tokens: int = 0
     num_input_prompts: int = 1 
     save_outputs: bool = False
     decode_token_to_text: bool = False
@@ -23,8 +24,8 @@ class ExperimentConfig:
     fp_precision: Literal["float32", "float16", "float8"] = "float32"
     quantization_config: Optional[Dict[str, Any]] = field(default_factory=dict)
     backend: Literal["pytorch", "tensorRT", "deepserve", "vllm"] = "pytorch"  
+    cycle_id: Optional[int] = None
 
-    # Extra metadata fields will be stored here.
     extra_metadata: Dict[str, Any] = field(default_factory=dict, init=False)
 
     def __init__(self, **kwargs):

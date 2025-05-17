@@ -1,6 +1,10 @@
 base_config = {
-    # Default values that will be remain constant across experiments 
-    "config_name": "default",
+    "config_name": None,     # To be updated by experiments.
+    "suite": None,                # Will be updated when controlled variations apply.
+    "controlled_variation": {},   # Holds details about the applied variation; default empty.
+    "scenario_info": {},              # specific to scenario configs
+    "cycle_id": None,            # to be injected later
+        
     "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0", 
     "is_encoder_decoder": False,
     "task_type": "text_generation",
@@ -9,10 +13,11 @@ base_config = {
     "backend": "pytorch",
     "save_outputs": True,
     
-    # Default values that will be overridden by the grid:
-    "max_input_tokens": 128, #2048 is Llama's limit
+    # Default values that will be overridden by the grid
+    "max_input_tokens": 128,        # 2048 is Llama's limit.
     "max_output_tokens": 128,
-    "num_input_prompts": 128,  # 500 * 200 = 100,000 output tokens.
+    "min_output_tokens": 128,
+    "num_input_prompts": 128,         
     "decode_token_to_text": True,
     "num_processes": 4,
     "batching_options": {
@@ -26,27 +31,28 @@ base_config = {
             "use_orig_params": False,
             "cpu_offload": False
         },
-        "sharding_strategy": "NO_SHARD" #FULL_SHARD doesn't work
+        "sharding_strategy": "NO_SHARD"  # Use "NO_SHARD"; FULL_SHARD doesn't work.
     },
     "query_rate": 1.0,
-    "latency_simulation" : {
-        "simulate": False,        # If True, introduce artificial delays.
-        "delay_min": 0,           # Minimum delay (in seconds, e.g. 50ms).
-        "delay_max": 0,         # Maximum delay (e.g. 300ms).
-        "simulate_burst": False,   # If True, simulate burst traffic conditions.
-        "burst_interval": 0.0,    # After a burst, wait for this many seconds.
-        "burst_size": 0           # Define a burst as every 5 batches.
+    "latency_simulation": {
+        "simulate": False,        # Whether to introduce artificial delays.
+        "delay_min": 0,           # Minimum delay in seconds (e.g., 0.05 for 50ms).
+        "delay_max": 0,           # Maximum delay in seconds (e.g., 0.3 for 300ms).
+        "simulate_burst": False,  
+        "burst_interval": 0.0,    
+        "burst_size": 0           
     },
-    "decoder_config":{
-        "decoder_temperature": 1.0,
-        "decoder_top_k": 0,      
-        "decoder_top_p": 0.0
-    }, 
-    "fp_precision": "float32", # float16
+    "decoder_config": {
+        "decoding_mode": None,         
+        "decoder_temperature": 1.0,      
+        "decoder_top_k": None,           # Set to None if top_k sampling is not applicable.
+        "decoder_top_p": None            # Set to None if top_p sampling is not applicable.
+    },
+    "fp_precision": "float32",           
     "quantization_config": {
-        "quantization": True,
-        "load_in_8bit": False,
-        "load_in_4bit": True,
-        "cached_flops_for_quantised_models": 16949970993152 # For quantized models, store a cached FLOPs value! 
+        "quantization": None,          
+        "load_in_8bit": None,          
+        "load_in_4bit": None,          
+        "cached_flops_for_quantised_models": 52638582308864  # FLOPs value for quantized models. I had so many issues calculating FLOPs / FLOPs equivalent when loading quantised models, so this was hthe botched workaround
     }
 }

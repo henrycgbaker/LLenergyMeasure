@@ -47,6 +47,7 @@ def get_experiment_setup(experiment_config, codecarbon_data, experiment_id):
     
     setup_info = {
         "experiment_id": experiment_id,
+        "cycle_id": experiment_config.cycle_id,
         "date_time": datetime.now().strftime("%B %d, %Y at %I:%M:%S %p"),
         "model": experiment_config.model_name,
         "is_encoder_decoder": is_encoder_decoder,
