@@ -24,3 +24,5 @@ site-packages/
 ~/.cache/huggingface/
 
 results/
+
+to_do.ipynb
