@@ -3764,5 +3764,9 @@
   "meta-llama/Llama-3.2-3B::GridSearch::num_processes_3_batching_4_precision_fp16_temp_0.8_topp_0.8_latency_const_0.1_0.2::cycle_2": null,
   "meta-llama/Llama-3.2-3B::GridSearch::num_processes_4_batching_4_precision_fp32_temp_0.8_topp_0.8_latency_bursty_0.1_0.2_i4_s8::cycle_2": null,
   "meta-llama/Llama-3.2-3B::GridSearch::num_processes_2_batching_2_precision_int4_temp_0.8_topp_0.8_latency_bursty_0.4_0.5_i4_s16::cycle_2": null,
-  "meta-llama/Llama-3.2-3B::GridSearch::num_processes_1_batching_16_precision_int4_temp_0.8_topp_0.8_latency_bursty_0.1_0.2_i4_s16::cycle_2": null
+  "meta-llama/Llama-3.2-3B::GridSearch::num_processes_1_batching_16_precision_int4_temp_0.8_topp_0.8_latency_bursty_0.1_0.2_i4_s16::cycle_2": null,
+  "meta-llama/Llama-3.2-3B::GridSearch::num_processes_4_batching_16_precision_fp16_temp_0.8_topp_0.8_latency_bursty_0.1_0.2_i6_s8::cycle_2": null,
+  "meta-llama/Llama-3.2-3B::GridSearch::num_processes_3_batching_8_precision_fp16_temp_0.8_topp_0.8_latency_bursty_0.1_0.2_i6_s8::cycle_2": null,
+  "meta-llama/Llama-3.2-3B::GridSearch::num_processes_3_batching_64_precision_fp16_temp_0.8_topp_0.8_latency_bursty_0.1_0.2_i6_s16::cycle_2": null,
+  "meta-llama/Llama-3.2-3B::GridSearch::num_processes_1_batching_4_precision_fp32_temp_0.8_topp_0.8_latency_bursty_0.1_0.2_i4_s8::cycle_2": null
 }
