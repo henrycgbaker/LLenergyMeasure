@@ -6,8 +6,12 @@ Built with Typer and Rich for beautiful, interactive terminal experience.
 
 import json
 import sys
+import warnings
 from pathlib import Path
 from typing import Optional
+
+# Suppress PyTorch's pynvml deprecation warning (PyTorch issue, not ours)
+warnings.filterwarnings('ignore', category=FutureWarning, module='torch.cuda')
 
 import typer
 from rich.console import Console

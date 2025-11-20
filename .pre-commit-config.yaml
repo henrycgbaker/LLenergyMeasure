@@ -25,3 +25,18 @@ repos:
       - id: mypy
         additional_dependencies: [types-all]
         args: [--ignore-missing-imports]
+
+  - repo: local
+    hooks:
+      - id: pytest-cli
+        name: Run CLI tests
+        entry: pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+        args:
+          - tests/unit/test_cli.py
+          - -v
+          - --tb=short
+          - -x  # Stop on first failure
+        stages: [commit]
