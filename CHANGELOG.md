@@ -9,6 +9,88 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.5.0] - 2025-11-20
+
+### ⚡ Performance & Caching Optimizations
+
+Performance-focused release with comprehensive profiling and caching utilities.
+
+### Added
+
+**Performance Profiling (`utils/profiling.py`):**
+- `PerformanceProfiler` class for tracking execution time and resource usage
+- `@profile_function` decorator for automatic function profiling
+- `timer()` context manager for simple timing
+- `get_memory_usage()` - current memory statistics
+- `get_cpu_usage()` - current CPU utilization
+- Profile results export to JSON
+- Detailed performance summaries with percentages
+
+**Advanced Caching (`utils/cache.py`):**
+- `LRUCacheWithTTL` - LRU cache with time-to-live support
+  - Automatic expiration of old entries
+  - Size-based eviction (LRU policy)
+  - Hit rate tracking
+  - Persistent save/load to disk
+- `DiskCache` - File-based persistent caching
+  - Ideal for large objects
+  - TTL support
+  - Disk usage monitoring
+- `@cached_with_ttl` decorator for function result caching
+
+**Test Coverage:**
+- `test_profiling.py` - 12 tests for profiling utilities
+- `test_cache.py` - 25 tests for caching utilities
+- **Total test count: 186 (up from 149, +25% increase)**
+
+### Features
+
+**Profiling Example:**
+```python
+from llm_efficiency.utils import PerformanceProfiler
+
+profiler = PerformanceProfiler()
+
+with profiler.profile("model_loading"):
+    model = load_model(...)
+
+with profiler.profile("inference"):
+    outputs = model.generate(...)
+
+profiler.print_summary()  # Shows timing breakdown
+profiler.save_results("profile.json")
+```
+
+**Caching Example:**
+```python
+from llm_efficiency.utils import LRUCacheWithTTL, cached_with_ttl
+
+# Manual caching
+cache = LRUCacheWithTTL(maxsize=100, ttl=3600)
+cache.set("key", expensive_result)
+result = cache.get("key")
+
+# Decorator caching
+@cached_with_ttl(ttl=3600, maxsize=100)
+def expensive_computation(x):
+    return complex_calc(x)
+```
+
+### Changed
+
+- Enhanced `utils/__init__.py` with profiling and caching exports
+- Dependencies already include `psutil>=5.9.0` (no changes needed)
+
+### Performance Improvements
+
+- Function-level profiling for optimization insights
+- Memory usage tracking to identify leaks
+- LRU cache reduces redundant computations
+- Disk cache for large, reusable data structures
+- Hit rate monitoring for cache effectiveness
+
+---
+
 ## [1.4.0] - 2025-11-20
 
 ### 🛡️ Production Polish & Error Handling
@@ -243,6 +325,7 @@ Original thesis code with core functionality.
 
 | Version | Date | Description |
 |---------|------|-------------|
+| **1.5.0** | 2025-11-20 | Performance profiling + advanced caching (186 tests) |
 | **1.4.0** | 2025-11-20 | Production polish + error handling + pickle export |
 | **1.3.0** | 2025-11-20 | Modern CLI with Typer + Rich |
 | **1.2.1** | 2025-11-20 | Comprehensive test coverage (114 tests) |
