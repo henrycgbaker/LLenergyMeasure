@@ -423,15 +423,25 @@ def export(
 
 @app.command()
 def init(
-    output_file: Path = typer.Option(Path("config.json"), "--output", "-o", help="Output config file"),
+    output_file: Optional[Path] = typer.Argument(None, help="Output config file (default: config.json)"),
 ) -> None:
-    """Interactive configuration wizard."""
+    """
+    Interactive configuration wizard.
+
+    Examples:
+        llm-efficiency init                    # Creates config.json
+        llm-efficiency init my-experiment.json # Creates my-experiment.json
+    """
+    # Set default output file if not provided
+    if output_file is None:
+        output_file = Path("config.json")
+
     console.print(Panel.fit(
         "[bold]LLM Efficiency Configuration Wizard[/bold]\n"
         "Create a configuration file interactively",
         border_style="cyan"
     ))
-    
+
     # Model selection
     model_name = Prompt.ask("\n[cyan]Model name from HuggingFace[/cyan]", default="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
     
