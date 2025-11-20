@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-efficiency"
-version = "2.0.0-dev"
+version = "2.0.0-alpha.1"
 description = "Comprehensive LLM efficiency measurement framework"
 authors = [{name = "Henry Baker"}]
 readme = "README.md"
@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 keywords = ["llm", "efficiency", "energy", "inference", "benchmark"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
