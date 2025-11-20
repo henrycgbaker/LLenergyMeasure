@@ -9,6 +9,63 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.3.0] - 2025-11-20
+
+### 🚀 Modern CLI with Typer + Rich
+
+Added comprehensive command-line interface with beautiful terminal output.
+
+### Added
+
+**CLI Features:**
+- `llm-efficiency run` - Run experiments with rich progress bars
+- `llm-efficiency list` - List all experiments in formatted table
+- `llm-efficiency show <id>` - Display detailed experiment results
+- `llm-efficiency export <file>` - Export experiments to CSV
+- `llm-efficiency init` - Interactive configuration wizard
+- `llm-efficiency summary` - Generate summary statistics
+- Beautiful terminal output with Rich (colors, tables, panels)
+- Progress indicators during long operations
+- Version flag (`--version`)
+- Verbose logging option (`--verbose`)
+
+**Dependencies:**
+- Added `typer[all]>=0.9.0` for CLI framework
+- Added `rich>=13.7.0` for terminal formatting
+
+### Changed
+
+- Console entry point: `llm-efficiency` command now available after install
+- All CLI commands use modern Typer framework with type hints
+- Interactive prompts with validation and defaults
+
+---
+
+## [1.2.1] - 2025-11-20
+
+### 🧪 Comprehensive Test Coverage
+
+Expanded test suite with extensive unit tests for all core modules.
+
+### Added
+
+**New Test Files (73 additional tests):**
+- `test_distributed.py` - 15 tests for distributed computing
+- `test_model_loader.py` - 7 tests for model loading
+- `test_inference.py` - 9 tests for inference engine
+- `test_prompts.py` - 14 tests for data processing
+- `test_energy.py` - 8 tests for energy tracking
+- `test_results.py` - 20 tests for results management
+
+### Changed
+
+- **Test coverage**: Increased from 41 to 114 total tests
+- All core modules now have dedicated unit tests
+- Better separation of unit vs integration tests
+- Improved test fixtures and mocking
+
+---
+
 ## [1.2.0] - 2025-11-20
 
 ### 🎉 Complete Core Infrastructure
@@ -128,6 +185,8 @@ Original thesis code with core functionality.
 
 | Version | Date | Description |
 |---------|------|-------------|
+| **1.3.0** | 2025-11-20 | Modern CLI with Typer + Rich |
+| **1.2.1** | 2025-11-20 | Comprehensive test coverage (114 tests) |
 | **1.2.0** | 2025-11-20 | Core modules + clean results management |
 | **1.1.0** | 2025-11-20 | Foundation + FLOPs fix + testing |
 | **1.0.0** | 2024 | Original thesis code |
