@@ -2,149 +2,208 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+**Versioning**: X.Y.Z
+- **X** = Major stable release (0 = pre-release)
+- **Y** = New functionality
+- **Z** = Patches/bug fixes
 
-## [2.0.0-dev] - 2025-11-20
+---
 
-### 🎉 Major Refactor
+## [0.2.0] - 2025-11-20
 
-Complete rewrite and modernization of the LLM Efficiency Measurement Tool.
+### 🎉 Complete Core Infrastructure
+
+Major architectural improvements with all core modules implemented.
 
 ### Added
 
-- **New Package Structure**: Modern `src/` layout with proper Python packaging
-- **Pydantic Configuration**: Type-safe configuration models replacing nested dictionaries
-- **Fixed FLOPs Calculator**: Accurate FLOPs calculation for quantized models
-  - Implemented `FLOPsCalculator` class with caching
-  - Architectural estimation fallback
-  - Per-model accuracy (no more hardcoded values!)
-- **Comprehensive Testing**: pytest infrastructure with fixtures and markers
-  - Unit tests for configuration and FLOPs calculator
-  - Test fixtures for models and configurations
-  - CI/CD with GitHub Actions
-- **Type Hints**: Full type annotations throughout codebase
-- **Modern Tooling**:
-  - Ruff for linting and formatting
-  - MyPy for type checking
-  - Pre-commit hooks
-  - Rich for beautiful CLI output
-- **Better Logging**: Structured logging with Rich integration
-- **Documentation**: Comprehensive docs for all modules
+**Core Modules:**
+- Distributed computing with Accelerate (`core/distributed.py`)
+- Inference engine with batching (`core/inference.py`)
+- Model loading with quantization support (`core/model_loader.py`)
+- Data/prompt processing (`data/prompts.py`)
+- Energy tracking with CodeCarbon (`metrics/energy.py`)
+
+**Results Management (Major Improvement):**
+- Single-file results storage (vs 8+ files in v1.0.0)
+- Type-safe dataclasses (ExperimentResults, InferenceMetrics, etc.)
+- ResultsManager for easy save/load/aggregate
+- Automatic efficiency metrics calculation
+- Simple CSV export
+- Summary statistics
+
+**Testing:**
+- Integration tests for full workflow
+- 40+ unit tests total
+- CI/CD with GitHub Actions
+
+**Examples:**
+- Complete workflow demonstration
+- Quantization comparison showing FLOPs fix
 
 ### Changed
 
-- **Breaking**: Configuration now uses Pydantic models instead of dictionaries
-  - Migration function provided: `ExperimentConfig.from_legacy_dict()`
-- **Breaking**: Package renamed to `llm_efficiency` (from root imports)
-- **Breaking**: New import paths: `from llm_efficiency.config import ExperimentConfig`
-- **Improved**: FLOPs calculation accuracy (fixes critical v1.0 bug)
-- **Improved**: Dependency management with pyproject.toml
-- **Improved**: Code organization and modularity
+- **Results storage**: Single JSON per experiment (was 8+ files)
+- **Results aggregation**: Simple, robust dataclass-based approach
+- All modules now use proper logging (not print statements)
+- Full type hints throughout
 
 ### Fixed
 
-- **Critical**: Quantized models now get accurate FLOPs values (was hardcoded in v1.0)
-- **Critical**: FLOPs calculation properly handles different model architectures
-- Type safety issues from dictionary-based configs
-- Missing validation for configuration parameters
+- **Critical**: Quantized model FLOPs calculation (accurate per-model)
+- Results aggregation complexity and fragility
 
-### Removed
+---
 
-- Hardcoded `cached_flops_for_quantised_models` from config
-- Alphabetic prefixes from module names (a_, b_, c_)
-- Debug print statements (replaced with logging)
-- Duplicate code across modules
+## [0.1.0] - 2025-11-20
 
-## [1.0.0] - 2024-XX-XX
+### 🎯 Foundation & Bug Fixes
+
+Initial refactoring with critical bug fixes.
+
+### Added
+
+**Infrastructure:**
+- Modern package structure (`src/llm_efficiency/`)
+- Type-safe Pydantic configuration models
+- FLOPs calculator with caching (`metrics/compute.py`)
+- Comprehensive testing infrastructure (pytest)
+- Modern tooling (Ruff, MyPy, pre-commit hooks)
+- Full documentation (README, module docs, refactoring strategy)
+
+**Configuration System:**
+- `ExperimentConfig` with validation
+- Sub-configs: `BatchingConfig`, `QuantizationConfig`, `DecoderConfig`, etc.
+- Migration helper: `ExperimentConfig.from_legacy_dict()`
+
+**Testing:**
+- 25 configuration tests
+- 15 FLOPs calculator tests
+- Test fixtures and markers
+
+**Documentation:**
+- README.md
+- QUICKSTART.md
+- REFACTORING_STRATEGY.md
+- Module-specific READMEs
+
+### Changed
+
+- **Breaking**: Configuration uses Pydantic models (was nested dicts)
+- **Breaking**: New import paths (`from llm_efficiency.config`)
+- Package renamed to `llm-efficiency`
+- Dependencies reduced from 305 to ~12 core packages
+
+### Fixed
+
+- **Critical**: Quantized models now get accurate FLOPs (was hardcoded: 52,638,582,308,864 for ALL models!)
+- FLOPs calculation supports multiple fallback strategies
+- Configuration validation (was missing)
+
+---
+
+## [1.0.0] - 2024
 
 ### Initial Release
 
-Original thesis code with core functionality:
+Original thesis code with core functionality.
 
+**Features:**
 - Energy and performance metrics collection
 - Support for multiple models and configurations
 - Distributed inference with Hugging Face Accelerate
 - Persistent progress tracking
 - Multiple experiment modes
 
-**Known Issues**:
-- Quantized model FLOPs uses hardcoded value for all models
-- Limited test coverage
-- Dictionary-based configuration without validation
-- Legacy code organization
+**Known Issues:**
+- ❌ Quantized model FLOPs uses same hardcoded value for all models
+- ❌ Results scattered across 8+ JSON files per experiment
+- ❌ No test coverage
+- ❌ Dictionary-based configuration without validation
+- ❌ No type hints
 
 ---
 
-## Migration Guide: v1.0 → v2.0
+## Version History Summary
+
+| Version | Date | Description |
+|---------|------|-------------|
+| **0.2.0** | 2025-11-20 | Core modules + clean results management |
+| **0.1.0** | 2025-11-20 | Foundation + FLOPs fix + testing |
+| **1.0.0** | 2024 | Original thesis code |
+
+---
+
+## Migration Guide: v1.0.0 → v0.2.0
+
+### Major Improvements
+
+1. **FLOPs Calculation**: Now accurate for all models (quantized and non-quantized)
+2. **Results Storage**: Single file vs 8+ files
+3. **Type Safety**: Pydantic models with validation
+4. **Clean APIs**: Simple, intuitive interfaces
 
 ### Configuration Changes
 
-**v1.0:**
+**v1.0.0:**
 ```python
 config = {
-    "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "model_name": "TinyLlama-1.1B",
     "fp_precision": "float16",
-    "batching_options": {
-        "batch_size___fixed_batching": 16
+    "batching_options": {"batch_size___fixed_batching": 16},
+    "quantization_config": {
+        "cached_flops_for_quantised_models": 52638582308864  # WRONG!
     }
 }
 ```
 
-**v2.0:**
+**v0.2.0:**
 ```python
 from llm_efficiency.config import ExperimentConfig, BatchingConfig
 
 config = ExperimentConfig(
-    model_name="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-    precision="float16",
-    batching=BatchingConfig(batch_size=16)
+    model_name="TinyLlama-1.1B",
+    precision="float16",  # cleaner!
+    batching=BatchingConfig(batch_size=16),  # typed!
+    # No hardcoded FLOPs - automatic!
 )
 ```
 
-**Or migrate automatically:**
-```python
-from llm_efficiency.config import ExperimentConfig
+### Results Changes
 
-old_config = {...}  # v1.0 dictionary
-new_config = ExperimentConfig.from_legacy_dict(old_config)
+**v1.0.0:**
+```python
+# 8+ separate JSON files to manage
+results/raw_results/0001/
+├── 0001_1_experiment_setup.json
+├── 0001_2_experiment_variables.json
+├── 0001_3_model_architecture.json
+├── 0001_4_inference_metrics.json
+├── 0001_5_compute_metrics.json
+├── 0001_6_local_energy_results_process_0.json
+├── 0001_7_global_energy_results.json
+└── 0001_8_text_output.json
+```
+
+**v0.2.0:**
+```python
+# Single file, clean API
+from llm_efficiency.storage import ResultsManager
+
+manager = ResultsManager()
+manager.save_experiment(results)  # One file: 0001.json
+results = manager.load_experiment("0001")  # Easy!
 ```
 
 ### Import Changes
 
-**v1.0:**
-```python
-from experiment_core_utils.h_metrics_compute import get_flops
-from configs.a_default_config import base_config
-```
-
-**v2.0:**
-```python
-from llm_efficiency.metrics import FLOPsCalculator
-from llm_efficiency.config import ExperimentConfig
-```
-
-### FLOPs Calculation Changes
-
-**v1.0:**
-```python
-# Used hardcoded value for ALL quantized models
-flops = config.quantization_config.get("cached_flops_for_quantised_models")
-```
-
-**v2.0:**
-```python
-# Accurate FLOPs per model
-calculator = FLOPsCalculator()
-flops = calculator.get_flops(
-    model=model,
-    model_name=config.model_name,
-    sequence_length=128,
-    device=device,
-    is_quantized=config.quantization.enabled
-)
-```
+| v1.0.0 | v0.2.0 |
+|--------|---------|
+| `from experiment_core_utils.b_model_loader import ...` | `from llm_efficiency.core import load_model_and_tokenizer` |
+| `from experiment_core_utils.h_metrics_compute import get_flops` | `from llm_efficiency.metrics import FLOPsCalculator` |
+| `from configs.a_default_config import base_config` | `from llm_efficiency.config import ExperimentConfig` |
 
 ---
 
-**Author**: Henry Baker
+**Author:** Henry Baker
+
