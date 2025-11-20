@@ -436,3 +436,179 @@ class TestCreateResults:
         assert results.compute is not None
         assert results.energy is not None
         assert len(results.outputs) == 2
+
+    def test_export_to_pickle(self, tmp_path):
+        """Test exporting to pickle file."""
+        manager = ResultsManager(results_dir=tmp_path / "results")
+
+        # Create experiment
+        results = create_results(
+            experiment_id="0001",
+            config={"model_name": "test"},
+            inference_metrics={
+                "total_time_seconds": 10.0,
+                "total_input_tokens": 100,
+                "total_output_tokens": 50,
+                "total_tokens": 150,
+                "num_prompts": 10,
+                "tokens_per_second": 15.0,
+                "queries_per_second": 1.0,
+                "avg_latency_per_query": 1.0,
+                "avg_tokens_per_prompt": 15.0,
+            },
+        )
+        manager.save_experiment(results)
+
+        # Export to pickle
+        pkl_path = tmp_path / "results.pkl"
+        manager.export_to_pickle(pkl_path)
+
+        assert pkl_path.exists()
+
+    def test_load_from_pickle(self, tmp_path):
+        """Test loading from pickle file."""
+        manager = ResultsManager(results_dir=tmp_path / "results")
+
+        # Create and export experiments
+        for i in range(2):
+            results = create_results(
+                experiment_id=f"000{i}",
+                config={"model_name": "test"},
+                inference_metrics={
+                    "total_time_seconds": 10.0,
+                    "total_input_tokens": 100,
+                    "total_output_tokens": 50,
+                    "total_tokens": 150,
+                    "num_prompts": 10,
+                    "tokens_per_second": 15.0,
+                    "queries_per_second": 1.0,
+                    "avg_latency_per_query": 1.0,
+                    "avg_tokens_per_prompt": 15.0,
+                },
+            )
+            manager.save_experiment(results)
+
+        pkl_path = tmp_path / "results.pkl"
+        manager.export_to_pickle(pkl_path)
+
+        # Load from pickle
+        loaded = manager.load_from_pickle(pkl_path)
+
+        assert len(loaded) == 2
+        assert loaded[0]["experiment_id"] == "0000"
+
+    def test_save_experiment_pickle(self, tmp_path):
+        """Test saving individual experiment as pickle."""
+        manager = ResultsManager(results_dir=tmp_path / "results")
+
+        results = ExperimentResults(
+            experiment_id="0001",
+            timestamp="2025-01-01T00:00:00",
+        )
+
+        pkl_path = manager.save_experiment_pickle(results)
+
+        assert pkl_path.exists()
+        assert pkl_path.name == "0001.pkl"
+
+    def test_load_experiment_pickle(self, tmp_path):
+        """Test loading individual experiment from pickle."""
+        manager = ResultsManager(results_dir=tmp_path / "results")
+
+        # Save as pickle
+        results = ExperimentResults(
+            experiment_id="0001",
+            timestamp="2025-01-01T00:00:00",
+        )
+        manager.save_experiment_pickle(results)
+
+        # Load from pickle
+        loaded = manager.load_experiment_pickle("0001")
+
+        assert loaded is not None
+        assert loaded.experiment_id == "0001"
+
+    def test_unified_export_csv(self, tmp_path):
+        """Test unified export method with CSV format."""
+        manager = ResultsManager(results_dir=tmp_path / "results")
+
+        results = create_results(
+            experiment_id="0001",
+            config={"model_name": "test"},
+            inference_metrics={
+                "total_time_seconds": 10.0,
+                "total_input_tokens": 100,
+                "total_output_tokens": 50,
+                "total_tokens": 150,
+                "num_prompts": 10,
+                "tokens_per_second": 15.0,
+                "queries_per_second": 1.0,
+                "avg_latency_per_query": 1.0,
+                "avg_tokens_per_prompt": 15.0,
+            },
+        )
+        manager.save_experiment(results)
+
+        csv_path = tmp_path / "results.csv"
+        manager.export(csv_path, format="csv")
+
+        assert csv_path.exists()
+
+    def test_unified_export_pickle(self, tmp_path):
+        """Test unified export method with pickle format."""
+        manager = ResultsManager(results_dir=tmp_path / "results")
+
+        results = create_results(
+            experiment_id="0001",
+            config={"model_name": "test"},
+            inference_metrics={
+                "total_time_seconds": 10.0,
+                "total_input_tokens": 100,
+                "total_output_tokens": 50,
+                "total_tokens": 150,
+                "num_prompts": 10,
+                "tokens_per_second": 15.0,
+                "queries_per_second": 1.0,
+                "avg_latency_per_query": 1.0,
+                "avg_tokens_per_prompt": 15.0,
+            },
+        )
+        manager.save_experiment(results)
+
+        pkl_path = tmp_path / "results.pkl"
+        manager.export(pkl_path, format="pickle")
+
+        assert pkl_path.exists()
+
+    def test_unified_export_json(self, tmp_path):
+        """Test unified export method with JSON format."""
+        manager = ResultsManager(results_dir=tmp_path / "results")
+
+        results = create_results(
+            experiment_id="0001",
+            config={"model_name": "test"},
+            inference_metrics={
+                "total_time_seconds": 10.0,
+                "total_input_tokens": 100,
+                "total_output_tokens": 50,
+                "total_tokens": 150,
+                "num_prompts": 10,
+                "tokens_per_second": 15.0,
+                "queries_per_second": 1.0,
+                "avg_latency_per_query": 1.0,
+                "avg_tokens_per_prompt": 15.0,
+            },
+        )
+        manager.save_experiment(results)
+
+        json_path = tmp_path / "results.json"
+        manager.export(json_path, format="json")
+
+        assert json_path.exists()
+
+    def test_unified_export_invalid_format(self, tmp_path):
+        """Test unified export with invalid format."""
+        manager = ResultsManager(results_dir=tmp_path / "results")
+
+        with pytest.raises(ValueError, match="Unknown format"):
+            manager.export(tmp_path / "results.xyz", format="invalid")

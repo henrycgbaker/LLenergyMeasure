@@ -334,24 +334,42 @@ def show(
 
 @app.command()
 def export(
-    output_file: Path = typer.Argument(..., help="Output CSV file path"),
+    output_file: Path = typer.Argument(..., help="Output file path"),
     results_dir: Path = typer.Option(Path("results"), "--results-dir", "-r", help="Results directory"),
+    format: str = typer.Option("csv", "--format", "-f", help="Export format (csv, pickle, json)"),
     experiment_ids: Optional[str] = typer.Option(None, "--ids", "-i", help="Comma-separated experiment IDs (default: all)"),
 ) -> None:
-    """Export experiments to CSV."""
+    """
+    Export experiments to file.
+
+    Supports multiple formats:
+    - csv: Human-readable, good for analysis tools
+    - pickle: Fast binary format, preserves Python objects
+    - json: Human-readable, good for sharing
+
+    Example:
+        llm-efficiency export results.csv --format csv
+        llm-efficiency export results.pkl --format pickle
+    """
     manager = ResultsManager(results_dir=results_dir)
-    
+
     ids = experiment_ids.split(",") if experiment_ids else None
-    
+
+    # Validate format
+    valid_formats = ["csv", "pickle", "json"]
+    if format not in valid_formats:
+        console.print(f"[red]Error:[/red] Invalid format '{format}'. Must be one of: {', '.join(valid_formats)}")
+        raise typer.Exit(1)
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        progress.add_task("Exporting to CSV...", total=None)
-        manager.export_to_csv(output_file, ids)
-    
-    console.print(f"[green]✓[/green] Exported to [cyan]{output_file}[/cyan]")
+        progress.add_task(f"Exporting to {format.upper()}...", total=None)
+        manager.export(output_file, format=format, experiment_ids=ids)
+
+    console.print(f"[green]✓[/green] Exported to [cyan]{output_file}[/cyan] ({format.upper()} format)")
 
 
 @app.command()
