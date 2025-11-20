@@ -139,7 +139,7 @@ def run(
             config_data["results_dir"] = str(results_dir)
             config_data["save_outputs"] = True
 
-            config = ExperimentConfig.from_dict(config_data)
+            config = ExperimentConfig.model_validate(config_data)
         else:
             # Require model_name if no config file
             if model_name is None:
@@ -176,9 +176,9 @@ def run(
         experiment_id = generate_experiment_id(accelerator)
         
         console.print(f"\n[green]✓[/green] Experiment ID: [bold]{experiment_id}[/bold]")
-        
+
         # Load model
-        progress.add_task(f"Loading model {model_name}...", total=None)
+        progress.add_task(f"Loading model {config.model_name}...", total=None)
         model, tokenizer = load_model_and_tokenizer(config)
         device = next(model.parameters()).device
         
