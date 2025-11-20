@@ -3,13 +3,13 @@
 All notable changes to this project will be documented in this file.
 
 **Versioning**: X.Y.Z
-- **X** = Major stable release (0 = pre-release)
+- **X** = Major stable release
 - **Y** = New functionality
 - **Z** = Patches/bug fixes
 
 ---
 
-## [0.2.0] - 2025-11-20
+## [1.2.0] - 2025-11-20
 
 ### 🎉 Complete Core Infrastructure
 
@@ -55,7 +55,7 @@ Major architectural improvements with all core modules implemented.
 
 ---
 
-## [0.1.0] - 2025-11-20
+## [1.1.0] - 2025-11-20
 
 ### 🎯 Foundation & Bug Fixes
 
@@ -128,13 +128,13 @@ Original thesis code with core functionality.
 
 | Version | Date | Description |
 |---------|------|-------------|
-| **0.2.0** | 2025-11-20 | Core modules + clean results management |
-| **0.1.0** | 2025-11-20 | Foundation + FLOPs fix + testing |
+| **1.2.0** | 2025-11-20 | Core modules + clean results management |
+| **1.1.0** | 2025-11-20 | Foundation + FLOPs fix + testing |
 | **1.0.0** | 2024 | Original thesis code |
 
 ---
 
-## Migration Guide: v1.0.0 → v0.2.0
+## Migration Guide: v1.0.0 → v1.2.0
 
 ### Major Improvements
 
@@ -157,7 +157,7 @@ config = {
 }
 ```
 
-**v0.2.0:**
+**v1.2.0:**
 ```python
 from llm_efficiency.config import ExperimentConfig, BatchingConfig
 
@@ -185,7 +185,7 @@ results/raw_results/0001/
 └── 0001_8_text_output.json
 ```
 
-**v0.2.0:**
+**v1.2.0:**
 ```python
 # Single file, clean API
 from llm_efficiency.storage import ResultsManager
@@ -197,7 +197,7 @@ results = manager.load_experiment("0001")  # Easy!
 
 ### Import Changes
 
-| v1.0.0 | v0.2.0 |
+| v1.0.0 | v1.2.0 |
 |--------|---------|
 | `from experiment_core_utils.b_model_loader import ...` | `from llm_efficiency.core import load_model_and_tokenizer` |
 | `from experiment_core_utils.h_metrics_compute import get_flops` | `from llm_efficiency.metrics import FLOPsCalculator` |
