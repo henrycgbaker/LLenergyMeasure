@@ -9,6 +9,109 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.7.0] - 2025-11-20
+
+### 📝 Enhanced Logging System
+
+Comprehensive logging improvements with structured logging, JSON output, and progress tracking.
+
+### Added
+
+**Structured Logging (`utils/logging.py` enhanced):**
+- `JSONFormatter` - JSON formatter for machine-readable logs
+  - ISO, Unix, or readable timestamp formats
+  - Automatic exception formatting with tracebacks
+  - Extra fields support for context
+- `StructuredLogger` - Context-aware logger
+  - Automatic context injection in all log messages
+  - `add_context()` / `remove_context()` methods
+  - `context_scope()` context manager for temporary fields
+  - Nested context scope support
+- `LoggingConfig` - Centralized configuration manager
+  - Multiple output formats: rich, json, standard
+  - Per-module log level configuration
+  - File and console output
+  - Third-party logger suppression (codecarbon, transformers, torch)
+
+**New Logging Functions:**
+- `configure_logging()` - Modern configuration API
+- `get_structured_logger()` - Get context-aware logger
+- `set_module_level()` - Runtime module level adjustment
+- `log_execution_time()` - Context manager for timing operations
+- `log_progress()` - Progress tracking with ETA calculation
+- `log_metrics()` - Dictionary metrics logging
+
+**Test Coverage:**
+- `test_logging.py` - 18 comprehensive tests
+  - JSONFormatter testing
+  - StructuredLogger testing
+  - Configuration testing
+  - Context manager testing
+  - **Total test count: 204 (up from 186, +10% increase)**
+
+### Features
+
+**Structured Logging Example:**
+```python
+from llm_efficiency.utils import get_structured_logger, configure_logging
+
+# Configure with JSON output
+configure_logging(
+    level="INFO",
+    format="json",
+    output_file=Path("./logs/app.log"),
+    module_levels={
+        "llm_efficiency.core": "DEBUG",
+        "llm_efficiency.metrics": "WARNING",
+    }
+)
+
+# Get structured logger with context
+logger = get_structured_logger(__name__, context={"experiment_id": "exp123"})
+
+# All logs automatically include context
+logger.info("Starting inference", extra={"batch_size": 8})
+# Output: {"timestamp": "...", "experiment_id": "exp123", "batch_size": 8, ...}
+
+# Temporary context
+with logger.context_scope(phase="warmup"):
+    logger.info("Warming up model")
+```
+
+**Progress Tracking:**
+```python
+from llm_efficiency.utils import log_progress
+
+with log_progress(logger, "processing_batches", total=100) as update:
+    for i in range(100):
+        # Do work
+        update(i + 1)
+        # Logs: "processing_batches: 50/100 (50.0%) - 10.5 items/s - ETA: 4.8s"
+```
+
+**Execution Timing:**
+```python
+from llm_efficiency.utils import log_execution_time
+
+with log_execution_time(logger, "model_loading"):
+    model = load_model()
+# Logs: "Completed model_loading in 12.345s"
+```
+
+### Changed
+
+- Enhanced existing `setup_logging()` and `get_logger()` for backwards compatibility
+- Updated `utils/__init__.py` with new logging exports
+- Improved third-party logger suppression
+
+### Performance Improvements
+
+- JSON logging for structured log analysis
+- Configurable log intervals to reduce overhead
+- Per-module log levels for targeted debugging
+
+---
+
 ## [1.6.0] - 2025-11-20
 
 ### 📚 Documentation & Examples Release
