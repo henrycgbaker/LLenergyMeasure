@@ -9,6 +9,70 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [2.0.0] - 2025-11-20
+
+### 🎉 Stable Release
+
+First stable production release with comprehensive features, documentation, and testing.
+
+### Summary
+
+v2.0.0 represents the culmination of systematic refactoring from the original thesis codebase. This version provides a production-ready framework for LLM efficiency measurement with comprehensive documentation, robust logging, advanced analysis tools, and extensive testing.
+
+### API Stability
+
+Starting with v2.0.0, the public API is considered stable with semantic versioning guarantees.
+
+### Key Features
+
+**Core:**
+- Multi-precision support (FP32, FP16, BF16, FP8)
+- Quantization (4-bit NF4/FP4, 8-bit INT8)
+- Energy tracking with CO2 emissions
+- FLOPs calculation (accurate per-model)
+- Performance profiling and caching
+
+**CLI:**
+- Rich terminal interface
+- Interactive configuration wizard
+- Experiment management and export
+
+**Analysis:**
+- Experiment comparison with rankings
+- Statistical analysis and outlier detection
+- Efficiency scoring and reporting
+
+**Developer Experience:**
+- 10+ comprehensive examples
+- Detailed usage guide and API docs
+- Type-safe Pydantic configuration
+- Structured logging with JSON output
+- Custom exception hierarchy
+- 204+ unit tests
+
+### Version History
+
+- v1.6.0: Documentation & Examples
+- v1.7.0: Enhanced Logging
+- v1.8.0: Advanced Analysis
+- v1.9.0: Stability & Polish
+- v2.0.0: Stable Release
+
+### Statistics
+
+- Lines of Code: ~15,000+ (src + tests + examples)
+- Documentation: ~6,000+ lines
+- Test Coverage: 204+ tests
+- Examples: 10+ scripts
+
+### Backwards Compatibility
+
+✅ Fully backwards compatible with v1.x
+- All configurations work without changes
+- Legacy functions preserved
+
+---
+
 ## [1.9.0] - 2025-11-20
 
 ### 🛡️ Stability & Polish
