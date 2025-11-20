@@ -9,6 +9,69 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.8.0] - 2025-11-20
+
+### 📊 Advanced Analysis & Comparison
+
+Comprehensive analysis utilities for experiment comparison and statistical analysis.
+
+### Added
+
+**Analysis Module (`analysis/` package):**
+- `comparison.py` - Experiment comparison utilities
+  - `compare_experiments()` - Compare multiple experiments with rankings
+  - `compare_models()` - Group and compare by model
+  - `compare_configurations()` - Configuration-based comparison
+  - `generate_comparison_report()` - Automated report generation
+  - `ComparisonResult` dataclass with best performers
+
+- `statistics.py` - Statistical analysis
+  - `calculate_statistics()` - Mean, median, stdev for metrics
+  - `detect_outliers()` - Statistical outlier detection
+  - `calculate_efficiency_score()` - Weighted efficiency scoring
+  - `rank_experiments()` - Multi-metric ranking
+
+### Features
+
+**Experiment Comparison:**
+```python
+from llm_efficiency.analysis import compare_experiments, generate_comparison_report
+
+comparison = compare_experiments(
+    experiment_ids=["exp1", "exp2", "exp3"],
+    results_dir=Path("./results"),
+)
+
+print(f"Fastest: {comparison.fastest.config.model_name}")
+print(f"Most efficient: {comparison.most_efficient.config.model_name}")
+
+report = generate_comparison_report(comparison, output_file=Path("report.txt"))
+```
+
+**Statistical Analysis:**
+```python
+from llm_efficiency.analysis import calculate_statistics, detect_outliers, rank_experiments
+
+# Calculate statistics
+stats = calculate_statistics(experiments)
+print(f"Mean throughput: {stats['throughput']['mean']:.2f}")
+
+# Detect outliers
+outliers, normal = detect_outliers(experiments, metric="throughput", threshold=2.0)
+
+# Rank by efficiency
+ranked = rank_experiments(experiments, metric="efficiency")
+for exp, score in ranked[:5]:
+    print(f"{exp.config.model_name}: {score:.1f}")
+```
+
+### Changed
+
+- Added `analysis` package to project structure
+- Updated exports for new analysis utilities
+
+---
+
 ## [1.7.0] - 2025-11-20
 
 ### 📝 Enhanced Logging System
