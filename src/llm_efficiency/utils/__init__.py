@@ -42,6 +42,17 @@ from llm_efficiency.utils.logging import (
     setup_logging,
     get_logger,
 )
+from llm_efficiency.utils.validation import (
+    validate_positive_int,
+    validate_positive_float,
+    validate_in_range,
+    validate_choice,
+    validate_path_exists,
+    validate_model_name,
+    validate_precision,
+    validate_batch_config,
+    validate_quantization_config,
+)
 
 __all__ = [
     # Exceptions
@@ -81,4 +92,14 @@ __all__ = [
     "log_metrics",
     "setup_logging",
     "get_logger",
+    # Validation
+    "validate_positive_int",
+    "validate_positive_float",
+    "validate_in_range",
+    "validate_choice",
+    "validate_path_exists",
+    "validate_model_name",
+    "validate_precision",
+    "validate_batch_config",
+    "validate_quantization_config",
 ]

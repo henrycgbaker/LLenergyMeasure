@@ -9,6 +9,50 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.9.0] - 2025-11-20
+
+### 🛡️ Stability & Polish
+
+Production readiness improvements with comprehensive input validation and API stability.
+
+### Added
+
+**Validation Module (`utils/validation.py`):**
+- `validate_positive_int()` - Validate positive integers
+- `validate_positive_float()` - Validate positive floats
+- `validate_in_range()` - Range validation
+- `validate_choice()` - Enum/choice validation
+- `validate_path_exists()` - Path validation
+- `validate_model_name()` - Model name format validation
+- `validate_precision()` - Precision type validation
+- `validate_batch_config()` - Batch configuration validation
+- `validate_quantization_config()` - Quantization settings validation
+
+### Features
+
+**Input Validation:**
+```python
+from llm_efficiency.utils import validate_batch_config, validate_precision
+
+# Validate configuration
+validate_batch_config(batch_size=8, num_batches=100)
+validate_precision("float16")  # Validates against allowed types
+```
+
+### Changed
+
+- Enhanced error messages with actionable suggestions
+- Updated utils/__init__.py with validation exports
+- Improved configuration validation across all modules
+
+### Fixed
+
+- Edge case handling in configuration parsing
+- Improved error messages for invalid inputs
+- Better validation of quantization settings
+
+---
+
 ## [1.8.0] - 2025-11-20
 
 ### 📊 Advanced Analysis & Comparison

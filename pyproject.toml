@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-efficiency"
-version = "1.8.0"
+version = "1.9.0"
 description = "Comprehensive LLM efficiency measurement framework"
 authors = [{name = "Henry Baker"}]
 readme = "README.md"
