@@ -9,6 +9,139 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.6.0] - 2025-11-20
+
+### 📚 Documentation & Examples Release
+
+Comprehensive documentation release with 10+ example scripts, detailed usage guide, and modernized README.
+
+### Added
+
+**Example Scripts (`examples/` directory):**
+- `01_basic_experiment.py` - Simple experiment workflow for beginners
+- `02_cli_usage.sh` - Complete CLI command reference and examples
+- `03_profiling_example.py` - Performance profiling demonstrations (5 examples)
+- `04_caching_example.py` - Caching strategies and patterns (5 examples)
+- `05_multi_model_comparison.py` - Automated multi-model benchmarking
+- `06_quantization_comparison.py` - Quantization methods comparison (FP16, 8-bit, 4-bit NF4/FP4)
+- `07_custom_config.py` - Advanced configuration patterns (5 examples)
+- `08_results_analysis.py` - Results loading, analysis, and export (5 examples)
+- `09_error_handling.py` - Error handling and recovery patterns (5 examples)
+- `10_advanced_workflow.py` - Production-ready benchmark suite with caching and profiling
+- `examples/README.md` - Comprehensive examples documentation with learning paths
+
+**Documentation:**
+- `USAGE_GUIDE.md` - Complete 600+ line usage guide covering:
+  - Installation and setup
+  - Configuration (Python API and YAML)
+  - Running experiments (single, multi-model, quantization comparison)
+  - Results analysis and export
+  - CLI reference (all commands with examples)
+  - Python API reference (all classes and functions)
+  - Advanced topics (multi-GPU, custom datasets, reproducibility)
+  - Best practices and troubleshooting
+
+**Updated README.md:**
+- Modernized for v1.5.0+ architecture
+- Added badges (Python version, license)
+- Quick start examples (both Python API and CLI)
+- Example scripts table with difficulty levels
+- Updated architecture diagram reflecting src/ layout
+- Advanced features section (profiling, caching, error handling)
+- Complete CLI reference
+- Testing instructions
+- Development setup guide
+- Version 1.5.0 release notes
+
+### Features
+
+**Example Highlights:**
+
+*Basic Experiment:*
+```python
+from llm_efficiency.config import ExperimentConfig
+from llm_efficiency.core.experiment import run_experiment
+
+config = ExperimentConfig(
+    model_name="gpt2",
+    precision="float16",
+    batch_size=4,
+    num_batches=20,
+    output_dir=Path("./results"),
+)
+
+result = run_experiment(config)
+print(f"Throughput: {result.metrics.tokens_per_second:.2f} tok/s")
+```
+
+*Multi-Model Comparison:*
+```bash
+python examples/05_multi_model_comparison.py
+# Compares multiple models, generates comprehensive report
+# Output: comparison_report.txt + comparison_report.json
+```
+
+*Advanced Workflow:*
+```python
+# From examples/10_advanced_workflow.py
+suite = BenchmarkSuite(
+    output_dir=Path("./results/benchmark"),
+    cache_dir=Path("./cache"),
+)
+results = suite.run_benchmark_suite(
+    models=["gpt2", "gpt2-medium"],
+    precisions=["float16"],
+    quantization_configs=[...],
+)
+suite.generate_comprehensive_report("report.txt")
+```
+
+**Learning Paths:**
+- **Beginner** (30 min): Basic experiment → CLI usage → Config → Analysis
+- **Intermediate** (1 hour): +Model comparison → Profiling → Caching → Error handling
+- **Advanced** (2 hours): +Quantization → Advanced workflows → Custom benchmarks
+
+### Changed
+
+- README.md fully rewritten for modern package structure
+  - Removed outdated thesis-style references (MAIN_*.py files)
+  - Added modern src/ package layout
+  - Updated installation instructions
+  - Added CLI-first approach
+  - Linked to all 10 examples
+- Examples directory structure with comprehensive README
+- Improved onboarding experience for new users
+
+### Documentation
+
+**Coverage:**
+- 10+ fully documented example scripts (~4000 lines of example code)
+- Comprehensive USAGE_GUIDE.md (600+ lines)
+- Updated README.md (480 lines)
+- Examples README (450 lines)
+- **Total documentation: ~5500+ lines**
+
+**Topics Covered:**
+- Installation and setup
+- Basic usage (Python API + CLI)
+- Configuration (programmatic + YAML)
+- Model comparison and benchmarking
+- Quantization evaluation
+- Performance profiling integration
+- Caching strategies
+- Results analysis and export
+- Error handling and recovery
+- Production workflows
+- Best practices
+- Troubleshooting
+
+### Removed
+
+- Outdated README sections referencing old architecture
+- Legacy file structure references
+
+---
+
 ## [1.5.0] - 2025-11-20
 
 ### ⚡ Performance & Caching Optimizations
