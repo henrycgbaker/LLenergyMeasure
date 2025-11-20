@@ -66,60 +66,109 @@ def main(
 
 @app.command()
 def run(
-    model_name: str = typer.Option(..., "--model", "-m", help="Model name from HuggingFace"),
-    precision: str = typer.Option("float16", "--precision", "-p", help="Precision (float32/float16/bfloat16)"),
-    batch_size: int = typer.Option(8, "--batch-size", "-b", help="Batch size for inference"),
-    num_prompts: int = typer.Option(100, "--num-prompts", "-n", help="Number of prompts to process"),
-    max_input_tokens: int = typer.Option(512, "--max-input", help="Max input tokens"),
-    max_output_tokens: int = typer.Option(128, "--max-output", help="Max output tokens"),
-    quantize: bool = typer.Option(False, "--quantize", "-q", help="Enable 4-bit quantization"),
-    dataset: str = typer.Option("AIEnergyScore/text_generation", "--dataset", "-d", help="Dataset name"),
+    config_file: Optional[Path] = typer.Option(None, "--config", "-c", help="Load configuration from JSON file"),
+    model_name: Optional[str] = typer.Option(None, "--model", "-m", help="Model name from HuggingFace"),
+    precision: Optional[str] = typer.Option(None, "--precision", "-p", help="Precision (float32/float16/bfloat16)"),
+    batch_size: Optional[int] = typer.Option(None, "--batch-size", "-b", help="Batch size for inference"),
+    num_prompts: Optional[int] = typer.Option(None, "--num-prompts", "-n", help="Number of prompts to process"),
+    max_input_tokens: Optional[int] = typer.Option(None, "--max-input", help="Max input tokens"),
+    max_output_tokens: Optional[int] = typer.Option(None, "--max-output", help="Max output tokens"),
+    quantize: Optional[bool] = typer.Option(None, "--quantize", "-q", help="Enable 4-bit quantization"),
+    dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Dataset name"),
     results_dir: Path = typer.Option(Path("results"), "--results-dir", "-r", help="Results directory"),
     track_energy: bool = typer.Option(True, "--energy/--no-energy", help="Enable energy tracking"),
     verbose: bool = typer.Option(False, "--verbose", "-V", help="Verbose logging"),
 ) -> None:
     """
     Run an efficiency measurement experiment.
-    
-    Example:
+
+    Examples:
+        llm-efficiency run --config config.json
         llm-efficiency run --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 --batch-size 16 --num-prompts 100
+        llm-efficiency run --config config.json --batch-size 16  # Override config value
     """
     # Setup logging
     setup_logging(level="DEBUG" if verbose else "INFO")
-    
+
     console.print(Panel.fit(
         "[bold cyan]LLM Efficiency Measurement Tool[/bold cyan]\n"
         f"Version {__version__}",
         border_style="cyan"
     ))
-    
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
         # Create configuration
-        progress.add_task("Creating configuration...", total=None)
-        
-        config = ExperimentConfig(
-            model_name=model_name,
-            precision=precision,
-            num_input_prompts=num_prompts,
-            max_input_tokens=max_input_tokens,
-            max_output_tokens=max_output_tokens,
-            batching=BatchingConfig(batch_size=batch_size),
-            quantization=QuantizationConfig(enabled=quantize, bits=4 if quantize else None),
-            results_dir=str(results_dir),
-            save_outputs=True,
-        )
-        
-        console.print(f"\n[green]✓[/green] Configuration created")
-        console.print(f"  Model: [cyan]{model_name}[/cyan]")
-        console.print(f"  Precision: [cyan]{precision}[/cyan]")
-        console.print(f"  Batch size: [cyan]{batch_size}[/cyan]")
-        console.print(f"  Prompts: [cyan]{num_prompts}[/cyan]")
-        if quantize:
-            console.print(f"  Quantization: [cyan]4-bit[/cyan]")
+        progress.add_task("Loading configuration...", total=None)
+
+        # Load from config file if provided
+        if config_file:
+            if not config_file.exists():
+                console.print(f"[red]Error:[/red] Config file {config_file} not found")
+                raise typer.Exit(1)
+
+            with open(config_file, "r") as f:
+                config_data = json.load(f)
+
+            # CLI arguments override config file
+            if model_name is not None:
+                config_data["model_name"] = model_name
+            if precision is not None:
+                config_data["precision"] = precision
+            if num_prompts is not None:
+                config_data["num_input_prompts"] = num_prompts
+            if max_input_tokens is not None:
+                config_data["max_input_tokens"] = max_input_tokens
+            if max_output_tokens is not None:
+                config_data["max_output_tokens"] = max_output_tokens
+            if batch_size is not None:
+                if "batching" not in config_data:
+                    config_data["batching"] = {}
+                config_data["batching"]["batch_size"] = batch_size
+            if quantize is not None:
+                if "quantization" not in config_data:
+                    config_data["quantization"] = {}
+                config_data["quantization"]["enabled"] = quantize
+                config_data["quantization"]["bits"] = 4 if quantize else None
+            if dataset is not None:
+                config_data["dataset_name"] = dataset
+
+            config_data["results_dir"] = str(results_dir)
+            config_data["save_outputs"] = True
+
+            config = ExperimentConfig.from_dict(config_data)
+        else:
+            # Require model_name if no config file
+            if model_name is None:
+                console.print("[red]Error:[/red] --model is required when not using --config")
+                raise typer.Exit(1)
+
+            # Use defaults for optional parameters
+            config = ExperimentConfig(
+                model_name=model_name,
+                precision=precision or "float16",
+                num_input_prompts=num_prompts or 100,
+                max_input_tokens=max_input_tokens or 512,
+                max_output_tokens=max_output_tokens or 128,
+                batching=BatchingConfig(batch_size=batch_size or 8),
+                quantization=QuantizationConfig(enabled=quantize or False, bits=4 if quantize else None),
+                results_dir=str(results_dir),
+                save_outputs=True,
+            )
+
+        # Get dataset name
+        dataset_name = dataset or getattr(config, "dataset_name", "AIEnergyScore/text_generation")
+
+        console.print(f"\n[green]✓[/green] Configuration loaded")
+        console.print(f"  Model: [cyan]{config.model_name}[/cyan]")
+        console.print(f"  Precision: [cyan]{config.precision}[/cyan]")
+        console.print(f"  Batch size: [cyan]{config.batching.batch_size}[/cyan]")
+        console.print(f"  Prompts: [cyan]{config.num_input_prompts}[/cyan]")
+        if config.quantization.enabled:
+            console.print(f"  Quantization: [cyan]{config.quantization.bits}-bit[/cyan]")
         
         # Setup distributed
         progress.add_task("Setting up distributed environment...", total=None)
@@ -136,13 +185,13 @@ def run(
         console.print(f"[green]✓[/green] Model loaded on [cyan]{device}[/cyan]")
         
         # Load data
-        progress.add_task(f"Loading prompts from {dataset}...", total=None)
+        progress.add_task(f"Loading prompts from {dataset_name}...", total=None)
         prompts = load_prompts_from_dataset(
-            dataset_name=dataset,
-            num_prompts=num_prompts,
+            dataset_name=dataset_name,
+            num_prompts=config.num_input_prompts,
         )
         prompts = filter_prompts_by_length(
-            prompts, tokenizer, max_tokens=max_input_tokens
+            prompts, tokenizer, max_tokens=config.max_input_tokens
         )
         
         console.print(f"[green]✓[/green] Loaded [cyan]{len(prompts)}[/cyan] prompts")
