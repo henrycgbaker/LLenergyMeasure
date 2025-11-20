@@ -3,7 +3,7 @@ Prompt loading, filtering, and processing utilities.
 """
 
 import logging
-from typing import List, Dict
+from typing import Dict, List, Optional
 
 import torch
 from datasets import load_dataset, Dataset
