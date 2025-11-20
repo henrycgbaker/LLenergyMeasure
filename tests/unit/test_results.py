@@ -374,68 +374,10 @@ class TestResultsManager:
             manager.save_experiment(results)
         
         summary = manager.generate_summary()
-        
+
         assert summary["total_experiments"] == 3
         assert "throughput" in summary
         assert "energy" in summary
-
-
-class TestCreateResults:
-    """Tests for create_results helper function."""
-
-    def test_create_minimal(self):
-        """Test creating minimal results."""
-        results = create_results(
-            experiment_id="0001",
-            config={"model_name": "test"},
-        )
-        
-        assert results.experiment_id == "0001"
-        assert results.config["model_name"] == "test"
-
-    def test_create_complete(self):
-        """Test creating complete results."""
-        results = create_results(
-            experiment_id="0001",
-            config={"model_name": "test"},
-            model_info={
-                "model_name": "test",
-                "total_parameters": 1000,
-                "trainable_parameters": 1000,
-                "precision": "float16",
-            },
-            inference_metrics={
-                "total_time_seconds": 10.0,
-                "total_input_tokens": 100,
-                "total_output_tokens": 50,
-                "total_tokens": 150,
-                "num_prompts": 10,
-                "tokens_per_second": 15.0,
-                "queries_per_second": 1.0,
-                "avg_latency_per_query": 1.0,
-                "avg_tokens_per_prompt": 15.0,
-            },
-            compute_metrics={
-                "flops": 1000000,
-                "gpu_memory_allocated_mb": 512.0,
-                "gpu_memory_peak_mb": 1024.0,
-            },
-            energy_metrics={
-                "duration_seconds": 10.0,
-                "total_energy_kwh": 0.001,
-                "cpu_energy_kwh": 0.0003,
-                "gpu_energy_kwh": 0.0005,
-                "ram_energy_kwh": 0.0002,
-                "emissions_kg_co2": 0.0005,
-            },
-            outputs=["output1", "output2"],
-        )
-        
-        assert results.model is not None
-        assert results.inference is not None
-        assert results.compute is not None
-        assert results.energy is not None
-        assert len(results.outputs) == 2
 
     def test_export_to_pickle(self, tmp_path):
         """Test exporting to pickle file."""
@@ -612,3 +554,61 @@ class TestCreateResults:
 
         with pytest.raises(ValueError, match="Unknown format"):
             manager.export(tmp_path / "results.xyz", format="invalid")
+
+
+class TestCreateResults:
+    """Tests for create_results helper function."""
+
+    def test_create_minimal(self):
+        """Test creating minimal results."""
+        results = create_results(
+            experiment_id="0001",
+            config={"model_name": "test"},
+        )
+        
+        assert results.experiment_id == "0001"
+        assert results.config["model_name"] == "test"
+
+    def test_create_complete(self):
+        """Test creating complete results."""
+        results = create_results(
+            experiment_id="0001",
+            config={"model_name": "test"},
+            model_info={
+                "model_name": "test",
+                "total_parameters": 1000,
+                "trainable_parameters": 1000,
+                "precision": "float16",
+            },
+            inference_metrics={
+                "total_time_seconds": 10.0,
+                "total_input_tokens": 100,
+                "total_output_tokens": 50,
+                "total_tokens": 150,
+                "num_prompts": 10,
+                "tokens_per_second": 15.0,
+                "queries_per_second": 1.0,
+                "avg_latency_per_query": 1.0,
+                "avg_tokens_per_prompt": 15.0,
+            },
+            compute_metrics={
+                "flops": 1000000,
+                "gpu_memory_allocated_mb": 512.0,
+                "gpu_memory_peak_mb": 1024.0,
+            },
+            energy_metrics={
+                "duration_seconds": 10.0,
+                "total_energy_kwh": 0.001,
+                "cpu_energy_kwh": 0.0003,
+                "gpu_energy_kwh": 0.0005,
+                "ram_energy_kwh": 0.0002,
+                "emissions_kg_co2": 0.0005,
+            },
+            outputs=["output1", "output2"],
+        )
+        
+        assert results.model is not None
+        assert results.inference is not None
+        assert results.compute is not None
+        assert results.energy is not None
+        assert len(results.outputs) == 2
