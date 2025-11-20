@@ -9,6 +9,64 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.4.0] - 2025-11-20
+
+### 🛡️ Production Polish & Error Handling
+
+Comprehensive improvements for production readiness with robust error handling, retry logic, and pickle export support.
+
+### Added
+
+**Export Features:**
+- Pickle (`.pkl`) export format for fast binary serialization
+- `export_to_pickle()` - Bulk export to pickle
+- `load_from_pickle()` - Load experiments from pickle
+- `save_experiment_pickle()` / `load_experiment_pickle()` - Per-experiment pickle support
+- Unified `export()` method supporting CSV, JSON, and pickle formats
+- CLI support: `llm-efficiency export results.pkl --format pickle`
+
+**Error Handling & Retry Logic:**
+- Custom exception hierarchy (`LLMEfficiencyError` base class)
+  - `ModelLoadingError`, `InferenceError`, `ConfigurationError`
+  - `DataError`, `MetricsError`, `StorageError`
+  - `NetworkError`, `QuantizationError`
+- Retry utilities (`utils/retry.py`)
+  - `@retry_with_exponential_backoff` decorator
+  - `retry_on_exception()` function
+  - `RetryContext` context manager
+- Automatic retry for network operations (4 retries with exponential backoff)
+  - Model downloading
+  - Tokenizer loading
+  - Dataset fetching
+
+**Enhanced Model Loading:**
+- Comprehensive error messages with actionable suggestions
+- OOM detection with helpful recovery hints
+- Quantization validation (CUDA availability, bitsandbytes version)
+- Automatic retry on network failures (2s → 4s → 8s → 16s delays)
+- Precision validation with warnings for unsupported types
+
+**New Test Coverage:**
+- `test_retry.py` - 15 tests for retry utilities
+- `test_exceptions.py` - 12 tests for exception hierarchy
+- 8 additional tests for pickle functionality in `test_results.py`
+- **Total test count: 149 (up from 114)**
+
+### Changed
+
+- **Model loader** (`core/model_loader.py`): Now throws specific exceptions instead of generic errors
+- **CLI export command**: Supports `--format` flag (csv/pickle/json)
+- **Error messages**: More informative with suggested fixes
+- **Logging**: Enhanced with success/failure states
+
+### Fixed
+
+- Network timeout handling during model downloads
+- Better error messages for quantization failures
+- Graceful fallback for unsupported precision types
+
+---
+
 ## [1.3.0] - 2025-11-20
 
 ### 🚀 Modern CLI with Typer + Rich
@@ -185,6 +243,7 @@ Original thesis code with core functionality.
 
 | Version | Date | Description |
 |---------|------|-------------|
+| **1.4.0** | 2025-11-20 | Production polish + error handling + pickle export |
 | **1.3.0** | 2025-11-20 | Modern CLI with Typer + Rich |
 | **1.2.1** | 2025-11-20 | Comprehensive test coverage (114 tests) |
 | **1.2.0** | 2025-11-20 | Core modules + clean results management |

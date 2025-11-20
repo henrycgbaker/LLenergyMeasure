@@ -7,9 +7,10 @@ type-safe approach using dataclasses and clear structure.
 
 import json
 import logging
+import pickle
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Literal
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -304,6 +305,136 @@ class ResultsManager:
                 writer.writerows(flat_data)
 
         logger.info(f"Exported to {output_file}")
+
+    def export_to_pickle(
+        self, output_file: Path, experiment_ids: Optional[List[str]] = None
+    ) -> None:
+        """
+        Export experiments to pickle file for fast loading.
+
+        Args:
+            output_file: Output pickle file path
+            experiment_ids: Specific IDs to export (None for all)
+        """
+        aggregated = self.aggregate_experiments(experiment_ids)
+
+        if not aggregated:
+            logger.warning("No experiments to export")
+            return
+
+        logger.info(f"Exporting {len(aggregated)} experiments to {output_file}")
+
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            with open(output_file, "wb") as f:
+                pickle.dump(aggregated, f, protocol=pickle.HIGHEST_PROTOCOL)
+            logger.info(f"Exported to {output_file}")
+        except Exception as e:
+            logger.error(f"Failed to export to pickle: {e}")
+            raise
+
+    def load_from_pickle(self, input_file: Path) -> List[Dict]:
+        """
+        Load experiments from pickle file.
+
+        Args:
+            input_file: Input pickle file path
+
+        Returns:
+            List of experiment dictionaries
+        """
+        if not input_file.exists():
+            logger.error(f"Pickle file {input_file} not found")
+            raise FileNotFoundError(f"Pickle file {input_file} not found")
+
+        logger.info(f"Loading experiments from {input_file}")
+
+        try:
+            with open(input_file, "rb") as f:
+                experiments = pickle.load(f)
+            logger.info(f"Loaded {len(experiments)} experiments")
+            return experiments
+        except Exception as e:
+            logger.error(f"Failed to load from pickle: {e}")
+            raise
+
+    def save_experiment_pickle(self, results: ExperimentResults) -> Path:
+        """
+        Save experiment results as pickle file (in addition to JSON).
+
+        Pickle files are faster to load but not human-readable.
+
+        Args:
+            results: ExperimentResults instance
+
+        Returns:
+            Path to saved pickle file
+        """
+        output_file = self.experiments_dir / f"{results.experiment_id}.pkl"
+
+        logger.debug(f"Saving experiment {results.experiment_id} to pickle")
+
+        try:
+            with open(output_file, "wb") as f:
+                pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
+            logger.debug("Experiment pickle saved successfully")
+            return output_file
+        except Exception as e:
+            logger.error(f"Failed to save pickle: {e}")
+            raise
+
+    def load_experiment_pickle(self, experiment_id: str) -> Optional[ExperimentResults]:
+        """
+        Load experiment results from pickle file.
+
+        Args:
+            experiment_id: Experiment identifier
+
+        Returns:
+            ExperimentResults instance or None if not found
+        """
+        input_file = self.experiments_dir / f"{experiment_id}.pkl"
+
+        if not input_file.exists():
+            logger.warning(f"Experiment pickle {experiment_id} not found")
+            return None
+
+        logger.debug(f"Loading experiment {experiment_id} from pickle")
+
+        try:
+            with open(input_file, "rb") as f:
+                return pickle.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load pickle: {e}")
+            raise
+
+    def export(
+        self,
+        output_file: Path,
+        format: Literal["csv", "pickle", "json"] = "csv",
+        experiment_ids: Optional[List[str]] = None,
+    ) -> None:
+        """
+        Export experiments in specified format.
+
+        Args:
+            output_file: Output file path
+            format: Export format ('csv', 'pickle', or 'json')
+            experiment_ids: Specific IDs to export (None for all)
+        """
+        if format == "csv":
+            self.export_to_csv(output_file, experiment_ids)
+        elif format == "pickle":
+            self.export_to_pickle(output_file, experiment_ids)
+        elif format == "json":
+            aggregated = self.aggregate_experiments(experiment_ids)
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_file, "w") as f:
+                json.dump(aggregated, f, indent=2)
+            logger.info(f"Exported {len(aggregated)} experiments to {output_file}")
+        else:
+            raise ValueError(f"Unknown format: {format}")
 
     def _flatten_dict(self, d: Dict, parent_key: str = "", sep: str = ".") -> Dict:
         """Flatten nested dictionary for CSV export."""
