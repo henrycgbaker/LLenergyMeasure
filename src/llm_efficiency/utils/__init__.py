@@ -29,6 +29,19 @@ from llm_efficiency.utils.cache import (
     DiskCache,
     cached_with_ttl,
 )
+from llm_efficiency.utils.logging import (
+    JSONFormatter,
+    StructuredLogger,
+    LoggingConfig,
+    configure_logging,
+    get_structured_logger,
+    set_module_level,
+    log_execution_time,
+    log_progress,
+    log_metrics,
+    setup_logging,
+    get_logger,
+)
 
 __all__ = [
     # Exceptions
@@ -56,4 +69,16 @@ __all__ = [
     "LRUCacheWithTTL",
     "DiskCache",
     "cached_with_ttl",
+    # Logging
+    "JSONFormatter",
+    "StructuredLogger",
+    "LoggingConfig",
+    "configure_logging",
+    "get_structured_logger",
+    "set_module_level",
+    "log_execution_time",
+    "log_progress",
+    "log_metrics",
+    "setup_logging",
+    "get_logger",
 ]
