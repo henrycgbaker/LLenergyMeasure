@@ -45,15 +45,27 @@ Perfect for:
 
 ### Installation
 
-```bash
-# From PyPI (when published)
-pip install llm-efficiency
+**⚠️ Important:** PyTorch requires platform-specific installation. See [INSTALLATION.md](INSTALLATION.md) for detailed instructions.
 
-# From source
+**Quick install (macOS/Linux):**
+
+```bash
+# 1. Install PyTorch first (required)
+pip install torch
+
+# 2. Install from source
 git clone https://github.com/henrycgbaker/llm-efficiency-measurement-tool.git
 cd llm-efficiency-measurement-tool
 pip install -e .
 ```
+
+**For specific platforms:**
+- **macOS (Apple Silicon)**: [See macOS instructions](INSTALLATION.md#macos-apple-silicon--intel)
+- **Linux with CUDA**: [See CUDA instructions](INSTALLATION.md#linux-with-cuda)
+- **Windows**: [See Windows instructions](INSTALLATION.md#windows-with-cuda)
+- **CPU-only**: [See CPU-only instructions](INSTALLATION.md#linux-cpu-only)
+
+📖 **[Full Installation Guide →](INSTALLATION.md)**
 
 ### Basic Usage
 
