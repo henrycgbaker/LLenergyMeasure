@@ -1,19 +1,19 @@
 """Domain models for LLM Bench."""
 
-from llm_bench.domain.experiment import (
+from llm_energy_measure.domain.experiment import (
     AggregatedResult,
     AggregationMetadata,
     RawProcessResult,
     Timestamps,
 )
-from llm_bench.domain.metrics import (
+from llm_energy_measure.domain.metrics import (
     CombinedMetrics,
     ComputeMetrics,
     EnergyMetrics,
     FlopsResult,
     InferenceMetrics,
 )
-from llm_bench.domain.model_info import ModelInfo, QuantizationSpec
+from llm_energy_measure.domain.model_info import ModelInfo, QuantizationSpec
 
 __all__ = [
     "AggregatedResult",

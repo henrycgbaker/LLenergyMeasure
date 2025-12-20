@@ -4,8 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from llm_bench.constants import SCHEMA_VERSION
-from llm_bench.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
+from llm_energy_measure.constants import SCHEMA_VERSION
+from llm_energy_measure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
 
 
 class Timestamps(BaseModel):

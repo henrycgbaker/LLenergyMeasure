@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from llm_bench.config.models import (
+from llm_energy_measure.config.models import (
     BatchingConfig,
     DecoderConfig,
     ExperimentConfig,

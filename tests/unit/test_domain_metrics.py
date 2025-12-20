@@ -2,7 +2,7 @@
 
 import pytest
 
-from llm_bench.domain.metrics import (
+from llm_energy_measure.domain.metrics import (
     CombinedMetrics,
     ComputeMetrics,
     EnergyMetrics,

@@ -9,7 +9,7 @@ from typing import Any
 import torch
 from loguru import logger
 
-from llm_bench.domain.metrics import EnergyMetrics
+from llm_energy_measure.domain.metrics import EnergyMetrics
 
 
 @dataclass

@@ -14,8 +14,8 @@ from packaging import version
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizer
 
-from llm_bench.config.models import ExperimentConfig, QuantizationConfig
-from llm_bench.exceptions import ConfigurationError
+from llm_energy_measure.config.models import ExperimentConfig, QuantizationConfig
+from llm_energy_measure.exceptions import ConfigurationError
 
 
 @dataclass

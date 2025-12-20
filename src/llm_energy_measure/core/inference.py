@@ -10,13 +10,13 @@ from typing import TYPE_CHECKING, Any
 import torch
 from loguru import logger
 
-from llm_bench.config.models import ExperimentConfig
-from llm_bench.core.prompts import (
+from llm_energy_measure.config.models import ExperimentConfig
+from llm_energy_measure.core.prompts import (
     create_adaptive_batches,
     create_fixed_batches,
     tokenize_batch,
 )
-from llm_bench.domain.metrics import InferenceMetrics
+from llm_energy_measure.domain.metrics import InferenceMetrics
 
 if TYPE_CHECKING:
     from accelerate import Accelerator

@@ -2,10 +2,14 @@
 
 from pathlib import Path
 
-from llm_bench.constants import AGGREGATED_RESULTS_SUBDIR, DEFAULT_RESULTS_DIR, RAW_RESULTS_SUBDIR
-from llm_bench.domain.experiment import AggregatedResult, RawProcessResult
-from llm_bench.exceptions import ConfigurationError
-from llm_bench.security import is_safe_path, sanitize_experiment_id
+from llm_energy_measure.constants import (
+    AGGREGATED_RESULTS_SUBDIR,
+    DEFAULT_RESULTS_DIR,
+    RAW_RESULTS_SUBDIR,
+)
+from llm_energy_measure.domain.experiment import AggregatedResult, RawProcessResult
+from llm_energy_measure.exceptions import ConfigurationError
+from llm_energy_measure.security import is_safe_path, sanitize_experiment_id
 
 
 class FileSystemRepository:

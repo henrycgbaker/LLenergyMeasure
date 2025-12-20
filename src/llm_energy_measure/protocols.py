@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from llm_bench.domain.experiment import RawProcessResult
-    from llm_bench.domain.metrics import CombinedMetrics, EnergyMetrics
+    from llm_energy_measure.domain.experiment import RawProcessResult
+    from llm_energy_measure.domain.metrics import CombinedMetrics, EnergyMetrics
 
 
 @runtime_checkable

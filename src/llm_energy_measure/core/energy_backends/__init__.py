@@ -23,13 +23,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from llm_bench.core.energy_backends.base import EnergyBackend
-from llm_bench.core.energy_backends.codecarbon import (
+from llm_energy_measure.core.energy_backends.base import EnergyBackend
+from llm_energy_measure.core.energy_backends.codecarbon import (
     CodeCarbonBackend,
     CodeCarbonData,
     warm_up,
 )
-from llm_bench.exceptions import ConfigurationError
+from llm_energy_measure.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
     pass

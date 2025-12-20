@@ -7,8 +7,8 @@ from typing import Any
 
 import yaml
 
-from llm_bench.config.models import ExperimentConfig
-from llm_bench.exceptions import ConfigurationError
+from llm_energy_measure.config.models import ExperimentConfig
+from llm_energy_measure.exceptions import ConfigurationError
 
 
 def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llm_bench.core.energy_backends import (
+from llm_energy_measure.core.energy_backends import (
     CodeCarbonBackend,
     CodeCarbonData,
     EnergyBackend,
@@ -13,8 +13,8 @@ from llm_bench.core.energy_backends import (
     list_backends,
     register_backend,
 )
-from llm_bench.domain.metrics import EnergyMetrics
-from llm_bench.exceptions import ConfigurationError
+from llm_energy_measure.domain.metrics import EnergyMetrics
+from llm_energy_measure.exceptions import ConfigurationError
 
 
 class TestCodeCarbonData:

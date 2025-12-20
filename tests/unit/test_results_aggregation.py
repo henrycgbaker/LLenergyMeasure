@@ -4,10 +4,10 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from llm_bench.domain.experiment import RawProcessResult, Timestamps
-from llm_bench.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
-from llm_bench.exceptions import AggregationError
-from llm_bench.results.aggregation import (
+from llm_energy_measure.domain.experiment import RawProcessResult, Timestamps
+from llm_energy_measure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
+from llm_energy_measure.exceptions import AggregationError
+from llm_energy_measure.results.aggregation import (
     aggregate_results,
     calculate_efficiency_metrics,
 )
