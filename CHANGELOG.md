@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v1.2.0 (2025-12-20)
+
+### Features
+
+- Add energy backend plugin registry (Phase 9)
+  ([`619682c`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/619682c229d5b23e8a33b2564a2fba4c86179b5b))
+
+- Add base.py with EnergyBackend protocol re-export - Implement plugin registry (register_backend,
+  get_backend, list_backends) - Auto-register CodeCarbonBackend on import - Add 8 unit tests for
+  plugin registry - 296 total tests passing
+
+
 ## v1.1.0 (2025-12-20)
 
 ### Continuous Integration
