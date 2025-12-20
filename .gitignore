@@ -5,6 +5,7 @@ emissions.csv
 thesis/lib/
 thesis/bin/
 thesis/include/
+.venv/
 
 # Ignore Python cache files
 __pycache__/
@@ -12,7 +13,7 @@ __pycache__/
 *.pyo
 *.pyd
 
-# igore logs
+# Ignore logs
 *.csv
 *.logs
 
@@ -23,6 +24,27 @@ site-packages/
 # Ignore Hugging Face cache
 ~/.cache/huggingface/
 
-results/
+/results/
 
 to_do.ipynb
+
+# Refactor planning docs (local only)
+refactor/
+
+# Build artifacts
+dist/
+build/
+
+# Tool caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Coverage
+htmlcov/
+.coverage
+coverage.xml
+
+# IDE
+.vscode/
+.idea/
