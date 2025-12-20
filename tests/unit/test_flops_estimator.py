@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from llm_bench.config.models import ExperimentConfig, QuantizationConfig
-from llm_bench.core.flops import FlopsEstimator, estimate_flops, get_flops_estimator
-from llm_bench.domain.metrics import FlopsResult
+from llm_energy_measure.config.models import ExperimentConfig, QuantizationConfig
+from llm_energy_measure.core.flops import FlopsEstimator, estimate_flops, get_flops_estimator
+from llm_energy_measure.domain.metrics import FlopsResult
 
 
 class TestFlopsResult:

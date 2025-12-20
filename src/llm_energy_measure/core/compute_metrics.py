@@ -14,12 +14,12 @@ import psutil
 import torch
 from loguru import logger
 
-from llm_bench.domain.metrics import ComputeMetrics, FlopsResult
+from llm_energy_measure.domain.metrics import ComputeMetrics, FlopsResult
 
 if TYPE_CHECKING:
     from accelerate import Accelerator
 
-    from llm_bench.config.models import ExperimentConfig
+    from llm_energy_measure.config.models import ExperimentConfig
 
 
 @dataclass
@@ -256,7 +256,7 @@ def collect_compute_metrics(
             logger.debug(f"Using cached FLOPs: {flops}")
         elif use_estimator:
             # Use new FlopsEstimator with fallback chain
-            from llm_bench.core.flops import estimate_flops
+            from llm_energy_measure.core.flops import estimate_flops
 
             flops_result = estimate_flops(model, input_ids, config)
             flops = flops_result.value

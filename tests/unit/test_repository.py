@@ -4,15 +4,15 @@ from datetime import datetime
 
 import pytest
 
-from llm_bench.domain.experiment import (
+from llm_energy_measure.domain.experiment import (
     AggregatedResult,
     AggregationMetadata,
     RawProcessResult,
     Timestamps,
 )
-from llm_bench.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
-from llm_bench.exceptions import ConfigurationError
-from llm_bench.results.repository import FileSystemRepository
+from llm_energy_measure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
+from llm_energy_measure.exceptions import ConfigurationError
+from llm_energy_measure.results.repository import FileSystemRepository
 
 
 @pytest.fixture

@@ -2,8 +2,8 @@
 
 import pytest
 
-from llm_bench.core.inference import calculate_inference_metrics
-from llm_bench.domain.metrics import InferenceMetrics
+from llm_energy_measure.core.inference import calculate_inference_metrics
+from llm_energy_measure.domain.metrics import InferenceMetrics
 
 
 class TestCalculateInferenceMetrics:

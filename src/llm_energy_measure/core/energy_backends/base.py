@@ -3,6 +3,6 @@
 Re-exports the EnergyBackend protocol from protocols.py for convenience.
 """
 
-from llm_bench.protocols import EnergyBackend
+from llm_energy_measure.protocols import EnergyBackend
 
 __all__ = ["EnergyBackend"]

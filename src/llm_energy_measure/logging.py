@@ -59,7 +59,7 @@ def setup_logging(
         )
 
 
-def get_logger(name: str = "llm_bench") -> Any:
+def get_logger(name: str = "llm_energy_measure") -> Any:
     """Get a logger instance bound with the given name.
 
     Args:

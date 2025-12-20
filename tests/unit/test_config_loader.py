@@ -2,15 +2,15 @@
 
 import pytest
 
-from llm_bench.config.loader import (
+from llm_energy_measure.config.loader import (
     deep_merge,
     load_config,
     load_config_dict,
     resolve_inheritance,
     validate_config,
 )
-from llm_bench.config.models import ExperimentConfig
-from llm_bench.exceptions import ConfigurationError
+from llm_energy_measure.config.models import ExperimentConfig
+from llm_energy_measure.exceptions import ConfigurationError
 
 
 class TestDeepMerge:

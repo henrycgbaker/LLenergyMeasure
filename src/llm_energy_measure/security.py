@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from llm_bench.exceptions import ConfigurationError
+from llm_energy_measure.exceptions import ConfigurationError
 
 
 def validate_path(path: Path, must_exist: bool = False, allow_relative: bool = True) -> Path:

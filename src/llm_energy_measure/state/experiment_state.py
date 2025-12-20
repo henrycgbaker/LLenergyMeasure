@@ -5,8 +5,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from llm_bench.exceptions import ConfigurationError
-from llm_bench.security import is_safe_path, sanitize_experiment_id
+from llm_energy_measure.exceptions import ConfigurationError
+from llm_energy_measure.security import is_safe_path, sanitize_experiment_id
 
 
 class ExperimentState(BaseModel):
@@ -91,7 +91,7 @@ class ExperimentState(BaseModel):
 class StateManager:
     """Manages persistent experiment state with atomic file operations."""
 
-    def __init__(self, state_dir: Path = Path(".llm_bench_state")):
+    def __init__(self, state_dir: Path = Path(".llm_energy_measure_state")):
         """Initialize state manager.
 
         Args:

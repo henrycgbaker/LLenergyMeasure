@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from llm_bench.domain.model_info import ModelInfo, QuantizationSpec
+from llm_energy_measure.domain.model_info import ModelInfo, QuantizationSpec
 
 
 class TestQuantizationSpec:

@@ -1,16 +1,16 @@
 """Results storage, aggregation, and export for LLM Bench."""
 
-from llm_bench.results.aggregation import (
+from llm_energy_measure.results.aggregation import (
     aggregate_results,
     calculate_efficiency_metrics,
 )
-from llm_bench.results.exporters import (
+from llm_energy_measure.results.exporters import (
     ResultsExporter,
     export_aggregated_to_csv,
     export_raw_to_csv,
     flatten_model,
 )
-from llm_bench.results.repository import FileSystemRepository
+from llm_energy_measure.results.repository import FileSystemRepository
 
 __all__ = [
     "FileSystemRepository",

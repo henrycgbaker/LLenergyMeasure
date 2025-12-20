@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from loguru import logger
 
-from llm_bench.domain.experiment import (
+from llm_energy_measure.domain.experiment import (
     AggregatedResult,
     AggregationMetadata,
     RawProcessResult,
 )
-from llm_bench.exceptions import AggregationError
+from llm_energy_measure.exceptions import AggregationError
 
 
 def aggregate_results(
