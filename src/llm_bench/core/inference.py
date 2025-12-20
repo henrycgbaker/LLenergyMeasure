@@ -219,7 +219,7 @@ def _process_batch(
     start_time = time.perf_counter()
 
     with torch.no_grad():
-        outputs: torch.Tensor = model.generate(
+        outputs = model.generate(
             input_ids,
             attention_mask=attention_mask,
             pad_token_id=tokenizer.pad_token_id,
