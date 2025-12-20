@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from llm_bench.core.compute_metrics import (
+from llm_energy_measure.core.compute_metrics import (
     MemoryStats,
     UtilizationStats,
     get_gpu_utilization,
@@ -83,7 +83,9 @@ class TestGetUtilizationStats:
         mock_process.memory_info.return_value.rss = 1_000_000
 
         with (
-            patch("llm_bench.core.compute_metrics.get_gpu_utilization", return_value=[50.0]),
+            patch(
+                "llm_energy_measure.core.compute_metrics.get_gpu_utilization", return_value=[50.0]
+            ),
             patch("psutil.cpu_percent", return_value=25.0),
             patch("psutil.Process", return_value=mock_process),
         ):
@@ -95,7 +97,7 @@ class TestGetUtilizationStats:
 
     def test_handles_psutil_error(self):
         with (
-            patch("llm_bench.core.compute_metrics.get_gpu_utilization", return_value=None),
+            patch("llm_energy_measure.core.compute_metrics.get_gpu_utilization", return_value=None),
             patch("psutil.cpu_percent", side_effect=Exception("Error")),
         ):
             result = get_utilization_stats()

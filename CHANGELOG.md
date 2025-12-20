@@ -37,7 +37,7 @@ Core module migration from legacy experiment_core_utils: - distributed.py: Accel
   memory stats, utilization tracking - energy_backends/codecarbon.py: CodeCarbon energy tracking
   backend
 
-Improvements over legacy code: - Uses domain models from llm_bench.domain - Protocol-based
+Improvements over legacy code: - Uses domain models from llm_energy_measure.domain - Protocol-based
   interfaces for extensibility - Loguru structured logging (replaced print statements) -
   Comprehensive type hints and docstrings - 63 new unit tests for core modules (228 total)
 

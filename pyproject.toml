@@ -1,10 +1,10 @@
 [tool.poetry]
-name = "llm-bench"
+name = "llm-energy-measure"
 version = "1.2.0"
 description = "LLM inference efficiency measurement framework"
 authors = ["henrycgbaker <henry.c.g.baker@gmail.com>"]
 readme = "README.md"
-packages = [{include = "llm_bench", from = "src"}]
+packages = [{include = "llm_energy_measure", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -29,7 +29,7 @@ types-pyyaml = "^6.0.12.20250915"
 python-semantic-release = "^9.0"
 
 [tool.poetry.scripts]
-llm-bench = "llm_bench.cli:app"
+llm-energy-measure = "llm_energy_measure.cli:app"
 
 [build-system]
 requires = ["poetry-core"]

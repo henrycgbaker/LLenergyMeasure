@@ -2,7 +2,7 @@
 
 import pytest
 
-from llm_bench.exceptions import (
+from llm_energy_measure.exceptions import (
     AggregationError,
     ConfigurationError,
     DistributedError,

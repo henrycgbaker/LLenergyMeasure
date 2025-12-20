@@ -17,10 +17,10 @@ from typing import TYPE_CHECKING, Any
 import torch
 from loguru import logger
 
-from llm_bench.domain.metrics import FlopsResult
+from llm_energy_measure.domain.metrics import FlopsResult
 
 if TYPE_CHECKING:
-    from llm_bench.config.models import ExperimentConfig
+    from llm_energy_measure.config.models import ExperimentConfig
 
 
 class FlopsEstimator:

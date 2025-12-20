@@ -8,7 +8,7 @@ from typing import TypeVar
 
 from loguru import logger
 
-from llm_bench.exceptions import RetryableError
+from llm_energy_measure.exceptions import RetryableError
 
 T = TypeVar("T")
 

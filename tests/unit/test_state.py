@@ -2,7 +2,7 @@
 
 import pytest
 
-from llm_bench.state.experiment_state import ExperimentState, StateManager
+from llm_energy_measure.state.experiment_state import ExperimentState, StateManager
 
 
 class TestExperimentState:

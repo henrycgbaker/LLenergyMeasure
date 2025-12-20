@@ -1,7 +1,7 @@
 """Configuration management for LLM Bench."""
 
-from llm_bench.config.loader import load_config, validate_config
-from llm_bench.config.models import (
+from llm_energy_measure.config.loader import load_config, validate_config
+from llm_energy_measure.config.models import (
     BatchingConfig,
     DecoderConfig,
     ExperimentConfig,

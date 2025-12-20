@@ -8,7 +8,7 @@ from typing import Any
 
 from loguru import logger
 
-from llm_bench.domain.experiment import AggregatedResult, RawProcessResult
+from llm_energy_measure.domain.experiment import AggregatedResult, RawProcessResult
 
 
 def flatten_model(model: Any, prefix: str = "") -> dict[str, Any]:

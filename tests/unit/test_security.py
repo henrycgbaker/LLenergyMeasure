@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from llm_bench.exceptions import ConfigurationError
-from llm_bench.security import (
+from llm_energy_measure.exceptions import ConfigurationError
+from llm_energy_measure.security import (
     check_env_for_secrets,
     is_safe_path,
     sanitize_experiment_id,
