@@ -50,6 +50,10 @@ indent-style = "space"
 python_version = "3.10"
 strict = true
 ignore_missing_imports = true
+# Disable checks that fail on untyped third-party libs (torch, transformers)
+disallow_untyped_calls = false
+# Allow unused type: ignore comments (needed for cross-environment compatibility)
+warn_unused_ignores = false
 exclude = [
     "experiment_core_utils",
     "experiment_orchestration_utils",
