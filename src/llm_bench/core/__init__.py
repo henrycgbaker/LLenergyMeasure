@@ -16,6 +16,11 @@ from llm_bench.core.distributed import (
     get_shared_unique_id,
     safe_wait,
 )
+from llm_bench.core.flops import (
+    FlopsEstimator,
+    estimate_flops,
+    get_flops_estimator,
+)
 from llm_bench.core.inference import (
     InferenceResult,
     calculate_inference_metrics,
@@ -38,6 +43,7 @@ from llm_bench.domain.metrics import ComputeMetrics
 
 __all__ = [
     "ComputeMetrics",
+    "FlopsEstimator",
     "InferenceResult",
     "MemoryStats",
     "ModelWrapper",
@@ -49,9 +55,11 @@ __all__ = [
     "create_adaptive_batches",
     "create_fixed_batches",
     "detect_quantization_support",
+    "estimate_flops",
     "filter_n_prompts",
     "get_accelerator",
     "get_flops",
+    "get_flops_estimator",
     "get_memory_stats",
     "get_original_generate_method",
     "get_persistent_unique_id",

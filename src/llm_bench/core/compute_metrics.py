@@ -14,10 +14,12 @@ import psutil
 import torch
 from loguru import logger
 
-from llm_bench.domain.metrics import ComputeMetrics
+from llm_bench.domain.metrics import ComputeMetrics, FlopsResult
 
 if TYPE_CHECKING:
     from accelerate import Accelerator
+
+    from llm_bench.config.models import ExperimentConfig
 
 
 @dataclass
@@ -219,6 +221,8 @@ def collect_compute_metrics(
     input_ids: torch.Tensor,
     accelerator: Accelerator,
     cached_flops: float | None = None,
+    config: ExperimentConfig | None = None,
+    use_estimator: bool = True,
 ) -> ComputeMetrics:
     """Collect all compute-related metrics.
 
@@ -231,20 +235,41 @@ def collect_compute_metrics(
         input_ids: Tokenized input tensor.
         accelerator: Accelerator for process coordination.
         cached_flops: Pre-computed FLOPs value (e.g., for quantized models).
+        config: Experiment config for precision detection (used by FlopsEstimator).
+        use_estimator: If True, use FlopsEstimator with fallback chain.
+                      If False, use legacy ptflops-only approach.
 
     Returns:
         ComputeMetrics with FLOPs and optionally memory/utilization data.
     """
+    flops_result: FlopsResult | None = None
     flops = 0.0
+    method = "unknown"
+    confidence = "unknown"
+    precision = "fp16"
 
     if accelerator.is_main_process:
         if cached_flops is not None:
             flops = cached_flops
+            method = "cached"
+            confidence = "high"
             logger.debug(f"Using cached FLOPs: {flops}")
+        elif use_estimator:
+            # Use new FlopsEstimator with fallback chain
+            from llm_bench.core.flops import estimate_flops
+
+            flops_result = estimate_flops(model, input_ids, config)
+            flops = flops_result.value
+            method = flops_result.method
+            confidence = flops_result.confidence
+            precision = flops_result.precision
         else:
+            # Legacy ptflops-only approach
             computed = get_flops(model, input_ids)
             if computed is not None:
                 flops = computed
+                method = "ptflops"
+                confidence = "medium"
             else:
                 logger.warning("FLOPs computation failed, using 0.0")
 
@@ -252,7 +277,7 @@ def collect_compute_metrics(
     _utilization = get_utilization_stats()  # Collected for future use
 
     logger.debug(
-        f"Compute metrics: FLOPs={flops:.2e}, "
+        f"Compute metrics: FLOPs={flops:.2e} ({method}/{confidence}), "
         f"GPU mem={memory.current_allocated_bytes / 1e9:.2f}GB, "
         f"CPU={_utilization.cpu_usage_percent:.1f}%"
     )
@@ -263,7 +288,7 @@ def collect_compute_metrics(
         flops_per_second=0.0,
         peak_memory_mb=memory.max_allocated_bytes / (1024 * 1024),
         model_memory_mb=0.0,
-        flops_method="ptflops",
-        flops_confidence="medium",
-        compute_precision="fp16",
+        flops_method=method,
+        flops_confidence=confidence,
+        compute_precision=precision,
     )
