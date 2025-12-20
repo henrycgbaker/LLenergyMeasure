@@ -1,6 +1,34 @@
 """Metrics domain models for LLM Bench."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+
+class FlopsResult(BaseModel):
+    """FLOPs estimation result with provenance tracking.
+
+    Tracks both the estimated value and the method used to obtain it,
+    allowing downstream consumers to understand confidence levels.
+
+    Note: For BitsAndBytes quantization, FLOPs = FP16 FLOPs because
+    computation happens at FP16 after dequantization.
+    """
+
+    value: float = Field(..., description="Estimated FLOPs count")
+    method: Literal["calflops", "architecture", "parameter_estimate"] = Field(
+        ..., description="Estimation method used"
+    )
+    confidence: Literal["high", "medium", "low"] = Field(
+        ..., description="Confidence level of the estimate"
+    )
+    precision: str = Field(..., description="Compute precision (e.g., fp16, fp32)")
+    notes: str | None = Field(default=None, description="Additional context or warnings")
+
+    @property
+    def is_valid(self) -> bool:
+        """Check if this is a valid (non-zero) estimate."""
+        return self.value > 0
 
 
 class InferenceMetrics(BaseModel):
