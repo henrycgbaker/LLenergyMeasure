@@ -1,0 +1,62 @@
+[tool.poetry]
+name = "llm-bench"
+version = "1.0.0"
+description = "LLM inference efficiency measurement framework"
+authors = ["henrycgbaker <henry.c.g.baker@gmail.com>"]
+readme = "README.md"
+packages = [{include = "llm_bench", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+torch = "^2.5.0"
+transformers = "^4.49.0"
+accelerate = "^1.4.0"
+datasets = "^3.0.0"
+codecarbon = "^2.8.0"
+pydantic = "^2.0"
+loguru = "^0.7.0"
+typer = {extras = ["all"], version = "^0.9.0"}
+pynvml = "^12.0.0"
+calflops = "^0.2.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-cov = "^4.0"
+ruff = "^0.8.0"
+mypy = "^1.0"
+pre-commit = "^3.0"
+
+[tool.poetry.scripts]
+llm-bench = "llm_bench.cli:app"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]  # Line length handled by formatter
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+exclude = [
+    "experiment_core_utils",
+    "experiment_orchestration_utils",
+    "configs",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
