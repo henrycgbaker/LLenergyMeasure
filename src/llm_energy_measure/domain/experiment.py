@@ -33,6 +33,8 @@ class RawProcessResult(BaseModel):
     experiment_id: str = Field(..., description="Unique experiment identifier")
     process_index: int = Field(..., description="Process rank in distributed setup")
     gpu_id: int = Field(..., description="GPU device index")
+    config_name: str = Field(..., description="Configuration name for this experiment")
+    model_name: str = Field(..., description="Model name/path used")
     timestamps: Timestamps = Field(..., description="Timing information")
     inference_metrics: InferenceMetrics = Field(..., description="Inference performance metrics")
     energy_metrics: EnergyMetrics = Field(..., description="Energy consumption metrics")

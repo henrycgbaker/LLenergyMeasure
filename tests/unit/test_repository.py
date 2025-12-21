@@ -22,6 +22,8 @@ def sample_raw_result():
         experiment_id="exp_001",
         process_index=0,
         gpu_id=0,
+        config_name="test_config",
+        model_name="test/model",
         timestamps=Timestamps(
             start=datetime(2024, 1, 1, 12, 0, 0),
             end=datetime(2024, 1, 1, 12, 0, 10),
