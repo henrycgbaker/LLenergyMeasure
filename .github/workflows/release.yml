@@ -5,6 +5,11 @@ on:
     branches: [main]
   workflow_dispatch:  # Allow manual trigger
 
+# Prevent concurrent releases
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -35,6 +40,9 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction
 
+      - name: Pull latest changes
+        run: git pull --rebase origin main
+
       - name: Python Semantic Release
         id: release
         env:
@@ -42,7 +50,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          poetry run semantic-release version --no-vcs-release
+          poetry run semantic-release version
           poetry run semantic-release publish
 
       - name: Build package
