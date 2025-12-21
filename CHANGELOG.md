@@ -1,6 +1,23 @@
 # CHANGELOG
 
 
+## v2.2.0 (2025-12-21)
+
+### Features
+
+- Add orchestration modules for experiment lifecycle (Phase 11)
+  ([`da2ab3d`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/da2ab3d874ea1764111c631a1ba75896b2488083))
+
+Add orchestration components: - ExperimentOrchestrator: Clean DI-based runner (~100 lines) -
+  lifecycle.py: CUDA/distributed cleanup, warmup utilities - launcher.py: Accelerate CLI launching
+  with retry logic
+
+Also updates RawProcessResult to include config_name and model_name fields for better experiment
+  traceability.
+
+Includes 27 new unit tests for orchestration modules.
+
+
 ## v2.1.0 (2025-12-21)
 
 ### Features
