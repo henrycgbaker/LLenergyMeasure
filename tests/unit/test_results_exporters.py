@@ -56,6 +56,8 @@ def make_raw_result(
         experiment_id="exp_001",
         process_index=process_index,
         gpu_id=gpu_id,
+        config_name="test_config",
+        model_name="test/model",
         timestamps=Timestamps(
             start=datetime(2024, 1, 1, 12, 0, 0),
             end=datetime(2024, 1, 1, 12, 0, 10),
