@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v2.0.0 (2025-12-20)
+
+### Features
+
+- Rename package from llm-bench to llm-energy-measure
+  ([`1814c1a`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/1814c1a93853ab1156e991bd5821fa4424c26ce8))
+
+BREAKING CHANGE: Package renamed from llm-bench to llm-energy-measure. All imports now use
+  llm_energy_measure instead of llm_bench.
+
+### Breaking Changes
+
+- Package renamed from llm-bench to llm-energy-measure. All imports now use llm_energy_measure
+  instead of llm_bench.
+
+
 ## v1.2.0 (2025-12-20)
 
 ### Features
@@ -37,7 +53,7 @@ Core module migration from legacy experiment_core_utils: - distributed.py: Accel
   memory stats, utilization tracking - energy_backends/codecarbon.py: CodeCarbon energy tracking
   backend
 
-Improvements over legacy code: - Uses domain models from llm_energy_measure.domain - Protocol-based
+Improvements over legacy code: - Uses domain models from llm_bench.domain - Protocol-based
   interfaces for extensibility - Loguru structured logging (replaced print statements) -
   Comprehensive type hints and docstrings - 63 new unit tests for core modules (228 total)
 
