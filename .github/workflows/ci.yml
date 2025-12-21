@@ -42,14 +42,13 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Run linting
-        run: poetry run ruff check src/
+        run: poetry run ruff check src/ tests/
 
       - name: Run formatting check
-        run: poetry run ruff format --check src/
+        run: poetry run ruff format --check src/ tests/
 
       - name: Run type checking
         run: poetry run mypy src/
 
       - name: Run tests
-        run: poetry run pytest tests/unit/ -v --tb=short
-        continue-on-error: true  # Tests may not exist yet
+        run: poetry run pytest tests/ -v --tb=short
