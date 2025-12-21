@@ -30,6 +30,8 @@ def make_raw_result(
         experiment_id="test_exp",
         process_index=process_index,
         gpu_id=gpu_id,
+        config_name="test_config",
+        model_name="test/model",
         timestamps=Timestamps(start=start, end=end, duration_sec=duration_sec),
         inference_metrics=InferenceMetrics(
             total_tokens=tokens,
