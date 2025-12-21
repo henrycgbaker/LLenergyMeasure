@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v2.1.0 (2025-12-21)
+
+### Features
+
+- Add ExperimentContext for lifecycle management (Phase 10)
+  ([`5ab9601`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/5ab96011bc4fff0d9b8658068b5b863f68524762))
+
+Add orchestration context module with: - ExperimentContext dataclass for runtime experiment state -
+  experiment_context context manager for lifecycle management - Factory method for creating contexts
+  from config - Automatic cleanup of distributed resources
+
+Includes 13 unit tests for context creation, properties, and cleanup.
+
+
 ## v2.0.0 (2025-12-20)
 
 ### Features
