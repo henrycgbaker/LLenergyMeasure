@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v1.16.2 (2025-12-29)
+
+### Bug Fixes
+
+- Resolve Docker CUDA mismatch and volume permission issues
+  ([`9d8e0a7`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/9d8e0a7e0c58af21254bc205257bffacbe33c870))
+
+- Install PyTorch with explicit CUDA 12.1 support to match base image - Use /tmp/hf_cache for
+  HuggingFace cache to avoid volume permission errors - Add minimal test config for quick validation
+
+
 ## v1.16.1 (2025-12-29)
 
 ### Bug Fixes

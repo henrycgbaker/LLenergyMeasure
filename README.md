@@ -126,6 +126,8 @@ Commands:
 
 ## Configuration
 
+The CLI expects **YAML** configuration files. The Python files in `configs/` are legacy research configs - see `configs/README.md` for migration instructions.
+
 ### Config Structure
 
 ```yaml
@@ -187,6 +189,12 @@ model_name: meta-llama/Llama-2-7b-hf
 
 ## Docker Usage
 
+### Requirements
+
+- **NVIDIA GPU** with CUDA support
+- **CUDA 12.1** compatible drivers (image uses `nvidia/cuda:12.1.0-runtime-ubuntu22.04`)
+- **nvidia-container-toolkit** installed and configured
+
 ### Environment Variables
 
 Copy `env.example` to `.env` and configure:
@@ -195,7 +203,7 @@ Copy `env.example` to `.env` and configure:
 # Required for gated models (Llama, etc.)
 HF_TOKEN=your_huggingface_token
 
-# Optional: GPU selection
+# Optional: GPU selection (see MIG notes below)
 CUDA_VISIBLE_DEVICES=0,1
 
 # Optional: Cache location
@@ -205,26 +213,58 @@ HF_HOME=/path/to/cache
 ### Running with Docker Compose
 
 ```bash
-# Validate config
-docker compose run --rm llm-energy-measure config validate /app/configs/experiment.yaml
+# Build the image
+docker compose build
 
-# Run experiment (requires custom entrypoint for accelerate)
+# Validate config
+docker compose run --rm llm-energy-measure llm-energy-measure config validate /app/configs/test_tiny.yaml
+
+# Run experiment with accelerate
 docker compose run --rm llm-energy-measure accelerate launch \
-  --num_processes 2 \
+  --num_processes 1 \
   -m llm_energy_measure.orchestration.launcher \
-  --config /app/configs/experiment.yaml
+  --config /app/configs/test_tiny.yaml
 
 # View results
-docker compose run --rm llm-energy-measure results list
+docker compose run --rm llm-energy-measure llm-energy-measure results list
 ```
+
+### Persistent Model Cache
+
+By default, models download to `/tmp/hf_cache` inside the container and are **lost when the container exits**. To persist downloaded models, mount a host volume:
+
+```bash
+# Option 1: Mount host HuggingFace cache (preserves existing downloads)
+docker compose run --rm \
+  --user "$(id -u):$(id -g)" \
+  -v ~/.cache/huggingface:/tmp/hf_cache \
+  llm-energy-measure accelerate launch \
+  --num_processes 1 \
+  -m llm_energy_measure.orchestration.launcher \
+  --config /app/configs/test_tiny.yaml
+```
+
+**Note**: The `--user "$(id -u):$(id -g)"` flag ensures files created in the mounted volume have correct ownership.
 
 ### Volume Mounts
 
 | Host Path | Container Path | Purpose |
 |-----------|----------------|---------|
-| `~/.cache/huggingface` | `/home/app/.cache/huggingface` | Model cache |
+| `~/.cache/huggingface` | `/tmp/hf_cache` | Model cache (optional mount) |
 | `./configs` | `/app/configs` (ro) | Experiment configs |
 | `./results` | `/app/results` | Output results |
+
+### MIG GPU Considerations
+
+On servers with **MIG (Multi-Instance GPU)** enabled GPUs (common on A100s), you may encounter device enumeration issues. Workarounds:
+
+```bash
+# Force use of physical GPU 0 (non-MIG device)
+CUDA_VISIBLE_DEVICES=0 docker compose run --rm llm-energy-measure ...
+
+# Or set in your .env file
+echo "CUDA_VISIBLE_DEVICES=0" >> .env
+```
 
 ## Results Structure
 
@@ -246,6 +286,72 @@ results/
 | **Inference** | total_tokens, tokens_per_second, latency_per_token_ms |
 | **Energy** | total_energy_j, gpu_energy_j, cpu_energy_j, emissions_kg_co2 |
 | **Compute** | flops_total, flops_per_token, peak_memory_mb |
+
+## Troubleshooting
+
+### CUDA Version Mismatch
+
+**Symptom**: `RuntimeError: CUDA error: no kernel image is available for execution on the device`
+
+**Cause**: Host CUDA drivers incompatible with container's CUDA 12.1.
+
+**Solution**: Ensure NVIDIA drivers support CUDA 12.1+. Check with:
+```bash
+nvidia-smi  # Shows driver version and max CUDA version
+```
+
+### Permission Denied on Results
+
+**Symptom**: `PermissionError` when writing to mounted volumes.
+
+**Solution**: Run container with host user ID:
+```bash
+docker compose run --rm --user "$(id -u):$(id -g)" llm-energy-measure ...
+```
+
+### MIG Device Errors
+
+**Symptom**: `RuntimeError: CUDA error: invalid device ordinal` or only seeing MIG instances.
+
+**Cause**: A100 or other GPUs with MIG enabled expose virtual devices differently.
+
+**Solution**: Force use of physical GPU:
+```bash
+CUDA_VISIBLE_DEVICES=0 docker compose run --rm llm-energy-measure ...
+```
+
+### Model Download Every Run
+
+**Symptom**: Models re-download each container run.
+
+**Cause**: HF cache inside container defaults to `/tmp/hf_cache` which is ephemeral.
+
+**Solution**: Mount persistent cache (see [Persistent Model Cache](#persistent-model-cache)):
+```bash
+docker compose run --rm \
+  --user "$(id -u):$(id -g)" \
+  -v ~/.cache/huggingface:/tmp/hf_cache \
+  llm-energy-measure ...
+```
+
+### Config Validation Errors
+
+**Symptom**: `ValidationError` when loading config.
+
+**Solutions**:
+- Ensure you're using YAML format (not Python config files)
+- Validate config before running: `llm-energy-measure config validate configs/your_config.yaml`
+- Check field names match the schema in [Config Structure](#config-structure)
+
+### Out of Memory (OOM)
+
+**Symptom**: `CUDA out of memory` error.
+
+**Solutions**:
+- Reduce `batching_options.batch_size`
+- Reduce `max_input_tokens` and `max_output_tokens`
+- Use quantization: set `quantization_config.load_in_8bit: true`
+- Use lower precision: `fp_precision: float16` or `bfloat16`
 
 ## Development
 
