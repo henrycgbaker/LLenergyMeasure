@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v1.16.1 (2025-12-29)
+
+### Bug Fixes
+
+- Remove default_bump_level to prevent prerelease errors
+  ([`965613d`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/965613d5bcfbddf7ebcf77d64487d63e84b36ed2))
+
+
 ## v1.16.0 (2025-12-29)
 
 ### Chores
@@ -24,12 +32,6 @@ Incremental versioning - no v2.x breaking changes.
 
 - Update version to match latest tag v2.5.2 - Remove outdated v1.x capping comments - Keep feat! as
   minor bump for incremental versioning
-
-- **release**: V2.0.0
-  ([`a2b0fe9`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/a2b0fe9eed7d09d3178b3437ec87da56a1b324c0))
-
-- **release**: V2.3.1
-  ([`b32ab8f`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/b32ab8ff33e18677395f4e81fed1c81dd67b533b))
 
 ### Documentation
 
@@ -121,11 +123,6 @@ Delete pip freeze output (306 packages) - all dependencies now managed via pypro
 
 ## v1.13.0 (2025-12-21)
 
-### Chores
-
-- **release**: V2.2.0
-  ([`110aa53`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/110aa53f218d8a0360041f4a4f39bb9551a4e058))
-
 ### Features
 
 - Add CLI with typer for experiment management (Phase 12)
@@ -138,11 +135,6 @@ Delete pip freeze output (306 packages) - all dependencies now managed via pypro
 
 
 ## v1.12.0 (2025-12-21)
-
-### Chores
-
-- **release**: V2.1.0
-  ([`6b945e1`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/6b945e10e9ecf8eab65942c548dce89582d3cba8))
 
 ### Features
 
@@ -161,11 +153,6 @@ Includes 27 new unit tests for orchestration modules.
 
 ## v1.11.0 (2025-12-21)
 
-### Chores
-
-- **release**: V2.0.0
-  ([`7bce73a`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/7bce73ab6bdbd82eab2bd89e9161635b5956248c))
-
 ### Features
 
 - Add ExperimentContext for lifecycle management (Phase 10)
@@ -179,11 +166,6 @@ Includes 13 unit tests for context creation, properties, and cleanup.
 
 
 ## v1.10.0 (2025-12-20)
-
-### Chores
-
-- **release**: V1.2.0
-  ([`c617931`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/c617931722d336290cdc8cf3c6b518bb89dc223d))
 
 ### Features
 
@@ -200,11 +182,6 @@ BREAKING CHANGE: Package renamed from llm-bench to llm-energy-measure. All impor
 
 
 ## v1.9.0 (2025-12-20)
-
-### Chores
-
-- **release**: V1.1.0
-  ([`997f86d`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/997f86d93017312590a286213d774528885ec00b))
 
 ### Continuous Integration
 

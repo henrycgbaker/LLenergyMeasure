@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "llm-energy-measure"
-version = "1.16.0"
+version = "1.16.1"
 description = "LLM inference efficiency measurement framework"
 authors = ["henrycgbaker <henry.c.g.baker@gmail.com>"]
 readme = "README.md"
