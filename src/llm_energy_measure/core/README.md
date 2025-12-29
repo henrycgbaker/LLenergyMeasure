@@ -1,0 +1,136 @@
+# core/ - Inference Engine
+
+Core functionality for running LLM inference and collecting metrics.
+
+## Purpose
+
+Provides the inference engine, model loading, FLOPs estimation, energy tracking backends, and metrics collection. This is where the actual benchmarking work happens.
+
+## Key Files
+
+### inference.py
+Main inference engine that processes prompts through the model.
+
+```python
+from llm_energy_measure.core import run_inference, InferenceResult
+
+result = run_inference(model, config, prompts, tokenizer, accelerator)
+# result.metrics contains InferenceMetrics
+# result.input_ids contains tokenized inputs
+```
+
+Key functions:
+- `run_inference()` - Main entry point for batch inference
+- `calculate_inference_metrics()` - Compute tokens/sec, latency
+- `_create_batches()` - Create fixed or dynamic batches
+- `_process_batch()` - Process single batch with timing
+
+### model_loader.py
+Model and tokenizer loading with quantization support.
+
+```python
+from llm_energy_measure.core import load_model_tokenizer, ModelWrapper
+
+model, tokenizer = load_model_tokenizer(config, accelerator)
+```
+
+Key exports:
+- `load_model_tokenizer()` - Load model with config settings
+- `ModelWrapper` - Wrapper for model with metadata
+- `QuantizationSupport` - Quantization capabilities detection
+- `detect_quantization_support()` - Check BNB availability
+
+### flops.py
+FLOPs estimation with multiple fallback methods.
+
+```python
+from llm_energy_measure.core import FlopsEstimator, estimate_flops
+
+estimator = FlopsEstimator(model, tokenizer, config)
+result = estimator.estimate(input_ids)  # Returns FlopsResult
+```
+
+Estimation methods (in priority order):
+1. `calflops` - Direct measurement (highest confidence)
+2. `architecture` - Architecture-based calculation
+3. `parameter_estimate` - Parameter count heuristic
+
+### compute_metrics.py
+GPU memory and utilization statistics.
+
+```python
+from llm_energy_measure.core import get_memory_stats, get_utilization_stats
+
+memory = get_memory_stats(device)  # MemoryStats
+util = get_utilization_stats(device)  # UtilizationStats
+```
+
+### distributed.py
+Distributed training utilities for `accelerate`.
+
+```python
+from llm_energy_measure.core import get_accelerator, safe_wait, cleanup_distributed
+
+accelerator = get_accelerator(config)
+safe_wait(accelerator)  # Barrier with timeout
+cleanup_distributed(accelerator)
+```
+
+Key functions:
+- `get_accelerator()` - Initialize accelerator
+- `get_persistent_unique_id()` - Unique experiment ID
+- `safe_wait()` - Barrier with configurable timeout
+
+### prompts.py
+Prompt processing and batching.
+
+```python
+from llm_energy_measure.core import create_fixed_batches, create_adaptive_batches
+
+batches = create_fixed_batches(prompts, batch_size=8)
+batches = create_adaptive_batches(prompts, tokenizer, max_tokens_per_batch=2048)
+```
+
+### energy_backends/
+Energy tracking implementations.
+
+```
+energy_backends/
+├── __init__.py
+├── base.py          # EnergyBackend protocol
+└── codecarbon.py    # CodeCarbon implementation
+```
+
+Usage:
+```python
+from llm_energy_measure.core.energy_backends import CodeCarbonBackend
+
+backend = CodeCarbonBackend()
+tracker = backend.start_tracking()
+# ... run inference ...
+metrics = backend.stop_tracking(tracker)  # EnergyMetrics
+```
+
+## Data Flow
+
+```
+prompts -> tokenize_batch() -> run_inference() -> BatchResult[]
+                                    |
+                           calculate_inference_metrics()
+                                    |
+                              InferenceResult
+```
+
+## Dependencies
+
+- `torch` - PyTorch tensors and CUDA
+- `transformers` - Model/tokenizer loading
+- `accelerate` - Distributed inference
+- `codecarbon` - Energy tracking
+- `calflops` - FLOPs estimation
+- `pynvml` - GPU stats
+
+## Related
+
+- See `../domain/README.md` for metric models
+- See `../orchestration/README.md` for experiment runner
