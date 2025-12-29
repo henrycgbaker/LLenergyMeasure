@@ -16,19 +16,19 @@ services:
 
     # Volumes
     volumes:
-      # HuggingFace model cache (avoid re-downloading)
-      - ${HF_HOME:-~/.cache/huggingface}:/home/app/.cache/huggingface
       # Experiment configs (read-only)
       - ./configs:/app/configs:ro
       # Results output
       - ./results:/app/results
-      # Optional: mount source for debugging (uncomment to enable)
-      # - ./src:/app/src:ro
+      # Optional: mount HF cache from host (requires correct permissions)
+      # - ${HF_HOME:-~/.cache/huggingface}:/tmp/hf_cache
 
-    # Environment variables (loaded from .env if present)
+    # Environment variables
     environment:
       - HF_TOKEN
       - CUDA_VISIBLE_DEVICES
+      - HF_HOME=/tmp/hf_cache
+      - TRANSFORMERS_CACHE=/tmp/hf_cache
       - CODECARBON_LOG_LEVEL=warning
 
     # Working directory

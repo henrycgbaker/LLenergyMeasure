@@ -1,0 +1,15 @@
+config_name: test-tinyllama
+model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+
+# Minimal settings for quick test
+max_input_tokens: 32
+max_output_tokens: 16
+num_input_prompts: 4
+
+# Single GPU (GPU 0 - the non-MIG one)
+gpu_list: [0]
+num_processes: 1
+
+# Batching
+batching_options:
+  batch_size: 2
