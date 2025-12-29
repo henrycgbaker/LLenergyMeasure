@@ -48,3 +48,6 @@ coverage.xml
 # IDE
 .vscode/
 .idea/
+
+# Environment files (secrets)
+.env

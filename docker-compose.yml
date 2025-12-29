@@ -1,0 +1,39 @@
+services:
+  llm-energy-measure:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: llm-energy-measure:latest
+
+    # GPU access
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    # Volumes
+    volumes:
+      # HuggingFace model cache (avoid re-downloading)
+      - ${HF_HOME:-~/.cache/huggingface}:/home/app/.cache/huggingface
+      # Experiment configs (read-only)
+      - ./configs:/app/configs:ro
+      # Results output
+      - ./results:/app/results
+      # Optional: mount source for debugging (uncomment to enable)
+      # - ./src:/app/src:ro
+
+    # Environment variables (loaded from .env if present)
+    environment:
+      - HF_TOKEN
+      - CUDA_VISIBLE_DEVICES
+      - CODECARBON_LOG_LEVEL=warning
+
+    # Working directory
+    working_dir: /app
+
+    # Override entrypoint for flexible commands
+    entrypoint: []
+    command: ["llm-energy-measure", "--help"]

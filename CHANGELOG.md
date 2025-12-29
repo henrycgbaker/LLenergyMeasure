@@ -1,9 +1,84 @@
 # CHANGELOG
 
 
-## v2.2.0 (2025-12-21)
+## v2.0.0 (2025-12-21)
+
+### Bug Fixes
+
+- **ci**: Improve release workflow reliability
+  ([`71a04a1`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/71a04a14b3af3db0488f535b3bea5bbd23cfb698))
+
+- Add concurrency group to prevent parallel releases - Pull latest changes before semantic-release
+  runs - Remove --no-vcs-release to let semantic-release manage releases
+
+- **ci**: Run all tests and check tests/ directory
+  ([`69fd8bc`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/69fd8bc1ce8b778c33288fd084abd06056ab4cd3))
+
+- Run linting/formatting on both src/ and tests/ - Run all tests (unit + integration + e2e), not
+  just unit - Remove continue-on-error now that tests exist
+
+### Chores
+
+- Remove requirements.txt in favor of Poetry (Phase 14)
+  ([`289d358`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/289d358b5ffe7bfc43c5ef8402865f293ad913ce))
+
+Delete pip freeze output (306 packages) - all dependencies now managed via pyproject.toml and
+  poetry.lock
+
+- Reset version to v1.2.0 and cap at v1.x
+  ([`284919b`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/284919bd3c9fc99a94975fb2ced2dee475923372))
+
+- Reset version to match v1.2.0 tag - Configure semantic-release to treat breaking changes as minor
+  - Will stay in v1.x range until ready for v2.0.0 release
+
+- **release**: Sync version to v2.3.0
+  ([`e18b8ee`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/e18b8ee437a78049c21a309f7149835ca4e32ecc))
+
+- **release**: V2.0.0
+  ([`7bce73a`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/7bce73ab6bdbd82eab2bd89e9161635b5956248c))
+
+- **release**: V2.1.0
+  ([`6b945e1`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/6b945e10e9ecf8eab65942c548dce89582d3cba8))
+
+- **release**: V2.2.0
+  ([`110aa53`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/110aa53f218d8a0360041f4a4f39bb9551a4e058))
+
+- **release**: V2.3.1
+  ([`b32ab8f`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/b32ab8ff33e18677395f4e81fed1c81dd67b533b))
 
 ### Features
+
+- Add CLI with typer for experiment management (Phase 12)
+  ([`6a692ea`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/6a692ea0fefb6c943880435171a95888b16a9484))
+
+- Add cli.py with typer commands: - run: execute experiments (dry-run supported) - aggregate:
+  combine raw results (--all, --force) - config validate/show: config inspection - results
+  list/show: result inspection (--raw, --json) - Add 25 CLI tests covering all commands - Delete
+  legacy MAIN_*.py entry points (6 files) - Upgrade typer to 0.15.x for Python 3.10+ type hints
+
+- Add E2E tests and methodology documentation (Phase 16)
+  ([`b80c3b9`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/b80c3b9d0b8dcd0eb72d6a472010e809dd5ae68c))
+
+- Add 8 E2E CLI tests covering complete benchmark workflows - Add docs/methodology.md with
+  measurement methodology - Total tests: 416 (passing)
+
+- Add ExperimentContext for lifecycle management (Phase 10)
+  ([`5ab9601`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/5ab96011bc4fff0d9b8658068b5b863f68524762))
+
+Add orchestration context module with: - ExperimentContext dataclass for runtime experiment state -
+  experiment_context context manager for lifecycle management - Factory method for creating contexts
+  from config - Automatic cleanup of distributed resources
+
+Includes 13 unit tests for context creation, properties, and cleanup.
+
+- Add integration tests for non-GPU workflows (Phase 15)
+  ([`809397e`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/809397e9db0a90d9f31e7d8f5cc382a8a29eb439))
+
+Add 47 integration tests covering: - Config → aggregation → export pipeline - Repository file
+  operations lifecycle - CLI end-to-end workflows - Error handling scenarios
+
+All tests run without GPU access by using mocked/simulated data. Total test count: 408 (47 new
+  integration tests)
 
 - Add orchestration modules for experiment lifecycle (Phase 11)
   ([`da2ab3d`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/da2ab3d874ea1764111c631a1ba75896b2488083))
@@ -17,38 +92,19 @@ Also updates RawProcessResult to include config_name and model_name fields for b
 
 Includes 27 new unit tests for orchestration modules.
 
-
-## v2.1.0 (2025-12-21)
-
-### Features
-
-- Add ExperimentContext for lifecycle management (Phase 10)
-  ([`5ab9601`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/5ab96011bc4fff0d9b8658068b5b863f68524762))
-
-Add orchestration context module with: - ExperimentContext dataclass for runtime experiment state -
-  experiment_context context manager for lifecycle management - Factory method for creating contexts
-  from config - Automatic cleanup of distributed resources
-
-Includes 13 unit tests for context creation, properties, and cleanup.
-
-
-## v2.0.0 (2025-12-20)
-
-### Features
-
 - Rename package from llm-bench to llm-energy-measure
   ([`1814c1a`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/1814c1a93853ab1156e991bd5821fa4424c26ce8))
 
 BREAKING CHANGE: Package renamed from llm-bench to llm-energy-measure. All imports now use
   llm_energy_measure instead of llm_bench.
 
-### Breaking Changes
-
-- Package renamed from llm-bench to llm-energy-measure. All imports now use llm_energy_measure
-  instead of llm_bench.
-
 
 ## v1.2.0 (2025-12-20)
+
+### Chores
+
+- **release**: V1.2.0
+  ([`c617931`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/c617931722d336290cdc8cf3c6b518bb89dc223d))
 
 ### Features
 
@@ -61,6 +117,11 @@ BREAKING CHANGE: Package renamed from llm-bench to llm-energy-measure. All impor
 
 
 ## v1.1.0 (2025-12-20)
+
+### Chores
+
+- **release**: V1.1.0
+  ([`997f86d`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/997f86d93017312590a286213d774528885ec00b))
 
 ### Continuous Integration
 
