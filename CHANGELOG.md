@@ -1,7 +1,62 @@
 # CHANGELOG
 
 
-## v2.0.0 (2025-12-21)
+## v1.16.0 (2025-12-29)
+
+### Chores
+
+- Reset version to v1.2.0 and cap at v1.x
+  ([`284919b`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/284919bd3c9fc99a94975fb2ced2dee475923372))
+
+- Reset version to match v1.2.0 tag - Configure semantic-release to treat breaking changes as minor
+  - Will stay in v1.x range until ready for v2.0.0 release
+
+- Sync version to v1.10.2
+  ([`32dd667`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/32dd6674d62b7d0d21535930814d0619ecc3e29a))
+
+Incremental versioning - no v2.x breaking changes.
+
+- Sync version to v1.15.2
+  ([`e5ab3cb`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/e5ab3cb0bc90e27decd20d312cdaa097bec6775a))
+
+- Sync version to v2.5.2 and clean semantic-release config
+  ([`40e983a`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/40e983aa933f9ca0cfe8764e7e82cdf34d005a32))
+
+- Update version to match latest tag v2.5.2 - Remove outdated v1.x capping comments - Keep feat! as
+  minor bump for incremental versioning
+
+- **release**: V2.0.0
+  ([`a2b0fe9`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/a2b0fe9eed7d09d3178b3437ec87da56a1b324c0))
+
+- **release**: V2.3.1
+  ([`b32ab8f`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/b32ab8ff33e18677395f4e81fed1c81dd67b533b))
+
+### Documentation
+
+- Add comprehensive project documentation
+  ([`efc8987`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/efc8987dad021e76b1142a7e1b6cdd57bc7c6823))
+
+Add user-facing and developer documentation across the project: - Enhanced root README with
+  installation, quick start, CLI reference, and Docker usage - Added root architecture overview
+  documentation with modular structure - Created module-level READMEs for all major packages
+  explaining purpose and structure - Documented configuration system, inference engine, domain
+  models, orchestration, and results persistence - Added test structure documentation
+
+This establishes a modular documentation approach where each component has local context, making the
+  codebase more navigable for both users and developers.
+
+### Features
+
+- Add Docker containerization with GPU support
+  ([`c93e8a5`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/c93e8a58c62a6731f971081cf8b332db39c0e8be))
+
+Add Docker and docker-compose setup for containerized execution: - Multi-stage Dockerfile with
+  nvidia/cuda:12.1 base - GPU passthrough configuration via docker-compose - HuggingFace cache
+  volume mounting to avoid re-downloads - Non-root user execution for security - Environment
+  template for HF_TOKEN and GPU selection - Updated .gitignore to exclude .env files
+
+
+## v1.15.2 (2025-12-21)
 
 ### Bug Fixes
 
@@ -11,11 +66,49 @@
 - Add concurrency group to prevent parallel releases - Pull latest changes before semantic-release
   runs - Remove --no-vcs-release to let semantic-release manage releases
 
+### Chores
+
+- **release**: Sync version to v2.3.0
+  ([`e18b8ee`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/e18b8ee437a78049c21a309f7149835ca4e32ecc))
+
+
+## v1.15.1 (2025-12-21)
+
+### Bug Fixes
+
 - **ci**: Run all tests and check tests/ directory
   ([`69fd8bc`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/69fd8bc1ce8b778c33288fd084abd06056ab4cd3))
 
 - Run linting/formatting on both src/ and tests/ - Run all tests (unit + integration + e2e), not
   just unit - Remove continue-on-error now that tests exist
+
+
+## v1.15.0 (2025-12-21)
+
+### Features
+
+- Add E2E tests and methodology documentation (Phase 16)
+  ([`b80c3b9`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/b80c3b9d0b8dcd0eb72d6a472010e809dd5ae68c))
+
+- Add 8 E2E CLI tests covering complete benchmark workflows - Add docs/methodology.md with
+  measurement methodology - Total tests: 416 (passing)
+
+
+## v1.14.0 (2025-12-21)
+
+### Features
+
+- Add integration tests for non-GPU workflows (Phase 15)
+  ([`809397e`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/809397e9db0a90d9f31e7d8f5cc382a8a29eb439))
+
+Add 47 integration tests covering: - Config → aggregation → export pipeline - Repository file
+  operations lifecycle - CLI end-to-end workflows - Error handling scenarios
+
+All tests run without GPU access by using mocked/simulated data. Total test count: 408 (47 new
+  integration tests)
+
+
+## v1.13.1 (2025-12-21)
 
 ### Chores
 
@@ -25,26 +118,13 @@
 Delete pip freeze output (306 packages) - all dependencies now managed via pyproject.toml and
   poetry.lock
 
-- Reset version to v1.2.0 and cap at v1.x
-  ([`284919b`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/284919bd3c9fc99a94975fb2ced2dee475923372))
 
-- Reset version to match v1.2.0 tag - Configure semantic-release to treat breaking changes as minor
-  - Will stay in v1.x range until ready for v2.0.0 release
+## v1.13.0 (2025-12-21)
 
-- **release**: Sync version to v2.3.0
-  ([`e18b8ee`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/e18b8ee437a78049c21a309f7149835ca4e32ecc))
-
-- **release**: V2.0.0
-  ([`7bce73a`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/7bce73ab6bdbd82eab2bd89e9161635b5956248c))
-
-- **release**: V2.1.0
-  ([`6b945e1`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/6b945e10e9ecf8eab65942c548dce89582d3cba8))
+### Chores
 
 - **release**: V2.2.0
   ([`110aa53`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/110aa53f218d8a0360041f4a4f39bb9551a4e058))
-
-- **release**: V2.3.1
-  ([`b32ab8f`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/b32ab8ff33e18677395f4e81fed1c81dd67b533b))
 
 ### Features
 
@@ -56,29 +136,15 @@ Delete pip freeze output (306 packages) - all dependencies now managed via pypro
   list/show: result inspection (--raw, --json) - Add 25 CLI tests covering all commands - Delete
   legacy MAIN_*.py entry points (6 files) - Upgrade typer to 0.15.x for Python 3.10+ type hints
 
-- Add E2E tests and methodology documentation (Phase 16)
-  ([`b80c3b9`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/b80c3b9d0b8dcd0eb72d6a472010e809dd5ae68c))
 
-- Add 8 E2E CLI tests covering complete benchmark workflows - Add docs/methodology.md with
-  measurement methodology - Total tests: 416 (passing)
+## v1.12.0 (2025-12-21)
 
-- Add ExperimentContext for lifecycle management (Phase 10)
-  ([`5ab9601`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/5ab96011bc4fff0d9b8658068b5b863f68524762))
+### Chores
 
-Add orchestration context module with: - ExperimentContext dataclass for runtime experiment state -
-  experiment_context context manager for lifecycle management - Factory method for creating contexts
-  from config - Automatic cleanup of distributed resources
+- **release**: V2.1.0
+  ([`6b945e1`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/6b945e10e9ecf8eab65942c548dce89582d3cba8))
 
-Includes 13 unit tests for context creation, properties, and cleanup.
-
-- Add integration tests for non-GPU workflows (Phase 15)
-  ([`809397e`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/809397e9db0a90d9f31e7d8f5cc382a8a29eb439))
-
-Add 47 integration tests covering: - Config → aggregation → export pipeline - Repository file
-  operations lifecycle - CLI end-to-end workflows - Error handling scenarios
-
-All tests run without GPU access by using mocked/simulated data. Total test count: 408 (47 new
-  integration tests)
+### Features
 
 - Add orchestration modules for experiment lifecycle (Phase 11)
   ([`da2ab3d`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/da2ab3d874ea1764111c631a1ba75896b2488083))
@@ -92,14 +158,27 @@ Also updates RawProcessResult to include config_name and model_name fields for b
 
 Includes 27 new unit tests for orchestration modules.
 
-- Rename package from llm-bench to llm-energy-measure
-  ([`1814c1a`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/1814c1a93853ab1156e991bd5821fa4424c26ce8))
 
-BREAKING CHANGE: Package renamed from llm-bench to llm-energy-measure. All imports now use
-  llm_energy_measure instead of llm_bench.
+## v1.11.0 (2025-12-21)
+
+### Chores
+
+- **release**: V2.0.0
+  ([`7bce73a`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/7bce73ab6bdbd82eab2bd89e9161635b5956248c))
+
+### Features
+
+- Add ExperimentContext for lifecycle management (Phase 10)
+  ([`5ab9601`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/5ab96011bc4fff0d9b8658068b5b863f68524762))
+
+Add orchestration context module with: - ExperimentContext dataclass for runtime experiment state -
+  experiment_context context manager for lifecycle management - Factory method for creating contexts
+  from config - Automatic cleanup of distributed resources
+
+Includes 13 unit tests for context creation, properties, and cleanup.
 
 
-## v1.2.0 (2025-12-20)
+## v1.10.0 (2025-12-20)
 
 ### Chores
 
@@ -108,15 +187,19 @@ BREAKING CHANGE: Package renamed from llm-bench to llm-energy-measure. All impor
 
 ### Features
 
-- Add energy backend plugin registry (Phase 9)
-  ([`619682c`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/619682c229d5b23e8a33b2564a2fba4c86179b5b))
+- Rename package from llm-bench to llm-energy-measure
+  ([`1814c1a`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/1814c1a93853ab1156e991bd5821fa4424c26ce8))
 
-- Add base.py with EnergyBackend protocol re-export - Implement plugin registry (register_backend,
-  get_backend, list_backends) - Auto-register CodeCarbonBackend on import - Add 8 unit tests for
-  plugin registry - 296 total tests passing
+BREAKING CHANGE: Package renamed from llm-bench to llm-energy-measure. All imports now use
+  llm_energy_measure instead of llm_bench.
+
+### Breaking Changes
+
+- Package renamed from llm-bench to llm-energy-measure. All imports now use llm_energy_measure
+  instead of llm_bench.
 
 
-## v1.1.0 (2025-12-20)
+## v1.9.0 (2025-12-20)
 
 ### Chores
 
@@ -132,6 +215,50 @@ BREAKING CHANGE: Package renamed from llm-bench to llm-energy-measure. All impor
   commits → minor version bump - fix: commits → patch version bump - Add
   .github/workflows/release.yml for automated releases - Creates GitHub releases with tags on push
   to main
+
+### Features
+
+- Add energy backend plugin registry (Phase 9)
+  ([`619682c`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/619682c229d5b23e8a33b2564a2fba4c86179b5b))
+
+- Add base.py with EnergyBackend protocol re-export - Implement plugin registry (register_backend,
+  get_backend, list_backends) - Auto-register CodeCarbonBackend on import - Add 8 unit tests for
+  plugin registry - 296 total tests passing
+
+
+## v1.8.0 (2025-12-20)
+
+### Features
+
+- Add FlopsEstimator with multi-strategy fallback (Phase 8)
+  ([`238c1f9`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/238c1f95d05d67419afc3f2feab01eed35db91ce))
+
+- Add FlopsResult model with provenance tracking (value, method, confidence, precision) - Implement
+  FlopsEstimator with 3-strategy fallback chain: 1. calflops (high confidence) - direct measurement
+  2. architecture (medium confidence) - uses model.config 3. parameter_estimate (low confidence) - 2
+  * params * seq_len - Update collect_compute_metrics() to use FlopsEstimator - Handle BNB
+  quantization correctly (always reports fp16 precision) - Add 29 unit tests for FlopsEstimator
+
+
+## v1.7.0 (2025-12-20)
+
+### Features
+
+- Add results aggregation and export (Phase 8)
+  ([`fc417fa`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/fc417fa8f457fcadc21ded3274e87bf3d30927e6))
+
+New results module functionality: - aggregation.py: Combine raw per-process results into aggregated
+  metrics - Sum energy across processes, average throughput - Temporal overlap verification
+  (concurrent execution check) - GPU attribution verification (no double-counting) - Calculate
+  derived efficiency metrics - exporters.py: Export results to CSV and JSON formats -
+  ResultsExporter class for unified export interface - Flatten Pydantic models to tabular format -
+  Logical column ordering
+
+Also includes: - mypy config update: disable strict untyped call checks for torch/transformers -
+  pre-commit mypy: use pyproject.toml config for consistency - 31 new unit tests (259 total)
+
+
+## v1.6.0 (2025-12-20)
 
 ### Features
 
@@ -151,27 +278,20 @@ Improvements over legacy code: - Uses domain models from llm_bench.domain - Prot
 
 Also fixes pre-commit mypy to only check src/.
 
-- Add FlopsEstimator with multi-strategy fallback (Phase 8)
-  ([`238c1f9`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/238c1f95d05d67419afc3f2feab01eed35db91ce))
 
-- Add FlopsResult model with provenance tracking (value, method, confidence, precision) - Implement
-  FlopsEstimator with 3-strategy fallback chain: 1. calflops (high confidence) - direct measurement
-  2. architecture (medium confidence) - uses model.config 3. parameter_estimate (low confidence) - 2
-  * params * seq_len - Update collect_compute_metrics() to use FlopsEstimator - Handle BNB
-  quantization correctly (always reports fp16 precision) - Add 29 unit tests for FlopsEstimator
+## v1.5.0 (2025-12-20)
 
-- Add results aggregation and export (Phase 8)
-  ([`fc417fa`](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/commit/fc417fa8f457fcadc21ded3274e87bf3d30927e6))
 
-New results module functionality: - aggregation.py: Combine raw per-process results into aggregated
-  metrics - Sum energy across processes, average throughput - Temporal overlap verification
-  (concurrent execution check) - GPU attribution verification (no double-counting) - Calculate
-  derived efficiency metrics - exporters.py: Export results to CSV and JSON formats -
-  ResultsExporter class for unified export interface - Flatten Pydantic models to tabular format -
-  Logical column ordering
+## v1.4.0 (2025-12-20)
 
-Also includes: - mypy config update: disable strict untyped call checks for torch/transformers -
-  pre-commit mypy: use pyproject.toml config for consistency - 31 new unit tests (259 total)
+
+## v1.3.0 (2025-12-20)
+
+
+## v1.2.0 (2025-12-20)
+
+
+## v1.1.0 (2025-12-20)
 
 
 ## v1.0.0 (2025-12-16)

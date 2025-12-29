@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "llm-energy-measure"
-version = "1.15.2"
+version = "1.16.0"
 description = "LLM inference efficiency measurement framework"
 authors = ["henrycgbaker <henry.c.g.baker@gmail.com>"]
 readme = "README.md"
@@ -83,8 +83,6 @@ prerelease = false
 allowed_tags = ["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore"]
 minor_tags = ["feat"]
 patch_tags = ["fix", "perf"]
-# feat! treated as minor bump (incremental versioning)
-default_bump_level = 1
 
 [tool.semantic_release.remote]
 type = "github"
