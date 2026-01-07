@@ -185,7 +185,14 @@ def get_gpu_utilization() -> list[float] | None:
             stderr=subprocess.DEVNULL,
         )
         lines = result.decode("utf-8").strip().splitlines()
-        return [float(line.strip()) for line in lines if line.strip()]
+        # Filter out N/A values (e.g., when GPU is in a non-compute state)
+        values = []
+        for line in lines:
+            line = line.strip()
+            if line and "N/A" not in line:
+                with contextlib.suppress(ValueError):
+                    values.append(float(line))
+        return values if values else None
     except (subprocess.SubprocessError, FileNotFoundError, ValueError) as e:
         logger.debug(f"Failed to get GPU utilization: {e}")
         return None
