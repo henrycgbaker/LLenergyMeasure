@@ -75,53 +75,80 @@ cleanup_cuda()  # torch.cuda.empty_cache()
 cleanup_distributed(accelerator)  # Destroy process group
 ```
 
-### launcher.py
-Utilities for launching via `accelerate`.
+### factory.py
+Dependency injection wiring.
 
 ```python
-from llm_energy_measure.orchestration import (
-    launch_experiment_accelerate,
-    run_from_config,
-    log_failed_experiment,
-)
+from llm_energy_measure.orchestration import create_orchestrator, experiment_context
 
-# Launch subprocess with accelerate
-launch_experiment_accelerate(
-    config_path="config.yaml",
-    num_processes=4,
-    prompts_file="prompts.txt",
-)
+with experiment_context(config) as ctx:
+    orchestrator = create_orchestrator(ctx)
+    result_path = orchestrator.run(ctx, prompts)
+```
 
-# Entry point when launched via accelerate
-run_from_config(config_path, prompts_file)
+**create_orchestrator(ctx)** wires up:
+- `HuggingFaceModelLoader` → wraps `load_model_tokenizer()`
+- `TransformersInferenceEngine` → wraps `run_inference()`
+- `ThroughputMetricsCollector` → wraps `collect_compute_metrics()`
+- `CodeCarbonBackend` → energy measurement
+- `FileSystemRepository` → result persistence
+
+### launcher.py
+Entry point for `accelerate launch -m llm_energy_measure.orchestration.launcher`.
+
+Parses CLI args and runs experiment:
+```bash
+accelerate launch --num_processes 2 \
+    -m llm_energy_measure.orchestration.launcher \
+    --config config.yaml --dataset alpaca -n 100
 ```
 
 ## Execution Flow
 
 ```
-CLI/launcher
-    |
-    v
-accelerate launch --num_processes N
-    |
-    v
-launcher.run_from_config()
-    |
-    v
-ExperimentContext (per process)
-    |
-    v
-ExperimentOrchestrator.run()
-    |
-    +-> ModelLoader.load()
-    +-> EnergyBackend.start_tracking()
-    +-> InferenceEngine.run()
-    +-> EnergyBackend.stop_tracking()
-    +-> MetricsCollector.collect()
-    +-> ResultsRepository.save_raw()
-    |
-    v
-RawProcessResult saved to results/raw/exp_id/process_N.json
+┌─────────────────────────────────────────────────────────────────┐
+│  CLI: llm-energy-measure experiment config.yaml -d alpaca -n 100 │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  accelerate launch --num_processes N                            │
+│    -m llm_energy_measure.orchestration.launcher                 │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  launcher.__main__                                              │
+│    1. _parse_args() → config_path, prompts                      │
+│    2. load_config(config_path)                                  │
+│    3. experiment_context(config) → ExperimentContext            │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  create_orchestrator(ctx) - DI Wiring                           │
+│    ├── HuggingFaceModelLoader                                   │
+│    ├── TransformersInferenceEngine(accelerator)                 │
+│    ├── ThroughputMetricsCollector(accelerator)                  │
+│    ├── CodeCarbonBackend                                        │
+│    └── FileSystemRepository                                     │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  ExperimentOrchestrator.run(ctx, prompts)                       │
+│    1. model_loader.load(config) → (model, tokenizer)            │
+│    2. energy_backend.start_tracking() → tracker                 │
+│    3. inference_engine.run(model, tokenizer, prompts) → result  │
+│    4. energy_backend.stop_tracking(tracker) → energy_metrics    │
+│    5. metrics_collector.collect(model, result) → combined       │
+│    6. repository.save_raw(experiment_id, raw_result) → path     │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  results/raw/{experiment_id}/process_{N}.json                   │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## Late Aggregation Pattern

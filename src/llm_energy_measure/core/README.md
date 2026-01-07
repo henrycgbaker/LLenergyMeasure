@@ -118,6 +118,40 @@ list_builtin_datasets()  # {"alpaca": {...}, "gsm8k": {...}, ...}
 
 **Auto-detect columns:** text, prompt, question, instruction, input, content
 
+### implementations.py
+Protocol implementations for DI wiring.
+
+```python
+from llm_energy_measure.core import (
+    HuggingFaceModelLoader,
+    TransformersInferenceEngine,
+    ThroughputMetricsCollector,
+)
+
+# These wrap the functions above into protocol-compliant classes
+loader = HuggingFaceModelLoader()
+model, tokenizer = loader.load(config)
+
+engine = TransformersInferenceEngine(accelerator)
+result = engine.run(model, tokenizer, prompts, config)
+
+collector = ThroughputMetricsCollector(accelerator)
+metrics = collector.collect(model, result, config)
+```
+
+**DI Architecture:**
+```
+┌─────────────────────────────────────────────────────────┐
+│  Protocol (interface)    │  Implementation (wrapper)    │
+├─────────────────────────────────────────────────────────┤
+│  ModelLoader             │  HuggingFaceModelLoader      │
+│  InferenceEngine         │  TransformersInferenceEngine │
+│  MetricsCollector        │  ThroughputMetricsCollector  │
+│  EnergyBackend           │  CodeCarbonBackend           │
+│  ResultsRepository       │  FileSystemRepository        │
+└─────────────────────────────────────────────────────────┘
+```
+
 ### energy_backends/
 Energy tracking implementations.
 

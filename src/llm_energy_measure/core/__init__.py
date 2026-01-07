@@ -21,6 +21,11 @@ from llm_energy_measure.core.flops import (
     estimate_flops,
     get_flops_estimator,
 )
+from llm_energy_measure.core.implementations import (
+    HuggingFaceModelLoader,
+    ThroughputMetricsCollector,
+    TransformersInferenceEngine,
+)
 from llm_energy_measure.core.inference import (
     InferenceResult,
     calculate_inference_metrics,
@@ -44,10 +49,13 @@ from llm_energy_measure.domain.metrics import ComputeMetrics
 __all__ = [
     "ComputeMetrics",
     "FlopsEstimator",
+    "HuggingFaceModelLoader",
     "InferenceResult",
     "MemoryStats",
     "ModelWrapper",
     "QuantizationSupport",
+    "ThroughputMetricsCollector",
+    "TransformersInferenceEngine",
     "UtilizationStats",
     "calculate_inference_metrics",
     "cleanup_distributed",
