@@ -69,3 +69,24 @@ ENV TRANSFORMERS_CACHE=/home/app/.cache/huggingface/transformers
 # Default command
 ENTRYPOINT ["llm-energy-measure"]
 CMD ["--help"]
+
+# ============================================================================
+# Stage 3: Dev - For VS Code devcontainer
+# ============================================================================
+FROM runtime AS dev
+
+USER root
+
+# Install dev tools (git for version control, curl for debugging)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+USER app
+
+# Copy source for editable install (will be overridden by workspace mount)
+COPY --chown=app:app . /app/
+
+# Default to bash for interactive dev sessions
+CMD ["/bin/bash"]

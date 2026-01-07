@@ -64,13 +64,23 @@ llm-energy-measure config validate configs/my_experiment.yaml
 
 ### 3. Run Experiment
 
-For multi-GPU experiments, use `accelerate launch`:
+The `experiment` command handles `accelerate launch` automatically, reading `num_processes` from your config:
+
+```bash
+# Using built-in HuggingFace datasets (recommended)
+llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
+
+# Using a prompts file
+llm-energy-measure experiment configs/my_experiment.yaml --prompts prompts.txt
+```
+
+Or use `accelerate launch` directly for more control:
 
 ```bash
 accelerate launch --num_processes 2 \
   -m llm_energy_measure.orchestration.launcher \
   --config configs/my_experiment.yaml \
-  --prompts prompts.txt
+  --dataset alpaca -n 100
 ```
 
 ### 4. Aggregate Results
@@ -107,8 +117,10 @@ llm-energy-measure results show exp_20240115_123456 --json
 llm-energy-measure [OPTIONS] COMMAND [ARGS]
 
 Commands:
-  run         Run an LLM efficiency experiment
+  experiment  Run experiment (wraps accelerate automatically)
+  run         Run inference (called by accelerate launch)
   aggregate   Aggregate raw per-process results
+  datasets    List available built-in datasets
   config      Configuration management
     validate  Validate a config file
     show      Display resolved configuration
@@ -116,6 +128,29 @@ Commands:
     list      List all experiments
     show      Show experiment results
 ```
+
+### Built-in Datasets
+
+Use HuggingFace datasets as prompt sources instead of text files:
+
+```bash
+# List available built-in datasets
+llm-energy-measure datasets
+
+# Run with built-in dataset
+llm-energy-measure run --config config.yaml --dataset alpaca -n 100
+
+# Use any HuggingFace dataset
+llm-energy-measure run --config config.yaml \
+  --dataset squad --split validation --column question -n 50
+```
+
+| Dataset | Source | Default Column |
+|---------|--------|----------------|
+| `alpaca` | tatsu-lab/alpaca | instruction |
+| `sharegpt` | ShareGPT_Vicuna | conversations |
+| `gsm8k` | gsm8k (main) | question |
+| `mmlu` | cais/mmlu (all) | question |
 
 ### Global Options
 
@@ -197,7 +232,7 @@ model_name: meta-llama/Llama-2-7b-hf
 
 ### Environment Variables
 
-Copy `env.example` to `.env` and configure:
+Create a `.env` file with:
 
 ```bash
 # Required for gated models (Llama, etc.)
@@ -206,27 +241,66 @@ HF_TOKEN=your_huggingface_token
 # Optional: GPU selection (see MIG notes below)
 CUDA_VISIBLE_DEVICES=0,1
 
-# Optional: Cache location
-HF_HOME=/path/to/cache
+# Optional: CodeCarbon logging level
+CODECARBON_LOG_LEVEL=warning
+```
+
+### Quick Start with Makefile
+
+The easiest way to run experiments in Docker:
+
+```bash
+# Build the image
+make docker-build
+
+# List available datasets
+make datasets
+
+# Validate a config
+make validate CONFIG=test_tiny.yaml
+
+# Run experiment (num_processes auto-inferred from config)
+make experiment CONFIG=test_tiny.yaml DATASET=alpaca SAMPLES=100
+
+# Interactive shell in container
+make docker-shell
 ```
 
 ### Running with Docker Compose
+
+Direct docker compose commands without Makefile:
 
 ```bash
 # Build the image
 docker compose build
 
-# Validate config
-docker compose run --rm llm-energy-measure llm-energy-measure config validate /app/configs/test_tiny.yaml
+# List available datasets
+docker compose run --rm llm-energy-measure llm-energy-measure datasets
 
-# Run experiment with accelerate
-docker compose run --rm llm-energy-measure accelerate launch \
-  --num_processes 1 \
+# Validate config
+docker compose run --rm llm-energy-measure \
+  llm-energy-measure config validate /app/configs/test_tiny.yaml
+
+# Run experiment (recommended - auto-handles accelerate)
+docker compose run --rm llm-energy-measure \
+  llm-energy-measure experiment /app/configs/test_tiny.yaml \
+  --dataset alpaca -n 100
+
+# Or use accelerate launch directly for more control
+docker compose run --rm llm-energy-measure \
+  accelerate launch --num_processes 1 \
   -m llm_energy_measure.orchestration.launcher \
-  --config /app/configs/test_tiny.yaml
+  --config /app/configs/test_tiny.yaml \
+  --dataset alpaca -n 100
 
 # View results
 docker compose run --rm llm-energy-measure llm-energy-measure results list
+
+# Aggregate results
+docker compose run --rm llm-energy-measure llm-energy-measure aggregate --all
+
+# Interactive shell
+docker compose run --rm llm-energy-measure /bin/bash
 ```
 
 ### Persistent Model Cache
@@ -355,6 +429,8 @@ docker compose run --rm \
 
 ## Development
 
+### Local Development
+
 ```bash
 # Install dev dependencies
 make dev
@@ -366,6 +442,28 @@ make check
 make test              # Unit tests only
 make test-integration  # Integration tests
 make test-all          # All tests
+```
+
+### VS Code Devcontainer
+
+For development inside a container with full GPU access:
+
+1. Install [VS Code Remote - Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+2. Set `HF_TOKEN` in your shell environment
+3. Open the project in VS Code and click "Reopen in Container"
+
+The devcontainer:
+- Uses the `dev` stage of the Dockerfile
+- Has GPU passthrough enabled
+- Mounts your host HuggingFace cache
+- Installs dev dependencies and pre-commit hooks
+
+Inside the container, run commands directly:
+
+```bash
+llm-energy-measure datasets
+llm-energy-measure config validate configs/test_tiny.yaml
+llm-energy-measure experiment configs/test_tiny.yaml --dataset alpaca -n 100
 ```
 
 ## Project Structure

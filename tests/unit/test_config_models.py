@@ -4,9 +4,12 @@ import pytest
 from pydantic import ValidationError
 
 from llm_energy_measure.config.models import (
+    BUILTIN_DATASETS,
     BatchingConfig,
     DecoderConfig,
     ExperimentConfig,
+    FilePromptSource,
+    HuggingFacePromptSource,
     LatencySimulation,
     QuantizationConfig,
 )
@@ -164,3 +167,98 @@ class TestExperimentConfig:
         json_str = config.model_dump_json()
         restored = ExperimentConfig.model_validate_json(json_str)
         assert restored.config_name == config.config_name
+
+    def test_prompt_source_file(self, minimal_config):
+        """Config with file prompt source."""
+        config = ExperimentConfig(
+            **minimal_config,
+            prompt_source={"type": "file", "path": "/path/to/prompts.txt"},
+        )
+        assert config.prompt_source is not None
+        assert isinstance(config.prompt_source, FilePromptSource)
+        assert config.prompt_source.path == "/path/to/prompts.txt"
+
+    def test_prompt_source_huggingface(self, minimal_config):
+        """Config with HuggingFace prompt source."""
+        config = ExperimentConfig(
+            **minimal_config,
+            prompt_source={
+                "type": "huggingface",
+                "dataset": "alpaca",
+                "sample_size": 1000,
+            },
+        )
+        assert config.prompt_source is not None
+        assert isinstance(config.prompt_source, HuggingFacePromptSource)
+        # Alias should be resolved
+        assert config.prompt_source.dataset == "tatsu-lab/alpaca"
+        assert config.prompt_source.sample_size == 1000
+
+    def test_prompt_source_none_default(self, minimal_config):
+        """Config without prompt source defaults to None."""
+        config = ExperimentConfig(**minimal_config)
+        assert config.prompt_source is None
+
+
+class TestFilePromptSource:
+    """Tests for FilePromptSource config."""
+
+    def test_required_path(self):
+        """Path is required."""
+        with pytest.raises(ValidationError):
+            FilePromptSource()
+
+    def test_type_literal(self):
+        """Type is fixed to 'file'."""
+        source = FilePromptSource(path="/test.txt")
+        assert source.type == "file"
+
+
+class TestHuggingFacePromptSource:
+    """Tests for HuggingFacePromptSource config."""
+
+    def test_required_dataset(self):
+        """Dataset is required."""
+        with pytest.raises(ValidationError):
+            HuggingFacePromptSource()
+
+    def test_type_literal(self):
+        """Type is fixed to 'huggingface'."""
+        source = HuggingFacePromptSource(dataset="test")
+        assert source.type == "huggingface"
+
+    def test_defaults(self):
+        """Check default values."""
+        source = HuggingFacePromptSource(dataset="test/ds")
+        assert source.split == "train"
+        assert source.subset is None
+        assert source.column is None
+        assert source.sample_size is None
+        assert source.shuffle is False
+        assert source.seed == 42
+
+    def test_builtin_alpaca_resolution(self):
+        """Alpaca alias resolves to full path."""
+        source = HuggingFacePromptSource(dataset="alpaca")
+        assert source.dataset == BUILTIN_DATASETS["alpaca"]["path"]
+        assert source.column == BUILTIN_DATASETS["alpaca"]["column"]
+
+    def test_builtin_gsm8k_resolution(self):
+        """GSM8K alias resolves with subset."""
+        source = HuggingFacePromptSource(dataset="gsm8k")
+        assert source.dataset == "gsm8k"
+        assert source.subset == "main"
+        assert source.column == "question"
+
+    def test_explicit_column_preserved(self):
+        """Explicit column is not overwritten by alias."""
+        source = HuggingFacePromptSource(dataset="alpaca", column="output")
+        assert source.column == "output"
+
+    def test_sample_size_must_be_positive(self):
+        """Sample size must be >= 1."""
+        with pytest.raises(ValidationError):
+            HuggingFacePromptSource(dataset="test", sample_size=0)
+
+        with pytest.raises(ValidationError):
+            HuggingFacePromptSource(dataset="test", sample_size=-1)
