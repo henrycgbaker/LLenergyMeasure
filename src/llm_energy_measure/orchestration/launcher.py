@@ -277,10 +277,19 @@ def _parse_args() -> tuple[Path, list[str]]:
 
 
 if __name__ == "__main__":
-    config_path, prompts = _parse_args()
-    logger.info(f"Running experiment with {len(prompts)} prompts from config: {config_path}")
+    from llm_energy_measure.config.loader import load_config
+    from llm_energy_measure.orchestration.context import experiment_context
+    from llm_energy_measure.orchestration.factory import create_orchestrator
 
-    # TODO: Wire up actual experiment execution here
-    # For now, just log that we received the args correctly
+    config_path, prompts = _parse_args()
+    config = load_config(config_path)
+
+    logger.info(f"Running experiment with {len(prompts)} prompts from config: {config_path}")
     logger.info(f"First prompt: {prompts[0][:50]}...")
-    logger.info("Experiment execution not yet implemented in launcher")
+
+    with experiment_context(config) as ctx:
+        orchestrator = create_orchestrator(ctx)
+        result_path = orchestrator.run(ctx, prompts)
+
+        logger.info(f"Experiment {ctx.experiment_id} complete")
+        logger.info(f"Result saved to: {result_path}")
