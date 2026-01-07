@@ -83,6 +83,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Uninstall the baked-in package so editable install works
+# Also ensure venv is writable by app user
+RUN pip uninstall -y llm-energy-measure || true \
+    && chown -R app:app /opt/venv
+
 USER app
 
 # Copy source for editable install (will be overridden by workspace mount)

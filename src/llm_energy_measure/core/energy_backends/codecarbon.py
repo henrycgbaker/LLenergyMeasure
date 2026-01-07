@@ -71,22 +71,28 @@ class CodeCarbonBackend:
         """Start energy tracking.
 
         Returns:
-            EmissionsTracker instance for stop_tracking.
+            EmissionsTracker instance for stop_tracking, or None if unavailable.
         """
         from codecarbon import EmissionsTracker
 
         # Suppress codecarbon's verbose logging
         logging.getLogger("codecarbon").setLevel(logging.ERROR)
 
-        tracker = EmissionsTracker(
-            measure_power_secs=self._measure_power_secs,
-            allow_multiple_runs=True,
-            tracking_mode=self._tracking_mode,
-            log_level=logging.ERROR,
-        )
-        tracker.start()
-        logger.debug("CodeCarbon tracking started")
-        return tracker
+        try:
+            tracker = EmissionsTracker(
+                measure_power_secs=self._measure_power_secs,
+                allow_multiple_runs=True,
+                tracking_mode=self._tracking_mode,
+                log_level=logging.ERROR,
+            )
+            tracker.start()
+            logger.debug("CodeCarbon tracking started")
+            return tracker
+        except Exception as e:
+            # Handle NVML permission errors in containers, etc.
+            logger.warning(f"Energy tracking unavailable: {e}")
+            logger.warning("Continuing without energy metrics (common in containers)")
+            return None
 
     def stop_tracking(self, tracker: Any) -> EnergyMetrics:
         """Stop tracking and return energy metrics.
@@ -98,7 +104,7 @@ class CodeCarbonBackend:
             EnergyMetrics with collected data.
         """
         if tracker is None:
-            logger.warning("Tracker was not started")
+            logger.debug("Energy tracker was unavailable, returning empty metrics")
             return self._empty_metrics()
 
         try:
