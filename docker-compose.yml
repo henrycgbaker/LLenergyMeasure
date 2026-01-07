@@ -5,14 +5,14 @@ services:
       dockerfile: Dockerfile
     image: llm-energy-measure:latest
 
-    # GPU access
+    # GPU access (gpu=compute, utility=nvidia-smi/NVML for energy metrics)
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]
+              capabilities: [gpu, utility]
 
     # Volumes
     volumes:
