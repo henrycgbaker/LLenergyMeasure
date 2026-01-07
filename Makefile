@@ -57,19 +57,19 @@ CONFIG ?= test_tiny.yaml
 DATASET ?= alpaca
 SAMPLES ?= 100
 experiment: docker-check
-	docker compose run --rm llm-energy-measure \
+	docker compose run --rm bench \
 		llm-energy-measure experiment /app/configs/$(CONFIG) \
 		--dataset $(DATASET) -n $(SAMPLES)
 
 # List available datasets
 datasets:
-	docker compose run --rm llm-energy-measure llm-energy-measure datasets
+	docker compose run --rm bench llm-energy-measure datasets
 
 # Validate a config file
 # Usage: make validate CONFIG=test_tiny.yaml
 validate: docker-check
-	docker compose run --rm llm-energy-measure llm-energy-measure config validate /app/configs/$(CONFIG)
+	docker compose run --rm bench llm-energy-measure config validate /app/configs/$(CONFIG)
 
 # Interactive shell in container
 docker-shell:
-	docker compose run --rm llm-energy-measure /bin/bash
+	docker compose run --rm bench /bin/bash
