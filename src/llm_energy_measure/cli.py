@@ -283,7 +283,7 @@ def list_datasets_cmd() -> None:
     descriptions = {
         "alpaca": "Instruction-following prompts (52k)",
         "sharegpt": "Real user conversations",
-        "gsm8k": "Grade school math reasoning",
+        "gsm8k": "Primary school maths reasoning",
         "mmlu": "Multi-task knowledge questions",
     }
 
