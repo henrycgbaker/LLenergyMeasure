@@ -51,19 +51,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
     && ln -sf /usr/bin/python3.11 /usr/bin/python
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash app
-USER app
+# Run as host user via compose `user:` directive (no baked-in user)
 WORKDIR /app
 
-# Copy virtual environment from builder
-COPY --from=builder --chown=app:app /opt/venv /opt/venv
+# Copy virtual environment from builder (root-owned, readable by any user)
+COPY --from=builder /opt/venv /opt/venv
 
 # Set environment
 ENV PATH="/opt/venv/bin:$PATH"
 ENV VIRTUAL_ENV="/opt/venv"
 ENV PYTHONUNBUFFERED=1
-ENV HF_HOME=/home/app/.cache/huggingface
+ENV HF_HOME=/app/.cache/huggingface
 
 # Clear NVIDIA's entrypoint (suppresses startup banner) and set default command
 ENTRYPOINT []
@@ -94,10 +92,11 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 ENV VIRTUAL_ENV="/opt/venv"
 ENV PYTHONUNBUFFERED=1
-ENV HF_HOME=/root/.cache/huggingface
+ENV HF_HOME=/app/.cache/huggingface
 
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+    && pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124 \
+    && chmod -R 777 /opt/venv
 
 # Copy source (will be overridden by workspace mount in devcontainer)
 COPY . /app/
