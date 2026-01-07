@@ -66,9 +66,8 @@ ENV PYTHONUNBUFFERED=1
 ENV HF_HOME=/home/app/.cache/huggingface
 ENV TRANSFORMERS_CACHE=/home/app/.cache/huggingface/transformers
 
-# Default command
-ENTRYPOINT ["llm-energy-measure"]
-CMD ["--help"]
+# Default command (no ENTRYPOINT - allows running accelerate, python, etc.)
+CMD ["llm-energy-measure", "--help"]
 
 # ============================================================================
 # Stage 3: Dev - For VS Code devcontainer
