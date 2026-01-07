@@ -215,3 +215,72 @@ def run_from_config(
 
     logger.error("All retry attempts exhausted")
     return False, None
+
+
+def _parse_args() -> tuple[Path, list[str]]:
+    """Parse command line arguments for accelerate launch.
+
+    Returns:
+        Tuple of (config_path, prompts).
+    """
+    import argparse
+
+    from llm_energy_measure.config.loader import load_config
+    from llm_energy_measure.config.models import HuggingFacePromptSource
+    from llm_energy_measure.core.dataset_loader import (
+        load_prompts_from_file,
+        load_prompts_from_source,
+    )
+
+    parser = argparse.ArgumentParser(description="Run LLM inference experiment")
+    parser.add_argument("--config", type=Path, required=True, help="Path to config file")
+    parser.add_argument("--dataset", type=str, help="HuggingFace dataset name or alias")
+    parser.add_argument("--split", type=str, default="train", help="Dataset split")
+    parser.add_argument("--column", type=str, help="Dataset column for prompts")
+    parser.add_argument("--prompts", type=Path, help="Path to prompts file")
+    parser.add_argument("--sample-size", type=int, help="Limit number of prompts")
+
+    args = parser.parse_args()
+
+    # Load config
+    config = load_config(args.config)
+
+    # Load prompts (CLI args > config > default)
+    if args.dataset:
+        source = HuggingFacePromptSource(
+            dataset=args.dataset,
+            split=args.split,
+            column=args.column,
+            sample_size=args.sample_size,
+        )
+        prompts = load_prompts_from_source(source)
+    elif args.prompts:
+        prompts = load_prompts_from_file(args.prompts)
+        if args.sample_size:
+            prompts = prompts[: args.sample_size]
+    elif config.prompt_source:
+        # Override sample_size from CLI if provided
+        cfg_source = config.prompt_source
+        if args.sample_size and isinstance(cfg_source, HuggingFacePromptSource):
+            cfg_source = HuggingFacePromptSource(
+                dataset=cfg_source.dataset,
+                split=cfg_source.split,
+                column=cfg_source.column,
+                sample_size=args.sample_size,
+            )
+        prompts = load_prompts_from_source(cfg_source)
+    else:
+        prompts = ["Hello, how are you?"]
+        logger.warning("No prompt source specified, using default prompt")
+
+    return args.config, prompts
+
+
+if __name__ == "__main__":
+    config_path, prompts = _parse_args()
+    logger.info(f"Running experiment with {len(prompts)} prompts from config: {config_path}")
+
+    # TODO: Wire up actual experiment execution here
+    # For now, just log that we received the args correctly
+    logger.info(f"First prompt: {prompts[0][:50]}...")
+    logger.info("Experiment execution not yet implemented in launcher")

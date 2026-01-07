@@ -3,7 +3,7 @@
 # ============================================================================
 # Stage 1: Builder - Install dependencies
 # ============================================================================
-FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04 AS builder
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS builder
 
 # Install Python 3.11 and build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -24,11 +24,11 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Upgrade pip and install build tools
 RUN pip install --no-cache-dir --upgrade pip poetry-core build
 
-# Install PyTorch with CUDA 12.1 (matches base image)
+# Install PyTorch with CUDA 12.4 (matches base image)
 # This prevents pip from installing torch with mismatched CUDA version
 RUN pip install --no-cache-dir \
     torch==2.5.1 \
-    --index-url https://download.pytorch.org/whl/cu121
+    --index-url https://download.pytorch.org/whl/cu124
 
 # Copy project files
 COPY pyproject.toml poetry.lock* README.md ./
@@ -40,7 +40,7 @@ RUN pip install --no-cache-dir .
 # ============================================================================
 # Stage 2: Runtime - Same base, minimal additions
 # ============================================================================
-FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04 AS runtime
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS runtime
 
 # Install Python 3.11 runtime only
 RUN apt-get update && apt-get install -y --no-install-recommends \

@@ -5,17 +5,14 @@ This module provides experiment lifecycle management including:
 - experiment_context: Context manager for experiment lifecycle
 - ExperimentOrchestrator: Main experiment runner
 - Lifecycle utilities: Setup/teardown, warmup
-- Launcher utilities: Accelerate CLI launching
+
+Note: launcher.py is meant to be run via `python -m` or `accelerate launch -m`,
+not imported directly. Import from llm_energy_measure.orchestration.launcher if needed.
 """
 
 from llm_energy_measure.orchestration.context import (
     ExperimentContext,
     experiment_context,
-)
-from llm_energy_measure.orchestration.launcher import (
-    launch_experiment_accelerate,
-    log_failed_experiment,
-    run_from_config,
 )
 from llm_energy_measure.orchestration.lifecycle import (
     cleanup_cuda,
@@ -36,8 +33,5 @@ __all__ = [
     "experiment_context",
     "experiment_lifecycle",
     "full_cleanup",
-    "launch_experiment_accelerate",
-    "log_failed_experiment",
-    "run_from_config",
     "warmup_model",
 ]
