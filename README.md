@@ -227,8 +227,9 @@ model_name: meta-llama/Llama-2-7b-hf
 ### Requirements
 
 - **NVIDIA GPU** with CUDA support
-- **CUDA 12.1** compatible drivers (image uses `nvidia/cuda:12.1.0-runtime-ubuntu22.04`)
+- **CUDA 12.4** compatible drivers (image uses `nvidia/cuda:12.4.1-runtime-ubuntu22.04`)
 - **nvidia-container-toolkit** installed and configured
+- **Privileged mode** for energy metrics (docker-compose.yml sets `privileged: true`)
 
 ### Environment Variables
 
@@ -363,24 +364,43 @@ results/
 
 ## Troubleshooting
 
+### Energy Metrics are Zero
+
+**Symptom**: `energy_metrics.total_energy_j` and related fields are all `0.0`.
+
+**Cause**: CodeCarbon requires NVML access to read GPU power, which needs privileged mode in Docker.
+
+**Solution**: Ensure `privileged: true` is set in docker-compose.yml (already configured by default). If running without docker-compose:
+```bash
+docker run --privileged --gpus all ...
+```
+
 ### CUDA Version Mismatch
 
 **Symptom**: `RuntimeError: CUDA error: no kernel image is available for execution on the device`
 
-**Cause**: Host CUDA drivers incompatible with container's CUDA 12.1.
+**Cause**: Host CUDA drivers incompatible with container's CUDA 12.4.
 
-**Solution**: Ensure NVIDIA drivers support CUDA 12.1+. Check with:
+**Solution**: Ensure NVIDIA drivers support CUDA 12.4+. Check with:
 ```bash
 nvidia-smi  # Shows driver version and max CUDA version
 ```
 
 ### Permission Denied on Results
 
-**Symptom**: `PermissionError` when writing to mounted volumes.
+**Symptom**: `PermissionError: [Errno 13] Permission denied: 'results/raw'`
 
-**Solution**: Run container with host user ID:
+**Cause**: The container runs as user `app` but the host `results/` directory doesn't exist or has restrictive permissions.
+
+**Solution**: Create the results directory with appropriate permissions:
 ```bash
-docker compose run --rm --user "$(id -u):$(id -g)" llm-energy-measure ...
+mkdir -p results
+chmod 777 results  # Or use more restrictive perms with matching UID
+```
+
+Or run the container with host user ID:
+```bash
+docker compose run --rm --user "$(id -u):$(id -g)" bench ...
 ```
 
 ### MIG Device Errors
