@@ -7,11 +7,13 @@
   "runArgs": ["--gpus", "all", "--privileged"],
   "containerEnv": {
     "HF_TOKEN": "${localEnv:HF_TOKEN}",
+    "HF_HOME": "/app/.cache/huggingface",
     "PYTHONUNBUFFERED": "1"
   },
   "mounts": [
-    "source=${localEnv:HOME}/.cache/huggingface,target=/root/.cache/huggingface,type=bind"
+    "source=${localEnv:HOME}/.cache/huggingface,target=/app/.cache/huggingface,type=bind"
   ],
+  "updateRemoteUserUID": true,
   "postCreateCommand": "pip install -e '.[dev]' && pre-commit install",
   "customizations": {
     "vscode": {

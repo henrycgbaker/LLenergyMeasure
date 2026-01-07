@@ -311,7 +311,7 @@ CODECARBON_LOG_LEVEL=warning
 
 ### Quick Start with Makefile
 
-The easiest way to run experiments in Docker:
+The easiest way to run experiments in Docker. The Makefile automatically handles UID/GID mapping so files created in containers are owned by your host user (no root permission issues):
 
 ```bash
 # Build the image
@@ -328,6 +328,9 @@ make experiment CONFIG=test_tiny.yaml DATASET=alpaca SAMPLES=100
 
 # Interactive shell in container
 make docker-shell
+
+# Development shell (editable install, source mounted)
+make docker-dev
 ```
 
 ### Running with Docker Compose
@@ -394,11 +397,11 @@ By default in the production container, models download inside the container and
 
 ```bash
 # Option 1: Uncomment the HF cache mount in docker-compose.yml
-# - ${HF_HOME:-~/.cache/huggingface}:/home/app/.cache/huggingface
+# - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
 
 # Option 2: Use the dev profile (auto-mounts HF cache)
-docker compose --profile dev run --rm llm-energy-measure-dev \
-  llm-energy-measure experiment /app/configs/test_tiny.yaml -d alpaca -n 100
+make docker-dev
+# Then inside: llm-energy-measure experiment /app/configs/test_tiny.yaml -d alpaca -n 100
 ```
 
 **Note**: The dev service automatically mounts `~/.cache/huggingface` for persistent model caching.
@@ -472,36 +475,14 @@ nvidia-smi  # Shows driver version and max CUDA version
 
 **Symptom**: `PermissionError: [Errno 13] Permission denied: 'results/raw'`
 
-**Cause**: The container runs as user `app` but the host `results/` directory doesn't exist or has restrictive permissions.
+**Cause**: The `results/` directory doesn't exist or has restrictive permissions.
 
-**Solution**: Create the results directory with appropriate permissions:
+**Solution**: Create the results directory:
 ```bash
 mkdir -p results
-chmod 777 results  # Or use more restrictive perms with matching UID
 ```
 
-Or run the container with host user ID:
-```bash
-docker compose run --rm --user "$(id -u):$(id -g)" llm-energy-measure-app ...
-```
-
-### Files Owned by Root After Dev Container
-
-**Symptom**: Files created inside the dev container are owned by `root` on the host.
-
-**Cause**: The dev container runs as root for simplicity (avoids venv permission issues). Files created inside inherit root ownership.
-
-**Solution**: Fix permissions when needed:
-```bash
-docker run --rm -v "$(pwd):/app" alpine chown -R $(id -u):$(id -g) /app
-```
-
-**Tip**: Add an alias to your shell profile (`~/.bashrc` or `~/.zshrc`):
-```bash
-alias fix-perms='docker run --rm -v "$(pwd):/app" alpine chown -R $(id -u):$(id -g) /app'
-```
-
-Then just run `fix-perms` when needed.
+**Note**: When using Makefile commands (`make docker-dev`, `make docker-shell`), containers automatically run as your host user, so permission issues are avoided.
 
 ### MIG Device Errors
 
