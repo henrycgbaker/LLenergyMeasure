@@ -35,8 +35,8 @@ app = typer.Typer(
     help="LLM inference efficiency measurement framework",
     add_completion=False,
 )
-config_app = typer.Typer(help="Configuration management commands")
-results_app = typer.Typer(help="Results inspection commands")
+config_app = typer.Typer(help="Configuration management commands", invoke_without_command=True)
+results_app = typer.Typer(help="Results inspection commands", invoke_without_command=True)
 app.add_typer(config_app, name="config")
 app.add_typer(results_app, name="results")
 
@@ -368,6 +368,20 @@ def _aggregate_one(repo: FileSystemRepository, experiment_id: str, force: bool) 
 
     except Exception as e:
         console.print(f"[red]Aggregation failed:[/red] {experiment_id} - {e}")
+
+
+@config_app.callback()  # type: ignore[misc]
+def config_callback(ctx: typer.Context) -> None:
+    """Configuration management commands."""
+    if ctx.invoked_subcommand is None:
+        console.print(ctx.get_help())
+
+
+@results_app.callback()  # type: ignore[misc]
+def results_callback(ctx: typer.Context) -> None:
+    """Results inspection commands."""
+    if ctx.invoked_subcommand is None:
+        console.print(ctx.get_help())
 
 
 @config_app.command("validate")  # type: ignore[misc]

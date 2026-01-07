@@ -43,6 +43,7 @@ services:
       timeout: 10s
       retries: 3
 
-    # No fixed entrypoint - allows both CLI and accelerate commands
-    entrypoint: []
-    command: ["llm-energy-measure", "--help"]
+    # Default shows help; override with: docker compose run --rm llm-energy-measure <command>
+    # Examples:
+    #   llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
+    #   accelerate launch --num_processes 2 -m llm_energy_measure.orchestration.launcher ...
