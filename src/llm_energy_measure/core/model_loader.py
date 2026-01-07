@@ -141,6 +141,7 @@ def load_model_tokenizer(
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 torch_dtype=dtype,
+                device_map="auto",
             )
     except Exception as e:
         raise ConfigurationError(f"Failed to load model {model_name}: {e}") from e
@@ -197,4 +198,5 @@ def _load_quantized_model(
     return AutoModelForCausalLM.from_pretrained(
         model_name,
         quantization_config=bnb_config,
+        device_map="auto",
     )
