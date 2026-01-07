@@ -140,7 +140,7 @@ def load_model_tokenizer(
         else:
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
-                torch_dtype=dtype,
+                dtype=dtype,  # Use 'dtype' instead of deprecated 'torch_dtype'
                 device_map="auto",
             )
     except Exception as e:

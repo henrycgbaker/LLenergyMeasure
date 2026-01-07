@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,6 +11,15 @@ import torch
 from loguru import logger
 
 from llm_energy_measure.domain.metrics import EnergyMetrics
+
+# Suppress FutureWarning from codecarbon's pandas usage
+# (DataFrame concatenation with empty columns deprecation)
+warnings.filterwarnings(
+    "ignore",
+    message="The behavior of DataFrame concatenation with empty or all-NA entries",
+    category=FutureWarning,
+    module="codecarbon",
+)
 
 
 @dataclass
