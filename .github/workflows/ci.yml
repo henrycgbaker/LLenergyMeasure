@@ -14,6 +14,9 @@ jobs:
         python-version: ["3.10", "3.11"]
 
     steps:
+      - name: Check disk space (before)
+        run: df -h
+
       - uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
@@ -40,6 +43,12 @@ jobs:
 
       - name: Install project
         run: poetry install --no-interaction
+
+      - name: Check disk space (after install)
+        run: |
+          df -h
+          du -sh .venv || true
+          du -sh ~/.cache/pypoetry || true
 
       - name: Run linting
         run: poetry run ruff check src/ tests/
