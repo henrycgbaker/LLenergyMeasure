@@ -31,7 +31,7 @@ poetry install --with dev
 docker compose build
 
 # Run with GPU access
-docker compose run --rm bench --help
+docker compose run --rm llm-energy-measure-app llm-energy-measure --help
 ```
 
 ## Quick Start
@@ -269,57 +269,76 @@ make docker-shell
 
 ### Running with Docker Compose
 
-Direct docker compose commands without Makefile:
+The project uses Docker Compose **profiles** to separate production and development environments:
+
+| Service | Profile | Purpose |
+|---------|---------|---------|
+| `llm-energy-measure-app` | (default) | Production - baked-in package |
+| `llm-energy-measure-dev` | `dev` | Development - editable install with source mount |
+
+#### Production Commands
 
 ```bash
 # Build the image
 docker compose build
 
 # List available datasets
-docker compose run --rm bench llm-energy-measure datasets
+docker compose run --rm llm-energy-measure-app llm-energy-measure datasets
 
 # Validate config
-docker compose run --rm bench \
+docker compose run --rm llm-energy-measure-app \
   llm-energy-measure config validate /app/configs/test_tiny.yaml
 
 # Run experiment (recommended - auto-handles accelerate)
-docker compose run --rm bench \
+docker compose run --rm llm-energy-measure-app \
   llm-energy-measure experiment /app/configs/test_tiny.yaml \
   --dataset alpaca -n 100
 
 # Or use accelerate launch directly for more control
-docker compose run --rm bench \
+docker compose run --rm llm-energy-measure-app \
   accelerate launch --num_processes 1 \
   -m llm_energy_measure.orchestration.launcher \
   --config /app/configs/test_tiny.yaml \
   --dataset alpaca -n 100
 
 # View results
-docker compose run --rm bench llm-energy-measure results list
+docker compose run --rm llm-energy-measure-app llm-energy-measure results list
 
 # Aggregate results
-docker compose run --rm bench llm-energy-measure aggregate --all
+docker compose run --rm llm-energy-measure-app llm-energy-measure aggregate --all
 
 # Interactive shell
-docker compose run --rm bench /bin/bash
+docker compose run --rm llm-energy-measure-app /bin/bash
+```
+
+#### Development Commands
+
+```bash
+# Build dev image
+docker compose --profile dev build
+
+# Interactive dev shell (source mounted, editable install)
+docker compose --profile dev run --rm llm-energy-measure-dev
+
+# Run commands in dev container
+docker compose --profile dev run --rm llm-energy-measure-dev \
+  llm-energy-measure experiment /app/configs/test_tiny.yaml -d alpaca -n 10
 ```
 
 ### Persistent Model Cache
 
-By default, models download to `/tmp/hf_cache` inside the container and are **lost when the container exits**. To persist downloaded models, mount a host volume:
+By default in the production container, models download inside the container and are **lost when it exits**. To persist downloaded models:
 
 ```bash
-# Option 1: Mount host HuggingFace cache (preserves existing downloads)
-docker compose run --rm \
-  --user "$(id -u):$(id -g)" \
-  -v ~/.cache/huggingface:/tmp/hf_cache \
-  llm-energy-measure accelerate launch \
-  --num_processes 1 \
-  -m llm_energy_measure.orchestration.launcher \
-  --config /app/configs/test_tiny.yaml
+# Option 1: Uncomment the HF cache mount in docker-compose.yml
+# - ${HF_HOME:-~/.cache/huggingface}:/home/app/.cache/huggingface
+
+# Option 2: Use the dev profile (auto-mounts HF cache)
+docker compose --profile dev run --rm llm-energy-measure-dev \
+  llm-energy-measure experiment /app/configs/test_tiny.yaml -d alpaca -n 100
 ```
 
-**Note**: The `--user "$(id -u):$(id -g)"` flag ensures files created in the mounted volume have correct ownership.
+**Note**: The dev service automatically mounts `~/.cache/huggingface` for persistent model caching.
 
 ### Volume Mounts
 
@@ -400,7 +419,7 @@ chmod 777 results  # Or use more restrictive perms with matching UID
 
 Or run the container with host user ID:
 ```bash
-docker compose run --rm --user "$(id -u):$(id -g)" bench ...
+docker compose run --rm --user "$(id -u):$(id -g)" llm-energy-measure-app ...
 ```
 
 ### MIG Device Errors
@@ -411,22 +430,16 @@ docker compose run --rm --user "$(id -u):$(id -g)" bench ...
 
 **Solution**: Force use of physical GPU:
 ```bash
-CUDA_VISIBLE_DEVICES=0 docker compose run --rm bench ...
+CUDA_VISIBLE_DEVICES=0 docker compose run --rm llm-energy-measure-app ...
 ```
 
 ### Model Download Every Run
 
 **Symptom**: Models re-download each container run.
 
-**Cause**: HF cache inside container defaults to `/tmp/hf_cache` which is ephemeral.
+**Cause**: HF cache inside production container is ephemeral.
 
-**Solution**: Mount persistent cache (see [Persistent Model Cache](#persistent-model-cache)):
-```bash
-docker compose run --rm \
-  --user "$(id -u):$(id -g)" \
-  -v ~/.cache/huggingface:/tmp/hf_cache \
-  llm-energy-measure ...
-```
+**Solution**: Use the dev profile which auto-mounts HF cache, or uncomment the cache mount in docker-compose.yml. See [Persistent Model Cache](#persistent-model-cache).
 
 ### Config Validation Errors
 

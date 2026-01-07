@@ -1,53 +1,83 @@
+# Docker Compose with profiles for dev/prod separation
+#
+# Usage:
+#   Production (default): docker compose run --rm llm-energy-measure-app <command>
+#   Development:          docker compose --profile dev run --rm llm-energy-measure-dev <command>
+#
+# Examples:
+#   docker compose run --rm llm-energy-measure-app llm-energy-measure --help
+#   docker compose run --rm llm-energy-measure-app llm-energy-measure experiment /app/configs/test.yaml -d alpaca -n 100
+#   docker compose --profile dev run --rm llm-energy-measure-dev /bin/bash
+
+# Shared configuration anchor
+x-common: &common
+  # GPU access with privileged mode for NVML energy metrics
+  privileged: true
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu, utility]
+
+  # Environment variables
+  environment:
+    - HF_TOKEN
+    - CUDA_VISIBLE_DEVICES
+    - HF_HOME=/home/app/.cache/huggingface
+    - TRANSFORMERS_CACHE=/home/app/.cache/huggingface
+    - CODECARBON_LOG_LEVEL=warning
+    - NVIDIA_DISABLE_REQUIRE=true
+
+  working_dir: /app
+
+  healthcheck:
+    test: ["CMD", "python", "-c", "import torch; assert torch.cuda.is_available()"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+
 services:
-  bench:
+  # ==========================================================================
+  # Production service - uses runtime stage with baked-in package
+  # ==========================================================================
+  llm-energy-measure-app:
+    <<: *common
     build:
       context: .
       dockerfile: Dockerfile
-      target: runtime  # Use runtime stage (has package installed), not dev stage
+      target: runtime
     image: llm-energy-measure:latest
 
-    # GPU access with privileged mode for NVML energy metrics
-    # Note: privileged is required for CodeCarbon to read GPU power via NVML
-    privileged: true
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu, utility]
-
-    # Volumes
     volumes:
-      # Experiment configs (read-only)
       - ./configs:/app/configs:ro
-      # Scripts (read-only)
       - ./scripts:/app/scripts:ro
-      # Results output
       - ./results:/app/results
-      # HuggingFace cache (optional - uncomment to persist models)
+      # Uncomment to persist HuggingFace model cache:
       # - ${HF_HOME:-~/.cache/huggingface}:/home/app/.cache/huggingface
 
-    # Environment variables (see .env.example)
-    environment:
-      - HF_TOKEN
-      - CUDA_VISIBLE_DEVICES
-      - HF_HOME=/home/app/.cache/huggingface
-      - TRANSFORMERS_CACHE=/home/app/.cache/huggingface
-      - CODECARBON_LOG_LEVEL=warning
-      - NVIDIA_DISABLE_REQUIRE=true  # Suppress CUDA startup banner
+  # ==========================================================================
+  # Development service - uses dev stage with editable install
+  # ==========================================================================
+  llm-energy-measure-dev:
+    <<: *common
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    image: llm-energy-measure:dev
 
-    # Working directory
-    working_dir: /app
+    # Run as root to allow editable install on bind-mounted source
+    user: root
 
-    # Health check - verify GPU is accessible
-    healthcheck:
-      test: ["CMD", "python", "-c", "import torch; assert torch.cuda.is_available()"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    volumes:
+      # Mount source for editable install
+      - .:/app
+      # Persist HuggingFace cache
+      - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
 
-    # Default shows help; override with: docker compose run --rm bench <command>
-    # Examples:
-    #   docker compose run --rm bench llm-energy-measure experiment /app/configs/test.yaml -d alpaca -n 100
-    #   docker compose run --rm bench accelerate launch --num_processes 2 -m llm_energy_measure.orchestration.launcher ...
+    # Auto-install editable package, then run command or shell
+    entrypoint: ["/app/scripts/dev-entrypoint.sh"]
+    command: []
