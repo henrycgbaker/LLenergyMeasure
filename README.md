@@ -222,7 +222,70 @@ config_name: llama2-7b
 model_name: meta-llama/Llama-2-7b-hf
 ```
 
-## Docker Usage
+## Running the Tool
+
+Four ways to run experiments (choose based on your needs):
+
+| Mode | Best For | Source Code | Setup |
+|------|----------|-------------|-------|
+| **Host (Poetry)** | Quick local dev | Local Python | `poetry install --with dev` |
+| **Docker prod** | Reproducible runs | Baked into image | `docker compose build` |
+| **Docker dev** | Test in container | Mounted from host | `docker compose --profile dev build` |
+| **VS Code devcontainer** | Full IDE + GPU | Mounted from host | "Reopen in Container" |
+
+### Host (Local Python with Poetry)
+
+```bash
+poetry install --with dev
+poetry run llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
+# Or activate the venv first:
+poetry shell
+llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
+```
+
+### Docker Production
+
+Uses the runtime image with the package baked in. Good for reproducible experiment runs.
+
+```bash
+docker compose build llm-energy-measure-app
+docker compose run --rm llm-energy-measure-app llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
+```
+
+### Docker Development
+
+Uses mounted source code with editable install. Changes on host are immediately available in container.
+
+```bash
+docker compose --profile dev build llm-energy-measure-dev
+# Interactive shell:
+docker compose --profile dev run --rm llm-energy-measure-dev
+# Or run command directly:
+docker compose --profile dev run --rm llm-energy-measure-dev llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
+```
+
+### VS Code Devcontainer
+
+Full IDE experience with GPU access inside the container:
+
+1. Open project in VS Code
+2. `Ctrl+Shift+P` → "Dev Containers: Reopen in Container"
+3. Wait for container to build and postCreateCommand to finish
+4. Run commands directly in the integrated terminal:
+
+```bash
+llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
+llm-energy-measure datasets
+llm-energy-measure results list
+```
+
+The devcontainer:
+- Runs as root (avoids permission issues with venv)
+- Mounts your source code (edits sync instantly)
+- Mounts your HuggingFace cache (models persist)
+- Has GPU passthrough enabled
+
+## Docker Details
 
 ### Requirements
 
@@ -421,6 +484,24 @@ Or run the container with host user ID:
 ```bash
 docker compose run --rm --user "$(id -u):$(id -g)" llm-energy-measure-app ...
 ```
+
+### Files Owned by Root After Dev Container
+
+**Symptom**: Files created inside the dev container are owned by `root` on the host.
+
+**Cause**: The dev container runs as root for simplicity (avoids venv permission issues). Files created inside inherit root ownership.
+
+**Solution**: Fix permissions when needed:
+```bash
+docker run --rm -v "$(pwd):/app" alpine chown -R $(id -u):$(id -g) /app
+```
+
+**Tip**: Add an alias to your shell profile (`~/.bashrc` or `~/.zshrc`):
+```bash
+alias fix-perms='docker run --rm -v "$(pwd):/app" alpine chown -R $(id -u):$(id -g) /app'
+```
+
+Then just run `fix-perms` when needed.
 
 ### MIG Device Errors
 
