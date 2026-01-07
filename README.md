@@ -31,7 +31,7 @@ poetry install --with dev
 docker compose build
 
 # Run with GPU access
-docker compose run --rm llm-energy-measure --help
+docker compose run --rm bench --help
 ```
 
 ## Quick Start
@@ -275,32 +275,32 @@ Direct docker compose commands without Makefile:
 docker compose build
 
 # List available datasets
-docker compose run --rm llm-energy-measure llm-energy-measure datasets
+docker compose run --rm bench llm-energy-measure datasets
 
 # Validate config
-docker compose run --rm llm-energy-measure \
+docker compose run --rm bench \
   llm-energy-measure config validate /app/configs/test_tiny.yaml
 
 # Run experiment (recommended - auto-handles accelerate)
-docker compose run --rm llm-energy-measure \
+docker compose run --rm bench \
   llm-energy-measure experiment /app/configs/test_tiny.yaml \
   --dataset alpaca -n 100
 
 # Or use accelerate launch directly for more control
-docker compose run --rm llm-energy-measure \
+docker compose run --rm bench \
   accelerate launch --num_processes 1 \
   -m llm_energy_measure.orchestration.launcher \
   --config /app/configs/test_tiny.yaml \
   --dataset alpaca -n 100
 
 # View results
-docker compose run --rm llm-energy-measure llm-energy-measure results list
+docker compose run --rm bench llm-energy-measure results list
 
 # Aggregate results
-docker compose run --rm llm-energy-measure llm-energy-measure aggregate --all
+docker compose run --rm bench llm-energy-measure aggregate --all
 
 # Interactive shell
-docker compose run --rm llm-energy-measure /bin/bash
+docker compose run --rm bench /bin/bash
 ```
 
 ### Persistent Model Cache
@@ -334,7 +334,7 @@ On servers with **MIG (Multi-Instance GPU)** enabled GPUs (common on A100s), you
 
 ```bash
 # Force use of physical GPU 0 (non-MIG device)
-CUDA_VISIBLE_DEVICES=0 docker compose run --rm llm-energy-measure ...
+CUDA_VISIBLE_DEVICES=0 docker compose run --rm bench ...
 
 # Or set in your .env file
 echo "CUDA_VISIBLE_DEVICES=0" >> .env
@@ -391,7 +391,7 @@ docker compose run --rm --user "$(id -u):$(id -g)" llm-energy-measure ...
 
 **Solution**: Force use of physical GPU:
 ```bash
-CUDA_VISIBLE_DEVICES=0 docker compose run --rm llm-energy-measure ...
+CUDA_VISIBLE_DEVICES=0 docker compose run --rm bench ...
 ```
 
 ### Model Download Every Run

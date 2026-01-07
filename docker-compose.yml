@@ -1,5 +1,5 @@
 services:
-  llm-energy-measure:
+  bench:
     build:
       context: .
       dockerfile: Dockerfile
@@ -43,7 +43,7 @@ services:
       timeout: 10s
       retries: 3
 
-    # Default shows help; override with: docker compose run --rm llm-energy-measure <command>
+    # Default shows help; override with: docker compose run --rm bench <command>
     # Examples:
-    #   llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
-    #   accelerate launch --num_processes 2 -m llm_energy_measure.orchestration.launcher ...
+    #   docker compose run --rm bench llm-energy-measure experiment /app/configs/test.yaml -d alpaca -n 100
+    #   docker compose run --rm bench accelerate launch --num_processes 2 -m llm_energy_measure.orchestration.launcher ...
