@@ -1,65 +1,79 @@
 name: Release
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:  # Allow manual trigger
-
-# Prevent concurrent releases
-concurrency:
-  group: release
-  cancel-in-progress: false
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (preview changes without releasing)'
+        type: boolean
+        default: false
+      prerelease:
+        description: 'Pre-release type (alpha, beta, rc) or leave empty for stable'
+        type: string
+        default: ''
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Only run if commit message doesn't start with "chore(release)"
-    if: "!startsWith(github.event.head_commit.message, 'chore(release)')"
-
     permissions:
       contents: write
-      id-token: write
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for semantic-release
-          token: ${{ secrets.GH_TOKEN }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
+      - name: Install commitizen
+        run: pip install commitizen
 
-      - name: Install dependencies
-        run: poetry install --no-interaction
-
-      - name: Pull latest changes
-        run: git pull --rebase origin main
-
-      - name: Python Semantic Release
-        id: release
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          poetry run semantic-release version
-          poetry run semantic-release publish
 
-      - name: Build package
-        if: steps.release.outputs.released == 'true'
-        run: poetry build
+      - name: Preview version bump (dry run)
+        if: inputs.dry_run == true
+        run: |
+          echo "=== DRY RUN: Preview of version bump ==="
+          cz bump --dry-run
+          echo ""
+          echo "=== Current VERSION file ==="
+          cat VERSION
+          echo ""
+          echo "=== No changes made (dry run) ==="
 
-      - name: Upload artifacts
-        if: steps.release.outputs.released == 'true'
-        uses: actions/upload-artifact@v4
+      - name: Bump version and update changelog
+        if: inputs.dry_run != true
+        id: bump
+        run: |
+          if [ -n "${{ inputs.prerelease }}" ]; then
+            echo "Creating pre-release: ${{ inputs.prerelease }}"
+            cz bump --prerelease ${{ inputs.prerelease }} --changelog
+          else
+            echo "Creating stable release"
+            cz bump --changelog
+          fi
+          NEW_VERSION=$(cat VERSION)
+          echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+          echo "New version: ${NEW_VERSION}"
+
+      - name: Push changes and tags
+        if: inputs.dry_run != true
+        run: |
+          git push origin main --follow-tags
+
+      - name: Create GitHub Release
+        if: inputs.dry_run != true
+        uses: softprops/action-gh-release@v2
         with:
-          name: dist
-          path: dist/
+          tag_name: v${{ steps.bump.outputs.version }}
+          name: v${{ steps.bump.outputs.version }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: ${{ inputs.prerelease != '' }}
