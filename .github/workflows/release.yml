@@ -41,7 +41,7 @@ jobs:
         if: inputs.dry_run == true
         run: |
           echo "=== DRY RUN: Preview of version bump ==="
-          cz bump --dry-run
+          cz bump --dry-run --yes
           echo ""
           echo "=== Current VERSION file ==="
           cat VERSION
@@ -54,10 +54,10 @@ jobs:
         run: |
           if [ -n "${{ inputs.prerelease }}" ]; then
             echo "Creating pre-release: ${{ inputs.prerelease }}"
-            cz bump --prerelease ${{ inputs.prerelease }} --changelog
+            cz bump --yes --prerelease ${{ inputs.prerelease }} --changelog
           else
             echo "Creating stable release"
-            cz bump --changelog
+            cz bump --yes --changelog
           fi
           NEW_VERSION=$(cat VERSION)
           echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
