@@ -1,5 +1,5 @@
 .PHONY: format lint typecheck check test test-integration test-all install dev clean
-.PHONY: docker-build docker-check experiment datasets validate docker-shell
+.PHONY: docker-build docker-build-dev docker-check experiment datasets validate docker-shell docker-dev
 
 # =============================================================================
 # Local Development
@@ -39,12 +39,12 @@ clean:
 ci: check test
 
 # =============================================================================
-# Docker Commands
+# Docker Commands (Production)
 # =============================================================================
 
-# Build the Docker image
+# Build the Docker image (production)
 docker-build:
-	docker compose build
+	docker compose build llm-energy-measure-app
 
 # Validate Docker setup
 docker-check:
@@ -57,19 +57,31 @@ CONFIG ?= test_tiny.yaml
 DATASET ?= alpaca
 SAMPLES ?= 100
 experiment: docker-check
-	docker compose run --rm bench \
+	docker compose run --rm llm-energy-measure-app \
 		llm-energy-measure experiment /app/configs/$(CONFIG) \
 		--dataset $(DATASET) -n $(SAMPLES)
 
 # List available datasets
 datasets:
-	docker compose run --rm bench llm-energy-measure datasets
+	docker compose run --rm llm-energy-measure-app llm-energy-measure datasets
 
 # Validate a config file
 # Usage: make validate CONFIG=test_tiny.yaml
 validate: docker-check
-	docker compose run --rm bench llm-energy-measure config validate /app/configs/$(CONFIG)
+	docker compose run --rm llm-energy-measure-app llm-energy-measure config validate /app/configs/$(CONFIG)
 
-# Interactive shell in container
+# Interactive shell in production container
 docker-shell:
-	docker compose run --rm bench /bin/bash
+	docker compose run --rm llm-energy-measure-app /bin/bash
+
+# =============================================================================
+# Docker Commands (Development)
+# =============================================================================
+
+# Build the dev Docker image
+docker-build-dev:
+	docker compose --profile dev build llm-energy-measure-dev
+
+# Interactive dev shell with source mounted
+docker-dev:
+	docker compose --profile dev run --rm llm-energy-measure-dev

@@ -4,7 +4,7 @@
     "dockerfile": "../Dockerfile",
     "target": "dev"
   },
-  "runArgs": ["--gpus", "all"],
+  "runArgs": ["--gpus", "all", "--privileged"],
   "remoteUser": "app",
   "containerEnv": {
     "HF_TOKEN": "${localEnv:HF_TOKEN}",
