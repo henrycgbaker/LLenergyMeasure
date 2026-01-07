@@ -1,0 +1,4 @@
+What is the capital of France?
+Explain quantum computing in one sentence.
+Write a haiku about programming.
+What is 2 + 2?
