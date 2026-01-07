@@ -58,7 +58,7 @@ services:
       # - ${HF_HOME:-~/.cache/huggingface}:/home/app/.cache/huggingface
 
   # ==========================================================================
-  # Development service - uses dev stage with editable install
+  # Development service - uses dev stage with editable install (runs as root)
   # ==========================================================================
   llm-energy-measure-dev:
     <<: *common
@@ -69,14 +69,19 @@ services:
       target: dev
     image: llm-energy-measure:dev
 
-    # Run as root to allow editable install on bind-mounted source
-    user: root
-
     volumes:
       # Mount source for editable install
       - .:/app
       # Persist HuggingFace cache
       - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
+
+    environment:
+      - HF_TOKEN
+      - CUDA_VISIBLE_DEVICES
+      - HF_HOME=/root/.cache/huggingface
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface
+      - CODECARBON_LOG_LEVEL=warning
+      - NVIDIA_DISABLE_REQUIRE=true
 
     # Auto-install editable package, then run command or shell
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]

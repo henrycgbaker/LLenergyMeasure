@@ -71,27 +71,37 @@ ENTRYPOINT []
 CMD ["llm-energy-measure", "--help"]
 
 # ============================================================================
-# Stage 3: Dev - For VS Code devcontainer
+# Stage 3: Dev - For VS Code devcontainer (runs as root for simplicity)
 # ============================================================================
-FROM runtime AS dev
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS dev
 
-USER root
-
-# Install dev tools (git for version control, curl for debugging)
+# Install Python 3.11 and dev tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3.11-dev \
+    python3-pip \
     git \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python
 
-# Uninstall the baked-in package so editable install works
-# Also ensure venv is writable by app user
-RUN pip uninstall -y llm-energy-measure || true \
-    && chown -R app:app /opt/venv
+WORKDIR /app
 
-USER app
+# Create venv and install base dependencies (torch with CUDA)
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+ENV VIRTUAL_ENV="/opt/venv"
+ENV PYTHONUNBUFFERED=1
+ENV HF_HOME=/root/.cache/huggingface
 
-# Copy source for editable install (will be overridden by workspace mount)
-COPY --chown=app:app . /app/
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+
+# Copy source (will be overridden by workspace mount in devcontainer)
+COPY . /app/
 
 # Default to bash for interactive dev sessions
 CMD ["/bin/bash"]
