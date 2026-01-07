@@ -91,6 +91,33 @@ batches = create_fixed_batches(prompts, batch_size=8)
 batches = create_adaptive_batches(prompts, tokenizer, max_tokens_per_batch=2048)
 ```
 
+### dataset_loader.py
+Load prompts from files or HuggingFace datasets.
+
+```python
+from llm_energy_measure.core.dataset_loader import (
+    load_prompts_from_source,
+    load_prompts_from_file,
+    load_prompts_from_hf,
+    list_builtin_datasets,
+)
+from llm_energy_measure.config.models import FilePromptSource, HuggingFacePromptSource
+
+# From file
+prompts = load_prompts_from_file("prompts.txt")
+
+# From HuggingFace (using config model)
+source = HuggingFacePromptSource(dataset="alpaca", sample_size=1000)
+prompts = load_prompts_from_source(source)
+
+# List built-in aliases
+list_builtin_datasets()  # {"alpaca": {...}, "gsm8k": {...}, ...}
+```
+
+**Built-in datasets:** alpaca, sharegpt, gsm8k, mmlu
+
+**Auto-detect columns:** text, prompt, question, instruction, input, content
+
 ### energy_backends/
 Energy tracking implementations.
 

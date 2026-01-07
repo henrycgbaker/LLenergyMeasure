@@ -18,21 +18,31 @@ services:
     volumes:
       # Experiment configs (read-only)
       - ./configs:/app/configs:ro
+      # Scripts (read-only)
+      - ./scripts:/app/scripts:ro
       # Results output
       - ./results:/app/results
-      # Optional: mount HF cache from host (requires correct permissions)
-      # - ${HF_HOME:-~/.cache/huggingface}:/tmp/hf_cache
+      # HuggingFace cache (optional - uncomment to persist models)
+      # - ${HF_HOME:-~/.cache/huggingface}:/home/app/.cache/huggingface
 
-    # Environment variables
+    # Environment variables (see .env.example)
     environment:
       - HF_TOKEN
       - CUDA_VISIBLE_DEVICES
-      - HF_HOME=/tmp/hf_cache
-      - TRANSFORMERS_CACHE=/tmp/hf_cache
+      - HF_HOME=/home/app/.cache/huggingface
+      - TRANSFORMERS_CACHE=/home/app/.cache/huggingface
       - CODECARBON_LOG_LEVEL=warning
 
     # Working directory
     working_dir: /app
 
-    # Default: show help
-    command: ["--help"]
+    # Health check - verify GPU is accessible
+    healthcheck:
+      test: ["CMD", "python", "-c", "import torch; assert torch.cuda.is_available()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+    # No fixed entrypoint - allows both CLI and accelerate commands
+    entrypoint: []
+    command: ["llm-energy-measure", "--help"]

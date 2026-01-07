@@ -31,6 +31,7 @@ config = ExperimentConfig(
 - `LatencySimulation` - Artificial delay injection
 - `DecoderConfig` - temperature, top_p, top_k
 - `QuantizationConfig` - 4-bit/8-bit BitsAndBytes
+- `PromptSourceConfig` - File or HuggingFace dataset prompts
 
 ### loader.py
 Configuration loading with inheritance.
@@ -88,6 +89,39 @@ model_name: meta-llama/Llama-2-7b-hf
 | `fp_precision` | float16 | float32, float16, bfloat16 |
 | `backend` | pytorch | pytorch, tensorrt, vllm |
 
+## Prompt Source Configuration
+
+Prompts can be loaded from files or HuggingFace datasets.
+
+### File-based prompts
+```yaml
+prompt_source:
+  type: file
+  path: ./prompts.txt  # One prompt per line
+```
+
+### HuggingFace datasets
+```yaml
+prompt_source:
+  type: huggingface
+  dataset: alpaca          # Built-in alias or full HF path
+  split: train             # Dataset split (default: train)
+  column: instruction      # Column to extract (auto-detected if omitted)
+  sample_size: 1000        # Limit prompts (optional)
+  shuffle: true            # Shuffle before sampling (default: false)
+  seed: 42                 # Random seed (default: 42)
+```
+
+**Built-in dataset aliases:**
+| Alias | HuggingFace Path | Default Column |
+|-------|-----------------|----------------|
+| `alpaca` | tatsu-lab/alpaca | instruction |
+| `sharegpt` | anon8231489123/ShareGPT_Vicuna_unfiltered | conversations |
+| `gsm8k` | gsm8k (main subset) | question |
+| `mmlu` | cais/mmlu (all subset) | question |
+
+**Auto-detect columns:** text, prompt, question, instruction, input, content
+
 ## Validation Rules
 
 Pydantic validators enforce:
@@ -95,6 +129,7 @@ Pydantic validators enforce:
 - `min_output_tokens <= max_output_tokens`
 - `load_in_4bit` and `load_in_8bit` are mutually exclusive
 - `delay_min_ms <= delay_max_ms` (latency simulation)
+- `sample_size >= 1` (prompt source)
 
 ## Related
 

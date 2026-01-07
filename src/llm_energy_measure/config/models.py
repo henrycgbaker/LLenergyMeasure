@@ -1,8 +1,37 @@
 """Configuration models for LLM Bench experiments."""
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Discriminator, Field, Tag, field_validator, model_validator
+
+# Built-in dataset aliases for prompt loading
+BUILTIN_DATASETS: dict[str, dict[str, str]] = {
+    "alpaca": {
+        "path": "tatsu-lab/alpaca",
+        "column": "instruction",
+        "split": "train",
+    },
+    "sharegpt": {
+        "path": "anon8231489123/ShareGPT_Vicuna_unfiltered",
+        "column": "conversations",
+        "split": "train",
+    },
+    "gsm8k": {
+        "path": "gsm8k",
+        "subset": "main",
+        "column": "question",
+        "split": "train",
+    },
+    "mmlu": {
+        "path": "cais/mmlu",
+        "subset": "all",
+        "column": "question",
+        "split": "test",
+    },
+}
+
+# Column names to try for auto-detection (order matters - first match wins)
+AUTO_DETECT_COLUMNS = ["text", "prompt", "question", "instruction", "input", "content"]
 
 
 class BatchingConfig(BaseModel):
@@ -65,6 +94,60 @@ class QuantizationConfig(BaseModel):
         return self
 
 
+class FilePromptSource(BaseModel):
+    """Load prompts from a text file (one per line)."""
+
+    type: Literal["file"] = "file"
+    path: str = Field(..., description="Path to prompts file")
+
+
+class HuggingFacePromptSource(BaseModel):
+    """Load prompts from a HuggingFace dataset.
+
+    Supports built-in aliases (alpaca, gsm8k, mmlu, sharegpt) or any HF dataset path.
+    Column auto-detection tries: text, prompt, question, instruction, input, content.
+    """
+
+    type: Literal["huggingface"] = "huggingface"
+    dataset: str = Field(..., description="Dataset name: built-in alias or HuggingFace path")
+    split: str = Field(default="train", description="Dataset split")
+    subset: str | None = Field(default=None, description="Dataset subset/config name")
+    column: str | None = Field(
+        default=None, description="Column to extract (auto-detected if not set)"
+    )
+    sample_size: int | None = Field(default=None, ge=1, description="Limit number of prompts")
+    shuffle: bool = Field(default=False, description="Shuffle before sampling")
+    seed: int = Field(default=42, description="Random seed for shuffling")
+
+    @model_validator(mode="after")
+    def resolve_builtin_alias(self) -> "HuggingFacePromptSource":
+        """Resolve built-in aliases to full dataset paths."""
+        if self.dataset in BUILTIN_DATASETS:
+            builtin = BUILTIN_DATASETS[self.dataset]
+            # Only override if not explicitly set
+            if self.column is None:
+                object.__setattr__(self, "column", builtin.get("column"))
+            if self.subset is None and "subset" in builtin:
+                object.__setattr__(self, "subset", builtin["subset"])
+            # Replace alias with full path
+            object.__setattr__(self, "dataset", builtin["path"])
+        return self
+
+
+def _get_prompt_source_type(v: Any) -> str:
+    """Discriminator function for PromptSourceConfig union."""
+    if isinstance(v, dict):
+        return str(v.get("type", "file"))
+    return str(getattr(v, "type", "file"))
+
+
+PromptSourceConfig = Annotated[
+    Annotated[FilePromptSource, Tag("file")]
+    | Annotated[HuggingFacePromptSource, Tag("huggingface")],
+    Discriminator(_get_prompt_source_type),
+]
+
+
 class ExperimentConfig(BaseModel):
     """Main experiment configuration.
 
@@ -94,6 +177,11 @@ class ExperimentConfig(BaseModel):
     num_input_prompts: int = Field(default=1, ge=1, description="Number of prompts")
     save_outputs: bool = Field(default=False, description="Save generated outputs")
     decode_token_to_text: bool = Field(default=False, description="Decode tokens to text")
+
+    # Prompt source (optional - can also be specified via CLI)
+    prompt_source: PromptSourceConfig | None = Field(
+        default=None, description="Prompt source: file or huggingface dataset"
+    )
 
     # Distributed configuration
     gpu_list: list[int] = Field(default_factory=lambda: [0], description="GPU indices to use")

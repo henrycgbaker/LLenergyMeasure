@@ -7,6 +7,8 @@ Provides commands for:
 - Listing and inspecting results
 """
 
+import subprocess
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -15,7 +17,13 @@ from rich.console import Console
 from rich.table import Table
 
 from llm_energy_measure.config.loader import load_config, validate_config
+from llm_energy_measure.config.models import ExperimentConfig, HuggingFacePromptSource
 from llm_energy_measure.constants import SCHEMA_VERSION
+from llm_energy_measure.core.dataset_loader import (
+    list_builtin_datasets,
+    load_prompts_from_file,
+    load_prompts_from_source,
+)
 from llm_energy_measure.domain.experiment import AggregatedResult, RawProcessResult
 from llm_energy_measure.exceptions import ConfigurationError
 from llm_energy_measure.logging import setup_logging
@@ -60,6 +68,19 @@ def run(
     prompts_file: Annotated[
         Path | None, typer.Option("--prompts", "-p", help="Path to prompts file (one per line)")
     ] = None,
+    dataset: Annotated[
+        str | None,
+        typer.Option(
+            "--dataset", "-d", help="HuggingFace dataset (alias: alpaca, gsm8k, mmlu, sharegpt)"
+        ),
+    ] = None,
+    dataset_split: Annotated[str, typer.Option("--split", help="Dataset split")] = "train",
+    dataset_column: Annotated[
+        str | None, typer.Option("--column", help="Dataset column for prompts")
+    ] = None,
+    sample_size: Annotated[
+        int | None, typer.Option("--sample-size", "-n", help="Limit number of prompts")
+    ] = None,
     results_dir: Annotated[
         Path | None, typer.Option("--results-dir", "-o", help="Results output directory")
     ] = None,
@@ -72,6 +93,11 @@ def run(
     Loads the configuration, runs inference, measures energy consumption,
     and saves raw per-process results. Use 'aggregate' command to combine
     results from multi-GPU experiments.
+
+    Prompts can be specified via:
+    - --prompts <file.txt>: One prompt per line
+    - --dataset <name>: HuggingFace dataset (alpaca, gsm8k, mmlu, sharegpt, or full path)
+    - prompt_source in config file
     """
     try:
         # Load and validate config
@@ -90,16 +116,16 @@ def run(
             console.print("[blue]Dry run - skipping experiment execution[/blue]")
             raise typer.Exit()
 
-        # Load prompts
-        prompts: list[str] = []
-        if prompts_file and prompts_file.exists():
-            prompts = [
-                line.strip() for line in prompts_file.read_text().splitlines() if line.strip()
-            ]
-            console.print(f"  Prompts: {len(prompts)}")
-        else:
-            console.print("[yellow]Warning:[/yellow] No prompts file provided, using default")
-            prompts = ["Hello, how are you?"]
+        # Resolve prompts (CLI > config > default)
+        prompts = _resolve_prompts(
+            config=config,
+            prompts_file=prompts_file,
+            dataset=dataset,
+            dataset_split=dataset_split,
+            dataset_column=dataset_column,
+            sample_size=sample_size,
+        )
+        console.print(f"  Prompts: {len(prompts)}")
 
         # Initialize repository (will be used when full experiment wiring is complete)
         _ = FileSystemRepository(results_dir)
@@ -121,6 +147,156 @@ def run(
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from None
+
+
+def _resolve_prompts(
+    config: ExperimentConfig,
+    prompts_file: Path | None,
+    dataset: str | None,
+    dataset_split: str,
+    dataset_column: str | None,
+    sample_size: int | None,
+) -> list[str]:
+    """Resolve prompts from CLI args or config.
+
+    Priority: CLI --dataset > CLI --prompts > config.prompt_source > default
+    """
+    # CLI --dataset takes highest priority
+    if dataset:
+        source = HuggingFacePromptSource(
+            dataset=dataset,
+            split=dataset_split,
+            column=dataset_column,
+            sample_size=sample_size,
+        )
+        return load_prompts_from_source(source)
+
+    # CLI --prompts file
+    if prompts_file and prompts_file.exists():
+        prompts = load_prompts_from_file(prompts_file)
+        if sample_size:
+            prompts = prompts[:sample_size]
+        return prompts
+
+    # Config-defined prompt source
+    if config.prompt_source:
+        prompts = load_prompts_from_source(config.prompt_source)
+        if sample_size:  # CLI sample_size can further limit
+            prompts = prompts[:sample_size]
+        return prompts
+
+    # Default fallback
+    console.print("[yellow]Warning:[/yellow] No prompts specified, using default")
+    return ["Hello, how are you?"]
+
+
+@app.command("experiment")  # type: ignore[misc]
+def experiment(
+    config_path: Annotated[Path, typer.Argument(help="Path to experiment config file")],
+    dataset: Annotated[
+        str | None,
+        typer.Option("--dataset", "-d", help="HuggingFace dataset (alpaca, gsm8k, mmlu, sharegpt)"),
+    ] = None,
+    prompts_file: Annotated[
+        Path | None, typer.Option("--prompts", "-p", help="Path to prompts file")
+    ] = None,
+    sample_size: Annotated[
+        int | None, typer.Option("--sample-size", "-n", help="Limit number of prompts")
+    ] = None,
+    dataset_split: Annotated[str, typer.Option("--split", help="Dataset split")] = "train",
+    dataset_column: Annotated[
+        str | None, typer.Option("--column", help="Dataset column for prompts")
+    ] = None,
+) -> None:
+    """Run experiment with automatic accelerate handling.
+
+    Reads num_processes from config and spawns accelerate launch automatically.
+    This is the recommended way to run experiments.
+
+    Examples:
+        llm-energy-measure experiment config.yaml --dataset alpaca -n 100
+        llm-energy-measure experiment config.yaml --prompts prompts.txt
+    """
+    try:
+        # Load config to get num_processes
+        config = load_config(config_path)
+        num_processes = config.num_processes
+
+        console.print(f"[bold]Running experiment: {config.config_name}[/bold]")
+        console.print(f"  Model: {config.model_name}")
+        console.print(f"  Processes: {num_processes}")
+
+        # Build accelerate command
+        cmd = [
+            sys.executable,
+            "-m",
+            "accelerate.commands.launch",
+            "--num_processes",
+            str(num_processes),
+            "-m",
+            "llm_energy_measure.orchestration.launcher",
+            "--config",
+            str(config_path.resolve()),
+        ]
+
+        # Add prompt source args
+        if dataset:
+            cmd.extend(["--dataset", dataset])
+            if dataset_split != "train":
+                cmd.extend(["--split", dataset_split])
+            if dataset_column:
+                cmd.extend(["--column", dataset_column])
+        elif prompts_file:
+            cmd.extend(["--prompts", str(prompts_file.resolve())])
+
+        if sample_size:
+            cmd.extend(["--sample-size", str(sample_size)])
+
+        console.print(f"\n[dim]$ accelerate launch --num_processes {num_processes} ...[/dim]\n")
+
+        # Run accelerate, streaming output
+        result = subprocess.run(cmd, check=False)
+        raise typer.Exit(result.returncode)
+
+    except ConfigurationError as e:
+        console.print(f"[red]Configuration error:[/red] {e}")
+        raise typer.Exit(1) from None
+    except FileNotFoundError:
+        console.print(
+            "[red]Error:[/red] accelerate not found. Install with: pip install accelerate"
+        )
+        raise typer.Exit(1) from None
+
+
+@app.command("datasets")  # type: ignore[misc]
+def list_datasets_cmd() -> None:
+    """List built-in dataset aliases for prompts.
+
+    These aliases can be used with --dataset option or in config files.
+    """
+    table = Table(title="Built-in Dataset Aliases")
+    table.add_column("Alias", style="cyan")
+    table.add_column("HuggingFace Path", style="green")
+    table.add_column("Column")
+    table.add_column("Description")
+
+    descriptions = {
+        "alpaca": "Instruction-following prompts (52k)",
+        "sharegpt": "Real user conversations",
+        "gsm8k": "Grade school math reasoning",
+        "mmlu": "Multi-task knowledge questions",
+    }
+
+    for alias, info in list_builtin_datasets().items():
+        table.add_row(
+            alias,
+            info["path"],
+            info.get("column", "auto"),
+            descriptions.get(alias, ""),
+        )
+
+    console.print(table)
+    console.print("\n[dim]Usage: llm-energy-measure run config.yaml --dataset alpaca -n 1000[/dim]")
 
 
 @app.command()  # type: ignore[misc]
