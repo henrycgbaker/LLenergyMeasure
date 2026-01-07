@@ -3,9 +3,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runtime  # Use runtime stage (has package installed), not dev stage
     image: llm-energy-measure:latest
 
-    # GPU access (gpu=compute, utility=nvidia-smi/NVML for energy metrics)
+    # GPU access with privileged mode for NVML energy metrics
+    # Note: privileged is required for CodeCarbon to read GPU power via NVML
+    privileged: true
     deploy:
       resources:
         reservations:
