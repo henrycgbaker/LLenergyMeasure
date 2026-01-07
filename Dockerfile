@@ -66,7 +66,8 @@ ENV PYTHONUNBUFFERED=1
 ENV HF_HOME=/home/app/.cache/huggingface
 ENV TRANSFORMERS_CACHE=/home/app/.cache/huggingface/transformers
 
-# Default command (no ENTRYPOINT - allows running accelerate, python, etc.)
+# Clear NVIDIA's entrypoint (suppresses startup banner) and set default command
+ENTRYPOINT []
 CMD ["llm-energy-measure", "--help"]
 
 # ============================================================================
