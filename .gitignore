@@ -1,57 +1,79 @@
-thesis/*
-emissions.csv
+# =============================================================================
+# LLM Energy Measure - .gitignore
+# =============================================================================
 
-# Ignore Python virtual environments
-thesis/lib/
-thesis/bin/
-thesis/include/
-.venv/
+# -----------------------------------------------------------------------------
+# Experiment artefacts (keep tool generic for all users)
+# -----------------------------------------------------------------------------
+results/
+var/
+emissions*.csv
+*.log
+*.logs
 
-# Ignore Python cache files
+# CodeCarbon tracking files
+.codecarbon.lock
+codecarbon.lock
+
+# -----------------------------------------------------------------------------
+# Legacy/thesis files
+# -----------------------------------------------------------------------------
+thesis/
+to_do.ipynb
+refactor/
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
-# Ignore logs
-*.csv
-*.logs
-
-# Ignore installed dependencies
-site-packages/
 *.egg-info/
-
-# Ignore Hugging Face cache
-~/.cache/huggingface/
-
-/results/
-
-to_do.ipynb
-
-# Refactor planning docs (local only)
-refactor/
+.eggs/
+*.egg
+.venv/
+venv/
+site-packages/
 
 # Build artifacts
 dist/
 build/
+*.whl
 
+# -----------------------------------------------------------------------------
 # Tool caches
+# -----------------------------------------------------------------------------
 .ruff_cache/
 .mypy_cache/
 .pytest_cache/
+.hypothesis/
 
 # Coverage
 htmlcov/
 .coverage
+.coverage.*
 coverage.xml
+*.cover
 
-# IDE
+# -----------------------------------------------------------------------------
+# IDE / Editor
+# -----------------------------------------------------------------------------
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# Environment files (secrets)
+# -----------------------------------------------------------------------------
+# Environment / Secrets
+# -----------------------------------------------------------------------------
 .env
+.env.*
+!.env.example
 
-# Claude Code context files
+# -----------------------------------------------------------------------------
+# Claude Code
+# -----------------------------------------------------------------------------
 CLAUDE.md
 **/CLAUDE.md
