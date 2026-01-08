@@ -416,6 +416,11 @@ def experiment(
         bool | None,
         typer.Option("--quantization/--no-quantization", help="Enable/disable quantization"),
     ] = None,
+    # Multi-cycle options (statistical robustness)
+    cycles: Annotated[
+        int,
+        typer.Option("--cycles", "-c", help="Number of cycles for statistical robustness (1-10)"),
+    ] = 1,
     # Workflow control options (Phases 1-5)
     no_aggregate: Annotated[
         bool, typer.Option("--no-aggregate", help="Skip auto-aggregation after experiment")
@@ -440,6 +445,9 @@ def experiment(
 
     3. Config + CLI overrides (sweeps):
        llm-energy-measure experiment config.yaml -b 8 --precision int8
+
+    Multi-cycle mode for statistical robustness (academic benchmarking standard):
+       llm-energy-measure experiment config.yaml --cycles 5 --dataset alpaca -n 100
 
     Precedence: CLI > Config file > Preset > Defaults
 
@@ -632,6 +640,15 @@ def experiment(
         # Display config with override visibility
         _display_config_summary(config, tracked_overrides, preset_name)
 
+        # Validate and display cycles
+        if cycles < 1 or cycles > 10:
+            console.print("[red]Error:[/red] --cycles must be between 1 and 10")
+            raise typer.Exit(1)
+        if cycles > 1:
+            console.print(
+                f"  [cyan]Multi-cycle mode:[/cyan] {cycles} cycles for statistical robustness"
+            )
+
         # Check for MIG instances and warn about energy measurement (Phase: MIG support)
         from llm_energy_measure.core.gpu_info import detect_gpu_topology, validate_gpu_selection
 
@@ -663,12 +680,13 @@ def experiment(
         # Generate temp config file with _metadata (Phase 0)
         # Always generate temp file to include _metadata for effective_config/cli_overrides tracking
         effective_config = config.model_dump()
-        metadata = {
+        metadata: dict[str, dict[str, Any]] = {
             "_metadata": {
                 "experiment_id": experiment_id,  # Pass to subprocess
                 "effective_config": effective_config,
                 "cli_overrides": tracked_overrides,
                 "original_config_path": str(config_path) if config_path else None,
+                "cycle_id": None,  # Set for multi-cycle experiments
             }
         }
         config_with_metadata = {**effective_config, **metadata}
@@ -699,117 +717,216 @@ def experiment(
             f"\n[dim]$ accelerate launch --num_processes {final_num_processes} ...[/dim]\n"
         )
 
-        # Create experiment state before launch (Phase 2)
-        current_state = ExperimentState(
-            experiment_id=experiment_id,
-            status=ExperimentStatus.RUNNING,
-            config_path=str(config_path) if config_path else None,
-            config_hash=config_hash,
-            model_name=config.model_name,
-            prompt_args={
-                "dataset": dataset,
-                "sample_size": sample_size,
-                "prompts_file": str(prompts_file) if prompts_file else None,
-            },
-            num_processes=final_num_processes,
-            started_at=datetime.now(),
-        )
+        # Multi-cycle support: run experiment multiple times for statistical robustness
+        cycle_results: list[AggregatedResult] = []
+        cycle_metadata_list: list[Any] = []
+        base_experiment_id = experiment_id
 
-        # Register signal handlers (Phase 3)
-        original_sigint = signal.signal(signal.SIGINT, _handle_interrupt)
-        original_sigterm = signal.signal(signal.SIGTERM, _handle_interrupt)
+        for cycle_idx in range(cycles):
+            # Generate cycle-specific experiment ID
+            if cycles > 1:
+                cycle_experiment_id = f"{base_experiment_id}_c{cycle_idx}"
+                console.print(f"\n[bold cyan]━━━ Cycle {cycle_idx + 1}/{cycles} ━━━[/bold cyan]")
+            else:
+                cycle_experiment_id = experiment_id
 
-        try:
-            # Run accelerate with Popen for better control (Phase 3)
-            # start_new_session=True creates a new process group, allowing us to
-            # kill all child processes (accelerate workers) with os.killpg()
-            subprocess_handle = subprocess.Popen(cmd, start_new_session=True)
-            current_state.subprocess_pid = subprocess_handle.pid
-            state_manager.save(current_state)
-
-            # Wait for completion
-            exit_code = subprocess_handle.wait()
-
-        finally:
-            # Restore signal handlers
-            signal.signal(signal.SIGINT, original_sigint)
-            signal.signal(signal.SIGTERM, original_sigterm)
-
-        # Handle subprocess result
-        if exit_code == 0:
-            # Update process state from completion markers (Phase 5)
-            current_state = _update_process_state_from_markers(
-                current_state, state_manager, actual_results_dir
+            # Collect cycle metadata (temperature, load) before each cycle
+            from llm_energy_measure.results.cycle_statistics import (
+                create_cycle_metadata,
+                try_get_gpu_temperature,
+                try_get_system_load,
             )
 
-            if current_state.can_aggregate():
-                current_state.status = ExperimentStatus.COMPLETED
+            cycle_meta = create_cycle_metadata(
+                cycle_id=cycle_idx,
+                timestamp=datetime.now(),
+                gpu_temperature_c=try_get_gpu_temperature(),
+                system_load=try_get_system_load(),
+            )
+            cycle_metadata_list.append(cycle_meta)
+
+            # Update temp config with cycle-specific experiment ID
+            metadata["_metadata"]["experiment_id"] = cycle_experiment_id
+            if cycles > 1:
+                metadata["_metadata"]["cycle_id"] = cycle_idx
+            config_with_metadata = {**effective_config, **metadata}
+
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".yaml", delete=False, prefix="llm_energy_"
+            ) as tmp:
+                yaml.dump(config_with_metadata, tmp, default_flow_style=False)
+                cycle_tmp_config_path = tmp.name
+
+            # Update command with cycle-specific config
+            cycle_cmd = cmd.copy()
+            # Replace config path in command
+            config_idx = cycle_cmd.index("--config")
+            cycle_cmd[config_idx + 1] = cycle_tmp_config_path
+
+            # Create experiment state before launch (Phase 2)
+            current_state = ExperimentState(
+                experiment_id=cycle_experiment_id,
+                status=ExperimentStatus.RUNNING,
+                config_path=str(config_path) if config_path else None,
+                config_hash=config_hash,
+                model_name=config.model_name,
+                prompt_args={
+                    "dataset": dataset,
+                    "sample_size": sample_size,
+                    "prompts_file": str(prompts_file) if prompts_file else None,
+                },
+                num_processes=final_num_processes,
+                started_at=datetime.now(),
+            )
+
+            # Register signal handlers (Phase 3)
+            original_sigint = signal.signal(signal.SIGINT, _handle_interrupt)
+            original_sigterm = signal.signal(signal.SIGTERM, _handle_interrupt)
+
+            try:
+                # Run accelerate with Popen for better control (Phase 3)
+                # start_new_session=True creates a new process group, allowing us to
+                # kill all child processes (accelerate workers) with os.killpg()
+                subprocess_handle = subprocess.Popen(cycle_cmd, start_new_session=True)
+                current_state.subprocess_pid = subprocess_handle.pid
                 state_manager.save(current_state)
 
-                # Auto-aggregate if not disabled (Phase 1)
-                if not no_aggregate:
-                    try:
-                        console.print("\n[dim]Auto-aggregating results...[/dim]")
-                        raw_results = repo.load_all_raw(current_state.experiment_id)
-                        agg_result = aggregate_results(
-                            experiment_id=current_state.experiment_id,
-                            raw_results=raw_results,
-                            expected_processes=final_num_processes,
-                            results_dir=actual_results_dir,
-                            strict=True,
-                        )
-                        result_path = repo.save_aggregated(agg_result)
-                        current_state.status = ExperimentStatus.AGGREGATED
-                        state_manager.delete(current_state.experiment_id)
-                        console.print(f"\n[green]Results saved to:[/green] {result_path}")
-                    except AggregationError as e:
-                        console.print(f"[yellow]Aggregation warning:[/yellow] {e}")
+                # Wait for completion
+                exit_code = subprocess_handle.wait()
+
+            finally:
+                # Restore signal handlers
+                signal.signal(signal.SIGINT, original_sigint)
+                signal.signal(signal.SIGTERM, original_sigterm)
+
+            # Handle subprocess result
+            if exit_code == 0:
+                # Update process state from completion markers (Phase 5)
+                current_state = _update_process_state_from_markers(
+                    current_state, state_manager, actual_results_dir
+                )
+
+                if current_state.can_aggregate():
+                    current_state.status = ExperimentStatus.COMPLETED
+                    state_manager.save(current_state)
+
+                    # Auto-aggregate if not disabled (Phase 1)
+                    if not no_aggregate:
+                        try:
+                            console.print("[dim]Auto-aggregating cycle results...[/dim]")
+                            raw_results = repo.load_all_raw(current_state.experiment_id)
+                            agg_result = aggregate_results(
+                                experiment_id=current_state.experiment_id,
+                                raw_results=raw_results,
+                                expected_processes=final_num_processes,
+                                results_dir=actual_results_dir,
+                                strict=True,
+                            )
+                            result_path = repo.save_aggregated(agg_result)
+                            current_state.status = ExperimentStatus.AGGREGATED
+                            state_manager.delete(current_state.experiment_id)
+                            cycle_results.append(agg_result)
+                            if cycles == 1:
+                                console.print(f"\n[green]Results saved to:[/green] {result_path}")
+                        except AggregationError as e:
+                            console.print(f"[yellow]Aggregation warning:[/yellow] {e}")
+                            console.print(
+                                f"Raw results available. Aggregate manually with: "
+                                f"llm-energy-measure aggregate {current_state.experiment_id}"
+                            )
+                            state_manager.save(current_state)
+                            if cycles > 1:
+                                console.print("[red]Cycle failed, stopping multi-cycle run[/red]")
+                                raise typer.Exit(1) from None
+                    else:
                         console.print(
-                            f"Raw results available. Aggregate manually with: "
-                            f"llm-energy-measure aggregate {current_state.experiment_id}"
+                            f"[green]Cycle {cycle_idx + 1} complete.[/green] "
+                            f"Aggregate with: llm-energy-measure aggregate {current_state.experiment_id}"
                         )
                         state_manager.save(current_state)
                 else:
+                    # Exit 0 but incomplete - anomaly
                     console.print(
-                        f"\n[green]Experiment complete.[/green] "
-                        f"Aggregate with: llm-energy-measure aggregate {current_state.experiment_id}"
+                        "[yellow]Warning: Process exited successfully but results incomplete[/yellow]"
+                    )
+                    console.print(
+                        f"  Completed: {current_state.processes_completed}/{current_state.num_processes}"
+                    )
+                    if cycles > 1:
+                        console.print("[red]Cycle incomplete, stopping multi-cycle run[/red]")
+                        raise typer.Exit(1)
+                    console.print(
+                        f"  Use 'llm-energy-measure aggregate {current_state.experiment_id} --force' "
+                        "to aggregate partial results"
                     )
                     state_manager.save(current_state)
+                    raise typer.Exit(0)
             else:
-                # Exit 0 but incomplete - anomaly
-                console.print(
-                    "[yellow]Warning: Process exited successfully but results incomplete[/yellow]"
+                # Non-zero exit - check what we got
+                current_state = _update_process_state_from_markers(
+                    current_state, state_manager, actual_results_dir
                 )
+                current_state.status = ExperimentStatus.FAILED
+                current_state.error_message = f"Subprocess exited with code {exit_code}"
+                state_manager.save(current_state)
+
+                console.print(f"[red]Experiment failed (exit code {exit_code})[/red]")
                 console.print(
                     f"  Completed: {current_state.processes_completed}/{current_state.num_processes}"
                 )
-                console.print(
-                    f"  Use 'llm-energy-measure aggregate {current_state.experiment_id} --force' "
-                    "to aggregate partial results"
-                )
-                state_manager.save(current_state)
+                if current_state.processes_completed > 0:
+                    console.print(
+                        f"  Partial results available. Resume with: "
+                        f"llm-energy-measure experiment --resume {current_state.experiment_id}"
+                    )
 
-            raise typer.Exit(0)
-        else:
-            # Non-zero exit - check what we got
-            current_state = _update_process_state_from_markers(
-                current_state, state_manager, actual_results_dir
+                raise typer.Exit(exit_code)
+
+        # Multi-cycle aggregation and statistics
+        if cycles > 1 and len(cycle_results) == cycles:
+            from llm_energy_measure.results.cycle_statistics import create_multi_cycle_result
+
+            console.print("\n[bold cyan]━━━ Multi-Cycle Statistics ━━━[/bold cyan]")
+
+            multi_cycle_result = create_multi_cycle_result(
+                experiment_id=base_experiment_id,
+                cycle_results=cycle_results,
+                cycle_metadata=cycle_metadata_list,
+                effective_config=effective_config,
             )
-            current_state.status = ExperimentStatus.FAILED
-            current_state.error_message = f"Subprocess exited with code {exit_code}"
-            state_manager.save(current_state)
 
-            console.print(f"[red]Experiment failed (exit code {exit_code})[/red]")
+            # Save multi-cycle result
+            multi_cycle_path = actual_results_dir / "multi_cycle" / f"{base_experiment_id}.json"
+            multi_cycle_path.parent.mkdir(parents=True, exist_ok=True)
+            multi_cycle_path.write_text(multi_cycle_result.model_dump_json(indent=2))
+
+            # Display statistics
+            stats = multi_cycle_result.statistics
+            console.print(f"\n[green]✓ Completed {cycles} cycles[/green]")
+            console.print("\n[bold]Energy:[/bold]")
+            console.print(f"  Mean: {stats.energy_mean_j:.2f} J ± {stats.energy_std_j:.2f}")
             console.print(
-                f"  Completed: {current_state.processes_completed}/{current_state.num_processes}"
+                f"  95% CI: [{stats.energy_ci_95_lower:.2f}, {stats.energy_ci_95_upper:.2f}] J"
             )
-            if current_state.processes_completed > 0:
-                console.print(
-                    f"  Partial results available. Resume with: "
-                    f"llm-energy-measure experiment --resume {current_state.experiment_id}"
-                )
+            console.print(f"  CV: {stats.energy_cv:.1%}")
 
-            raise typer.Exit(exit_code)
+            console.print("\n[bold]Throughput:[/bold]")
+            console.print(
+                f"  Mean: {stats.throughput_mean_tps:.2f} tok/s ± {stats.throughput_std_tps:.2f}"
+            )
+            console.print(
+                f"  95% CI: [{stats.throughput_ci_95_lower:.2f}, {stats.throughput_ci_95_upper:.2f}] tok/s"
+            )
+            console.print(f"  CV: {stats.throughput_cv:.1%}")
+
+            console.print("\n[bold]Efficiency:[/bold]")
+            console.print(
+                f"  Mean: {stats.efficiency_mean_tpj:.2f} tok/J ± {stats.efficiency_std_tpj:.2f}"
+            )
+
+            console.print(f"\n[green]Multi-cycle results saved to:[/green] {multi_cycle_path}")
+
+        raise typer.Exit(0)
 
     except typer.Exit:
         raise  # Re-raise typer exits
