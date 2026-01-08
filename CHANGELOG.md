@@ -2,6 +2,52 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased] - Industry-Standard Benchmarking Features
+
+Implements academic and industry-standard benchmarking features based on MLPerf, vLLM, and TokenPowerBench research.
+
+### Added
+
+- **Multi-Cycle Experiments** for statistical robustness
+  - `--cycles N` flag runs the same experiment N times (1-10)
+  - Statistical aggregation: mean, standard deviation, 95% confidence intervals
+  - Coefficient of variation (CV) for measurement stability assessment
+  - Per-cycle metadata tracking (GPU temperature, system load at cycle start)
+  - Multi-cycle results saved to `results/multi_cycle/<experiment_id>.json`
+  - Uses t-distribution for small sample confidence intervals (academic standard)
+
+- **MLPerf-Style Traffic Simulation** replacing naive delay simulation
+  - `TrafficSimulation` config with Poisson and constant arrival modes
+  - `target_qps` parameter for queries-per-second arrival rate
+  - Poisson mode uses exponential inter-arrival times (statistically realistic)
+  - Seeded reproducibility for consistent benchmarking
+  - `TrafficGenerator` class maintains state across batches
+
+- **Industry-Standard Batching Strategies** (MLPerf/vLLM terminology)
+  - `strategy` field: `static`, `dynamic`, `sorted_static`, `sorted_dynamic`
+  - `static`: Fixed batch size (default)
+  - `dynamic`: Token-aware batching with `max_tokens_per_batch`
+  - `sorted_static`/`sorted_dynamic`: Sort prompts by length before batching
+  - Length sorting improves GPU utilisation by reducing padding
+
+### Changed
+
+- Traffic simulation now uses proper Poisson arrival process instead of simple random delays
+- Batching config uses explicit `strategy` field instead of boolean `dynamic_batching`
+
+### Dropped (From v1.0.0 Plans)
+
+- **FSDP Support**: Research confirmed FSDP (Fully Sharded Data Parallel) is for training, not inference. Current tensor parallelism via accelerate `device_map="auto"` is the correct approach for inference workloads.
+- **Scenario Metadata**: Already covered by existing `extra_metadata` field in ExperimentConfig.
+
+### References
+
+- [MLPerf Inference LoadGen](https://docs.mlcommons.org/inference/) - Traffic simulation patterns
+- [vLLM Batching](https://blog.vllm.ai/) - Industry batching strategies
+- [TokenPowerBench](https://arxiv.org/html/2512.03024v1) - Statistical robustness methodology
+
+---
+
 ## [v1.16.0](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/releases/tag/v1.16.0) (2025-01-07)
 
 Production-ready containerisation with full GPU support and streamlined developer experience.
