@@ -8,12 +8,15 @@ separate step (see results/aggregation.py).
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from llm_energy_measure.constants import COMPLETION_MARKER_PREFIX
 from llm_energy_measure.domain.experiment import RawProcessResult, Timestamps
 from llm_energy_measure.orchestration.context import ExperimentContext
 
@@ -25,6 +28,54 @@ if TYPE_CHECKING:
         ModelLoader,
         ResultsRepository,
     )
+
+
+def _compute_file_hash(file_path: Path) -> str:
+    """Compute SHA256 hash of a file for integrity verification."""
+    if not file_path.exists():
+        return "sha256:file_not_found"
+    hash_obj = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            hash_obj.update(chunk)
+    return f"sha256:{hash_obj.hexdigest()[:16]}"
+
+
+def _write_completion_marker(
+    experiment_id: str,
+    process_index: int,
+    gpu_id: int,
+    result_path: Path,
+) -> Path:
+    """Write process completion marker after successful result save.
+
+    Args:
+        experiment_id: Experiment identifier.
+        process_index: Process index (0-based).
+        gpu_id: GPU device index.
+        result_path: Path to the saved result file.
+
+    Returns:
+        Path to the completion marker file.
+    """
+    marker_dir = result_path.parent
+    marker_path = marker_dir / f"{COMPLETION_MARKER_PREFIX}{process_index}"
+
+    marker_data = {
+        "process_index": process_index,
+        "gpu_id": gpu_id,
+        "result_path": str(result_path),
+        "timestamp": datetime.now().isoformat(),
+        "result_hash": _compute_file_hash(result_path),
+    }
+
+    # Atomic write
+    temp_path = marker_path.with_suffix(".tmp")
+    temp_path.write_text(json.dumps(marker_data, indent=2))
+    temp_path.rename(marker_path)
+
+    logger.debug(f"Completion marker written: {marker_path}")
+    return marker_path
 
 
 class ExperimentOrchestrator:
@@ -88,7 +139,7 @@ class ExperimentOrchestrator:
         combined = self._metrics.collect(model, inference_result, ctx.config)
         end = datetime.now()
 
-        # Build raw result
+        # Build raw result with effective_config and cli_overrides (Phase 0)
         raw_result = RawProcessResult(
             experiment_id=ctx.experiment_id,
             process_index=ctx.process_index,
@@ -103,10 +154,20 @@ class ExperimentOrchestrator:
             inference_metrics=combined.inference,
             energy_metrics=energy_metrics,
             compute_metrics=combined.compute,
+            effective_config=ctx.effective_config,
+            cli_overrides=ctx.cli_overrides,
         )
 
         # Save raw result
         result_path = self._repository.save_raw(ctx.experiment_id, raw_result)
         logger.info(f"Raw result saved to {result_path}")
+
+        # Write completion marker (Phase 5)
+        _write_completion_marker(
+            ctx.experiment_id,
+            ctx.process_index,
+            ctx.device.index or 0,
+            result_path,
+        )
 
         return result_path

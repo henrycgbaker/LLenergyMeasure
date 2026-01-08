@@ -8,7 +8,8 @@ A Python framework for measuring LLM inference efficiency, including energy cons
 - **Throughput Metrics**: Tokens/second, latency per token, batch processing stats
 - **FLOPs Estimation**: Multiple estimation methods (calflops, architecture-based, parameter-based)
 - **Multi-GPU Support**: Distributed inference via `accelerate` with per-process result tracking
-- **Late Aggregation**: Raw per-GPU results are saved separately and aggregated on demand
+- **Auto-Aggregation**: Results automatically aggregated after successful experiment runs
+- **Experiment Resumption**: Resume interrupted experiments from where they left off
 - **Flexible Configuration**: YAML/JSON configs with inheritance support
 - **Docker Ready**: GPU-enabled containerization with docker-compose
 
@@ -64,7 +65,7 @@ llm-energy-measure config validate configs/my_experiment.yaml
 
 ### 3. Run Experiment
 
-The `experiment` command handles `accelerate launch` automatically, reading `num_processes` from your config:
+The `experiment` command handles `accelerate launch` automatically and auto-aggregates results on success:
 
 ```bash
 # Using built-in HuggingFace datasets (recommended)
@@ -72,7 +73,18 @@ llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
 
 # Using a prompts file
 llm-energy-measure experiment configs/my_experiment.yaml --prompts prompts.txt
+
+# Skip auto-aggregation (advanced)
+llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100 --no-aggregate
+
+# Resume an interrupted experiment
+llm-energy-measure experiment --resume <exp_id>
+
+# Start fresh, ignoring any incomplete experiments
+llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100 --fresh
 ```
+
+**Interrupt handling**: Press Ctrl+C to gracefully stop an experiment. State is saved and you can resume later with `--resume`.
 
 Or use `accelerate launch` directly for more control:
 
@@ -83,9 +95,9 @@ accelerate launch --num_processes 2 \
   --dataset alpaca -n 100
 ```
 
-### 4. Aggregate Results
+### 4. Aggregate Results (Manual)
 
-After running, aggregate per-process results:
+If you used `--no-aggregate` or need to re-aggregate:
 
 ```bash
 # Aggregate a specific experiment
@@ -93,6 +105,9 @@ llm-energy-measure aggregate exp_20240115_123456
 
 # Aggregate all pending experiments
 llm-energy-measure aggregate --all
+
+# Force aggregation of partial results (debugging)
+llm-energy-measure aggregate exp_20240115_123456 --force
 ```
 
 ### 5. View Results
@@ -117,9 +132,13 @@ llm-energy-measure results show exp_20240115_123456 --json
 llm-energy-measure [OPTIONS] COMMAND [ARGS]
 
 Commands:
-  experiment  Run experiment (wraps accelerate automatically)
+  experiment  Run experiment (wraps accelerate, auto-aggregates)
+    --no-aggregate   Skip auto-aggregation
+    --fresh          Ignore incomplete experiments
+    --resume <id>    Resume an interrupted experiment
   run         Run inference (called by accelerate launch)
   aggregate   Aggregate raw per-process results
+    --force          Aggregate even if incomplete (partial results)
   datasets    List available built-in datasets
   config      Configuration management
     validate  Validate a config file
@@ -434,10 +453,14 @@ results/
 │   └── exp_20240115_123456/
 │       ├── process_0.json    # GPU 0 results
 │       ├── process_1.json    # GPU 1 results
+│       ├── .completed_0      # Completion marker for process 0
+│       ├── .completed_1      # Completion marker for process 1
 │       └── ...
 └── aggregated/
     └── exp_20240115_123456.json
 ```
+
+**Completion markers**: Each process writes a `.completed_<index>` marker after saving its result. Aggregation validates all markers exist before proceeding.
 
 ### Metrics Collected
 

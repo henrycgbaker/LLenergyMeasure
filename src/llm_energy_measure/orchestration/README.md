@@ -153,16 +153,83 @@ accelerate launch --num_processes 2 \
 
 ## Late Aggregation Pattern
 
-Raw results are saved per-process. Aggregation happens later:
-```bash
-# After experiment completes
-llm-energy-measure aggregate exp_id
+### Why Late Aggregation?
+
+When running multi-GPU experiments, `accelerate launch` spawns **N independent Python processes** - one per GPU. These processes:
+
+1. Run in separate memory spaces (no shared state)
+2. Execute the same code but on different data slices
+3. Each produce their own metrics (energy, tokens, timing)
+4. Cannot directly communicate complex result objects
+
+**The problem**: There's no natural "coordinator" process that can collect and aggregate results. Each subprocess only sees its own GPU's data.
+
+**The solution**: Each process saves its raw result independently to disk:
+```
+results/raw/exp_id/
+├── process_0.json   # GPU 0's metrics
+├── process_1.json   # GPU 1's metrics
+├── .completed_0     # Marker confirming process 0 finished
+├── .completed_1     # Marker confirming process 1 finished
 ```
 
-This allows:
-- Partial results if some processes fail
-- Re-aggregation with different methods
-- Debugging per-GPU metrics
+After all processes complete, aggregation runs in the parent CLI process:
+```python
+# CLI (parent process) - runs after accelerate exits
+raw_results = repo.load_all_raw(experiment_id)
+aggregated = aggregate_results(experiment_id, raw_results)
+repo.save_aggregated(aggregated)
+```
+
+### Benefits of This Approach
+
+| Benefit | Description |
+|---------|-------------|
+| **Fault tolerance** | If one GPU fails, other results are preserved |
+| **Debuggability** | Per-GPU metrics available for analysis |
+| **Flexibility** | Re-aggregate with different methods without re-running |
+| **Simplicity** | No inter-process communication complexity |
+| **Completeness validation** | Markers ensure all N processes finished before aggregating |
+
+### Workflow
+
+```
+┌─────────────────────────────────────────────────┐
+│ CLI: llm-energy-measure experiment config.yaml  │
+│   - Creates ExperimentState                     │
+│   - Spawns subprocess via Popen                 │
+└─────────────────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────┐
+│ accelerate launch (subprocess)                  │
+│   ├── Process 0 (GPU 0) → saves process_0.json │
+│   ├── Process 1 (GPU 1) → saves process_1.json │
+│   └── Each writes .completed_N marker           │
+└─────────────────────────────────────────────────┘
+                      │
+                      ▼ (exit code 0)
+┌─────────────────────────────────────────────────┐
+│ CLI (parent process continues)                  │
+│   - Validates all completion markers exist      │
+│   - Loads raw results                           │
+│   - Aggregates metrics                          │
+│   - Saves aggregated result                     │
+└─────────────────────────────────────────────────┘
+```
+
+### Auto-Aggregation vs Manual
+
+By default, aggregation runs automatically after successful subprocess exit. Use `--no-aggregate` to skip this and aggregate manually later:
+
+```bash
+# Default: auto-aggregates
+llm-energy-measure experiment config.yaml -d alpaca -n 100
+
+# Manual aggregation
+llm-energy-measure experiment config.yaml -d alpaca -n 100 --no-aggregate
+llm-energy-measure aggregate exp_id
+```
 
 ## Related
 

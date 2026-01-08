@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
 from loguru import logger
@@ -44,6 +44,8 @@ class ExperimentContext:
         is_main_process: Whether this is the main (rank 0) process.
         process_index: Index of this process (0 to num_processes-1).
         start_time: When the experiment started.
+        effective_config: Full resolved config for reproducibility.
+        cli_overrides: CLI parameters that overrode config values.
     """
 
     experiment_id: str
@@ -53,12 +55,17 @@ class ExperimentContext:
     is_main_process: bool
     process_index: int
     start_time: datetime = field(default_factory=datetime.now)
+    effective_config: dict[str, Any] = field(default_factory=dict)
+    cli_overrides: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def create(
         cls,
         config: ExperimentConfig,
         id_file: Path | None = None,
+        effective_config: dict[str, Any] | None = None,
+        cli_overrides: dict[str, Any] | None = None,
+        experiment_id: str | None = None,
     ) -> ExperimentContext:
         """Factory method to create context from config.
 
@@ -68,6 +75,9 @@ class ExperimentContext:
         Args:
             config: The experiment configuration.
             id_file: Optional path for storing persistent ID counter.
+            effective_config: Full resolved config for reproducibility.
+            cli_overrides: CLI parameters that overrode config values.
+            experiment_id: Optional pre-generated experiment ID (from CLI).
 
         Returns:
             Fully initialized ExperimentContext.
@@ -77,7 +87,9 @@ class ExperimentContext:
             num_processes=config.num_processes,
         )
 
-        experiment_id = get_shared_unique_id(accelerator, id_file)
+        # Use provided experiment_id if available, otherwise generate one
+        if experiment_id is None:
+            experiment_id = get_shared_unique_id(accelerator, id_file)
 
         logger.info(
             f"Created ExperimentContext: id={experiment_id}, "
@@ -93,6 +105,8 @@ class ExperimentContext:
             is_main_process=accelerator.is_main_process,
             process_index=accelerator.process_index,
             start_time=datetime.now(),
+            effective_config=effective_config or {},
+            cli_overrides=cli_overrides or {},
         )
 
     def cleanup(self) -> None:
@@ -119,6 +133,9 @@ class ExperimentContext:
 def experiment_context(
     config: ExperimentConfig,
     id_file: Path | None = None,
+    effective_config: dict[str, Any] | None = None,
+    cli_overrides: dict[str, Any] | None = None,
+    experiment_id: str | None = None,
 ) -> Iterator[ExperimentContext]:
     """Context manager for experiment lifecycle.
 
@@ -128,6 +145,9 @@ def experiment_context(
     Args:
         config: The experiment configuration.
         id_file: Optional path for storing persistent ID counter.
+        effective_config: Full resolved config for reproducibility.
+        cli_overrides: CLI parameters that overrode config values.
+        experiment_id: Optional pre-generated experiment ID (from CLI).
 
     Yields:
         ExperimentContext instance.
@@ -137,7 +157,7 @@ def experiment_context(
         ...     model = load_model(ctx.config, ctx.device)
         ...     results = run_inference(model, ctx)
     """
-    ctx = ExperimentContext.create(config, id_file)
+    ctx = ExperimentContext.create(config, id_file, effective_config, cli_overrides, experiment_id)
     try:
         yield ctx
     finally:

@@ -217,11 +217,39 @@ def run_from_config(
     return False, None
 
 
-def _parse_args() -> tuple[Path, list[str]]:
+def _extract_metadata(
+    config_path: Path,
+) -> tuple[dict[str, Any], dict[str, Any], str | None]:
+    """Extract _metadata section from config file if present.
+
+    Args:
+        config_path: Path to the config file.
+
+    Returns:
+        Tuple of (effective_config, cli_overrides, experiment_id).
+    """
+    import yaml
+
+    try:
+        with open(config_path) as f:
+            raw_config = yaml.safe_load(f) or {}
+
+        metadata = raw_config.get("_metadata", {})
+        effective_config = metadata.get("effective_config", {})
+        cli_overrides = metadata.get("cli_overrides", {})
+        experiment_id = metadata.get("experiment_id")
+
+        return effective_config, cli_overrides, experiment_id
+    except Exception as e:
+        logger.debug(f"Could not extract _metadata from config: {e}")
+        return {}, {}, None
+
+
+def _parse_args() -> tuple[Path, list[str], dict[str, Any], dict[str, Any], str | None]:
     """Parse command line arguments for accelerate launch.
 
     Returns:
-        Tuple of (config_path, prompts).
+        Tuple of (config_path, prompts, effective_config, cli_overrides, experiment_id).
     """
     import argparse
 
@@ -242,8 +270,15 @@ def _parse_args() -> tuple[Path, list[str]]:
 
     args = parser.parse_args()
 
-    # Load config
+    # Extract metadata before loading config (Phase 0)
+    effective_config, cli_overrides, experiment_id = _extract_metadata(args.config)
+
+    # Load config (ExperimentConfig ignores _metadata field)
     config = load_config(args.config)
+
+    # If effective_config wasn't provided via _metadata, use config dict
+    if not effective_config:
+        effective_config = config.model_dump()
 
     # Load prompts (CLI args > config > default)
     if args.dataset:
@@ -273,7 +308,7 @@ def _parse_args() -> tuple[Path, list[str]]:
         prompts = ["Hello, how are you?"]
         logger.warning("No prompt source specified, using default prompt")
 
-    return args.config, prompts
+    return args.config, prompts, effective_config, cli_overrides, experiment_id
 
 
 if __name__ == "__main__":
@@ -281,13 +316,18 @@ if __name__ == "__main__":
     from llm_energy_measure.orchestration.context import experiment_context
     from llm_energy_measure.orchestration.factory import create_orchestrator
 
-    config_path, prompts = _parse_args()
+    config_path, prompts, effective_config, cli_overrides, experiment_id = _parse_args()
     config = load_config(config_path)
 
     logger.info(f"Running experiment with {len(prompts)} prompts from config: {config_path}")
     logger.info(f"First prompt: {prompts[0][:50]}...")
 
-    with experiment_context(config) as ctx:
+    with experiment_context(
+        config,
+        effective_config=effective_config,
+        cli_overrides=cli_overrides,
+        experiment_id=experiment_id,
+    ) as ctx:
         orchestrator = create_orchestrator(ctx)
         result_path = orchestrator.run(ctx, prompts)
 

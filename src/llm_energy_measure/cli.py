@@ -7,29 +7,50 @@ Provides commands for:
 - Listing and inspecting results
 """
 
+from __future__ import annotations
+
+import contextlib
 import copy
+import json
+import os
+import signal
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
 
 import typer
 from rich.console import Console
+from rich.prompt import Confirm
 from rich.table import Table
 
 from llm_energy_measure.config.loader import load_config, validate_config
 from llm_energy_measure.config.models import ExperimentConfig, HuggingFacePromptSource
-from llm_energy_measure.constants import PRESETS, SCHEMA_VERSION
+from llm_energy_measure.constants import (
+    COMPLETION_MARKER_PREFIX,
+    GRACEFUL_SHUTDOWN_TIMEOUT_SEC,
+    PRESETS,
+    SCHEMA_VERSION,
+)
 from llm_energy_measure.core.dataset_loader import (
     list_builtin_datasets,
     load_prompts_from_file,
     load_prompts_from_source,
 )
 from llm_energy_measure.domain.experiment import AggregatedResult, RawProcessResult
-from llm_energy_measure.exceptions import ConfigurationError
+from llm_energy_measure.exceptions import AggregationError, ConfigurationError
 from llm_energy_measure.logging import setup_logging
 from llm_energy_measure.results.aggregation import aggregate_results, calculate_efficiency_metrics
 from llm_energy_measure.results.repository import FileSystemRepository
+from llm_energy_measure.state.experiment_state import (
+    ExperimentState,
+    ExperimentStatus,
+    ProcessProgress,
+    ProcessStatus,
+    StateManager,
+    compute_config_hash,
+)
 
 app = typer.Typer(
     name="llm-energy-measure",
@@ -117,6 +138,73 @@ def _display_config_summary(
                 console.print(f"  {key}: {new} [dim](was: {original})[/dim]")
             else:
                 console.print(f"  {key}: {new}")
+
+
+def _update_process_state_from_markers(
+    state: ExperimentState,
+    state_manager: StateManager,
+    results_dir: Path,
+) -> ExperimentState:
+    """Update experiment state by scanning completion markers.
+
+    Args:
+        state: Current experiment state.
+        state_manager: State manager for persistence.
+        results_dir: Base results directory.
+
+    Returns:
+        Updated experiment state.
+    """
+    raw_dir = results_dir / "raw" / state.experiment_id
+
+    for i in range(state.num_processes):
+        marker_path = raw_dir / f"{COMPLETION_MARKER_PREFIX}{i}"
+        if marker_path.exists():
+            try:
+                marker_data = json.loads(marker_path.read_text())
+                state.process_progress[i] = ProcessProgress(
+                    process_index=i,
+                    status=ProcessStatus.COMPLETED,
+                    gpu_id=marker_data.get("gpu_id"),
+                    completed_at=datetime.fromisoformat(marker_data["timestamp"]),
+                )
+            except Exception:
+                # Marker exists but couldn't parse - still mark as completed
+                state.process_progress[i] = ProcessProgress(
+                    process_index=i,
+                    status=ProcessStatus.COMPLETED,
+                )
+        elif i not in state.process_progress:
+            # No marker and not previously tracked = failed or didn't start
+            state.process_progress[i] = ProcessProgress(
+                process_index=i,
+                status=ProcessStatus.FAILED,
+                error_message="No completion marker found",
+            )
+
+    state_manager.save(state)
+    return state
+
+
+def _display_incomplete_experiment(state: ExperimentState) -> None:
+    """Display information about an incomplete experiment."""
+    console.print("\n[yellow]Incomplete experiment detected:[/yellow]")
+    console.print(f"  Experiment ID: [cyan]{state.experiment_id}[/cyan]")
+    if state.config_path:
+        console.print(f"  Config: {state.config_path}")
+    if state.model_name:
+        console.print(f"  Model: {state.model_name}")
+    if state.prompt_args:
+        dataset = state.prompt_args.get("dataset", "")
+        sample_size = state.prompt_args.get("sample_size", "")
+        if dataset:
+            console.print(f"  Dataset: {dataset}" + (f" (n={sample_size})" if sample_size else ""))
+    if state.started_at:
+        console.print(f"  Started: {state.started_at.strftime('%Y-%m-%d %H:%M:%S')}")
+    console.print(f"  Status: {state.status.value}")
+    console.print(
+        f"  Progress: {state.processes_completed}/{state.num_processes} processes completed"
+    )
 
 
 def version_callback(value: bool) -> None:
@@ -328,8 +416,19 @@ def experiment(
         bool | None,
         typer.Option("--quantization/--no-quantization", help="Enable/disable quantization"),
     ] = None,
+    # Workflow control options (Phases 1-5)
+    no_aggregate: Annotated[
+        bool, typer.Option("--no-aggregate", help="Skip auto-aggregation after experiment")
+    ] = False,
+    fresh: Annotated[
+        bool, typer.Option("--fresh", help="Start fresh, ignore incomplete experiments")
+    ] = False,
+    resume: Annotated[str | None, typer.Option("--resume", help="Resume experiment by ID")] = None,
+    results_dir: Annotated[
+        Path | None, typer.Option("--results-dir", "-o", help="Results directory")
+    ] = None,
 ) -> None:
-    """Run experiment with automatic accelerate handling.
+    """Run experiment with automatic accelerate handling and auto-aggregation.
 
     Supports three modes:
 
@@ -343,11 +442,114 @@ def experiment(
        llm-energy-measure experiment config.yaml -b 8 --precision int8
 
     Precedence: CLI > Config file > Preset > Defaults
+
+    By default, results are auto-aggregated on success. Use --no-aggregate to skip.
+    Interrupted experiments can be resumed with --resume <exp_id>.
     """
+    import tempfile
+
+    import yaml
+
+    state_manager = StateManager()
+    repo = FileSystemRepository(results_dir)
+    actual_results_dir = repo._base  # Get resolved results dir
+
+    # Track subprocess for signal handling
+    subprocess_handle: subprocess.Popen[bytes] | None = None
+    current_state: ExperimentState | None = None
+    interrupt_in_progress = False
+
+    def _handle_interrupt(signum: int, frame: Any) -> None:
+        """Handle SIGINT/SIGTERM gracefully.
+
+        Uses process groups to ensure all child processes (accelerate workers)
+        are terminated, not just the parent process.
+        """
+        nonlocal subprocess_handle, current_state, interrupt_in_progress
+
+        # Prevent re-entry from multiple Ctrl+C presses
+        if interrupt_in_progress:
+            console.print("[dim]Already shutting down, please wait...[/dim]")
+            return
+        interrupt_in_progress = True
+
+        console.print("\n[yellow]Interrupt received, shutting down...[/yellow]")
+
+        if subprocess_handle and subprocess_handle.poll() is None:
+            # Get the process group ID (same as PID when start_new_session=True)
+            pgid = os.getpgid(subprocess_handle.pid)
+
+            # Send SIGTERM to entire process group first
+            console.print(
+                f"[dim]Waiting up to {GRACEFUL_SHUTDOWN_TIMEOUT_SEC}s for subprocess group...[/dim]"
+            )
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(pgid, signal.SIGTERM)
+
+            # Wait in 1-second increments for responsiveness
+            for i in range(GRACEFUL_SHUTDOWN_TIMEOUT_SEC):
+                try:
+                    subprocess_handle.wait(timeout=1)
+                    break  # Subprocess exited
+                except subprocess.TimeoutExpired:
+                    if i < GRACEFUL_SHUTDOWN_TIMEOUT_SEC - 1:
+                        console.print(f"[dim]...{GRACEFUL_SHUTDOWN_TIMEOUT_SEC - i - 1}s[/dim]")
+            else:
+                # Timeout expired, force kill entire process group
+                console.print("[red]Timeout, sending SIGKILL to process group...[/red]")
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(pgid, signal.SIGKILL)
+
+                # Brief wait to let kernel reap the process, but don't block indefinitely
+                # SIGKILL cannot be caught, so the process will die eventually
+                with contextlib.suppress(subprocess.TimeoutExpired):
+                    subprocess_handle.wait(timeout=2)
+
+        # Update state to INTERRUPTED
+        if current_state:
+            current_state.status = ExperimentStatus.INTERRUPTED
+            current_state.error_message = "Interrupted by user (SIGINT/SIGTERM)"
+            state_manager.save(current_state)
+            console.print("\n[yellow]Experiment interrupted. Resume with:[/yellow]")
+            console.print(f"  llm-energy-measure experiment --resume {current_state.experiment_id}")
+
+        raise typer.Exit(130)  # Standard exit code for SIGINT
+
     try:
+        # Clean up stale running states
+        stale = state_manager.cleanup_stale()
+        if stale:
+            console.print(f"[dim]Cleaned up {len(stale)} stale experiment states[/dim]")
+
+        # Handle --resume flag (Phase 2)
+        existing_state: ExperimentState | None = None
+        if resume:
+            existing_state = state_manager.load(resume)
+            if not existing_state:
+                console.print(f"[red]Error:[/red] No state found for experiment {resume}")
+                raise typer.Exit(1)
+            if existing_state.status == ExperimentStatus.AGGREGATED:
+                console.print(
+                    f"[green]Experiment {resume} already completed and aggregated[/green]"
+                )
+                raise typer.Exit(0)
+
+            # Restore config and prompt args from saved state
+            _display_incomplete_experiment(existing_state)
+            console.print(f"[green]Resuming experiment {resume}[/green]\n")
+
+            if existing_state.config_path:
+                config_path = Path(existing_state.config_path)
+            if existing_state.prompt_args:
+                # Restore prompt source args
+                if "dataset" in existing_state.prompt_args and not dataset:
+                    dataset = existing_state.prompt_args["dataset"]
+                if "sample_size" in existing_state.prompt_args and sample_size is None:
+                    sample_size = existing_state.prompt_args["sample_size"]
+
         # Validate input modes
-        if not config_path and not preset:
-            console.print("[red]Error:[/red] Provide config file or --preset")
+        if not config_path and not preset and not resume:
+            console.print("[red]Error:[/red] Provide config file, --preset, or --resume")
             raise typer.Exit(1)
 
         if preset and not config_path and not model:
@@ -369,7 +571,6 @@ def experiment(
         if preset:
             preset_name = preset
             config_dict = copy.deepcopy(PRESETS[preset])
-            # Preset needs a config_name
             config_dict["config_name"] = f"preset-{preset}"
 
         # 2. Merge config file on top (config overrides preset)
@@ -388,30 +589,45 @@ def experiment(
             raise typer.Exit(1)
 
         # 4. Prepare CLI overrides
-        cli_overrides: dict[str, Any] = {}
+        cli_overrides_dict: dict[str, Any] = {}
         if batch_size is not None:
-            cli_overrides["batching_options.batch_size"] = batch_size
+            cli_overrides_dict["batching_options.batch_size"] = batch_size
         if precision is not None:
-            cli_overrides["fp_precision"] = precision
+            cli_overrides_dict["fp_precision"] = precision
         if max_tokens is not None:
-            cli_overrides["max_output_tokens"] = max_tokens
+            cli_overrides_dict["max_output_tokens"] = max_tokens
         if seed is not None:
-            cli_overrides["random_seed"] = seed
+            cli_overrides_dict["random_seed"] = seed
         if num_processes is not None:
-            cli_overrides["num_processes"] = num_processes
+            cli_overrides_dict["num_processes"] = num_processes
         if gpu_list is not None:
-            cli_overrides["gpu_list"] = [int(g.strip()) for g in gpu_list.split(",")]
+            cli_overrides_dict["gpu_list"] = [int(g.strip()) for g in gpu_list.split(",")]
         if temperature is not None:
-            cli_overrides["decoder_config.temperature"] = temperature
+            cli_overrides_dict["decoder_config.temperature"] = temperature
         if quantization is not None:
-            cli_overrides["quantization_config.quantization"] = quantization
+            cli_overrides_dict["quantization_config.quantization"] = quantization
 
         # 5. Apply CLI overrides and track them
-        config_dict, tracked_overrides = _apply_cli_overrides(config_dict, cli_overrides)
+        config_dict, tracked_overrides = _apply_cli_overrides(config_dict, cli_overrides_dict)
 
         # 6. Create final config
         config = ExperimentConfig(**config_dict)
         final_num_processes = config.num_processes
+
+        # Compute config hash for incomplete experiment detection (Phase 4)
+        config_hash = compute_config_hash(config_dict)
+
+        # Check for incomplete experiments with same config (Phase 4)
+        if not fresh and not resume:
+            existing = state_manager.find_by_config_hash(config_hash)
+            if existing and existing.status != ExperimentStatus.AGGREGATED:
+                _display_incomplete_experiment(existing)
+                if Confirm.ask("\nResume this experiment?", default=True):
+                    resume = existing.experiment_id
+                    console.print(f"[green]Resuming experiment {resume}[/green]")
+                    # TODO: Actual resume logic
+                else:
+                    console.print("[yellow]Starting fresh experiment[/yellow]")
 
         # Display config with override visibility
         _display_config_summary(config, tracked_overrides, preset_name)
@@ -427,27 +643,36 @@ def experiment(
             "llm_energy_measure.orchestration.launcher",
         ]
 
-        # Generate temp config file when using preset-only mode OR when CLI overrides exist
-        # (CLI overrides need to be baked into the config since launcher doesn't support them)
-        import tempfile
-
-        import yaml
-
-        if not config_path or tracked_overrides:
-            # Need temp file: preset-only mode or config with CLI overrides
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".yaml", delete=False, prefix="llm_energy_"
-            ) as tmp:
-                yaml.dump(config.model_dump(), tmp, default_flow_style=False)
-                tmp_config_path = tmp.name
-            cmd.extend(["--config", tmp_config_path])
-            if not config_path:
-                console.print(f"[dim]Generated temp config: {tmp_config_path}[/dim]")
-            else:
-                console.print(f"[dim]Generated temp config with overrides: {tmp_config_path}[/dim]")
+        # Generate experiment ID early so CLI and subprocess use the same ID
+        # If resuming, reuse the existing experiment ID; otherwise generate new one
+        if resume and existing_state:
+            experiment_id = existing_state.experiment_id
         else:
-            # Use original config file directly (no overrides)
-            cmd.extend(["--config", str(config_path.resolve())])
+            from llm_energy_measure.core.distributed import get_persistent_unique_id
+
+            experiment_id = get_persistent_unique_id()
+
+        # Generate temp config file with _metadata (Phase 0)
+        # Always generate temp file to include _metadata for effective_config/cli_overrides tracking
+        effective_config = config.model_dump()
+        metadata = {
+            "_metadata": {
+                "experiment_id": experiment_id,  # Pass to subprocess
+                "effective_config": effective_config,
+                "cli_overrides": tracked_overrides,
+                "original_config_path": str(config_path) if config_path else None,
+            }
+        }
+        config_with_metadata = {**effective_config, **metadata}
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, prefix="llm_energy_"
+        ) as tmp:
+            yaml.dump(config_with_metadata, tmp, default_flow_style=False)
+            tmp_config_path = tmp.name
+
+        cmd.extend(["--config", tmp_config_path])
+        console.print(f"[dim]Generated config with metadata: {tmp_config_path}[/dim]")
 
         # Add prompt source args
         if dataset:
@@ -462,16 +687,121 @@ def experiment(
         if sample_size:
             cmd.extend(["--sample-size", str(sample_size)])
 
-        # Note: CLI overrides (batch_size, precision, etc.) are already baked into
-        # the config dict/file - no need to pass them separately to the launcher
-
         console.print(
             f"\n[dim]$ accelerate launch --num_processes {final_num_processes} ...[/dim]\n"
         )
 
-        # Run accelerate, streaming output
-        result = subprocess.run(cmd, check=False)
-        raise typer.Exit(result.returncode)
+        # Create experiment state before launch (Phase 2)
+        current_state = ExperimentState(
+            experiment_id=experiment_id,
+            status=ExperimentStatus.RUNNING,
+            config_path=str(config_path) if config_path else None,
+            config_hash=config_hash,
+            model_name=config.model_name,
+            prompt_args={
+                "dataset": dataset,
+                "sample_size": sample_size,
+                "prompts_file": str(prompts_file) if prompts_file else None,
+            },
+            num_processes=final_num_processes,
+            started_at=datetime.now(),
+        )
+
+        # Register signal handlers (Phase 3)
+        original_sigint = signal.signal(signal.SIGINT, _handle_interrupt)
+        original_sigterm = signal.signal(signal.SIGTERM, _handle_interrupt)
+
+        try:
+            # Run accelerate with Popen for better control (Phase 3)
+            # start_new_session=True creates a new process group, allowing us to
+            # kill all child processes (accelerate workers) with os.killpg()
+            subprocess_handle = subprocess.Popen(cmd, start_new_session=True)
+            current_state.subprocess_pid = subprocess_handle.pid
+            state_manager.save(current_state)
+
+            # Wait for completion
+            exit_code = subprocess_handle.wait()
+
+        finally:
+            # Restore signal handlers
+            signal.signal(signal.SIGINT, original_sigint)
+            signal.signal(signal.SIGTERM, original_sigterm)
+
+        # Handle subprocess result
+        if exit_code == 0:
+            # Update process state from completion markers (Phase 5)
+            current_state = _update_process_state_from_markers(
+                current_state, state_manager, actual_results_dir
+            )
+
+            if current_state.can_aggregate():
+                current_state.status = ExperimentStatus.COMPLETED
+                state_manager.save(current_state)
+
+                # Auto-aggregate if not disabled (Phase 1)
+                if not no_aggregate:
+                    try:
+                        console.print("\n[dim]Auto-aggregating results...[/dim]")
+                        raw_results = repo.load_all_raw(current_state.experiment_id)
+                        agg_result = aggregate_results(
+                            experiment_id=current_state.experiment_id,
+                            raw_results=raw_results,
+                            expected_processes=final_num_processes,
+                            results_dir=actual_results_dir,
+                            strict=True,
+                        )
+                        result_path = repo.save_aggregated(agg_result)
+                        current_state.status = ExperimentStatus.AGGREGATED
+                        state_manager.delete(current_state.experiment_id)
+                        console.print(f"\n[green]Results saved to:[/green] {result_path}")
+                    except AggregationError as e:
+                        console.print(f"[yellow]Aggregation warning:[/yellow] {e}")
+                        console.print(
+                            f"Raw results available. Aggregate manually with: "
+                            f"llm-energy-measure aggregate {current_state.experiment_id}"
+                        )
+                        state_manager.save(current_state)
+                else:
+                    console.print(
+                        f"\n[green]Experiment complete.[/green] "
+                        f"Aggregate with: llm-energy-measure aggregate {current_state.experiment_id}"
+                    )
+                    state_manager.save(current_state)
+            else:
+                # Exit 0 but incomplete - anomaly
+                console.print(
+                    "[yellow]Warning: Process exited successfully but results incomplete[/yellow]"
+                )
+                console.print(
+                    f"  Completed: {current_state.processes_completed}/{current_state.num_processes}"
+                )
+                console.print(
+                    f"  Use 'llm-energy-measure aggregate {current_state.experiment_id} --force' "
+                    "to aggregate partial results"
+                )
+                state_manager.save(current_state)
+
+            raise typer.Exit(0)
+        else:
+            # Non-zero exit - check what we got
+            current_state = _update_process_state_from_markers(
+                current_state, state_manager, actual_results_dir
+            )
+            current_state.status = ExperimentStatus.FAILED
+            current_state.error_message = f"Subprocess exited with code {exit_code}"
+            state_manager.save(current_state)
+
+            console.print(f"[red]Experiment failed (exit code {exit_code})[/red]")
+            console.print(
+                f"  Completed: {current_state.processes_completed}/{current_state.num_processes}"
+            )
+            if current_state.processes_completed > 0:
+                console.print(
+                    f"  Partial results available. Resume with: "
+                    f"llm-energy-measure experiment --resume {current_state.experiment_id}"
+                )
+
+            raise typer.Exit(exit_code)
 
     except typer.Exit:
         raise  # Re-raise typer exits
@@ -569,12 +899,18 @@ def aggregate(
     force: Annotated[
         bool, typer.Option("--force", "-f", help="Re-aggregate even if result exists")
     ] = False,
+    strict: Annotated[
+        bool,
+        typer.Option("--strict/--no-strict", help="Fail if results incomplete (default: strict)"),
+    ] = True,
 ) -> None:
     """Aggregate raw per-process results into final experiment result.
 
     For multi-GPU experiments, this combines results from each GPU/process
     into a single aggregated result with proper energy summation and
     throughput averaging.
+
+    Use --no-strict to aggregate partial results (when some processes failed).
     """
     repo = FileSystemRepository(results_dir)
 
@@ -589,15 +925,20 @@ def aggregate(
 
         console.print(f"Aggregating {len(pending)} experiments...")
         for exp_id in pending:
-            _aggregate_one(repo, exp_id, force)
+            _aggregate_one(repo, exp_id, force, strict)
     elif experiment_id:
-        _aggregate_one(repo, experiment_id, force)
+        _aggregate_one(repo, experiment_id, force, strict)
     else:
         console.print("[red]Error:[/red] Provide experiment ID or use --all")
         raise typer.Exit(1)
 
 
-def _aggregate_one(repo: FileSystemRepository, experiment_id: str, force: bool) -> None:
+def _aggregate_one(
+    repo: FileSystemRepository,
+    experiment_id: str,
+    force: bool,
+    strict: bool = True,
+) -> None:
     """Aggregate a single experiment."""
     if repo.has_aggregated(experiment_id) and not force:
         console.print(
@@ -611,7 +952,13 @@ def _aggregate_one(repo: FileSystemRepository, experiment_id: str, force: bool) 
         return
 
     try:
-        aggregated = aggregate_results(experiment_id, raw_results)
+        # Pass results_dir for completeness validation (Phase 5)
+        aggregated = aggregate_results(
+            experiment_id,
+            raw_results,
+            results_dir=repo._base,
+            strict=strict,
+        )
         path = repo.save_aggregated(aggregated)
         console.print(
             f"[green]✓[/green] Aggregated {experiment_id} ({len(raw_results)} processes) → {path}"
@@ -624,6 +971,12 @@ def _aggregate_one(repo: FileSystemRepository, experiment_id: str, force: bool) 
         console.print(f"  Throughput: {metrics['tokens_per_second']:.2f} tok/s")
         console.print(f"  Efficiency: {metrics['tokens_per_joule']:.2f} tok/J")
 
+    except AggregationError as e:
+        if strict:
+            console.print(f"[red]Aggregation failed:[/red] {experiment_id} - {e}")
+            console.print("[dim]Use --no-strict to aggregate partial results[/dim]")
+        else:
+            console.print(f"[yellow]Aggregation warning:[/yellow] {e}")
     except Exception as e:
         console.print(f"[red]Aggregation failed:[/red] {experiment_id} - {e}")
 

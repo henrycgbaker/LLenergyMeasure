@@ -37,6 +37,9 @@ def mock_context(sample_config):
     mock_device = MagicMock()
     type(mock_device).index = PropertyMock(return_value=0)
     ctx.device = mock_device
+    # Provide proper dicts for effective_config and cli_overrides
+    ctx.effective_config = {}
+    ctx.cli_overrides = {}
     return ctx
 
 
@@ -158,6 +161,9 @@ class TestExperimentOrchestrator:
         mock_device = MagicMock()
         type(mock_device).index = PropertyMock(return_value=None)
         ctx.device = mock_device
+        # Provide proper dicts for effective_config and cli_overrides
+        ctx.effective_config = {}
+        ctx.cli_overrides = {}
 
         orchestrator = ExperimentOrchestrator(**mock_components)
         orchestrator.run(ctx, ["test"])

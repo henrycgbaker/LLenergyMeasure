@@ -21,6 +21,11 @@ DEFAULT_TOP_P = 1.0
 # Schema version for result files
 SCHEMA_VERSION = "2.0.0"
 
+# State management
+DEFAULT_STATE_DIR = ".llm_energy_measure_state"
+COMPLETION_MARKER_PREFIX = ".completed_"
+GRACEFUL_SHUTDOWN_TIMEOUT_SEC = 2
+
 # Built-in presets for quick experiment configuration
 # Presets provide convenience defaults but NOT model (model is always required)
 PRESETS: dict[str, dict[str, Any]] = {
