@@ -40,9 +40,9 @@ config = ExperimentConfig(
 ```
 
 **Sub-configurations:**
-- `BatchingConfig` - batch_size, dynamic_batching
+- `BatchingConfig` - batch_size, strategy, max_tokens_per_batch
 - `ShardingConfig` - tensor_parallel, pipeline_parallel
-- `LatencySimulation` - Artificial delay injection
+- `TrafficSimulation` - MLPerf-style Poisson/constant arrival simulation
 - `DecoderConfig` - temperature, top_p, top_k
 - `QuantizationConfig` - 4-bit/8-bit BitsAndBytes
 - `PromptSourceConfig` - File or HuggingFace dataset prompts
@@ -111,6 +111,10 @@ llm-energy-measure config new --preset benchmark
 | `gpu_list` | `--gpu-list` | list[int] | [0] | GPU indices |
 | `random_seed` | `--seed` | int\|None | None | Random seed |
 | `batching_options.batch_size` | `--batch-size / -b` | int | 1 | Batch size |
+| `batching_options.strategy` | - | str | static | Batching strategy |
+| `latency_simulation.enabled` | - | bool | false | Enable traffic simulation |
+| `latency_simulation.mode` | - | str | poisson | Traffic mode (poisson/constant) |
+| `latency_simulation.target_qps` | - | float | 1.0 | Target queries per second |
 | `decoder_config.temperature` | `--temperature` | float | 1.0 | Decoder temperature |
 | `quantization_config.quantization` | `--quantization` | bool | false | Enable quantization |
 
@@ -177,13 +181,52 @@ prompt_source:
 
 **Auto-detect columns:** text, prompt, question, instruction, input, content
 
+## Batching Strategies (MLPerf/vLLM Terminology)
+
+Industry-standard batching strategies for benchmarking:
+
+```yaml
+batching_options:
+  batch_size: 4
+  strategy: sorted_dynamic    # static | dynamic | sorted_static | sorted_dynamic
+  max_tokens_per_batch: 512   # For dynamic strategies
+```
+
+| Strategy | Description |
+|----------|-------------|
+| `static` | Fixed batch size (default) |
+| `dynamic` | Token-aware batching respecting `max_tokens_per_batch` |
+| `sorted_static` | Sort prompts by length, then fixed batches |
+| `sorted_dynamic` | Sort prompts by length, then token-aware batching |
+
+**Length sorting** reduces padding waste by grouping similar-length prompts together.
+
+## Traffic Simulation (MLPerf LoadGen Style)
+
+Simulate realistic request arrival patterns for load testing:
+
+```yaml
+latency_simulation:
+  enabled: true
+  mode: poisson             # poisson | constant
+  target_qps: 2.0           # Target queries per second (arrival rate λ)
+  seed: 42                  # For reproducibility
+```
+
+| Mode | Description |
+|------|-------------|
+| `poisson` | Exponential inter-arrival times (realistic traffic) |
+| `constant` | Fixed inter-arrival = 1/target_qps |
+
+**Poisson arrivals** model real-world traffic patterns where requests arrive randomly but at a known average rate.
+
 ## Validation Rules
 
 Pydantic validators enforce:
 - `num_processes <= len(gpu_list)`
 - `min_output_tokens <= max_output_tokens`
 - `load_in_4bit` and `load_in_8bit` are mutually exclusive
-- `delay_min_ms <= delay_max_ms` (latency simulation)
+- `target_qps > 0` (traffic simulation)
 - `sample_size >= 1` (prompt source)
 
 ## Grid Generation
