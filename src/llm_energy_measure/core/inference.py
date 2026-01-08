@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import random
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -21,6 +20,8 @@ from llm_energy_measure.domain.metrics import InferenceMetrics
 if TYPE_CHECKING:
     from accelerate import Accelerator
     from transformers import PreTrainedModel, PreTrainedTokenizer
+
+from llm_energy_measure.core.traffic import TrafficGenerator
 
 
 @dataclass
@@ -99,6 +100,10 @@ def run_inference(
     # Create batches
     batches = _create_batches(prompts, tokenizer, config)
 
+    # Initialize traffic generator once for the entire experiment
+    # This ensures proper Poisson sequence with seeded reproducibility
+    traffic_generator = _create_traffic_generator(config)
+
     # Process batches
     all_outputs: list[torch.Tensor] = []
     all_input_ids: list[torch.Tensor] = []
@@ -118,6 +123,7 @@ def run_inference(
             batch_idx=batch_idx,
             total_batches=len(batches),
             accelerator=accelerator,
+            traffic_generator=traffic_generator,
         )
 
         all_input_ids.append(result.output_ids[:, :max_input_tokens])
@@ -218,6 +224,7 @@ def _process_batch(
     batch_idx: int,
     total_batches: int,
     accelerator: Accelerator,
+    traffic_generator: TrafficGenerator | None = None,
 ) -> BatchResult:
     """Process a single batch of prompts."""
     # Tokenize batch
@@ -251,8 +258,8 @@ def _process_batch(
         allowed_new_tokens=allowed_new,
     )
 
-    # Apply latency simulation if configured
-    _apply_latency_simulation(config, batch_idx)
+    # Apply traffic simulation if configured (MLPerf-style Poisson arrivals)
+    _apply_traffic_simulation(config, batch_idx, traffic_generator)
 
     # Run inference
     start_time = time.perf_counter()
@@ -318,10 +325,44 @@ def _build_generation_kwargs(
     return generation_kwargs
 
 
-def _apply_latency_simulation(config: ExperimentConfig, batch_idx: int) -> None:
-    """Apply latency simulation delays if configured."""
-    latency = config.latency_simulation
+def _create_traffic_generator(config: ExperimentConfig) -> TrafficGenerator | None:
+    """Create a traffic generator for the experiment.
 
-    if latency.enabled:
-        delay_sec = random.uniform(latency.delay_min_ms, latency.delay_max_ms) / 1000.0
-        time.sleep(delay_sec)
+    Creates the generator once so it maintains state across batches,
+    ensuring proper Poisson sequence generation.
+
+    Args:
+        config: Experiment configuration.
+
+    Returns:
+        TrafficGenerator if traffic simulation is enabled, None otherwise.
+    """
+    if not config.latency_simulation.enabled:
+        return None
+    return TrafficGenerator(config.latency_simulation)
+
+
+def _apply_traffic_simulation(
+    config: ExperimentConfig,
+    batch_idx: int,
+    generator: TrafficGenerator | None,
+) -> float:
+    """Apply MLPerf-style traffic simulation delays.
+
+    Uses Poisson or constant arrival patterns instead of simple random delays.
+
+    Args:
+        config: Experiment configuration.
+        batch_idx: Current batch index (0-indexed).
+        generator: Pre-initialized traffic generator.
+
+    Returns:
+        The delay applied in seconds.
+    """
+    from llm_energy_measure.core.traffic import apply_traffic_delay
+
+    return apply_traffic_delay(
+        config=config.latency_simulation,
+        batch_idx=batch_idx,
+        generator=generator,
+    )

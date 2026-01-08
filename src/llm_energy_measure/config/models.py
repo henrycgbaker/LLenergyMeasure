@@ -76,18 +76,31 @@ class ShardingConfig(BaseModel):
     num_shards: int = Field(default=1, ge=1, description="Number of shards")
 
 
-class LatencySimulation(BaseModel):
-    """Configuration for simulating network latency."""
+class TrafficSimulation(BaseModel):
+    """MLPerf-style traffic simulation for realistic load testing.
 
-    enabled: bool = Field(default=False, description="Enable latency simulation")
-    delay_min_ms: float = Field(default=0.0, ge=0, description="Minimum delay in ms")
-    delay_max_ms: float = Field(default=0.0, ge=0, description="Maximum delay in ms")
+    Modes:
+    - constant: Fixed inter-arrival time (1/target_qps seconds)
+    - poisson: Exponential inter-arrival times (MLPerf server scenario)
 
-    @model_validator(mode="after")
-    def validate_delay_range(self) -> "LatencySimulation":
-        if self.delay_min_ms > self.delay_max_ms:
-            raise ValueError("delay_min_ms must be <= delay_max_ms")
-        return self
+    The Poisson mode models real-world API traffic where requests arrive
+    randomly following a Poisson process with rate λ = target_qps.
+    """
+
+    enabled: bool = Field(default=False, description="Enable traffic simulation")
+    mode: Literal["constant", "poisson"] = Field(
+        default="poisson", description="Traffic arrival pattern (MLPerf terminology)"
+    )
+    target_qps: float = Field(
+        default=1.0, gt=0, description="Target queries per second (arrival rate λ)"
+    )
+    seed: int | None = Field(
+        default=None, description="Random seed for reproducible Poisson arrivals"
+    )
+
+
+# Backwards compatibility alias
+LatencySimulation = TrafficSimulation
 
 
 class DecoderConfig(BaseModel):
