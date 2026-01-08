@@ -632,6 +632,14 @@ def experiment(
         # Display config with override visibility
         _display_config_summary(config, tracked_overrides, preset_name)
 
+        # Check for MIG instances and warn about energy measurement (Phase: MIG support)
+        from llm_energy_measure.core.gpu_info import detect_gpu_topology, validate_gpu_selection
+
+        topology = detect_gpu_topology()
+        mig_warnings = validate_gpu_selection(config.gpu_list, topology)
+        for warning in mig_warnings:
+            console.print(f"[yellow]Warning:[/yellow] {warning}")
+
         # Build accelerate command
         cmd = [
             sys.executable,
@@ -885,6 +893,38 @@ def list_presets_cmd() -> None:
     console.print(
         "\n[dim]Usage: llm-energy-measure experiment --preset quick-test --model <model> -d alpaca[/dim]"
     )
+
+
+@app.command("gpus")  # type: ignore[misc]
+def list_gpus_cmd() -> None:
+    """Show GPU topology including MIG instances.
+
+    Displays all visible CUDA devices with their configuration,
+    including Multi-Instance GPU (MIG) partitions if present.
+    """
+    from llm_energy_measure.core.gpu_info import (
+        detect_gpu_topology,
+        format_gpu_topology,
+    )
+
+    topology = detect_gpu_topology()
+
+    if not topology.devices:
+        console.print("[yellow]No CUDA devices detected[/yellow]")
+        console.print("\nPossible causes:")
+        console.print("  - No NVIDIA GPU installed")
+        console.print("  - CUDA drivers not installed")
+        console.print("  - CUDA_VISIBLE_DEVICES set to empty")
+        raise typer.Exit(1)
+
+    console.print(format_gpu_topology(topology))
+
+    # Show usage hint
+    if len(topology.devices) > 1:
+        indices = ",".join(str(d.index) for d in topology.devices[:2])
+        console.print(
+            f"\n[dim]Use --gpu-list to select devices: llm-energy-measure experiment config.yaml --gpu-list {indices}[/dim]"
+        )
 
 
 @app.command()  # type: ignore[misc]

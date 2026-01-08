@@ -411,6 +411,13 @@ class TestExperimentCommand:
         import subprocess
         from unittest.mock import MagicMock
 
+        import llm_energy_measure.constants
+
+        # Use temp directory for state to avoid interference from real experiments
+        monkeypatch.setattr(
+            llm_energy_measure.constants, "DEFAULT_STATE_DIR", str(tmp_path / "state")
+        )
+
         calls = []
 
         def mock_popen(cmd, **kwargs):
@@ -441,8 +448,10 @@ class TestExperimentCommand:
         # Should exit with the mocked subprocess return code
         assert result.exit_code == 0
         # Check that subprocess was called with accelerate
-        assert len(calls) == 1
-        cmd = calls[0]
+        # Filter for accelerate calls (ignore nvidia-smi calls from MIG detection)
+        accelerate_calls = [c for c in calls if "accelerate" in str(c)]
+        assert len(accelerate_calls) == 1
+        cmd = accelerate_calls[0]
         # Preset settings are baked into a temp config file
         assert "--config" in cmd
         assert "--dataset" in cmd
@@ -457,6 +466,13 @@ class TestExperimentCommand:
         from unittest.mock import MagicMock
 
         import yaml
+
+        import llm_energy_measure.constants
+
+        # Use temp directory for state to avoid interference from real experiments
+        monkeypatch.setattr(
+            llm_energy_measure.constants, "DEFAULT_STATE_DIR", str(tmp_path / "state")
+        )
 
         calls = []
 
@@ -497,8 +513,10 @@ fp_precision: float32
         )
         assert result.exit_code == 0
         # Check subprocess was called with accelerate
-        assert len(calls) == 1
-        cmd = calls[0]
+        # Filter for accelerate calls (ignore nvidia-smi calls from MIG detection)
+        accelerate_calls = [c for c in calls if "accelerate" in str(c)]
+        assert len(accelerate_calls) == 1
+        cmd = accelerate_calls[0]
         assert "--config" in cmd
         assert "--dataset" in cmd
         # CLI overrides are baked into temp config file (not original)
@@ -519,6 +537,13 @@ fp_precision: float32
         """GPU list is parsed from comma-separated string."""
         import subprocess
         from unittest.mock import MagicMock
+
+        import llm_energy_measure.constants
+
+        # Use temp directory for state to avoid interference from real experiments
+        monkeypatch.setattr(
+            llm_energy_measure.constants, "DEFAULT_STATE_DIR", str(tmp_path / "state")
+        )
 
         calls = []
 
@@ -556,7 +581,9 @@ num_processes: 2
         )
         # Should parse "0,1,2,3" into list [0, 1, 2, 3]
         # The config will be validated and subprocess called
-        assert len(calls) == 1
+        # Filter for accelerate calls (ignore nvidia-smi calls from MIG detection)
+        accelerate_calls = [c for c in calls if "accelerate" in str(c)]
+        assert len(accelerate_calls) == 1
 
     def test_experiment_temperature_override(self, tmp_path, monkeypatch):
         """Temperature override is passed correctly."""

@@ -38,7 +38,10 @@ def get_accelerator(
     os.environ["ACCELERATE_CONFIG_FILE"] = ""
 
     if gpu_list is not None:
-        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_list)
+        # Only set CUDA_VISIBLE_DEVICES if not already set to MIG/GPU UUIDs
+        existing_cuda_env = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+        if "MIG-" not in existing_cuda_env and "GPU-" not in existing_cuda_env:
+            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_list)
 
         if num_processes is not None:
             available = len(gpu_list)

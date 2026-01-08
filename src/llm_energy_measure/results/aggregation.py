@@ -173,6 +173,17 @@ def aggregate_results(
             warnings.append("Duplicate GPU IDs detected - energy may be double-counted")
             logger.warning("GPU attribution verification failed")
 
+    # Check for MIG instances and warn about energy measurement
+    mig_instances = [r for r in raw_results if r.gpu_is_mig]
+    if mig_instances:
+        mig_profiles = {r.gpu_mig_profile for r in mig_instances if r.gpu_mig_profile}
+        profile_str = ", ".join(sorted(mig_profiles)) if mig_profiles else "unknown"
+        warnings.append(
+            f"Experiment ran on {len(mig_instances)} MIG instance(s) ({profile_str}). "
+            "Energy measurements reflect parent GPU total, not per-instance consumption."
+        )
+        logger.info(f"MIG instances detected: {len(mig_instances)} with profiles: {profile_str}")
+
     # Aggregate metrics
     total_tokens = sum(r.inference_metrics.total_tokens for r in raw_results)
     total_energy_j = sum(r.energy_metrics.total_energy_j for r in raw_results)

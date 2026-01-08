@@ -65,6 +65,40 @@ memory = get_memory_stats(device)  # MemoryStats
 util = get_utilization_stats(device)  # UtilizationStats
 ```
 
+### gpu_info.py
+GPU topology detection with MIG (Multi-Instance GPU) support.
+
+```python
+from llm_energy_measure.core.gpu_info import (
+    detect_gpu_topology,
+    format_gpu_topology,
+    validate_gpu_selection,
+    get_device_mig_info,
+    GPUInfo,
+    GPUTopology,
+)
+
+# Detect all visible CUDA devices
+topology = detect_gpu_topology()
+print(format_gpu_topology(topology))  # Human-readable tree
+
+# Check if MIG instances are present
+if topology.has_mig:
+    print(f"MIG instances: {topology.mig_instances}")
+
+# Validate GPU selection and get warnings
+warnings = validate_gpu_selection([0, 1], topology)
+
+# Get MIG metadata for a specific device (respects CUDA_VISIBLE_DEVICES)
+mig_info = get_device_mig_info(0)  # {"gpu_is_mig": bool, "gpu_mig_profile": str|None, ...}
+```
+
+**Key classes:**
+- `GPUInfo` - Information about a GPU or MIG instance
+- `GPUTopology` - Collection of all detected devices with helper properties
+
+**MIG detection:** Uses pynvml (preferred) or falls back to PyTorch. MIG instances are identified by UUID prefix (`MIG-`) or device name containing "MIG".
+
 ### distributed.py
 Distributed training utilities for `accelerate`.
 
