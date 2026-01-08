@@ -131,7 +131,20 @@ def launch_experiment_accelerate(
 
         try:
             env = os.environ.copy()
-            env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_list)
+            # Only set CUDA_VISIBLE_DEVICES if not already set to MIG/GPU UUIDs
+            # MIG instances must be addressed by UUID, not integer index
+            existing_cuda_env = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+            if "MIG-" in existing_cuda_env or "GPU-" in existing_cuda_env:
+                # User has set MIG/GPU UUIDs - respect that
+                uuid_count = len(existing_cuda_env.split(","))
+                logger.info(f"Using CUDA_VISIBLE_DEVICES UUIDs: {uuid_count} device(s)")
+                if len(gpu_list) != uuid_count:
+                    logger.warning(
+                        f"--gpu-list has {len(gpu_list)} entries but CUDA_VISIBLE_DEVICES "
+                        f"has {uuid_count} UUIDs. Using CUDA_VISIBLE_DEVICES."
+                    )
+            else:
+                env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_list)
             env["ACCELERATE_NUM_PROCESSES"] = str(num_processes)
             env["ACCELERATE_CONFIG_FILE"] = ""
 

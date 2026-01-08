@@ -34,6 +34,13 @@ class RawProcessResult(BaseModel):
     experiment_id: str = Field(..., description="Unique experiment identifier")
     process_index: int = Field(..., description="Process rank in distributed setup")
     gpu_id: int = Field(..., description="GPU device index")
+    gpu_name: str = Field(default="", description="GPU model name")
+    gpu_is_mig: bool = Field(default=False, description="Whether GPU is a MIG instance")
+    gpu_mig_profile: str | None = Field(default=None, description="MIG profile if applicable")
+    energy_measurement_warning: str | None = Field(
+        default=None,
+        description="Warning about energy measurement accuracy (e.g., MIG limitations)",
+    )
     config_name: str = Field(..., description="Configuration name for this experiment")
     model_name: str = Field(..., description="Model name/path used")
     timestamps: Timestamps = Field(..., description="Timing information")

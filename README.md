@@ -139,7 +139,9 @@ Commands:
   run         Run inference (called by accelerate launch)
   aggregate   Aggregate raw per-process results
     --force          Aggregate even if incomplete (partial results)
+  gpus        Show GPU topology including MIG instances
   datasets    List available built-in datasets
+  presets     List built-in experiment presets
   config      Configuration management
     validate  Validate a config file
     show      Display resolved configuration
@@ -177,6 +179,72 @@ llm-energy-measure run --config config.yaml \
 |--------|-------------|
 | `--version, -v` | Show version |
 | `--verbose` | Enable debug logging |
+
+### GPU Topology & MIG Support
+
+View your GPU configuration before running experiments:
+
+```bash
+llm-energy-measure gpus
+```
+
+Output example:
+```
+GPU Topology (4 device(s) detected)
+├── [0] NVIDIA A100-PCIE-40GB (40GB) - Full GPU
+├── [1] NVIDIA A100-PCIE-40GB (40GB) - MIG Enabled (3 instances)
+├── [2] NVIDIA A100-PCIE-40GB (40GB) - MIG Enabled (3 instances)
+└── [3] NVIDIA A100-PCIE-40GB (40GB) - MIG Enabled (3 instances)
+
+MIG Usage Notes:
+  - MIG instances must be addressed by UUID, not parent GPU index
+  - Example: CUDA_VISIBLE_DEVICES=MIG-<uuid> llm-energy-measure ...
+  - Run: nvidia-smi -L  to see MIG instance UUIDs
+  - MIG instances are isolated - no distributed inference across them
+  - Energy readings reflect parent GPU total, not per-instance
+```
+
+#### MIG (Multi-Instance GPU) Support
+
+NVIDIA MIG allows partitioning A100/H100 GPUs into isolated instances. This tool supports running experiments on MIG instances with some important caveats.
+
+**What Works:**
+- Single-process experiments on individual MIG instances
+- Running parallel independent experiments on different MIG instances (separate terminals)
+- MIG detection and metadata recording in results (`gpu_is_mig`, `gpu_mig_profile`)
+- Automatic warnings when running on MIG instances
+
+**What Does NOT Work:**
+- Multi-process distributed inference (`--num-processes 2`) across MIG instances
+  - MIG instances are hardware-isolated (no NVLink/peer-to-peer communication)
+  - This is a hardware limitation, not a software bug
+- Using parent GPU index (e.g., `--gpu-list 1`) when MIG is enabled on that GPU
+  - Must use `CUDA_VISIBLE_DEVICES` with MIG UUIDs instead
+
+**How to Use MIG Instances:**
+
+```bash
+# 1. List MIG instances and their UUIDs
+nvidia-smi -L
+
+# Example output:
+# GPU 0: NVIDIA A100-PCIE-40GB (UUID: GPU-xxx)
+#   MIG 3g.20gb Device 0: (UUID: MIG-abc123)
+#   MIG 3g.20gb Device 1: (UUID: MIG-def456)
+
+# 2. Run experiment on a specific MIG instance
+CUDA_VISIBLE_DEVICES=MIG-abc123 llm-energy-measure experiment config.yaml --dataset alpaca -n 100
+
+# 3. Run parallel experiments on different MIG instances (separate terminals)
+# Terminal 1:
+CUDA_VISIBLE_DEVICES=MIG-abc123 llm-energy-measure experiment config1.yaml --dataset alpaca -n 100
+
+# Terminal 2:
+CUDA_VISIBLE_DEVICES=MIG-def456 llm-energy-measure experiment config2.yaml --dataset alpaca -n 100
+```
+
+**Energy Measurement Note:**
+Energy readings on MIG instances reflect the **parent GPU's total power consumption**, not per-instance usage. This is a hardware/driver limitation (NVML reports parent GPU power only). Results metadata includes an `energy_measurement_warning` field when running on MIG to flag this limitation.
 
 ## Configuration
 
@@ -435,15 +503,22 @@ make docker-dev
 
 ### MIG GPU Considerations
 
-On servers with **MIG (Multi-Instance GPU)** enabled GPUs (common on A100s), you may encounter device enumeration issues. Workarounds:
+On servers with **MIG (Multi-Instance GPU)** enabled GPUs (common on A100/H100), special handling is required:
 
 ```bash
-# Force use of physical GPU 0 (non-MIG device)
-CUDA_VISIBLE_DEVICES=0 docker compose run --rm bench ...
+# Option 1: Use a specific MIG instance by UUID
+nvidia-smi -L  # Find MIG UUIDs
+CUDA_VISIBLE_DEVICES=MIG-abc123 docker compose run --rm llm-energy-measure-app \
+  llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
 
-# Or set in your .env file
-echo "CUDA_VISIBLE_DEVICES=0" >> .env
+# Option 2: Use a non-MIG GPU (if available)
+CUDA_VISIBLE_DEVICES=0 docker compose run --rm llm-energy-measure-app ...
+
+# Option 3: Set in your .env file
+echo "CUDA_VISIBLE_DEVICES=MIG-abc123" >> .env
 ```
+
+**Important:** Distributed inference (`num_processes > 1`) does not work across MIG instances due to hardware isolation. See [MIG Support](#mig-multi-instance-gpu-support) for details.
 
 ## Results Structure
 
@@ -509,14 +584,48 @@ mkdir -p results
 
 ### MIG Device Errors
 
-**Symptom**: `RuntimeError: CUDA error: invalid device ordinal` or only seeing MIG instances.
+**Symptom**: `RuntimeError: CUDA error: invalid device ordinal` or `NCCL error: invalid usage`.
 
-**Cause**: A100 or other GPUs with MIG enabled expose virtual devices differently.
+**Cause**: MIG instances are hardware-isolated and cannot be used for distributed (multi-process) inference.
 
-**Solution**: Force use of physical GPU:
-```bash
-CUDA_VISIBLE_DEVICES=0 docker compose run --rm llm-energy-measure-app ...
-```
+**Solutions**:
+
+1. **For single-process experiments on MIG** (recommended):
+   ```bash
+   # Get MIG UUIDs
+   nvidia-smi -L
+
+   # Run on specific MIG instance (use UUID, not index)
+   CUDA_VISIBLE_DEVICES=MIG-abc123 llm-energy-measure experiment config.yaml --dataset alpaca -n 100
+   ```
+
+2. **For distributed inference**, use full GPUs (non-MIG):
+   ```bash
+   # If GPU 0 has MIG disabled
+   CUDA_VISIBLE_DEVICES=0 llm-energy-measure experiment config.yaml --gpu-list 0 --num-processes 1
+   ```
+
+3. **Run parallel independent experiments** on separate MIG instances:
+   ```bash
+   # Terminal 1
+   CUDA_VISIBLE_DEVICES=MIG-abc123 llm-energy-measure experiment config.yaml &
+
+   # Terminal 2
+   CUDA_VISIBLE_DEVICES=MIG-def456 llm-energy-measure experiment config.yaml &
+   ```
+
+**Note**: Using `--gpu-list 1` when GPU 1 has MIG enabled will fail. You must use `CUDA_VISIBLE_DEVICES` with the MIG UUID.
+
+### MIG Energy Measurements Inaccurate
+
+**Symptom**: Energy measurements on MIG instances seem too high or don't correlate with workload.
+
+**Cause**: NVML reports power consumption for the entire parent GPU, not individual MIG instances. If other workloads run on sibling MIG instances, their power usage is included.
+
+**Solution**: This is a hardware/driver limitation. For accurate energy measurements:
+- Use full GPUs (disable MIG) for energy benchmarking
+- Or ensure no other workloads run on sibling MIG instances during measurement
+- Results include `energy_measurement_warning` field to flag this limitation
 
 ### Model Download Every Run
 

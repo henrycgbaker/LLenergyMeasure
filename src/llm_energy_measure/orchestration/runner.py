@@ -139,11 +139,31 @@ class ExperimentOrchestrator:
         combined = self._metrics.collect(model, inference_result, ctx.config)
         end = datetime.now()
 
+        # Get GPU/MIG info for result metadata
+        from llm_energy_measure.core.gpu_info import get_device_mig_info
+
+        gpu_id = ctx.device.index or 0
+        mig_info = get_device_mig_info(gpu_id)
+
+        # Generate energy measurement warning if on MIG
+        energy_warning = None
+        if mig_info.get("gpu_is_mig", False):
+            profile = mig_info.get("gpu_mig_profile") or "unknown"
+            energy_warning = (
+                f"Running on MIG instance ({profile}). Energy measurement reflects "
+                "parent GPU total, not per-instance consumption."
+            )
+            logger.warning(energy_warning)
+
         # Build raw result with effective_config and cli_overrides (Phase 0)
         raw_result = RawProcessResult(
             experiment_id=ctx.experiment_id,
             process_index=ctx.process_index,
-            gpu_id=ctx.device.index or 0,
+            gpu_id=gpu_id,
+            gpu_name=mig_info.get("gpu_name", ""),
+            gpu_is_mig=mig_info.get("gpu_is_mig", False),
+            gpu_mig_profile=mig_info.get("gpu_mig_profile"),
+            energy_measurement_warning=energy_warning,
             config_name=ctx.config.config_name,
             model_name=ctx.config.model_name,
             timestamps=Timestamps(
