@@ -35,10 +35,36 @@ AUTO_DETECT_COLUMNS = ["text", "prompt", "question", "instruction", "input", "co
 
 
 class BatchingConfig(BaseModel):
-    """Batching configuration for inference."""
+    """Batching configuration for inference.
 
-    batch_size: int = Field(default=1, ge=1, description="Batch size for inference")
-    dynamic_batching: bool = Field(default=False, description="Enable dynamic batching")
+    Industry-standard batching strategies (per MLPerf/vLLM terminology):
+    - static: Fixed batch size, pads to uniform length (MLPerf offline scenario)
+    - dynamic: Token-aware batching, groups by token budget (MLPerf server scenario)
+    - sorted_static: Sort by length then static batches (reduces padding waste)
+    - sorted_dynamic: Sort by length + dynamic token budget (optimal packing)
+    """
+
+    batch_size: int = Field(default=1, ge=1, description="Max prompts per batch")
+    strategy: Literal["static", "dynamic", "sorted_static", "sorted_dynamic"] = Field(
+        default="static", description="Batching strategy (MLPerf terminology)"
+    )
+    max_tokens_per_batch: int | None = Field(
+        default=None,
+        description="Max tokens per batch (for dynamic strategies). Defaults to max_input_tokens.",
+    )
+
+    # Legacy field for backwards compatibility
+    dynamic_batching: bool = Field(
+        default=False,
+        description="[Deprecated] Use strategy='dynamic' instead. Kept for backwards compat.",
+    )
+
+    @model_validator(mode="after")
+    def handle_legacy_dynamic_batching(self) -> "BatchingConfig":
+        """Map legacy dynamic_batching flag to strategy."""
+        if self.dynamic_batching and self.strategy == "static":
+            object.__setattr__(self, "strategy", "dynamic")
+        return self
 
 
 class ShardingConfig(BaseModel):
