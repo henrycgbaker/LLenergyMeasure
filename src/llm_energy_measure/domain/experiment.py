@@ -1,6 +1,7 @@
 """Experiment result domain models for LLM Bench."""
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -39,6 +40,16 @@ class RawProcessResult(BaseModel):
     inference_metrics: InferenceMetrics = Field(..., description="Inference performance metrics")
     energy_metrics: EnergyMetrics = Field(..., description="Energy consumption metrics")
     compute_metrics: ComputeMetrics = Field(..., description="Computational metrics")
+
+    # Effective configuration (for reproducibility)
+    effective_config: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Full resolved config (CLI > config file > preset > defaults)",
+    )
+    cli_overrides: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Parameters that were overridden via CLI flags",
+    )
 
     model_config = {"frozen": True}
 
@@ -87,6 +98,16 @@ class AggregatedResult(BaseModel):
     # Timestamps
     start_time: datetime = Field(..., description="Earliest process start time")
     end_time: datetime = Field(..., description="Latest process end time")
+
+    # Effective configuration (for reproducibility)
+    effective_config: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Full resolved config (CLI > config file > preset > defaults)",
+    )
+    cli_overrides: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Parameters that were overridden via CLI flags",
+    )
 
     model_config = {"frozen": True}
 

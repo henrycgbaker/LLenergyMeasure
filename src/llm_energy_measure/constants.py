@@ -1,6 +1,7 @@
 """Constants for LLM Bench framework."""
 
 from pathlib import Path
+from typing import Any
 
 # Results directories
 DEFAULT_RESULTS_DIR = Path("results")
@@ -19,3 +20,29 @@ DEFAULT_TOP_P = 1.0
 
 # Schema version for result files
 SCHEMA_VERSION = "2.0.0"
+
+# Built-in presets for quick experiment configuration
+# Presets provide convenience defaults but NOT model (model is always required)
+PRESETS: dict[str, dict[str, Any]] = {
+    "quick-test": {
+        "max_input_tokens": 64,
+        "max_output_tokens": 32,
+        "num_processes": 1,
+        "gpu_list": [0],
+        "batching_options": {"batch_size": 1},
+        "decoder_config": {"do_sample": False},  # Deterministic for quick tests
+    },
+    "benchmark": {
+        "max_input_tokens": 2048,
+        "max_output_tokens": 512,
+        "fp_precision": "float16",
+        "batching_options": {"batch_size": 1},
+        "decoder_config": {"do_sample": False},  # Deterministic for benchmarks
+    },
+    "throughput": {
+        "max_input_tokens": 512,
+        "max_output_tokens": 256,
+        "fp_precision": "float16",
+        "batching_options": {"batch_size": 8, "dynamic_batching": True},
+    },
+}

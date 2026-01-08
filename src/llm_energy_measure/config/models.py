@@ -216,6 +216,11 @@ class ExperimentConfig(BaseModel):
     cycle_id: int | None = Field(default=None, description="Experiment cycle ID")
     query_rate: float = Field(default=1.0, ge=0, description="Query rate (queries/sec)")
 
+    # Reproducibility
+    random_seed: int | None = Field(
+        default=None, description="Random seed for reproducibility (None = non-deterministic)"
+    )
+
     # Extra metadata (for extensibility)
     extra_metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
