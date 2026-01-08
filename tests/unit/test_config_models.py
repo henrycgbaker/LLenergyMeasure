@@ -262,3 +262,59 @@ class TestHuggingFacePromptSource:
 
         with pytest.raises(ValidationError):
             HuggingFacePromptSource(dataset="test", sample_size=-1)
+
+
+class TestExperimentConfigRandomSeed:
+    """Tests for random_seed field in ExperimentConfig."""
+
+    @pytest.fixture
+    def minimal_config(self):
+        return {
+            "config_name": "test_config",
+            "model_name": "test-model",
+        }
+
+    def test_random_seed_default_none(self, minimal_config):
+        """random_seed defaults to None."""
+        config = ExperimentConfig(**minimal_config)
+        assert config.random_seed is None
+
+    def test_random_seed_accepts_integer(self, minimal_config):
+        """random_seed accepts integer values."""
+        config = ExperimentConfig(**minimal_config, random_seed=42)
+        assert config.random_seed == 42
+
+    def test_random_seed_accepts_zero(self, minimal_config):
+        """random_seed accepts 0 as a valid seed."""
+        config = ExperimentConfig(**minimal_config, random_seed=0)
+        assert config.random_seed == 0
+
+    def test_random_seed_accepts_large_integer(self, minimal_config):
+        """random_seed accepts large integers."""
+        config = ExperimentConfig(**minimal_config, random_seed=2**32 - 1)
+        assert config.random_seed == 2**32 - 1
+
+    def test_random_seed_field_exists(self):
+        """random_seed field is present on ExperimentConfig."""
+        assert "random_seed" in ExperimentConfig.model_fields
+
+    def test_random_seed_in_serialization(self, minimal_config):
+        """random_seed is included in JSON serialization."""
+        config = ExperimentConfig(**minimal_config, random_seed=123)
+        json_str = config.model_dump_json()
+        restored = ExperimentConfig.model_validate_json(json_str)
+        assert restored.random_seed == 123
+
+    def test_random_seed_none_in_serialization(self, minimal_config):
+        """random_seed=None is preserved in serialization."""
+        config = ExperimentConfig(**minimal_config)
+        json_str = config.model_dump_json()
+        restored = ExperimentConfig.model_validate_json(json_str)
+        assert restored.random_seed is None
+
+    def test_random_seed_negative_allowed(self, minimal_config):
+        """random_seed allows negative integers (no constraint)."""
+        # Note: Whether negative seeds are allowed depends on your validation
+        # This test documents the current behavior
+        config = ExperimentConfig(**minimal_config, random_seed=-1)
+        assert config.random_seed == -1

@@ -13,8 +13,10 @@
   "mounts": [
     "source=${localEnv:HOME}/.cache/huggingface,target=/app/.cache/huggingface,type=bind"
   ],
+  "remoteUser": "vscode",
   "updateRemoteUserUID": true,
-  "postCreateCommand": "pip install -e '.[dev]' && pre-commit install",
+  "onCreateCommand": "sudo chown -R $(id -u):$(id -g) /opt/venv",
+  "postCreateCommand": "pip install -e . && pip install pytest pytest-cov ruff mypy pre-commit types-pyyaml commitizen && pre-commit install",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -25,6 +27,7 @@
       ],
       "settings": {
         "python.defaultInterpreterPath": "/opt/venv/bin/python",
+        "python.terminal.activateEnvironment": false,
         "python.formatting.provider": "none",
         "editor.formatOnSave": true,
         "[python]": {

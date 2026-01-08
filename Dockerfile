@@ -68,7 +68,7 @@ ENTRYPOINT []
 CMD ["llm-energy-measure", "--help"]
 
 # ============================================================================
-# Stage 3: Dev - For VS Code devcontainer (runs as root for simplicity)
+# Stage 3: Dev - For VS Code devcontainer with host user UID/GID passthrough
 # ============================================================================
 FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS dev
 
@@ -81,9 +81,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     libgomp1 \
+    sudo \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
     && ln -sf /usr/bin/python3.11 /usr/bin/python
+
+# Create non-root user for VS Code devcontainer (UID will be remapped by updateRemoteUserUID)
+ARG USERNAME=vscode
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
+RUN groupadd --gid $USER_GID $USERNAME \
+    && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
+    && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
+    && chmod 0440 /etc/sudoers.d/$USERNAME
 
 WORKDIR /app
 
@@ -95,11 +105,13 @@ ENV PYTHONUNBUFFERED=1
 ENV HF_HOME=/app/.cache/huggingface
 
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124 \
-    && chmod -R 777 /opt/venv
+    && pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
 
 # Copy source (will be overridden by workspace mount in devcontainer)
 COPY . /app/
 
-# Default to bash for interactive dev sessions
+# Don't chown here - it's ineffective because updateRemoteUserUID remaps
+# the vscode user's UID at container start. Permissions fixed via onCreateCommand.
+# Don't set USER here - devcontainer.json controls this.
+
 CMD ["/bin/bash"]

@@ -7,10 +7,11 @@ Provides commands for:
 - Listing and inspecting results
 """
 
+import copy
 import subprocess
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -18,7 +19,7 @@ from rich.table import Table
 
 from llm_energy_measure.config.loader import load_config, validate_config
 from llm_energy_measure.config.models import ExperimentConfig, HuggingFacePromptSource
-from llm_energy_measure.constants import SCHEMA_VERSION
+from llm_energy_measure.constants import PRESETS, SCHEMA_VERSION
 from llm_energy_measure.core.dataset_loader import (
     list_builtin_datasets,
     load_prompts_from_file,
@@ -41,6 +42,81 @@ app.add_typer(config_app, name="config")
 app.add_typer(results_app, name="results")
 
 console = Console()
+
+
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Deep merge override into base, returning a new dict."""
+    result = copy.deepcopy(base)
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
+
+
+def _apply_cli_overrides(
+    config_dict: dict[str, Any],
+    overrides: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Apply CLI overrides to config dict, tracking what was overridden.
+
+    Returns:
+        Tuple of (merged config dict, dict of overridden values with original values)
+    """
+    tracked_overrides: dict[str, Any] = {}
+
+    for key, value in overrides.items():
+        if value is None:
+            continue
+
+        # Handle nested keys like "batching_options.batch_size"
+        if "." in key:
+            parts = key.split(".")
+            parent_key, child_key = parts[0], ".".join(parts[1:])
+
+            if parent_key not in config_dict:
+                config_dict[parent_key] = {}
+
+            if isinstance(config_dict[parent_key], dict):
+                original = config_dict[parent_key].get(child_key.split(".")[0])
+                if child_key in config_dict[parent_key]:
+                    original = config_dict[parent_key][child_key]
+                config_dict[parent_key][child_key.split(".")[0]] = value
+                tracked_overrides[key] = {"new": value, "original": original}
+        else:
+            original = config_dict.get(key)
+            config_dict[key] = value
+            tracked_overrides[key] = {"new": value, "original": original}
+
+    return config_dict, tracked_overrides
+
+
+def _display_config_summary(
+    config: ExperimentConfig,
+    overrides: dict[str, Any],
+    preset_name: str | None = None,
+) -> None:
+    """Display config summary with override visibility."""
+    console.print(f"\n[bold]Experiment: {config.config_name}[/bold]")
+    console.print(f"  Model: {config.model_name}")
+    console.print(f"  Processes: {config.num_processes} on GPUs {config.gpu_list}")
+    console.print(f"  Precision: {config.fp_precision}")
+    console.print(f"  Batch size: {config.batching_options.batch_size}")
+
+    if preset_name:
+        console.print(f"  Preset: [cyan]{preset_name}[/cyan]")
+
+    # Show overrides
+    if overrides:
+        console.print("\n[dim]CLI overrides:[/dim]")
+        for key, info in overrides.items():
+            original = info.get("original")
+            new = info.get("new")
+            if original is not None and original != new:
+                console.print(f"  {key}: {new} [dim](was: {original})[/dim]")
+            else:
+                console.print(f"  {key}: {new}")
 
 
 def version_callback(value: bool) -> None:
@@ -192,7 +268,10 @@ def _resolve_prompts(
 
 @app.command("experiment")  # type: ignore[misc]
 def experiment(
-    config_path: Annotated[Path, typer.Argument(help="Path to experiment config file")],
+    config_path: Annotated[
+        Path | None, typer.Argument(help="Path to experiment config file (optional with --preset)")
+    ] = None,
+    # Prompt source options
     dataset: Annotated[
         str | None,
         typer.Option("--dataset", "-d", help="HuggingFace dataset (alpaca, gsm8k, mmlu, sharegpt)"),
@@ -207,24 +286,135 @@ def experiment(
     dataset_column: Annotated[
         str | None, typer.Option("--column", help="Dataset column for prompts")
     ] = None,
+    # Preset and model for config-free mode
+    preset: Annotated[
+        str | None,
+        typer.Option("--preset", help=f"Built-in preset ({', '.join(PRESETS.keys())})"),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", "-m", help="HuggingFace model name (required with --preset)"),
+    ] = None,
+    # CLI overrides for config parameters
+    batch_size: Annotated[
+        int | None,
+        typer.Option("--batch-size", "-b", help="Override batch size"),
+    ] = None,
+    precision: Annotated[
+        str | None,
+        typer.Option("--precision", help="Override fp_precision (float32/float16/bfloat16)"),
+    ] = None,
+    max_tokens: Annotated[
+        int | None,
+        typer.Option("--max-tokens", help="Override max_output_tokens"),
+    ] = None,
+    seed: Annotated[
+        int | None,
+        typer.Option("--seed", help="Random seed for reproducibility"),
+    ] = None,
+    num_processes: Annotated[
+        int | None,
+        typer.Option("--num-processes", help="Override number of processes"),
+    ] = None,
+    gpu_list: Annotated[
+        str | None,
+        typer.Option("--gpu-list", help="Override GPU list (comma-separated, e.g., '0,1,2')"),
+    ] = None,
+    temperature: Annotated[
+        float | None,
+        typer.Option("--temperature", help="Override decoder temperature"),
+    ] = None,
+    quantization: Annotated[
+        bool | None,
+        typer.Option("--quantization/--no-quantization", help="Enable/disable quantization"),
+    ] = None,
 ) -> None:
     """Run experiment with automatic accelerate handling.
 
-    Reads num_processes from config and spawns accelerate launch automatically.
-    This is the recommended way to run experiments.
+    Supports three modes:
 
-    Examples:
-        llm-energy-measure experiment config.yaml --dataset alpaca -n 100
-        llm-energy-measure experiment config.yaml --prompts prompts.txt
+    1. Config file (formal experiments):
+       llm-energy-measure experiment config.yaml --dataset alpaca -n 100
+
+    2. Preset + model (quick exploration):
+       llm-energy-measure experiment --preset quick-test --model TinyLlama/... -d alpaca
+
+    3. Config + CLI overrides (sweeps):
+       llm-energy-measure experiment config.yaml -b 8 --precision int8
+
+    Precedence: CLI > Config file > Preset > Defaults
     """
     try:
-        # Load config to get num_processes
-        config = load_config(config_path)
-        num_processes = config.num_processes
+        # Validate input modes
+        if not config_path and not preset:
+            console.print("[red]Error:[/red] Provide config file or --preset")
+            raise typer.Exit(1)
 
-        console.print(f"[bold]Running experiment: {config.config_name}[/bold]")
-        console.print(f"  Model: {config.model_name}")
-        console.print(f"  Processes: {num_processes}")
+        if preset and not config_path and not model:
+            console.print(
+                "[red]Error:[/red] --model is required when using --preset without config"
+            )
+            raise typer.Exit(1)
+
+        if preset and preset not in PRESETS:
+            console.print(f"[red]Error:[/red] Unknown preset '{preset}'")
+            console.print(f"Available presets: {', '.join(PRESETS.keys())}")
+            raise typer.Exit(1)
+
+        # Build config from sources (precedence: CLI > config > preset > defaults)
+        config_dict: dict[str, Any] = {}
+        preset_name: str | None = None
+
+        # 1. Start with preset if provided
+        if preset:
+            preset_name = preset
+            config_dict = copy.deepcopy(PRESETS[preset])
+            # Preset needs a config_name
+            config_dict["config_name"] = f"preset-{preset}"
+
+        # 2. Merge config file on top (config overrides preset)
+        if config_path:
+            file_config = load_config(config_path)
+            file_dict = file_config.model_dump()
+            config_dict = _deep_merge(config_dict, file_dict)
+
+        # 3. Apply model if specified (required for preset-only mode)
+        if model:
+            config_dict["model_name"] = model
+
+        # Validate we have a model
+        if "model_name" not in config_dict or not config_dict["model_name"]:
+            console.print("[red]Error:[/red] model_name is required (from config or --model)")
+            raise typer.Exit(1)
+
+        # 4. Prepare CLI overrides
+        cli_overrides: dict[str, Any] = {}
+        if batch_size is not None:
+            cli_overrides["batching_options.batch_size"] = batch_size
+        if precision is not None:
+            cli_overrides["fp_precision"] = precision
+        if max_tokens is not None:
+            cli_overrides["max_output_tokens"] = max_tokens
+        if seed is not None:
+            cli_overrides["random_seed"] = seed
+        if num_processes is not None:
+            cli_overrides["num_processes"] = num_processes
+        if gpu_list is not None:
+            cli_overrides["gpu_list"] = [int(g.strip()) for g in gpu_list.split(",")]
+        if temperature is not None:
+            cli_overrides["decoder_config.temperature"] = temperature
+        if quantization is not None:
+            cli_overrides["quantization_config.quantization"] = quantization
+
+        # 5. Apply CLI overrides and track them
+        config_dict, tracked_overrides = _apply_cli_overrides(config_dict, cli_overrides)
+
+        # 6. Create final config
+        config = ExperimentConfig(**config_dict)
+        final_num_processes = config.num_processes
+
+        # Display config with override visibility
+        _display_config_summary(config, tracked_overrides, preset_name)
 
         # Build accelerate command
         cmd = [
@@ -232,12 +422,32 @@ def experiment(
             "-m",
             "accelerate.commands.launch",
             "--num_processes",
-            str(num_processes),
+            str(final_num_processes),
             "-m",
             "llm_energy_measure.orchestration.launcher",
-            "--config",
-            str(config_path.resolve()),
         ]
+
+        # Generate temp config file when using preset-only mode OR when CLI overrides exist
+        # (CLI overrides need to be baked into the config since launcher doesn't support them)
+        import tempfile
+
+        import yaml
+
+        if not config_path or tracked_overrides:
+            # Need temp file: preset-only mode or config with CLI overrides
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".yaml", delete=False, prefix="llm_energy_"
+            ) as tmp:
+                yaml.dump(config.model_dump(), tmp, default_flow_style=False)
+                tmp_config_path = tmp.name
+            cmd.extend(["--config", tmp_config_path])
+            if not config_path:
+                console.print(f"[dim]Generated temp config: {tmp_config_path}[/dim]")
+            else:
+                console.print(f"[dim]Generated temp config with overrides: {tmp_config_path}[/dim]")
+        else:
+            # Use original config file directly (no overrides)
+            cmd.extend(["--config", str(config_path.resolve())])
 
         # Add prompt source args
         if dataset:
@@ -252,12 +462,19 @@ def experiment(
         if sample_size:
             cmd.extend(["--sample-size", str(sample_size)])
 
-        console.print(f"\n[dim]$ accelerate launch --num_processes {num_processes} ...[/dim]\n")
+        # Note: CLI overrides (batch_size, precision, etc.) are already baked into
+        # the config dict/file - no need to pass them separately to the launcher
+
+        console.print(
+            f"\n[dim]$ accelerate launch --num_processes {final_num_processes} ...[/dim]\n"
+        )
 
         # Run accelerate, streaming output
         result = subprocess.run(cmd, check=False)
         raise typer.Exit(result.returncode)
 
+    except typer.Exit:
+        raise  # Re-raise typer exits
     except ConfigurationError as e:
         console.print(f"[red]Configuration error:[/red] {e}")
         raise typer.Exit(1) from None
@@ -297,6 +514,47 @@ def list_datasets_cmd() -> None:
 
     console.print(table)
     console.print("\n[dim]Usage: llm-energy-measure run config.yaml --dataset alpaca -n 1000[/dim]")
+
+
+@app.command("presets")  # type: ignore[misc]
+def list_presets_cmd() -> None:
+    """List built-in experiment presets.
+
+    Presets provide sensible defaults for common experiment scenarios.
+    Use with: llm-energy-measure experiment --preset <name> --model <model>
+    """
+    table = Table(title="Built-in Presets")
+    table.add_column("Name", style="cyan")
+    table.add_column("Description", style="green")
+    table.add_column("Key Settings")
+
+    preset_descriptions = {
+        "quick-test": "Fast validation runs",
+        "benchmark": "Formal benchmark measurements",
+        "throughput": "Throughput-optimised testing",
+    }
+
+    for name, config in PRESETS.items():
+        settings = []
+        if "max_input_tokens" in config:
+            settings.append(f"max_in={config['max_input_tokens']}")
+        if "max_output_tokens" in config:
+            settings.append(f"max_out={config['max_output_tokens']}")
+        if "batching_options" in config:
+            settings.append(f"batch={config['batching_options'].get('batch_size', 1)}")
+        if "fp_precision" in config:
+            settings.append(f"precision={config['fp_precision']}")
+
+        table.add_row(
+            name,
+            preset_descriptions.get(name, ""),
+            ", ".join(settings),
+        )
+
+    console.print(table)
+    console.print(
+        "\n[dim]Usage: llm-energy-measure experiment --preset quick-test --model <model> -d alpaca[/dim]"
+    )
 
 
 @app.command()  # type: ignore[misc]
@@ -447,6 +705,373 @@ def config_show(
     except ConfigurationError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from None
+
+
+@config_app.command("new")  # type: ignore[misc]
+def config_new(
+    output_path: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Output path for config file")
+    ] = None,
+    base_preset: Annotated[str | None, typer.Option("--preset", help="Start from a preset")] = None,
+) -> None:
+    """Interactive config builder for creating new experiment configs.
+
+    Guides you through creating a valid configuration file with sensible defaults.
+    """
+    from rich.prompt import Confirm, Prompt
+
+    console.print("[bold]Create new experiment configuration[/bold]\n")
+
+    # Config name
+    config_name = Prompt.ask("Config name", default="my-experiment")
+
+    # Model name
+    model_name = Prompt.ask(
+        "Model name (HuggingFace path)",
+        default="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    )
+
+    # Start from preset?
+    if base_preset is None:
+        use_preset = Confirm.ask("Start from a preset?", default=False)
+        if use_preset:
+            preset_choices = ", ".join(PRESETS.keys())
+            base_preset = Prompt.ask(f"Preset ({preset_choices})", default="benchmark")
+
+    # Build config
+    config_dict: dict[str, Any] = {}
+    if base_preset and base_preset in PRESETS:
+        config_dict = copy.deepcopy(PRESETS[base_preset])
+        console.print(f"[dim]Starting from preset: {base_preset}[/dim]")
+
+    config_dict["config_name"] = config_name
+    config_dict["model_name"] = model_name
+
+    # GPU configuration
+    num_gpus = int(Prompt.ask("Number of GPUs", default="1"))
+    config_dict["num_processes"] = num_gpus
+    if num_gpus > 1:
+        gpu_list = [
+            int(g)
+            for g in Prompt.ask(
+                "GPU indices (comma-separated)",
+                default=",".join(str(i) for i in range(num_gpus)),
+            ).split(",")
+        ]
+        config_dict["gpu_list"] = gpu_list
+    else:
+        config_dict["gpu_list"] = [0]
+
+    # Precision
+    precision = Prompt.ask(
+        "Precision (float32/float16/bfloat16)",
+        default=config_dict.get("fp_precision", "float16"),
+    )
+    config_dict["fp_precision"] = precision
+
+    # Batch size
+    batch_size = int(
+        Prompt.ask(
+            "Batch size",
+            default=str(config_dict.get("batching_options", {}).get("batch_size", 1)),
+        )
+    )
+    if "batching_options" not in config_dict:
+        config_dict["batching_options"] = {}
+    config_dict["batching_options"]["batch_size"] = batch_size
+
+    # Token limits
+    max_input = int(
+        Prompt.ask(
+            "Max input tokens",
+            default=str(config_dict.get("max_input_tokens", 512)),
+        )
+    )
+    max_output = int(
+        Prompt.ask(
+            "Max output tokens",
+            default=str(config_dict.get("max_output_tokens", 128)),
+        )
+    )
+    config_dict["max_input_tokens"] = max_input
+    config_dict["max_output_tokens"] = max_output
+
+    # Quantization
+    use_quant = Confirm.ask("Enable quantization?", default=False)
+    if use_quant:
+        quant_bits = Prompt.ask("Quantization bits (4/8)", default="4")
+        config_dict["quantization_config"] = {
+            "quantization": True,
+            "load_in_4bit": quant_bits == "4",
+            "load_in_8bit": quant_bits == "8",
+        }
+
+    # Validate config
+    try:
+        config = ExperimentConfig(**config_dict)
+    except Exception as e:
+        console.print(f"[red]Invalid configuration:[/red] {e}")
+        raise typer.Exit(1) from None
+
+    # Determine output path
+    if output_path is None:
+        output_path = Path(f"configs/{config_name}.yaml")
+
+    # Ensure parent directory exists
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Write YAML
+    import yaml
+
+    with open(output_path, "w") as f:
+        yaml.dump(
+            config.model_dump(exclude_defaults=True), f, default_flow_style=False, sort_keys=False
+        )
+
+    console.print(f"\n[green]✓[/green] Created: {output_path}")
+    console.print(
+        f"\n[dim]Run with: llm-energy-measure experiment {output_path} --dataset alpaca -n 100[/dim]"
+    )
+
+
+@config_app.command("generate-grid")  # type: ignore[misc]
+def config_generate_grid(
+    base_config: Annotated[Path, typer.Argument(help="Base config file to vary")],
+    vary: Annotated[
+        list[str] | None,
+        typer.Option("--vary", help="Parameter=values to vary (e.g., batch_size=1,2,4,8)"),
+    ] = None,
+    output_dir: Annotated[
+        Path, typer.Option("--output-dir", "-o", help="Output directory for generated configs")
+    ] = Path("configs/grid"),
+) -> None:
+    """Generate a grid of configs from a base config with parameter variations.
+
+    Creates Cartesian product of all --vary parameters.
+
+    Example:
+        llm-energy-measure config generate-grid base.yaml \\
+            --vary batch_size=1,2,4,8 \\
+            --vary fp_precision=float16,float32 \\
+            --output-dir ./grid/
+    """
+    import itertools
+
+    import yaml
+
+    if not vary:
+        console.print("[red]Error:[/red] At least one --vary parameter is required")
+        raise typer.Exit(1)
+
+    # Load base config
+    try:
+        base = load_config(base_config)
+        base_dict = base.model_dump()
+    except ConfigurationError as e:
+        console.print(f"[red]Error loading base config:[/red] {e}")
+        raise typer.Exit(1) from None
+
+    # Shorthand mappings for common parameters (match CLI flag behavior)
+    param_shortcuts: dict[str, str] = {
+        "batch_size": "batching_options.batch_size",
+        "temperature": "decoder_config.temperature",
+        "quantization": "quantization_config.quantization",
+    }
+
+    # Parse variations
+    variations: dict[str, list[Any]] = {}
+    for v in vary:
+        if "=" not in v:
+            console.print(f"[red]Error:[/red] Invalid --vary format: {v}")
+            console.print("Expected: parameter=value1,value2,...")
+            raise typer.Exit(1)
+
+        param, values_str = v.split("=", 1)
+        # Apply shorthand mappings
+        param = param_shortcuts.get(param, param)
+        values: list[Any] = []
+        for val in values_str.split(","):
+            val = val.strip()
+            # Try to parse as number
+            try:
+                if "." in val:
+                    values.append(float(val))
+                else:
+                    values.append(int(val))
+            except ValueError:
+                values.append(val)
+        variations[param] = values
+
+    # Generate Cartesian product
+    param_names = list(variations.keys())
+    param_values = list(variations.values())
+    combinations = list(itertools.product(*param_values))
+
+    console.print(f"Generating {len(combinations)} configs from {len(param_names)} parameters...")
+
+    # Create output directory
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate configs
+    generated = []
+    for combo in combinations:
+        config_dict = copy.deepcopy(base_dict)
+
+        # Build suffix for filename
+        suffix_parts = []
+        for param, value in zip(param_names, combo, strict=False):
+            # Apply the variation
+            if "." in param:
+                # Nested parameter like batching_options.batch_size
+                parts = param.split(".")
+                target = config_dict
+                for part in parts[:-1]:
+                    if part not in target:
+                        target[part] = {}
+                    target = target[part]
+                target[parts[-1]] = value
+            else:
+                config_dict[param] = value
+
+            # Clean value for filename
+            clean_val = str(value).replace(".", "_")
+            suffix_parts.append(f"{param.split('.')[-1]}_{clean_val}")
+
+        # Update config name
+        base_name = base_config.stem
+        suffix = "_".join(suffix_parts)
+        config_dict["config_name"] = f"{base_name}_{suffix}"
+
+        # Write config
+        output_path = output_dir / f"{base_name}_{suffix}.yaml"
+        with open(output_path, "w") as f:
+            yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
+
+        generated.append(output_path)
+
+    console.print(f"[green]✓[/green] Generated {len(generated)} configs in {output_dir}/")
+    console.print(
+        f"\n[dim]Run with: llm-energy-measure batch {output_dir}/*.yaml --dataset alpaca -n 100[/dim]"
+    )
+
+
+@app.command("batch")  # type: ignore[misc]
+def batch_run(
+    config_pattern: Annotated[
+        str, typer.Argument(help="Glob pattern for config files (e.g., configs/*.yaml)")
+    ],
+    dataset: Annotated[
+        str | None,
+        typer.Option("--dataset", "-d", help="HuggingFace dataset for all runs"),
+    ] = None,
+    sample_size: Annotated[
+        int | None, typer.Option("--sample-size", "-n", help="Limit prompts for all runs")
+    ] = None,
+    parallel: Annotated[
+        int | None,
+        typer.Option("--parallel", help="Run N configs in parallel (default: sequential)"),
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="List configs without running")
+    ] = False,
+) -> None:
+    """Run multiple experiment configs in batch.
+
+    Supports sequential (default) or parallel execution.
+
+    Examples:
+        # Sequential
+        llm-energy-measure batch configs/*.yaml --dataset alpaca -n 100
+
+        # Parallel (4 at a time)
+        llm-energy-measure batch configs/*.yaml --parallel 4 --dataset alpaca -n 100
+    """
+    import glob as glob_module
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
+    # Find matching configs
+    config_paths = sorted(glob_module.glob(config_pattern))
+    if not config_paths:
+        console.print(f"[red]Error:[/red] No configs match pattern: {config_pattern}")
+        raise typer.Exit(1)
+
+    console.print(f"[bold]Batch run: {len(config_paths)} configs[/bold]")
+
+    # Validate all configs first
+    valid_configs: list[tuple[Path, ExperimentConfig]] = []
+    for path in config_paths:
+        try:
+            config = load_config(Path(path))
+            valid_configs.append((Path(path), config))
+            console.print(f"  [green]✓[/green] {path}: {config.config_name}")
+        except ConfigurationError as e:
+            console.print(f"  [red]✗[/red] {path}: {e}")
+
+    if len(valid_configs) < len(config_paths):
+        console.print(
+            f"\n[yellow]Warning:[/yellow] {len(config_paths) - len(valid_configs)} invalid configs skipped"
+        )
+
+    if not valid_configs:
+        console.print("[red]Error:[/red] No valid configs to run")
+        raise typer.Exit(1)
+
+    if dry_run:
+        console.print(f"\n[blue]Dry run - would execute {len(valid_configs)} experiments[/blue]")
+        raise typer.Exit()
+
+    # Build command template
+    def run_config(config_path: Path) -> tuple[str, int]:
+        """Run a single config and return (name, exit_code)."""
+        cmd = [
+            sys.executable,
+            "-m",
+            "llm_energy_measure.cli",
+            "experiment",
+            str(config_path),
+        ]
+        if dataset:
+            cmd.extend(["--dataset", dataset])
+        if sample_size:
+            cmd.extend(["--sample-size", str(sample_size)])
+
+        result = subprocess.run(cmd, capture_output=True, check=False)
+        return config_path.stem, result.returncode
+
+    console.print(f"\n[bold]Running {len(valid_configs)} experiments...[/bold]\n")
+
+    results: dict[str, int] = {}
+
+    if parallel and parallel > 1:
+        # Parallel execution
+        console.print(f"[dim]Parallel mode: {parallel} concurrent runs[/dim]\n")
+        with ProcessPoolExecutor(max_workers=parallel) as executor:
+            futures = {
+                executor.submit(run_config, config_path): config_path
+                for config_path, _ in valid_configs
+            }
+            for future in as_completed(futures):
+                name, exit_code = future.result()
+                results[name] = exit_code
+                status = "[green]✓[/green]" if exit_code == 0 else f"[red]✗ ({exit_code})[/red]"
+                console.print(f"  {status} {name}")
+    else:
+        # Sequential execution
+        for config_path, config in valid_configs:
+            console.print(f"[dim]Running: {config.config_name}[/dim]")
+            name, exit_code = run_config(config_path)
+            results[name] = exit_code
+            status = "[green]✓[/green]" if exit_code == 0 else f"[red]✗ ({exit_code})[/red]"
+            console.print(f"  {status} {name}")
+
+    # Summary
+    succeeded = sum(1 for code in results.values() if code == 0)
+    failed = len(results) - succeeded
+
+    console.print(f"\n[bold]Batch complete:[/bold] {succeeded} succeeded, {failed} failed")
+
+    if failed > 0:
+        raise typer.Exit(1)
 
 
 @results_app.command("list")  # type: ignore[misc]
