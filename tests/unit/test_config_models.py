@@ -16,21 +16,57 @@ from llm_energy_measure.config.models import (
 
 
 class TestBatchingConfig:
-    """Tests for BatchingConfig."""
+    """Tests for BatchingConfig with industry-standard strategies."""
 
     def test_defaults(self):
         config = BatchingConfig()
         assert config.batch_size == 1
+        assert config.strategy == "static"
+        assert config.max_tokens_per_batch is None
         assert config.dynamic_batching is False
 
-    def test_custom_values(self):
-        config = BatchingConfig(batch_size=8, dynamic_batching=True)
+    def test_static_strategy(self):
+        """Static strategy: fixed batch size (MLPerf offline)."""
+        config = BatchingConfig(strategy="static", batch_size=8)
+        assert config.strategy == "static"
         assert config.batch_size == 8
-        assert config.dynamic_batching is True
+
+    def test_dynamic_strategy(self):
+        """Dynamic strategy: token-aware batching (MLPerf server)."""
+        config = BatchingConfig(strategy="dynamic", batch_size=8, max_tokens_per_batch=2048)
+        assert config.strategy == "dynamic"
+        assert config.max_tokens_per_batch == 2048
+
+    def test_sorted_static_strategy(self):
+        """Sorted static: sort by length then fixed batches."""
+        config = BatchingConfig(strategy="sorted_static", batch_size=4)
+        assert config.strategy == "sorted_static"
+
+    def test_sorted_dynamic_strategy(self):
+        """Sorted dynamic: sort by length + token budget."""
+        config = BatchingConfig(strategy="sorted_dynamic", batch_size=8, max_tokens_per_batch=1024)
+        assert config.strategy == "sorted_dynamic"
+        assert config.max_tokens_per_batch == 1024
+
+    def test_legacy_dynamic_batching_flag(self):
+        """Legacy dynamic_batching=True maps to strategy='dynamic'."""
+        config = BatchingConfig(dynamic_batching=True)
+        assert config.strategy == "dynamic"
+
+    def test_legacy_flag_does_not_override_explicit_strategy(self):
+        """Explicit strategy takes precedence over legacy flag."""
+        config = BatchingConfig(strategy="sorted_static", dynamic_batching=True)
+        # sorted_static is not "static", so flag should not override
+        assert config.strategy == "sorted_static"
 
     def test_batch_size_must_be_positive(self):
         with pytest.raises(ValidationError):
             BatchingConfig(batch_size=0)
+
+    def test_invalid_strategy_rejected(self):
+        """Invalid strategy value is rejected."""
+        with pytest.raises(ValidationError):
+            BatchingConfig(strategy="invalid")
 
 
 class TestLatencySimulation:

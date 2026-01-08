@@ -149,21 +149,60 @@ def _create_batches(
     tokenizer: PreTrainedTokenizer,
     config: ExperimentConfig,
 ) -> list[list[str]]:
-    """Create batches based on config settings."""
-    batching = config.batching_options
+    """Create batches based on config settings.
 
-    if batching.dynamic_batching:
-        # Dynamic batching uses token budget
+    Industry-standard strategies (per MLPerf/vLLM terminology):
+    - static: Fixed batch size, pads to max_length (MLPerf offline scenario)
+    - dynamic: Token-aware batching with max_tokens_per_batch (MLPerf server scenario)
+    - sorted_static: Sort by length, then static batches (reduces padding waste)
+    - sorted_dynamic: Sort by length + dynamic token budget (optimal packing)
+    """
+    batching = config.batching_options
+    strategy = batching.strategy
+
+    # Determine max tokens per batch
+    max_tokens = batching.max_tokens_per_batch or config.max_input_tokens
+
+    # Apply length sorting for relevant strategies
+    working_prompts = prompts
+    if strategy in ("sorted_static", "sorted_dynamic"):
+        working_prompts = sorted(prompts, key=len)
+        logger.debug(f"Sorted {len(prompts)} prompts by length for {strategy} strategy")
+
+    # Create batches based on strategy
+    if strategy == "static":
+        return create_fixed_batches(
+            prompts=working_prompts,
+            batch_size=batching.batch_size,
+        )
+    elif strategy == "dynamic":
         return create_adaptive_batches(
-            prompts=prompts,
+            prompts=working_prompts,
             tokenizer=tokenizer,
-            max_tokens_per_batch=config.max_input_tokens,
+            max_tokens_per_batch=max_tokens,
+            max_prompt_tokens=config.max_input_tokens,
+            max_batch_size=batching.batch_size,
+        )
+    elif strategy == "sorted_static":
+        # Sort by length, then static batches
+        return create_fixed_batches(
+            prompts=working_prompts,
+            batch_size=batching.batch_size,
+        )
+    elif strategy == "sorted_dynamic":
+        # Sort by length + dynamic token budget
+        return create_adaptive_batches(
+            prompts=working_prompts,
+            tokenizer=tokenizer,
+            max_tokens_per_batch=max_tokens,
             max_prompt_tokens=config.max_input_tokens,
             max_batch_size=batching.batch_size,
         )
     else:
+        # Fallback to static
+        logger.warning(f"Unknown batching strategy '{strategy}', using static")
         return create_fixed_batches(
-            prompts=prompts,
+            prompts=working_prompts,
             batch_size=batching.batch_size,
         )
 
