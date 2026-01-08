@@ -12,6 +12,7 @@ from llm_energy_measure.config.models import (
     HuggingFacePromptSource,
     LatencySimulation,
     QuantizationConfig,
+    TrafficSimulation,
 )
 
 
@@ -69,22 +70,49 @@ class TestBatchingConfig:
             BatchingConfig(strategy="invalid")
 
 
-class TestLatencySimulation:
-    """Tests for LatencySimulation."""
+class TestTrafficSimulation:
+    """Tests for TrafficSimulation (MLPerf-style traffic patterns)."""
 
     def test_defaults(self):
-        config = LatencySimulation()
+        config = TrafficSimulation()
         assert config.enabled is False
-        assert config.delay_min_ms == 0.0
+        assert config.mode == "poisson"
+        assert config.target_qps == 1.0
+        assert config.seed is None
 
-    def test_delay_range_validation(self):
-        with pytest.raises(ValidationError, match="delay_min_ms must be <= delay_max_ms"):
-            LatencySimulation(delay_min_ms=100, delay_max_ms=50)
+    def test_poisson_mode(self):
+        """Poisson mode: MLPerf server scenario."""
+        config = TrafficSimulation(enabled=True, mode="poisson", target_qps=10.0)
+        assert config.mode == "poisson"
+        assert config.target_qps == 10.0
 
-    def test_valid_delay_range(self):
-        config = LatencySimulation(enabled=True, delay_min_ms=10, delay_max_ms=100)
-        assert config.delay_min_ms == 10
-        assert config.delay_max_ms == 100
+    def test_constant_mode(self):
+        """Constant mode: fixed inter-arrival time."""
+        config = TrafficSimulation(enabled=True, mode="constant", target_qps=5.0)
+        assert config.mode == "constant"
+        assert config.target_qps == 5.0
+
+    def test_target_qps_must_be_positive(self):
+        """target_qps must be > 0."""
+        with pytest.raises(ValidationError):
+            TrafficSimulation(target_qps=0)
+        with pytest.raises(ValidationError):
+            TrafficSimulation(target_qps=-1.0)
+
+    def test_seed_for_reproducibility(self):
+        """seed allows reproducible Poisson arrivals."""
+        config = TrafficSimulation(enabled=True, mode="poisson", seed=42)
+        assert config.seed == 42
+
+    def test_invalid_mode_rejected(self):
+        """Invalid mode is rejected."""
+        with pytest.raises(ValidationError):
+            TrafficSimulation(mode="invalid")
+
+    def test_backwards_compat_alias(self):
+        """LatencySimulation is an alias for TrafficSimulation."""
+        config = LatencySimulation()
+        assert isinstance(config, TrafficSimulation)
 
 
 class TestQuantizationConfig:
