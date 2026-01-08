@@ -19,6 +19,94 @@ This allows flexible workflows:
 - **Quick exploration**: Presets with minimal flags
 - **Parameter sweeps**: Base config with CLI overrides
 
+## CLI vs YAML Philosophy
+
+**Core Principle**: CLI flags are for workflow control; YAML configs are for testable experiment parameters.
+
+Think of it as: **CLI = "how to run"** vs **YAML = "what to measure"**
+
+### Workflow Params (CLI Recommended)
+
+These control execution workflow, not the experiment itself:
+
+| Flag | Purpose |
+|------|---------|
+| `--model`, `-m` | Which model to benchmark |
+| `--dataset`, `-d` | Which prompt source to use |
+| `--preset` | Quick-start configuration template |
+| `--cycles`, `-c` | Statistical repetition count |
+| `--seed` | Reproducibility seed |
+| `--max-tokens` | Generation limit |
+| `--fresh` | Ignore incomplete experiments |
+| `--resume` | Continue interrupted experiment |
+| `--no-aggregate` | Skip auto-aggregation |
+| `--results-dir` | Output location |
+
+### Testable Params (YAML Required for Formal Experiments)
+
+These define the experiment configuration that affects measurements:
+
+| Config Field | What It Controls |
+|--------------|------------------|
+| `batching_options.batch_size` | Inference batch size |
+| `batching_options.strategy` | static/dynamic/sorted_static/sorted_dynamic |
+| `fp_precision` | float32/float16/bfloat16 |
+| `num_processes` | Distributed workers |
+| `gpu_list` | GPU allocation |
+| `num_cycles` | Statistical repetition (YAML alternative to --cycles) |
+| `decoder_config.temperature` | Sampling temperature |
+| `quantization_config.*` | 4-bit/8-bit quantisation |
+| `latency_simulation.*` | Traffic patterns (Poisson/constant) |
+| `sharding_config.*` | Tensor/pipeline parallelism |
+
+### Deprecated CLI Flags
+
+These CLI flags **still work** but emit deprecation warnings:
+
+```
+--batch-size, -b    → Use batching_options.batch_size in YAML
+--precision         → Use fp_precision in YAML
+--num-processes     → Use num_processes in YAML
+--gpu-list          → Use gpu_list in YAML
+--temperature       → Use decoder_config.temperature in YAML
+--quantization      → Use quantization_config.quantization in YAML
+```
+
+**Why deprecated?** They encourage ad-hoc experiments harder to reproduce.
+**Why keep working?** Backwards compatibility and quick iteration.
+
+### Override Tracking
+
+All CLI overrides are recorded in result metadata for traceability:
+
+```json
+{
+  "effective_config": { "batch_size": 8, ... },
+  "cli_overrides": {
+    "batching_options.batch_size": { "original": 1, "new": 8 }
+  }
+}
+```
+
+### Workflow Examples
+
+```bash
+# 1. Formal experiment (fully reproducible)
+llm-energy-measure experiment configs/llama2-7b-benchmark.yaml
+
+# 2. Quick exploration (preset + model)
+llm-energy-measure experiment --preset quick-test --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 -d alpaca
+
+# 3. Parameter sweep (override tracked in metadata)
+for batch in 1 2 4 8; do
+  llm-energy-measure experiment config.yaml --batch-size $batch
+done
+
+# 4. Statistical robustness (CLI or YAML)
+llm-energy-measure experiment config.yaml --cycles 5
+# Or set num_cycles: 5 in YAML
+```
+
 ## Key Files
 
 ### models.py
@@ -219,6 +307,45 @@ latency_simulation:
 | `constant` | Fixed inter-arrival = 1/target_qps |
 
 **Poisson arrivals** model real-world traffic patterns where requests arrive randomly but at a known average rate.
+
+## Scheduled Experiments (Daemon Mode)
+
+Run experiments on a schedule for temporal variation studies (e.g., energy consumption at different times of day).
+
+### CLI Usage
+```bash
+# Run every 6 hours for 24 hours
+llm-energy-measure schedule config.yaml --interval 6h --duration 24h --dataset alpaca -n 100
+
+# Run daily at 9am for a week
+llm-energy-measure schedule config.yaml --at 09:00 --duration 7d
+
+# Run at 9am on weekdays only
+llm-energy-measure schedule config.yaml --at 09:00 --days weekdays --duration 14d
+
+# Run every 12 hours on weekends
+llm-energy-measure schedule config.yaml --interval 12h --days sat,sun --duration 48h
+```
+
+### YAML Configuration
+```yaml
+schedule_config:
+  enabled: true
+  interval: "6h"              # Run every 6 hours (alternative to 'at')
+  at: "09:00"                 # Run at specific time (alternative to 'interval')
+  days: ["mon", "wed", "fri"] # Filter to specific days (optional)
+  total_duration: "7d"        # Stop daemon after 7 days
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | false | Enable scheduled mode |
+| `interval` | str | None | Interval between runs (e.g., '6h', '30m') |
+| `at` | str | None | Time of day to run (e.g., '09:00') |
+| `days` | list | None | Days to run: ['mon','tue',...] or ['weekdays'] |
+| `total_duration` | str | '24h' | How long to run daemon |
+
+**Day aliases**: `weekdays` (mon-fri), `weekends` (sat-sun)
 
 ## Validation Rules
 

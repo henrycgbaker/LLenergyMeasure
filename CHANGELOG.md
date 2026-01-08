@@ -16,6 +16,15 @@ Implements academic and industry-standard benchmarking features based on MLPerf,
   - Multi-cycle results saved to `results/multi_cycle/<experiment_id>.json`
   - Uses t-distribution for small sample confidence intervals (academic standard)
 
+- **Scheduled Experiments** (daemon mode) for temporal variation studies
+  - `llm-energy-measure schedule` command for running experiments on a schedule
+  - Interval-based scheduling: `--interval 6h` runs every 6 hours
+  - Time-of-day scheduling: `--at 09:00` runs daily at 9am
+  - Day filtering: `--days mon,wed,fri` or `--days weekdays`
+  - Duration control: `--duration 7d` stops daemon after 7 days
+  - Graceful shutdown on SIGINT/SIGTERM with progress tracking
+  - YAML config support via `schedule_config` section
+
 - **MLPerf-Style Traffic Simulation** replacing naive delay simulation
   - `TrafficSimulation` config with Poisson and constant arrival modes
   - `target_qps` parameter for queries-per-second arrival rate

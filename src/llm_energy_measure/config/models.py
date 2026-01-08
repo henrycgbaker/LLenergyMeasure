@@ -102,6 +102,70 @@ class TrafficSimulation(BaseModel):
 # Backwards compatibility alias
 LatencySimulation = TrafficSimulation
 
+# Valid day names for schedule configuration
+VALID_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+DAY_ALIASES = {"weekdays": ["mon", "tue", "wed", "thu", "fri"], "weekends": ["sat", "sun"]}
+
+
+class ScheduleConfig(BaseModel):
+    """Schedule configuration for daemon mode experiments.
+
+    Supports interval-based scheduling, time-of-day scheduling, and day filtering.
+    All options can be combined for flexible scheduling patterns.
+
+    Examples:
+        - interval: "6h" → run every 6 hours
+        - at: "09:00" → run daily at 9am
+        - at: "09:00", days: ["mon", "wed", "fri"] → 9am on Mon/Wed/Fri
+        - interval: "12h", days: ["sat", "sun"] → every 12h on weekends
+    """
+
+    enabled: bool = Field(default=False, description="Enable scheduled mode")
+    interval: str | None = Field(
+        default=None,
+        description="Interval between runs (e.g., '6h', '30m', '1d')",
+    )
+    at: str | None = Field(
+        default=None,
+        description="Specific time of day to run (e.g., '09:00', '14:30')",
+    )
+    days: list[str] | None = Field(
+        default=None,
+        description="Days to run on (e.g., ['mon', 'wed', 'fri'] or ['weekdays'])",
+    )
+    total_duration: str = Field(
+        default="24h",
+        description="Total duration to run daemon (e.g., '24h', '7d')",
+    )
+
+    @field_validator("days", mode="before")
+    @classmethod
+    def expand_day_aliases(cls, v: list[str] | str | None) -> list[str] | None:
+        """Expand day aliases like 'weekdays' and 'weekends'."""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            v = [v]
+        expanded: list[str] = []
+        for day in v:
+            day_lower = day.lower()
+            if day_lower in DAY_ALIASES:
+                expanded.extend(DAY_ALIASES[day_lower])
+            elif day_lower in VALID_DAYS:
+                expanded.append(day_lower)
+            else:
+                raise ValueError(
+                    f"Invalid day '{day}'. Valid: {sorted(VALID_DAYS)} or {list(DAY_ALIASES.keys())}"
+                )
+        return expanded
+
+    @model_validator(mode="after")
+    def validate_schedule_has_timing(self) -> "ScheduleConfig":
+        """Ensure at least one timing option is set when enabled."""
+        if self.enabled and not self.interval and not self.at:
+            raise ValueError("Schedule requires either 'interval' or 'at' to be set")
+        return self
+
 
 class DecoderConfig(BaseModel):
     """Decoder/generation configuration."""
@@ -242,6 +306,9 @@ class ExperimentConfig(BaseModel):
     quantization_config: QuantizationConfig = Field(
         default_factory=QuantizationConfig, description="Quantization config"
     )
+    schedule_config: ScheduleConfig = Field(
+        default_factory=ScheduleConfig, description="Schedule config for daemon mode"
+    )
 
     # Precision and backend
     fp_precision: Literal["float32", "float16", "bfloat16"] = Field(
@@ -253,6 +320,12 @@ class ExperimentConfig(BaseModel):
 
     # Experiment tracking
     cycle_id: int | None = Field(default=None, description="Experiment cycle ID")
+    num_cycles: int = Field(
+        default=1,
+        ge=1,
+        le=10,
+        description="Number of cycles for statistical robustness (1-10)",
+    )
     query_rate: float = Field(default=1.0, ge=0, description="Query rate (queries/sec)")
 
     # Reproducibility

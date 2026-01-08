@@ -383,15 +383,7 @@ def experiment(
         str | None,
         typer.Option("--model", "-m", help="HuggingFace model name (required with --preset)"),
     ] = None,
-    # CLI overrides for config parameters
-    batch_size: Annotated[
-        int | None,
-        typer.Option("--batch-size", "-b", help="Override batch size"),
-    ] = None,
-    precision: Annotated[
-        str | None,
-        typer.Option("--precision", help="Override fp_precision (float32/float16/bfloat16)"),
-    ] = None,
+    # Workflow parameters (recommended)
     max_tokens: Annotated[
         int | None,
         typer.Option("--max-tokens", help="Override max_output_tokens"),
@@ -400,27 +392,37 @@ def experiment(
         int | None,
         typer.Option("--seed", help="Random seed for reproducibility"),
     ] = None,
+    cycles: Annotated[
+        int | None,
+        typer.Option("--cycles", "-c", help="Number of cycles for statistical robustness (1-10)"),
+    ] = None,
+    # DEPRECATED: Testable params - use YAML config for formal experiments
+    batch_size: Annotated[
+        int | None,
+        typer.Option(
+            "--batch-size", "-b", help="[Deprecated] Use YAML config for formal experiments"
+        ),
+    ] = None,
+    precision: Annotated[
+        str | None,
+        typer.Option("--precision", help="[Deprecated] Use YAML config for formal experiments"),
+    ] = None,
     num_processes: Annotated[
         int | None,
-        typer.Option("--num-processes", help="Override number of processes"),
+        typer.Option("--num-processes", help="[Deprecated] Use YAML config for formal experiments"),
     ] = None,
     gpu_list: Annotated[
         str | None,
-        typer.Option("--gpu-list", help="Override GPU list (comma-separated, e.g., '0,1,2')"),
+        typer.Option("--gpu-list", help="[Deprecated] Use YAML config for formal experiments"),
     ] = None,
     temperature: Annotated[
         float | None,
-        typer.Option("--temperature", help="Override decoder temperature"),
+        typer.Option("--temperature", help="[Deprecated] Use YAML config for formal experiments"),
     ] = None,
     quantization: Annotated[
         bool | None,
-        typer.Option("--quantization/--no-quantization", help="Enable/disable quantization"),
+        typer.Option("--quantization/--no-quantization", help="[Deprecated] Use YAML config"),
     ] = None,
-    # Multi-cycle options (statistical robustness)
-    cycles: Annotated[
-        int,
-        typer.Option("--cycles", "-c", help="Number of cycles for statistical robustness (1-10)"),
-    ] = 1,
     # Workflow control options (Phases 1-5)
     no_aggregate: Annotated[
         bool, typer.Option("--no-aggregate", help="Skip auto-aggregation after experiment")
@@ -596,24 +598,43 @@ def experiment(
             console.print("[red]Error:[/red] model_name is required (from config or --model)")
             raise typer.Exit(1)
 
-        # 4. Prepare CLI overrides
+        # 4. Prepare CLI overrides and emit deprecation warnings for testable params
+        # Philosophy: CLI = workflow/meta params, YAML = testable experiment params
+        deprecated_flags: list[str] = []
         cli_overrides_dict: dict[str, Any] = {}
-        if batch_size is not None:
-            cli_overrides_dict["batching_options.batch_size"] = batch_size
-        if precision is not None:
-            cli_overrides_dict["fp_precision"] = precision
+
+        # Workflow params (recommended) - no deprecation warning
         if max_tokens is not None:
             cli_overrides_dict["max_output_tokens"] = max_tokens
         if seed is not None:
             cli_overrides_dict["random_seed"] = seed
+
+        # Deprecated testable params - warn but still apply
+        if batch_size is not None:
+            deprecated_flags.append("--batch-size")
+            cli_overrides_dict["batching_options.batch_size"] = batch_size
+        if precision is not None:
+            deprecated_flags.append("--precision")
+            cli_overrides_dict["fp_precision"] = precision
         if num_processes is not None:
+            deprecated_flags.append("--num-processes")
             cli_overrides_dict["num_processes"] = num_processes
         if gpu_list is not None:
+            deprecated_flags.append("--gpu-list")
             cli_overrides_dict["gpu_list"] = [int(g.strip()) for g in gpu_list.split(",")]
         if temperature is not None:
+            deprecated_flags.append("--temperature")
             cli_overrides_dict["decoder_config.temperature"] = temperature
         if quantization is not None:
+            deprecated_flags.append("--quantization")
             cli_overrides_dict["quantization_config.quantization"] = quantization
+
+        # Emit deprecation warning if any deprecated flags used
+        if deprecated_flags:
+            console.print(
+                f"[yellow]Deprecation warning:[/yellow] {', '.join(deprecated_flags)} "
+                "are testable params - use YAML config for formal experiments"
+            )
 
         # 5. Apply CLI overrides and track them
         config_dict, tracked_overrides = _apply_cli_overrides(config_dict, cli_overrides_dict)
@@ -640,14 +661,14 @@ def experiment(
         # Display config with override visibility
         _display_config_summary(config, tracked_overrides, preset_name)
 
-        # Validate and display cycles
-        if cycles < 1 or cycles > 10:
-            console.print("[red]Error:[/red] --cycles must be between 1 and 10")
+        # Resolve cycles: CLI > config.num_cycles > default (1)
+        effective_cycles = cycles if cycles is not None else config.num_cycles
+        if effective_cycles < 1 or effective_cycles > 10:
+            console.print("[red]Error:[/red] cycles must be between 1 and 10")
             raise typer.Exit(1)
-        if cycles > 1:
-            console.print(
-                f"  [cyan]Multi-cycle mode:[/cyan] {cycles} cycles for statistical robustness"
-            )
+        if effective_cycles > 1:
+            source = "CLI" if cycles is not None else "config"
+            console.print(f"  [cyan]Multi-cycle mode:[/cyan] {effective_cycles} cycles ({source})")
 
         # Check for MIG instances and warn about energy measurement (Phase: MIG support)
         from llm_energy_measure.core.gpu_info import detect_gpu_topology, validate_gpu_selection
@@ -722,11 +743,13 @@ def experiment(
         cycle_metadata_list: list[Any] = []
         base_experiment_id = experiment_id
 
-        for cycle_idx in range(cycles):
+        for cycle_idx in range(effective_cycles):
             # Generate cycle-specific experiment ID
-            if cycles > 1:
+            if effective_cycles > 1:
                 cycle_experiment_id = f"{base_experiment_id}_c{cycle_idx}"
-                console.print(f"\n[bold cyan]━━━ Cycle {cycle_idx + 1}/{cycles} ━━━[/bold cyan]")
+                console.print(
+                    f"\n[bold cyan]━━━ Cycle {cycle_idx + 1}/{effective_cycles} ━━━[/bold cyan]"
+                )
             else:
                 cycle_experiment_id = experiment_id
 
@@ -747,7 +770,7 @@ def experiment(
 
             # Update temp config with cycle-specific experiment ID
             metadata["_metadata"]["experiment_id"] = cycle_experiment_id
-            if cycles > 1:
+            if effective_cycles > 1:
                 metadata["_metadata"]["cycle_id"] = cycle_idx
             config_with_metadata = {**effective_config, **metadata}
 
@@ -826,7 +849,7 @@ def experiment(
                             current_state.status = ExperimentStatus.AGGREGATED
                             state_manager.delete(current_state.experiment_id)
                             cycle_results.append(agg_result)
-                            if cycles == 1:
+                            if effective_cycles == 1:
                                 console.print(f"\n[green]Results saved to:[/green] {result_path}")
                         except AggregationError as e:
                             console.print(f"[yellow]Aggregation warning:[/yellow] {e}")
@@ -835,7 +858,7 @@ def experiment(
                                 f"llm-energy-measure aggregate {current_state.experiment_id}"
                             )
                             state_manager.save(current_state)
-                            if cycles > 1:
+                            if effective_cycles > 1:
                                 console.print("[red]Cycle failed, stopping multi-cycle run[/red]")
                                 raise typer.Exit(1) from None
                     else:
@@ -852,7 +875,7 @@ def experiment(
                     console.print(
                         f"  Completed: {current_state.processes_completed}/{current_state.num_processes}"
                     )
-                    if cycles > 1:
+                    if effective_cycles > 1:
                         console.print("[red]Cycle incomplete, stopping multi-cycle run[/red]")
                         raise typer.Exit(1)
                     console.print(
@@ -883,7 +906,7 @@ def experiment(
                 raise typer.Exit(exit_code)
 
         # Multi-cycle aggregation and statistics
-        if cycles > 1 and len(cycle_results) == cycles:
+        if effective_cycles > 1 and len(cycle_results) == effective_cycles:
             from llm_energy_measure.results.cycle_statistics import create_multi_cycle_result
 
             console.print("\n[bold cyan]━━━ Multi-Cycle Statistics ━━━[/bold cyan]")
@@ -902,7 +925,7 @@ def experiment(
 
             # Display statistics
             stats = multi_cycle_result.statistics
-            console.print(f"\n[green]✓ Completed {cycles} cycles[/green]")
+            console.print(f"\n[green]✓ Completed {effective_cycles} cycles[/green]")
             console.print("\n[bold]Energy:[/bold]")
             console.print(f"  Mean: {stats.energy_mean_j:.2f} J ± {stats.energy_std_j:.2f}")
             console.print(
@@ -1731,6 +1754,326 @@ def _show_aggregated_result(result: AggregatedResult) -> None:
         console.print("[green]✓ GPU attribution verified[/green]")
     for warning in meta.warnings:
         console.print(f"[yellow]⚠ {warning}[/yellow]")
+
+
+def _parse_duration(duration_str: str) -> float:
+    """Parse duration string to seconds.
+
+    Supports: '30s', '5m', '2h', '1d', '1w'
+    """
+    import re
+
+    match = re.match(r"^(\d+(?:\.\d+)?)\s*([smhdw])$", duration_str.lower().strip())
+    if not match:
+        raise ValueError(f"Invalid duration format: {duration_str}. Use e.g., '30m', '6h', '1d'")
+
+    value = float(match.group(1))
+    unit = match.group(2)
+
+    multipliers = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+    return value * multipliers[unit]
+
+
+def _format_duration(seconds: float) -> str:
+    """Format seconds as human-readable duration."""
+    if seconds < 60:
+        return f"{seconds:.0f}s"
+    elif seconds < 3600:
+        return f"{seconds / 60:.0f}m"
+    elif seconds < 86400:
+        return f"{seconds / 3600:.1f}h"
+    else:
+        return f"{seconds / 86400:.1f}d"
+
+
+@app.command("schedule")  # type: ignore[misc]
+def schedule_experiment(
+    config_path: Annotated[
+        Path | None, typer.Argument(help="Path to experiment config file")
+    ] = None,
+    # Scheduling options (CLI overrides config)
+    interval: Annotated[
+        str | None,
+        typer.Option("--interval", "-i", help="Interval between runs (e.g., '6h', '30m', '1d')"),
+    ] = None,
+    at_time: Annotated[
+        str | None,
+        typer.Option("--at", help="Specific time of day to run (e.g., '09:00', '14:30')"),
+    ] = None,
+    days: Annotated[
+        str | None,
+        typer.Option("--days", help="Days to run on (e.g., 'mon,wed,fri' or 'weekdays')"),
+    ] = None,
+    total_duration: Annotated[
+        str,
+        typer.Option("--duration", "-d", help="Total duration to run daemon (e.g., '24h', '7d')"),
+    ] = "24h",
+    # Prompt source options
+    dataset: Annotated[
+        str | None,
+        typer.Option("--dataset", help="Built-in dataset alias or HuggingFace path"),
+    ] = None,
+    sample_size: Annotated[
+        int | None,
+        typer.Option("--sample-size", "-n", help="Number of prompts to use"),
+    ] = None,
+    prompts_file: Annotated[
+        Path | None,
+        typer.Option("--prompts", "-p", help="Path to prompts file"),
+    ] = None,
+    # Other options
+    model: Annotated[
+        str | None,
+        typer.Option("--model", "-m", help="HuggingFace model name"),
+    ] = None,
+    preset: Annotated[
+        str | None,
+        typer.Option("--preset", help=f"Built-in preset ({', '.join(PRESETS.keys())})"),
+    ] = None,
+    results_dir: Annotated[
+        Path | None,
+        typer.Option("--results-dir", "-o", help="Results directory"),
+    ] = None,
+) -> None:
+    """Run experiments on a schedule for temporal variation studies.
+
+    Daemon mode runs experiments at specified intervals or times, useful for
+    studying how energy consumption varies by time of day or day of week.
+
+    Examples:
+
+        # Run every 6 hours for 24 hours (4 experiments)
+        llm-energy-measure schedule config.yaml --interval 6h --duration 24h
+
+        # Run daily at 9am for a week
+        llm-energy-measure schedule config.yaml --at 09:00 --duration 7d
+
+        # Run at 9am on weekdays only for 2 weeks
+        llm-energy-measure schedule config.yaml --at 09:00 --days weekdays --duration 14d
+
+        # Run every 12 hours on weekends
+        llm-energy-measure schedule config.yaml --interval 12h --days sat,sun --duration 48h
+
+    Configuration can also be set in YAML:
+
+        schedule_config:
+          enabled: true
+          interval: "6h"
+          at: "09:00"
+          days: ["mon", "wed", "fri"]
+          total_duration: "7d"
+    """
+    import signal
+    import time
+    from datetime import datetime
+
+    import schedule as sched
+
+    from llm_energy_measure.config import load_config
+    from llm_energy_measure.config.models import DAY_ALIASES, VALID_DAYS
+
+    # Validate inputs
+    if not config_path and not preset:
+        console.print("[red]Error:[/red] Provide config file or --preset")
+        raise typer.Exit(1)
+
+    # Load config
+    if config_path:
+        config = load_config(config_path)
+        if model:
+            config = config.model_copy(update={"model_name": model})
+    else:
+        from llm_energy_measure.config.models import ExperimentConfig
+
+        if not model:
+            console.print(
+                "[red]Error:[/red] --model is required when using --preset without config"
+            )
+            raise typer.Exit(1)
+        preset_config = {**PRESETS[preset], "config_name": f"preset-{preset}", "model_name": model}  # type: ignore[index]
+        config = ExperimentConfig(**preset_config)
+
+    # Resolve schedule settings: CLI > config > error
+    schedule_cfg = config.schedule_config
+    effective_interval = interval or schedule_cfg.interval
+    effective_at = at_time or schedule_cfg.at
+    effective_duration = total_duration if total_duration != "24h" else schedule_cfg.total_duration
+
+    # Parse days
+    effective_days: list[str] | None = None
+    if days:
+        effective_days = []
+        for day in days.split(","):
+            day_lower = day.strip().lower()
+            if day_lower in DAY_ALIASES:
+                effective_days.extend(DAY_ALIASES[day_lower])
+            elif day_lower in VALID_DAYS:
+                effective_days.append(day_lower)
+            else:
+                console.print(f"[red]Error:[/red] Invalid day '{day}'")
+                console.print(f"Valid: {sorted(VALID_DAYS)} or {list(DAY_ALIASES.keys())}")
+                raise typer.Exit(1)
+    elif schedule_cfg.days:
+        effective_days = schedule_cfg.days
+
+    # Validate we have timing
+    if not effective_interval and not effective_at:
+        console.print("[red]Error:[/red] Specify --interval or --at (or set in config)")
+        raise typer.Exit(1)
+
+    # Parse durations
+    try:
+        duration_sec = _parse_duration(effective_duration)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+    interval_sec: float | None = None
+    if effective_interval:
+        try:
+            interval_sec = _parse_duration(effective_interval)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1) from None
+
+    # Display schedule info
+    console.print("\n[bold cyan]━━━ Scheduled Experiment Mode ━━━[/bold cyan]\n")
+    console.print(f"  [cyan]Model:[/cyan] {config.model_name}")
+    console.print(f"  [cyan]Duration:[/cyan] {effective_duration}")
+
+    if effective_interval:
+        console.print(f"  [cyan]Interval:[/cyan] {effective_interval}")
+    if effective_at:
+        console.print(f"  [cyan]Time:[/cyan] {effective_at}")
+    if effective_days:
+        console.print(f"  [cyan]Days:[/cyan] {', '.join(effective_days)}")
+
+    # Calculate expected runs
+    if interval_sec:
+        expected_runs = int(duration_sec / interval_sec) + 1
+        console.print(f"  [cyan]Expected runs:[/cyan] ~{expected_runs}")
+
+    console.print()
+
+    # State tracking
+    run_count = 0
+    stop_requested = False
+    start_time = time.time()
+    end_time = start_time + duration_sec
+
+    def _should_run_today() -> bool:
+        """Check if we should run based on day filter."""
+        if not effective_days:
+            return True
+        today = datetime.now().strftime("%a").lower()[:3]
+        return today in effective_days
+
+    def _run_experiment() -> None:
+        """Run a single experiment."""
+        nonlocal run_count
+
+        if not _should_run_today():
+            console.print("[dim]Skipping - not a scheduled day[/dim]")
+            return
+
+        run_count += 1
+        run_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        console.print(f"\n[bold cyan]━━━ Run #{run_count} at {run_time} ━━━[/bold cyan]")
+
+        # Build experiment command
+        cmd = [
+            "llm-energy-measure",
+            "experiment",
+        ]
+
+        if config_path:
+            cmd.append(str(config_path))
+        if preset:
+            cmd.extend(["--preset", preset])
+        if model:
+            cmd.extend(["--model", model])
+        if dataset:
+            cmd.extend(["--dataset", dataset])
+        if sample_size:
+            cmd.extend(["--sample-size", str(sample_size)])
+        if prompts_file:
+            cmd.extend(["--prompts", str(prompts_file)])
+        if results_dir:
+            cmd.extend(["--results-dir", str(results_dir)])
+
+        console.print(f"[dim]$ {' '.join(cmd)}[/dim]\n")
+
+        # Run experiment as subprocess
+        import subprocess
+
+        result = subprocess.run(cmd)
+
+        if result.returncode == 0:
+            console.print(f"\n[green]✓ Run #{run_count} completed successfully[/green]")
+        else:
+            console.print(
+                f"\n[yellow]⚠ Run #{run_count} exited with code {result.returncode}[/yellow]"
+            )
+
+    def _handle_shutdown(signum: int, frame: Any) -> None:
+        """Handle graceful shutdown."""
+        nonlocal stop_requested
+        stop_requested = True
+        console.print("\n[yellow]Shutdown requested, will stop after current run...[/yellow]")
+
+    # Register signal handlers
+    signal.signal(signal.SIGINT, _handle_shutdown)
+    signal.signal(signal.SIGTERM, _handle_shutdown)
+
+    # Run first experiment immediately
+    console.print("[cyan]Running first experiment immediately...[/cyan]")
+    _run_experiment()
+
+    if stop_requested:
+        console.print("\n[yellow]Stopped after first run[/yellow]")
+        raise typer.Exit(0)
+
+    # Set up schedule
+    if effective_at and not interval_sec:
+        # Daily at specific time
+        sched.every().day.at(effective_at).do(_run_experiment)
+        console.print(f"\n[cyan]Scheduled daily at {effective_at}[/cyan]")
+    elif interval_sec:
+        # Interval-based
+        sched.every(int(interval_sec)).seconds.do(_run_experiment)
+        console.print(f"\n[cyan]Scheduled every {effective_interval}[/cyan]")
+
+    # Main loop
+    console.print(
+        f"[dim]Daemon running until {datetime.fromtimestamp(end_time).strftime('%Y-%m-%d %H:%M:%S')}[/dim]"
+    )
+    console.print("[dim]Press Ctrl+C to stop gracefully[/dim]\n")
+
+    while time.time() < end_time and not stop_requested:
+        sched.run_pending()
+
+        # Show next run time
+        next_run = sched.next_run()
+        if next_run:
+            remaining = (next_run - datetime.now()).total_seconds()
+            if remaining > 0:
+                console.print(
+                    f"\r[dim]Next run in {_format_duration(remaining)} "
+                    f"(total: {run_count} runs, {_format_duration(end_time - time.time())} remaining)[/dim]",
+                    end="",
+                )
+
+        time.sleep(10)  # Check every 10 seconds
+
+    # Summary
+    console.print("\n\n[bold cyan]━━━ Schedule Complete ━━━[/bold cyan]")
+    console.print(f"  [cyan]Total runs:[/cyan] {run_count}")
+    console.print(f"  [cyan]Duration:[/cyan] {_format_duration(time.time() - start_time)}")
+
+    if stop_requested:
+        console.print("  [yellow]Stopped early by user request[/yellow]")
+
+    raise typer.Exit(0)
 
 
 if __name__ == "__main__":
