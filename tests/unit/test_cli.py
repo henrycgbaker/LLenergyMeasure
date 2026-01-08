@@ -387,7 +387,7 @@ class TestExperimentCommand:
         """Error when neither config nor preset provided."""
         result = runner.invoke(app, ["experiment"])
         assert result.exit_code == 1
-        assert "config file or --preset" in result.stdout
+        assert "config file, --preset, or --resume" in result.stdout
 
     def test_experiment_preset_requires_model(self):
         """Error when --preset used without --model."""
@@ -409,15 +409,20 @@ class TestExperimentCommand:
     def test_experiment_valid_preset_with_model(self, tmp_path, monkeypatch):
         """Preset with model proceeds to subprocess (mock subprocess)."""
         import subprocess
+        from unittest.mock import MagicMock
 
         calls = []
 
-        def mock_run(cmd, **kwargs):
+        def mock_popen(cmd, **kwargs):
             calls.append(cmd)
-            # Return a mock result
-            return subprocess.CompletedProcess(cmd, returncode=0)
+            # Return a mock process
+            mock_proc = MagicMock()
+            mock_proc.wait.return_value = 0
+            mock_proc.returncode = 0
+            mock_proc.pid = 12345
+            return mock_proc
 
-        monkeypatch.setattr(subprocess, "run", mock_run)
+        monkeypatch.setattr(subprocess, "Popen", mock_popen)
 
         result = runner.invoke(
             app,
@@ -449,16 +454,21 @@ class TestExperimentCommand:
     def test_experiment_config_file_with_overrides(self, tmp_path, monkeypatch):
         """Config file with CLI overrides baked into temp config."""
         import subprocess
+        from unittest.mock import MagicMock
 
         import yaml
 
         calls = []
 
-        def mock_run(cmd, **kwargs):
+        def mock_popen(cmd, **kwargs):
             calls.append(cmd)
-            return subprocess.CompletedProcess(cmd, returncode=0)
+            mock_proc = MagicMock()
+            mock_proc.wait.return_value = 0
+            mock_proc.returncode = 0
+            mock_proc.pid = 12345
+            return mock_proc
 
-        monkeypatch.setattr(subprocess, "run", mock_run)
+        monkeypatch.setattr(subprocess, "Popen", mock_popen)
 
         config_file = tmp_path / "config.yaml"
         config_file.write_text("""
@@ -508,14 +518,19 @@ fp_precision: float32
     def test_experiment_gpu_list_parsing(self, tmp_path, monkeypatch):
         """GPU list is parsed from comma-separated string."""
         import subprocess
+        from unittest.mock import MagicMock
 
         calls = []
 
-        def mock_run(cmd, **kwargs):
+        def mock_popen(cmd, **kwargs):
             calls.append(cmd)
-            return subprocess.CompletedProcess(cmd, returncode=0)
+            mock_proc = MagicMock()
+            mock_proc.wait.return_value = 0
+            mock_proc.returncode = 0
+            mock_proc.pid = 12345
+            return mock_proc
 
-        monkeypatch.setattr(subprocess, "run", mock_run)
+        monkeypatch.setattr(subprocess, "Popen", mock_popen)
 
         config_file = tmp_path / "config.yaml"
         # Use num_processes <= len(gpu_list) after override
@@ -546,14 +561,19 @@ num_processes: 2
     def test_experiment_temperature_override(self, tmp_path, monkeypatch):
         """Temperature override is passed correctly."""
         import subprocess
+        from unittest.mock import MagicMock
 
         calls = []
 
-        def mock_run(cmd, **kwargs):
+        def mock_popen(cmd, **kwargs):
             calls.append(cmd)
-            return subprocess.CompletedProcess(cmd, returncode=0)
+            mock_proc = MagicMock()
+            mock_proc.wait.return_value = 0
+            mock_proc.returncode = 0
+            mock_proc.pid = 12345
+            return mock_proc
 
-        monkeypatch.setattr(subprocess, "run", mock_run)
+        monkeypatch.setattr(subprocess, "Popen", mock_popen)
 
         config_file = tmp_path / "config.yaml"
         config_file.write_text("""
@@ -569,6 +589,7 @@ model_name: test/model
                 "0.7",
                 "--dataset",
                 "alpaca",
+                "--fresh",  # Skip incomplete experiment detection
             ],
         )
         assert result.exit_code == 0
@@ -576,14 +597,19 @@ model_name: test/model
     def test_experiment_quantization_flag(self, tmp_path, monkeypatch):
         """Quantization boolean flag works."""
         import subprocess
+        from unittest.mock import MagicMock
 
         calls = []
 
-        def mock_run(cmd, **kwargs):
+        def mock_popen(cmd, **kwargs):
             calls.append(cmd)
-            return subprocess.CompletedProcess(cmd, returncode=0)
+            mock_proc = MagicMock()
+            mock_proc.wait.return_value = 0
+            mock_proc.returncode = 0
+            mock_proc.pid = 12345
+            return mock_proc
 
-        monkeypatch.setattr(subprocess, "run", mock_run)
+        monkeypatch.setattr(subprocess, "Popen", mock_popen)
 
         config_file = tmp_path / "config.yaml"
         config_file.write_text("""
@@ -599,6 +625,7 @@ model_name: test/model
                 "--quantization",
                 "--dataset",
                 "alpaca",
+                "--fresh",  # Skip incomplete experiment detection
             ],
         )
         assert result.exit_code == 0
@@ -612,6 +639,7 @@ model_name: test/model
                 "--no-quantization",
                 "--dataset",
                 "alpaca",
+                "--fresh",  # Skip incomplete experiment detection
             ],
         )
         assert result.exit_code == 0

@@ -72,7 +72,8 @@ class TestGetGpuUtilization:
         with patch("subprocess.check_output", return_value=b""):
             result = get_gpu_utilization()
 
-        assert result == []
+        # Empty output returns None (consistent with error handling)
+        assert result is None
 
 
 class TestGetUtilizationStats:
