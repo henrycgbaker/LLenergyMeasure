@@ -261,6 +261,13 @@ def _process_batch(
     # Apply traffic simulation if configured (MLPerf-style Poisson arrivals)
     _apply_traffic_simulation(config, batch_idx, traffic_generator)
 
+    # Set seed for reproducible sampling (seed + batch_idx for varied but reproducible)
+    if config.random_seed is not None:
+        batch_seed = config.random_seed + batch_idx
+        torch.manual_seed(batch_seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(batch_seed)
+
     # Run inference
     start_time = time.perf_counter()
 
@@ -301,26 +308,44 @@ def _build_generation_kwargs(
     max_output_tokens: int,
     allowed_new_tokens: int,
 ) -> dict[str, Any]:
-    """Build kwargs dict for model.generate()."""
+    """Build kwargs dict for model.generate().
+
+    Applies all decoder configuration settings correctly:
+    - Temperature=0 forces greedy decoding regardless of other settings
+    - Respects do_sample config value
+    - Applies repetition_penalty, min_p, no_repeat_ngram_size when enabled
+    """
     min_output = config.min_output_tokens or 0
-    min_length = input_length + min_output
+    decoder = config.decoder_config
 
     generation_kwargs: dict[str, Any] = {
-        "min_length": min_length,
+        "min_length": input_length + min_output,
         "max_new_tokens": min(max_output_tokens, allowed_new_tokens),
     }
 
-    # Apply decoder settings
-    decoder = config.decoder_config
-    temp = decoder.temperature
+    # Temperature=0 forces greedy regardless of other settings
+    if decoder.temperature == 0.0:
+        generation_kwargs["do_sample"] = False
+        return generation_kwargs
 
-    if temp and temp > 0:
-        generation_kwargs["do_sample"] = True
-        generation_kwargs["temperature"] = temp
-        if decoder.top_k:
+    # Apply sampling settings
+    generation_kwargs["do_sample"] = decoder.do_sample
+    generation_kwargs["temperature"] = decoder.temperature
+
+    if decoder.do_sample:
+        # Nucleus/top sampling (only when sampling is enabled)
+        if decoder.top_k > 0:
             generation_kwargs["top_k"] = decoder.top_k
-        if decoder.top_p:
+        if decoder.top_p < 1.0:
             generation_kwargs["top_p"] = decoder.top_p
+        if decoder.min_p > 0.0:
+            generation_kwargs["min_p"] = decoder.min_p
+
+        # Repetition control
+        if decoder.repetition_penalty != 1.0:
+            generation_kwargs["repetition_penalty"] = decoder.repetition_penalty
+        if decoder.no_repeat_ngram_size > 0:
+            generation_kwargs["no_repeat_ngram_size"] = decoder.no_repeat_ngram_size
 
     return generation_kwargs
 

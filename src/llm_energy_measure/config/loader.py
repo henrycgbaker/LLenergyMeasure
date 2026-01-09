@@ -2,13 +2,36 @@
 
 import json
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
 from llm_energy_measure.config.models import ExperimentConfig
 from llm_energy_measure.exceptions import ConfigurationError
+
+
+@dataclass
+class ConfigWarning:
+    """A configuration warning with severity level.
+
+    Severity levels:
+    - error: Impossible/invalid config combination (blocks execution without --force)
+    - warning: Problematic config that may cause unexpected behaviour
+    - info: Suboptimal but valid configuration
+    """
+
+    field: str
+    message: str
+    severity: Literal["error", "warning", "info"] = "warning"
+
+    def __str__(self) -> str:
+        return f"[{self.severity.upper()}] {self.field}: {self.message}"
+
+    def to_result_string(self) -> str:
+        """Format for embedding in results."""
+        return f"{self.severity}: {self.field} - {self.message}"
 
 
 def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
@@ -138,30 +161,181 @@ def load_config(path: Path | str) -> ExperimentConfig:
         raise ConfigurationError(f"Invalid config {path}: {e}") from e
 
 
-def validate_config(config: ExperimentConfig) -> list[str]:
+def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     """Validate configuration and return any warnings.
+
+    Checks for potential issues in configuration. Returns warnings at three levels:
+    - error: Impossible/conflicting config (blocks without --force)
+    - warning: Problematic config that may cause unexpected behaviour
+    - info: Suboptimal but valid configuration
 
     Args:
         config: Configuration to validate.
 
     Returns:
-        List of warning messages (empty if no warnings).
+        List of ConfigWarning objects (empty if no warnings).
     """
-    warnings = []
+    warnings: list[ConfigWarning] = []
 
-    # Check for potential issues (not errors, just warnings)
+    # =========================================================================
+    # DISTRIBUTED CONFIG
+    # =========================================================================
+
     if config.num_processes > 1 and len(config.gpu_list) == 1:
-        warnings.append("Multiple processes with single GPU may not provide parallelism benefits")
+        warnings.append(
+            ConfigWarning(
+                field="num_processes",
+                message="Multiple processes with single GPU may not provide parallelism benefits",
+                severity="info",
+            )
+        )
+
+    # =========================================================================
+    # TOKEN CONFIG
+    # =========================================================================
 
     if config.max_output_tokens > 2048:
         warnings.append(
-            f"max_output_tokens={config.max_output_tokens} is very high, " "may cause memory issues"
+            ConfigWarning(
+                field="max_output_tokens",
+                message=f"max_output_tokens={config.max_output_tokens} is very high, may cause memory issues",
+                severity="warning",
+            )
         )
 
-    if config.quantization_config.quantization and config.fp_precision == "float32":
+    # =========================================================================
+    # QUANTIZATION CONFIG
+    # =========================================================================
+
+    quant = config.quantization_config
+    if quant.quantization and config.fp_precision == "float32":
         warnings.append(
-            "Quantization enabled with float32 precision - "
-            "quantization typically uses float16 compute"
+            ConfigWarning(
+                field="quantization_config",
+                message="Quantization enabled with float32 precision - quantization typically uses float16 compute",
+                severity="warning",
+            )
+        )
+
+    if quant.quantization and not quant.load_in_4bit and not quant.load_in_8bit:
+        warnings.append(
+            ConfigWarning(
+                field="quantization_config",
+                message="quantization=True but neither load_in_4bit nor load_in_8bit specified",
+                severity="error",
+            )
+        )
+
+    # =========================================================================
+    # BATCHING CONFIG
+    # =========================================================================
+
+    batch = config.batching_options
+    if batch.strategy in ("dynamic", "sorted_dynamic") and batch.max_tokens_per_batch is None:
+        warnings.append(
+            ConfigWarning(
+                field="batching_options",
+                message=f"Dynamic batching strategy '{batch.strategy}' without max_tokens_per_batch - will use max_input_tokens as budget",
+                severity="info",
+            )
+        )
+
+    if batch.strategy in ("sorted_static", "sorted_dynamic") and batch.batch_size == 1:
+        warnings.append(
+            ConfigWarning(
+                field="batching_options",
+                message=f"Sorted strategy '{batch.strategy}' with batch_size=1 provides no benefit (sorting is pointless)",
+                severity="info",
+            )
+        )
+
+    # =========================================================================
+    # SHARDING CONFIG
+    # =========================================================================
+
+    shard = config.sharding_config
+    if shard.strategy != "none":
+        if shard.num_shards > len(config.gpu_list):
+            warnings.append(
+                ConfigWarning(
+                    field="sharding_config",
+                    message=f"num_shards={shard.num_shards} exceeds available GPUs ({len(config.gpu_list)})",
+                    severity="error",
+                )
+            )
+        if len(config.gpu_list) == 1:
+            warnings.append(
+                ConfigWarning(
+                    field="sharding_config",
+                    message=f"Sharding strategy '{shard.strategy}' with single GPU provides no benefit",
+                    severity="info",
+                )
+            )
+
+    # =========================================================================
+    # DECODER/SAMPLING CONFIG
+    # =========================================================================
+
+    decoder = config.decoder_config
+
+    # Sampling params have no effect in greedy/deterministic mode
+    if decoder.is_deterministic:
+        ignored_params = []
+        if decoder.top_k != 50:  # Non-default
+            ignored_params.append(f"top_k={decoder.top_k}")
+        if decoder.top_p != 1.0:  # Non-default
+            ignored_params.append(f"top_p={decoder.top_p}")
+        if decoder.min_p != 0.0:  # Non-default
+            ignored_params.append(f"min_p={decoder.min_p}")
+        if decoder.repetition_penalty != 1.0:  # Non-default
+            ignored_params.append(f"repetition_penalty={decoder.repetition_penalty}")
+
+        if ignored_params:
+            warnings.append(
+                ConfigWarning(
+                    field="decoder_config",
+                    message=f"Sampling params [{', '.join(ignored_params)}] have no effect in deterministic mode (temp=0 or do_sample=False)",
+                    severity="error",
+                )
+            )
+
+    # do_sample=True has no effect when temperature=0
+    if decoder.do_sample and decoder.temperature == 0.0:
+        warnings.append(
+            ConfigWarning(
+                field="decoder_config.do_sample",
+                message="do_sample=True has no effect when temperature=0 (greedy decoding)",
+                severity="info",
+            )
+        )
+
+    # Not recommended to alter both temperature and top_p
+    if decoder.temperature != 1.0 and decoder.temperature != 0.0 and decoder.top_p != 1.0:
+        warnings.append(
+            ConfigWarning(
+                field="decoder_config",
+                message="Both temperature and top_p modified - not recommended, alter one or the other",
+                severity="warning",
+            )
+        )
+
+    # =========================================================================
+    # TRAFFIC SIMULATION CONFIG
+    # =========================================================================
+
+    traffic = config.latency_simulation
+    if traffic.enabled and traffic.target_qps > 100:
+        warnings.append(
+            ConfigWarning(
+                field="latency_simulation",
+                message=f"target_qps={traffic.target_qps} is very high - may not achieve target rate",
+                severity="warning",
+            )
         )
 
     return warnings
+
+
+def has_blocking_warnings(warnings: list[ConfigWarning]) -> bool:
+    """Check if any warnings are blocking (error severity)."""
+    return any(w.severity == "error" for w in warnings)

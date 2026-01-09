@@ -218,13 +218,15 @@ def aggregate_results(
         f"throughput={avg_tokens_per_second:.2f} tok/s"
     )
 
-    # Propagate effective_config and cli_overrides from first result (Phase 0)
+    # Propagate effective_config, cli_overrides, and config_warnings from first result
     # All processes have the same config, so any result works
     effective_config: dict[str, Any] = {}
     cli_overrides: dict[str, Any] = {}
+    config_warnings: list[str] = []
     if raw_results:
         effective_config = raw_results[0].effective_config
         cli_overrides = raw_results[0].cli_overrides
+        config_warnings = raw_results[0].config_warnings
 
     return AggregatedResult(
         experiment_id=experiment_id,
@@ -240,6 +242,7 @@ def aggregate_results(
         end_time=end_time,
         effective_config=effective_config,
         cli_overrides=cli_overrides,
+        config_warnings=config_warnings,
     )
 
 

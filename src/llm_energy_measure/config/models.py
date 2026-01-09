@@ -167,14 +167,77 @@ class ScheduleConfig(BaseModel):
         return self
 
 
-class DecoderConfig(BaseModel):
-    """Decoder/generation configuration."""
+# Sampling presets aligned with industry best practices (vLLM, OpenAI, MLPerf)
+SAMPLING_PRESETS: dict[str, dict[str, Any]] = {
+    "deterministic": {"temperature": 0.0, "do_sample": False},
+    "standard": {"temperature": 1.0, "do_sample": True, "top_p": 0.95, "top_k": 50},
+    "creative": {"temperature": 0.8, "do_sample": True, "top_p": 0.9, "repetition_penalty": 1.1},
+    "factual": {"temperature": 0.3, "do_sample": True, "top_k": 10},
+}
 
-    temperature: float = Field(default=1.0, ge=0, description="Sampling temperature")
-    top_p: float = Field(default=1.0, ge=0, le=1, description="Top-p (nucleus) sampling")
-    top_k: int = Field(default=50, ge=0, description="Top-k sampling")
-    do_sample: bool = Field(default=True, description="Whether to use sampling")
-    repetition_penalty: float = Field(default=1.0, ge=0, description="Repetition penalty")
+
+class DecoderConfig(BaseModel):
+    """Decoder/generation configuration.
+
+    Supports industry-standard sampling parameters aligned with vLLM/HuggingFace.
+    Use `preset` for common configurations or set individual parameters.
+
+    Presets:
+    - deterministic: Greedy decoding (temp=0, do_sample=False)
+    - standard: Balanced sampling (temp=1.0, top_p=0.95, top_k=50)
+    - creative: Higher variance (temp=0.8, top_p=0.9, repetition_penalty=1.1)
+    - factual: Lower variance (temp=0.3, top_k=10)
+    """
+
+    # Core sampling
+    temperature: float = Field(
+        default=1.0, ge=0.0, le=2.0, description="Sampling temperature (0=greedy)"
+    )
+    do_sample: bool = Field(default=True, description="Enable sampling (ignored if temp=0)")
+
+    # Nucleus/top sampling
+    top_p: float = Field(
+        default=1.0, ge=0.0, le=1.0, description="Top-p nucleus sampling (1.0=disabled)"
+    )
+    top_k: int = Field(default=50, ge=0, description="Top-k sampling (0=disabled)")
+    min_p: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Min probability relative to top token (0=disabled)",
+    )
+
+    # Repetition control
+    repetition_penalty: float = Field(
+        default=1.0, ge=0.1, le=10.0, description="Repetition penalty (1.0=no penalty)"
+    )
+    no_repeat_ngram_size: int = Field(
+        default=0, ge=0, description="Prevent n-gram repetition (0=disabled)"
+    )
+
+    # Preset shortcut
+    preset: Literal["deterministic", "standard", "creative", "factual"] | None = Field(
+        default=None,
+        description="Sampling preset (expands to preset values, overrides apply on top)",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def apply_preset(cls, data: Any) -> Any:
+        """Expand preset, then apply explicit overrides on top."""
+        if (
+            isinstance(data, dict)
+            and (preset_name := data.get("preset"))
+            and preset_name in SAMPLING_PRESETS
+        ):
+            # Preset values first, then user overrides on top
+            return {**SAMPLING_PRESETS[preset_name], **data}
+        return data
+
+    @property
+    def is_deterministic(self) -> bool:
+        """True if using greedy decoding (temp=0 or do_sample=False)."""
+        return self.temperature == 0.0 or not self.do_sample
 
 
 class QuantizationConfig(BaseModel):

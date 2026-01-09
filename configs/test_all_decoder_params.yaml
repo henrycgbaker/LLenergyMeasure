@@ -1,0 +1,18 @@
+# Test config exercising ALL decoder parameters
+config_name: test-all-decoder-params
+model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+
+max_input_tokens: 32
+max_output_tokens: 16
+random_seed: 42
+
+decoder_config:
+  # Using creative preset as base, then overriding some values
+  preset: creative
+  temperature: 0.9           # Override preset's 0.8
+  top_p: 0.85                # Override preset's 0.9
+  top_k: 40                  # Explicit
+  min_p: 0.05                # New param
+  repetition_penalty: 1.3    # Override preset's 1.1
+  no_repeat_ngram_size: 3    # New param
+  do_sample: true            # Explicit

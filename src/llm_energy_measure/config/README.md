@@ -131,9 +131,93 @@ config = ExperimentConfig(
 - `BatchingConfig` - batch_size, strategy, max_tokens_per_batch
 - `ShardingConfig` - tensor_parallel, pipeline_parallel
 - `TrafficSimulation` - MLPerf-style Poisson/constant arrival simulation
-- `DecoderConfig` - temperature, top_p, top_k
+- `DecoderConfig` - temperature, sampling presets, repetition control
 - `QuantizationConfig` - 4-bit/8-bit BitsAndBytes
 - `PromptSourceConfig` - File or HuggingFace dataset prompts
+
+## Decoder Sampling Configuration
+
+Industry-standard sampling parameters aligned with vLLM, HuggingFace, and MLPerf.
+
+### Sampling Presets
+
+Use `preset` for common configurations:
+
+```yaml
+decoder_config:
+  preset: deterministic  # Greedy decoding (temp=0, do_sample=false)
+```
+
+| Preset | Temperature | do_sample | Notes |
+|--------|-------------|-----------|-------|
+| `deterministic` | 0.0 | false | Greedy decoding for reproducible benchmarks |
+| `standard` | 1.0 | true | Balanced sampling (top_p=0.95, top_k=50) |
+| `creative` | 0.8 | true | Higher variance (top_p=0.9, repetition_penalty=1.1) |
+| `factual` | 0.3 | true | Lower variance (top_k=10) |
+
+**Preset + override**: Explicit parameters override preset values:
+```yaml
+decoder_config:
+  preset: deterministic
+  temperature: 0.5  # This overrides the preset's temperature
+```
+
+### Full Parameter Reference
+
+| Parameter | Range | Default | Effect |
+|-----------|-------|---------|--------|
+| `temperature` | [0, 2] | 1.0 | 0=greedy, 1=standard, >1=more random |
+| `do_sample` | bool | true | Enable sampling (ignored if temp=0) |
+| `top_p` | [0, 1] | 1.0 | Nucleus sampling (1.0=disabled) |
+| `top_k` | ≥0 | 50 | Top-k sampling (0=disabled) |
+| `min_p` | [0, 1] | 0.0 | Min prob relative to top token (0=disabled) |
+| `repetition_penalty` | [0.1, 10] | 1.0 | Repetition penalty (1.0=disabled) |
+| `no_repeat_ngram_size` | ≥0 | 0 | Prevent n-gram repetition (0=disabled) |
+| `preset` | enum | None | Shortcut: deterministic/standard/creative/factual |
+
+### Example Configurations
+
+```yaml
+# Greedy decoding (most reproducible)
+decoder_config:
+  preset: deterministic
+
+# Custom sampling
+decoder_config:
+  temperature: 0.7
+  top_p: 0.9
+  repetition_penalty: 1.2
+  no_repeat_ngram_size: 3
+
+# Preset with override
+decoder_config:
+  preset: creative
+  repetition_penalty: 1.5  # Override preset value
+```
+
+### Seed Handling for Reproducibility
+
+Seeds are applied per-batch for varied but reproducible outputs:
+- Batch 0 uses `random_seed`
+- Batch 1 uses `random_seed + 1`
+- etc.
+
+```yaml
+random_seed: 42
+decoder_config:
+  preset: standard  # Sampling enabled but reproducible with seed
+```
+
+### Configuration Warnings
+
+The validator emits warnings for potentially problematic configurations:
+
+| Scenario | Warning |
+|----------|---------|
+| Both `temperature` and `top_p` modified | "not recommended, alter one or the other" |
+| `do_sample=True` with `temperature=0` | "do_sample has no effect when temperature=0" |
+
+Use `--yes` flag to skip confirmation prompts in non-interactive mode.
 
 ### loader.py
 Configuration loading with inheritance.

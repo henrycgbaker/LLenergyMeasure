@@ -191,7 +191,7 @@ class TestValidateConfig:
             max_output_tokens=4096,
         )
         warnings = validate_config(config)
-        assert any("max_output_tokens" in w for w in warnings)
+        assert any("max_output_tokens" in w.field for w in warnings)
 
     def test_warning_for_quant_with_fp32(self):
         config = ExperimentConfig(
@@ -201,4 +201,185 @@ class TestValidateConfig:
             quantization_config={"quantization": True, "load_in_4bit": True},
         )
         warnings = validate_config(config)
-        assert any("Quantization" in w for w in warnings)
+        assert any("quantization" in w.field for w in warnings)
+
+    def test_warning_for_temp_and_top_p_modified(self):
+        """Warning when both temperature and top_p are modified from defaults."""
+        config = ExperimentConfig(
+            config_name="test",
+            model_name="test-model",
+            decoder_config={"temperature": 0.7, "top_p": 0.9},
+        )
+        warnings = validate_config(config)
+        assert any(
+            "decoder_config" in w.field and "temperature" in w.message.lower() for w in warnings
+        )
+
+    def test_warning_for_do_sample_with_temp_zero(self):
+        """Info warning when do_sample=True with temperature=0."""
+        config = ExperimentConfig(
+            config_name="test",
+            model_name="test-model",
+            decoder_config={"temperature": 0.0, "do_sample": True},
+        )
+        warnings = validate_config(config)
+        assert any("do_sample" in w.field and w.severity == "info" for w in warnings)
+
+    def test_no_warning_for_deterministic_preset(self):
+        """No warning for deterministic preset (greedy decoding)."""
+        config = ExperimentConfig(
+            config_name="test",
+            model_name="test-model",
+            decoder_config={"preset": "deterministic"},
+        )
+        warnings = validate_config(config)
+        # Should have no decoder-related warnings (temp=0 with do_sample=False is fine)
+        decoder_warnings = [w for w in warnings if "decoder" in w.field]
+        assert len(decoder_warnings) == 0
+
+    def test_no_warning_for_default_decoder_config(self, base_config):
+        """No warnings for default decoder config."""
+        warnings = validate_config(base_config)
+        decoder_warnings = [w for w in warnings if "decoder" in w.field]
+        assert len(decoder_warnings) == 0
+
+    def test_config_warning_str_format(self):
+        """ConfigWarning __str__ produces expected format."""
+        from llm_energy_measure.config.loader import ConfigWarning
+
+        warning = ConfigWarning(
+            field="test_field",
+            message="Test message",
+            severity="warning",
+        )
+        assert "[WARNING]" in str(warning)
+        assert "test_field" in str(warning)
+        assert "Test message" in str(warning)
+
+    def test_config_warning_info_severity(self):
+        """ConfigWarning with info severity."""
+        from llm_energy_measure.config.loader import ConfigWarning
+
+        warning = ConfigWarning(
+            field="test_field",
+            message="Info message",
+            severity="info",
+        )
+        assert "[INFO]" in str(warning)
+        assert warning.severity == "info"
+
+    def test_config_warning_error_severity(self):
+        """ConfigWarning with error severity."""
+        from llm_energy_measure.config.loader import ConfigWarning
+
+        warning = ConfigWarning(
+            field="test_field",
+            message="Error message",
+            severity="error",
+        )
+        assert "[ERROR]" in str(warning)
+        assert warning.severity == "error"
+
+    def test_config_warning_to_result_string(self):
+        """ConfigWarning.to_result_string() formats for embedding in results."""
+        from llm_energy_measure.config.loader import ConfigWarning
+
+        warning = ConfigWarning(
+            field="decoder_config",
+            message="Sampling params ignored",
+            severity="error",
+        )
+        result_str = warning.to_result_string()
+        assert result_str == "error: decoder_config - Sampling params ignored"
+
+    def test_error_for_quantization_without_bit_mode(self):
+        """Error when quantization=True but no bit mode specified."""
+        config = ExperimentConfig(
+            config_name="test",
+            model_name="test-model",
+            quantization_config={"quantization": True},  # No load_in_4bit or load_in_8bit
+        )
+        warnings = validate_config(config)
+        error_warnings = [w for w in warnings if w.severity == "error"]
+        assert any("quantization" in w.field and "4bit" in w.message for w in error_warnings)
+
+    def test_error_for_sharding_exceeds_gpus(self):
+        """Error when num_shards exceeds available GPUs."""
+        config = ExperimentConfig(
+            config_name="test",
+            model_name="test-model",
+            gpu_list=[0, 1],
+            sharding_config={"strategy": "tensor_parallel", "num_shards": 4},
+        )
+        warnings = validate_config(config)
+        error_warnings = [w for w in warnings if w.severity == "error"]
+        assert any("sharding" in w.field.lower() for w in error_warnings)
+
+    def test_error_for_sampling_params_in_deterministic_mode(self):
+        """Error when sampling params set in deterministic mode."""
+        config = ExperimentConfig(
+            config_name="test",
+            model_name="test-model",
+            decoder_config={"temperature": 0.0, "top_k": 100, "top_p": 0.9},
+        )
+        warnings = validate_config(config)
+        error_warnings = [w for w in warnings if w.severity == "error"]
+        assert any(
+            "decoder_config" in w.field and "deterministic" in w.message for w in error_warnings
+        )
+
+    def test_no_error_for_default_sampling_params_in_deterministic_mode(self):
+        """No error when only default sampling params in deterministic mode."""
+        config = ExperimentConfig(
+            config_name="test",
+            model_name="test-model",
+            decoder_config={"preset": "deterministic"},  # Default params, temp=0
+        )
+        warnings = validate_config(config)
+        error_warnings = [w for w in warnings if w.severity == "error"]
+        assert len(error_warnings) == 0
+
+
+class TestHasBlockingWarnings:
+    """Tests for has_blocking_warnings function."""
+
+    def test_no_blocking_with_empty_list(self):
+        from llm_energy_measure.config.loader import has_blocking_warnings
+
+        assert has_blocking_warnings([]) is False
+
+    def test_no_blocking_with_info_warnings(self):
+        from llm_energy_measure.config.loader import ConfigWarning, has_blocking_warnings
+
+        warnings = [
+            ConfigWarning(field="a", message="info 1", severity="info"),
+            ConfigWarning(field="b", message="info 2", severity="info"),
+        ]
+        assert has_blocking_warnings(warnings) is False
+
+    def test_no_blocking_with_warning_warnings(self):
+        from llm_energy_measure.config.loader import ConfigWarning, has_blocking_warnings
+
+        warnings = [
+            ConfigWarning(field="a", message="warning 1", severity="warning"),
+            ConfigWarning(field="b", message="info 1", severity="info"),
+        ]
+        assert has_blocking_warnings(warnings) is False
+
+    def test_blocking_with_error_warning(self):
+        from llm_energy_measure.config.loader import ConfigWarning, has_blocking_warnings
+
+        warnings = [
+            ConfigWarning(field="a", message="info 1", severity="info"),
+            ConfigWarning(field="b", message="error 1", severity="error"),
+        ]
+        assert has_blocking_warnings(warnings) is True
+
+    def test_blocking_with_multiple_errors(self):
+        from llm_energy_measure.config.loader import ConfigWarning, has_blocking_warnings
+
+        warnings = [
+            ConfigWarning(field="a", message="error 1", severity="error"),
+            ConfigWarning(field="b", message="error 2", severity="error"),
+        ]
+        assert has_blocking_warnings(warnings) is True

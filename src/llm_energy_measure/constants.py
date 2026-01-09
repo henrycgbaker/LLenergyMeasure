@@ -28,6 +28,7 @@ GRACEFUL_SHUTDOWN_TIMEOUT_SEC = 2
 
 # Built-in presets for quick experiment configuration
 # Presets provide convenience defaults but NOT model (model is always required)
+# All presets use deterministic sampling for reproducible measurements
 PRESETS: dict[str, dict[str, Any]] = {
     "quick-test": {
         "max_input_tokens": 64,
@@ -35,19 +36,20 @@ PRESETS: dict[str, dict[str, Any]] = {
         "num_processes": 1,
         "gpu_list": [0],
         "batching_options": {"batch_size": 1},
-        "decoder_config": {"do_sample": False},  # Deterministic for quick tests
+        "decoder_config": {"preset": "deterministic"},  # Greedy for speed
     },
     "benchmark": {
         "max_input_tokens": 2048,
         "max_output_tokens": 512,
         "fp_precision": "float16",
         "batching_options": {"batch_size": 1},
-        "decoder_config": {"do_sample": False},  # Deterministic for benchmarks
+        "decoder_config": {"preset": "deterministic"},  # Greedy for reproducibility
     },
     "throughput": {
         "max_input_tokens": 512,
         "max_output_tokens": 256,
         "fp_precision": "float16",
         "batching_options": {"batch_size": 8, "dynamic_batching": True},
+        "decoder_config": {"preset": "deterministic"},  # Greedy for consistent throughput
     },
 }

@@ -139,20 +139,141 @@ class TestQuantizationConfig:
 
 
 class TestDecoderConfig:
-    """Tests for DecoderConfig."""
+    """Tests for DecoderConfig with sampling presets."""
 
     def test_defaults(self):
+        """Default values match specification."""
         config = DecoderConfig()
         assert config.temperature == 1.0
         assert config.top_p == 1.0
+        assert config.top_k == 50
         assert config.do_sample is True
+        assert config.min_p == 0.0
+        assert config.repetition_penalty == 1.0
+        assert config.no_repeat_ngram_size == 0
+        assert config.preset is None
 
     def test_top_p_bounds(self):
+        """top_p must be in [0, 1]."""
         with pytest.raises(ValidationError):
             DecoderConfig(top_p=1.5)
 
         with pytest.raises(ValidationError):
             DecoderConfig(top_p=-0.1)
+
+    def test_temperature_bounds(self):
+        """temperature must be in [0, 2]."""
+        # Valid range
+        DecoderConfig(temperature=0.0)
+        DecoderConfig(temperature=2.0)
+
+        # Invalid
+        with pytest.raises(ValidationError):
+            DecoderConfig(temperature=-0.1)
+
+        with pytest.raises(ValidationError):
+            DecoderConfig(temperature=2.1)
+
+    def test_repetition_penalty_bounds(self):
+        """repetition_penalty must be in [0.1, 10]."""
+        # Valid range
+        DecoderConfig(repetition_penalty=0.1)
+        DecoderConfig(repetition_penalty=10.0)
+
+        # Invalid
+        with pytest.raises(ValidationError):
+            DecoderConfig(repetition_penalty=0.05)
+
+        with pytest.raises(ValidationError):
+            DecoderConfig(repetition_penalty=10.5)
+
+    def test_min_p_bounds(self):
+        """min_p must be in [0, 1]."""
+        # Valid range
+        DecoderConfig(min_p=0.0)
+        DecoderConfig(min_p=1.0)
+
+        # Invalid
+        with pytest.raises(ValidationError):
+            DecoderConfig(min_p=-0.1)
+
+        with pytest.raises(ValidationError):
+            DecoderConfig(min_p=1.1)
+
+    def test_no_repeat_ngram_non_negative(self):
+        """no_repeat_ngram_size must be >= 0."""
+        DecoderConfig(no_repeat_ngram_size=0)
+        DecoderConfig(no_repeat_ngram_size=3)
+
+        with pytest.raises(ValidationError):
+            DecoderConfig(no_repeat_ngram_size=-1)
+
+    def test_preset_deterministic(self):
+        """preset: deterministic expands to greedy settings."""
+        config = DecoderConfig(preset="deterministic")
+        assert config.temperature == 0.0
+        assert config.do_sample is False
+        assert config.preset == "deterministic"
+
+    def test_preset_standard(self):
+        """preset: standard expands to balanced sampling settings."""
+        config = DecoderConfig(preset="standard")
+        assert config.temperature == 1.0
+        assert config.do_sample is True
+        assert config.top_p == 0.95
+        assert config.top_k == 50
+
+    def test_preset_creative(self):
+        """preset: creative expands to higher variance settings."""
+        config = DecoderConfig(preset="creative")
+        assert config.temperature == 0.8
+        assert config.do_sample is True
+        assert config.top_p == 0.9
+        assert config.repetition_penalty == 1.1
+
+    def test_preset_factual(self):
+        """preset: factual expands to lower variance settings."""
+        config = DecoderConfig(preset="factual")
+        assert config.temperature == 0.3
+        assert config.do_sample is True
+        assert config.top_k == 10
+
+    def test_preset_with_override(self):
+        """Explicit params override preset values."""
+        config = DecoderConfig(preset="deterministic", temperature=0.5)
+        # temperature from explicit param, not preset
+        assert config.temperature == 0.5
+        # do_sample from preset
+        assert config.do_sample is False
+        assert config.preset == "deterministic"
+
+    def test_preset_invalid_rejected(self):
+        """Invalid preset name is rejected."""
+        with pytest.raises(ValidationError):
+            DecoderConfig(preset="invalid_preset")
+
+    def test_is_deterministic_temp_zero(self):
+        """is_deterministic True when temperature=0."""
+        config = DecoderConfig(temperature=0.0)
+        assert config.is_deterministic is True
+
+    def test_is_deterministic_do_sample_false(self):
+        """is_deterministic True when do_sample=False."""
+        config = DecoderConfig(temperature=1.0, do_sample=False)
+        assert config.is_deterministic is True
+
+    def test_is_deterministic_sampling_enabled(self):
+        """is_deterministic False when sampling with temp > 0."""
+        config = DecoderConfig(temperature=1.0, do_sample=True)
+        assert config.is_deterministic is False
+
+    def test_is_deterministic_preset(self):
+        """is_deterministic correct for preset."""
+        deterministic = DecoderConfig(preset="deterministic")
+        assert deterministic.is_deterministic is True
+
+        standard = DecoderConfig(preset="standard")
+        assert standard.is_deterministic is False
 
 
 class TestExperimentConfig:

@@ -57,6 +57,7 @@ class ExperimentContext:
     start_time: datetime = field(default_factory=datetime.now)
     effective_config: dict[str, Any] = field(default_factory=dict)
     cli_overrides: dict[str, Any] = field(default_factory=dict)
+    config_warnings: list[str] = field(default_factory=list)
 
     @classmethod
     def create(
@@ -66,6 +67,7 @@ class ExperimentContext:
         effective_config: dict[str, Any] | None = None,
         cli_overrides: dict[str, Any] | None = None,
         experiment_id: str | None = None,
+        config_warnings: list[str] | None = None,
     ) -> ExperimentContext:
         """Factory method to create context from config.
 
@@ -78,6 +80,7 @@ class ExperimentContext:
             effective_config: Full resolved config for reproducibility.
             cli_overrides: CLI parameters that overrode config values.
             experiment_id: Optional pre-generated experiment ID (from CLI).
+            config_warnings: Config validation warnings to embed in results.
 
         Returns:
             Fully initialized ExperimentContext.
@@ -107,6 +110,7 @@ class ExperimentContext:
             start_time=datetime.now(),
             effective_config=effective_config or {},
             cli_overrides=cli_overrides or {},
+            config_warnings=config_warnings or [],
         )
 
     def cleanup(self) -> None:
@@ -136,6 +140,7 @@ def experiment_context(
     effective_config: dict[str, Any] | None = None,
     cli_overrides: dict[str, Any] | None = None,
     experiment_id: str | None = None,
+    config_warnings: list[str] | None = None,
 ) -> Iterator[ExperimentContext]:
     """Context manager for experiment lifecycle.
 
@@ -148,6 +153,7 @@ def experiment_context(
         effective_config: Full resolved config for reproducibility.
         cli_overrides: CLI parameters that overrode config values.
         experiment_id: Optional pre-generated experiment ID (from CLI).
+        config_warnings: Config validation warnings to embed in results.
 
     Yields:
         ExperimentContext instance.
@@ -157,7 +163,9 @@ def experiment_context(
         ...     model = load_model(ctx.config, ctx.device)
         ...     results = run_inference(model, ctx)
     """
-    ctx = ExperimentContext.create(config, id_file, effective_config, cli_overrides, experiment_id)
+    ctx = ExperimentContext.create(
+        config, id_file, effective_config, cli_overrides, experiment_id, config_warnings
+    )
     try:
         yield ctx
     finally:
