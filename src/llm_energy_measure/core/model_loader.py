@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 from loguru import logger
 from packaging import version
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizer
@@ -114,8 +115,6 @@ def load_model_tokenizer(
     Raises:
         ConfigurationError: If model loading fails.
     """
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-
     model_name = config.model_name
     fp_precision = config.fp_precision
     quant_config = config.quantization_config
@@ -167,8 +166,6 @@ def _load_quantized_model(
     Returns:
         Quantized model.
     """
-    from transformers import AutoModelForCausalLM, BitsAndBytesConfig
-
     qsupport = detect_quantization_support()
 
     bnb_kwargs: dict[str, Any] = {}

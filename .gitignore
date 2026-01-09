@@ -77,3 +77,4 @@ coverage.xml
 # -----------------------------------------------------------------------------
 CLAUDE.md
 **/CLAUDE.md
+.llm_energy_measure_state/

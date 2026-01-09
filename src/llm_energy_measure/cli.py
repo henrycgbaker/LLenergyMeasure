@@ -72,6 +72,41 @@ app.add_typer(results_app, name="results")
 console = Console()
 
 
+# =============================================================================
+# Config Display Helpers
+# =============================================================================
+
+
+def _format_field(
+    name: str,
+    value: Any,
+    is_default: bool,
+    nested: bool = False,
+) -> tuple[str, str]:
+    """Format field name and value with appropriate styling.
+
+    Args:
+        name: Field name
+        value: Field value
+        is_default: Whether value is the default (dim if True)
+        nested: Whether this is a nested field (indented)
+
+    Returns:
+        Tuple of (formatted_name, formatted_value) for table row
+    """
+    indent = "  " if nested else ""
+    if is_default:
+        return f"[dim]{indent}{name}[/dim]", f"[dim]{value}[/dim]"
+    else:
+        style = "cyan" if nested else "green"
+        return f"[{style}]{indent}{name}[/{style}]", str(value)
+
+
+def _add_section_header(table: Table, name: str) -> None:
+    """Add a bold section header row to the table."""
+    table.add_row(f"[bold]{name}[/bold]", "")
+
+
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """Deep merge override into base, returning a new dict."""
     result = copy.deepcopy(base)
@@ -120,41 +155,148 @@ def _apply_cli_overrides(
     return config_dict, tracked_overrides
 
 
+def _print_value(name: str, value: Any, is_default: bool, indent: int = 2) -> None:
+    """Print a config value with dim styling for defaults."""
+    spaces = " " * indent
+    if is_default:
+        console.print(f"[dim]{spaces}{name}: {value}[/dim]")
+    else:
+        console.print(f"{spaces}[cyan]{name}[/cyan]: {value}")
+
+
 def _display_config_summary(
     config: ExperimentConfig,
     overrides: dict[str, Any],
     preset_name: str | None = None,
 ) -> None:
-    """Display config summary with override visibility."""
+    """Display config summary with override visibility.
+
+    Shows ALL configuration parameters with visual styling:
+    - Bold: Section headers
+    - Cyan: Non-default values
+    - Dim: Default values
+    """
     console.print(f"\n[bold]Experiment: {config.config_name}[/bold]")
-    console.print(f"  Model: {config.model_name}")
-    console.print(f"  Processes: {config.num_processes} on GPUs {config.gpu_list}")
-    console.print(f"  Precision: {config.fp_precision}")
-    console.print(f"  Batch size: {config.batching_options.batch_size}")
+
+    # Core settings
+    _print_value("model", config.model_name, False)
+    _print_value(
+        "processes", f"{config.num_processes} on GPUs {config.gpu_list}", config.num_processes == 1
+    )
+    _print_value("max_input_tokens", config.max_input_tokens, config.max_input_tokens == 512)
+    _print_value("max_output_tokens", config.max_output_tokens, config.max_output_tokens == 128)
+    _print_value("min_output_tokens", config.min_output_tokens, config.min_output_tokens == 0)
+    _print_value("num_input_prompts", config.num_input_prompts, config.num_input_prompts == 1)
+    _print_value("fp_precision", config.fp_precision, config.fp_precision == "float16")
+    _print_value("backend", config.backend, config.backend == "pytorch")
+    _print_value("task_type", config.task_type, config.task_type == "text_generation")
+    _print_value(
+        "inference_type", config.inference_type, config.inference_type == "pure_generative"
+    )
+    _print_value("num_cycles", config.num_cycles, config.num_cycles == 1)
+    _print_value("query_rate", config.query_rate, config.query_rate == 1.0)
+    _print_value("random_seed", config.random_seed, config.random_seed is None)
 
     if preset_name:
-        console.print(f"  Preset: [cyan]{preset_name}[/cyan]")
+        console.print(f"  [cyan]Preset: {preset_name}[/cyan]")
 
-    # Show seed if set
-    if config.random_seed is not None:
-        console.print(f"  Seed: {config.random_seed}")
+    # Batching
+    console.print("  [bold]batching:[/bold]")
+    batch = config.batching_options
+    _print_value("batch_size", batch.batch_size, batch.batch_size == 1, indent=4)
+    _print_value("strategy", batch.strategy, batch.strategy == "static", indent=4)
+    _print_value(
+        "max_tokens_per_batch",
+        batch.max_tokens_per_batch,
+        batch.max_tokens_per_batch is None,
+        indent=4,
+    )
 
-    # Show decoder/sampling config
+    # Sharding
+    console.print("  [bold]sharding:[/bold]")
+    shard = config.sharding_config
+    _print_value("strategy", shard.strategy, shard.strategy == "none", indent=4)
+    _print_value("num_shards", shard.num_shards, shard.num_shards == 1, indent=4)
+
+    # Traffic simulation
+    console.print("  [bold]traffic_simulation:[/bold]")
+    sim = config.latency_simulation
+    _print_value("enabled", sim.enabled, sim.enabled is False, indent=4)
+    _print_value("mode", sim.mode, sim.mode == "poisson", indent=4)
+    _print_value("target_qps", sim.target_qps, sim.target_qps == 1.0, indent=4)
+    _print_value("seed", sim.seed, sim.seed is None, indent=4)
+
+    # Decoder config
+    console.print("  [bold]decoder:[/bold]")
     decoder = config.decoder_config
-    console.print("  [bold]Decoder config:[/bold]")
-    if decoder.preset:
-        console.print(f"    preset: [cyan]{decoder.preset}[/cyan]")
-    if decoder.is_deterministic:
-        console.print("    mode: [green]deterministic (greedy)[/green]")
-    else:
-        console.print("    mode: sampling")
-    console.print(f"    temperature: {decoder.temperature}")
-    console.print(f"    do_sample: {decoder.do_sample}")
-    console.print(f"    top_p: {decoder.top_p}")
-    console.print(f"    top_k: {decoder.top_k}")
-    console.print(f"    min_p: {decoder.min_p}")
-    console.print(f"    repetition_penalty: {decoder.repetition_penalty}")
-    console.print(f"    no_repeat_ngram_size: {decoder.no_repeat_ngram_size}")
+    _print_value("preset", decoder.preset, decoder.preset is None, indent=4)
+    mode = "deterministic (greedy)" if decoder.is_deterministic else "sampling"
+    _print_value("mode", mode, decoder.temperature == 1.0 and decoder.do_sample, indent=4)
+    _print_value("temperature", decoder.temperature, decoder.temperature == 1.0, indent=4)
+    _print_value("do_sample", decoder.do_sample, decoder.do_sample is True, indent=4)
+    _print_value("top_p", decoder.top_p, decoder.top_p == 1.0, indent=4)
+    _print_value("top_k", decoder.top_k, decoder.top_k == 50, indent=4)
+    _print_value("min_p", decoder.min_p, decoder.min_p == 0.0, indent=4)
+    _print_value(
+        "repetition_penalty",
+        decoder.repetition_penalty,
+        decoder.repetition_penalty == 1.0,
+        indent=4,
+    )
+    _print_value(
+        "no_repeat_ngram_size",
+        decoder.no_repeat_ngram_size,
+        decoder.no_repeat_ngram_size == 0,
+        indent=4,
+    )
+
+    # Quantization
+    console.print("  [bold]quantization:[/bold]")
+    q = config.quantization_config
+    _print_value("quantization", q.quantization, q.quantization is False, indent=4)
+    _print_value("load_in_4bit", q.load_in_4bit, q.load_in_4bit is False, indent=4)
+    _print_value("load_in_8bit", q.load_in_8bit, q.load_in_8bit is False, indent=4)
+    _print_value(
+        "bnb_4bit_compute_dtype",
+        q.bnb_4bit_compute_dtype,
+        q.bnb_4bit_compute_dtype == "float16",
+        indent=4,
+    )
+    _print_value(
+        "bnb_4bit_quant_type", q.bnb_4bit_quant_type, q.bnb_4bit_quant_type == "nf4", indent=4
+    )
+    _print_value(
+        "bnb_4bit_use_double_quant",
+        q.bnb_4bit_use_double_quant,
+        q.bnb_4bit_use_double_quant is False,
+        indent=4,
+    )
+
+    # Schedule config
+    console.print("  [bold]schedule:[/bold]")
+    sched = config.schedule_config
+    _print_value("enabled", sched.enabled, sched.enabled is False, indent=4)
+    _print_value("interval", sched.interval, sched.interval is None, indent=4)
+    _print_value("at", sched.at, sched.at is None, indent=4)
+    days_str = ", ".join(sched.days) if sched.days else None
+    _print_value("days", days_str, sched.days is None, indent=4)
+    _print_value("total_duration", sched.total_duration, sched.total_duration == "24h", indent=4)
+
+    # Prompt source (if configured)
+    if config.prompt_source is not None:
+        console.print("  [bold]prompts:[/bold]")
+        ps = config.prompt_source
+        _print_value("type", ps.type, False, indent=4)
+        if ps.type == "file":
+            _print_value("path", ps.path, False, indent=4)
+        else:  # huggingface
+            _print_value("dataset", ps.dataset, False, indent=4)
+            _print_value("split", ps.split, ps.split == "train", indent=4)
+            _print_value("subset", ps.subset, ps.subset is None, indent=4)
+            _print_value("column", ps.column, ps.column is None, indent=4)
+            _print_value("sample_size", ps.sample_size, ps.sample_size is None, indent=4)
+            _print_value("shuffle", ps.shuffle, ps.shuffle is False, indent=4)
+            _print_value("seed", ps.seed, ps.seed == 42, indent=4)
 
     # Show overrides
     if overrides:
@@ -1272,71 +1414,7 @@ def config_validate(
         warnings = validate_config(config)
 
         console.print(f"[green]✓[/green] Valid configuration: {config.config_name}")
-        console.print(f"  Model: {config.model_name}")
-        console.print(f"  Processes: {config.num_processes} on GPUs {config.gpu_list}")
-        console.print(
-            f"  Tokens: input={config.max_input_tokens}, output={config.max_output_tokens}"
-        )
-        console.print(f"  Precision: {config.fp_precision}, Backend: {config.backend}")
-
-        # Batching
-        batch = config.batching_options
-        console.print(f"  Batching: size={batch.batch_size}, strategy={batch.strategy}")
-
-        # Sharding (if enabled)
-        if config.sharding_config.strategy != "none":
-            shard = config.sharding_config
-            console.print(f"  Sharding: {shard.strategy}, shards={shard.num_shards}")
-
-        # Quantization
-        if config.quantization_config.quantization:
-            q = config.quantization_config
-            bits = "4-bit" if q.load_in_4bit else "8-bit" if q.load_in_8bit else "unknown"
-            console.print(f"  Quantization: {bits}")
-
-        # Reproducibility & cycles
-        if config.random_seed is not None:
-            console.print(f"  Seed: {config.random_seed}")
-        if config.num_cycles > 1:
-            console.print(f"  Cycles: {config.num_cycles}")
-
-        # Decoder config (all params)
-        decoder = config.decoder_config
-        console.print("  [bold]Decoder config:[/bold]")
-        if decoder.preset:
-            console.print(f"    preset: [cyan]{decoder.preset}[/cyan]")
-        if decoder.is_deterministic:
-            console.print("    mode: [green]deterministic (greedy)[/green]")
-        else:
-            console.print("    mode: sampling")
-        console.print(f"    temperature: {decoder.temperature}")
-        console.print(f"    do_sample: {decoder.do_sample}")
-        console.print(f"    top_p: {decoder.top_p}")
-        console.print(f"    top_k: {decoder.top_k}")
-        console.print(f"    min_p: {decoder.min_p}")
-        console.print(f"    repetition_penalty: {decoder.repetition_penalty}")
-        console.print(f"    no_repeat_ngram_size: {decoder.no_repeat_ngram_size}")
-
-        # Traffic simulation (if enabled)
-        if config.latency_simulation.enabled:
-            sim = config.latency_simulation
-            console.print("  [bold]Traffic simulation:[/bold]")
-            console.print(f"    mode: {sim.mode}, target_qps: {sim.target_qps}")
-
-        # Schedule config (if enabled)
-        if config.schedule_config.enabled:
-            sched = config.schedule_config
-            console.print("  [bold]Schedule:[/bold]")
-            timing = sched.interval or f"at {sched.at}"
-            console.print(f"    {timing} for {sched.total_duration}")
-
-        # Prompt source (if configured)
-        if config.prompt_source is not None:
-            ps = config.prompt_source
-            if ps.type == "file":
-                console.print(f"  Prompt source: file ({ps.path})")
-            else:
-                console.print(f"  Prompt source: {ps.dataset} ({ps.split})")
+        _display_config_summary(config, {})
 
         # Show warnings with severity
         if warnings:
@@ -1354,109 +1432,243 @@ def config_validate(
 def config_show(
     config_path: Annotated[Path, typer.Argument(help="Path to config file")],
 ) -> None:
-    """Display resolved configuration with inheritance applied."""
+    """Display resolved configuration with inheritance applied.
+
+    Shows ALL configuration parameters with visual styling:
+    - Bold: Section headers
+    - Bright/coloured: Explicitly set values
+    - Dim: Default values
+    """
     try:
         config = load_config(config_path)
 
         table = Table(title=f"Configuration: {config.config_name}")
-        table.add_column("Field", style="cyan")
-        table.add_column("Value", style="green")
+        table.add_column("Field")
+        table.add_column("Value")
 
-        # Core settings
-        table.add_row("model_name", config.model_name)
-        table.add_row("num_processes", str(config.num_processes))
-        table.add_row("gpu_list", str(config.gpu_list))
-        table.add_row("max_input_tokens", str(config.max_input_tokens))
-        table.add_row("max_output_tokens", str(config.max_output_tokens))
-        if config.min_output_tokens > 0:
-            table.add_row("min_output_tokens", str(config.min_output_tokens))
-        table.add_row("fp_precision", config.fp_precision)
-        table.add_row("backend", config.backend)
+        # =================================================================
+        # Core settings (always shown)
+        # =================================================================
+        table.add_row(*_format_field("model_name", config.model_name, False))
+        table.add_row(
+            *_format_field("num_processes", config.num_processes, config.num_processes == 1)
+        )
+        table.add_row(*_format_field("gpu_list", config.gpu_list, config.gpu_list == [0]))
+        table.add_row(
+            *_format_field(
+                "max_input_tokens", config.max_input_tokens, config.max_input_tokens == 512
+            )
+        )
+        table.add_row(
+            *_format_field(
+                "max_output_tokens", config.max_output_tokens, config.max_output_tokens == 128
+            )
+        )
+        table.add_row(
+            *_format_field(
+                "min_output_tokens", config.min_output_tokens, config.min_output_tokens == 0
+            )
+        )
+        table.add_row(
+            *_format_field(
+                "num_input_prompts", config.num_input_prompts, config.num_input_prompts == 1
+            )
+        )
+        table.add_row(
+            *_format_field("fp_precision", config.fp_precision, config.fp_precision == "float16")
+        )
+        table.add_row(*_format_field("backend", config.backend, config.backend == "pytorch"))
+        table.add_row(
+            *_format_field("task_type", config.task_type, config.task_type == "text_generation")
+        )
+        table.add_row(
+            *_format_field(
+                "inference_type", config.inference_type, config.inference_type == "pure_generative"
+            )
+        )
+        table.add_row(
+            *_format_field(
+                "is_encoder_decoder", config.is_encoder_decoder, config.is_encoder_decoder is False
+            )
+        )
+        table.add_row(
+            *_format_field("save_outputs", config.save_outputs, config.save_outputs is False)
+        )
+        table.add_row(
+            *_format_field(
+                "decode_token_to_text",
+                config.decode_token_to_text,
+                config.decode_token_to_text is False,
+            )
+        )
+        table.add_row(*_format_field("num_cycles", config.num_cycles, config.num_cycles == 1))
+        table.add_row(*_format_field("query_rate", config.query_rate, config.query_rate == 1.0))
+        table.add_row(*_format_field("random_seed", config.random_seed, config.random_seed is None))
 
-        # Task type (if non-default)
-        if config.task_type != "text_generation":
-            table.add_row("task_type", config.task_type)
-        if config.inference_type != "pure_generative":
-            table.add_row("inference_type", config.inference_type)
-
-        # Reproducibility & cycles
-        if config.random_seed is not None:
-            table.add_row("random_seed", str(config.random_seed))
-        if config.num_cycles > 1:
-            table.add_row("num_cycles", str(config.num_cycles))
-
-        # Batching
+        # =================================================================
+        # Batching config (always shown)
+        # =================================================================
+        _add_section_header(table, "batching")
         batch = config.batching_options
-        table.add_row("batch_size", str(batch.batch_size))
-        table.add_row("batching_strategy", batch.strategy)
-        if batch.max_tokens_per_batch is not None:
-            table.add_row("max_tokens_per_batch", str(batch.max_tokens_per_batch))
+        table.add_row(
+            *_format_field("batch_size", batch.batch_size, batch.batch_size == 1, nested=True)
+        )
+        table.add_row(
+            *_format_field("strategy", batch.strategy, batch.strategy == "static", nested=True)
+        )
+        table.add_row(
+            *_format_field(
+                "max_tokens_per_batch",
+                batch.max_tokens_per_batch,
+                batch.max_tokens_per_batch is None,
+                nested=True,
+            )
+        )
 
-        # Sharding (if enabled)
+        # =================================================================
+        # Sharding config (always shown)
+        # =================================================================
+        _add_section_header(table, "sharding")
         shard = config.sharding_config
-        if shard.strategy != "none":
-            table.add_row("[bold]sharding_config[/bold]", "")
-            table.add_row("  strategy", shard.strategy)
-            table.add_row("  num_shards", str(shard.num_shards))
+        table.add_row(
+            *_format_field("strategy", shard.strategy, shard.strategy == "none", nested=True)
+        )
+        table.add_row(
+            *_format_field("num_shards", shard.num_shards, shard.num_shards == 1, nested=True)
+        )
 
-        # Quantization
-        if config.quantization_config.quantization:
-            q = config.quantization_config
-            quant = "4-bit" if q.load_in_4bit else "8-bit" if q.load_in_8bit else "enabled"
-            table.add_row("quantization", quant)
+        # =================================================================
+        # Traffic simulation (always shown)
+        # =================================================================
+        _add_section_header(table, "traffic_simulation")
+        sim = config.latency_simulation
+        table.add_row(*_format_field("enabled", sim.enabled, sim.enabled is False, nested=True))
+        table.add_row(*_format_field("mode", sim.mode, sim.mode == "poisson", nested=True))
+        table.add_row(
+            *_format_field("target_qps", sim.target_qps, sim.target_qps == 1.0, nested=True)
+        )
+        table.add_row(*_format_field("seed", sim.seed, sim.seed is None, nested=True))
 
-        # Decoder/sampling config
+        # =================================================================
+        # Schedule config (always shown)
+        # =================================================================
+        _add_section_header(table, "schedule")
+        sched = config.schedule_config
+        table.add_row(*_format_field("enabled", sched.enabled, sched.enabled is False, nested=True))
+        table.add_row(
+            *_format_field("interval", sched.interval, sched.interval is None, nested=True)
+        )
+        table.add_row(*_format_field("at", sched.at, sched.at is None, nested=True))
+        days_str = ", ".join(sched.days) if sched.days else None
+        table.add_row(*_format_field("days", days_str, sched.days is None, nested=True))
+        table.add_row(
+            *_format_field(
+                "total_duration", sched.total_duration, sched.total_duration == "24h", nested=True
+            )
+        )
+
+        # =================================================================
+        # Decoder config (always shown)
+        # =================================================================
+        _add_section_header(table, "decoder")
         decoder = config.decoder_config
-        table.add_row("[bold]decoder_config[/bold]", "")
-        if decoder.preset:
-            table.add_row("  preset", decoder.preset)
+        table.add_row(*_format_field("preset", decoder.preset, decoder.preset is None, nested=True))
         mode = "deterministic (greedy)" if decoder.is_deterministic else "sampling"
-        table.add_row("  mode", mode)
-        table.add_row("  temperature", str(decoder.temperature))
-        table.add_row("  do_sample", str(decoder.do_sample))
-        table.add_row("  top_p", str(decoder.top_p))
-        table.add_row("  top_k", str(decoder.top_k))
-        table.add_row("  min_p", str(decoder.min_p))
-        table.add_row("  repetition_penalty", str(decoder.repetition_penalty))
-        table.add_row("  no_repeat_ngram_size", str(decoder.no_repeat_ngram_size))
+        table.add_row(
+            *_format_field(
+                "mode", mode, decoder.temperature == 1.0 and decoder.do_sample, nested=True
+            )
+        )
+        table.add_row(
+            *_format_field(
+                "temperature", decoder.temperature, decoder.temperature == 1.0, nested=True
+            )
+        )
+        table.add_row(
+            *_format_field("do_sample", decoder.do_sample, decoder.do_sample is True, nested=True)
+        )
+        table.add_row(*_format_field("top_p", decoder.top_p, decoder.top_p == 1.0, nested=True))
+        table.add_row(*_format_field("top_k", decoder.top_k, decoder.top_k == 50, nested=True))
+        table.add_row(*_format_field("min_p", decoder.min_p, decoder.min_p == 0.0, nested=True))
+        table.add_row(
+            *_format_field(
+                "repetition_penalty",
+                decoder.repetition_penalty,
+                decoder.repetition_penalty == 1.0,
+                nested=True,
+            )
+        )
+        table.add_row(
+            *_format_field(
+                "no_repeat_ngram_size",
+                decoder.no_repeat_ngram_size,
+                decoder.no_repeat_ngram_size == 0,
+                nested=True,
+            )
+        )
 
-        # Traffic simulation (if enabled)
-        if config.latency_simulation.enabled:
-            sim = config.latency_simulation
-            table.add_row("[bold]latency_simulation[/bold]", "")
-            table.add_row("  mode", sim.mode)
-            table.add_row("  target_qps", str(sim.target_qps))
-            if sim.seed is not None:
-                table.add_row("  seed", str(sim.seed))
+        # =================================================================
+        # Quantization config (always shown)
+        # =================================================================
+        _add_section_header(table, "quantization")
+        q = config.quantization_config
+        table.add_row(
+            *_format_field("quantization", q.quantization, q.quantization is False, nested=True)
+        )
+        table.add_row(
+            *_format_field("load_in_4bit", q.load_in_4bit, q.load_in_4bit is False, nested=True)
+        )
+        table.add_row(
+            *_format_field("load_in_8bit", q.load_in_8bit, q.load_in_8bit is False, nested=True)
+        )
+        table.add_row(
+            *_format_field(
+                "bnb_4bit_compute_dtype",
+                q.bnb_4bit_compute_dtype,
+                q.bnb_4bit_compute_dtype == "float16",
+                nested=True,
+            )
+        )
+        table.add_row(
+            *_format_field(
+                "bnb_4bit_quant_type",
+                q.bnb_4bit_quant_type,
+                q.bnb_4bit_quant_type == "nf4",
+                nested=True,
+            )
+        )
+        table.add_row(
+            *_format_field(
+                "bnb_4bit_use_double_quant",
+                q.bnb_4bit_use_double_quant,
+                q.bnb_4bit_use_double_quant is False,
+                nested=True,
+            )
+        )
 
-        # Schedule config (if enabled)
-        if config.schedule_config.enabled:
-            sched = config.schedule_config
-            table.add_row("[bold]schedule_config[/bold]", "")
-            if sched.interval:
-                table.add_row("  interval", sched.interval)
-            if sched.at:
-                table.add_row("  at", sched.at)
-            if sched.days:
-                table.add_row("  days", ", ".join(sched.days))
-            table.add_row("  total_duration", sched.total_duration)
-
-        # Prompt source (if configured in YAML)
+        # =================================================================
+        # Prompt source (if configured)
+        # =================================================================
         if config.prompt_source is not None:
+            _add_section_header(table, "prompts")
             ps = config.prompt_source
-            table.add_row("[bold]prompt_source[/bold]", "")
-            table.add_row("  type", ps.type)
+            table.add_row(*_format_field("type", ps.type, False, nested=True))
             if ps.type == "file":
-                table.add_row("  path", ps.path)
+                table.add_row(*_format_field("path", ps.path, False, nested=True))
             else:  # huggingface
-                table.add_row("  dataset", ps.dataset)
-                table.add_row("  split", ps.split)
-                if ps.column:
-                    table.add_row("  column", ps.column)
-                if ps.sample_size:
-                    table.add_row("  sample_size", str(ps.sample_size))
-                if ps.shuffle:
-                    table.add_row("  shuffle", str(ps.shuffle))
+                table.add_row(*_format_field("dataset", ps.dataset, False, nested=True))
+                table.add_row(*_format_field("split", ps.split, ps.split == "train", nested=True))
+                table.add_row(*_format_field("subset", ps.subset, ps.subset is None, nested=True))
+                table.add_row(*_format_field("column", ps.column, ps.column is None, nested=True))
+                table.add_row(
+                    *_format_field(
+                        "sample_size", ps.sample_size, ps.sample_size is None, nested=True
+                    )
+                )
+                table.add_row(
+                    *_format_field("shuffle", ps.shuffle, ps.shuffle is False, nested=True)
+                )
+                table.add_row(*_format_field("seed", ps.seed, ps.seed == 42, nested=True))
 
         console.print(table)
 
@@ -2009,80 +2221,224 @@ def results_show(
             _show_aggregated_result(aggregated)
 
 
+def _format_dict_field(
+    name: str,
+    value: Any,
+    default: Any,
+    nested: bool = False,
+) -> tuple[str, str]:
+    """Format field from dict config with default comparison."""
+    is_default = value == default
+    indent = "  " if nested else ""
+    if is_default:
+        return f"[dim]{indent}{name}[/dim]", f"[dim]{value}[/dim]"
+    else:
+        style = "cyan" if nested else "green"
+        return f"[{style}]{indent}{name}[/{style}]", str(value)
+
+
 def _show_effective_config(
     config: dict[str, Any], cli_overrides: dict[str, Any] | None = None
 ) -> None:
-    """Display effective configuration from results."""
+    """Display effective configuration from results.
+
+    Shows ALL configuration parameters with visual styling:
+    - Bold: Section headers
+    - Bright/coloured: Non-default values
+    - Dim: Default values
+    """
     table = Table(title="Experiment Configuration")
-    table.add_column("Field", style="cyan")
-    table.add_column("Value", style="green")
+    table.add_column("Field")
+    table.add_column("Value")
 
-    # Core settings
-    table.add_row("model_name", str(config.get("model_name", "N/A")))
-    table.add_row("num_processes", str(config.get("num_processes", 1)))
-    table.add_row("gpu_list", str(config.get("gpu_list", [0])))
-    table.add_row("max_input_tokens", str(config.get("max_input_tokens", "N/A")))
-    table.add_row("max_output_tokens", str(config.get("max_output_tokens", "N/A")))
-    table.add_row("fp_precision", str(config.get("fp_precision", "N/A")))
+    # =================================================================
+    # Core settings (always shown)
+    # =================================================================
+    table.add_row(*_format_dict_field("model_name", config.get("model_name", "N/A"), None))
+    table.add_row(*_format_dict_field("num_processes", config.get("num_processes", 1), 1))
+    table.add_row(*_format_dict_field("gpu_list", config.get("gpu_list", [0]), [0]))
+    table.add_row(*_format_dict_field("max_input_tokens", config.get("max_input_tokens", 512), 512))
+    table.add_row(
+        *_format_dict_field("max_output_tokens", config.get("max_output_tokens", 128), 128)
+    )
+    table.add_row(*_format_dict_field("min_output_tokens", config.get("min_output_tokens", 0), 0))
+    table.add_row(*_format_dict_field("num_input_prompts", config.get("num_input_prompts", 1), 1))
+    table.add_row(
+        *_format_dict_field("fp_precision", config.get("fp_precision", "float16"), "float16")
+    )
+    table.add_row(*_format_dict_field("backend", config.get("backend", "pytorch"), "pytorch"))
+    table.add_row(
+        *_format_dict_field(
+            "task_type", config.get("task_type", "text_generation"), "text_generation"
+        )
+    )
+    table.add_row(
+        *_format_dict_field(
+            "inference_type", config.get("inference_type", "pure_generative"), "pure_generative"
+        )
+    )
+    table.add_row(
+        *_format_dict_field("is_encoder_decoder", config.get("is_encoder_decoder", False), False)
+    )
+    table.add_row(*_format_dict_field("save_outputs", config.get("save_outputs", False), False))
+    table.add_row(
+        *_format_dict_field(
+            "decode_token_to_text", config.get("decode_token_to_text", False), False
+        )
+    )
+    table.add_row(*_format_dict_field("num_cycles", config.get("num_cycles", 1), 1))
+    table.add_row(*_format_dict_field("query_rate", config.get("query_rate", 1.0), 1.0))
+    table.add_row(*_format_dict_field("random_seed", config.get("random_seed"), None))
 
-    # Reproducibility
-    if config.get("random_seed") is not None:
-        table.add_row("random_seed", str(config["random_seed"]))
-    if config.get("num_cycles", 1) > 1:
-        table.add_row("num_cycles", str(config["num_cycles"]))
-
-    # Batching
+    # =================================================================
+    # Batching config (always shown)
+    # =================================================================
+    _add_section_header(table, "batching")
     batch = config.get("batching_options", {})
-    if batch:
-        table.add_row("batch_size", str(batch.get("batch_size", 1)))
-        table.add_row("batching_strategy", str(batch.get("strategy", "static")))
-        if batch.get("max_tokens_per_batch"):
-            table.add_row("max_tokens_per_batch", str(batch["max_tokens_per_batch"]))
+    table.add_row(*_format_dict_field("batch_size", batch.get("batch_size", 1), 1, nested=True))
+    table.add_row(
+        *_format_dict_field("strategy", batch.get("strategy", "static"), "static", nested=True)
+    )
+    table.add_row(
+        *_format_dict_field(
+            "max_tokens_per_batch", batch.get("max_tokens_per_batch"), None, nested=True
+        )
+    )
 
-    # Sharding
+    # =================================================================
+    # Sharding config (always shown)
+    # =================================================================
+    _add_section_header(table, "sharding")
     shard = config.get("sharding_config", {})
-    if shard and shard.get("strategy", "none") != "none":
-        table.add_row("[bold]sharding[/bold]", "")
-        table.add_row("  strategy", str(shard.get("strategy")))
-        table.add_row("  num_shards", str(shard.get("num_shards", 1)))
+    table.add_row(
+        *_format_dict_field("strategy", shard.get("strategy", "none"), "none", nested=True)
+    )
+    table.add_row(*_format_dict_field("num_shards", shard.get("num_shards", 1), 1, nested=True))
 
-    # Quantization
-    quant = config.get("quantization_config", {})
-    if quant and quant.get("quantization"):
-        bits = (
-            "4-bit"
-            if quant.get("load_in_4bit")
-            else "8-bit"
-            if quant.get("load_in_8bit")
-            else "enabled"
-        )
-        table.add_row("quantization", bits)
-
-    # Decoder config
-    decoder = config.get("decoder_config", {})
-    if decoder:
-        table.add_row("[bold]decoder_config[/bold]", "")
-        if decoder.get("preset"):
-            table.add_row("  preset", str(decoder["preset"]))
-        is_deterministic = decoder.get("temperature", 1.0) == 0.0 or not decoder.get(
-            "do_sample", True
-        )
-        mode = "deterministic (greedy)" if is_deterministic else "sampling"
-        table.add_row("  mode", mode)
-        table.add_row("  temperature", str(decoder.get("temperature", 1.0)))
-        table.add_row("  do_sample", str(decoder.get("do_sample", True)))
-        table.add_row("  top_p", str(decoder.get("top_p", 1.0)))
-        table.add_row("  top_k", str(decoder.get("top_k", 50)))
-        table.add_row("  min_p", str(decoder.get("min_p", 0.0)))
-        table.add_row("  repetition_penalty", str(decoder.get("repetition_penalty", 1.0)))
-        table.add_row("  no_repeat_ngram_size", str(decoder.get("no_repeat_ngram_size", 0)))
-
-    # Traffic simulation
+    # =================================================================
+    # Traffic simulation (always shown)
+    # =================================================================
+    _add_section_header(table, "traffic_simulation")
     latency = config.get("latency_simulation", {})
-    if latency and latency.get("enabled"):
-        table.add_row("[bold]latency_simulation[/bold]", "")
-        table.add_row("  mode", str(latency.get("mode", "poisson")))
-        table.add_row("  target_qps", str(latency.get("target_qps", 1.0)))
+    table.add_row(*_format_dict_field("enabled", latency.get("enabled", False), False, nested=True))
+    table.add_row(
+        *_format_dict_field("mode", latency.get("mode", "poisson"), "poisson", nested=True)
+    )
+    table.add_row(
+        *_format_dict_field("target_qps", latency.get("target_qps", 1.0), 1.0, nested=True)
+    )
+    table.add_row(*_format_dict_field("seed", latency.get("seed"), None, nested=True))
+
+    # =================================================================
+    # Schedule config (always shown)
+    # =================================================================
+    _add_section_header(table, "schedule")
+    schedule = config.get("schedule_config", {})
+    table.add_row(
+        *_format_dict_field("enabled", schedule.get("enabled", False), False, nested=True)
+    )
+    table.add_row(*_format_dict_field("interval", schedule.get("interval"), None, nested=True))
+    table.add_row(*_format_dict_field("at", schedule.get("at"), None, nested=True))
+    days = schedule.get("days")
+    days_str = ", ".join(days) if days else None
+    table.add_row(*_format_dict_field("days", days_str, None, nested=True))
+    table.add_row(
+        *_format_dict_field(
+            "total_duration", schedule.get("total_duration", "24h"), "24h", nested=True
+        )
+    )
+
+    # =================================================================
+    # Decoder config (always shown)
+    # =================================================================
+    _add_section_header(table, "decoder")
+    decoder = config.get("decoder_config", {})
+    table.add_row(*_format_dict_field("preset", decoder.get("preset"), None, nested=True))
+    is_deterministic = decoder.get("temperature", 1.0) == 0.0 or not decoder.get("do_sample", True)
+    mode = "deterministic (greedy)" if is_deterministic else "sampling"
+    default_mode = decoder.get("temperature", 1.0) == 1.0 and decoder.get("do_sample", True)
+    table.add_row(
+        *_format_dict_field("mode", mode, "sampling" if default_mode else mode, nested=True)
+    )
+    table.add_row(
+        *_format_dict_field("temperature", decoder.get("temperature", 1.0), 1.0, nested=True)
+    )
+    table.add_row(
+        *_format_dict_field("do_sample", decoder.get("do_sample", True), True, nested=True)
+    )
+    table.add_row(*_format_dict_field("top_p", decoder.get("top_p", 1.0), 1.0, nested=True))
+    table.add_row(*_format_dict_field("top_k", decoder.get("top_k", 50), 50, nested=True))
+    table.add_row(*_format_dict_field("min_p", decoder.get("min_p", 0.0), 0.0, nested=True))
+    table.add_row(
+        *_format_dict_field(
+            "repetition_penalty", decoder.get("repetition_penalty", 1.0), 1.0, nested=True
+        )
+    )
+    table.add_row(
+        *_format_dict_field(
+            "no_repeat_ngram_size", decoder.get("no_repeat_ngram_size", 0), 0, nested=True
+        )
+    )
+
+    # =================================================================
+    # Quantization config (always shown)
+    # =================================================================
+    _add_section_header(table, "quantization")
+    quant = config.get("quantization_config", {})
+    table.add_row(
+        *_format_dict_field("quantization", quant.get("quantization", False), False, nested=True)
+    )
+    table.add_row(
+        *_format_dict_field("load_in_4bit", quant.get("load_in_4bit", False), False, nested=True)
+    )
+    table.add_row(
+        *_format_dict_field("load_in_8bit", quant.get("load_in_8bit", False), False, nested=True)
+    )
+    table.add_row(
+        *_format_dict_field(
+            "bnb_4bit_compute_dtype",
+            quant.get("bnb_4bit_compute_dtype", "float16"),
+            "float16",
+            nested=True,
+        )
+    )
+    table.add_row(
+        *_format_dict_field(
+            "bnb_4bit_quant_type", quant.get("bnb_4bit_quant_type", "nf4"), "nf4", nested=True
+        )
+    )
+    table.add_row(
+        *_format_dict_field(
+            "bnb_4bit_use_double_quant",
+            quant.get("bnb_4bit_use_double_quant", False),
+            False,
+            nested=True,
+        )
+    )
+
+    # =================================================================
+    # Prompt source (if in results)
+    # =================================================================
+    ps = config.get("prompt_source")
+    if ps:
+        _add_section_header(table, "prompts")
+        table.add_row(*_format_dict_field("type", ps.get("type", "file"), None, nested=True))
+        if ps.get("type") == "file":
+            table.add_row(*_format_dict_field("path", ps.get("path"), None, nested=True))
+        else:  # huggingface
+            table.add_row(*_format_dict_field("dataset", ps.get("dataset"), None, nested=True))
+            table.add_row(
+                *_format_dict_field("split", ps.get("split", "train"), "train", nested=True)
+            )
+            table.add_row(*_format_dict_field("subset", ps.get("subset"), None, nested=True))
+            table.add_row(*_format_dict_field("column", ps.get("column"), None, nested=True))
+            table.add_row(
+                *_format_dict_field("sample_size", ps.get("sample_size"), None, nested=True)
+            )
+            table.add_row(
+                *_format_dict_field("shuffle", ps.get("shuffle", False), False, nested=True)
+            )
+            table.add_row(*_format_dict_field("seed", ps.get("seed", 42), 42, nested=True))
 
     console.print(table)
 

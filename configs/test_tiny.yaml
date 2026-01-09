@@ -12,9 +12,9 @@ num_input_prompts: 4
 # Single GPU
 # On servers with MIG-enabled GPUs, use CUDA_VISIBLE_DEVICES=0 to select
 # the physical GPU rather than MIG instances
-gpu_list: [0]
+gpus: [0]
 num_processes: 1
 
 # Batching
-batching_options:
+batching:
   batch_size: 2

@@ -6,7 +6,7 @@ max_input_tokens: 32
 max_output_tokens: 16
 random_seed: 42
 
-decoder_config:
+decoder:
   # Using creative preset as base, then overriding some values
   preset: creative
   temperature: 0.9           # Override preset's 0.8

@@ -2,7 +2,15 @@
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Discriminator, Field, Tag, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    Discriminator,
+    Field,
+    Tag,
+    field_validator,
+    model_validator,
+)
 
 # Built-in dataset aliases for prompt loading
 BUILTIN_DATASETS: dict[str, dict[str, str]] = {
@@ -345,32 +353,53 @@ class ExperimentConfig(BaseModel):
     decode_token_to_text: bool = Field(default=False, description="Decode tokens to text")
 
     # Prompt source (optional - can also be specified via CLI)
+    # YAML alias: "prompts" (preferred) or "prompt_source" (legacy)
     prompt_source: PromptSourceConfig | None = Field(
-        default=None, description="Prompt source: file or huggingface dataset"
+        default=None,
+        validation_alias=AliasChoices("prompts", "prompt_source"),
+        description="Prompt source: file or huggingface dataset",
     )
 
     # Distributed configuration
-    gpu_list: list[int] = Field(default_factory=lambda: [0], description="GPU indices to use")
+    # YAML alias: "gpus" (preferred) or "gpu_list" (legacy)
+    gpu_list: list[int] = Field(
+        default_factory=lambda: [0],
+        validation_alias=AliasChoices("gpus", "gpu_list"),
+        description="GPU indices to use",
+    )
     num_processes: int = Field(default=1, ge=1, description="Number of processes")
 
     # Sub-configurations
+    # YAML aliases: short names (preferred) or full names (legacy)
     batching_options: BatchingConfig = Field(
-        default_factory=BatchingConfig, description="Batching config"
+        default_factory=BatchingConfig,
+        validation_alias=AliasChoices("batching", "batching_options"),
+        description="Batching config",
     )
     sharding_config: ShardingConfig = Field(
-        default_factory=ShardingConfig, description="Sharding config"
+        default_factory=ShardingConfig,
+        validation_alias=AliasChoices("sharding", "sharding_config"),
+        description="Sharding config",
     )
     latency_simulation: LatencySimulation = Field(
-        default_factory=LatencySimulation, description="Latency simulation config"
+        default_factory=LatencySimulation,
+        validation_alias=AliasChoices("traffic_simulation", "latency_simulation"),
+        description="Traffic simulation config",
     )
     decoder_config: DecoderConfig = Field(
-        default_factory=DecoderConfig, description="Decoder/generation config"
+        default_factory=DecoderConfig,
+        validation_alias=AliasChoices("decoder", "decoder_config"),
+        description="Decoder/generation config",
     )
     quantization_config: QuantizationConfig = Field(
-        default_factory=QuantizationConfig, description="Quantization config"
+        default_factory=QuantizationConfig,
+        validation_alias=AliasChoices("quantization", "quantization_config"),
+        description="Quantization config",
     )
     schedule_config: ScheduleConfig = Field(
-        default_factory=ScheduleConfig, description="Schedule config for daemon mode"
+        default_factory=ScheduleConfig,
+        validation_alias=AliasChoices("schedule", "schedule_config"),
+        description="Schedule config for daemon mode",
     )
 
     # Precision and backend
