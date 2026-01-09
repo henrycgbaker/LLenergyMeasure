@@ -25,7 +25,7 @@ from rich.console import Console
 from rich.prompt import Confirm
 from rich.table import Table
 
-from llm_energy_measure.config.loader import load_config, validate_config
+from llm_energy_measure.config.loader import has_blocking_warnings, load_config, validate_config
 from llm_energy_measure.config.models import ExperimentConfig, HuggingFacePromptSource
 from llm_energy_measure.constants import (
     COMPLETION_MARKER_PREFIX,
@@ -127,6 +127,27 @@ def _display_config_summary(
 
     if preset_name:
         console.print(f"  Preset: [cyan]{preset_name}[/cyan]")
+
+    # Show seed if set
+    if config.random_seed is not None:
+        console.print(f"  Seed: {config.random_seed}")
+
+    # Show decoder/sampling config
+    decoder = config.decoder_config
+    console.print("  [bold]Decoder config:[/bold]")
+    if decoder.preset:
+        console.print(f"    preset: [cyan]{decoder.preset}[/cyan]")
+    if decoder.is_deterministic:
+        console.print("    mode: [green]deterministic (greedy)[/green]")
+    else:
+        console.print("    mode: sampling")
+    console.print(f"    temperature: {decoder.temperature}")
+    console.print(f"    do_sample: {decoder.do_sample}")
+    console.print(f"    top_p: {decoder.top_p}")
+    console.print(f"    top_k: {decoder.top_k}")
+    console.print(f"    min_p: {decoder.min_p}")
+    console.print(f"    repetition_penalty: {decoder.repetition_penalty}")
+    console.print(f"    no_repeat_ngram_size: {decoder.no_repeat_ngram_size}")
 
     # Show overrides
     if overrides:
@@ -434,6 +455,15 @@ def experiment(
     results_dir: Annotated[
         Path | None, typer.Option("--results-dir", "-o", help="Results directory")
     ] = None,
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Skip confirmation prompts (auto-accept warnings)")
+    ] = False,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Show config and exit without running experiment")
+    ] = False,
+    force: Annotated[
+        bool, typer.Option("--force", help="Run despite blocking config errors")
+    ] = False,
 ) -> None:
     """Run experiment with automatic accelerate handling and auto-aggregation.
 
@@ -643,6 +673,43 @@ def experiment(
         config = ExperimentConfig(**config_dict)
         final_num_processes = config.num_processes
 
+        # 7. Validate config and handle warnings
+        config_warnings = validate_config(config)
+        if config_warnings:
+            # Display warnings with severity-appropriate styling
+            console.print("\n[yellow]Configuration warnings:[/yellow]")
+            for warning in config_warnings:
+                severity_styles = {"error": "red", "warning": "yellow", "info": "dim"}
+                style = severity_styles.get(warning.severity, "yellow")
+                console.print(f"  [{style}]{warning}[/{style}]")
+
+            # Check for blocking errors (error severity)
+            if has_blocking_warnings(config_warnings):
+                if not force:
+                    console.print(
+                        "\n[red]Blocking config errors detected. Use --force to run anyway.[/red]"
+                    )
+                    raise typer.Exit(1)
+                else:
+                    console.print("\n[yellow]--force: Running despite blocking errors[/yellow]")
+
+            # Handle non-blocking warnings with --yes / interactive prompt
+            elif not yes:
+                # Check if we're in interactive mode
+                if not sys.stdin.isatty():
+                    # Non-interactive mode without --yes: fail
+                    console.print("\n[red]Config warnings detected in non-interactive mode.[/red]")
+                    console.print("[yellow]Use --yes to proceed anyway.[/yellow]")
+                    raise typer.Exit(1)
+
+                # Interactive mode: prompt user
+                if not Confirm.ask("\nContinue with this configuration?", default=True):
+                    console.print("[dim]Aborted by user[/dim]")
+                    raise typer.Abort()
+
+        # Convert warnings to strings for embedding in results
+        warning_strings = [w.to_result_string() for w in config_warnings] if config_warnings else []
+
         # Compute config hash for incomplete experiment detection (Phase 4)
         config_hash = compute_config_hash(config_dict)
 
@@ -675,8 +742,13 @@ def experiment(
 
         topology = detect_gpu_topology()
         mig_warnings = validate_gpu_selection(config.gpu_list, topology)
-        for warning in mig_warnings:
-            console.print(f"[yellow]Warning:[/yellow] {warning}")
+        for mig_warning in mig_warnings:
+            console.print(f"[yellow]Warning:[/yellow] {mig_warning}")
+
+        # Dry-run: show config and exit without running
+        if dry_run:
+            console.print("\n[cyan]--dry-run: Exiting without running experiment[/cyan]")
+            raise typer.Exit(0)
 
         # Build accelerate command
         cmd = [
@@ -708,6 +780,7 @@ def experiment(
                 "cli_overrides": tracked_overrides,
                 "original_config_path": str(config_path) if config_path else None,
                 "cycle_id": None,  # Set for multi-cycle experiments
+                "config_warnings": warning_strings,  # Embed in results for traceability
             }
         }
         config_with_metadata = {**effective_config, **metadata}
@@ -1194,14 +1267,76 @@ def config_validate(
         console.print(f"[green]✓[/green] Valid configuration: {config.config_name}")
         console.print(f"  Model: {config.model_name}")
         console.print(f"  Processes: {config.num_processes} on GPUs {config.gpu_list}")
+        console.print(
+            f"  Tokens: input={config.max_input_tokens}, output={config.max_output_tokens}"
+        )
+        console.print(f"  Precision: {config.fp_precision}, Backend: {config.backend}")
 
+        # Batching
+        batch = config.batching_options
+        console.print(f"  Batching: size={batch.batch_size}, strategy={batch.strategy}")
+
+        # Sharding (if enabled)
+        if config.sharding_config.strategy != "none":
+            shard = config.sharding_config
+            console.print(f"  Sharding: {shard.strategy}, shards={shard.num_shards}")
+
+        # Quantization
         if config.quantization_config.quantization:
             q = config.quantization_config
             bits = "4-bit" if q.load_in_4bit else "8-bit" if q.load_in_8bit else "unknown"
             console.print(f"  Quantization: {bits}")
 
+        # Reproducibility & cycles
+        if config.random_seed is not None:
+            console.print(f"  Seed: {config.random_seed}")
+        if config.num_cycles > 1:
+            console.print(f"  Cycles: {config.num_cycles}")
+
+        # Decoder config (all params)
+        decoder = config.decoder_config
+        console.print("  [bold]Decoder config:[/bold]")
+        if decoder.preset:
+            console.print(f"    preset: [cyan]{decoder.preset}[/cyan]")
+        if decoder.is_deterministic:
+            console.print("    mode: [green]deterministic (greedy)[/green]")
+        else:
+            console.print("    mode: sampling")
+        console.print(f"    temperature: {decoder.temperature}")
+        console.print(f"    do_sample: {decoder.do_sample}")
+        console.print(f"    top_p: {decoder.top_p}")
+        console.print(f"    top_k: {decoder.top_k}")
+        console.print(f"    min_p: {decoder.min_p}")
+        console.print(f"    repetition_penalty: {decoder.repetition_penalty}")
+        console.print(f"    no_repeat_ngram_size: {decoder.no_repeat_ngram_size}")
+
+        # Traffic simulation (if enabled)
+        if config.latency_simulation.enabled:
+            sim = config.latency_simulation
+            console.print("  [bold]Traffic simulation:[/bold]")
+            console.print(f"    mode: {sim.mode}, target_qps: {sim.target_qps}")
+
+        # Schedule config (if enabled)
+        if config.schedule_config.enabled:
+            sched = config.schedule_config
+            console.print("  [bold]Schedule:[/bold]")
+            timing = sched.interval or f"at {sched.at}"
+            console.print(f"    {timing} for {sched.total_duration}")
+
+        # Prompt source (if configured)
+        if config.prompt_source is not None:
+            ps = config.prompt_source
+            if ps.type == "file":
+                console.print(f"  Prompt source: file ({ps.path})")
+            else:
+                console.print(f"  Prompt source: {ps.dataset} ({ps.split})")
+
+        # Show warnings with severity
+        if warnings:
+            console.print()
         for warning in warnings:
-            console.print(f"[yellow]Warning:[/yellow] {warning}")
+            severity_style = "yellow" if warning.severity == "warning" else "dim"
+            console.print(f"[{severity_style}]{warning}[/{severity_style}]")
 
     except ConfigurationError as e:
         console.print(f"[red]Invalid configuration:[/red] {e}")
@@ -1220,18 +1355,101 @@ def config_show(
         table.add_column("Field", style="cyan")
         table.add_column("Value", style="green")
 
+        # Core settings
         table.add_row("model_name", config.model_name)
         table.add_row("num_processes", str(config.num_processes))
         table.add_row("gpu_list", str(config.gpu_list))
         table.add_row("max_input_tokens", str(config.max_input_tokens))
         table.add_row("max_output_tokens", str(config.max_output_tokens))
+        if config.min_output_tokens > 0:
+            table.add_row("min_output_tokens", str(config.min_output_tokens))
         table.add_row("fp_precision", config.fp_precision)
         table.add_row("backend", config.backend)
 
+        # Task type (if non-default)
+        if config.task_type != "text_generation":
+            table.add_row("task_type", config.task_type)
+        if config.inference_type != "pure_generative":
+            table.add_row("inference_type", config.inference_type)
+
+        # Reproducibility & cycles
+        if config.random_seed is not None:
+            table.add_row("random_seed", str(config.random_seed))
+        if config.num_cycles > 1:
+            table.add_row("num_cycles", str(config.num_cycles))
+
+        # Batching
+        batch = config.batching_options
+        table.add_row("batch_size", str(batch.batch_size))
+        table.add_row("batching_strategy", batch.strategy)
+        if batch.max_tokens_per_batch is not None:
+            table.add_row("max_tokens_per_batch", str(batch.max_tokens_per_batch))
+
+        # Sharding (if enabled)
+        shard = config.sharding_config
+        if shard.strategy != "none":
+            table.add_row("[bold]sharding_config[/bold]", "")
+            table.add_row("  strategy", shard.strategy)
+            table.add_row("  num_shards", str(shard.num_shards))
+
+        # Quantization
         if config.quantization_config.quantization:
             q = config.quantization_config
             quant = "4-bit" if q.load_in_4bit else "8-bit" if q.load_in_8bit else "enabled"
             table.add_row("quantization", quant)
+
+        # Decoder/sampling config
+        decoder = config.decoder_config
+        table.add_row("[bold]decoder_config[/bold]", "")
+        if decoder.preset:
+            table.add_row("  preset", decoder.preset)
+        mode = "deterministic (greedy)" if decoder.is_deterministic else "sampling"
+        table.add_row("  mode", mode)
+        table.add_row("  temperature", str(decoder.temperature))
+        table.add_row("  do_sample", str(decoder.do_sample))
+        table.add_row("  top_p", str(decoder.top_p))
+        table.add_row("  top_k", str(decoder.top_k))
+        table.add_row("  min_p", str(decoder.min_p))
+        table.add_row("  repetition_penalty", str(decoder.repetition_penalty))
+        table.add_row("  no_repeat_ngram_size", str(decoder.no_repeat_ngram_size))
+
+        # Traffic simulation (if enabled)
+        if config.latency_simulation.enabled:
+            sim = config.latency_simulation
+            table.add_row("[bold]latency_simulation[/bold]", "")
+            table.add_row("  mode", sim.mode)
+            table.add_row("  target_qps", str(sim.target_qps))
+            if sim.seed is not None:
+                table.add_row("  seed", str(sim.seed))
+
+        # Schedule config (if enabled)
+        if config.schedule_config.enabled:
+            sched = config.schedule_config
+            table.add_row("[bold]schedule_config[/bold]", "")
+            if sched.interval:
+                table.add_row("  interval", sched.interval)
+            if sched.at:
+                table.add_row("  at", sched.at)
+            if sched.days:
+                table.add_row("  days", ", ".join(sched.days))
+            table.add_row("  total_duration", sched.total_duration)
+
+        # Prompt source (if configured in YAML)
+        if config.prompt_source is not None:
+            ps = config.prompt_source
+            table.add_row("[bold]prompt_source[/bold]", "")
+            table.add_row("  type", ps.type)
+            if ps.type == "file":
+                table.add_row("  path", ps.path)
+            else:  # huggingface
+                table.add_row("  dataset", ps.dataset)
+                table.add_row("  split", ps.split)
+                if ps.column:
+                    table.add_row("  column", ps.column)
+                if ps.sample_size:
+                    table.add_row("  sample_size", str(ps.sample_size))
+                if ps.shuffle:
+                    table.add_row("  shuffle", str(ps.shuffle))
 
         console.print(table)
 
@@ -1690,8 +1908,9 @@ def results_show(
             data = [r.model_dump(mode="json") for r in raw_results]
             console.print_json(json.dumps(data, default=str))
         else:
-            for result in raw_results:
-                _show_raw_result(result)
+            for i, result in enumerate(raw_results):
+                # Show config only for first result to avoid repetition
+                _show_raw_result(result, show_config=(i == 0))
     else:
         aggregated = repo.load_aggregated(experiment_id)
         if not aggregated:
@@ -1705,9 +1924,102 @@ def results_show(
             _show_aggregated_result(aggregated)
 
 
-def _show_raw_result(result: RawProcessResult) -> None:
+def _show_effective_config(
+    config: dict[str, Any], cli_overrides: dict[str, Any] | None = None
+) -> None:
+    """Display effective configuration from results."""
+    table = Table(title="Experiment Configuration")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="green")
+
+    # Core settings
+    table.add_row("model_name", str(config.get("model_name", "N/A")))
+    table.add_row("num_processes", str(config.get("num_processes", 1)))
+    table.add_row("gpu_list", str(config.get("gpu_list", [0])))
+    table.add_row("max_input_tokens", str(config.get("max_input_tokens", "N/A")))
+    table.add_row("max_output_tokens", str(config.get("max_output_tokens", "N/A")))
+    table.add_row("fp_precision", str(config.get("fp_precision", "N/A")))
+
+    # Reproducibility
+    if config.get("random_seed") is not None:
+        table.add_row("random_seed", str(config["random_seed"]))
+    if config.get("num_cycles", 1) > 1:
+        table.add_row("num_cycles", str(config["num_cycles"]))
+
+    # Batching
+    batch = config.get("batching_options", {})
+    if batch:
+        table.add_row("batch_size", str(batch.get("batch_size", 1)))
+        table.add_row("batching_strategy", str(batch.get("strategy", "static")))
+        if batch.get("max_tokens_per_batch"):
+            table.add_row("max_tokens_per_batch", str(batch["max_tokens_per_batch"]))
+
+    # Sharding
+    shard = config.get("sharding_config", {})
+    if shard and shard.get("strategy", "none") != "none":
+        table.add_row("[bold]sharding[/bold]", "")
+        table.add_row("  strategy", str(shard.get("strategy")))
+        table.add_row("  num_shards", str(shard.get("num_shards", 1)))
+
+    # Quantization
+    quant = config.get("quantization_config", {})
+    if quant and quant.get("quantization"):
+        bits = (
+            "4-bit"
+            if quant.get("load_in_4bit")
+            else "8-bit"
+            if quant.get("load_in_8bit")
+            else "enabled"
+        )
+        table.add_row("quantization", bits)
+
+    # Decoder config
+    decoder = config.get("decoder_config", {})
+    if decoder:
+        table.add_row("[bold]decoder_config[/bold]", "")
+        if decoder.get("preset"):
+            table.add_row("  preset", str(decoder["preset"]))
+        is_deterministic = decoder.get("temperature", 1.0) == 0.0 or not decoder.get(
+            "do_sample", True
+        )
+        mode = "deterministic (greedy)" if is_deterministic else "sampling"
+        table.add_row("  mode", mode)
+        table.add_row("  temperature", str(decoder.get("temperature", 1.0)))
+        table.add_row("  do_sample", str(decoder.get("do_sample", True)))
+        table.add_row("  top_p", str(decoder.get("top_p", 1.0)))
+        table.add_row("  top_k", str(decoder.get("top_k", 50)))
+        table.add_row("  min_p", str(decoder.get("min_p", 0.0)))
+        table.add_row("  repetition_penalty", str(decoder.get("repetition_penalty", 1.0)))
+        table.add_row("  no_repeat_ngram_size", str(decoder.get("no_repeat_ngram_size", 0)))
+
+    # Traffic simulation
+    latency = config.get("latency_simulation", {})
+    if latency and latency.get("enabled"):
+        table.add_row("[bold]latency_simulation[/bold]", "")
+        table.add_row("  mode", str(latency.get("mode", "poisson")))
+        table.add_row("  target_qps", str(latency.get("target_qps", 1.0)))
+
+    console.print(table)
+
+    # Show CLI overrides if any
+    if cli_overrides:
+        console.print("\n[dim]CLI overrides:[/dim]")
+        for key, override in cli_overrides.items():
+            if isinstance(override, dict):
+                console.print(f"  {key}: {override.get('original')} → {override.get('new')}")
+            else:
+                console.print(f"  {key}: {override}")
+
+
+def _show_raw_result(result: RawProcessResult, show_config: bool = True) -> None:
     """Display a raw process result."""
     console.print(f"\n[bold cyan]Process {result.process_index}[/bold cyan] (GPU {result.gpu_id})")
+    if result.gpu_name:
+        console.print(f"GPU: {result.gpu_name}")
+    if result.gpu_is_mig:
+        console.print(f"MIG Profile: {result.gpu_mig_profile}")
+    if result.energy_measurement_warning:
+        console.print(f"[yellow]⚠ {result.energy_measurement_warning}[/yellow]")
 
     table = Table(show_header=False, box=None)
     table.add_column("Field", style="dim")
@@ -1720,6 +2032,16 @@ def _show_raw_result(result: RawProcessResult) -> None:
     table.add_row("FLOPs", f"{result.compute_metrics.flops_total:.2e}")
 
     console.print(table)
+
+    # Show effective config (only for first result to avoid repetition)
+    if show_config and result.effective_config:
+        _show_effective_config(result.effective_config, result.cli_overrides)
+
+    # Show config warnings if present
+    if show_config and result.config_warnings:
+        console.print("\n[yellow]Config warnings at runtime:[/yellow]")
+        for warning in result.config_warnings:
+            console.print(f"  [dim]{warning}[/dim]")
 
 
 def _show_aggregated_result(result: AggregatedResult) -> None:
@@ -1744,6 +2066,16 @@ def _show_aggregated_result(result: AggregatedResult) -> None:
     table.add_row("Total FLOPs", f"{result.total_flops:.2e}")
 
     console.print(table)
+
+    # Show effective config if available
+    if result.effective_config:
+        _show_effective_config(result.effective_config, result.cli_overrides)
+
+    # Show config warnings if present
+    if result.config_warnings:
+        console.print("\n[yellow]Config warnings at runtime:[/yellow]")
+        for warning in result.config_warnings:
+            console.print(f"  [dim]{warning}[/dim]")
 
     # Aggregation metadata
     meta = result.aggregation

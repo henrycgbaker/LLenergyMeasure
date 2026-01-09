@@ -176,6 +176,7 @@ class ExperimentOrchestrator:
             compute_metrics=combined.compute,
             effective_config=ctx.effective_config,
             cli_overrides=ctx.cli_overrides,
+            config_warnings=ctx.config_warnings,
         )
 
         # Save raw result

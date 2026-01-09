@@ -95,6 +95,10 @@ class MultiCycleResult(BaseModel):
     effective_config: dict[str, Any] = Field(
         default_factory=dict, description="Experiment configuration"
     )
+    config_warnings: list[str] = Field(
+        default_factory=list,
+        description="Config validation warnings that were present at runtime",
+    )
 
     model_config = {"frozen": True}
 
@@ -146,6 +150,10 @@ class RawProcessResult(BaseModel):
     cli_overrides: dict[str, Any] = Field(
         default_factory=dict,
         description="Parameters that were overridden via CLI flags",
+    )
+    config_warnings: list[str] = Field(
+        default_factory=list,
+        description="Config validation warnings that were present at runtime",
     )
 
     model_config = {"frozen": True}
@@ -204,6 +212,10 @@ class AggregatedResult(BaseModel):
     cli_overrides: dict[str, Any] = Field(
         default_factory=dict,
         description="Parameters that were overridden via CLI flags",
+    )
+    config_warnings: list[str] = Field(
+        default_factory=list,
+        description="Config validation warnings that were present at runtime",
     )
 
     model_config = {"frozen": True}
