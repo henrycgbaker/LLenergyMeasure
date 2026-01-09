@@ -210,14 +210,43 @@ decoder:
 
 ### Configuration Warnings
 
-The validator emits warnings for potentially problematic configurations:
+The validator (`validate_config()`) checks for problematic configurations and returns warnings at three severity levels:
 
-| Scenario | Warning |
-|----------|---------|
-| Both `temperature` and `top_p` modified | "not recommended, alter one or the other" |
-| `do_sample=True` with `temperature=0` | "do_sample has no effect when temperature=0" |
+| Severity | Behaviour |
+|----------|-----------|
+| **error** | Blocks experiment without `--force` flag |
+| **warning** | Shows warning, prompts for confirmation (skip with `--yes`) |
+| **info** | Informational, doesn't block |
 
-Use `--yes` flag to skip confirmation prompts in non-interactive mode.
+#### All Configuration Warnings
+
+| Category | Condition | Severity | Message |
+|----------|-----------|----------|---------|
+| Distributed | `num_processes > 1` with single GPU | info | Multiple processes with single GPU may not provide parallelism benefits |
+| Tokens | `max_output_tokens > 2048` | warning | Very high max_output_tokens may cause memory issues |
+| Quantization | `quantization=True` with `fp_precision=float32` | warning | Quantization typically uses float16 compute, not float32 |
+| Quantization | `quantization=True` without 4bit/8bit specified | error | Must specify load_in_4bit or load_in_8bit |
+| Batching | Dynamic strategy without `max_tokens_per_batch` | info | Will use max_input_tokens as token budget |
+| Batching | Sorted strategy with `batch_size=1` | info | Sorting provides no benefit with batch_size=1 |
+| Sharding | `num_shards > len(gpus)` | error | num_shards exceeds available GPUs |
+| Sharding | Sharding strategy with single GPU | info | Sharding provides no benefit with single GPU |
+| Decoder | Non-default sampling params in deterministic mode | error | Sampling params ignored when temp=0 or do_sample=False |
+| Decoder | `do_sample=True` with `temperature=0` | info | do_sample has no effect when temperature=0 |
+| Decoder | Both `temperature` and `top_p` modified | warning | Not recommended - alter one or the other |
+| Traffic | `target_qps > 100` | warning | Very high QPS may not be achievable |
+
+#### Handling Warnings
+
+```bash
+# Show warnings, prompt for confirmation
+llm-energy-measure experiment config.yaml --dataset alpaca -n 100
+
+# Skip confirmation prompts (auto-accept warnings)
+llm-energy-measure experiment config.yaml --dataset alpaca -n 100 --yes
+
+# Run despite blocking errors
+llm-energy-measure experiment config.yaml --dataset alpaca -n 100 --force
+```
 
 ### loader.py
 Configuration loading with inheritance.

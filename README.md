@@ -56,7 +56,7 @@ save_outputs: false
 #   column: instruction
 
 # === GPU SETUP ===
-gpus: [0, 1]
+gpus: [0, 1]                    # Available GPUs on your server (e.g., [0], [0,1,2,3])
 num_processes: 2                # Must be <= len(gpus)
 
 # === PRECISION ===
