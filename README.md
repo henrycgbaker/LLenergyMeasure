@@ -30,36 +30,75 @@ docker compose build
 **1. Create a config** (`configs/my_experiment.yaml`):
 
 ```yaml
-# Experiment identity
+# === IDENTITY ===
 config_name: llama2-7b-benchmark
 model_name: meta-llama/Llama-2-7b-hf
 
-# Token limits
+# === MODEL PROPERTIES ===
+is_encoder_decoder: false
+task_type: text_generation      # text_generation | translation | summarisation
+inference_type: pure_generative # pure_generative | reasoning
+
+# === TOKEN LIMITS ===
 max_input_tokens: 512
 max_output_tokens: 128
+min_output_tokens: 0
 
-# GPU setup
-gpus: [0]
-num_processes: 1
+# === INPUT ===
+num_input_prompts: 100
+save_outputs: false
 
-# Precision & quantization
-fp_precision: float16
+# === PROMPT SOURCE (alternative to --dataset CLI flag) ===
+# prompts:
+#   type: huggingface
+#   dataset: alpaca             # Built-in: alpaca, gsm8k, mmlu, sharegpt
+#   split: train
+#   column: instruction
+
+# === GPU SETUP ===
+gpus: [0, 1]
+num_processes: 2                # Must be <= len(gpus)
+
+# === PRECISION ===
+fp_precision: float16           # float32 | float16 | bfloat16
+
+# === QUANTIZATION ===
 quantization:
-  enabled: false
+  quantization: false
   load_in_8bit: false
   load_in_4bit: false
 
-# Batching
+# === BATCHING ===
 batching:
   batch_size: 4
-  strategy: static          # static | dynamic | sorted
+  strategy: static              # static | dynamic | sorted_static | sorted_dynamic
+  max_tokens_per_batch: null    # For dynamic strategies
 
-# Generation parameters
+# === GENERATION / DECODER ===
 decoder:
+  preset: null                  # deterministic | standard | creative | factual
   temperature: 1.0
+  do_sample: true
   top_p: 1.0
   top_k: 50
-  do_sample: false          # false = greedy decoding
+  repetition_penalty: 1.0
+
+# === EXPERIMENT CYCLES (for statistical robustness) ===
+num_cycles: 1                   # 1-10 cycles, results aggregated with statistics
+random_seed: 42                 # null = non-deterministic
+
+# === TRAFFIC SIMULATION (MLPerf-style load testing) ===
+traffic_simulation:
+  enabled: false
+  mode: poisson                 # constant | poisson
+  target_qps: 1.0
+
+# === SCHEDULED EXPERIMENTS (daemon mode) ===
+schedule:
+  enabled: false
+  interval: "6h"                # e.g., "6h", "30m", "1d"
+  # at: "09:00"                 # Specific time of day
+  # days: ["mon", "wed", "fri"] # Or "weekdays", "weekends"
 ```
 
 **2. Run experiment:**
