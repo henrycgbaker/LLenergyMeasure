@@ -21,11 +21,18 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
+from pydantic import ValidationError
 from rich.console import Console
+from rich.markup import escape as rich_escape
 from rich.prompt import Confirm
 from rich.table import Table
 
-from llm_energy_measure.config.loader import has_blocking_warnings, load_config, validate_config
+from llm_energy_measure.config.loader import (
+    ConfigWarning,
+    has_blocking_warnings,
+    load_config,
+    validate_config,
+)
 from llm_energy_measure.config.models import ExperimentConfig, HuggingFacePromptSource
 from llm_energy_measure.constants import (
     COMPLETION_MARKER_PREFIX,
@@ -681,7 +688,7 @@ def experiment(
             for warning in config_warnings:
                 severity_styles = {"error": "red", "warning": "yellow", "info": "dim"}
                 style = severity_styles.get(warning.severity, "yellow")
-                console.print(f"  [{style}]{warning}[/{style}]")
+                console.print(f"  [{style}]{rich_escape(str(warning))}[/{style}]")
 
             # Check for blocking errors (error severity)
             if has_blocking_warnings(config_warnings):
@@ -1336,7 +1343,7 @@ def config_validate(
             console.print()
         for warning in warnings:
             severity_style = "yellow" if warning.severity == "warning" else "dim"
-            console.print(f"[{severity_style}]{warning}[/{severity_style}]")
+            console.print(f"[{severity_style}]{rich_escape(str(warning))}[/{severity_style}]")
 
     except ConfigurationError as e:
         console.print(f"[red]Invalid configuration:[/red] {e}")
@@ -1595,6 +1602,13 @@ def config_generate_grid(
     output_dir: Annotated[
         Path, typer.Option("--output-dir", "-o", help="Output directory for generated configs")
     ] = Path("configs/grid"),
+    validate: Annotated[
+        bool,
+        typer.Option("--validate", help="Only generate valid configs (skip those with errors)"),
+    ] = False,
+    strict: Annotated[
+        bool, typer.Option("--strict", help="Fail if any generated config would be invalid")
+    ] = False,
 ) -> None:
     """Generate a grid of configs from a base config with parameter variations.
 
@@ -1663,8 +1677,11 @@ def config_generate_grid(
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Generate configs
-    generated = []
+    # Generate configs with validation
+    # Build all config variations first (for --strict validation before write)
+    config_variations: list[tuple[Path, dict[str, Any]]] = []
+    base_name = base_config.stem
+
     for combo in combinations:
         config_dict = copy.deepcopy(base_dict)
 
@@ -1689,21 +1706,89 @@ def config_generate_grid(
             suffix_parts.append(f"{param.split('.')[-1]}_{clean_val}")
 
         # Update config name
-        base_name = base_config.stem
         suffix = "_".join(suffix_parts)
         config_dict["config_name"] = f"{base_name}_{suffix}"
+        output_path = output_dir / f"{base_name}_{suffix}.yaml"
+        config_variations.append((output_path, config_dict))
+
+    # Validate all configs first
+    invalid_configs: list[tuple[Path, list[ConfigWarning] | str]] = []
+    valid_configs: list[tuple[Path, dict[str, Any]]] = []
+
+    for output_path, config_dict in config_variations:
+        try:
+            config_obj = ExperimentConfig(**config_dict)
+            config_warnings = validate_config(config_obj)
+
+            if has_blocking_warnings(config_warnings):
+                invalid_configs.append((output_path, config_warnings))
+            else:
+                valid_configs.append((output_path, config_dict))
+
+        except ValidationError as e:
+            invalid_configs.append((output_path, str(e)))
+
+    # --strict: fail before writing if any invalid
+    if strict and invalid_configs:
+        console.print(
+            f"\n[yellow]⚠ {len(invalid_configs)} config(s) with blocking errors:[/yellow]"
+        )
+        for path, warnings_or_err in invalid_configs[:5]:
+            console.print(f"  {path.name}:")
+            if isinstance(warnings_or_err, list):
+                for w in warnings_or_err:
+                    if w.severity == "error":
+                        console.print(f"    [red]{rich_escape(str(w))}[/red]")
+            else:
+                console.print(f"    [red]{rich_escape(str(warnings_or_err))}[/red]")
+        if len(invalid_configs) > 5:
+            console.print(f"  ... and {len(invalid_configs) - 5} more")
+        console.print("\n[red]Error:[/red] --strict: Some configs have blocking errors")
+        console.print("[dim]No configs were written.[/dim]")
+        raise typer.Exit(1)
+
+    # Write configs
+    generated: list[Path] = []
+    skipped_count = 0
+
+    for output_path, config_dict in config_variations:
+        # Check if this config was invalid
+        is_invalid = any(p == output_path for p, _ in invalid_configs)
+
+        if is_invalid and validate:
+            skipped_count += 1
+            continue  # Don't write invalid config
 
         # Write config
-        output_path = output_dir / f"{base_name}_{suffix}.yaml"
         with open(output_path, "w") as f:
             yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
-
         generated.append(output_path)
 
+    # Report results
     console.print(f"[green]✓[/green] Generated {len(generated)} configs in {output_dir}/")
-    console.print(
-        f"\n[dim]Run with: llm-energy-measure batch {output_dir}/*.yaml --dataset alpaca -n 100[/dim]"
-    )
+
+    if invalid_configs:
+        console.print(
+            f"\n[yellow]⚠ {len(invalid_configs)} config(s) with blocking errors:[/yellow]"
+        )
+        for path, warnings_or_err in invalid_configs[:5]:
+            console.print(f"  {path.name}:")
+            if isinstance(warnings_or_err, list):
+                for w in warnings_or_err:
+                    if w.severity == "error":
+                        console.print(f"    [red]{rich_escape(str(w))}[/red]")
+            else:
+                console.print(f"    [red]{rich_escape(str(warnings_or_err))}[/red]")
+        if len(invalid_configs) > 5:
+            console.print(f"  ... and {len(invalid_configs) - 5} more")
+
+    if validate and skipped_count:
+        console.print(f"\n[dim]Skipped {skipped_count} invalid configs due to --validate[/dim]")
+
+    if generated:
+        console.print(
+            f"\n[dim]Run with: llm-energy-measure batch {output_dir}/*.yaml --dataset alpaca -n 100[/dim]"
+        )
 
 
 @app.command("batch")  # type: ignore[misc]
@@ -2041,7 +2126,7 @@ def _show_raw_result(result: RawProcessResult, show_config: bool = True) -> None
     if show_config and result.config_warnings:
         console.print("\n[yellow]Config warnings at runtime:[/yellow]")
         for warning in result.config_warnings:
-            console.print(f"  [dim]{warning}[/dim]")
+            console.print(f"  [dim]{rich_escape(str(warning))}[/dim]")
 
 
 def _show_aggregated_result(result: AggregatedResult) -> None:
@@ -2075,7 +2160,7 @@ def _show_aggregated_result(result: AggregatedResult) -> None:
     if result.config_warnings:
         console.print("\n[yellow]Config warnings at runtime:[/yellow]")
         for warning in result.config_warnings:
-            console.print(f"  [dim]{warning}[/dim]")
+            console.print(f"  [dim]{rich_escape(str(warning))}[/dim]")
 
     # Aggregation metadata
     meta = result.aggregation
@@ -2085,7 +2170,7 @@ def _show_aggregated_result(result: AggregatedResult) -> None:
     if meta.gpu_attribution_verified:
         console.print("[green]✓ GPU attribution verified[/green]")
     for warning in meta.warnings:
-        console.print(f"[yellow]⚠ {warning}[/yellow]")
+        console.print(f"[yellow]⚠ {rich_escape(str(warning))}[/yellow]")
 
 
 def _parse_duration(duration_str: str) -> float:
