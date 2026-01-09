@@ -80,8 +80,8 @@ class TestPresets:
         preset = PRESETS["quick-test"]
         assert "max_input_tokens" in preset
         assert "max_output_tokens" in preset
-        assert "batching_options" in preset
-        assert "batch_size" in preset["batching_options"]
+        assert "batching" in preset
+        assert "batch_size" in preset["batching"]
         assert preset["max_input_tokens"] > 0
         assert preset["max_output_tokens"] > 0
 
@@ -91,7 +91,7 @@ class TestPresets:
         assert "max_input_tokens" in preset
         assert "max_output_tokens" in preset
         assert "fp_precision" in preset
-        assert "batching_options" in preset
+        assert "batching" in preset
         assert preset["fp_precision"] in ("float16", "float32", "bfloat16")
 
     def test_throughput_preset_structure(self):
@@ -99,9 +99,9 @@ class TestPresets:
         preset = PRESETS["throughput"]
         assert "max_input_tokens" in preset
         assert "max_output_tokens" in preset
-        assert "batching_options" in preset
+        assert "batching" in preset
         # Throughput preset should have larger batch size
-        assert preset["batching_options"]["batch_size"] > 1
+        assert preset["batching"]["batch_size"] > 1
 
     def test_all_presets_have_token_limits(self):
         """All presets have max_input_tokens and max_output_tokens."""
@@ -111,11 +111,11 @@ class TestPresets:
             assert preset["max_input_tokens"] > 0, f"{name} has invalid max_input_tokens"
             assert preset["max_output_tokens"] > 0, f"{name} has invalid max_output_tokens"
 
-    def test_all_presets_have_batching_options(self):
-        """All presets have batching_options."""
+    def test_all_presets_have_batching(self):
+        """All presets have batching."""
         for name, preset in PRESETS.items():
-            assert "batching_options" in preset, f"{name} missing batching_options"
-            assert "batch_size" in preset["batching_options"], f"{name} missing batch_size"
+            assert "batching" in preset, f"{name} missing batching"
+            assert "batch_size" in preset["batching"], f"{name} missing batch_size"
 
     def test_preset_values_are_valid_types(self):
         """Preset values have correct types."""
@@ -124,9 +124,7 @@ class TestPresets:
             assert isinstance(
                 preset["max_output_tokens"], int
             ), f"{name}: max_output_tokens not int"
-            assert isinstance(
-                preset["batching_options"]["batch_size"], int
-            ), f"{name}: batch_size not int"
+            assert isinstance(preset["batching"]["batch_size"], int), f"{name}: batch_size not int"
 
     def test_quick_test_is_minimal(self):
         """quick-test preset uses minimal values for fast testing."""
@@ -134,16 +132,21 @@ class TestPresets:
         # Quick test should have small token limits
         assert preset["max_input_tokens"] <= 128
         assert preset["max_output_tokens"] <= 64
-        assert preset["batching_options"]["batch_size"] == 1
+        assert preset["batching"]["batch_size"] == 1
 
     def test_benchmark_is_deterministic(self):
         """benchmark preset has deterministic settings."""
         preset = PRESETS["benchmark"]
         # Benchmark should be deterministic for reproducibility
-        if "decoder_config" in preset:
-            assert preset["decoder_config"].get("do_sample") is False
+        if "decoder" in preset:
+            # Either explicit do_sample=False or deterministic preset
+            is_deterministic = (
+                preset["decoder"].get("do_sample") is False
+                or preset["decoder"].get("preset") == "deterministic"
+            )
+            assert is_deterministic
 
     def test_throughput_has_dynamic_batching(self):
         """throughput preset enables dynamic batching."""
         preset = PRESETS["throughput"]
-        assert preset["batching_options"].get("dynamic_batching") is True
+        assert preset["batching"].get("dynamic_batching") is True

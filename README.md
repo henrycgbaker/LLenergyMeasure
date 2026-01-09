@@ -1,543 +1,69 @@
 # LLM Energy Measure
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+
 A Python framework for measuring LLM inference efficiency, including energy consumption, throughput, and computational metrics (FLOPs). Designed for distributed GPU benchmarking using HuggingFace models.
 
 ## Features
 
-- **Energy Measurement**: Track GPU, CPU, and RAM energy consumption via CodeCarbon
-- **Throughput Metrics**: Tokens/second, latency per token, batch processing stats
-- **FLOPs Estimation**: Multiple estimation methods (calflops, architecture-based, parameter-based)
-- **Multi-GPU Support**: Distributed inference via `accelerate` with per-process result tracking
-- **Auto-Aggregation**: Results automatically aggregated after successful experiment runs
-- **Experiment Resumption**: Resume interrupted experiments from where they left off
-- **Flexible Configuration**: YAML/JSON configs with inheritance support
-- **Docker Ready**: GPU-enabled containerization with docker-compose
+- **Energy Measurement** - Track GPU, CPU, and RAM energy via CodeCarbon
+- **Throughput Metrics** - Tokens/second, latency, batch processing stats
+- **FLOPs Estimation** - Multiple methods (calflops, architecture-based, parameter-based)
+- **Multi-GPU Support** - Distributed inference via `accelerate`
+- **Flexible Configuration** - YAML configs with inheritance and presets
+- **Docker Ready** - GPU-enabled containerisation
 
 ## Installation
 
-### Local (Poetry)
-
 ```bash
-# Install dependencies
+# Poetry (recommended)
 poetry install
 
-# With development dependencies
-poetry install --with dev
-```
-
-### Docker
-
-```bash
-# Build the image
+# Docker
 docker compose build
-
-# Run with GPU access
-docker compose run --rm llm-energy-measure-app llm-energy-measure --help
 ```
 
 ## Quick Start
 
-### 1. Create a Configuration
-
-Create a YAML config file (e.g., `configs/my_experiment.yaml`):
+**1. Create a config** (`configs/my_experiment.yaml`):
 
 ```yaml
 config_name: llama2-7b-benchmark
 model_name: meta-llama/Llama-2-7b-hf
-
-# Token limits
 max_input_tokens: 512
 max_output_tokens: 128
-
-# Distributed setup
-gpu_list: [0, 1]
-num_processes: 2
-
-# Precision
+gpus: [0]
+num_processes: 1
 fp_precision: float16
 ```
 
-### 2. Validate Configuration
+**2. Run experiment:**
 
 ```bash
-llm-energy-measure config validate configs/my_experiment.yaml
-```
-
-### 3. Run Experiment
-
-The `experiment` command handles `accelerate launch` automatically and auto-aggregates results on success:
-
-```bash
-# Using built-in HuggingFace datasets (recommended)
 llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
-
-# Using a prompts file
-llm-energy-measure experiment configs/my_experiment.yaml --prompts prompts.txt
-
-# Skip auto-aggregation (advanced)
-llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100 --no-aggregate
-
-# Resume an interrupted experiment
-llm-energy-measure experiment --resume <exp_id>
-
-# Start fresh, ignoring any incomplete experiments
-llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100 --fresh
 ```
 
-**Interrupt handling**: Press Ctrl+C to gracefully stop an experiment. State is saved and you can resume later with `--resume`.
-
-Or use `accelerate launch` directly for more control:
+**3. View results:**
 
 ```bash
-accelerate launch --num_processes 2 \
-  -m llm_energy_measure.orchestration.launcher \
-  --config configs/my_experiment.yaml \
-  --dataset alpaca -n 100
-```
-
-### 4. Aggregate Results (Manual)
-
-If you used `--no-aggregate` or need to re-aggregate:
-
-```bash
-# Aggregate a specific experiment
-llm-energy-measure aggregate exp_20240115_123456
-
-# Aggregate all pending experiments
-llm-energy-measure aggregate --all
-
-# Force aggregation of partial results (debugging)
-llm-energy-measure aggregate exp_20240115_123456 --force
-```
-
-### 5. View Results
-
-```bash
-# List all experiments
 llm-energy-measure results list
-
-# Show aggregated results
-llm-energy-measure results show exp_20240115_123456
-
-# Show per-process raw results
-llm-energy-measure results show exp_20240115_123456 --raw
-
-# Export as JSON
-llm-energy-measure results show exp_20240115_123456 --json
+llm-energy-measure results show <exp_id>
 ```
 
-## CLI Reference
+For a full tutorial, see the [Getting Started Guide](docs/quickstart.md).
 
-```
-llm-energy-measure [OPTIONS] COMMAND [ARGS]
+## Documentation
 
-Commands:
-  experiment  Run experiment (wraps accelerate, auto-aggregates)
-    --no-aggregate   Skip auto-aggregation
-    --fresh          Ignore incomplete experiments
-    --resume <id>    Resume an interrupted experiment
-  run         Run inference (called by accelerate launch)
-  aggregate   Aggregate raw per-process results
-    --force          Aggregate even if incomplete (partial results)
-  gpus        Show GPU topology including MIG instances
-  datasets    List available built-in datasets
-  presets     List built-in experiment presets
-  config      Configuration management
-    validate  Validate a config file
-    show      Display resolved configuration
-  results     Results inspection
-    list      List all experiments
-    show      Show experiment results
-```
+| Guide | Description |
+|-------|-------------|
+| [Getting Started](docs/quickstart.md) | Full tutorial, datasets, basic config |
+| [CLI Reference](docs/cli.md) | All commands and options |
+| [Deployment](docs/deployment.md) | Docker, MIG GPUs, troubleshooting |
+| [Configuration](src/llm_energy_measure/config/README.md) | Full config options, presets, validation |
 
-### Built-in Datasets
-
-Use HuggingFace datasets as prompt sources instead of text files:
-
-```bash
-# List available built-in datasets
-llm-energy-measure datasets
-
-# Run with built-in dataset
-llm-energy-measure run --config config.yaml --dataset alpaca -n 100
-
-# Use any HuggingFace dataset
-llm-energy-measure run --config config.yaml \
-  --dataset squad --split validation --column question -n 50
-```
-
-| Dataset | Source | Default Column |
-|---------|--------|----------------|
-| `alpaca` | tatsu-lab/alpaca | instruction |
-| `sharegpt` | ShareGPT_Vicuna | conversations |
-| `gsm8k` | gsm8k (main) | question |
-| `mmlu` | cais/mmlu (all) | question |
-
-### Global Options
-
-| Option | Description |
-|--------|-------------|
-| `--version, -v` | Show version |
-| `--verbose` | Enable debug logging |
-
-### GPU Topology & MIG Support
-
-View your GPU configuration before running experiments:
-
-```bash
-llm-energy-measure gpus
-```
-
-Output example:
-```
-GPU Topology (4 device(s) detected)
-├── [0] NVIDIA A100-PCIE-40GB (40GB) - Full GPU
-├── [1] NVIDIA A100-PCIE-40GB (40GB) - MIG Enabled (3 instances)
-├── [2] NVIDIA A100-PCIE-40GB (40GB) - MIG Enabled (3 instances)
-└── [3] NVIDIA A100-PCIE-40GB (40GB) - MIG Enabled (3 instances)
-
-MIG Usage Notes:
-  - MIG instances must be addressed by UUID, not parent GPU index
-  - Example: CUDA_VISIBLE_DEVICES=MIG-<uuid> llm-energy-measure ...
-  - Run: nvidia-smi -L  to see MIG instance UUIDs
-  - MIG instances are isolated - no distributed inference across them
-  - Energy readings reflect parent GPU total, not per-instance
-```
-
-#### MIG (Multi-Instance GPU) Support
-
-NVIDIA MIG allows partitioning A100/H100 GPUs into isolated instances. This tool supports running experiments on MIG instances with some important caveats.
-
-**What Works:**
-- Single-process experiments on individual MIG instances
-- Running parallel independent experiments on different MIG instances (separate terminals)
-- MIG detection and metadata recording in results (`gpu_is_mig`, `gpu_mig_profile`)
-- Automatic warnings when running on MIG instances
-
-**What Does NOT Work:**
-- Multi-process distributed inference (`--num-processes 2`) across MIG instances
-  - MIG instances are hardware-isolated (no NVLink/peer-to-peer communication)
-  - This is a hardware limitation, not a software bug
-- Using parent GPU index (e.g., `--gpu-list 1`) when MIG is enabled on that GPU
-  - Must use `CUDA_VISIBLE_DEVICES` with MIG UUIDs instead
-
-**How to Use MIG Instances:**
-
-```bash
-# 1. List MIG instances and their UUIDs
-nvidia-smi -L
-
-# Example output:
-# GPU 0: NVIDIA A100-PCIE-40GB (UUID: GPU-xxx)
-#   MIG 3g.20gb Device 0: (UUID: MIG-abc123)
-#   MIG 3g.20gb Device 1: (UUID: MIG-def456)
-
-# 2. Run experiment on a specific MIG instance
-CUDA_VISIBLE_DEVICES=MIG-abc123 llm-energy-measure experiment config.yaml --dataset alpaca -n 100
-
-# 3. Run parallel experiments on different MIG instances (separate terminals)
-# Terminal 1:
-CUDA_VISIBLE_DEVICES=MIG-abc123 llm-energy-measure experiment config1.yaml --dataset alpaca -n 100
-
-# Terminal 2:
-CUDA_VISIBLE_DEVICES=MIG-def456 llm-energy-measure experiment config2.yaml --dataset alpaca -n 100
-```
-
-**Energy Measurement Note:**
-Energy readings on MIG instances reflect the **parent GPU's total power consumption**, not per-instance usage. This is a hardware/driver limitation (NVML reports parent GPU power only). Results metadata includes an `energy_measurement_warning` field when running on MIG to flag this limitation.
-
-## Configuration
-
-The CLI expects **YAML** configuration files. The Python files in `configs/` are legacy research configs - see `configs/README.md` for migration instructions.
-
-### Config Structure
-
-```yaml
-# Identity
-config_name: experiment-name  # Required
-model_name: org/model-name    # Required (HuggingFace path)
-
-# Model properties
-is_encoder_decoder: false
-task_type: text_generation    # text_generation | translation | summarisation
-inference_type: pure_generative
-
-# Token limits
-max_input_tokens: 512
-max_output_tokens: 128
-min_output_tokens: 0
-
-# Input
-num_input_prompts: 100
-save_outputs: false
-
-# Distributed
-gpu_list: [0, 1, 2, 3]
-num_processes: 4
-
-# Batching
-batching_options:
-  batch_size: 8
-  dynamic_batching: false
-
-# Generation
-decoder_config:
-  temperature: 1.0
-  top_p: 1.0
-  top_k: 50
-
-# Precision & Quantization
-fp_precision: float16         # float32 | float16 | bfloat16
-quantization_config:
-  quantization: false
-  load_in_4bit: false
-  load_in_8bit: false
-```
-
-### Config Inheritance
-
-Configs can extend base configs using `_extends`:
-
-```yaml
-# configs/base.yaml
-max_input_tokens: 512
-fp_precision: float16
-
-# configs/llama2-7b.yaml
-_extends: base.yaml
-config_name: llama2-7b
-model_name: meta-llama/Llama-2-7b-hf
-```
-
-## Running the Tool
-
-Four ways to run experiments (choose based on your needs):
-
-| Mode | Best For | Source Code | Setup |
-|------|----------|-------------|-------|
-| **Host (Poetry)** | Quick local dev | Local Python | `poetry install --with dev` |
-| **Docker prod** | Reproducible runs | Baked into image | `docker compose build` |
-| **Docker dev** | Test in container | Mounted from host | `docker compose --profile dev build` |
-| **VS Code devcontainer** | Full IDE + GPU | Mounted from host | "Reopen in Container" |
-
-### Host (Local Python with Poetry)
-
-```bash
-poetry install --with dev
-poetry run llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
-# Or activate the venv first:
-poetry shell
-llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
-```
-
-### Docker Production
-
-Uses the runtime image with the package baked in. Good for reproducible experiment runs.
-
-```bash
-docker compose build llm-energy-measure-app
-docker compose run --rm llm-energy-measure-app llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
-```
-
-### Docker Development
-
-Uses mounted source code with editable install. Changes on host are immediately available in container.
-
-```bash
-docker compose --profile dev build llm-energy-measure-dev
-# Interactive shell:
-docker compose --profile dev run --rm llm-energy-measure-dev
-# Or run command directly:
-docker compose --profile dev run --rm llm-energy-measure-dev llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
-```
-
-### VS Code Devcontainer
-
-Full IDE experience with GPU access inside the container:
-
-1. Open project in VS Code
-2. `Ctrl+Shift+P` → "Dev Containers: Reopen in Container"
-3. Wait for container to build and postCreateCommand to finish
-4. Run commands directly in the integrated terminal:
-
-```bash
-llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
-llm-energy-measure datasets
-llm-energy-measure results list
-```
-
-The devcontainer:
-- Runs as root (avoids permission issues with venv)
-- Mounts your source code (edits sync instantly)
-- Mounts your HuggingFace cache (models persist)
-- Has GPU passthrough enabled
-
-## Docker Details
-
-### Requirements
-
-- **NVIDIA GPU** with CUDA support
-- **CUDA 12.4** compatible drivers (image uses `nvidia/cuda:12.4.1-runtime-ubuntu22.04`)
-- **nvidia-container-toolkit** installed and configured
-- **Privileged mode** for energy metrics (docker-compose.yml sets `privileged: true`)
-
-### Environment Variables
-
-Create a `.env` file with:
-
-```bash
-# Required for gated models (Llama, etc.)
-HF_TOKEN=your_huggingface_token
-
-# Optional: GPU selection (see MIG notes below)
-CUDA_VISIBLE_DEVICES=0,1
-
-# Optional: CodeCarbon logging level
-CODECARBON_LOG_LEVEL=warning
-```
-
-### Quick Start with Makefile
-
-The easiest way to run experiments in Docker. The Makefile automatically handles UID/GID mapping so files created in containers are owned by your host user (no root permission issues):
-
-```bash
-# Build the image
-make docker-build
-
-# List available datasets
-make datasets
-
-# Validate a config
-make validate CONFIG=test_tiny.yaml
-
-# Run experiment (num_processes auto-inferred from config)
-make experiment CONFIG=test_tiny.yaml DATASET=alpaca SAMPLES=100
-
-# Interactive shell in container
-make docker-shell
-
-# Development shell (editable install, source mounted)
-make docker-dev
-```
-
-### Running with Docker Compose
-
-The project uses Docker Compose **profiles** to separate production and development environments:
-
-| Service | Profile | Purpose |
-|---------|---------|---------|
-| `llm-energy-measure-app` | (default) | Production - baked-in package |
-| `llm-energy-measure-dev` | `dev` | Development - editable install with source mount |
-
-#### Production Commands
-
-```bash
-# Build the image
-docker compose build
-
-# List available datasets
-docker compose run --rm llm-energy-measure-app llm-energy-measure datasets
-
-# Validate config
-docker compose run --rm llm-energy-measure-app \
-  llm-energy-measure config validate /app/configs/test_tiny.yaml
-
-# Run experiment (recommended - auto-handles accelerate)
-docker compose run --rm llm-energy-measure-app \
-  llm-energy-measure experiment /app/configs/test_tiny.yaml \
-  --dataset alpaca -n 100
-
-# Or use accelerate launch directly for more control
-docker compose run --rm llm-energy-measure-app \
-  accelerate launch --num_processes 1 \
-  -m llm_energy_measure.orchestration.launcher \
-  --config /app/configs/test_tiny.yaml \
-  --dataset alpaca -n 100
-
-# View results
-docker compose run --rm llm-energy-measure-app llm-energy-measure results list
-
-# Aggregate results
-docker compose run --rm llm-energy-measure-app llm-energy-measure aggregate --all
-
-# Interactive shell
-docker compose run --rm llm-energy-measure-app /bin/bash
-```
-
-#### Development Commands
-
-```bash
-# Build dev image
-docker compose --profile dev build
-
-# Interactive dev shell (source mounted, editable install)
-docker compose --profile dev run --rm llm-energy-measure-dev
-
-# Run commands in dev container
-docker compose --profile dev run --rm llm-energy-measure-dev \
-  llm-energy-measure experiment /app/configs/test_tiny.yaml -d alpaca -n 10
-```
-
-### Persistent Model Cache
-
-By default in the production container, models download inside the container and are **lost when it exits**. To persist downloaded models:
-
-```bash
-# Option 1: Uncomment the HF cache mount in docker-compose.yml
-# - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
-
-# Option 2: Use the dev profile (auto-mounts HF cache)
-make docker-dev
-# Then inside: llm-energy-measure experiment /app/configs/test_tiny.yaml -d alpaca -n 100
-```
-
-**Note**: The dev service automatically mounts `~/.cache/huggingface` for persistent model caching.
-
-### Volume Mounts
-
-| Host Path | Container Path | Purpose |
-|-----------|----------------|---------|
-| `~/.cache/huggingface` | `/tmp/hf_cache` | Model cache (optional mount) |
-| `./configs` | `/app/configs` (ro) | Experiment configs |
-| `./results` | `/app/results` | Output results |
-
-### MIG GPU Considerations
-
-On servers with **MIG (Multi-Instance GPU)** enabled GPUs (common on A100/H100), special handling is required:
-
-```bash
-# Option 1: Use a specific MIG instance by UUID
-nvidia-smi -L  # Find MIG UUIDs
-CUDA_VISIBLE_DEVICES=MIG-abc123 docker compose run --rm llm-energy-measure-app \
-  llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
-
-# Option 2: Use a non-MIG GPU (if available)
-CUDA_VISIBLE_DEVICES=0 docker compose run --rm llm-energy-measure-app ...
-
-# Option 3: Set in your .env file
-echo "CUDA_VISIBLE_DEVICES=MIG-abc123" >> .env
-```
-
-**Important:** Distributed inference (`num_processes > 1`) does not work across MIG instances due to hardware isolation. See [MIG Support](#mig-multi-instance-gpu-support) for details.
-
-## Results Structure
-
-```
-results/
-├── raw/
-│   └── exp_20240115_123456/
-│       ├── process_0.json    # GPU 0 results
-│       ├── process_1.json    # GPU 1 results
-│       ├── .completed_0      # Completion marker for process 0
-│       ├── .completed_1      # Completion marker for process 1
-│       └── ...
-└── aggregated/
-    └── exp_20240115_123456.json
-```
-
-**Completion markers**: Each process writes a `.completed_<index>` marker after saving its result. Aggregation validates all markers exist before proceeding.
-
-### Metrics Collected
+## Metrics Collected
 
 | Category | Metrics |
 |----------|---------|
@@ -545,168 +71,28 @@ results/
 | **Energy** | total_energy_j, gpu_energy_j, cpu_energy_j, emissions_kg_co2 |
 | **Compute** | flops_total, flops_per_token, peak_memory_mb |
 
-## Troubleshooting
-
-### Energy Metrics are Zero
-
-**Symptom**: `energy_metrics.total_energy_j` and related fields are all `0.0`.
-
-**Cause**: CodeCarbon requires NVML access to read GPU power, which needs privileged mode in Docker.
-
-**Solution**: Ensure `privileged: true` is set in docker-compose.yml (already configured by default). If running without docker-compose:
-```bash
-docker run --privileged --gpus all ...
-```
-
-### CUDA Version Mismatch
-
-**Symptom**: `RuntimeError: CUDA error: no kernel image is available for execution on the device`
-
-**Cause**: Host CUDA drivers incompatible with container's CUDA 12.4.
-
-**Solution**: Ensure NVIDIA drivers support CUDA 12.4+. Check with:
-```bash
-nvidia-smi  # Shows driver version and max CUDA version
-```
-
-### Permission Denied on Results
-
-**Symptom**: `PermissionError: [Errno 13] Permission denied: 'results/raw'`
-
-**Cause**: The `results/` directory doesn't exist or has restrictive permissions.
-
-**Solution**: Create the results directory:
-```bash
-mkdir -p results
-```
-
-**Note**: When using Makefile commands (`make docker-dev`, `make docker-shell`), containers automatically run as your host user, so permission issues are avoided.
-
-### MIG Device Errors
-
-**Symptom**: `RuntimeError: CUDA error: invalid device ordinal` or `NCCL error: invalid usage`.
-
-**Cause**: MIG instances are hardware-isolated and cannot be used for distributed (multi-process) inference.
-
-**Solutions**:
-
-1. **For single-process experiments on MIG** (recommended):
-   ```bash
-   # Get MIG UUIDs
-   nvidia-smi -L
-
-   # Run on specific MIG instance (use UUID, not index)
-   CUDA_VISIBLE_DEVICES=MIG-abc123 llm-energy-measure experiment config.yaml --dataset alpaca -n 100
-   ```
-
-2. **For distributed inference**, use full GPUs (non-MIG):
-   ```bash
-   # If GPU 0 has MIG disabled
-   CUDA_VISIBLE_DEVICES=0 llm-energy-measure experiment config.yaml --gpu-list 0 --num-processes 1
-   ```
-
-3. **Run parallel independent experiments** on separate MIG instances:
-   ```bash
-   # Terminal 1
-   CUDA_VISIBLE_DEVICES=MIG-abc123 llm-energy-measure experiment config.yaml &
-
-   # Terminal 2
-   CUDA_VISIBLE_DEVICES=MIG-def456 llm-energy-measure experiment config.yaml &
-   ```
-
-**Note**: Using `--gpu-list 1` when GPU 1 has MIG enabled will fail. You must use `CUDA_VISIBLE_DEVICES` with the MIG UUID.
-
-### MIG Energy Measurements Inaccurate
-
-**Symptom**: Energy measurements on MIG instances seem too high or don't correlate with workload.
-
-**Cause**: NVML reports power consumption for the entire parent GPU, not individual MIG instances. If other workloads run on sibling MIG instances, their power usage is included.
-
-**Solution**: This is a hardware/driver limitation. For accurate energy measurements:
-- Use full GPUs (disable MIG) for energy benchmarking
-- Or ensure no other workloads run on sibling MIG instances during measurement
-- Results include `energy_measurement_warning` field to flag this limitation
-
-### Model Download Every Run
-
-**Symptom**: Models re-download each container run.
-
-**Cause**: HF cache inside production container is ephemeral.
-
-**Solution**: Use the dev profile which auto-mounts HF cache, or uncomment the cache mount in docker-compose.yml. See [Persistent Model Cache](#persistent-model-cache).
-
-### Config Validation Errors
-
-**Symptom**: `ValidationError` when loading config.
-
-**Solutions**:
-- Ensure you're using YAML format (not Python config files)
-- Validate config before running: `llm-energy-measure config validate configs/your_config.yaml`
-- Check field names match the schema in [Config Structure](#config-structure)
-
-### Out of Memory (OOM)
-
-**Symptom**: `CUDA out of memory` error.
-
-**Solutions**:
-- Reduce `batching_options.batch_size`
-- Reduce `max_input_tokens` and `max_output_tokens`
-- Use quantization: set `quantization_config.load_in_8bit: true`
-- Use lower precision: `fp_precision: float16` or `bfloat16`
-
 ## Development
 
-### Local Development
-
 ```bash
-# Install dev dependencies
-make dev
-
-# Run checks (format, lint, typecheck)
-make check
-
-# Run tests
-make test              # Unit tests only
-make test-integration  # Integration tests
-make test-all          # All tests
-```
-
-### VS Code Devcontainer
-
-For development inside a container with full GPU access:
-
-1. Install [VS Code Remote - Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-2. Set `HF_TOKEN` in your shell environment
-3. Open the project in VS Code and click "Reopen in Container"
-
-The devcontainer:
-- Uses the `dev` stage of the Dockerfile
-- Has GPU passthrough enabled
-- Mounts your host HuggingFace cache
-- Installs dev dependencies and pre-commit hooks
-
-Inside the container, run commands directly:
-
-```bash
-llm-energy-measure datasets
-llm-energy-measure config validate configs/test_tiny.yaml
-llm-energy-measure experiment configs/test_tiny.yaml --dataset alpaca -n 100
+make dev      # Install + pre-commit hooks
+make check    # Format, lint, typecheck
+make test     # Run tests
 ```
 
 ## Project Structure
 
 ```
 src/llm_energy_measure/
-├── cli.py                 # Typer CLI application
-├── config/                # Configuration loading & models
+├── cli.py                 # Typer CLI
+├── config/                # Configuration loading
 ├── core/                  # Inference engine & metrics
 ├── domain/                # Domain models (Pydantic)
-├── orchestration/         # Experiment lifecycle management
-└── results/               # Results persistence & aggregation
+├── orchestration/         # Experiment lifecycle
+└── results/               # Results persistence
 ```
 
-See directory-level README.md files for detailed module documentation.
+See module READMEs for detailed documentation.
 
 ## License
 
-MIT
+[MIT](LICENSE)

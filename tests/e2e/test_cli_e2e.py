@@ -16,7 +16,8 @@ from llm_energy_measure.domain.experiment import RawProcessResult, Timestamps
 from llm_energy_measure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
 from llm_energy_measure.results.repository import FileSystemRepository
 
-runner = CliRunner()
+# Pass NO_COLOR to disable Rich colors in test output for consistent assertions
+runner = CliRunner(env={"NO_COLOR": "1"})
 
 
 class TestBenchmarkWorkflowE2E:
@@ -259,7 +260,7 @@ gpu_list: [0]
         result = runner.invoke(app, ["config", "validate", str(configs / "llama-7b-4bit.yaml")])
         assert result.exit_code == 0
         assert "llama-7b-4bit" in result.stdout
-        assert "4-bit" in result.stdout
+        assert "load_in_4bit: True" in result.stdout
 
         # Show resolved config
         result = runner.invoke(app, ["config", "show", str(configs / "llama-7b-4bit.yaml")])

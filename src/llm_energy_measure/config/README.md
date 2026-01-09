@@ -48,28 +48,28 @@ These define the experiment configuration that affects measurements:
 
 | Config Field | What It Controls |
 |--------------|------------------|
-| `batching_options.batch_size` | Inference batch size |
-| `batching_options.strategy` | static/dynamic/sorted_static/sorted_dynamic |
+| `batching.batch_size` | Inference batch size |
+| `batching.strategy` | static/dynamic/sorted_static/sorted_dynamic |
 | `fp_precision` | float32/float16/bfloat16 |
 | `num_processes` | Distributed workers |
-| `gpu_list` | GPU allocation |
+| `gpus` | GPU allocation |
 | `num_cycles` | Statistical repetition (YAML alternative to --cycles) |
-| `decoder_config.temperature` | Sampling temperature |
-| `quantization_config.*` | 4-bit/8-bit quantisation |
-| `latency_simulation.*` | Traffic patterns (Poisson/constant) |
-| `sharding_config.*` | Tensor/pipeline parallelism |
+| `decoder.temperature` | Sampling temperature |
+| `quantization.*` | 4-bit/8-bit quantisation |
+| `traffic_simulation.*` | Traffic patterns (Poisson/constant) |
+| `sharding.*` | Tensor/pipeline parallelism |
 
 ### Deprecated CLI Flags
 
 These CLI flags **still work** but emit deprecation warnings:
 
 ```
---batch-size, -b    → Use batching_options.batch_size in YAML
+--batch-size, -b    → Use batching.batch_size in YAML
 --precision         → Use fp_precision in YAML
 --num-processes     → Use num_processes in YAML
---gpu-list          → Use gpu_list in YAML
---temperature       → Use decoder_config.temperature in YAML
---quantization      → Use quantization_config.quantization in YAML
+--gpu-list          → Use gpus in YAML
+--temperature       → Use decoder.temperature in YAML
+--quantization      → Use quantization.quantization in YAML
 ```
 
 **Why deprecated?** They encourage ad-hoc experiments harder to reproduce.
@@ -83,7 +83,7 @@ All CLI overrides are recorded in result metadata for traceability:
 {
   "effective_config": { "batch_size": 8, ... },
   "cli_overrides": {
-    "batching_options.batch_size": { "original": 1, "new": 8 }
+    "batching.batch_size": { "original": 1, "new": 8 }
   }
 }
 ```
@@ -121,7 +121,7 @@ config = ExperimentConfig(
     model_name="meta-llama/Llama-2-7b-hf",
     max_input_tokens=512,
     max_output_tokens=128,
-    gpu_list=[0, 1],
+    gpus=[0, 1],
     num_processes=2,
     random_seed=42,  # For reproducibility
 )
@@ -144,7 +144,7 @@ Industry-standard sampling parameters aligned with vLLM, HuggingFace, and MLPerf
 Use `preset` for common configurations:
 
 ```yaml
-decoder_config:
+decoder:
   preset: deterministic  # Greedy decoding (temp=0, do_sample=false)
 ```
 
@@ -157,7 +157,7 @@ decoder_config:
 
 **Preset + override**: Explicit parameters override preset values:
 ```yaml
-decoder_config:
+decoder:
   preset: deterministic
   temperature: 0.5  # This overrides the preset's temperature
 ```
@@ -179,18 +179,18 @@ decoder_config:
 
 ```yaml
 # Greedy decoding (most reproducible)
-decoder_config:
+decoder:
   preset: deterministic
 
 # Custom sampling
-decoder_config:
+decoder:
   temperature: 0.7
   top_p: 0.9
   repetition_penalty: 1.2
   no_repeat_ngram_size: 3
 
 # Preset with override
-decoder_config:
+decoder:
   preset: creative
   repetition_penalty: 1.5  # Override preset value
 ```
@@ -204,7 +204,7 @@ Seeds are applied per-batch for varied but reproducible outputs:
 
 ```yaml
 random_seed: 42
-decoder_config:
+decoder:
   preset: standard  # Sampling enabled but reproducible with seed
 ```
 
@@ -280,15 +280,15 @@ llm-energy-measure config new --preset benchmark
 | `min_output_tokens` | - | int | 0 | Min generated tokens |
 | `fp_precision` | `--precision` | str | float16 | float32/float16/bfloat16 |
 | `num_processes` | `--num-processes` | int | 1 | Worker processes |
-| `gpu_list` | `--gpu-list` | list[int] | [0] | GPU indices |
+| `gpus` | `--gpu-list` | list[int] | [0] | GPU indices |
 | `random_seed` | `--seed` | int\|None | None | Random seed |
-| `batching_options.batch_size` | `--batch-size / -b` | int | 1 | Batch size |
-| `batching_options.strategy` | - | str | static | Batching strategy |
-| `latency_simulation.enabled` | - | bool | false | Enable traffic simulation |
-| `latency_simulation.mode` | - | str | poisson | Traffic mode (poisson/constant) |
-| `latency_simulation.target_qps` | - | float | 1.0 | Target queries per second |
-| `decoder_config.temperature` | `--temperature` | float | 1.0 | Decoder temperature |
-| `quantization_config.quantization` | `--quantization` | bool | false | Enable quantization |
+| `batching.batch_size` | `--batch-size / -b` | int | 1 | Batch size |
+| `batching.strategy` | - | str | static | Batching strategy |
+| `traffic_simulation.enabled` | - | bool | false | Enable traffic simulation |
+| `traffic_simulation.mode` | - | str | poisson | Traffic mode (poisson/constant) |
+| `traffic_simulation.target_qps` | - | float | 1.0 | Target queries per second |
+| `decoder.temperature` | `--temperature` | float | 1.0 | Decoder temperature |
+| `quantization.quantization` | `--quantization` | bool | false | Enable quantization |
 
 ### Required Fields
 | Field | Type | Description |
@@ -306,7 +306,7 @@ llm-energy-measure config new --preset benchmark
 ### Distributed Settings
 | Field | Default | Description |
 |-------|---------|-------------|
-| `gpu_list` | [0] | GPU indices |
+| `gpus` | [0] | GPU indices |
 | `num_processes` | 1 | Worker processes |
 
 ### Precision Settings
@@ -326,14 +326,14 @@ Prompts can be loaded from files or HuggingFace datasets.
 
 ### File-based prompts
 ```yaml
-prompt_source:
+prompts:
   type: file
   path: ./prompts.txt  # One prompt per line
 ```
 
 ### HuggingFace datasets
 ```yaml
-prompt_source:
+prompts:
   type: huggingface
   dataset: alpaca          # Built-in alias or full HF path
   split: train             # Dataset split (default: train)
@@ -358,7 +358,7 @@ prompt_source:
 Industry-standard batching strategies for benchmarking:
 
 ```yaml
-batching_options:
+batching:
   batch_size: 4
   strategy: sorted_dynamic    # static | dynamic | sorted_static | sorted_dynamic
   max_tokens_per_batch: 512   # For dynamic strategies
@@ -378,7 +378,7 @@ batching_options:
 Simulate realistic request arrival patterns for load testing:
 
 ```yaml
-latency_simulation:
+traffic_simulation:
   enabled: true
   mode: poisson             # poisson | constant
   target_qps: 2.0           # Target queries per second (arrival rate λ)
@@ -413,7 +413,7 @@ llm-energy-measure schedule config.yaml --interval 12h --days sat,sun --duration
 
 ### YAML Configuration
 ```yaml
-schedule_config:
+schedule:
   enabled: true
   interval: "6h"              # Run every 6 hours (alternative to 'at')
   at: "09:00"                 # Run at specific time (alternative to 'interval')
@@ -434,7 +434,7 @@ schedule_config:
 ## Validation Rules
 
 Pydantic validators enforce:
-- `num_processes <= len(gpu_list)`
+- `num_processes <= len(gpus)`
 - `min_output_tokens <= max_output_tokens`
 - `load_in_4bit` and `load_in_8bit` are mutually exclusive
 - `target_qps > 0` (traffic simulation)
@@ -467,19 +467,19 @@ This creates 8 configs (4 batch sizes × 2 precisions) in `./grid/`.
 ```bash
 # Default: generates all, warns about invalid (may produce unusable configs!)
 llm-energy-measure config generate-grid base.yaml \
-    --vary decoder_config.temperature=0.0,1.0 \
-    --vary decoder_config.top_k=50,100
+    --vary decoder.temperature=0.0,1.0 \
+    --vary decoder.top_k=50,100
 
 # Recommended: skip invalid configs
 llm-energy-measure config generate-grid base.yaml \
-    --vary decoder_config.temperature=0.0,1.0 \
-    --vary decoder_config.top_k=50,100 \
+    --vary decoder.temperature=0.0,1.0 \
+    --vary decoder.top_k=50,100 \
     --validate
 
 # CI/automation: fail if any would be invalid
 llm-energy-measure config generate-grid base.yaml \
-    --vary decoder_config.temperature=0.0,1.0 \
-    --vary decoder_config.top_k=50,100 \
+    --vary decoder.temperature=0.0,1.0 \
+    --vary decoder.top_k=50,100 \
     --strict
 ```
 
@@ -489,7 +489,7 @@ llm-energy-measure config generate-grid base.yaml \
 |-------------|-------|
 | `temperature=0` + non-default `top_k`/`top_p`/`min_p` | Sampling params ignored in deterministic mode |
 | `quantization=true` without bit mode | Missing `load_in_4bit` or `load_in_8bit` |
-| `num_shards > len(gpu_list)` | More shards than GPUs |
+| `num_shards > len(gpus)` | More shards than GPUs |
 | `do_sample=false` + sampling params | Sampling params ignored |
 
 **Output example (default):**
@@ -499,9 +499,9 @@ Generating 6 configs from 2 parameters...
 
 ⚠ 2 config(s) with blocking errors:
   base_temperature_0_0_top_k_100.yaml:
-    [ERROR] decoder_config: Sampling params [top_k=100] have no effect in deterministic mode
+    [ERROR] decoder: Sampling params [top_k=100] have no effect in deterministic mode
   base_temperature_0_0_top_k_50.yaml:
-    [ERROR] decoder_config: ... (if top_k=50 differs from default)
+    [ERROR] decoder: ... (if top_k=50 differs from default)
 ```
 
 **Output example (--validate):**
@@ -536,7 +536,7 @@ Results include `effective_config` and `cli_overrides` fields for full reproduci
     "fp_precision": "float16"
   },
   "cli_overrides": {
-    "batching_options.batch_size": {"new": 8, "original": 1}
+    "batching.batch_size": {"new": 8, "original": 1}
   }
 }
 ```

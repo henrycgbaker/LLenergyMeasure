@@ -54,6 +54,11 @@ Fast, isolated tests for individual components.
 | `test_core_model_loader.py` | Model loading logic |
 | `test_core_energy_backends.py` | Energy backend interface |
 | `test_core_compute_metrics.py` | Memory/utilization stats |
+| `test_core_traffic.py` | Traffic handling |
+| `test_core_implementations.py` | Implementation details |
+| `test_dataset_loader.py` | Dataset loading |
+| `test_cycle_statistics.py` | Cycle statistics |
+| `test_inference_generation.py` | Inference generation |
 | `test_domain_metrics.py` | Metric model validation |
 | `test_domain_experiment.py` | Result model validation |
 | `test_domain_model_info.py` | Model info models |
@@ -81,6 +86,7 @@ Tests for component interaction.
 | `test_cli_workflows.py` | CLI multi-step workflows |
 | `test_repository_operations.py` | Repository CRUD operations |
 | `test_error_handling.py` | Error propagation |
+| `test_config_params_wired.py` | Config parameter wiring |
 
 ### E2E Tests (`tests/e2e/`)
 

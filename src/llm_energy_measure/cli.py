@@ -69,7 +69,8 @@ results_app = typer.Typer(help="Results inspection commands", invoke_without_com
 app.add_typer(config_app, name="config")
 app.add_typer(results_app, name="results")
 
-console = Console()
+# Respect NO_COLOR environment variable for testing and accessibility
+console = Console(no_color=os.environ.get("NO_COLOR") == "1")
 
 
 # =============================================================================

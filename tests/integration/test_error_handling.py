@@ -13,7 +13,8 @@ from llm_energy_measure.config.loader import load_config
 from llm_energy_measure.exceptions import ConfigurationError
 from llm_energy_measure.results.repository import FileSystemRepository
 
-runner = CliRunner()
+# Pass NO_COLOR to disable Rich colors in test output for consistent assertions
+runner = CliRunner(env={"NO_COLOR": "1"})
 
 
 class TestConfigErrorHandling:
