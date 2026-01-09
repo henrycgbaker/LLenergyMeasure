@@ -30,13 +30,36 @@ docker compose build
 **1. Create a config** (`configs/my_experiment.yaml`):
 
 ```yaml
+# Experiment identity
 config_name: llama2-7b-benchmark
 model_name: meta-llama/Llama-2-7b-hf
+
+# Token limits
 max_input_tokens: 512
 max_output_tokens: 128
+
+# GPU setup
 gpus: [0]
 num_processes: 1
+
+# Precision & quantization
 fp_precision: float16
+quantization:
+  enabled: false
+  load_in_8bit: false
+  load_in_4bit: false
+
+# Batching
+batching:
+  batch_size: 4
+  strategy: static          # static | dynamic | sorted
+
+# Generation parameters
+decoder:
+  temperature: 1.0
+  top_p: 1.0
+  top_k: 50
+  do_sample: false          # false = greedy decoding
 ```
 
 **2. Run experiment:**
