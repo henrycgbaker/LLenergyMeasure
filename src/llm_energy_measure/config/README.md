@@ -451,7 +451,68 @@ llm-energy-measure config generate-grid base.yaml \
     --output-dir ./grid/
 ```
 
-This creates 8 configs (4 batch sizes x 2 precisions) in `./grid/`.
+This creates 8 configs (4 batch sizes × 2 precisions) in `./grid/`.
+
+### ⚠️ Grid Validation Flags
+
+**Important**: Parameter sweeps can produce invalid combinations. For example, varying `temperature` and `top_k` together will create configs where sampling params are set in deterministic mode (temp=0), which is an error.
+
+| Flag | Behaviour |
+|------|-----------|
+| (default) | Generate **all** configs, show warnings for invalid ones |
+| `--validate` | Only generate **valid** configs (skip invalid) |
+| `--strict` | **Fail** if any config would be invalid |
+
+**Usage:**
+```bash
+# Default: generates all, warns about invalid (may produce unusable configs!)
+llm-energy-measure config generate-grid base.yaml \
+    --vary decoder_config.temperature=0.0,1.0 \
+    --vary decoder_config.top_k=50,100
+
+# Recommended: skip invalid configs
+llm-energy-measure config generate-grid base.yaml \
+    --vary decoder_config.temperature=0.0,1.0 \
+    --vary decoder_config.top_k=50,100 \
+    --validate
+
+# CI/automation: fail if any would be invalid
+llm-energy-measure config generate-grid base.yaml \
+    --vary decoder_config.temperature=0.0,1.0 \
+    --vary decoder_config.top_k=50,100 \
+    --strict
+```
+
+**Common invalid combinations detected:**
+
+| Combination | Error |
+|-------------|-------|
+| `temperature=0` + non-default `top_k`/`top_p`/`min_p` | Sampling params ignored in deterministic mode |
+| `quantization=true` without bit mode | Missing `load_in_4bit` or `load_in_8bit` |
+| `num_shards > len(gpu_list)` | More shards than GPUs |
+| `do_sample=false` + sampling params | Sampling params ignored |
+
+**Output example (default):**
+```
+Generating 6 configs from 2 parameters...
+✓ Generated 6 configs in /tmp/grid/
+
+⚠ 2 config(s) with blocking errors:
+  base_temperature_0_0_top_k_100.yaml:
+    [ERROR] decoder_config: Sampling params [top_k=100] have no effect in deterministic mode
+  base_temperature_0_0_top_k_50.yaml:
+    [ERROR] decoder_config: ... (if top_k=50 differs from default)
+```
+
+**Output example (--validate):**
+```
+Generating 6 configs from 2 parameters...
+✓ Generated 4 configs in /tmp/grid/
+
+Skipped 2 invalid configs due to --validate
+```
+
+**Best practice**: Use `--validate` when generating grids for batch experiments to avoid runtime failures.
 
 ## Interactive Config Builder
 
