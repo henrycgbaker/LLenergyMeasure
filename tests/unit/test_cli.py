@@ -1,5 +1,6 @@
 """Tests for the CLI module."""
 
+import re
 from datetime import datetime
 
 import pytest
@@ -15,7 +16,15 @@ from llm_energy_measure.domain.experiment import (
 from llm_energy_measure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
 from llm_energy_measure.results.repository import FileSystemRepository
 
-runner = CliRunner()
+
+def strip_ansi(text: str) -> str:
+    """Strip ANSI escape codes from text."""
+    ansi_escape = re.compile(r"\x1b\[[0-9;]*m")
+    return ansi_escape.sub("", text)
+
+
+# Pass NO_COLOR to disable Rich colors in test output for consistent assertions
+runner = CliRunner(env={"NO_COLOR": "1"})
 
 
 class TestMainApp:
@@ -373,15 +382,16 @@ class TestExperimentCommand:
     def test_experiment_help(self):
         result = runner.invoke(app, ["experiment", "--help"])
         assert result.exit_code == 0
-        assert "--preset" in result.stdout
-        assert "--model" in result.stdout
-        assert "--batch-size" in result.stdout
-        assert "--precision" in result.stdout
-        assert "--max-tokens" in result.stdout
-        assert "--seed" in result.stdout
-        assert "--gpu-list" in result.stdout
-        assert "--temperature" in result.stdout
-        assert "--quantization" in result.stdout
+        output = strip_ansi(result.stdout)
+        assert "--preset" in output
+        assert "--model" in output
+        assert "--batch-size" in output
+        assert "--precision" in output
+        assert "--max-tokens" in output
+        assert "--seed" in output
+        assert "--gpu-list" in output
+        assert "--temperature" in output
+        assert "--quantization" in output
 
     def test_experiment_requires_config_or_preset(self):
         """Error when neither config nor preset provided."""
@@ -443,6 +453,7 @@ class TestExperimentCommand:
                 "alpaca",
                 "-n",
                 "10",
+                "--fresh",  # Skip incomplete experiment detection
             ],
         )
         # Should exit with the mocked subprocess return code
@@ -509,6 +520,7 @@ fp_precision: float32
                 "42",
                 "--dataset",
                 "alpaca",
+                "--fresh",  # Skip incomplete experiment detection
             ],
         )
         assert result.exit_code == 0
@@ -577,6 +589,7 @@ num_processes: 2
                 "0,1,2,3",
                 "--dataset",
                 "alpaca",
+                "--fresh",  # Skip incomplete experiment detection
             ],
         )
         # Should parse "0,1,2,3" into list [0, 1, 2, 3]
@@ -642,8 +655,10 @@ model_name: test/model
         config_file.write_text("""
 config_name: test_experiment
 model_name: test/model
+quantization:
+  load_in_8bit: true
 """)
-        # Test --quantization
+        # Test --quantization (config already has valid quantization settings)
         result = runner.invoke(
             app,
             [
@@ -678,9 +693,10 @@ class TestConfigNewCommand:
     def test_config_new_help(self):
         result = runner.invoke(app, ["config", "new", "--help"])
         assert result.exit_code == 0
-        assert "Interactive config builder" in result.stdout
-        assert "--preset" in result.stdout
-        assert "--output" in result.stdout
+        output = strip_ansi(result.stdout)
+        assert "Interactive config builder" in output
+        assert "--preset" in output
+        assert "--output" in output
 
 
 class TestConfigGenerateGridCommand:
@@ -689,9 +705,10 @@ class TestConfigGenerateGridCommand:
     def test_generate_grid_help(self):
         result = runner.invoke(app, ["config", "generate-grid", "--help"])
         assert result.exit_code == 0
-        assert "Generate a grid of configs" in result.stdout
-        assert "--vary" in result.stdout
-        assert "--output-dir" in result.stdout
+        output = strip_ansi(result.stdout)
+        assert "Generate a grid of configs" in output
+        assert "--vary" in output
+        assert "--output-dir" in output
 
     def test_generate_grid_requires_vary(self, tmp_path):
         """Error when no --vary parameter provided."""
@@ -829,9 +846,10 @@ class TestBatchCommand:
     def test_batch_help(self):
         result = runner.invoke(app, ["batch", "--help"])
         assert result.exit_code == 0
-        assert "Run multiple experiment configs" in result.stdout
-        assert "--parallel" in result.stdout
-        assert "--dry-run" in result.stdout
+        output = strip_ansi(result.stdout)
+        assert "Run multiple experiment configs" in output
+        assert "--parallel" in output
+        assert "--dry-run" in output
 
     def test_batch_no_matching_configs(self, tmp_path):
         """Error when glob pattern matches nothing."""

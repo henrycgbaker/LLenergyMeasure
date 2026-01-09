@@ -29,15 +29,16 @@ LLM inference efficiency measurement framework for benchmarking energy consumpti
 
 ## Key Directories
 
-| Directory | Purpose | Docs |
-|-----------|---------|------|
-| `src/llm_energy_measure/` | Main package | [README](src/llm_energy_measure/README.md) |
-| `src/llm_energy_measure/core/` | Inference engine, model loading, metrics | [README](src/llm_energy_measure/core/README.md) |
-| `src/llm_energy_measure/config/` | Configuration system | [README](src/llm_energy_measure/config/README.md) |
-| `src/llm_energy_measure/domain/` | Domain models (metrics, results) | [README](src/llm_energy_measure/domain/README.md) |
-| `src/llm_energy_measure/orchestration/` | Experiment lifecycle | [README](src/llm_energy_measure/orchestration/README.md) |
-| `src/llm_energy_measure/results/` | Results persistence | [README](src/llm_energy_measure/results/README.md) |
-| `tests/` | Unit, integration, e2e tests | [README](tests/README.md) |
+| Directory | Purpose | AI Context | Full Docs |
+|-----------|---------|------------|-----------|
+| `src/llm_energy_measure/` | Main package | [CLAUDE.md](src/llm_energy_measure/CLAUDE.md) | [README](src/llm_energy_measure/README.md) |
+| `src/.../config/` | Configuration system | [CLAUDE.md](src/llm_energy_measure/config/CLAUDE.md) | [README](src/llm_energy_measure/config/README.md) |
+| `src/.../core/` | Inference engine, metrics | [CLAUDE.md](src/llm_energy_measure/core/CLAUDE.md) | [README](src/llm_energy_measure/core/README.md) |
+| `src/.../domain/` | Domain models | [CLAUDE.md](src/llm_energy_measure/domain/CLAUDE.md) | [README](src/llm_energy_measure/domain/README.md) |
+| `src/.../orchestration/` | Experiment lifecycle | [CLAUDE.md](src/llm_energy_measure/orchestration/CLAUDE.md) | [README](src/llm_energy_measure/orchestration/README.md) |
+| `src/.../results/` | Results persistence | [CLAUDE.md](src/llm_energy_measure/results/CLAUDE.md) | [README](src/llm_energy_measure/results/README.md) |
+| `src/.../state/` | Experiment state | [CLAUDE.md](src/llm_energy_measure/state/CLAUDE.md) | [README](src/llm_energy_measure/state/README.md) |
+| `tests/` | Test suite | [CLAUDE.md](tests/CLAUDE.md) | [README](tests/README.md) |
 
 ## Quick Reference
 
@@ -101,11 +102,21 @@ make check    # format + lint + typecheck
 make test     # Unit tests
 ```
 
-## Detailed Documentation
+## Documentation
 
-For comprehensive documentation on specific topics:
+### User Guides (docs/)
 
-- **Configuration**: [config/README.md](src/llm_energy_measure/config/README.md) - Presets, decoder config, grid generation, validation
-- **Core Engine**: [core/README.md](src/llm_energy_measure/core/README.md) - Inference, model loading, energy backends
-- **Orchestration**: [orchestration/README.md](src/llm_energy_measure/orchestration/README.md) - Experiment lifecycle
-- **Results**: [results/README.md](src/llm_energy_measure/results/README.md) - Aggregation, persistence
+| Guide | Description |
+|-------|-------------|
+| [Getting Started](docs/quickstart.md) | Tutorial, datasets, basic config |
+| [CLI Reference](docs/cli.md) | All commands and options |
+| [Deployment](docs/deployment.md) | Docker, MIG GPUs, troubleshooting |
+
+### Developer Docs (module READMEs)
+
+| Topic | Location |
+|-------|----------|
+| Configuration system | [config/README.md](src/llm_energy_measure/config/README.md) |
+| Core engine | [core/README.md](src/llm_energy_measure/core/README.md) |
+| Orchestration | [orchestration/README.md](src/llm_energy_measure/orchestration/README.md) |
+| Results persistence | [results/README.md](src/llm_energy_measure/results/README.md) |
