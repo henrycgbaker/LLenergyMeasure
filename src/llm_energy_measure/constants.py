@@ -34,22 +34,22 @@ PRESETS: dict[str, dict[str, Any]] = {
         "max_input_tokens": 64,
         "max_output_tokens": 32,
         "num_processes": 1,
-        "gpu_list": [0],
-        "batching_options": {"batch_size": 1},
-        "decoder_config": {"preset": "deterministic"},  # Greedy for speed
+        "gpus": [0],
+        "batching": {"batch_size": 1},
+        "decoder": {"preset": "deterministic"},  # Greedy for speed
     },
     "benchmark": {
         "max_input_tokens": 2048,
         "max_output_tokens": 512,
         "fp_precision": "float16",
-        "batching_options": {"batch_size": 1},
-        "decoder_config": {"preset": "deterministic"},  # Greedy for reproducibility
+        "batching": {"batch_size": 1},
+        "decoder": {"preset": "deterministic"},  # Greedy for reproducibility
     },
     "throughput": {
         "max_input_tokens": 512,
         "max_output_tokens": 256,
         "fp_precision": "float16",
-        "batching_options": {"batch_size": 8, "dynamic_batching": True},
-        "decoder_config": {"preset": "deterministic"},  # Greedy for consistent throughput
+        "batching": {"batch_size": 8, "dynamic_batching": True},
+        "decoder": {"preset": "deterministic"},  # Greedy for consistent throughput
     },
 }
