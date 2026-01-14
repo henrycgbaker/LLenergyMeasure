@@ -57,22 +57,25 @@ Refactored CLI-based tool with clean architecture, comprehensive documentation, 
   - Topology detection and UUID handling for NVIDIA MIG instances
   - Correct energy attribution per MIG partition
 
+- **Proper Multi-GPU Parallelism** (replaces v1.x naive `device_map="auto"` approach)
+  - v1.x used `accelerate launch` with `CUDA_VISIBLE_DEVICES` for multi-GPU, which auto-distributed layers but without coordinated parallel execution
+  - v2.0 adds explicit parallelism strategies with proper distributed execution
+
 - **Tensor Parallelism (TP)** for large model inference
   - Native HuggingFace tensor parallelism via `tp_plan="auto"`
+  - Splits layers horizontally so GPUs compute in parallel
   - Supported models: Llama, Mistral, Mixtral, Qwen, Phi, Gemma, Falcon, MPT, BLOOM, OPT
   - Uses `torchrun` launcher for distributed initialisation
-  - Validation warnings for model compatibility
 
 - **Pipeline Parallelism (PP)** for multi-GPU inference
-  - PyTorch native pipeline parallelism via `torch.distributed.pipelining`
-  - GPipe and 1F1B scheduling options
-  - Configurable microbatching for throughput optimisation
-  - Automatic layer-based model splitting
+  - Splits model vertically into sequential stages across GPUs
+  - Each GPU holds a subset of layers (e.g., layers 0-15 on GPU 0, 16-31 on GPU 1)
+  - Useful when model doesn't fit on single GPU but TP isn't supported
 
 - **Parallelism Configuration** via `sharding` config
   - `strategy`: `none`, `tensor_parallel`, `pipeline_parallel`
   - `num_shards`: Number of GPUs for parallelism
-  - `tp_plan`, `pipeline_schedule`, `num_microbatches` options
+  - `tp_plan`: HuggingFace native tensor parallel plan
   - Validation for GPU count, model compatibility, and configuration conflicts
 
 - **E2E Experiment Workflow**

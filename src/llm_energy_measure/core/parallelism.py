@@ -217,26 +217,28 @@ class TensorParallelStrategy(ParallelismStrategy):
 
 
 class PipelineParallelStrategy(ParallelismStrategy):
-    """PyTorch native pipeline parallelism using torch.distributed.pipelining.
+    """Pipeline parallelism via layer-based model splitting.
 
-    Pipeline parallelism splits the model into sequential stages, with
-    each stage running on a different GPU. Microbatching is used to
-    improve utilisation by overlapping computation across stages.
+    Splits the model vertically into sequential stages, with each stage
+    (subset of layers) running on a different GPU. Forward passes run
+    sequentially through stages.
 
-    Schedules:
-    - gpipe: Simple fill-drain schedule (lower memory, higher latency)
-    - 1f1b: Interleaved schedule (steady state memory, better throughput)
+    This is useful when:
+    - Model doesn't fit on a single GPU
+    - Tensor parallelism isn't supported for the model architecture
+    - You need simple multi-GPU inference without specialised backends
 
     Note:
-        Pipeline parallelism requires model splitting which may not work
-        with all HuggingFace models. Falls back to layer-based splitting
-        if torch.export fails.
+        For production serving with optimised batching and scheduling,
+        consider using the vLLM backend which handles parallelism with
+        optimised kernels and continuous batching.
+
+        Model splitting may not work with all HuggingFace architectures.
+        Falls back to manual layer-based splitting if automatic splitting fails.
     """
 
     def __init__(self) -> None:
         self._num_stages: int = 1
-        self._schedule_type: str = "gpipe"
-        self._num_microbatches: int = 4
         self._rank: int = 0
         self._world_size: int = 1
 
@@ -244,7 +246,7 @@ class PipelineParallelStrategy(ParallelismStrategy):
         """Initialise pipeline parallelism.
 
         Args:
-            config: Sharding config with pipeline options.
+            config: Sharding config with num_shards.
             gpu_list: Available GPUs.
 
         Raises:
@@ -257,8 +259,6 @@ class PipelineParallelStrategy(ParallelismStrategy):
             )
 
         self._num_stages = config.num_shards
-        self._schedule_type = config.pipeline_schedule
-        self._num_microbatches = config.num_microbatches
 
         # Initialise distributed if not already done
         if not dist.is_initialized():
@@ -269,7 +269,6 @@ class PipelineParallelStrategy(ParallelismStrategy):
 
         logger.info(
             f"PipelineParallelStrategy configured: stages={self._num_stages}, "
-            f"schedule={self._schedule_type}, microbatches={self._num_microbatches}, "
             f"rank={self._rank}/{self._world_size}"
         )
 

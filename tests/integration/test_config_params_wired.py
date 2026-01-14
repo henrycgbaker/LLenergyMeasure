@@ -317,7 +317,7 @@ class TestShardingConfigImplemented:
         assert config.sharding_config.tp_plan == "auto"  # Default for TP
 
     def test_sharding_config_pipeline_parallel(self):
-        """Pipeline parallel config should parse with schedule options."""
+        """Pipeline parallel config should parse correctly."""
         config = ExperimentConfig.model_validate(
             {
                 "config_name": "test",
@@ -325,8 +325,6 @@ class TestShardingConfigImplemented:
                 "sharding": {
                     "strategy": "pipeline_parallel",
                     "num_shards": 4,
-                    "pipeline_schedule": "1f1b",
-                    "num_microbatches": 8,
                 },
                 "gpus": [0, 1, 2, 3],
             }
@@ -334,8 +332,6 @@ class TestShardingConfigImplemented:
 
         assert config.sharding_config.strategy == "pipeline_parallel"
         assert config.sharding_config.num_shards == 4
-        assert config.sharding_config.pipeline_schedule == "1f1b"
-        assert config.sharding_config.num_microbatches == 8
 
     def test_sharding_is_used_in_model_loader(self):
         """Sharding config IS used in model loading."""

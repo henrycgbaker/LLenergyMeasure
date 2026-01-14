@@ -80,38 +80,34 @@ class ShardingConfig(BaseModel):
 
     Strategies:
     - none: Default device_map='auto' behaviour (sequential layer distribution)
-    - tensor_parallel: Split layers across GPUs (HuggingFace native tp_plan)
-    - pipeline_parallel: Split model into sequential stages across GPUs
+    - tensor_parallel: Split layers horizontally across GPUs (HuggingFace native)
+    - pipeline_parallel: Split model vertically into sequential stages
 
     Tensor Parallelism:
-        Requires torchrun launcher. Supported models: Llama, Mistral, Mixtral,
-        Qwen, Phi, Gemma, Falcon, MPT, BLOOM, OPT.
+        Requires torchrun launcher. Each GPU computes part of every layer in
+        parallel. Supported models: Llama, Mistral, Mixtral, Qwen, Phi, Gemma,
+        Falcon, MPT, BLOOM, OPT.
 
     Pipeline Parallelism:
-        Uses torch.distributed.pipelining with microbatching for throughput.
-        Schedules: 'gpipe' (fill-drain) or '1f1b' (interleaved).
+        Splits model layers across GPUs (e.g., layers 0-15 on GPU 0, 16-31 on
+        GPU 1). Forward passes run sequentially through stages. Useful when
+        model doesn't fit on single GPU but TP isn't supported.
+
+    Note:
+        For production serving with advanced batching and scheduling, consider
+        using the vLLM backend (when available) which handles parallelism
+        internally with optimised kernels.
     """
 
     strategy: Literal["none", "tensor_parallel", "pipeline_parallel"] = Field(
         default="none", description="Sharding strategy"
     )
-    num_shards: int = Field(default=1, ge=1, description="Number of shards/stages")
+    num_shards: int = Field(default=1, ge=1, description="Number of GPUs for parallelism")
 
     # Tensor parallelism options
     tp_plan: Literal["auto"] | None = Field(
         default=None,
         description="Tensor parallel plan ('auto' uses model's predefined config)",
-    )
-
-    # Pipeline parallelism options
-    pipeline_schedule: Literal["gpipe", "1f1b"] = Field(
-        default="gpipe",
-        description="Pipeline schedule: 'gpipe' (fill-drain) or '1f1b' (interleaved)",
-    )
-    num_microbatches: int = Field(
-        default=4,
-        ge=1,
-        description="Number of microbatches for pipeline parallelism",
     )
 
     @model_validator(mode="after")

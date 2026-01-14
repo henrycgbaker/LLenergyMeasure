@@ -146,8 +146,6 @@ class TestShardingConfigExtensions:
         assert config.strategy == "none"
         assert config.num_shards == 1
         assert config.tp_plan is None
-        assert config.pipeline_schedule == "gpipe"
-        assert config.num_microbatches == 4
 
     def test_tp_plan_defaults_to_auto_for_tensor_parallel(self):
         """tp_plan should default to 'auto' when strategy is tensor_parallel."""
@@ -162,24 +160,12 @@ class TestShardingConfigExtensions:
         config = ShardingConfig(strategy="pipeline_parallel", num_shards=2)
         assert config.tp_plan is None
 
-    def test_pipeline_schedule_options(self):
-        """Pipeline schedule should accept gpipe and 1f1b."""
-        config_gpipe = ShardingConfig(
-            strategy="pipeline_parallel", num_shards=2, pipeline_schedule="gpipe"
-        )
-        assert config_gpipe.pipeline_schedule == "gpipe"
-
-        config_1f1b = ShardingConfig(
-            strategy="pipeline_parallel", num_shards=2, pipeline_schedule="1f1b"
-        )
-        assert config_1f1b.pipeline_schedule == "1f1b"
-
-    def test_num_microbatches_must_be_positive(self):
-        """num_microbatches must be >= 1."""
-        from pydantic import ValidationError
-
-        with pytest.raises(ValidationError):
-            ShardingConfig(strategy="pipeline_parallel", num_shards=2, num_microbatches=0)
+    def test_pipeline_parallel_config(self):
+        """Pipeline parallel config should just need strategy and num_shards."""
+        config = ShardingConfig(strategy="pipeline_parallel", num_shards=4)
+        assert config.strategy == "pipeline_parallel"
+        assert config.num_shards == 4
+        assert config.tp_plan is None  # TP options not used for PP
 
 
 class TestModelTPCompatibility:
