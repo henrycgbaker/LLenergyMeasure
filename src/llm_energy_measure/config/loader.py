@@ -360,6 +360,39 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
             )
         )
 
+    # =========================================================================
+    # BACKEND-SPECIFIC CONFIG VALIDATION
+    # =========================================================================
+
+    # Validate config against the selected backend (if not default pytorch)
+    backend_name = getattr(config, "backend", "pytorch")
+    try:
+        from llm_energy_measure.core.inference_backends import get_backend
+
+        backend = get_backend(backend_name)
+        backend_warnings = backend.validate_config(config)
+
+        # Convert backend ConfigWarnings to config ConfigWarnings
+        for bw in backend_warnings:
+            severity = bw.severity if bw.severity in ("error", "warning", "info") else "warning"
+            warnings.append(
+                ConfigWarning(
+                    field=f"backend.{bw.param}",
+                    message=bw.message,
+                    severity=severity,  # type: ignore[arg-type]
+                )
+            )
+    except Exception as e:
+        # Backend not available or validation failed - add warning
+        if backend_name != "pytorch":
+            warnings.append(
+                ConfigWarning(
+                    field="backend",
+                    message=f"Could not validate config for backend '{backend_name}': {e}",
+                    severity="warning",
+                )
+            )
+
     return warnings
 
 

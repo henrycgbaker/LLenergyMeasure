@@ -247,6 +247,8 @@ class TestCreateOrchestrator:
             metrics_collector=MagicMock(),
             energy_backend=MagicMock(),
             repository=MagicMock(),
+            backend_name="pytorch",
+            backend_version="transformers=4.50.0",
         )
         mock_create_components.return_value = mock_components
 
@@ -259,6 +261,8 @@ class TestCreateOrchestrator:
             metrics_collector=mock_components.metrics_collector,
             energy_backend=mock_components.energy_backend,
             repository=mock_components.repository,
+            backend_name=mock_components.backend_name,
+            backend_version=mock_components.backend_version,
         )
 
     @patch("llm_energy_measure.orchestration.runner.ExperimentOrchestrator")
@@ -273,6 +277,8 @@ class TestCreateOrchestrator:
             metrics_collector=MagicMock(),
             energy_backend=MagicMock(),
             repository=MagicMock(),
+            backend_name="pytorch",
+            backend_version="transformers=4.50.0",
         )
         mock_create_components.return_value = mock_components
 

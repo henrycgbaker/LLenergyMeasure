@@ -1,9 +1,15 @@
-"""Factory for creating experiment components with DI wiring."""
+"""Factory for creating experiment components with DI wiring.
+
+Supports backend selection via config.backend field. Currently only 'pytorch'
+is fully implemented; vLLM and TensorRT-LLM support is planned for Phase 2.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+from loguru import logger
 
 if TYPE_CHECKING:
     from llm_energy_measure.orchestration.context import ExperimentContext
@@ -26,31 +32,84 @@ class ExperimentComponents:
     metrics_collector: MetricsCollector
     energy_backend: EnergyBackend
     repository: ResultsRepository
+    backend_name: str = "pytorch"
+    backend_version: str | None = None
+
+
+def _validate_backend(backend_name: str) -> None:
+    """Validate that the requested backend is available.
+
+    Args:
+        backend_name: Name of the backend to validate.
+
+    Raises:
+        ConfigurationError: If backend is not available.
+    """
+    from llm_energy_measure.core.inference_backends import get_backend, is_backend_available
+    from llm_energy_measure.exceptions import ConfigurationError
+
+    if not is_backend_available(backend_name):
+        # Try to get the backend to produce a helpful error message
+        try:
+            get_backend(backend_name)
+        except ConfigurationError:
+            raise
+        raise ConfigurationError(f"Backend '{backend_name}' is not available on this system.")
 
 
 def create_components(ctx: ExperimentContext) -> ExperimentComponents:
     """Create all experiment components wired for the given context.
+
+    Validates the requested backend and creates appropriate components.
+    Currently only 'pytorch' backend is supported for component creation;
+    other backends will be added in Phase 2.
 
     Args:
         ctx: Experiment context with accelerator and config.
 
     Returns:
         ExperimentComponents with all dependencies wired.
+
+    Raises:
+        ConfigurationError: If requested backend is not available or not yet supported.
     """
-    from llm_energy_measure.core.energy_backends import get_backend
+    from llm_energy_measure.core.energy_backends import get_backend as get_energy_backend
     from llm_energy_measure.core.implementations import (
         HuggingFaceModelLoader,
         ThroughputMetricsCollector,
         TransformersInferenceEngine,
     )
+    from llm_energy_measure.core.inference_backends import get_backend as get_inference_backend
+    from llm_energy_measure.exceptions import ConfigurationError
     from llm_energy_measure.results.repository import FileSystemRepository
+
+    # Get backend name from config (default to pytorch)
+    backend_name = getattr(ctx.config, "backend", "pytorch")
+
+    # Validate backend is available
+    _validate_backend(backend_name)
+
+    # Currently only pytorch backend is fully integrated with the orchestrator.
+    # Other backends (vLLM, TensorRT) will be added in Phase 2.
+    if backend_name != "pytorch":
+        raise ConfigurationError(
+            f"Backend '{backend_name}' is not yet integrated with the orchestrator. "
+            f"Currently only 'pytorch' backend is supported. "
+            f"vLLM and TensorRT-LLM support is planned for v2.1.0."
+        )
+
+    # Get backend instance for version info
+    backend = get_inference_backend(backend_name)
+    logger.debug(f"Using inference backend: {backend.name} ({backend.version})")
 
     return ExperimentComponents(
         model_loader=HuggingFaceModelLoader(),
         inference_engine=TransformersInferenceEngine(ctx.accelerator),
         metrics_collector=ThroughputMetricsCollector(ctx.accelerator),
-        energy_backend=get_backend("codecarbon"),
+        energy_backend=get_energy_backend("codecarbon"),
         repository=FileSystemRepository(),
+        backend_name=backend.name,
+        backend_version=backend.version,
     )
 
 
@@ -74,4 +133,6 @@ def create_orchestrator(ctx: ExperimentContext) -> ExperimentOrchestrator:
         metrics_collector=components.metrics_collector,
         energy_backend=components.energy_backend,
         repository=components.repository,
+        backend_name=components.backend_name,
+        backend_version=components.backend_version,
     )
