@@ -297,11 +297,11 @@ class TestQuantizationConfigWired:
             assert "quantization_config" in call_kwargs
 
 
-class TestShardingConfigNotImplemented:
-    """Verify sharding config exists but is NOT yet wired up."""
+class TestShardingConfigImplemented:
+    """Verify sharding config is wired up to parallelism strategies."""
 
     def test_sharding_config_parsed(self):
-        """Sharding config should be parsed correctly."""
+        """Sharding config should be parsed correctly with extended fields."""
         # Use model_validate to properly handle validation_alias
         config = ExperimentConfig.model_validate(
             {
@@ -314,22 +314,55 @@ class TestShardingConfigNotImplemented:
 
         assert config.sharding_config.strategy == "tensor_parallel"
         assert config.sharding_config.num_shards == 2
+        assert config.sharding_config.tp_plan == "auto"  # Default for TP
 
-    def test_sharding_not_used_in_model_loader(self):
-        """Sharding config is NOT used in model loading (documenting current state)."""
-        # This test documents that sharding is not implemented
-        # It should be updated when sharding is implemented
+    def test_sharding_config_pipeline_parallel(self):
+        """Pipeline parallel config should parse with schedule options."""
+        config = ExperimentConfig.model_validate(
+            {
+                "config_name": "test",
+                "model_name": "gpt2",
+                "sharding": {
+                    "strategy": "pipeline_parallel",
+                    "num_shards": 4,
+                    "pipeline_schedule": "1f1b",
+                    "num_microbatches": 8,
+                },
+                "gpus": [0, 1, 2, 3],
+            }
+        )
 
+        assert config.sharding_config.strategy == "pipeline_parallel"
+        assert config.sharding_config.num_shards == 4
+        assert config.sharding_config.pipeline_schedule == "1f1b"
+        assert config.sharding_config.num_microbatches == 8
+
+    def test_sharding_is_used_in_model_loader(self):
+        """Sharding config IS used in model loading."""
         import inspect
 
         from llm_energy_measure.core import model_loader
 
         source = inspect.getsource(model_loader.load_model_tokenizer)
 
-        # Sharding config should NOT appear in model loader
-        assert "sharding" not in source.lower()
-        assert "tensor_parallel" not in source
-        assert "pipeline_parallel" not in source
+        # Sharding config should appear in model loader
+        assert "sharding" in source.lower() or "parallelism" in source.lower()
+
+    def test_parallelism_strategy_factory_exists(self):
+        """Parallelism strategy factory should exist and work."""
+        from llm_energy_measure.config.models import ShardingConfig
+        from llm_energy_measure.core.parallelism import (
+            NoParallelism,
+            TensorParallelStrategy,
+            get_parallelism_strategy,
+        )
+
+        # Test factory returns correct strategy types
+        none_config = ShardingConfig(strategy="none")
+        assert isinstance(get_parallelism_strategy(none_config), NoParallelism)
+
+        tp_config = ShardingConfig(strategy="tensor_parallel", num_shards=2)
+        assert isinstance(get_parallelism_strategy(tp_config), TensorParallelStrategy)
 
 
 class TestBackendConfigNotImplemented:

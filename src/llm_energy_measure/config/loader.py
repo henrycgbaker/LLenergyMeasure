@@ -272,6 +272,46 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
                 )
             )
 
+    # Tensor parallelism specific validation
+    if shard.strategy == "tensor_parallel":
+        # Check model support for native TP
+        from llm_energy_measure.core.parallelism import is_model_tp_compatible
+
+        if not is_model_tp_compatible(config.model_name):
+            warnings.append(
+                ConfigWarning(
+                    field="sharding_config",
+                    message=(
+                        f"Model '{config.model_name}' may not support HuggingFace native tensor parallelism. "
+                        f"Supported architectures: Llama, Mistral, Mixtral, Qwen, Phi, Gemma, Falcon, MPT, BLOOM, OPT"
+                    ),
+                    severity="warning",
+                )
+            )
+
+        # Quantization + TP warning
+        if quant.quantization:
+            warnings.append(
+                ConfigWarning(
+                    field="sharding_config",
+                    message="Quantization with tensor parallelism is experimental and may not work correctly",
+                    severity="warning",
+                )
+            )
+
+    # Pipeline parallelism specific validation
+    if shard.strategy == "pipeline_parallel" and shard.num_microbatches < shard.num_shards:
+        warnings.append(
+            ConfigWarning(
+                field="sharding_config",
+                message=(
+                    f"num_microbatches ({shard.num_microbatches}) < num_shards ({shard.num_shards}). "
+                    f"Consider increasing microbatches to improve pipeline utilisation."
+                ),
+                severity="info",
+            )
+        )
+
     # =========================================================================
     # DECODER/SAMPLING CONFIG
     # =========================================================================

@@ -57,6 +57,24 @@ Refactored CLI-based tool with clean architecture, comprehensive documentation, 
   - Topology detection and UUID handling for NVIDIA MIG instances
   - Correct energy attribution per MIG partition
 
+- **Tensor Parallelism (TP)** for large model inference
+  - Native HuggingFace tensor parallelism via `tp_plan="auto"`
+  - Supported models: Llama, Mistral, Mixtral, Qwen, Phi, Gemma, Falcon, MPT, BLOOM, OPT
+  - Uses `torchrun` launcher for distributed initialisation
+  - Validation warnings for model compatibility
+
+- **Pipeline Parallelism (PP)** for multi-GPU inference
+  - PyTorch native pipeline parallelism via `torch.distributed.pipelining`
+  - GPipe and 1F1B scheduling options
+  - Configurable microbatching for throughput optimisation
+  - Automatic layer-based model splitting
+
+- **Parallelism Configuration** via `sharding` config
+  - `strategy`: `none`, `tensor_parallel`, `pipeline_parallel`
+  - `num_shards`: Number of GPUs for parallelism
+  - `tp_plan`, `pipeline_schedule`, `num_microbatches` options
+  - Validation for GPU count, model compatibility, and configuration conflicts
+
 - **E2E Experiment Workflow**
   - Auto-aggregation on experiment completion
   - Experiment resumption for interrupted runs

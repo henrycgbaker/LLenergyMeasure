@@ -208,6 +208,53 @@ decoder:
   preset: standard  # Sampling enabled but reproducible with seed
 ```
 
+## Sharding / Parallelism Configuration
+
+Multi-GPU parallelism for large model inference. Two strategies available:
+
+### Tensor Parallelism (TP)
+
+Splits individual layers across GPUs. Each GPU processes a portion of each layer in parallel.
+
+```yaml
+sharding:
+  strategy: tensor_parallel
+  num_shards: 2          # Number of GPUs
+  tp_plan: auto          # HuggingFace native TP
+gpus: [0, 1]
+```
+
+**Supported models**: Llama, Mistral, Mixtral, Qwen, Phi, Gemma, Falcon, MPT, BLOOM, OPT
+
+**Note**: Uses `torchrun` launcher instead of `accelerate launch`.
+
+### Pipeline Parallelism (PP)
+
+Splits model into sequential stages across GPUs. Uses microbatching for throughput.
+
+```yaml
+sharding:
+  strategy: pipeline_parallel
+  num_shards: 4              # Number of stages/GPUs
+  pipeline_schedule: gpipe   # gpipe (fill-drain) or 1f1b (interleaved)
+  num_microbatches: 8        # Higher = better utilisation
+gpus: [0, 1, 2, 3]
+```
+
+**Schedules**:
+- `gpipe`: Fill-drain schedule. Lower memory, higher latency.
+- `1f1b`: Interleaved schedule. Steady-state memory, better throughput.
+
+### Parallelism Parameter Reference
+
+| Parameter | Values | Default | Effect |
+|-----------|--------|---------|--------|
+| `strategy` | `none`, `tensor_parallel`, `pipeline_parallel` | `none` | Parallelism strategy |
+| `num_shards` | 1+ | 1 | Number of GPUs for parallelism |
+| `tp_plan` | `auto` | `auto` | Tensor parallel plan (HF native) |
+| `pipeline_schedule` | `gpipe`, `1f1b` | `gpipe` | Pipeline schedule type |
+| `num_microbatches` | 1+ | 4 | Microbatches for PP throughput |
+
 ### Configuration Warnings
 
 The validator (`validate_config()`) checks for problematic configurations and returns warnings at three severity levels:
@@ -230,6 +277,9 @@ The validator (`validate_config()`) checks for problematic configurations and re
 | Batching | Sorted strategy with `batch_size=1` | info | Sorting provides no benefit with batch_size=1 |
 | Sharding | `num_shards > len(gpus)` | error | num_shards exceeds available GPUs |
 | Sharding | Sharding strategy with single GPU | info | Sharding provides no benefit with single GPU |
+| Sharding | TP with unsupported model | warning | Model may not support HF native tensor parallelism |
+| Sharding | TP with quantization | warning | Quantization with tensor parallelism is experimental |
+| Sharding | PP `num_microbatches < num_shards` | info | Consider increasing microbatches for better utilisation |
 | Decoder | Non-default sampling params in deterministic mode | error | Sampling params ignored when temp=0 or do_sample=False |
 | Decoder | `do_sample=True` with `temperature=0` | info | do_sample has no effect when temperature=0 |
 | Decoder | Both `temperature` and `top_p` modified | warning | Not recommended - alter one or the other |

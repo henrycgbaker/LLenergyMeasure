@@ -12,6 +12,7 @@ A Python framework for measuring LLM inference efficiency, including energy cons
 - **Throughput Metrics** - Tokens/second, latency, batch processing stats
 - **FLOPs Estimation** - Multiple methods (calflops, architecture-based, parameter-based)
 - **Multi-GPU Support** - Distributed inference via `accelerate`
+- **Tensor & Pipeline Parallelism** - Native PyTorch TP/PP for large model inference
 - **Flexible Configuration** - YAML configs with inheritance and presets
 - **Docker Ready** - GPU-enabled containerisation
 
@@ -45,7 +46,11 @@ All parameters below are fully wired and functional.
 | Schedule | `interval` | e.g. `6h`, `30m`, `1d` | Run frequency (daemon mode) |
 | Schedule | `at` | e.g. `09:00` | Specific time of day |
 | Schedule | `days` | `mon`–`sun`, `weekdays`, `weekends` | Day filter |
-| *Planned* | `sharding.strategy` | — | Requires backend integration (vLLM/TensorRT-LLM) |
+| Sharding | `strategy` | `none`, `tensor_parallel`, `pipeline_parallel` | Multi-GPU parallelism strategy |
+| Sharding | `num_shards` | 1+ | Number of GPUs for parallelism |
+| Sharding | `tp_plan` | `auto` | Tensor parallel plan (HF native) |
+| Sharding | `pipeline_schedule` | `gpipe`, `1f1b` | Pipeline parallel schedule |
+| Sharding | `num_microbatches` | 1+ | Microbatches for PP throughput |
 | *Planned* | `backend` | — | Only `pytorch` functional; `vllm`/`tensorrt` planned |
 
 ## Installation
@@ -125,6 +130,14 @@ traffic_simulation:
   enabled: false
   mode: poisson                 # constant | poisson
   target_qps: 1.0
+
+# === SHARDING / PARALLELISM (multi-GPU large models) ===
+sharding:
+  strategy: none                # none | tensor_parallel | pipeline_parallel
+  num_shards: 1                 # Number of GPUs for parallelism
+  # tp_plan: auto               # For tensor_parallel (HF native)
+  # pipeline_schedule: gpipe    # For pipeline_parallel: gpipe | 1f1b
+  # num_microbatches: 4         # For pipeline_parallel throughput
 
 # === SCHEDULED EXPERIMENTS (daemon mode) ===
 schedule:

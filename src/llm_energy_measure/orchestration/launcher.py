@@ -1,7 +1,11 @@
 """Experiment launcher utilities.
 
 This module provides utilities for launching experiments via
-accelerate CLI with proper configuration and retry logic.
+accelerate CLI or torchrun with proper configuration and retry logic.
+
+For tensor parallelism and pipeline parallelism strategies, torchrun
+is used instead of accelerate launch as these require different
+distributed initialisation.
 """
 
 from __future__ import annotations
@@ -90,6 +94,80 @@ def log_failed_experiment(
     logger.info(f"Logged failed experiment {experiment_id} to {output_path}")
 
 
+def _requires_torchrun(config_data: dict[str, Any]) -> bool:
+    """Check if the experiment requires torchrun launcher.
+
+    Tensor parallelism and pipeline parallelism require torchrun
+    instead of accelerate launch for proper distributed initialisation.
+
+    Args:
+        config_data: Configuration dictionary.
+
+    Returns:
+        True if torchrun should be used.
+    """
+    sharding = config_data.get("sharding_config", config_data.get("sharding", {}))
+    strategy = sharding.get("strategy", "none")
+    return strategy in ("tensor_parallel", "pipeline_parallel")
+
+
+def _build_launch_command(
+    config_data: dict[str, Any],
+    script_path: str | Path,
+    config_path: Path,
+    extra_args: list[str] | None = None,
+) -> list[str]:
+    """Build the appropriate launch command based on parallelism strategy.
+
+    Args:
+        config_data: Configuration dictionary.
+        script_path: Path to the experiment script.
+        config_path: Path to the config file.
+        extra_args: Additional arguments to pass to the script.
+
+    Returns:
+        Complete command list for subprocess.run().
+    """
+    gpu_list = config_data.get("gpu_list", [])
+
+    if _requires_torchrun(config_data):
+        # Tensor/Pipeline parallelism: use torchrun
+        sharding = config_data.get("sharding_config", config_data.get("sharding", {}))
+        num_shards = sharding.get("num_shards", len(gpu_list))
+
+        cmd = [
+            "torchrun",
+            "--nproc_per_node",
+            str(num_shards),
+            "--standalone",  # Single-node mode
+            str(script_path),
+            "--config",
+            str(config_path),
+        ]
+        logger.info(f"Using torchrun for {sharding.get('strategy')} with {num_shards} processes")
+    else:
+        # Default: use accelerate launch
+        num_processes = min(
+            config_data.get("num_processes", len(gpu_list)),
+            len(gpu_list),
+        )
+
+        cmd = [
+            "accelerate",
+            "launch",
+            "--num_processes",
+            str(num_processes),
+            str(script_path),
+            "--config",
+            str(config_path),
+        ]
+
+    if extra_args:
+        cmd.extend(extra_args)
+
+    return cmd
+
+
 def launch_experiment_accelerate(
     config: dict[str, Any] | str | Path,
     script_path: str | Path,
@@ -97,7 +175,10 @@ def launch_experiment_accelerate(
     retry_delay: int = 5,
     extra_args: list[str] | None = None,
 ) -> None:
-    """Launch an experiment using accelerate CLI.
+    """Launch an experiment using accelerate CLI or torchrun.
+
+    For tensor parallelism and pipeline parallelism strategies, torchrun
+    is used instead of accelerate launch.
 
     Args:
         config: Configuration dict or path to config file.
@@ -145,20 +226,16 @@ def launch_experiment_accelerate(
                     )
             else:
                 env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_list)
-            env["ACCELERATE_NUM_PROCESSES"] = str(num_processes)
-            env["ACCELERATE_CONFIG_FILE"] = ""
 
-            cmd = [
-                "accelerate",
-                "launch",
-                "--num_processes",
-                str(num_processes),
-                str(script_path),
-                "--config",
-                str(config_path),
-            ]
-            if extra_args:
-                cmd.extend(extra_args)
+            # Set environment based on launcher type
+            if _requires_torchrun(config_data):
+                # torchrun handles distributed setup
+                pass
+            else:
+                env["ACCELERATE_NUM_PROCESSES"] = str(num_processes)
+                env["ACCELERATE_CONFIG_FILE"] = ""
+
+            cmd = _build_launch_command(config_data, script_path, config_path, extra_args)
 
             logger.info(f"Command: {' '.join(cmd)}")
             subprocess.run(cmd, env=env, check=True)

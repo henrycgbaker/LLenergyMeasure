@@ -76,12 +76,51 @@ class BatchingConfig(BaseModel):
 
 
 class ShardingConfig(BaseModel):
-    """Model sharding configuration for multi-GPU."""
+    """Model sharding configuration for multi-GPU parallelism.
+
+    Strategies:
+    - none: Default device_map='auto' behaviour (sequential layer distribution)
+    - tensor_parallel: Split layers across GPUs (HuggingFace native tp_plan)
+    - pipeline_parallel: Split model into sequential stages across GPUs
+
+    Tensor Parallelism:
+        Requires torchrun launcher. Supported models: Llama, Mistral, Mixtral,
+        Qwen, Phi, Gemma, Falcon, MPT, BLOOM, OPT.
+
+    Pipeline Parallelism:
+        Uses torch.distributed.pipelining with microbatching for throughput.
+        Schedules: 'gpipe' (fill-drain) or '1f1b' (interleaved).
+    """
 
     strategy: Literal["none", "tensor_parallel", "pipeline_parallel"] = Field(
         default="none", description="Sharding strategy"
     )
-    num_shards: int = Field(default=1, ge=1, description="Number of shards")
+    num_shards: int = Field(default=1, ge=1, description="Number of shards/stages")
+
+    # Tensor parallelism options
+    tp_plan: Literal["auto"] | None = Field(
+        default=None,
+        description="Tensor parallel plan ('auto' uses model's predefined config)",
+    )
+
+    # Pipeline parallelism options
+    pipeline_schedule: Literal["gpipe", "1f1b"] = Field(
+        default="gpipe",
+        description="Pipeline schedule: 'gpipe' (fill-drain) or '1f1b' (interleaved)",
+    )
+    num_microbatches: int = Field(
+        default=4,
+        ge=1,
+        description="Number of microbatches for pipeline parallelism",
+    )
+
+    @model_validator(mode="after")
+    def set_strategy_defaults(self) -> "ShardingConfig":
+        """Set strategy-specific defaults."""
+        # TP defaults to tp_plan="auto" if not specified
+        if self.strategy == "tensor_parallel" and self.tp_plan is None:
+            object.__setattr__(self, "tp_plan", "auto")
+        return self
 
 
 class TrafficSimulation(BaseModel):
