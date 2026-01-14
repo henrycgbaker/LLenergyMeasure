@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1
+# =============================================================================
+# Base Image: CUDA + Python foundation for all backends
+# =============================================================================
+# Shared system dependencies - backends install their own PyTorch version
+#
+# Usage:
+#   docker build -f docker/Dockerfile.base -t llm-energy-measure-base:latest .
+# =============================================================================
+
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS base
+
+# System dependencies shared by all backends
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3.11-dev \
+    python3-pip \
+    libgomp1 \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python
+
+# Create venv structure (backends will install into this)
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+ENV VIRTUAL_ENV="/opt/venv"
+ENV PYTHONUNBUFFERED=1
+
+# Upgrade pip once
+RUN pip install --no-cache-dir --upgrade pip
+
+# Common working directory
+WORKDIR /app
+
+# HuggingFace cache location
+ENV HF_HOME=/app/.cache/huggingface

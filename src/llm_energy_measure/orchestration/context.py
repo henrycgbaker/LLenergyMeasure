@@ -74,6 +74,9 @@ class ExperimentContext:
         Sets up the Accelerator, generates a unique experiment ID,
         and determines process-specific information.
 
+        For vLLM backend, skips Accelerator initialization since vLLM manages
+        its own CUDA context and multiprocessing.
+
         Args:
             config: The experiment configuration.
             id_file: Optional path for storing persistent ID counter.
@@ -85,6 +88,46 @@ class ExperimentContext:
         Returns:
             Fully initialized ExperimentContext.
         """
+        # Check if using vLLM backend - it manages its own CUDA context
+        backend_name = getattr(config, "backend", "pytorch")
+        is_vllm = backend_name == "vllm"
+
+        if is_vllm:
+            # vLLM: skip Accelerator - use minimal context
+            # vLLM spawns child processes and can't use CUDA in forked context
+            # CRITICAL: Do NOT call torch.cuda.* functions here - they initialize CUDA
+            from llm_energy_measure.core.distributed import get_persistent_unique_id
+
+            if experiment_id is None:
+                experiment_id = get_persistent_unique_id(id_file)
+
+            # Use a placeholder device - vLLM manages its own device selection
+            # We don't check torch.cuda.is_available() as it can initialize CUDA
+            device = torch.device("cuda:0")  # vLLM will handle actual device
+
+            logger.info(
+                f"Created ExperimentContext (vLLM mode): id={experiment_id}, " f"device={device}"
+            )
+
+            # Create minimal accelerator-like object for compatibility
+            from llm_energy_measure.core.distributed import create_minimal_accelerator
+
+            minimal_accelerator = create_minimal_accelerator(device)
+
+            return cls(
+                experiment_id=experiment_id,
+                config=config,
+                accelerator=minimal_accelerator,
+                device=device,
+                is_main_process=True,  # vLLM runs single process from our perspective
+                process_index=0,
+                start_time=datetime.now(),
+                effective_config=effective_config or {},
+                cli_overrides=cli_overrides or {},
+                config_warnings=config_warnings or [],
+            )
+
+        # Standard path: use Accelerator
         accelerator = get_accelerator(
             gpu_list=config.gpu_list,
             num_processes=config.num_processes,

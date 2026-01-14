@@ -1,13 +1,23 @@
-# Docker Compose with profiles for dev/prod separation
+# Docker Compose with multiple backend support
 #
 # Usage:
-#   Production (default): docker compose run --rm llm-energy-measure-app <command>
-#   Development:          docker compose --profile dev run --rm llm-energy-measure-dev <command>
+#   Build base first:  docker compose build base
+#   PyTorch (default): docker compose run --rm pytorch llm-energy-measure --help
+#   vLLM:              docker compose run --rm vllm llm-energy-measure --help
+#   Development:       docker compose --profile dev run --rm pytorch-dev /bin/bash
 #
 # Examples:
-#   docker compose run --rm llm-energy-measure-app llm-energy-measure --help
-#   docker compose run --rm llm-energy-measure-app llm-energy-measure experiment /app/configs/test.yaml -d alpaca -n 100
-#   docker compose --profile dev run --rm llm-energy-measure-dev /bin/bash
+#   # PyTorch backend (default)
+#   docker compose run --rm pytorch llm-energy-measure experiment config.yaml -d alpaca -n 100
+#
+#   # vLLM backend
+#   docker compose run --rm vllm llm-energy-measure experiment config.yaml -d alpaca -n 100 --backend vllm
+#
+#   # Development with PyTorch
+#   docker compose --profile dev run --rm pytorch-dev /bin/bash
+#
+#   # Development with vLLM
+#   docker compose --profile dev run --rm vllm-dev /bin/bash
 
 # Shared configuration anchor
 x-common: &common
@@ -44,41 +54,100 @@ x-common: &common
 
 services:
   # ==========================================================================
-  # Production service - uses runtime stage with baked-in package
+  # Base image - shared foundation (build this first)
   # ==========================================================================
-  llm-energy-measure-app:
-    <<: *common
+  base:
     build:
       context: .
-      dockerfile: Dockerfile
-      target: runtime
-    image: llm-energy-measure:latest
+      dockerfile: docker/Dockerfile.base
+    image: llm-energy-measure-base:latest
 
+  # ==========================================================================
+  # PyTorch Backend - HuggingFace Transformers + Accelerate
+  # ==========================================================================
+  pytorch:
+    <<: *common
     volumes:
       - ./configs:/app/configs:ro
       - ./scripts:/app/scripts:ro
       - ./results:/app/results
-      # Uncomment to persist HuggingFace model cache:
-      # - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.pytorch
+      target: runtime
+      args:
+        BASE_IMAGE: llm-energy-measure-base:latest
+    image: llm-energy-measure:pytorch
+    depends_on:
+      - base
 
-  # ==========================================================================
-  # Development service - uses dev stage with editable install
-  # ==========================================================================
-  llm-energy-measure-dev:
+  pytorch-dev:
     <<: *common
+    volumes:
+      - .:/app
+      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
     profiles: ["dev"]
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: docker/Dockerfile.pytorch
       target: dev
-    image: llm-energy-measure:dev
-
-    volumes:
-      # Mount source for editable install
-      - .:/app
-      # Persist HuggingFace cache
-      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
-
-    # Auto-install editable package, then run command or shell
+      args:
+        BASE_IMAGE: llm-energy-measure-base:latest
+    image: llm-energy-measure:pytorch-dev
+    depends_on:
+      - base
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
     command: []
+
+  # ==========================================================================
+  # vLLM Backend - High-performance inference with PagedAttention
+  # ==========================================================================
+  vllm:
+    <<: *common
+    # vLLM requires shared memory for multiprocessing
+    ipc: host
+    volumes:
+      - ./configs:/app/configs:ro
+      - ./scripts:/app/scripts:ro
+      - ./results:/app/results
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.vllm
+      target: runtime
+      args:
+        BASE_IMAGE: llm-energy-measure-base:latest
+    image: llm-energy-measure:vllm
+    depends_on:
+      - base
+
+  vllm-dev:
+    <<: *common
+    # vLLM requires shared memory for multiprocessing
+    ipc: host
+    volumes:
+      - .:/app
+      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.vllm
+      target: dev
+      args:
+        BASE_IMAGE: llm-energy-measure-base:latest
+    image: llm-energy-measure:vllm-dev
+    depends_on:
+      - base
+    entrypoint: ["/app/scripts/dev-entrypoint.sh"]
+    command: []
+
+  # ==========================================================================
+  # Legacy aliases (backwards compatibility)
+  # ==========================================================================
+  llm-energy-measure-app:
+    extends:
+      service: pytorch
+
+  llm-energy-measure-dev:
+    extends:
+      service: pytorch-dev
+    profiles: ["dev"]

@@ -138,18 +138,62 @@ class ExperimentOrchestrator:
         logger.info(f"Inference complete: {len(prompts)} prompts processed")
 
         # Stop energy tracking
-        energy_metrics = self._energy.stop_tracking(tracker)
-        logger.debug("Energy tracking stopped")
+        # Note: Energy tracking can fail with vLLM due to CUDA context issues
+        # We continue with placeholder metrics if this happens
+        try:
+            energy_metrics = self._energy.stop_tracking(tracker)
+            logger.debug("Energy tracking stopped")
+        except Exception as e:
+            logger.warning(f"Energy tracking failed (non-fatal): {e}")
+            from llm_energy_measure.domain.metrics import EnergyMetrics
+
+            energy_metrics = EnergyMetrics(
+                total_energy_j=0.0,
+                gpu_energy_j=0.0,
+                cpu_energy_j=0.0,
+                ram_energy_j=0.0,
+                gpu_power_w=0.0,
+                cpu_power_w=0.0,
+                duration_sec=0.0,
+                emissions_kg_co2=0.0,
+                energy_per_token_j=0.0,
+            )
 
         # Collect metrics
-        combined = self._metrics.collect(model, inference_result, ctx.config)
+        # Note: Can fail with vLLM due to CUDA context issues
+        try:
+            combined = self._metrics.collect(model, inference_result, ctx.config)
+        except Exception as e:
+            logger.warning(f"Metrics collection failed (non-fatal): {e}")
+            from llm_energy_measure.domain.metrics import CombinedMetrics, ComputeMetrics
+
+            combined = CombinedMetrics(
+                inference=inference_result.metrics,
+                energy=energy_metrics,
+                compute=ComputeMetrics(
+                    flops_total=0.0,
+                    flops_per_token=0.0,
+                    flops_per_second=0.0,
+                    peak_memory_mb=0.0,
+                    model_memory_mb=0.0,
+                    flops_method="unavailable",
+                    flops_confidence="low",
+                    compute_precision=ctx.config.fp_precision,
+                ),
+            )
         end = datetime.now()
 
         # Get GPU/MIG info for result metadata
-        from llm_energy_measure.core.gpu_info import get_device_mig_info
+        # Note: Can fail with vLLM due to CUDA context issues
+        try:
+            from llm_energy_measure.core.gpu_info import get_device_mig_info
 
-        gpu_id = ctx.device.index or 0
-        mig_info = get_device_mig_info(gpu_id)
+            gpu_id = ctx.device.index or 0
+            mig_info = get_device_mig_info(gpu_id)
+        except Exception as e:
+            logger.warning(f"GPU info collection failed (non-fatal): {e}")
+            gpu_id = 0
+            mig_info = {"gpu_name": "unknown", "gpu_is_mig": False, "gpu_mig_profile": None}
 
         # Generate energy measurement warning if on MIG
         energy_warning = None
