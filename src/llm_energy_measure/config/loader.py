@@ -299,19 +299,6 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
                 )
             )
 
-    # Pipeline parallelism specific validation
-    if shard.strategy == "pipeline_parallel" and shard.num_microbatches < shard.num_shards:
-        warnings.append(
-            ConfigWarning(
-                field="sharding_config",
-                message=(
-                    f"num_microbatches ({shard.num_microbatches}) < num_shards ({shard.num_shards}). "
-                    f"Consider increasing microbatches to improve pipeline utilisation."
-                ),
-                severity="info",
-            )
-        )
-
     # =========================================================================
     # DECODER/SAMPLING CONFIG
     # =========================================================================

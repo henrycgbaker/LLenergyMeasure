@@ -48,9 +48,7 @@ All parameters below are fully wired and functional.
 | Schedule | `days` | `mon`–`sun`, `weekdays`, `weekends` | Day filter |
 | Sharding | `strategy` | `none`, `tensor_parallel`, `pipeline_parallel` | Multi-GPU parallelism strategy |
 | Sharding | `num_shards` | 1+ | Number of GPUs for parallelism |
-| Sharding | `tp_plan` | `auto` | Tensor parallel plan (HF native) |
-| Sharding | `pipeline_schedule` | `gpipe`, `1f1b` | Pipeline parallel schedule |
-| Sharding | `num_microbatches` | 1+ | Microbatches for PP throughput |
+| Sharding | `tp_plan` | `auto` | Tensor parallel plan (HF native, TP only) |
 | *Planned* | `backend` | — | Only `pytorch` functional; `vllm`/`tensorrt` planned |
 
 ## Installation
@@ -136,8 +134,6 @@ sharding:
   strategy: none                # none | tensor_parallel | pipeline_parallel
   num_shards: 1                 # Number of GPUs for parallelism
   # tp_plan: auto               # For tensor_parallel (HF native)
-  # pipeline_schedule: gpipe    # For pipeline_parallel: gpipe | 1f1b
-  # num_microbatches: 4         # For pipeline_parallel throughput
 
 # === SCHEDULED EXPERIMENTS (daemon mode) ===
 schedule:

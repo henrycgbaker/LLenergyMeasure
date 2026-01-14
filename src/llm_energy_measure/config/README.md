@@ -210,7 +210,15 @@ decoder:
 
 ## Sharding / Parallelism Configuration
 
-Multi-GPU parallelism for large model inference. Two strategies available:
+Multi-GPU parallelism for large model inference.
+
+**Background**: v1.x used `accelerate launch` with `device_map="auto"`, which auto-distributes layers across visible GPUs based on `CUDA_VISIBLE_DEVICES`. This worked but was naive—each GPU holds different layers with no coordinated parallel execution.
+
+v2.0 adds proper parallelism strategies:
+- **Tensor Parallelism**: Splits layers horizontally so GPUs compute in parallel
+- **Pipeline Parallelism**: Explicit stage-based splitting with coordinated execution
+
+Two strategies available:
 
 ### Tensor Parallelism (TP)
 
@@ -230,20 +238,20 @@ gpus: [0, 1]
 
 ### Pipeline Parallelism (PP)
 
-Splits model into sequential stages across GPUs. Uses microbatching for throughput.
+Splits model vertically into sequential stages across GPUs. Each GPU holds a subset of layers (e.g., layers 0-15 on GPU 0, layers 16-31 on GPU 1). Forward passes run sequentially through stages.
 
 ```yaml
 sharding:
   strategy: pipeline_parallel
   num_shards: 4              # Number of stages/GPUs
-  pipeline_schedule: gpipe   # gpipe (fill-drain) or 1f1b (interleaved)
-  num_microbatches: 8        # Higher = better utilisation
 gpus: [0, 1, 2, 3]
 ```
 
-**Schedules**:
-- `gpipe`: Fill-drain schedule. Lower memory, higher latency.
-- `1f1b`: Interleaved schedule. Steady-state memory, better throughput.
+**Use cases**:
+- Model too large for single GPU but TP not supported
+- Simple multi-GPU inference without specialised backends
+
+**Note**: For production serving with optimised batching and continuous batching, consider using the vLLM backend (when available).
 
 ### Parallelism Parameter Reference
 
@@ -251,9 +259,7 @@ gpus: [0, 1, 2, 3]
 |-----------|--------|---------|--------|
 | `strategy` | `none`, `tensor_parallel`, `pipeline_parallel` | `none` | Parallelism strategy |
 | `num_shards` | 1+ | 1 | Number of GPUs for parallelism |
-| `tp_plan` | `auto` | `auto` | Tensor parallel plan (HF native) |
-| `pipeline_schedule` | `gpipe`, `1f1b` | `gpipe` | Pipeline schedule type |
-| `num_microbatches` | 1+ | 4 | Microbatches for PP throughput |
+| `tp_plan` | `auto` | `auto` | Tensor parallel plan (HF native, TP only) |
 
 ### Configuration Warnings
 
@@ -279,7 +285,6 @@ The validator (`validate_config()`) checks for problematic configurations and re
 | Sharding | Sharding strategy with single GPU | info | Sharding provides no benefit with single GPU |
 | Sharding | TP with unsupported model | warning | Model may not support HF native tensor parallelism |
 | Sharding | TP with quantization | warning | Quantization with tensor parallelism is experimental |
-| Sharding | PP `num_microbatches < num_shards` | info | Consider increasing microbatches for better utilisation |
 | Decoder | Non-default sampling params in deterministic mode | error | Sampling params ignored when temp=0 or do_sample=False |
 | Decoder | `do_sample=True` with `temperature=0` | info | do_sample has no effect when temperature=0 |
 | Decoder | Both `temperature` and `top_p` modified | warning | Not recommended - alter one or the other |
