@@ -106,6 +106,11 @@ def load_model_tokenizer(
 ) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
     """Load a model and tokenizer from HuggingFace.
 
+    Supports different parallelism strategies based on sharding_config:
+    - none: Default device_map='auto' behaviour
+    - tensor_parallel: HuggingFace native TP via tp_plan
+    - pipeline_parallel: PyTorch native PP with stage splitting
+
     Args:
         config: Experiment configuration with model settings.
 
@@ -115,11 +120,18 @@ def load_model_tokenizer(
     Raises:
         ConfigurationError: If model loading fails.
     """
+    from llm_energy_measure.core.parallelism import get_parallelism_strategy
+
     model_name = config.model_name
     fp_precision = config.fp_precision
     quant_config = config.quantization_config
+    sharding_config = config.sharding_config
 
     logger.info(f"Loading model: {model_name}")
+
+    # Get parallelism strategy
+    strategy = get_parallelism_strategy(sharding_config)
+    strategy.setup(sharding_config, config.gpu_list)
 
     # Load tokenizer
     try:
@@ -132,21 +144,32 @@ def load_model_tokenizer(
     # Determine dtype
     dtype = get_torch_dtype(fp_precision)
 
+    # Get parallelism-specific model kwargs
+    model_kwargs = strategy.prepare_model_kwargs()
+
     # Load model with optional quantization
     try:
         if quant_config and quant_config.quantization:
+            # Quantization uses its own loading path
+            # Note: quantization + TP/PP is experimental
             model = _load_quantized_model(model_name, quant_config)
         else:
+            # Merge dtype with parallelism kwargs
+            # Parallelism kwargs may override device_map
+            model_kwargs["dtype"] = model_kwargs.get("dtype", dtype)
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
-                dtype=dtype,  # Use 'dtype' instead of deprecated 'torch_dtype'
-                device_map="auto",
+                **model_kwargs,
             )
     except Exception as e:
         raise ConfigurationError(f"Failed to load model {model_name}: {e}") from e
 
+    # Apply post-load wrapping (needed for pipeline parallelism)
+    model = strategy.wrap_model(model)
+
     logger.info(
         f"Model loaded: {model_name}, dtype={model.dtype}, "
+        f"strategy={sharding_config.strategy}, "
         f"params={sum(p.numel() for p in model.parameters()):,}"
     )
 

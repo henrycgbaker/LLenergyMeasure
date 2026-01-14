@@ -83,8 +83,13 @@ def run_inference(
 ) -> InferenceResult:
     """Run inference on prompts and collect metrics.
 
+    Supports different parallelism strategies:
+    - none: Standard inference with device_map='auto'
+    - tensor_parallel: HF native TP - works transparently with model.generate()
+    - pipeline_parallel: Experimental - uses standard inference path
+
     Args:
-        model: The language model.
+        model: The language model (may be wrapped for parallelism).
         config: Experiment configuration.
         prompts: List of prompt strings.
         tokenizer: The tokenizer.
@@ -93,6 +98,17 @@ def run_inference(
     Returns:
         InferenceResult with metrics and optionally outputs.
     """
+    sharding_strategy = config.sharding_config.strategy
+
+    # Log parallelism mode
+    if sharding_strategy == "tensor_parallel":
+        logger.info("Running inference with tensor parallelism (HF native tp_plan)")
+    elif sharding_strategy == "pipeline_parallel":
+        logger.info(
+            "Running inference with pipeline parallelism (experimental - "
+            "full PP scheduling not yet implemented)"
+        )
+
     device = accelerator.device
     max_input_tokens = config.max_input_tokens
     max_output_tokens = config.max_output_tokens
