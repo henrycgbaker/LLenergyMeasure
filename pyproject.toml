@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "llm-energy-measure"
-version = "1.16.2"
+version = "2.0.0"
 description = "LLM inference efficiency measurement framework"
 authors = ["henrycgbaker <henry.c.g.baker@gmail.com>"]
 readme = "README.md"
@@ -70,7 +70,7 @@ addopts = "-v --tb=short"
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "1.16.2"
+version = "2.0.0"
 version_files = ["VERSION", "pyproject.toml:tool.poetry.version"]
 tag_format = "v$version"
 update_changelog_on_bump = true
