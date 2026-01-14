@@ -2,58 +2,81 @@
 
 All notable changes to this project are documented here.
 
-## [Unreleased] - Industry-Standard Benchmarking Features
+## [v2.0.0](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/releases/tag/v2.0.0) (2026-01-14)
 
-Implements academic and industry-standard benchmarking features based on MLPerf, vLLM, and TokenPowerBench research.
+Refactored CLI-based tool with clean architecture, comprehensive documentation, and improved configuration UX.
 
 ### Added
 
+- **Architectural Refactor**
+  - Dependency injection via protocol-based components (`EnergyBackend`, `ModelLoader`, `InferenceEngine`)
+  - `ExperimentOrchestrator` manages lifecycle with injected dependencies
+  - Late aggregation pattern: raw per-process results saved separately, aggregated on-demand
+  - Pydantic models throughout for validated configs and results
+  - Modular package structure: `config/`, `core/`, `domain/`, `orchestration/`, `results/`, `state/`
+
+- **Documentation Overhaul**
+  - New `docs/` directory with user-facing guides: `quickstart.md`, `cli.md`, `deployment.md`
+  - Comprehensive CLI reference with all commands, flags, and examples
+  - Implemented testing parameters table in README for quick reference
+  - Streamlined README focusing on essentials; detailed docs moved to dedicated files
+
+- **Enhanced Configuration UX**
+  - Intuitive YAML field names: `gpus`, `batching`, `decoder`, `quantization` (legacy names still supported)
+  - `config show` displays resolved config with colour-coded sections
+  - Grid config validation with `--validate` and `--strict` flags
+  - Config param wiring tests ensuring all YAML options reach their targets
+
+- **Decoder Sampling Presets**
+  - `preset` field: `deterministic`, `standard`, `creative`, `factual`
+  - Presets expand to appropriate temperature/top_p/top_k combinations
+  - Additional decoder params: `min_p`, `no_repeat_ngram_size`
+
 - **Multi-Cycle Experiments** for statistical robustness
-  - `--cycles N` flag runs the same experiment N times (1-10)
+  - `--cycles N` flag runs the same experiment N times (1–10)
   - Statistical aggregation: mean, standard deviation, 95% confidence intervals
   - Coefficient of variation (CV) for measurement stability assessment
-  - Per-cycle metadata tracking (GPU temperature, system load at cycle start)
-  - Multi-cycle results saved to `results/multi_cycle/<experiment_id>.json`
-  - Uses t-distribution for small sample confidence intervals (academic standard)
+  - Uses t-distribution for small sample confidence intervals
 
 - **Scheduled Experiments** (daemon mode) for temporal variation studies
-  - `llm-energy-measure schedule` command for running experiments on a schedule
-  - Interval-based scheduling: `--interval 6h` runs every 6 hours
-  - Time-of-day scheduling: `--at 09:00` runs daily at 9am
+  - Interval-based: `--interval 6h`, time-of-day: `--at 09:00`
   - Day filtering: `--days mon,wed,fri` or `--days weekdays`
-  - Duration control: `--duration 7d` stops daemon after 7 days
   - Graceful shutdown on SIGINT/SIGTERM with progress tracking
-  - YAML config support via `schedule_config` section
 
-- **MLPerf-Style Traffic Simulation** replacing naive delay simulation
+- **MLPerf-Style Traffic Simulation**
   - `TrafficSimulation` config with Poisson and constant arrival modes
   - `target_qps` parameter for queries-per-second arrival rate
   - Poisson mode uses exponential inter-arrival times (statistically realistic)
-  - Seeded reproducibility for consistent benchmarking
-  - `TrafficGenerator` class maintains state across batches
 
 - **Industry-Standard Batching Strategies** (MLPerf/vLLM terminology)
   - `strategy` field: `static`, `dynamic`, `sorted_static`, `sorted_dynamic`
-  - `static`: Fixed batch size (default)
-  - `dynamic`: Token-aware batching with `max_tokens_per_batch`
-  - `sorted_static`/`sorted_dynamic`: Sort prompts by length before batching
-  - Length sorting improves GPU utilisation by reducing padding
+  - `max_tokens_per_batch` for dynamic token-aware batching
+  - Length sorting reduces padding waste
+
+- **MIG GPU Support**
+  - Topology detection and UUID handling for NVIDIA MIG instances
+  - Correct energy attribution per MIG partition
+
+- **E2E Experiment Workflow**
+  - Auto-aggregation on experiment completion
+  - Experiment resumption for interrupted runs
 
 ### Changed
 
-- Traffic simulation now uses proper Poisson arrival process instead of simple random delays
+- YAML config uses shorter, intuitive field names (backwards-compatible aliases preserved)
+- Traffic simulation uses proper Poisson arrival process instead of simple delays
 - Batching config uses explicit `strategy` field instead of boolean `dynamic_batching`
 
-### Dropped (From v1.0.0 Plans)
+### Dropped (From v1.x Plans)
 
-- **FSDP Support**: Research confirmed FSDP (Fully Sharded Data Parallel) is for training, not inference. Current tensor parallelism via accelerate `device_map="auto"` is the correct approach for inference workloads.
-- **Scenario Metadata**: Already covered by existing `extra_metadata` field in ExperimentConfig.
+- **FSDP Support**: Confirmed as training-only; `device_map="auto"` is correct for inference
+- **Scenario Metadata**: Covered by existing `extra_metadata` field
 
 ### References
 
-- [MLPerf Inference LoadGen](https://docs.mlcommons.org/inference/) - Traffic simulation patterns
-- [vLLM Batching](https://blog.vllm.ai/) - Industry batching strategies
-- [TokenPowerBench](https://arxiv.org/html/2512.03024v1) - Statistical robustness methodology
+- [MLPerf Inference](https://docs.mlcommons.org/inference/) — Traffic simulation patterns
+- [vLLM](https://blog.vllm.ai/) — Batching strategies
+- [TokenPowerBench](https://arxiv.org/html/2512.03024v1) — Statistical robustness methodology
 
 ---
 
