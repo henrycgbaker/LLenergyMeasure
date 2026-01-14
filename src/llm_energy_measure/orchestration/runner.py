@@ -90,6 +90,8 @@ class ExperimentOrchestrator:
         metrics_collector: Component for collecting metrics.
         energy_backend: Component for energy measurement.
         repository: Component for persisting results.
+        backend_name: Name of the inference backend (for result metadata).
+        backend_version: Version of the inference backend (for reproducibility).
     """
 
     def __init__(
@@ -99,12 +101,16 @@ class ExperimentOrchestrator:
         metrics_collector: MetricsCollector,
         energy_backend: EnergyBackend,
         repository: ResultsRepository,
+        backend_name: str = "pytorch",
+        backend_version: str | None = None,
     ) -> None:
         self._loader = model_loader
         self._inference = inference_engine
         self._metrics = metrics_collector
         self._energy = energy_backend
         self._repository = repository
+        self._backend_name = backend_name
+        self._backend_version = backend_version
 
     def run(self, ctx: ExperimentContext, prompts: list[str]) -> Path:
         """Run experiment and save raw results.
@@ -158,6 +164,8 @@ class ExperimentOrchestrator:
         # Build raw result with effective_config and cli_overrides (Phase 0)
         raw_result = RawProcessResult(
             experiment_id=ctx.experiment_id,
+            backend=self._backend_name,
+            backend_version=self._backend_version,
             process_index=ctx.process_index,
             gpu_id=gpu_id,
             gpu_name=mig_info.get("gpu_name", ""),

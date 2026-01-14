@@ -73,6 +73,10 @@ class MultiCycleResult(BaseModel):
 
     schema_version: str = Field(default=SCHEMA_VERSION, description="Result schema version")
     experiment_id: str = Field(..., description="Unique experiment identifier")
+    backend: str = Field(default="pytorch", description="Inference backend used")
+    backend_version: str | None = Field(
+        default=None, description="Backend version string for reproducibility"
+    )
     num_cycles: int = Field(..., description="Total cycles executed")
 
     # Statistical summary
@@ -126,6 +130,10 @@ class RawProcessResult(BaseModel):
 
     schema_version: str = Field(default=SCHEMA_VERSION, description="Result schema version")
     experiment_id: str = Field(..., description="Unique experiment identifier")
+    backend: str = Field(default="pytorch", description="Inference backend used")
+    backend_version: str | None = Field(
+        default=None, description="Backend version string for reproducibility"
+    )
     process_index: int = Field(..., description="Process rank in distributed setup")
     gpu_id: int = Field(..., description="GPU device index")
     gpu_name: str = Field(default="", description="GPU model name")
@@ -185,6 +193,10 @@ class AggregatedResult(BaseModel):
 
     schema_version: str = Field(default=SCHEMA_VERSION, description="Result schema version")
     experiment_id: str = Field(..., description="Unique experiment identifier")
+    backend: str = Field(default="pytorch", description="Inference backend used")
+    backend_version: str | None = Field(
+        default=None, description="Backend version string for reproducibility"
+    )
     aggregation: AggregationMetadata = Field(..., description="Aggregation metadata")
 
     # Aggregated metrics

@@ -41,3 +41,55 @@ class RetryableError(LLMBenchError):
     def __init__(self, message: str, max_retries: int = 3):
         super().__init__(message)
         self.max_retries = max_retries
+
+
+# Backend-specific errors
+
+
+class BackendError(LLMBenchError):
+    """Base class for inference backend errors."""
+
+
+class BackendNotAvailableError(BackendError):
+    """Backend is not installed or not usable.
+
+    Raised when a backend's dependencies are missing or the backend
+    reports it cannot be used on the current system.
+    """
+
+    def __init__(self, backend: str, install_hint: str | None = None):
+        msg = f"Backend '{backend}' is not available"
+        if install_hint:
+            msg += f". Install with: {install_hint}"
+        super().__init__(msg)
+        self.backend = backend
+        self.install_hint = install_hint
+
+
+class BackendInitializationError(BackendError):
+    """Failed to initialize backend (model loading, memory allocation, etc.)."""
+
+
+class BackendInferenceError(BackendError):
+    """Error during inference execution."""
+
+
+class BackendTimeoutError(BackendError):
+    """Inference exceeded timeout limit."""
+
+    def __init__(self, backend: str, timeout_sec: float):
+        super().__init__(
+            f"Inference timed out after {timeout_sec}s on backend '{backend}'. "
+            "Consider reducing batch size or prompt count."
+        )
+        self.backend = backend
+        self.timeout_sec = timeout_sec
+
+
+class BackendConfigError(BackendError):
+    """Configuration is incompatible with the selected backend."""
+
+    def __init__(self, backend: str, param: str, message: str):
+        super().__init__(f"Backend '{backend}': parameter '{param}' - {message}")
+        self.backend = backend
+        self.param = param
