@@ -563,6 +563,10 @@ def experiment(
         int | None,
         typer.Option("--seed", help="Random seed for reproducibility"),
     ] = None,
+    backend: Annotated[
+        str | None,
+        typer.Option("--backend", help="Inference backend (pytorch, vllm)"),
+    ] = None,
     cycles: Annotated[
         int | None,
         typer.Option("--cycles", "-c", help="Number of cycles for statistical robustness (1-10)"),
@@ -788,6 +792,8 @@ def experiment(
             cli_overrides_dict["max_output_tokens"] = max_tokens
         if seed is not None:
             cli_overrides_dict["random_seed"] = seed
+        if backend is not None:
+            cli_overrides_dict["backend"] = backend
 
         # Deprecated testable params - warn but still apply
         if batch_size is not None:
@@ -900,16 +906,39 @@ def experiment(
             console.print("\n[cyan]--dry-run: Exiting without running experiment[/cyan]")
             raise typer.Exit(0)
 
-        # Build accelerate command
-        cmd = [
-            sys.executable,
-            "-m",
-            "accelerate.commands.launch",
-            "--num_processes",
-            str(final_num_processes),
-            "-m",
-            "llm_energy_measure.orchestration.launcher",
-        ]
+        # Build launch command based on backend
+        # vLLM manages its own multiprocessing (spawn), incompatible with accelerate (fork)
+        backend_name = config.backend if hasattr(config, "backend") else "pytorch"
+        subprocess_env: dict[str, str] | None = None  # Environment for subprocess
+
+        if backend_name == "vllm":
+            # Direct launch for vLLM - it handles its own distribution
+            cmd = [
+                sys.executable,
+                "-m",
+                "llm_energy_measure.orchestration.launcher",
+            ]
+            # vLLM v1 multiprocessing can have issues with CUDA initialization
+            # Disable V1 multiprocessing to use simpler process model
+            subprocess_env = os.environ.copy()
+            subprocess_env["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
+            subprocess_env["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
+            # Disable torch.compile - requires C compiler not present in minimal Docker images
+            subprocess_env["TORCH_COMPILE_DISABLE"] = "1"
+            # Set CUDA_VISIBLE_DEVICES to the configured GPU list
+            # This ensures vLLM only sees the intended GPUs
+            subprocess_env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in config.gpu_list)
+        else:
+            # Accelerate launch for PyTorch backend
+            cmd = [
+                sys.executable,
+                "-m",
+                "accelerate.commands.launch",
+                "--num_processes",
+                str(final_num_processes),
+                "-m",
+                "llm_energy_measure.orchestration.launcher",
+            ]
 
         # Generate experiment ID early so CLI and subprocess use the same ID
         # If resuming, reuse the existing experiment ID; otherwise generate new one
@@ -957,9 +986,14 @@ def experiment(
         if sample_size:
             cmd.extend(["--sample-size", str(sample_size)])
 
-        console.print(
-            f"\n[dim]$ accelerate launch --num_processes {final_num_processes} ...[/dim]\n"
-        )
+        if backend_name == "vllm":
+            console.print(
+                "\n[dim]$ python -m llm_energy_measure.orchestration.launcher ...[/dim]\n"
+            )
+        else:
+            console.print(
+                f"\n[dim]$ accelerate launch --num_processes {final_num_processes} ...[/dim]\n"
+            )
 
         # Multi-cycle support: run experiment multiple times for statistical robustness
         cycle_results: list[AggregatedResult] = []
@@ -1030,10 +1064,12 @@ def experiment(
             original_sigterm = signal.signal(signal.SIGTERM, _handle_interrupt)
 
             try:
-                # Run accelerate with Popen for better control (Phase 3)
+                # Run with Popen for better control (Phase 3)
                 # start_new_session=True creates a new process group, allowing us to
                 # kill all child processes (accelerate workers) with os.killpg()
-                subprocess_handle = subprocess.Popen(cycle_cmd, start_new_session=True)
+                subprocess_handle = subprocess.Popen(
+                    cycle_cmd, start_new_session=True, env=subprocess_env
+                )
                 current_state.subprocess_pid = subprocess_handle.pid
                 state_manager.save(current_state)
 

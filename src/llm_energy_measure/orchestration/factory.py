@@ -1,7 +1,9 @@
 """Factory for creating experiment components with DI wiring.
 
-Supports backend selection via config.backend field. Currently only 'pytorch'
-is fully implemented; vLLM and TensorRT-LLM support is planned for Phase 2.
+Supports backend selection via config.backend field. Supported backends:
+- pytorch: HuggingFace Transformers + Accelerate (default)
+- vllm: vLLM with PagedAttention and continuous batching
+- tensorrt: TensorRT-LLM (planned)
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 if TYPE_CHECKING:
+    from llm_energy_measure.core.inference_backends.protocols import InferenceBackend
     from llm_energy_measure.orchestration.context import ExperimentContext
     from llm_energy_measure.orchestration.runner import ExperimentOrchestrator
     from llm_energy_measure.protocols import (
@@ -61,8 +64,7 @@ def create_components(ctx: ExperimentContext) -> ExperimentComponents:
     """Create all experiment components wired for the given context.
 
     Validates the requested backend and creates appropriate components.
-    Currently only 'pytorch' backend is supported for component creation;
-    other backends will be added in Phase 2.
+    Supports 'pytorch' and 'vllm' backends.
 
     Args:
         ctx: Experiment context with accelerator and config.
@@ -73,15 +75,8 @@ def create_components(ctx: ExperimentContext) -> ExperimentComponents:
     Raises:
         ConfigurationError: If requested backend is not available or not yet supported.
     """
-    from llm_energy_measure.core.energy_backends import get_backend as get_energy_backend
-    from llm_energy_measure.core.implementations import (
-        HuggingFaceModelLoader,
-        ThroughputMetricsCollector,
-        TransformersInferenceEngine,
-    )
     from llm_energy_measure.core.inference_backends import get_backend as get_inference_backend
     from llm_energy_measure.exceptions import ConfigurationError
-    from llm_energy_measure.results.repository import FileSystemRepository
 
     # Get backend name from config (default to pytorch)
     backend_name = getattr(ctx.config, "backend", "pytorch")
@@ -89,23 +84,96 @@ def create_components(ctx: ExperimentContext) -> ExperimentComponents:
     # Validate backend is available
     _validate_backend(backend_name)
 
-    # Currently only pytorch backend is fully integrated with the orchestrator.
-    # Other backends (vLLM, TensorRT) will be added in Phase 2.
-    if backend_name != "pytorch":
-        raise ConfigurationError(
-            f"Backend '{backend_name}' is not yet integrated with the orchestrator. "
-            f"Currently only 'pytorch' backend is supported. "
-            f"vLLM and TensorRT-LLM support is planned for v2.1.0."
-        )
-
-    # Get backend instance for version info
+    # Get backend instance
     backend = get_inference_backend(backend_name)
     logger.debug(f"Using inference backend: {backend.name} ({backend.version})")
+
+    # Create backend-specific components
+    if backend_name == "pytorch":
+        return _create_pytorch_components(ctx, backend)
+    elif backend_name == "vllm":
+        return _create_vllm_components(ctx, backend)
+    else:
+        raise ConfigurationError(
+            f"Backend '{backend_name}' is not yet integrated with the orchestrator. "
+            f"Supported backends: pytorch, vllm."
+        )
+
+
+def _create_pytorch_components(
+    ctx: ExperimentContext, backend: InferenceBackend
+) -> ExperimentComponents:
+    """Create components for PyTorch/Transformers backend.
+
+    Args:
+        ctx: Experiment context.
+        backend: PyTorch backend instance.
+
+    Returns:
+        ExperimentComponents configured for PyTorch.
+    """
+    from llm_energy_measure.core.energy_backends import get_backend as get_energy_backend
+    from llm_energy_measure.core.implementations import (
+        HuggingFaceModelLoader,
+        ThroughputMetricsCollector,
+        TransformersInferenceEngine,
+    )
+    from llm_energy_measure.results.repository import FileSystemRepository
 
     return ExperimentComponents(
         model_loader=HuggingFaceModelLoader(),
         inference_engine=TransformersInferenceEngine(ctx.accelerator),
         metrics_collector=ThroughputMetricsCollector(ctx.accelerator),
+        energy_backend=get_energy_backend("codecarbon"),
+        repository=FileSystemRepository(),
+        backend_name=backend.name,
+        backend_version=backend.version,
+    )
+
+
+def _create_vllm_components(
+    ctx: ExperimentContext, backend: InferenceBackend
+) -> ExperimentComponents:
+    """Create components for vLLM backend.
+
+    vLLM manages its own model loading and distribution, so we use adapters
+    to integrate with the existing orchestrator architecture.
+
+    Args:
+        ctx: Experiment context.
+        backend: vLLM backend instance.
+
+    Returns:
+        ExperimentComponents configured for vLLM.
+    """
+    from llm_energy_measure.core.energy_backends import get_backend as get_energy_backend
+    from llm_energy_measure.core.inference_backends.adapters import (
+        BackendInferenceEngineAdapter,
+        BackendMetricsCollectorAdapter,
+        BackendModelLoaderAdapter,
+    )
+    from llm_energy_measure.core.inference_backends.protocols import BackendRuntime
+    from llm_energy_measure.results.repository import FileSystemRepository
+
+    # Create runtime context for vLLM
+    # vLLM manages its own distribution, so we don't pass the accelerator
+    runtime = BackendRuntime(
+        device=None,  # vLLM manages devices
+        process_index=ctx.process_index,
+        num_processes=ctx.num_processes,
+        is_main_process=ctx.is_main_process,
+        accelerator=None,  # vLLM doesn't use Accelerate
+    )
+
+    # Create adapters that wrap the vLLM backend
+    model_loader = BackendModelLoaderAdapter(backend, runtime)
+    inference_engine = BackendInferenceEngineAdapter(backend)
+    metrics_collector = BackendMetricsCollectorAdapter(backend)
+
+    return ExperimentComponents(
+        model_loader=model_loader,
+        inference_engine=inference_engine,
+        metrics_collector=metrics_collector,
         energy_backend=get_energy_backend("codecarbon"),
         repository=FileSystemRepository(),
         backend_name=backend.name,

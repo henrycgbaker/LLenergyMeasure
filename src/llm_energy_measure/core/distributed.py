@@ -183,3 +183,46 @@ def cleanup_distributed() -> None:
         logger.info("Distributed cleanup completed")
     except Exception as e:
         logger.warning(f"Error during distributed cleanup: {e}")
+
+
+class MinimalAccelerator:
+    """Minimal Accelerator-like object for backends that manage their own distribution.
+
+    vLLM and other backends that handle their own CUDA context and multiprocessing
+    don't need the full Accelerator. This provides a minimal compatible interface.
+    """
+
+    def __init__(self, device: torch.device) -> None:
+        self._device = device
+
+    @property
+    def device(self) -> torch.device:
+        return self._device
+
+    @property
+    def num_processes(self) -> int:
+        return 1
+
+    @property
+    def process_index(self) -> int:
+        return 0
+
+    @property
+    def is_main_process(self) -> bool:
+        return True
+
+    def wait_for_everyone(self) -> None:
+        """No-op for single process."""
+        pass
+
+
+def create_minimal_accelerator(device: torch.device) -> MinimalAccelerator:
+    """Create a minimal Accelerator-like object for vLLM and similar backends.
+
+    Args:
+        device: The torch device to use.
+
+    Returns:
+        MinimalAccelerator instance.
+    """
+    return MinimalAccelerator(device)

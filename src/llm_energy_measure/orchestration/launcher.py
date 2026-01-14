@@ -111,13 +111,30 @@ def _requires_torchrun(config_data: dict[str, Any]) -> bool:
     return strategy in ("tensor_parallel", "pipeline_parallel")
 
 
+def _requires_direct_launch(config_data: dict[str, Any]) -> bool:
+    """Check if the backend requires direct Python execution (no launcher).
+
+    vLLM manages its own multiprocessing with spawn start method, which is
+    incompatible with accelerate/torchrun forked processes. It must be
+    launched directly.
+
+    Args:
+        config_data: Configuration dictionary.
+
+    Returns:
+        True if direct Python launch is required.
+    """
+    backend = str(config_data.get("backend", "pytorch"))
+    return backend == "vllm"
+
+
 def _build_launch_command(
     config_data: dict[str, Any],
     script_path: str | Path,
     config_path: Path,
     extra_args: list[str] | None = None,
 ) -> list[str]:
-    """Build the appropriate launch command based on parallelism strategy.
+    """Build the appropriate launch command based on backend and parallelism strategy.
 
     Args:
         config_data: Configuration dictionary.
@@ -130,7 +147,21 @@ def _build_launch_command(
     """
     gpu_list = config_data.get("gpu_list", [])
 
-    if _requires_torchrun(config_data):
+    if _requires_direct_launch(config_data):
+        # vLLM: direct Python launch (no accelerate/torchrun)
+        # vLLM manages its own multiprocessing with spawn start method
+        import sys
+
+        cmd = [
+            sys.executable,
+            "-m",
+            "llm_energy_measure.orchestration.launcher",
+            "--config",
+            str(config_path),
+        ]
+        backend = config_data.get("backend", "pytorch")
+        logger.info(f"Using direct launch for {backend} backend")
+    elif _requires_torchrun(config_data):
         # Tensor/Pipeline parallelism: use torchrun
         sharding = config_data.get("sharding_config", config_data.get("sharding", {}))
         num_shards = sharding.get("num_shards", len(gpu_list))
@@ -228,7 +259,11 @@ def launch_experiment_accelerate(
                 env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_list)
 
             # Set environment based on launcher type
-            if _requires_torchrun(config_data):
+            if _requires_direct_launch(config_data):
+                # vLLM: direct launch, no special env vars needed
+                # vLLM manages its own distribution
+                pass
+            elif _requires_torchrun(config_data):
                 # torchrun handles distributed setup
                 pass
             else:

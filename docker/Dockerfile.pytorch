@@ -1,0 +1,61 @@
+# syntax=docker/dockerfile:1
+# =============================================================================
+# PyTorch Backend: HuggingFace Transformers + Accelerate
+# =============================================================================
+# Default backend using PyTorch 2.5.x with HuggingFace ecosystem
+#
+# Usage:
+#   docker build -f docker/Dockerfile.pytorch \
+#     --build-arg BASE_IMAGE=llm-energy-measure-base:latest \
+#     -t llm-energy-measure:pytorch .
+# =============================================================================
+
+ARG BASE_IMAGE=llm-energy-measure-base:latest
+
+# ============================================================================
+# Stage 1: Builder - Install dependencies
+# ============================================================================
+FROM ${BASE_IMAGE} AS builder
+
+WORKDIR /build
+
+# Install PyTorch 2.5.x with CUDA 12.4 (matches base image)
+RUN pip install --no-cache-dir \
+    torch==2.5.1 \
+    --index-url https://download.pytorch.org/whl/cu124
+
+# Copy project files
+COPY pyproject.toml poetry.lock* README.md ./
+COPY src/ ./src/
+
+# Install the package with remaining dependencies (torch already installed)
+RUN pip install --no-cache-dir .
+
+# ============================================================================
+# Stage 2: Runtime - Minimal production image
+# ============================================================================
+FROM ${BASE_IMAGE} AS runtime
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Clear NVIDIA's entrypoint and set default command
+ENTRYPOINT []
+CMD ["llm-energy-measure", "--help"]
+
+# ============================================================================
+# Stage 3: Dev - For development with source mounting
+# ============================================================================
+FROM ${BASE_IMAGE} AS dev
+
+# Install PyTorch (same as builder)
+RUN pip install --no-cache-dir \
+    torch==2.5.1 \
+    --index-url https://download.pytorch.org/whl/cu124
+
+# Install dev dependencies
+RUN pip install --no-cache-dir poetry-core build pytest pytest-cov ruff mypy
+
+# Source will be mounted at runtime for editable install
+ENTRYPOINT []
+CMD ["/bin/bash"]
