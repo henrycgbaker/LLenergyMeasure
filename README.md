@@ -15,6 +15,39 @@ A Python framework for measuring LLM inference efficiency, including energy cons
 - **Flexible Configuration** - YAML configs with inheritance and presets
 - **Docker Ready** - GPU-enabled containerisation
 
+## Implemented Testing Parameters
+
+All parameters below are fully wired and functional.
+
+| Category | Parameter | Values | Description |
+|----------|-----------|--------|-------------|
+| Core | `model_name` | any HF model | HuggingFace model path |
+| Core | `fp_precision` | `float32`, `float16`, `bfloat16` | Floating point precision |
+| Core | `max_input_tokens` | 1+ | Input token limit |
+| Core | `max_output_tokens` | 1+ | Output token limit |
+| Core | `min_output_tokens` | 0+ | Minimum output tokens |
+| Core | `random_seed` | int or null | Reproducibility seed |
+| Batching | `batch_size` | 1+ | Prompts per batch |
+| Batching | `strategy` | `static`, `dynamic`, `sorted_static`, `sorted_dynamic` | MLPerf-aligned batching strategies |
+| Batching | `max_tokens_per_batch` | int or null | Token budget (dynamic modes) |
+| Decoder | `preset` | `deterministic`, `standard`, `creative`, `factual` | Sampling presets |
+| Decoder | `temperature` | 0.0–2.0 | Sampling temperature |
+| Decoder | `top_p` | 0.0–1.0 | Nucleus sampling |
+| Decoder | `top_k` | 0+ | Top-k sampling |
+| Decoder | `min_p` | 0.0–1.0 | Min probability threshold |
+| Decoder | `repetition_penalty` | 0.1–10.0 | Repetition control |
+| Decoder | `no_repeat_ngram_size` | 0+ | Prevent n-gram repetition |
+| Quantization | `load_in_4bit` | bool | BitsAndBytes 4-bit quantization |
+| Quantization | `load_in_8bit` | bool | BitsAndBytes 8-bit quantization |
+| Multi-Cycle | `num_cycles` | 1–10 | Repeat experiment for statistical robustness |
+| Traffic | `mode` | `constant`, `poisson` | Request arrival pattern (MLPerf-style) |
+| Traffic | `target_qps` | float | Target queries per second |
+| Schedule | `interval` | e.g. `6h`, `30m`, `1d` | Run frequency (daemon mode) |
+| Schedule | `at` | e.g. `09:00` | Specific time of day |
+| Schedule | `days` | `mon`–`sun`, `weekdays`, `weekends` | Day filter |
+| *Planned* | `sharding.strategy` | — | Requires backend integration (vLLM/TensorRT-LLM) |
+| *Planned* | `backend` | — | Only `pytorch` functional; `vllm`/`tensorrt` planned |
+
 ## Installation
 
 ```bash
