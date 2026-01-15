@@ -40,6 +40,9 @@ class InferenceMetrics(BaseModel):
     inference_time_sec: float = Field(..., description="Total inference time in seconds")
     tokens_per_second: float = Field(..., description="Throughput in tokens/second")
     latency_per_token_ms: float = Field(..., description="Average latency per token in ms")
+    time_to_first_token_ms: float | None = Field(
+        default=None, description="Average time to first token in ms (if available)"
+    )
 
     @property
     def throughput(self) -> float:

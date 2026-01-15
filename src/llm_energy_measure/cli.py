@@ -1342,6 +1342,13 @@ def aggregate(
         bool,
         typer.Option("--strict/--no-strict", help="Fail if results incomplete (default: strict)"),
     ] = True,
+    allow_mixed_backends: Annotated[
+        bool,
+        typer.Option(
+            "--allow-mixed-backends",
+            help="Allow aggregating results from different backends (not recommended)",
+        ),
+    ] = False,
 ) -> None:
     """Aggregate raw per-process results into final experiment result.
 
@@ -1364,9 +1371,9 @@ def aggregate(
 
         console.print(f"Aggregating {len(pending)} experiments...")
         for exp_id in pending:
-            _aggregate_one(repo, exp_id, force, strict)
+            _aggregate_one(repo, exp_id, force, strict, allow_mixed_backends)
     elif experiment_id:
-        _aggregate_one(repo, experiment_id, force, strict)
+        _aggregate_one(repo, experiment_id, force, strict, allow_mixed_backends)
     else:
         console.print("[red]Error:[/red] Provide experiment ID or use --all")
         raise typer.Exit(1)
@@ -1377,6 +1384,7 @@ def _aggregate_one(
     experiment_id: str,
     force: bool,
     strict: bool = True,
+    allow_mixed_backends: bool = False,
 ) -> None:
     """Aggregate a single experiment."""
     if repo.has_aggregated(experiment_id) and not force:
@@ -1397,6 +1405,7 @@ def _aggregate_one(
             raw_results,
             results_dir=repo._base,
             strict=strict,
+            allow_mixed_backends=allow_mixed_backends,
         )
         path = repo.save_aggregated(aggregated)
         console.print(

@@ -371,50 +371,136 @@ class VLLMBackend:
             raise BackendInferenceError("vLLM not initialized. Call initialize() first.")
 
         try:
-            start_time = time.perf_counter()
+            # Check if traffic simulation is enabled
+            traffic_config = config.latency_simulation
+            if traffic_config.enabled:
+                return self._run_inference_with_traffic(prompts, config)
 
-            # Run inference
-            outputs = self._llm.generate(prompts, self._sampling_params)
-
-            inference_time = time.perf_counter() - start_time
-
-            # Count tokens from outputs
-            total_input_tokens = 0
-            total_output_tokens = 0
-            output_texts: list[str] = []
-
-            for output in outputs:
-                # Input tokens from prompt
-                total_input_tokens += len(output.prompt_token_ids)
-
-                # Output tokens from first completion
-                if output.outputs:
-                    completion = output.outputs[0]
-                    total_output_tokens += len(completion.token_ids)
-                    output_texts.append(completion.text)
-
-            total_tokens = total_input_tokens + total_output_tokens
-
-            logger.info(
-                f"vLLM inference complete: {len(prompts)} prompts, "
-                f"{total_tokens} tokens in {inference_time:.2f}s"
-            )
-
-            return BackendResult(
-                total_tokens=total_tokens,
-                input_tokens=total_input_tokens,
-                output_tokens=total_output_tokens,
-                inference_time_sec=inference_time,
-                output_texts=output_texts if config.save_outputs else None,
-                backend_metadata={
-                    "backend": "vllm",
-                    "continuous_batching": True,
-                    "num_prompts": len(prompts),
-                },
-            )
+            return self._run_inference_batch(prompts, config)
 
         except Exception as e:
             raise BackendInferenceError(f"vLLM inference failed: {e}") from e
+
+    def _run_inference_batch(self, prompts: list[str], config: ExperimentConfig) -> BackendResult:
+        """Run inference on all prompts at once (no traffic simulation)."""
+        start_time = time.perf_counter()
+
+        # Run inference
+        outputs = self._llm.generate(prompts, self._sampling_params)
+
+        inference_time = time.perf_counter() - start_time
+
+        return self._process_outputs(outputs, config, inference_time, len(prompts))
+
+    def _run_inference_with_traffic(
+        self, prompts: list[str], config: ExperimentConfig
+    ) -> BackendResult:
+        """Run inference with MLPerf-style traffic simulation.
+
+        Submits prompts in sub-batches with inter-arrival delays to simulate
+        realistic request patterns (Poisson or constant arrivals).
+        """
+        from llm_energy_measure.core.traffic import TrafficGenerator
+
+        traffic_config = config.latency_simulation
+        generator = TrafficGenerator(traffic_config, seed=config.random_seed)
+
+        # Determine batch size for sub-batches
+        batch_size = config.batching_options.batch_size or len(prompts)
+        batches = [prompts[i : i + batch_size] for i in range(0, len(prompts), batch_size)]
+
+        logger.info(
+            f"vLLM traffic simulation: {len(batches)} batches, "
+            f"mode={traffic_config.mode}, target_qps={traffic_config.target_qps}"
+        )
+
+        all_outputs: list[Any] = []
+        start_time = time.perf_counter()
+
+        for batch_idx, batch in enumerate(batches):
+            # Apply traffic delay (skip first batch)
+            if batch_idx > 0:
+                delay = generator.wait_for_next_request()
+                if delay > 0.1:
+                    logger.debug(f"Traffic delay: {delay:.3f}s before batch {batch_idx + 1}")
+
+            # Run this batch
+            batch_outputs = self._llm.generate(batch, self._sampling_params)
+            all_outputs.extend(batch_outputs)
+
+        inference_time = time.perf_counter() - start_time
+
+        return self._process_outputs(
+            all_outputs,
+            config,
+            inference_time,
+            len(prompts),
+            extra_metadata={"traffic_simulation": True, "num_batches": len(batches)},
+        )
+
+    def _process_outputs(
+        self,
+        outputs: list[Any],
+        config: ExperimentConfig,
+        inference_time: float,
+        num_prompts: int,
+        extra_metadata: dict[str, Any] | None = None,
+    ) -> BackendResult:
+        """Process vLLM outputs into BackendResult."""
+        total_input_tokens = 0
+        total_output_tokens = 0
+        output_texts: list[str] = []
+        ttft_values: list[float] = []
+
+        for output in outputs:
+            # Input tokens from prompt
+            total_input_tokens += len(output.prompt_token_ids)
+
+            # Output tokens from first completion
+            if output.outputs:
+                completion = output.outputs[0]
+                total_output_tokens += len(completion.token_ids)
+                output_texts.append(completion.text)
+
+            # Extract TTFT if available (vLLM metrics)
+            if hasattr(output, "metrics") and output.metrics is not None:
+                metrics = output.metrics
+                if hasattr(metrics, "time_to_first_token"):
+                    ttft_values.append(metrics.time_to_first_token * 1000)
+                elif hasattr(metrics, "first_token_time"):
+                    ttft_values.append(metrics.first_token_time * 1000)
+
+        total_tokens = total_input_tokens + total_output_tokens
+
+        # Calculate average TTFT
+        avg_ttft_ms: float | None = None
+        if ttft_values:
+            avg_ttft_ms = sum(ttft_values) / len(ttft_values)
+            logger.debug(f"vLLM TTFT: avg={avg_ttft_ms:.2f}ms from {len(ttft_values)} samples")
+
+        logger.info(
+            f"vLLM inference complete: {num_prompts} prompts, "
+            f"{total_tokens} tokens in {inference_time:.2f}s"
+        )
+
+        metadata: dict[str, Any] = {
+            "backend": "vllm",
+            "continuous_batching": True,
+            "num_prompts": num_prompts,
+            "ttft_samples": len(ttft_values) if ttft_values else 0,
+        }
+        if extra_metadata:
+            metadata.update(extra_metadata)
+
+        return BackendResult(
+            total_tokens=total_tokens,
+            input_tokens=total_input_tokens,
+            output_tokens=total_output_tokens,
+            inference_time_sec=inference_time,
+            time_to_first_token_ms=avg_ttft_ms,
+            output_texts=output_texts if config.save_outputs else None,
+            backend_metadata=metadata,
+        )
 
     def cleanup(self) -> None:
         """Release vLLM resources.

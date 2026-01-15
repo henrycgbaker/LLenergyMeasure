@@ -114,6 +114,7 @@ def aggregate_results(
     expected_processes: int | None = None,
     results_dir: Path | None = None,
     strict: bool = True,
+    allow_mixed_backends: bool = False,
 ) -> AggregatedResult:
     """Aggregate raw per-process results into a single result.
 
@@ -132,18 +133,33 @@ def aggregate_results(
         expected_processes: Expected number of processes (for completeness validation).
         results_dir: Results directory (for marker checking).
         strict: If True, raise on incomplete; if False, warn and proceed.
+        allow_mixed_backends: If False (default), reject results from different backends.
+            Mixed-backend aggregation produces statistically invalid comparisons.
 
     Returns:
         Aggregated result combining all process data.
 
     Raises:
-        AggregationError: If raw_results is empty or (strict and incomplete).
+        AggregationError: If raw_results is empty, strict and incomplete,
+            or mixed backends without allow_mixed_backends=True.
     """
     if not raw_results:
         raise AggregationError("Cannot aggregate empty results list")
 
     warnings: list[str] = []
     num_processes = len(raw_results)
+
+    # Backend consistency validation (Phase 3)
+    backends = {r.backend for r in raw_results}
+    if len(backends) > 1:
+        backend_list = ", ".join(sorted(backends))
+        msg = f"Mixed backends detected: {backend_list}. Aggregating results from different backends produces statistically invalid comparisons."
+        if not allow_mixed_backends:
+            raise AggregationError(
+                f"{msg} Use --allow-mixed-backends to override (not recommended)."
+            )
+        warnings.append(msg)
+        logger.warning(f"Proceeding with mixed-backend aggregation: {backend_list}")
 
     # Completeness validation (Phase 5)
     if expected_processes is not None and results_dir is not None:
@@ -218,18 +234,24 @@ def aggregate_results(
         f"throughput={avg_tokens_per_second:.2f} tok/s"
     )
 
-    # Propagate effective_config, cli_overrides, and config_warnings from first result
-    # All processes have the same config, so any result works
+    # Propagate effective_config, cli_overrides, config_warnings, and backend from first result
+    # All processes have the same config/backend, so any result works
     effective_config: dict[str, Any] = {}
     cli_overrides: dict[str, Any] = {}
     config_warnings: list[str] = []
+    backend = "pytorch"
+    backend_version: str | None = None
     if raw_results:
         effective_config = raw_results[0].effective_config
         cli_overrides = raw_results[0].cli_overrides
         config_warnings = raw_results[0].config_warnings
+        backend = raw_results[0].backend
+        backend_version = raw_results[0].backend_version
 
     return AggregatedResult(
         experiment_id=experiment_id,
+        backend=backend,
+        backend_version=backend_version,
         aggregation=metadata,
         total_tokens=total_tokens,
         total_energy_j=total_energy_j,
