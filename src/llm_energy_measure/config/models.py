@@ -1,6 +1,6 @@
 """Configuration models for LLM Bench experiments."""
 
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import (
     AliasChoices,
@@ -11,6 +11,9 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+if TYPE_CHECKING:
+    from llm_energy_measure.config.backend_configs import PyTorchConfig, VLLMConfig
 
 # Built-in dataset aliases for prompt loading
 BUILTIN_DATASETS: dict[str, dict[str, str]] = {
@@ -445,6 +448,17 @@ class ExperimentConfig(BaseModel):
         default="pytorch", description="Inference backend"
     )
 
+    # Backend-specific configurations
+    # These are optional and only validated when the corresponding backend is selected
+    vllm: "VLLMConfig | None" = Field(
+        default=None,
+        description="vLLM-specific configuration (only used when backend=vllm)",
+    )
+    pytorch: "PyTorchConfig | None" = Field(
+        default=None,
+        description="PyTorch-specific configuration (only used when backend=pytorch)",
+    )
+
     # Experiment tracking
     cycle_id: int | None = Field(default=None, description="Experiment cycle ID")
     num_cycles: int = Field(
@@ -481,6 +495,18 @@ class ExperimentConfig(BaseModel):
                 f"max_output_tokens ({self.max_output_tokens})"
             )
 
+        # Validate backend-specific config matches selected backend
+        if self.vllm is not None and self.backend != "vllm":
+            raise ValueError(
+                f"vllm config provided but backend is '{self.backend}'. "
+                "Set backend='vllm' or remove vllm config section."
+            )
+        if self.pytorch is not None and self.backend != "pytorch":
+            raise ValueError(
+                f"pytorch config provided but backend is '{self.backend}'. "
+                "Set backend='pytorch' or remove pytorch config section."
+            )
+
         return self
 
     @field_validator("gpu_list", mode="before")
@@ -489,3 +515,17 @@ class ExperimentConfig(BaseModel):
         if isinstance(v, int):
             return [v]
         return list(v)
+
+
+# Rebuild model to resolve forward references for backend configs
+# Import here to avoid circular imports
+def _rebuild_experiment_config() -> None:
+    """Rebuild ExperimentConfig to resolve forward references."""
+    from llm_energy_measure.config.backend_configs import PyTorchConfig, VLLMConfig
+
+    ExperimentConfig.model_rebuild(
+        _types_namespace={"VLLMConfig": VLLMConfig, "PyTorchConfig": PyTorchConfig}
+    )
+
+
+_rebuild_experiment_config()

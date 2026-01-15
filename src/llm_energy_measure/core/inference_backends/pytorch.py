@@ -30,6 +30,7 @@ from llm_energy_measure.exceptions import (
 )
 
 if TYPE_CHECKING:
+    from llm_energy_measure.config.backend_configs import PyTorchConfig
     from llm_energy_measure.config.models import ExperimentConfig
     from llm_energy_measure.domain.model_info import ModelInfo
 
@@ -86,6 +87,13 @@ class PyTorchBackend:
 
     It provides full backward compatibility with existing experiments while
     conforming to the InferenceBackend protocol.
+
+    PyTorch-specific configuration (config.pytorch) controls:
+    - Attention implementation (flash_attention_2, sdpa, eager)
+    - torch.compile optimization
+    - BetterTransformer conversion
+    - KV caching, memory management
+    - Assisted generation (speculative decoding)
     """
 
     def __init__(self) -> None:
@@ -95,6 +103,7 @@ class PyTorchBackend:
         self._accelerator: Any = None
         self._config: ExperimentConfig | None = None
         self._runtime: BackendRuntime | None = None
+        self._assistant_model: Any = None  # For assisted generation
 
     @property
     def name(self) -> str:
@@ -132,6 +141,155 @@ class PyTorchBackend:
             manages_own_batching=False,
         )
 
+    def _build_model_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
+        """Build kwargs for model loading from PyTorchConfig.
+
+        Args:
+            config: Experiment configuration.
+
+        Returns:
+            Dict of kwargs for AutoModelForCausalLM.from_pretrained().
+        """
+        pytorch_cfg: PyTorchConfig | None = config.pytorch
+        kwargs: dict[str, Any] = {}
+
+        if pytorch_cfg is None:
+            return kwargs
+
+        # Attention implementation
+        if pytorch_cfg.attn_implementation != "sdpa":
+            kwargs["attn_implementation"] = pytorch_cfg.attn_implementation
+
+        # Memory management
+        if pytorch_cfg.low_cpu_mem_usage:
+            kwargs["low_cpu_mem_usage"] = True
+        if pytorch_cfg.max_memory:
+            kwargs["max_memory"] = pytorch_cfg.max_memory
+
+        # Escape hatch
+        if pytorch_cfg.extra:
+            kwargs.update(pytorch_cfg.extra)
+
+        return kwargs
+
+    def _build_generation_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
+        """Build kwargs for model.generate() from PyTorchConfig.
+
+        Args:
+            config: Experiment configuration.
+
+        Returns:
+            Dict of additional kwargs for generate().
+        """
+        pytorch_cfg: PyTorchConfig | None = config.pytorch
+        kwargs: dict[str, Any] = {}
+
+        if pytorch_cfg is None:
+            return kwargs
+
+        # KV caching
+        if not pytorch_cfg.use_cache:
+            kwargs["use_cache"] = False
+
+        # Beam search
+        if pytorch_cfg.num_beams > 1:
+            kwargs["num_beams"] = pytorch_cfg.num_beams
+            if pytorch_cfg.early_stopping:
+                kwargs["early_stopping"] = True
+            if pytorch_cfg.length_penalty != 1.0:
+                kwargs["length_penalty"] = pytorch_cfg.length_penalty
+
+        # Output configuration
+        if pytorch_cfg.output_scores:
+            kwargs["output_scores"] = True
+        if pytorch_cfg.return_dict_in_generate:
+            kwargs["return_dict_in_generate"] = True
+
+        # Assisted generation (speculative decoding)
+        if pytorch_cfg.assisted_generation and pytorch_cfg.assisted_generation.model:
+            # The assistant model is loaded separately and passed to generate()
+            # This is handled in run_inference, not here
+            pass
+
+        return kwargs
+
+    def _apply_torch_compile(self, config: ExperimentConfig) -> None:
+        """Apply torch.compile to model if configured.
+
+        Args:
+            config: Experiment configuration.
+        """
+        pytorch_cfg: PyTorchConfig | None = config.pytorch
+        if pytorch_cfg is None or not pytorch_cfg.torch_compile:
+            return
+
+        if self._model is None:
+            return
+
+        # Determine compilation mode
+        mode = "default"
+        if isinstance(pytorch_cfg.torch_compile, str):
+            mode = pytorch_cfg.torch_compile
+
+        logger.info(f"Applying torch.compile with mode='{mode}'")
+
+        try:
+            self._model = torch.compile(self._model, mode=mode)
+            logger.info("torch.compile applied successfully")
+        except Exception as e:
+            logger.warning(f"torch.compile failed (non-fatal): {e}")
+
+    def _apply_bettertransformer(self, config: ExperimentConfig) -> None:
+        """Convert model to BetterTransformer if configured.
+
+        Args:
+            config: Experiment configuration.
+        """
+        pytorch_cfg: PyTorchConfig | None = config.pytorch
+        if pytorch_cfg is None or not pytorch_cfg.use_bettertransformer:
+            return
+
+        if self._model is None:
+            return
+
+        logger.info("Converting model to BetterTransformer")
+
+        try:
+            self._model = self._model.to_bettertransformer()
+            logger.info("BetterTransformer conversion successful")
+        except Exception as e:
+            logger.warning(f"BetterTransformer conversion failed (non-fatal): {e}")
+
+    def _load_assistant_model(self, config: ExperimentConfig) -> None:
+        """Load assistant model for assisted generation if configured.
+
+        Args:
+            config: Experiment configuration.
+        """
+        pytorch_cfg: PyTorchConfig | None = config.pytorch
+        if pytorch_cfg is None:
+            return
+
+        assisted_cfg = pytorch_cfg.assisted_generation
+        if assisted_cfg is None or not assisted_cfg.model:
+            return
+
+        from transformers import AutoModelForCausalLM
+
+        logger.info(f"Loading assistant model for speculative decoding: {assisted_cfg.model}")
+
+        try:
+            self._assistant_model = AutoModelForCausalLM.from_pretrained(
+                assisted_cfg.model,
+                torch_dtype=getattr(torch, config.fp_precision),
+                device_map="auto",
+                trust_remote_code=True,
+            )
+            logger.info(f"Assistant model loaded: {assisted_cfg.model}")
+        except Exception as e:
+            logger.warning(f"Failed to load assistant model (non-fatal): {e}")
+            self._assistant_model = None
+
     def initialize(self, config: ExperimentConfig, runtime: BackendRuntime) -> None:
         """Load model and prepare for inference.
 
@@ -155,9 +313,24 @@ class PyTorchBackend:
             )
 
         try:
+            # Build model loading kwargs from PyTorchConfig
+            model_kwargs = self._build_model_kwargs(config)
+            if model_kwargs:
+                logger.info(f"PyTorch config: {model_kwargs}")
+
             loader = HuggingFaceModelLoader()
+            # Note: HuggingFaceModelLoader.load() currently doesn't accept extra kwargs
+            # TODO: Pass model_kwargs to loader when supported
             self._model, self._tokenizer = loader.load(config)
             logger.info(f"Model loaded: {config.model_name}")
+
+            # Apply post-load optimizations
+            self._apply_bettertransformer(config)
+            self._apply_torch_compile(config)
+
+            # Load assistant model for speculative decoding if configured
+            self._load_assistant_model(config)
+
         except Exception as e:
             raise BackendInitializationError(
                 f"Failed to load model '{config.model_name}': {e}"
@@ -218,6 +391,10 @@ class PyTorchBackend:
         if self._tokenizer is not None:
             del self._tokenizer
             self._tokenizer = None
+
+        if self._assistant_model is not None:
+            del self._assistant_model
+            self._assistant_model = None
 
         # Clear CUDA cache
         if torch.cuda.is_available():
@@ -282,6 +459,51 @@ class PyTorchBackend:
         Returns:
             List of warnings/errors for config problems. Empty for valid configs.
         """
-        # PyTorch/Transformers backend supports all standard config options.
-        # No warnings needed for normal usage.
-        return []
+        warnings: list[ConfigWarning] = []
+
+        pytorch_cfg = config.pytorch
+        if pytorch_cfg is None:
+            return warnings
+
+        # Check for flash_attention_2 - requires flash-attn package
+        if pytorch_cfg.attn_implementation == "flash_attention_2":
+            try:
+                import flash_attn  # noqa: F401
+            except ImportError:
+                warnings.append(
+                    ConfigWarning(
+                        param="pytorch.attn_implementation",
+                        message=(
+                            "flash_attention_2 requires the flash-attn package. "
+                            "Falling back to sdpa."
+                        ),
+                        severity="warning",
+                        suggestion="pip install flash-attn or use attn_implementation='sdpa'",
+                    )
+                )
+
+        # BetterTransformer is deprecated with sdpa/flash_attention
+        if pytorch_cfg.use_bettertransformer and pytorch_cfg.attn_implementation != "eager":
+            warnings.append(
+                ConfigWarning(
+                    param="pytorch.use_bettertransformer",
+                    message=(
+                        "BetterTransformer is deprecated and may conflict with "
+                        f"attn_implementation='{pytorch_cfg.attn_implementation}'. "
+                        "Consider removing use_bettertransformer."
+                    ),
+                    severity="warning",
+                )
+            )
+
+        # torch.compile with BetterTransformer is problematic
+        if pytorch_cfg.torch_compile and pytorch_cfg.use_bettertransformer:
+            warnings.append(
+                ConfigWarning(
+                    param="pytorch.torch_compile",
+                    message="torch.compile and BetterTransformer together may cause issues.",
+                    severity="warning",
+                )
+            )
+
+        return warnings

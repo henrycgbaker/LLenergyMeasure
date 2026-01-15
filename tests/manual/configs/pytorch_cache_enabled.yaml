@@ -1,0 +1,17 @@
+config_name: pytorch_cache_enabled
+model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+backend: pytorch
+max_input_tokens: 64
+max_output_tokens: 64
+num_input_prompts: 3
+gpus: [0]
+fp_precision: float16
+
+decoder:
+  temperature: 0.0
+  do_sample: false
+
+pytorch:
+  attn_implementation: sdpa
+  use_cache: true  # KV cache ENABLED (fast)
+  low_cpu_mem_usage: true

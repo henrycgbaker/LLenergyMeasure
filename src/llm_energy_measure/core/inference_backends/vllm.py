@@ -42,6 +42,7 @@ from llm_energy_measure.exceptions import (
 )
 
 if TYPE_CHECKING:
+    from llm_energy_measure.config.backend_configs import VLLMConfig
     from llm_energy_measure.config.models import ExperimentConfig
     from llm_energy_measure.domain.model_info import ModelInfo
 
@@ -186,39 +187,28 @@ class VLLMBackend:
         try:
             from vllm import LLM, SamplingParams
 
-            # Determine tensor parallelism
-            tensor_parallel_size = self._get_tensor_parallel_size(config)
+            # Build engine kwargs from config (shared + vLLM-specific)
+            llm_kwargs = self._build_engine_kwargs(config)
 
-            # Map precision
-            dtype = self._map_dtype(config.fp_precision)
-
-            # Determine quantization
-            quantization = self._map_quantization(config)
+            # Log configuration
+            tp_size = llm_kwargs.get("tensor_parallel_size", 1)
+            dtype = llm_kwargs.get("dtype", "auto")
+            quant = llm_kwargs.get("quantization")
+            prefix_caching = llm_kwargs.get("enable_prefix_caching", False)
+            speculative = "speculative_config" in llm_kwargs
 
             logger.info(
                 f"Initializing vLLM: model={config.model_name}, "
-                f"dtype={dtype}, tp={tensor_parallel_size}, quant={quantization}"
+                f"dtype={dtype}, tp={tp_size}, quant={quant}, "
+                f"prefix_caching={prefix_caching}, speculative={speculative}"
             )
 
-            # Create LLM instance
-            llm_kwargs: dict[str, Any] = {
-                "model": config.model_name,
-                "dtype": dtype,
-                "tensor_parallel_size": tensor_parallel_size,
-                "trust_remote_code": True,
-            }
-
-            # Add quantization if specified
-            if quantization:
-                llm_kwargs["quantization"] = quantization
-
-            # Set seed if specified
-            if config.random_seed is not None:
-                llm_kwargs["seed"] = config.random_seed
-
-            # Configure max model length if specified
-            if config.max_input_tokens:
-                llm_kwargs["max_model_len"] = config.max_input_tokens + config.max_output_tokens
+            if config.vllm:
+                logger.info(
+                    f"vLLM config: max_num_seqs={config.vllm.max_num_seqs}, "
+                    f"gpu_mem={config.vllm.gpu_memory_utilization}, "
+                    f"kv_dtype={config.vllm.kv_cache_dtype}"
+                )
 
             self._llm = LLM(**llm_kwargs)
 
@@ -307,6 +297,10 @@ class VLLMBackend:
         Returns:
             vLLM quantization string or None.
         """
+        # Check vLLM-specific quantization method first
+        if config.vllm and config.vllm.quantization_method:
+            return config.vllm.quantization_method
+
         quant = config.quantization_config
 
         # Check for BitsAndBytes 4-bit
@@ -316,6 +310,162 @@ class VLLMBackend:
         # Note: quant.quantization is a bool flag, not a method string
         # vLLM auto-detects quantization for GPTQ/AWQ models from model config
         return None
+
+    def _build_engine_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
+        """Build vLLM LLM() constructor kwargs from config.
+
+        Combines shared ExperimentConfig params with vLLM-specific VLLMConfig params.
+        VLLMConfig params take precedence where both are specified.
+
+        Args:
+            config: Experiment configuration (may include config.vllm).
+
+        Returns:
+            Dict of kwargs for vLLM LLM() constructor.
+        """
+        vllm_cfg: VLLMConfig | None = config.vllm
+
+        # Base kwargs from shared config
+        kwargs: dict[str, Any] = {
+            "model": config.model_name,
+            "dtype": self._map_dtype(config.fp_precision),
+            "tensor_parallel_size": self._get_tensor_parallel_size(config),
+            "trust_remote_code": True,
+        }
+
+        # Add quantization if specified
+        quantization = self._map_quantization(config)
+        if quantization:
+            kwargs["quantization"] = quantization
+
+        # Set seed if specified
+        if config.random_seed is not None:
+            kwargs["seed"] = config.random_seed
+
+        # Configure max model length
+        if config.max_input_tokens:
+            kwargs["max_model_len"] = config.max_input_tokens + config.max_output_tokens
+
+        # If no vLLM-specific config, return base kwargs
+        if vllm_cfg is None:
+            return kwargs
+
+        # =================================================================
+        # Apply vLLM-specific configuration
+        # =================================================================
+
+        # Memory & Batching
+        if vllm_cfg.max_num_seqs != 256:  # Non-default
+            kwargs["max_num_seqs"] = vllm_cfg.max_num_seqs
+        if vllm_cfg.max_num_batched_tokens is not None:
+            kwargs["max_num_batched_tokens"] = vllm_cfg.max_num_batched_tokens
+        if vllm_cfg.gpu_memory_utilization != 0.9:  # Non-default
+            kwargs["gpu_memory_utilization"] = vllm_cfg.gpu_memory_utilization
+        if vllm_cfg.swap_space != 4.0:  # Non-default
+            kwargs["swap_space"] = vllm_cfg.swap_space
+        if vllm_cfg.cpu_offload_gb > 0:
+            kwargs["cpu_offload_gb"] = vllm_cfg.cpu_offload_gb
+
+        # KV Cache
+        if vllm_cfg.enable_prefix_caching:
+            kwargs["enable_prefix_caching"] = True
+        if vllm_cfg.enable_chunked_prefill:
+            kwargs["enable_chunked_prefill"] = True
+        if vllm_cfg.kv_cache_dtype != "auto":
+            kwargs["kv_cache_dtype"] = vllm_cfg.kv_cache_dtype
+        if vllm_cfg.block_size != 16:  # Non-default
+            kwargs["block_size"] = vllm_cfg.block_size
+
+        # Context length (override shared config if specified)
+        if vllm_cfg.max_model_len is not None:
+            kwargs["max_model_len"] = vllm_cfg.max_model_len
+        if vllm_cfg.max_seq_len_to_capture is not None:
+            kwargs["max_seq_len_to_capture"] = vllm_cfg.max_seq_len_to_capture
+
+        # Execution mode
+        if vllm_cfg.enforce_eager:
+            kwargs["enforce_eager"] = True
+
+        # Parallelism
+        if vllm_cfg.distributed_backend != "mp":
+            kwargs["distributed_executor_backend"] = vllm_cfg.distributed_backend
+        if vllm_cfg.disable_custom_all_reduce:
+            kwargs["disable_custom_all_reduce"] = True
+
+        # Load format
+        if vllm_cfg.load_format != "auto":
+            kwargs["load_format"] = vllm_cfg.load_format
+
+        # Attention configuration
+        if vllm_cfg.attention:
+            attn = vllm_cfg.attention
+            if attn.backend != "auto":
+                # vLLM uses VLLM_ATTENTION_BACKEND env var or attention_backend arg
+                kwargs["attention_backend"] = attn.backend
+            if attn.disable_sliding_window:
+                kwargs["disable_sliding_window"] = True
+
+        # Speculative decoding
+        if vllm_cfg.speculative and vllm_cfg.speculative.model:
+            spec = vllm_cfg.speculative
+            spec_config: dict[str, Any] = {
+                "model": spec.model,
+                "num_speculative_tokens": spec.num_tokens,
+            }
+            if spec.method != "ngram":
+                spec_config["method"] = spec.method
+            if spec.method == "ngram":
+                if spec.ngram_min != 1:
+                    spec_config["ngram_prompt_lookup_min"] = spec.ngram_min
+                if spec.ngram_max is not None:
+                    spec_config["ngram_prompt_lookup_max"] = spec.ngram_max
+            if spec.draft_tp_size > 1:
+                spec_config["draft_tensor_parallel_size"] = spec.draft_tp_size
+            kwargs["speculative_config"] = spec_config
+
+        # LoRA
+        if vllm_cfg.lora and vllm_cfg.lora.enabled:
+            lora = vllm_cfg.lora
+            kwargs["enable_lora"] = True
+            kwargs["max_loras"] = lora.max_loras
+            kwargs["max_lora_rank"] = lora.max_rank
+            if lora.extra_vocab_size != 256:  # Non-default
+                kwargs["lora_extra_vocab_size"] = lora.extra_vocab_size
+
+        # Escape hatch: merge any extra kwargs
+        if vllm_cfg.extra:
+            kwargs.update(vllm_cfg.extra)
+
+        return kwargs
+
+    def _build_sampling_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
+        """Build additional sampling kwargs from VLLMConfig.
+
+        Args:
+            config: Experiment configuration.
+
+        Returns:
+            Dict of additional kwargs for SamplingParams.
+        """
+        vllm_cfg: VLLMConfig | None = config.vllm
+        if vllm_cfg is None:
+            return {}
+
+        kwargs: dict[str, Any] = {}
+
+        # Advanced sampling params
+        if vllm_cfg.best_of is not None and vllm_cfg.best_of > 1:
+            kwargs["best_of"] = vllm_cfg.best_of
+        if vllm_cfg.use_beam_search:
+            kwargs["use_beam_search"] = True
+            if vllm_cfg.length_penalty != 1.0:
+                kwargs["length_penalty"] = vllm_cfg.length_penalty
+        if vllm_cfg.logprobs is not None:
+            kwargs["logprobs"] = vllm_cfg.logprobs
+        if vllm_cfg.logit_bias:
+            kwargs["logit_bias"] = vllm_cfg.logit_bias
+
+        return kwargs
 
     def _create_sampling_params(self, config: ExperimentConfig, SamplingParams: type) -> Any:
         """Create vLLM SamplingParams from config.
@@ -365,6 +515,10 @@ class VLLMBackend:
         # Seed (per-request seed)
         if config.random_seed is not None:
             params["seed"] = config.random_seed
+
+        # Add vLLM-specific sampling params (best_of, beam_search, logprobs, etc.)
+        vllm_sampling_kwargs = self._build_sampling_kwargs(config)
+        params.update(vllm_sampling_kwargs)
 
         return SamplingParams(**params)
 

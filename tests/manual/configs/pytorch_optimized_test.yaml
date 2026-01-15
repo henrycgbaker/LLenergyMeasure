@@ -1,0 +1,21 @@
+# PyTorch backend test with optimizations
+config_name: pytorch_optimized_test
+model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+backend: pytorch
+
+max_input_tokens: 64
+max_output_tokens: 32
+num_input_prompts: 5
+gpus: [0]
+
+fp_precision: float16
+
+decoder:
+  preset: deterministic
+
+# PyTorch-specific optimizations
+pytorch:
+  attn_implementation: flash_attention_2
+  torch_compile: false  # Skip compile for faster test
+  use_cache: true
+  low_cpu_mem_usage: true

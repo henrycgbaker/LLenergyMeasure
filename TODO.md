@@ -33,3 +33,15 @@
 
 ### Documentation
 - [ ] Convert CLAUDE.md files to admin/developer READMEs (user-facing vs contributor docs)
+
+## Future: Web Interface
+
+See [docs/strategy.md](docs/strategy.md) for comprehensive UI/webapp strategic planning.
+
+**Summary:** Full community platform with public leaderboard, remote execution on self-hosted GPUs, React + FastAPI architecture.
+
+### Web Platform Phases
+- [ ] **Phase 1:** Core platform (FastAPI + React, upload results, leaderboard)
+- [ ] **Phase 2:** Analysis features (interactive charts, comparisons, API)
+- [ ] **Phase 3:** Remote execution (job queue, GPU workers, progress monitoring)
+- [ ] **Phase 4:** Community features (user profiles, moderation, HF Dataset export)

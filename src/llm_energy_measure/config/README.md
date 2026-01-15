@@ -134,6 +134,8 @@ config = ExperimentConfig(
 - `DecoderConfig` - temperature, sampling presets, repetition control
 - `QuantizationConfig` - 4-bit/8-bit BitsAndBytes
 - `PromptSourceConfig` - File or HuggingFace dataset prompts
+- `VLLMConfig` - vLLM backend options (see `backend_configs.py`)
+- `PyTorchConfig` - PyTorch backend options (see `backend_configs.py`)
 
 ## Decoder Sampling Configuration
 
@@ -403,6 +405,38 @@ llm-energy-measure config new --preset benchmark
 | Field | Default | Description |
 |-------|---------|-------------|
 | `random_seed` | None | Random seed (None = non-deterministic) |
+
+## Backend-Specific Configuration
+
+Each inference backend exposes its own configuration section for advanced optimisation. These are defined in `backend_configs.py` and set via `vllm:` or `pytorch:` blocks in YAML.
+
+```yaml
+# vLLM backend
+backend: vllm
+vllm:
+  gpu_memory_utilization: 0.9
+  enable_prefix_caching: true
+  kv_cache_dtype: fp8
+
+# PyTorch backend (default)
+backend: pytorch
+pytorch:
+  attn_implementation: flash_attention_2
+  torch_compile: reduce-overhead
+```
+
+### backend_configs.py
+
+| Config Class | Purpose |
+|--------------|---------|
+| `VLLMConfig` | vLLM engine kwargs and sampling params |
+| `VLLMAttentionConfig` | Attention backend selection |
+| `VLLMSpeculativeConfig` | Speculative decoding setup |
+| `VLLMLoRAConfig` | LoRA adapter configuration |
+| `PyTorchConfig` | PyTorch/Transformers options |
+| `PyTorchAssistedGenerationConfig` | Assisted generation (speculative) |
+
+**Full documentation:** See [docs/backends.md](../../../docs/backends.md) for comprehensive parameter reference.
 
 ## Prompt Source Configuration
 
