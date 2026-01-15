@@ -30,20 +30,12 @@ RUN pip install --no-cache-dir vllm>=0.6.0
 COPY pyproject.toml poetry.lock* README.md ./
 COPY src/ ./src/
 
-# Install the package WITHOUT torch dependency (vLLM provides it)
-# Then install remaining deps explicitly
-RUN pip install --no-cache-dir --no-deps . \
+# Install the package with vllm extras (--no-deps to avoid torch conflict)
+# Then install pytorch extras for HuggingFace compatibility
+RUN pip install --no-cache-dir --no-deps ".[vllm]" \
     && pip install --no-cache-dir \
-        transformers \
-        datasets \
-        pydantic \
-        loguru \
-        typer \
-        pynvml \
-        codecarbon \
-        calflops \
-        schedule \
-        accelerate
+        pydantic loguru typer codecarbon pynvml datasets schedule \
+        transformers accelerate bitsandbytes calflops
 
 # ============================================================================
 # Stage 2: Runtime - Minimal production image
@@ -65,20 +57,16 @@ FROM ${BASE_IMAGE} AS dev
 # Install vLLM (brings its own PyTorch)
 RUN pip install --no-cache-dir vllm>=0.6.0
 
-# Install remaining dependencies for dev
-RUN pip install --no-cache-dir \
-    transformers \
-    datasets \
-    pydantic \
-    loguru \
-    typer \
-    pynvml \
-    codecarbon \
-    calflops \
-    schedule \
-    accelerate \
-    poetry-core build pytest pytest-cov ruff mypy
+# Copy project files and install with vllm + pytorch + dev extras
+# (--no-deps to avoid torch conflict, then install remaining deps)
+COPY pyproject.toml poetry.lock* README.md ./
+COPY src/ ./src/
+RUN pip install --no-cache-dir --no-deps ".[vllm]" \
+    && pip install --no-cache-dir \
+        pydantic loguru typer codecarbon pynvml datasets schedule \
+        transformers accelerate bitsandbytes calflops \
+        pytest pytest-cov ruff mypy pre-commit commitizen
 
-# Source will be mounted at runtime for editable install
+# Source can be mounted at runtime for editable install
 ENTRYPOINT []
 CMD ["/bin/bash"]

@@ -28,8 +28,8 @@ RUN pip install --no-cache-dir \
 COPY pyproject.toml poetry.lock* README.md ./
 COPY src/ ./src/
 
-# Install the package with remaining dependencies (torch already installed)
-RUN pip install --no-cache-dir .
+# Install the package with PyTorch backend extras (torch already installed)
+RUN pip install --no-cache-dir ".[pytorch]"
 
 # ============================================================================
 # Stage 2: Runtime - Minimal production image
@@ -53,9 +53,12 @@ RUN pip install --no-cache-dir \
     torch==2.5.1 \
     --index-url https://download.pytorch.org/whl/cu124
 
-# Install dev dependencies
-RUN pip install --no-cache-dir poetry-core build pytest pytest-cov ruff mypy
+# Copy project files and install with pytorch + dev extras
+# (deps cached, source can be mounted at runtime for editable install)
+COPY pyproject.toml poetry.lock* README.md ./
+COPY src/ ./src/
+RUN pip install --no-cache-dir ".[pytorch,dev]"
 
-# Source will be mounted at runtime for editable install
+# Source can be mounted at runtime; run `pip install -e ".[pytorch,dev]"` for editable
 ENTRYPOINT []
 CMD ["/bin/bash"]
