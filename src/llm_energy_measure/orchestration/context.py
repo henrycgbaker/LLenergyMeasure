@@ -28,6 +28,31 @@ if TYPE_CHECKING:
     from accelerate import Accelerator
 
 
+def _get_orchestrator_may_call_cuda(backend_name: str) -> bool:
+    """Check if orchestration layer may safely call torch.cuda.* functions.
+
+    Uses the backend's RuntimeCapabilities to determine if the orchestration
+    layer can safely initialize CUDA, or if the backend manages CUDA internally.
+
+    Args:
+        backend_name: Name of the backend (e.g., "pytorch", "vllm").
+
+    Returns:
+        True if orchestrator may call torch.cuda.*, False if backend manages CUDA.
+    """
+    try:
+        from llm_energy_measure.core.inference_backends import get_backend
+
+        backend = get_backend(backend_name)
+        capabilities = backend.get_runtime_capabilities()
+        return capabilities.orchestrator_may_call_cuda
+    except Exception as e:
+        # If we can't load the backend, fall back to safe defaults
+        # vLLM and tensorrt must NOT have CUDA initialized before them
+        logger.debug(f"Could not get capabilities for {backend_name}: {e}")
+        return backend_name not in ("vllm", "tensorrt")
+
+
 @dataclass
 class ExperimentContext:
     """Context object containing experiment state and resources.
@@ -74,8 +99,8 @@ class ExperimentContext:
         Sets up the Accelerator, generates a unique experiment ID,
         and determines process-specific information.
 
-        For vLLM backend, skips Accelerator initialization since vLLM manages
-        its own CUDA context and multiprocessing.
+        For backends that manage their own CUDA context (vLLM, TensorRT-LLM),
+        skips Accelerator initialization to avoid CUDA fork issues.
 
         Args:
             config: The experiment configuration.
@@ -88,25 +113,25 @@ class ExperimentContext:
         Returns:
             Fully initialized ExperimentContext.
         """
-        # Check if using vLLM backend - it manages its own CUDA context
+        # Query backend capabilities to determine CUDA management
         backend_name = getattr(config, "backend", "pytorch")
-        is_vllm = backend_name == "vllm"
+        orchestrator_may_call_cuda = _get_orchestrator_may_call_cuda(backend_name)
 
-        if is_vllm:
-            # vLLM: skip Accelerator - use minimal context
-            # vLLM spawns child processes and can't use CUDA in forked context
+        if not orchestrator_may_call_cuda:
+            # Backend manages CUDA context - use minimal context
             # CRITICAL: Do NOT call torch.cuda.* functions here - they initialize CUDA
             from llm_energy_measure.core.distributed import get_persistent_unique_id
 
             if experiment_id is None:
                 experiment_id = get_persistent_unique_id(id_file)
 
-            # Use a placeholder device - vLLM manages its own device selection
+            # Use a placeholder device - backend manages its own device selection
             # We don't check torch.cuda.is_available() as it can initialize CUDA
-            device = torch.device("cuda:0")  # vLLM will handle actual device
+            device = torch.device("cuda:0")  # Backend will handle actual device
 
             logger.info(
-                f"Created ExperimentContext (vLLM mode): id={experiment_id}, " f"device={device}"
+                f"Created ExperimentContext ({backend_name} mode): id={experiment_id}, "
+                f"device={device} (backend manages CUDA)"
             )
 
             # Create minimal accelerator-like object for compatibility
@@ -119,7 +144,7 @@ class ExperimentContext:
                 config=config,
                 accelerator=minimal_accelerator,
                 device=device,
-                is_main_process=True,  # vLLM runs single process from our perspective
+                is_main_process=True,  # Backend runs single process from our perspective
                 process_index=0,
                 start_time=datetime.now(),
                 effective_config=effective_config or {},
@@ -127,7 +152,7 @@ class ExperimentContext:
                 config_warnings=config_warnings or [],
             )
 
-        # Standard path: use Accelerator
+        # Standard path: orchestrator manages CUDA via Accelerator
         accelerator = get_accelerator(
             gpu_list=config.gpu_list,
             num_processes=config.num_processes,

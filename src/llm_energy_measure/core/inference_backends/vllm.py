@@ -31,6 +31,9 @@ from llm_energy_measure.core.inference_backends.protocols import (
     BackendResult,
     BackendRuntime,
     ConfigWarning,
+    CudaManagement,
+    LaunchMode,
+    RuntimeCapabilities,
 )
 from llm_energy_measure.exceptions import (
     BackendInferenceError,
@@ -146,6 +149,21 @@ class VLLMBackend:
         """Check if vLLM is installed."""
         return _check_vllm_available()
 
+    def get_runtime_capabilities(self) -> RuntimeCapabilities:
+        """Return vLLM runtime requirements.
+
+        vLLM manages its own CUDA context and uses spawn multiprocessing for
+        tensor parallelism. The orchestration layer MUST NOT call torch.cuda.*
+        functions before vLLM initializes.
+        """
+        return RuntimeCapabilities(
+            launch_mode=LaunchMode.DIRECT,
+            cuda_management=CudaManagement.BACKEND,
+            supports_tensor_parallel=True,
+            supports_pipeline_parallel=True,
+            manages_own_batching=True,
+        )
+
     def initialize(self, config: ExperimentConfig, runtime: BackendRuntime) -> None:
         """Load model using vLLM's LLM class.
 
@@ -218,7 +236,12 @@ class VLLMBackend:
             ) from e
 
     def _get_tensor_parallel_size(self, config: ExperimentConfig) -> int:
-        """Determine tensor parallelism size from config.
+        """Determine tensor parallelism size from config WITHOUT initializing CUDA.
+
+        IMPORTANT: This method must NOT call torch.cuda.* functions as vLLM
+        manages its own CUDA context. Calling torch.cuda.device_count() or
+        torch.cuda.is_available() here would pre-initialize CUDA and cause
+        fork issues when vLLM spawns worker processes.
 
         Args:
             config: Experiment configuration.
@@ -226,16 +249,30 @@ class VLLMBackend:
         Returns:
             Number of GPUs for tensor parallelism.
         """
+        import os
+
         sharding = config.sharding_config
 
         # Check if tensor parallelism is explicitly requested
         if sharding.strategy == "tensor_parallel":
             if sharding.num_shards:
                 return sharding.num_shards
-            # Use all available GPUs
-            import torch
 
-            return torch.cuda.device_count() if torch.cuda.is_available() else 1
+            # Use gpu_list if provided
+            if config.gpu_list:
+                return len(config.gpu_list)
+
+            # Fall back to CUDA_VISIBLE_DEVICES (no torch.cuda.* calls!)
+            cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+            if cuda_visible:
+                return len(cuda_visible.split(","))
+
+            # vLLM will auto-detect at initialization
+            logger.warning(
+                "tensor_parallel without num_shards or gpu_list specified. "
+                "vLLM will auto-detect available GPUs at initialization."
+            )
+            return 1
 
         # Check GPU list
         if config.gpu_list:

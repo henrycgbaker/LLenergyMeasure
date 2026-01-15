@@ -12,11 +12,87 @@ Design Philosophy:
 """
 
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from llm_energy_measure.config.models import ExperimentConfig
     from llm_energy_measure.domain.model_info import ModelInfo
+
+
+# =============================================================================
+# Runtime Capabilities - Backend requirements declaration
+# =============================================================================
+
+
+class LaunchMode(Enum):
+    """How the backend should be launched.
+
+    Different backends require different launch mechanisms:
+    - ACCELERATE: HuggingFace Accelerate handles distributed setup
+    - TORCHRUN: PyTorch's torchrun for tensor/pipeline parallelism
+    - DIRECT: Direct Python execution (backend manages its own multiprocessing)
+    """
+
+    ACCELERATE = auto()
+    TORCHRUN = auto()
+    DIRECT = auto()
+
+
+class CudaManagement(Enum):
+    """Who manages CUDA context initialisation.
+
+    This is critical for avoiding CUDA fork issues:
+    - ORCHESTRATOR: Orchestration layer may safely call torch.cuda.* functions
+    - BACKEND: Backend manages CUDA; orchestration must NOT call torch.cuda.*
+    """
+
+    ORCHESTRATOR = auto()
+    BACKEND = auto()
+
+
+@dataclass(frozen=True)
+class RuntimeCapabilities:
+    """Backend runtime requirements and capabilities.
+
+    Backends return this from get_runtime_capabilities() to declare how they
+    should be launched and what runtime environment they need. This enables
+    the orchestration layer to configure itself appropriately without
+    hardcoding backend-specific checks.
+
+    Attributes:
+        launch_mode: How to launch the backend (accelerate/torchrun/direct).
+        cuda_management: Who initialises CUDA context.
+        supports_tensor_parallel: Whether backend supports tensor parallelism.
+        supports_pipeline_parallel: Whether backend supports pipeline parallelism.
+        manages_own_batching: Whether backend manages batching internally.
+    """
+
+    launch_mode: LaunchMode = LaunchMode.ACCELERATE
+    cuda_management: CudaManagement = CudaManagement.ORCHESTRATOR
+    supports_tensor_parallel: bool = False
+    supports_pipeline_parallel: bool = False
+    manages_own_batching: bool = False
+
+    @property
+    def orchestrator_may_call_cuda(self) -> bool:
+        """Whether orchestration layer can safely call torch.cuda.* functions.
+
+        If False, the orchestration layer MUST NOT call any torch.cuda.*
+        functions before the backend's initialize() method, as this would
+        pre-initialise CUDA and cause fork issues with backends like vLLM
+        that use spawn multiprocessing.
+        """
+        return self.cuda_management == CudaManagement.ORCHESTRATOR
+
+
+# Default capabilities for backwards compatibility
+DEFAULT_RUNTIME_CAPABILITIES = RuntimeCapabilities()
+
+
+# =============================================================================
+# Backend Result and Runtime Context
+# =============================================================================
 
 
 @dataclass
@@ -218,5 +294,19 @@ class InferenceBackend(Protocol):
 
         Returns:
             List of warnings/errors. Empty list means config is fully compatible.
+        """
+        ...
+
+    def get_runtime_capabilities(self) -> RuntimeCapabilities:
+        """Return runtime requirements for this backend.
+
+        Called BEFORE initialize() to determine launch strategy and whether
+        the orchestration layer may call torch.cuda.* functions.
+
+        IMPORTANT: This method must NOT initialise CUDA or import heavy
+        dependencies. It should return a static RuntimeCapabilities instance.
+
+        Returns:
+            RuntimeCapabilities declaring launch mode, CUDA management, etc.
         """
         ...

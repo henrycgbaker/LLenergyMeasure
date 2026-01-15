@@ -20,6 +20,9 @@ from llm_energy_measure.core.inference_backends.protocols import (
     BackendResult,
     BackendRuntime,
     ConfigWarning,
+    CudaManagement,
+    LaunchMode,
+    RuntimeCapabilities,
 )
 from llm_energy_measure.exceptions import (
     BackendInferenceError,
@@ -114,6 +117,20 @@ class PyTorchBackend:
             return True
         except ImportError:
             return False
+
+    def get_runtime_capabilities(self) -> RuntimeCapabilities:
+        """Return PyTorch/Accelerate runtime requirements.
+
+        The orchestration layer manages CUDA context via Accelerate.
+        torch.cuda.* calls are safe before this backend initializes.
+        """
+        return RuntimeCapabilities(
+            launch_mode=LaunchMode.ACCELERATE,
+            cuda_management=CudaManagement.ORCHESTRATOR,
+            supports_tensor_parallel=True,
+            supports_pipeline_parallel=False,
+            manages_own_batching=False,
+        )
 
     def initialize(self, config: ExperimentConfig, runtime: BackendRuntime) -> None:
         """Load model and prepare for inference.
