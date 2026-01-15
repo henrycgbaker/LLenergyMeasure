@@ -20,7 +20,15 @@ from typing import TYPE_CHECKING
 
 from llm_energy_measure.exceptions import ConfigurationError
 
-from .protocols import BackendResult, BackendRuntime, ConfigWarning, InferenceBackend
+from .protocols import (
+    BackendResult,
+    BackendRuntime,
+    ConfigWarning,
+    CudaManagement,
+    InferenceBackend,
+    LaunchMode,
+    RuntimeCapabilities,
+)
 
 if TYPE_CHECKING:
     pass
@@ -29,7 +37,10 @@ __all__ = [
     "BackendResult",
     "BackendRuntime",
     "ConfigWarning",
+    "CudaManagement",
     "InferenceBackend",
+    "LaunchMode",
+    "RuntimeCapabilities",
     "get_backend",
     "is_backend_available",
     "list_backends",

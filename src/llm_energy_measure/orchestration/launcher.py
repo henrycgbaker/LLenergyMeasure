@@ -94,38 +94,68 @@ def log_failed_experiment(
     logger.info(f"Logged failed experiment {experiment_id} to {output_path}")
 
 
-def _requires_torchrun(config_data: dict[str, Any]) -> bool:
-    """Check if the experiment requires torchrun launcher.
+def _get_launch_mode(config_data: dict[str, Any]) -> str:
+    """Determine launch mode from backend capabilities.
 
-    Tensor parallelism and pipeline parallelism require torchrun
-    instead of accelerate launch for proper distributed initialisation.
+    Uses the backend's RuntimeCapabilities to decide how to launch the
+    experiment. This avoids hardcoded backend checks and makes adding
+    new backends easier.
 
     Args:
         config_data: Configuration dictionary.
 
     Returns:
-        True if torchrun should be used.
+        Launch mode: "direct", "torchrun", or "accelerate".
     """
-    sharding = config_data.get("sharding_config", config_data.get("sharding", {}))
-    strategy = sharding.get("strategy", "none")
-    return strategy in ("tensor_parallel", "pipeline_parallel")
+    from llm_energy_measure.core.inference_backends import get_backend
+    from llm_energy_measure.core.inference_backends.protocols import LaunchMode
+
+    backend_name = str(config_data.get("backend", "pytorch"))
+
+    try:
+        backend = get_backend(backend_name)
+        capabilities = backend.get_runtime_capabilities()
+
+        # Backend-declared launch mode takes priority
+        if capabilities.launch_mode == LaunchMode.DIRECT:
+            return "direct"
+
+        # Check for sharding strategies that may need torchrun
+        sharding = config_data.get("sharding_config", config_data.get("sharding", {}))
+        strategy = sharding.get("strategy", "none")
+
+        if strategy in ("tensor_parallel", "pipeline_parallel"):
+            # For sharding strategies, use torchrun for distributed setup
+            # (DIRECT launch mode backends were already handled above)
+            return "torchrun"
+
+        # Use backend's declared launch mode
+        if capabilities.launch_mode == LaunchMode.TORCHRUN:
+            return "torchrun"
+        return "accelerate"
+
+    except Exception as e:
+        # Fall back to safe defaults if backend can't be loaded
+        logger.warning(f"Could not get backend capabilities for {backend_name}: {e}")
+        if backend_name == "vllm":
+            return "direct"
+        return "accelerate"
+
+
+def _requires_torchrun(config_data: dict[str, Any]) -> bool:
+    """Check if the experiment requires torchrun launcher.
+
+    DEPRECATED: Use _get_launch_mode() instead. Kept for backwards compatibility.
+    """
+    return _get_launch_mode(config_data) == "torchrun"
 
 
 def _requires_direct_launch(config_data: dict[str, Any]) -> bool:
     """Check if the backend requires direct Python execution (no launcher).
 
-    vLLM manages its own multiprocessing with spawn start method, which is
-    incompatible with accelerate/torchrun forked processes. It must be
-    launched directly.
-
-    Args:
-        config_data: Configuration dictionary.
-
-    Returns:
-        True if direct Python launch is required.
+    DEPRECATED: Use _get_launch_mode() instead. Kept for backwards compatibility.
     """
-    backend = str(config_data.get("backend", "pytorch"))
-    return backend == "vllm"
+    return _get_launch_mode(config_data) == "direct"
 
 
 def _build_launch_command(
@@ -134,7 +164,10 @@ def _build_launch_command(
     config_path: Path,
     extra_args: list[str] | None = None,
 ) -> list[str]:
-    """Build the appropriate launch command based on backend and parallelism strategy.
+    """Build the appropriate launch command based on backend capabilities.
+
+    Uses RuntimeCapabilities from the backend to determine the correct
+    launch mechanism, avoiding hardcoded backend checks.
 
     Args:
         config_data: Configuration dictionary.
@@ -146,10 +179,10 @@ def _build_launch_command(
         Complete command list for subprocess.run().
     """
     gpu_list = config_data.get("gpu_list", [])
+    launch_mode = _get_launch_mode(config_data)
 
-    if _requires_direct_launch(config_data):
-        # vLLM: direct Python launch (no accelerate/torchrun)
-        # vLLM manages its own multiprocessing with spawn start method
+    if launch_mode == "direct":
+        # Backend manages its own multiprocessing (e.g., vLLM, TensorRT-LLM)
         import sys
 
         cmd = [
@@ -160,8 +193,9 @@ def _build_launch_command(
             str(config_path),
         ]
         backend = config_data.get("backend", "pytorch")
-        logger.info(f"Using direct launch for {backend} backend")
-    elif _requires_torchrun(config_data):
+        logger.info(f"Using direct launch for {backend} backend (manages own CUDA context)")
+
+    elif launch_mode == "torchrun":
         # Tensor/Pipeline parallelism: use torchrun
         sharding = config_data.get("sharding_config", config_data.get("sharding", {}))
         num_shards = sharding.get("num_shards", len(gpu_list))
@@ -176,6 +210,7 @@ def _build_launch_command(
             str(config_path),
         ]
         logger.info(f"Using torchrun for {sharding.get('strategy')} with {num_shards} processes")
+
     else:
         # Default: use accelerate launch
         num_processes = min(
@@ -192,6 +227,7 @@ def _build_launch_command(
             "--config",
             str(config_path),
         ]
+        logger.info(f"Using accelerate launch with {num_processes} processes")
 
     if extra_args:
         cmd.extend(extra_args)
