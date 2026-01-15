@@ -36,6 +36,10 @@ class BackendResult:
     # Timing
     inference_time_sec: float
 
+    # Time to first token (TTFT) - average across all requests in ms
+    # None if backend doesn't support TTFT measurement
+    time_to_first_token_ms: float | None = None
+
     # Per-batch timing (if available)
     batch_latencies_ms: list[float] = field(default_factory=list)
 
