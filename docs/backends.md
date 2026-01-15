@@ -154,6 +154,84 @@ llm-energy-measure results show <pytorch_exp_id>
 llm-energy-measure results show <vllm_exp_id>
 ```
 
+## Architecture
+
+### RuntimeCapabilities Protocol
+
+Backends declare their runtime requirements via `RuntimeCapabilities`, enabling the orchestration layer to configure itself without hardcoded backend checks:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        CLI / Runner                              │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    launcher.py                                   │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │ _get_launch_mode(config)                                   │ │
+│  │   └─► backend.get_runtime_capabilities()                   │ │
+│  │       └─► Returns LaunchMode (DIRECT/ACCELERATE/TORCHRUN)  │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                │                                 │
+│         ┌──────────────────────┼──────────────────────┐         │
+│         ▼                      ▼                      ▼         │
+│   Direct Python         torchrun              accelerate        │
+│   (vLLM, TRT)          (TP/PP)                (PyTorch)         │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    context.py                                    │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │ ExperimentContext.create(config)                           │ │
+│  │   └─► capabilities.orchestrator_may_call_cuda              │ │
+│  │       ├─► True:  Use Accelerator (initialises CUDA)        │ │
+│  │       └─► False: Use MinimalAccelerator (no CUDA calls)    │ │
+│  └────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Backend Capabilities
+
+| Backend | LaunchMode | CudaManagement | Tensor Parallel |
+|---------|------------|----------------|-----------------|
+| `pytorch` | ACCELERATE | ORCHESTRATOR | ✓ (via Accelerate) |
+| `vllm` | DIRECT | BACKEND | ✓ (native) |
+| `tensorrt` | DIRECT | BACKEND | ✓ (native) |
+
+**Key concepts:**
+
+- **LaunchMode.DIRECT**: Backend manages its own multiprocessing (e.g., vLLM uses spawn)
+- **LaunchMode.ACCELERATE**: Use HuggingFace Accelerate for distributed setup
+- **LaunchMode.TORCHRUN**: Use torchrun for tensor/pipeline parallelism
+- **CudaManagement.BACKEND**: Backend initialises CUDA; orchestration must NOT call `torch.cuda.*`
+- **CudaManagement.ORCHESTRATOR**: Orchestration layer may safely initialise CUDA
+
+### Adding New Backends
+
+To add a new backend, implement `InferenceBackend` protocol and declare capabilities:
+
+```python
+class MyBackend:
+    def get_runtime_capabilities(self) -> RuntimeCapabilities:
+        return RuntimeCapabilities(
+            launch_mode=LaunchMode.DIRECT,  # or ACCELERATE/TORCHRUN
+            cuda_management=CudaManagement.BACKEND,  # or ORCHESTRATOR
+            supports_tensor_parallel=True,
+            supports_pipeline_parallel=False,
+            manages_own_batching=True,
+        )
+
+    # ... implement other protocol methods
+```
+
+Register in `inference_backends/__init__.py`:
+
+```python
+_LAZY_BACKENDS["mybackend"] = "llm_energy_measure.core.inference_backends.mybackend:MyBackend"
+```
+
 ## Troubleshooting
 
 ### Backend Not Available

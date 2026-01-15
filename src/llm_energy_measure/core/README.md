@@ -186,6 +186,63 @@ metrics = collector.collect(model, result, config)
 └─────────────────────────────────────────────────────────┘
 ```
 
+### inference_backends/
+Pluggable inference backend implementations.
+
+```
+inference_backends/
+├── __init__.py      # Registry with lazy loading
+├── protocols.py     # InferenceBackend protocol, RuntimeCapabilities
+├── pytorch.py       # HuggingFace Transformers + Accelerate
+└── vllm.py          # vLLM with PagedAttention
+```
+
+**Key types:**
+- `InferenceBackend` - Protocol for all backends
+- `RuntimeCapabilities` - Backend requirements declaration
+- `LaunchMode` - How to launch (ACCELERATE, TORCHRUN, DIRECT)
+- `CudaManagement` - Who manages CUDA (ORCHESTRATOR, BACKEND)
+
+Usage:
+```python
+from llm_energy_measure.core.inference_backends import (
+    get_backend,
+    RuntimeCapabilities,
+    LaunchMode,
+    CudaManagement,
+)
+
+# Get a backend
+backend = get_backend("vllm")
+
+# Query capabilities (no CUDA initialization)
+caps = backend.get_runtime_capabilities()
+if caps.orchestrator_may_call_cuda:
+    # Safe to call torch.cuda.* before initialize()
+    pass
+
+# Initialize and run
+backend.initialize(config, runtime)
+result = backend.run_inference(prompts, config)
+backend.cleanup()
+```
+
+**RuntimeCapabilities architecture:**
+```
+Backend declares capabilities
+         ↓
+┌─────────────────────────────────────┐
+│  RuntimeCapabilities                │
+│  - launch_mode: ACCELERATE/DIRECT   │
+│  - cuda_management: ORCHESTRATOR/   │
+│                     BACKEND         │
+│  - supports_tensor_parallel: bool   │
+└─────────────────────────────────────┘
+         ↓
+Orchestration layer respects them
+(no hardcoded backend checks)
+```
+
 ### energy_backends/
 Energy tracking implementations.
 
