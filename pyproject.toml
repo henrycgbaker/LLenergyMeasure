@@ -8,35 +8,51 @@ packages = [{include = "llm_energy_measure", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
+# Core dependencies (all backends)
 torch = "^2.5.0"
-transformers = "^4.49.0"
-accelerate = "^1.4.0"
-datasets = "^3.0.0"
-codecarbon = "^2.8.0"
 pydantic = "^2.0"
 loguru = "^0.7.0"
 typer = "^0.15.0"
+codecarbon = "^2.8.0"
 pynvml = "^12.0.0"
-calflops = "^0.2.0"
+datasets = "^3.0.0"
 schedule = "^1.2.2"
 
-# Optional backend dependencies (declared here, activated via extras)
+# Optional: PyTorch/HuggingFace backend
+transformers = {version = "^4.49.0", optional = true}
+accelerate = {version = "^1.4.0", optional = true}
+bitsandbytes = {version = "^0.45.0", optional = true}
+calflops = {version = "^0.2.0", optional = true}
+
+# Optional: vLLM backend
 vllm = {version = ">=0.6.0", optional = true}
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0"
-pytest-cov = "^4.0"
-ruff = "^0.8.0"
-mypy = "^1.0"
-pre-commit = "^3.0"
-types-pyyaml = "^6.0.12.20250915"
-commitizen = "^4.0"
+# Optional: dev dependencies
+pytest = {version = "^8.0", optional = true}
+pytest-cov = {version = "^4.0", optional = true}
+ruff = {version = "^0.8.0", optional = true}
+mypy = {version = "^1.0", optional = true}
+pre-commit = {version = "^3.0", optional = true}
+types-pyyaml = {version = "^6.0.12.20250915", optional = true}
+commitizen = {version = "^4.0", optional = true}
 
 [tool.poetry.extras]
-# Optional inference backends (install separately due to dependency conflicts)
+# PyTorch/HuggingFace backend (default for most use cases)
+# Usage: pip install llm-energy-measure[pytorch]
+pytorch = ["transformers", "accelerate", "bitsandbytes", "calflops"]
+
+# vLLM backend (high-throughput inference)
 # Usage: pip install llm-energy-measure[vllm]
-# Note: vLLM requires PyTorch 2.8+, use dedicated Docker image for isolation
+# Note: Use dedicated Docker image due to dependency conflicts
 vllm = ["vllm"]
+
+# Development tools
+# Usage: pip install llm-energy-measure[dev]
+dev = ["pytest", "pytest-cov", "ruff", "mypy", "pre-commit", "types-pyyaml", "commitizen"]
+
+# All backends + dev (for full development)
+# Usage: pip install llm-energy-measure[all]
+all = ["transformers", "accelerate", "bitsandbytes", "calflops", "vllm", "pytest", "pytest-cov", "ruff", "mypy", "pre-commit", "types-pyyaml", "commitizen"]
 
 [tool.poetry.scripts]
 llm-energy-measure = "llm_energy_measure.cli:app"
