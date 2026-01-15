@@ -23,6 +23,7 @@
 ### Backend Support
 - [ ] **TensorRT-LLM backend** - Optimised NVIDIA inference (Phase 4)
 - [ ] Cross-backend comparison CLI: `llm-energy-measure compare --backends pytorch,vllm`
+- [ ] Cross-backend visualisation (energy vs throughput per backend)
 
 ### Backend-Native Features (Phase 4+)
 - [ ] Expose vLLM-specific params (speculative_decoding, paged_attention config)
