@@ -68,7 +68,17 @@ class TestPresets:
 
     def test_presets_has_expected_keys(self):
         """PRESETS dict has expected preset names."""
-        expected_keys = {"quick-test", "benchmark", "throughput"}
+        # General presets (backend-agnostic)
+        general_presets = {"quick-test", "benchmark", "throughput"}
+        # Backend-specific presets
+        vllm_presets = {
+            "vllm-throughput",
+            "vllm-speculative",
+            "vllm-memory-efficient",
+            "vllm-low-latency",
+        }
+        pytorch_presets = {"pytorch-optimized", "pytorch-speculative", "pytorch-compatible"}
+        expected_keys = general_presets | vllm_presets | pytorch_presets
         assert expected_keys == set(PRESETS.keys())
 
     def test_presets_is_dict(self):
@@ -111,11 +121,34 @@ class TestPresets:
             assert preset["max_input_tokens"] > 0, f"{name} has invalid max_input_tokens"
             assert preset["max_output_tokens"] > 0, f"{name} has invalid max_output_tokens"
 
-    def test_all_presets_have_batching(self):
-        """All presets have batching."""
-        for name, preset in PRESETS.items():
+    def test_general_presets_have_batching(self):
+        """General presets have batching config."""
+        general_presets = ["quick-test", "benchmark", "throughput"]
+        for name in general_presets:
+            preset = PRESETS[name]
             assert "batching" in preset, f"{name} missing batching"
             assert "batch_size" in preset["batching"], f"{name} missing batch_size"
+
+    def test_vllm_presets_have_backend_config(self):
+        """vLLM presets have backend='vllm' and vllm config section."""
+        vllm_presets = [
+            "vllm-throughput",
+            "vllm-speculative",
+            "vllm-memory-efficient",
+            "vllm-low-latency",
+        ]
+        for name in vllm_presets:
+            preset = PRESETS[name]
+            assert preset.get("backend") == "vllm", f"{name} should have backend='vllm'"
+            assert "vllm" in preset, f"{name} missing vllm config section"
+
+    def test_pytorch_presets_have_backend_config(self):
+        """PyTorch presets have backend='pytorch' and pytorch config section."""
+        pytorch_presets = ["pytorch-optimized", "pytorch-speculative", "pytorch-compatible"]
+        for name in pytorch_presets:
+            preset = PRESETS[name]
+            assert preset.get("backend") == "pytorch", f"{name} should have backend='pytorch'"
+            assert "pytorch" in preset, f"{name} missing pytorch config section"
 
     def test_preset_values_are_valid_types(self):
         """Preset values have correct types."""
@@ -124,7 +157,11 @@ class TestPresets:
             assert isinstance(
                 preset["max_output_tokens"], int
             ), f"{name}: max_output_tokens not int"
-            assert isinstance(preset["batching"]["batch_size"], int), f"{name}: batch_size not int"
+            # Only general presets have batching
+            if "batching" in preset:
+                assert isinstance(
+                    preset["batching"]["batch_size"], int
+                ), f"{name}: batch_size not int"
 
     def test_quick_test_is_minimal(self):
         """quick-test preset uses minimal values for fast testing."""

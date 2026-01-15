@@ -110,6 +110,7 @@ make test     # Unit tests
 |-------|-------------|
 | [Getting Started](docs/quickstart.md) | Tutorial, datasets, basic config |
 | [CLI Reference](docs/cli.md) | All commands and options |
+| [Backends Guide](docs/backends.md) | PyTorch vs vLLM, backend-specific config |
 | [Deployment](docs/deployment.md) | Docker, MIG GPUs, troubleshooting |
 
 ### Developer Docs (module READMEs)

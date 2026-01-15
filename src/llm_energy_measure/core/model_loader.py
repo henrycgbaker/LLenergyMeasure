@@ -147,6 +147,23 @@ def load_model_tokenizer(
     # Get parallelism-specific model kwargs
     model_kwargs = strategy.prepare_model_kwargs()
 
+    # Merge PyTorch-specific model kwargs (if config.pytorch is set)
+    pytorch_cfg = config.pytorch
+    if pytorch_cfg is not None:
+        # Attention implementation
+        if pytorch_cfg.attn_implementation != "sdpa":
+            model_kwargs["attn_implementation"] = pytorch_cfg.attn_implementation
+
+        # Memory management
+        if pytorch_cfg.low_cpu_mem_usage:
+            model_kwargs["low_cpu_mem_usage"] = True
+        if pytorch_cfg.max_memory:
+            model_kwargs["max_memory"] = pytorch_cfg.max_memory
+
+        # Escape hatch for extra kwargs
+        if pytorch_cfg.extra:
+            model_kwargs.update(pytorch_cfg.extra)
+
     # Load model with optional quantization
     try:
         if quant_config and quant_config.quantization:

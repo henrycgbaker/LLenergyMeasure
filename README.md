@@ -49,7 +49,9 @@ All parameters below are fully wired and functional.
 | Sharding | `strategy` | `none`, `tensor_parallel`, `pipeline_parallel` | Multi-GPU parallelism strategy |
 | Sharding | `num_shards` | 1+ | Number of GPUs for parallelism |
 | Sharding | `tp_plan` | `auto` | Tensor parallel plan (HF native, TP only) |
-| *Planned* | `backend` | — | Only `pytorch` functional; `vllm`/`tensorrt` planned |
+| Backend | `backend` | `pytorch`, `vllm` | Inference backend (see [Backends Guide](docs/backends.md)) |
+| vLLM | `vllm.*` | various | vLLM-specific config (memory, KV cache, speculative) |
+| PyTorch | `pytorch.*` | various | PyTorch-specific config (attention, compile, assisted gen) |
 
 ## Installation
 
@@ -141,6 +143,18 @@ schedule:
   interval: "6h"                # e.g., "6h", "30m", "1d"
   # at: "09:00"                 # Specific time of day
   # days: ["mon", "wed", "fri"] # Or "weekdays", "weekends"
+
+# === BACKEND-SPECIFIC CONFIG (optional) ===
+# backend: vllm                 # Switch to vLLM backend
+# vllm:
+#   gpu_memory_utilization: 0.9
+#   enable_prefix_caching: true
+#   kv_cache_dtype: fp8
+
+# backend: pytorch              # Default backend
+# pytorch:
+#   attn_implementation: flash_attention_2
+#   torch_compile: reduce-overhead
 ```
 
 **2. Run experiment:**
@@ -164,6 +178,7 @@ For a full tutorial, see the [Getting Started Guide](docs/quickstart.md).
 |-------|-------------|
 | [Getting Started](docs/quickstart.md) | Full tutorial, datasets, basic config |
 | [CLI Reference](docs/cli.md) | All commands and options |
+| [Backends Guide](docs/backends.md) | PyTorch vs vLLM, backend-specific config |
 | [Deployment](docs/deployment.md) | Docker, MIG GPUs, troubleshooting |
 | [Configuration](src/llm_energy_measure/config/README.md) | Full config options, presets, validation |
 

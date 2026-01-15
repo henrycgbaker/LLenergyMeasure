@@ -330,6 +330,7 @@ def _build_generation_kwargs(
     - Temperature=0 forces greedy decoding regardless of other settings
     - Respects do_sample config value
     - Applies repetition_penalty, min_p, no_repeat_ngram_size when enabled
+    - Merges PyTorch-specific generation params (num_beams, early_stopping, etc.)
     """
     min_output = config.min_output_tokens or 0
     decoder = config.decoder_config
@@ -342,26 +343,46 @@ def _build_generation_kwargs(
     # Temperature=0 forces greedy regardless of other settings
     if decoder.temperature == 0.0:
         generation_kwargs["do_sample"] = False
-        return generation_kwargs
+    else:
+        # Apply sampling settings
+        generation_kwargs["do_sample"] = decoder.do_sample
+        generation_kwargs["temperature"] = decoder.temperature
 
-    # Apply sampling settings
-    generation_kwargs["do_sample"] = decoder.do_sample
-    generation_kwargs["temperature"] = decoder.temperature
+        if decoder.do_sample:
+            # Nucleus/top sampling (only when sampling is enabled)
+            if decoder.top_k > 0:
+                generation_kwargs["top_k"] = decoder.top_k
+            if decoder.top_p < 1.0:
+                generation_kwargs["top_p"] = decoder.top_p
+            if decoder.min_p > 0.0:
+                generation_kwargs["min_p"] = decoder.min_p
 
-    if decoder.do_sample:
-        # Nucleus/top sampling (only when sampling is enabled)
-        if decoder.top_k > 0:
-            generation_kwargs["top_k"] = decoder.top_k
-        if decoder.top_p < 1.0:
-            generation_kwargs["top_p"] = decoder.top_p
-        if decoder.min_p > 0.0:
-            generation_kwargs["min_p"] = decoder.min_p
+            # Repetition control
+            if decoder.repetition_penalty != 1.0:
+                generation_kwargs["repetition_penalty"] = decoder.repetition_penalty
+            if decoder.no_repeat_ngram_size > 0:
+                generation_kwargs["no_repeat_ngram_size"] = decoder.no_repeat_ngram_size
 
-        # Repetition control
-        if decoder.repetition_penalty != 1.0:
-            generation_kwargs["repetition_penalty"] = decoder.repetition_penalty
-        if decoder.no_repeat_ngram_size > 0:
-            generation_kwargs["no_repeat_ngram_size"] = decoder.no_repeat_ngram_size
+    # Merge PyTorch-specific generation params (if config.pytorch is set)
+    pytorch_cfg = config.pytorch
+    if pytorch_cfg is not None:
+        # KV caching
+        if not pytorch_cfg.use_cache:
+            generation_kwargs["use_cache"] = False
+
+        # Beam search
+        if pytorch_cfg.num_beams > 1:
+            generation_kwargs["num_beams"] = pytorch_cfg.num_beams
+            if pytorch_cfg.early_stopping:
+                generation_kwargs["early_stopping"] = True
+            if pytorch_cfg.length_penalty != 1.0:
+                generation_kwargs["length_penalty"] = pytorch_cfg.length_penalty
+
+        # Output configuration
+        if pytorch_cfg.output_scores:
+            generation_kwargs["output_scores"] = True
+        if pytorch_cfg.return_dict_in_generate:
+            generation_kwargs["return_dict_in_generate"] = True
 
     return generation_kwargs
 
