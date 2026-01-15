@@ -42,10 +42,11 @@ RUN pip install --no-cache-dir .
 # ============================================================================
 FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS runtime
 
-# Install Python 3.11 runtime only
+# Install Python 3.11 runtime and dev headers (Triton compiles kernels at runtime)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 \
     python3.11-venv \
+    python3.11-dev \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
