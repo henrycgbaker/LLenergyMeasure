@@ -15,8 +15,16 @@ from pydantic import (
 if TYPE_CHECKING:
     from llm_energy_measure.config.backend_configs import PyTorchConfig, VLLMConfig
 
+# Default dataset for experiments (AI Energy Score standardised benchmark)
+DEFAULT_DATASET = "ai-energy-score"
+
 # Built-in dataset aliases for prompt loading
 BUILTIN_DATASETS: dict[str, dict[str, str]] = {
+    "ai-energy-score": {
+        "path": "AIEnergyScore/text_generation",
+        "column": "text",
+        "split": "train",
+    },
     "alpaca": {
         "path": "tatsu-lab/alpaca",
         "column": "instruction",

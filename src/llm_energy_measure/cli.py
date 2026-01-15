@@ -33,7 +33,11 @@ from llm_energy_measure.config.loader import (
     load_config,
     validate_config,
 )
-from llm_energy_measure.config.models import ExperimentConfig, HuggingFacePromptSource
+from llm_energy_measure.config.models import (
+    DEFAULT_DATASET,
+    ExperimentConfig,
+    HuggingFacePromptSource,
+)
 from llm_energy_measure.constants import (
     COMPLETION_MARKER_PREFIX,
     GRACEFUL_SHUTDOWN_TIMEOUT_SEC,
@@ -405,9 +409,7 @@ def run(
     ] = None,
     dataset: Annotated[
         str | None,
-        typer.Option(
-            "--dataset", "-d", help="HuggingFace dataset (alias: alpaca, gsm8k, mmlu, sharegpt)"
-        ),
+        typer.Option("--dataset", "-d", help="HuggingFace dataset (default: ai-energy-score)"),
     ] = None,
     dataset_split: Annotated[str, typer.Option("--split", help="Dataset split")] = "train",
     dataset_column: Annotated[
@@ -431,7 +433,7 @@ def run(
 
     Prompts can be specified via:
     - --prompts <file.txt>: One prompt per line
-    - --dataset <name>: HuggingFace dataset (alpaca, gsm8k, mmlu, sharegpt, or full path)
+    - --dataset <name>: HuggingFace dataset or alias (default: ai-energy-score)
     - prompt_source in config file
     """
     try:
@@ -520,9 +522,13 @@ def _resolve_prompts(
             prompts = prompts[:sample_size]
         return prompts
 
-    # Default fallback
-    console.print("[yellow]Warning:[/yellow] No prompts specified, using default")
-    return ["Hello, how are you?"]
+    # Default: use AI Energy Score dataset (standardised benchmark)
+    console.print(f"[dim]Using default dataset: {DEFAULT_DATASET}[/dim]")
+    source = HuggingFacePromptSource(
+        dataset=DEFAULT_DATASET,
+        sample_size=sample_size,
+    )
+    return load_prompts_from_source(source)
 
 
 @app.command("experiment")  # type: ignore[misc]
@@ -533,7 +539,7 @@ def experiment(
     # Prompt source options
     dataset: Annotated[
         str | None,
-        typer.Option("--dataset", "-d", help="HuggingFace dataset (alpaca, gsm8k, mmlu, sharegpt)"),
+        typer.Option("--dataset", "-d", help="HuggingFace dataset (default: ai-energy-score)"),
     ] = None,
     prompts_file: Annotated[
         Path | None, typer.Option("--prompts", "-p", help="Path to prompts file")
