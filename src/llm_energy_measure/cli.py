@@ -1116,6 +1116,24 @@ def experiment(
                             cycle_results.append(agg_result)
                             if effective_cycles == 1:
                                 console.print(f"\n[green]Results saved to:[/green] {result_path}")
+                                # Show brief summary including streaming latency if present
+                                if agg_result.latency_stats is not None:
+                                    lat = agg_result.latency_stats
+                                    ttft_p99 = (
+                                        lat.get("ttft_p99_ms")
+                                        if isinstance(lat, dict)
+                                        else lat.ttft_p99_ms
+                                    )
+                                    itl_p99 = (
+                                        lat.get("itl_p99_ms")
+                                        if isinstance(lat, dict)
+                                        else lat.itl_p99_ms
+                                    )
+                                    console.print(
+                                        f"  [dim]Streaming: TTFT p99={ttft_p99:.1f}ms"
+                                        + (f"  ITL p99={itl_p99:.1f}ms" if itl_p99 else "")
+                                        + "[/dim]"
+                                    )
                         except AggregationError as e:
                             console.print(f"[yellow]Aggregation warning:[/yellow] {e}")
                             console.print(
@@ -1424,6 +1442,17 @@ def _aggregate_one(
         console.print(f"  Energy: {aggregated.total_energy_j:.2f} J")
         console.print(f"  Throughput: {metrics['tokens_per_second']:.2f} tok/s")
         console.print(f"  Efficiency: {metrics['tokens_per_joule']:.2f} tok/J")
+
+        # Show streaming latency if present
+        if aggregated.latency_stats is not None:
+            lat = aggregated.latency_stats
+            ttft_mean = lat.get("ttft_mean_ms") if isinstance(lat, dict) else lat.ttft_mean_ms
+            ttft_p99 = lat.get("ttft_p99_ms") if isinstance(lat, dict) else lat.ttft_p99_ms
+            itl_mean = lat.get("itl_mean_ms") if isinstance(lat, dict) else lat.itl_mean_ms
+            itl_p99 = lat.get("itl_p99_ms") if isinstance(lat, dict) else lat.itl_p99_ms
+            console.print(f"  TTFT: mean={ttft_mean:.1f}ms p99={ttft_p99:.1f}ms")
+            if itl_mean is not None:
+                console.print(f"  ITL: mean={itl_mean:.1f}ms p99={itl_p99:.1f}ms (trimmed)")
 
     except AggregationError as e:
         if strict:
@@ -2559,6 +2588,58 @@ def _show_aggregated_result(result: AggregatedResult) -> None:
     table.add_row("Total FLOPs", f"{result.total_flops:.2e}")
 
     console.print(table)
+
+    # Show streaming latency stats if present
+    if result.latency_stats is not None:
+        # Handle both dict (from JSON) and object (LatencyStatistics)
+        lat = result.latency_stats
+        if isinstance(lat, dict):
+            ttft_mean = lat.get("ttft_mean_ms")
+            ttft_median = lat.get("ttft_median_ms")
+            ttft_p95 = lat.get("ttft_p95_ms")
+            ttft_p99 = lat.get("ttft_p99_ms")
+            ttft_samples = lat.get("ttft_samples")
+            itl_mean = lat.get("itl_mean_ms")
+            itl_median = lat.get("itl_median_ms")
+            itl_p95 = lat.get("itl_p95_ms")
+            itl_p99 = lat.get("itl_p99_ms")
+            itl_samples = lat.get("itl_samples")
+            itl_full_mean = lat.get("itl_full_mean_ms")
+            itl_full_p99 = lat.get("itl_full_p99_ms")
+        else:
+            ttft_mean = lat.ttft_mean_ms
+            ttft_median = lat.ttft_median_ms
+            ttft_p95 = lat.ttft_p95_ms
+            ttft_p99 = lat.ttft_p99_ms
+            ttft_samples = lat.ttft_samples
+            itl_mean = lat.itl_mean_ms
+            itl_median = lat.itl_median_ms
+            itl_p95 = lat.itl_p95_ms
+            itl_p99 = lat.itl_p99_ms
+            itl_samples = lat.itl_samples
+            itl_full_mean = lat.itl_full_mean_ms
+            itl_full_p99 = lat.itl_full_p99_ms
+
+        console.print("\n[bold]Streaming Latency[/bold]")
+        console.print(
+            f"  TTFT:  mean={ttft_mean:.1f}ms  "
+            f"median={ttft_median:.1f}ms  "
+            f"p95={ttft_p95:.1f}ms  "
+            f"p99={ttft_p99:.1f}ms  "
+            f"(n={ttft_samples})"
+        )
+        if itl_mean is not None:
+            console.print(
+                f"  ITL:   mean={itl_mean:.1f}ms  "
+                f"median={itl_median:.1f}ms  "
+                f"p95={itl_p95:.1f}ms  "
+                f"p99={itl_p99:.1f}ms  "
+                f"(n={itl_samples} tokens, trimmed)"
+            )
+        if itl_full_mean is not None:
+            console.print(
+                f"  [dim]ITL (full): mean={itl_full_mean:.1f}ms  " f"p99={itl_full_p99:.1f}ms[/dim]"
+            )
 
     # Show effective config if available
     if result.effective_config:

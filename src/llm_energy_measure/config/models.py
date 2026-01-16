@@ -456,6 +456,18 @@ class ExperimentConfig(BaseModel):
         default="pytorch", description="Inference backend"
     )
 
+    # Streaming latency measurement (TTFT/ITL metrics)
+    streaming: bool = Field(
+        default=False,
+        description="Enable streaming mode for TTFT/ITL latency measurement. "
+        "Also a testable parameter - streaming may affect energy profile.",
+    )
+    streaming_warmup_requests: int = Field(
+        default=5,
+        ge=0,
+        description="Warmup requests before streaming measurement (excluded from stats)",
+    )
+
     # Backend-specific configurations
     # These are optional and only validated when the corresponding backend is selected
     vllm: "VLLMConfig | None" = Field(

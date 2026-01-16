@@ -1,0 +1,10 @@
+config_name: "vllm-streaming-test"
+model_name: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+backend: vllm
+num_input_prompts: 10
+max_output_tokens: 64
+streaming: true
+streaming_warmup_requests: 2
+
+vllm:
+  gpu_memory_utilization: 0.8

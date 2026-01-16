@@ -91,6 +91,73 @@ DEFAULT_RUNTIME_CAPABILITIES = RuntimeCapabilities()
 
 
 # =============================================================================
+# Latency Measurements (for streaming support)
+# =============================================================================
+
+
+@dataclass
+class LatencyMeasurements:
+    """Raw latency measurements for late aggregation.
+
+    Stores raw samples from streaming inference. Statistics are computed
+    at aggregation time, enabling correct multi-process aggregation
+    (concatenate samples first, then compute percentiles).
+
+    Attributes:
+        ttft_ms: Per-request time-to-first-token in milliseconds.
+        itl_full_ms: All inter-token latencies (includes all intervals).
+        itl_trimmed_ms: Trimmed ITL excluding first/last per request
+            (first token is TTFT, last may have EOS anomalies).
+        request_count: Number of requests measured.
+        total_output_tokens: Total tokens generated across all requests.
+        excluded_tokens: Count of first+last tokens excluded from trimmed ITL.
+        streaming_mode: Whether streaming API was used for measurement.
+        warmup_requests_excluded: Number of warmup requests not included.
+    """
+
+    ttft_ms: list[float]
+    itl_full_ms: list[float]
+    itl_trimmed_ms: list[float]
+    request_count: int
+    total_output_tokens: int
+    excluded_tokens: int
+    streaming_mode: bool
+    warmup_requests_excluded: int
+
+
+@dataclass
+class LatencyStatistics:
+    """Computed statistics from raw latency measurements.
+
+    Created at aggregation time from LatencyMeasurements. This is the final
+    form stored in AggregatedResult and displayed in CLI output.
+
+    Primary metrics use trimmed ITL (excluding first/last tokens per request).
+    Full ITL stats are provided for comparison/debugging.
+    """
+
+    # TTFT statistics
+    ttft_mean_ms: float
+    ttft_median_ms: float
+    ttft_p95_ms: float
+    ttft_p99_ms: float
+    ttft_min_ms: float
+    ttft_max_ms: float
+    ttft_samples: int
+
+    # ITL statistics (trimmed - primary metric)
+    itl_mean_ms: float | None = None
+    itl_median_ms: float | None = None
+    itl_p95_ms: float | None = None
+    itl_p99_ms: float | None = None
+    itl_samples: int = 0
+
+    # ITL statistics (full - for comparison)
+    itl_full_mean_ms: float | None = None
+    itl_full_p99_ms: float | None = None
+
+
+# =============================================================================
 # Backend Result and Runtime Context
 # =============================================================================
 
@@ -124,6 +191,10 @@ class BackendResult:
 
     # Backend-specific metadata
     backend_metadata: dict[str, Any] = field(default_factory=dict)
+
+    # Raw latency measurements from streaming inference (for late aggregation)
+    # None if streaming mode was not enabled
+    latency_measurements: LatencyMeasurements | None = None
 
     @property
     def tokens_per_second(self) -> float:
@@ -173,12 +244,18 @@ class ConfigWarning:
 
     Used when a config parameter is set but not supported by the selected backend,
     or when parameter semantics differ between backends.
+
+    Severity levels:
+    - info: Different semantics but works (e.g., batch_size hint vs exact)
+    - warning: Feature partially supported or has caveats
+    - error: Feature not supported, experiment may fail
     """
 
     param: str
     message: str
-    severity: Literal["warning", "error"] = "warning"
+    severity: Literal["info", "warning", "error"] = "warning"
     suggestion: str | None = None
+    migration_hint: str | None = None  # For deprecated/changed params
 
 
 @runtime_checkable
