@@ -18,22 +18,27 @@
 - [x] Backend validation at aggregation (reject mixed backends)
 - [x] Backend documentation (`docs/backends.md`)
 
+### Phase 4 Features (Native Backend Config)
+- [x] Native vLLM config (`VLLMConfig`) - memory, KV cache, prefix caching, speculative decoding
+- [x] Native PyTorch config (`PyTorchConfig`) - attention impl, torch.compile, assisted generation
+- [x] Runtime verification tests for vLLM parameters
+
 ## Planned Features
 
 ### Backend Support
-- [ ] **TensorRT-LLM backend** - Optimised NVIDIA inference (Phase 4)
+- [x] **TensorRT-LLM backend** - Optimised NVIDIA inference
 - [ ] Cross-backend comparison CLI: `llm-energy-measure compare --backends pytorch,vllm`
 - [ ] Cross-backend visualisation (energy vs throughput per backend)
 
 ### Backend-Native Features (Phase 4+)
+- [x] LoRA adapter loading
 - [ ] Expose vLLM-specific params (speculative_decoding, paged_attention config)
 - [ ] PagedAttention memory efficiency reporting
-- [ ] LoRA adapter loading
 
 ### Streaming Latency Metrics (TTFT/ITL)
-- [ ] **vLLM streaming** - TTFT and ITL measurement via streaming API (in progress)
-- [ ] **PyTorch streaming** - Use `TextIteratorStreamer` for TTFT/ITL
-- [ ] **TensorRT-LLM streaming** - TRT-LLM streaming for TTFT/ITL
+- [x] **vLLM streaming** - TTFT and ITL measurement via streaming API
+- [x] **PyTorch streaming** - Use `TextIteratorStreamer` for TTFT/ITL
+- [ ] **TensorRT-LLM streaming** - Code complete, requires NGC login to test (see docker/Dockerfile.tensorrt)
 
 ### Streaming Enhancements (Future)
 - [ ] Real-time CLI token display during inference
@@ -42,6 +47,14 @@
 - [ ] Energy-per-token correlation (TTFT energy vs decode energy)
 - [ ] Speculative decoding acceptance rate metrics
 - [ ] KV cache hit rate metrics (prefix caching effectiveness)
+
+### Downstream: Causal Analysis
+> For unpacking *why* optimisations affect efficiency, not primary measurement.
+
+- [ ] PagedAttention block usage metrics (vLLM memory efficiency observability)
+- [ ] CUDA graph capture timing breakdown
+- [ ] KV cache hit rates (prefix caching effectiveness)
+- [ ] Attention kernel profiling (flash vs standard)
 
 ### Documentation
 - [ ] Convert CLAUDE.md files to admin/developer READMEs (user-facing vs contributor docs)

@@ -2,63 +2,80 @@
 # =============================================================================
 # TensorRT-LLM Backend: High-performance compiled inference
 # =============================================================================
-# IMPORTANT: Requires NVIDIA NGC authentication before building.
+# TensorRT-LLM backend for maximum throughput with compiled engines
 #
-# Setup NGC access:
-#   1. Create account at https://ngc.nvidia.com/
-#   2. Generate API key at https://ngc.nvidia.com/setup/api-key
-#   3. Login: docker login nvcr.io -u '$oauthtoken' -p <YOUR_API_KEY>
-#
-# Then build:
-#   docker compose build tensorrt
+# Usage:
+#   docker build -f docker/Dockerfile.tensorrt \
+#     --build-arg BASE_IMAGE=llm-energy-measure-base:latest \
+#     -t llm-energy-measure:tensorrt .
 #
 # Note: TensorRT-LLM requires NVIDIA GPU with compute capability >= 8.0 (Ampere+)
+# and installs its own PyTorch version for CUDA compatibility.
 # =============================================================================
 
-# NVIDIA's official TensorRT-LLM image - includes all CUDA/TensorRT dependencies
-# See: https://catalog.ngc.nvidia.com/orgs/nvidia/containers/tensorrt_llm
-ARG TRTLLM_VERSION=0.17.0
-FROM nvcr.io/nvidia/tensorrt_llm/release:${TRTLLM_VERSION} AS base
-
-WORKDIR /app
-
-# Install additional Python dependencies
-RUN pip install --no-cache-dir \
-    pydantic loguru typer codecarbon nvidia-ml-py datasets schedule \
-    transformers accelerate
+ARG BASE_IMAGE=llm-energy-measure-base:latest
 
 # ============================================================================
-# Stage: Runtime - Production image
+# Stage 1: Builder - Install TensorRT-LLM and dependencies
 # ============================================================================
-FROM base AS runtime
+FROM ${BASE_IMAGE} AS builder
 
-WORKDIR /app
+WORKDIR /build
 
+# Install TensorRT-LLM (brings its own compatible PyTorch and CUDA libraries)
+# Pin version for reproducibility - update as needed
+# Note: tensorrt-llm has strict CUDA version requirements
+RUN pip install --no-cache-dir tensorrt-llm>=0.12.0
+
+# Copy project files
 COPY pyproject.toml poetry.lock* README.md ./
 COPY src/ ./src/
 
-# Install package (tensorrt-llm already in base)
-RUN pip install --no-cache-dir --no-deps -e .
+# Install the package with tensorrt extras (--no-deps to avoid torch conflict)
+# Then install remaining dependencies for HuggingFace compatibility
+RUN pip install --no-cache-dir --no-deps ".[tensorrt]" \
+    && pip install --no-cache-dir \
+        pydantic loguru typer codecarbon pynvml datasets schedule \
+        transformers accelerate
 
+# ============================================================================
+# Stage 2: Runtime - Minimal production image
+# ============================================================================
+FROM ${BASE_IMAGE} AS runtime
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# TensorRT engine cache directory
 ENV TRT_ENGINE_CACHE=/app/.cache/tensorrt-engines
 RUN mkdir -p ${TRT_ENGINE_CACHE}
 
+# Clear NVIDIA's entrypoint and set default command
+ENTRYPOINT []
 CMD ["llm-energy-measure", "--help"]
 
 # ============================================================================
-# Stage: Dev - Development image
+# Stage 3: Dev - For development with source mounting
 # ============================================================================
-FROM base AS dev
+FROM ${BASE_IMAGE} AS dev
 
-WORKDIR /app
+# Install TensorRT-LLM (brings its own PyTorch)
+RUN pip install --no-cache-dir tensorrt-llm>=0.12.0
 
+# Copy project files and install with tensorrt + dev extras
+# (--no-deps to avoid torch conflict, then install remaining deps)
 COPY pyproject.toml poetry.lock* README.md ./
 COPY src/ ./src/
+RUN pip install --no-cache-dir --no-deps ".[tensorrt]" \
+    && pip install --no-cache-dir \
+        pydantic loguru typer codecarbon pynvml datasets schedule \
+        transformers accelerate \
+        pytest pytest-cov ruff mypy pre-commit commitizen
 
-RUN pip install --no-cache-dir --no-deps -e . && \
-    pip install --no-cache-dir pytest pytest-cov ruff mypy pre-commit commitizen
-
+# TensorRT engine cache directory
 ENV TRT_ENGINE_CACHE=/app/.cache/tensorrt-engines
 RUN mkdir -p ${TRT_ENGINE_CACHE}
 
+# Source can be mounted at runtime for editable install
+ENTRYPOINT []
 CMD ["/bin/bash"]

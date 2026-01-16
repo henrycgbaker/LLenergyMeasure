@@ -442,9 +442,8 @@ def _parse_args() -> tuple[Path, list[str], dict[str, Any], dict[str, Any], str 
     if not effective_config:
         effective_config = config.model_dump()
 
-    # Determine sample size: CLI > config > None
-    # Precedence: CLI flag (-n) > config.num_input_prompts
-    sample_size = args.sample_size if args.sample_size else config.num_input_prompts
+    # Determine sample size: CLI -n > config.num_input_prompts > None (all)
+    effective_sample_size = args.sample_size if args.sample_size else config.num_input_prompts
 
     # Load prompts (CLI args > config > default)
     if args.dataset:
@@ -452,22 +451,22 @@ def _parse_args() -> tuple[Path, list[str], dict[str, Any], dict[str, Any], str 
             dataset=args.dataset,
             split=args.split,
             column=args.column,
-            sample_size=sample_size,
+            sample_size=effective_sample_size,
         )
         prompts = load_prompts_from_source(source)
     elif args.prompts:
         prompts = load_prompts_from_file(args.prompts)
-        if sample_size:
-            prompts = prompts[:sample_size]
+        if effective_sample_size:
+            prompts = prompts[:effective_sample_size]
     elif config.prompt_source:
-        # Override sample_size from CLI if provided
+        # Override sample_size with effective_sample_size (CLI > config > source default)
         cfg_source = config.prompt_source
-        if sample_size and isinstance(cfg_source, HuggingFacePromptSource):
+        if effective_sample_size and isinstance(cfg_source, HuggingFacePromptSource):
             cfg_source = HuggingFacePromptSource(
                 dataset=cfg_source.dataset,
                 split=cfg_source.split,
                 column=cfg_source.column,
-                sample_size=sample_size,
+                sample_size=effective_sample_size,
             )
         prompts = load_prompts_from_source(cfg_source)
     else:

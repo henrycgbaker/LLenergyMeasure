@@ -164,8 +164,11 @@ services:
       context: .
       dockerfile: docker/Dockerfile.tensorrt
       target: runtime
+      args:
+        BASE_IMAGE: llm-energy-measure-base:latest
     image: llm-energy-measure:tensorrt
-    # Note: Uses NVIDIA's official TensorRT-LLM image, no base dependency
+    depends_on:
+      - base
 
   tensorrt-dev:
     <<: *common
@@ -181,8 +184,11 @@ services:
       context: .
       dockerfile: docker/Dockerfile.tensorrt
       target: dev
+      args:
+        BASE_IMAGE: llm-energy-measure-base:latest
     image: llm-energy-measure:tensorrt-dev
-    # Note: Uses NVIDIA's official TensorRT-LLM image, no base dependency
+    depends_on:
+      - base
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
     command: []
 

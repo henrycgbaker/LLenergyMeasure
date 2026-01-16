@@ -35,6 +35,7 @@ from llm_energy_measure.core.inference_backends.protocols import (
     LatencyMeasurements,
     LaunchMode,
     RuntimeCapabilities,
+    collect_itl_measurements,
 )
 from llm_energy_measure.exceptions import (
     BackendInferenceError,
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
 _SUPPORTED_PARAMS: set[str] = {
     # Core
     "model_name",
+    "adapter",
     "fp_precision",
     "max_input_tokens",
     "max_output_tokens",
@@ -139,6 +141,7 @@ class VLLMBackend:
         self._runtime: BackendRuntime | None = None
         self._model_info: ModelInfo | None = None
         self._warmup_done: bool = False
+        self._lora_request: Any = None
 
     @property
     def name(self) -> str:
@@ -200,11 +203,13 @@ class VLLMBackend:
             quant = llm_kwargs.get("quantization")
             prefix_caching = llm_kwargs.get("enable_prefix_caching", False)
             speculative = "speculative_config" in llm_kwargs
+            lora_enabled = llm_kwargs.get("enable_lora", False)
 
             logger.info(
                 f"Initializing vLLM: model={config.model_name}, "
                 f"dtype={dtype}, tp={tp_size}, quant={quant}, "
-                f"prefix_caching={prefix_caching}, speculative={speculative}"
+                f"prefix_caching={prefix_caching}, speculative={speculative}, "
+                f"lora={lora_enabled}"
             )
 
             if config.vllm:
@@ -218,6 +223,10 @@ class VLLMBackend:
 
             # Create sampling params
             self._sampling_params = self._create_sampling_params(config, SamplingParams)
+
+            # Create LoRARequest if adapter specified
+            if config.adapter:
+                self._lora_request = self._create_lora_request(config)
 
             logger.info(f"vLLM model loaded: {config.model_name}")
 
@@ -427,13 +436,27 @@ class VLLMBackend:
                 spec_config["draft_tensor_parallel_size"] = spec.draft_tp_size
             kwargs["speculative_config"] = spec_config
 
-        # LoRA
-        if vllm_cfg.lora and vllm_cfg.lora.enabled:
+        # LoRA - auto-enable if adapter specified, or use explicit config
+        if config.adapter:
+            # Auto-enable LoRA when adapter is specified
+            kwargs["enable_lora"] = True
+            if vllm_cfg and vllm_cfg.lora:
+                lora = vllm_cfg.lora
+                kwargs["max_loras"] = lora.max_loras
+                kwargs["max_lora_rank"] = lora.max_rank
+                if lora.extra_vocab_size != 256:
+                    kwargs["lora_extra_vocab_size"] = lora.extra_vocab_size
+            else:
+                # Sensible defaults for single adapter
+                kwargs["max_loras"] = 1
+                kwargs["max_lora_rank"] = 64
+        elif vllm_cfg and vllm_cfg.lora and vllm_cfg.lora.enabled:
+            # Explicit LoRA config without adapter (pre-configured engine)
             lora = vllm_cfg.lora
             kwargs["enable_lora"] = True
             kwargs["max_loras"] = lora.max_loras
             kwargs["max_lora_rank"] = lora.max_rank
-            if lora.extra_vocab_size != 256:  # Non-default
+            if lora.extra_vocab_size != 256:
                 kwargs["lora_extra_vocab_size"] = lora.extra_vocab_size
 
         # Escape hatch: merge any extra kwargs
@@ -470,6 +493,35 @@ class VLLMBackend:
             kwargs["logit_bias"] = vllm_cfg.logit_bias
 
         return kwargs
+
+    def _create_lora_request(self, config: ExperimentConfig) -> Any:
+        """Create vLLM LoRARequest for adapter inference.
+
+        Args:
+            config: Experiment configuration with adapter path.
+
+        Returns:
+            LoRARequest instance for generate() calls.
+
+        Raises:
+            BackendInitializationError: If adapter loading fails.
+        """
+        from vllm.lora.request import LoRARequest
+
+        adapter_path = config.adapter
+        assert adapter_path is not None  # Caller verified this
+
+        logger.info(f"Creating LoRA request for adapter: {adapter_path}")
+
+        # Generate a unique ID for this adapter
+        # Using hash of path for consistency across runs
+        lora_id = abs(hash(adapter_path)) % (10**6)
+
+        return LoRARequest(
+            lora_name=adapter_path,
+            lora_int_id=lora_id,
+            lora_path=adapter_path,
+        )
 
     def _create_sampling_params(self, config: ExperimentConfig, SamplingParams: type) -> Any:
         """Create vLLM SamplingParams from config.
@@ -584,8 +636,12 @@ class VLLMBackend:
         """Run inference on all prompts at once (no traffic simulation)."""
         start_time = time.perf_counter()
 
-        # Run inference
-        outputs = self._llm.generate(prompts, self._sampling_params)
+        # Run inference (with optional LoRA adapter)
+        outputs = self._llm.generate(
+            prompts,
+            self._sampling_params,
+            lora_request=self._lora_request,
+        )
 
         inference_time = time.perf_counter() - start_time
 
@@ -710,12 +766,11 @@ class VLLMBackend:
 
         inference_time = time.perf_counter() - start_time
 
-        # Calculate ITL from token timestamps
-        itl_full, itl_trimmed, excluded = self._collect_itl_measurements(
-            token_timestamps_per_request
-        )
+        # Calculate ITL from token timestamps using shared utility
+        itl_full, itl_trimmed, excluded = collect_itl_measurements(token_timestamps_per_request)
 
         # Build latency measurements
+        # Note: vLLM doesn't have true streaming API - we estimate ITL from per-request timing
         latency_measurements = LatencyMeasurements(
             ttft_ms=ttft_samples,
             itl_full_ms=itl_full,
@@ -725,6 +780,7 @@ class VLLMBackend:
             excluded_tokens=excluded,
             streaming_mode=True,
             warmup_requests_excluded=warmup_count,
+            measurement_method="proportional_estimate",  # ITL estimated, not true streaming
         )
 
         # Calculate average TTFT for BackendResult (backward compat)
@@ -759,44 +815,6 @@ class VLLMBackend:
             latency_measurements=latency_measurements,
         )
 
-    def _collect_itl_measurements(
-        self, token_timestamps: list[list[float]]
-    ) -> tuple[list[float], list[float], int]:
-        """Collect ITL measurements from per-request token timestamps.
-
-        Args:
-            token_timestamps: List of timestamp lists, one per request.
-
-        Returns:
-            Tuple of (itl_full, itl_trimmed, excluded_count):
-            - itl_full: All inter-token intervals
-            - itl_trimmed: Excluding first/last per request
-            - excluded_count: Number of excluded tokens
-        """
-        import numpy as np
-
-        itl_full: list[float] = []
-        itl_trimmed: list[float] = []
-        excluded = 0
-
-        for timestamps in token_timestamps:
-            if len(timestamps) < 2:
-                continue
-
-            # Calculate inter-token intervals
-            intervals = list(np.diff(timestamps))
-            itl_full.extend(intervals)
-
-            # Trim first and last intervals
-            if len(intervals) >= 3:
-                itl_trimmed.extend(intervals[1:-1])
-                excluded += 2
-            elif len(intervals) >= 1:
-                # Too short to trim meaningfully
-                excluded += len(intervals)
-
-        return itl_full, itl_trimmed, excluded
-
     def _run_inference_with_traffic(
         self, prompts: list[str], config: ExperimentConfig
     ) -> BackendResult:
@@ -829,8 +847,12 @@ class VLLMBackend:
                 if delay > 0.1:
                     logger.debug(f"Traffic delay: {delay:.3f}s before batch {batch_idx + 1}")
 
-            # Run this batch
-            batch_outputs = self._llm.generate(batch, self._sampling_params)
+            # Run this batch (with optional LoRA adapter)
+            batch_outputs = self._llm.generate(
+                batch,
+                self._sampling_params,
+                lora_request=self._lora_request,
+            )
             all_outputs.extend(batch_outputs)
 
         inference_time = time.perf_counter() - start_time
@@ -891,6 +913,7 @@ class VLLMBackend:
         metadata: dict[str, Any] = {
             "backend": "vllm",
             "continuous_batching": True,
+            "lora_adapter": self._config.adapter if self._config else None,
             "num_prompts": num_prompts,
             "ttft_samples": len(ttft_values) if ttft_values else 0,
         }
