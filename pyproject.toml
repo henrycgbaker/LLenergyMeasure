@@ -27,6 +27,10 @@ calflops = {version = "^0.2.0", optional = true}
 # Optional: vLLM backend
 vllm = {version = ">=0.6.0", optional = true}
 
+# Optional: TensorRT-LLM backend (high-performance compiled inference)
+# Note: Requires NVIDIA GPU with compute capability >= 8.0 (Ampere+)
+tensorrt-llm = {version = ">=0.12.0", optional = true}
+
 # Optional: dev dependencies
 pytest = {version = "^8.0", optional = true}
 pytest-cov = {version = "^4.0", optional = true}
@@ -46,13 +50,20 @@ pytorch = ["transformers", "accelerate", "bitsandbytes", "calflops"]
 # Note: Use dedicated Docker image due to dependency conflicts
 vllm = ["vllm"]
 
+# TensorRT-LLM backend (high-performance compiled inference)
+# Usage: pip install llm-energy-measure[tensorrt]
+# Note: Requires NVIDIA GPU (Ampere+) and CUDA 12.x
+tensorrt = ["tensorrt-llm"]
+
 # Development tools
 # Usage: pip install llm-energy-measure[dev]
 dev = ["pytest", "pytest-cov", "ruff", "mypy", "pre-commit", "types-pyyaml", "commitizen"]
 
 # All backends + dev (for full development)
 # Usage: pip install llm-energy-measure[all]
-all = ["transformers", "accelerate", "bitsandbytes", "calflops", "vllm", "pytest", "pytest-cov", "ruff", "mypy", "pre-commit", "types-pyyaml", "commitizen"]
+# Note: Backend-specific extras (vllm, tensorrt) may have dependency conflicts.
+# For production, use individual backend extras: [pytorch], [vllm], or [tensorrt]
+all = ["transformers", "accelerate", "bitsandbytes", "calflops", "vllm", "tensorrt-llm", "pytest", "pytest-cov", "ruff", "mypy", "pre-commit", "types-pyyaml", "commitizen"]
 
 [tool.poetry.scripts]
 llm-energy-measure = "llm_energy_measure.cli:app"

@@ -3,7 +3,7 @@
 Supports backend selection via config.backend field. Supported backends:
 - pytorch: HuggingFace Transformers + Accelerate (default)
 - vllm: vLLM with PagedAttention and continuous batching
-- tensorrt: TensorRT-LLM (planned)
+- tensorrt: TensorRT-LLM with compiled execution plans
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def create_components(ctx: ExperimentContext) -> ExperimentComponents:
     """Create all experiment components wired for the given context.
 
     Validates the requested backend and creates appropriate components.
-    Supports 'pytorch' and 'vllm' backends.
+    Supports 'pytorch', 'vllm', and 'tensorrt' backends.
 
     Args:
         ctx: Experiment context with accelerator and config.
@@ -93,10 +93,12 @@ def create_components(ctx: ExperimentContext) -> ExperimentComponents:
         return _create_pytorch_components(ctx, backend)
     elif backend_name == "vllm":
         return _create_vllm_components(ctx, backend)
+    elif backend_name == "tensorrt":
+        return _create_tensorrt_components(ctx, backend)
     else:
         raise ConfigurationError(
             f"Backend '{backend_name}' is not yet integrated with the orchestrator. "
-            f"Supported backends: pytorch, vllm."
+            f"Supported backends: pytorch, vllm, tensorrt."
         )
 
 
@@ -166,6 +168,56 @@ def _create_vllm_components(
     )
 
     # Create adapters that wrap the vLLM backend
+    model_loader = BackendModelLoaderAdapter(backend, runtime)
+    inference_engine = BackendInferenceEngineAdapter(backend)
+    metrics_collector = BackendMetricsCollectorAdapter(backend)
+
+    return ExperimentComponents(
+        model_loader=model_loader,
+        inference_engine=inference_engine,
+        metrics_collector=metrics_collector,
+        energy_backend=get_energy_backend("codecarbon"),
+        repository=FileSystemRepository(),
+        backend_name=backend.name,
+        backend_version=backend.version,
+    )
+
+
+def _create_tensorrt_components(
+    ctx: ExperimentContext, backend: InferenceBackend
+) -> ExperimentComponents:
+    """Create components for TensorRT-LLM backend.
+
+    TensorRT-LLM manages its own model loading, CUDA context, and batching.
+    Uses the same adapter pattern as vLLM.
+
+    Args:
+        ctx: Experiment context.
+        backend: TensorRT backend instance.
+
+    Returns:
+        ExperimentComponents configured for TensorRT-LLM.
+    """
+    from llm_energy_measure.core.energy_backends import get_backend as get_energy_backend
+    from llm_energy_measure.core.inference_backends.adapters import (
+        BackendInferenceEngineAdapter,
+        BackendMetricsCollectorAdapter,
+        BackendModelLoaderAdapter,
+    )
+    from llm_energy_measure.core.inference_backends.protocols import BackendRuntime
+    from llm_energy_measure.results.repository import FileSystemRepository
+
+    # Create runtime context for TensorRT
+    # TensorRT manages its own distribution, so we don't pass the accelerator
+    runtime = BackendRuntime(
+        device=None,  # TensorRT manages devices
+        process_index=ctx.process_index,
+        num_processes=ctx.num_processes,
+        is_main_process=ctx.is_main_process,
+        accelerator=None,  # TensorRT doesn't use Accelerate
+    )
+
+    # Create adapters that wrap the TensorRT backend
     model_loader = BackendModelLoaderAdapter(backend, runtime)
     inference_engine = BackendInferenceEngineAdapter(backend)
     metrics_collector = BackendMetricsCollectorAdapter(backend)

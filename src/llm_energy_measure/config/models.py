@@ -13,7 +13,11 @@ from pydantic import (
 )
 
 if TYPE_CHECKING:
-    from llm_energy_measure.config.backend_configs import PyTorchConfig, VLLMConfig
+    from llm_energy_measure.config.backend_configs import (
+        PyTorchConfig,
+        TensorRTConfig,
+        VLLMConfig,
+    )
 
 # Default dataset for experiments (AI Energy Score standardised benchmark)
 DEFAULT_DATASET = "ai-energy-score"
@@ -478,6 +482,10 @@ class ExperimentConfig(BaseModel):
         default=None,
         description="PyTorch-specific configuration (only used when backend=pytorch)",
     )
+    tensorrt: "TensorRTConfig | None" = Field(
+        default=None,
+        description="TensorRT-LLM configuration (only used when backend=tensorrt)",
+    )
 
     # Experiment tracking
     cycle_id: int | None = Field(default=None, description="Experiment cycle ID")
@@ -526,6 +534,11 @@ class ExperimentConfig(BaseModel):
                 f"pytorch config provided but backend is '{self.backend}'. "
                 "Set backend='pytorch' or remove pytorch config section."
             )
+        if self.tensorrt is not None and self.backend != "tensorrt":
+            raise ValueError(
+                f"tensorrt config provided but backend is '{self.backend}'. "
+                "Set backend='tensorrt' or remove tensorrt config section."
+            )
 
         return self
 
@@ -541,10 +554,18 @@ class ExperimentConfig(BaseModel):
 # Import here to avoid circular imports
 def _rebuild_experiment_config() -> None:
     """Rebuild ExperimentConfig to resolve forward references."""
-    from llm_energy_measure.config.backend_configs import PyTorchConfig, VLLMConfig
+    from llm_energy_measure.config.backend_configs import (
+        PyTorchConfig,
+        TensorRTConfig,
+        VLLMConfig,
+    )
 
     ExperimentConfig.model_rebuild(
-        _types_namespace={"VLLMConfig": VLLMConfig, "PyTorchConfig": PyTorchConfig}
+        _types_namespace={
+            "VLLMConfig": VLLMConfig,
+            "PyTorchConfig": PyTorchConfig,
+            "TensorRTConfig": TensorRTConfig,
+        }
     )
 
 

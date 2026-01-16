@@ -4,6 +4,7 @@
 #   Build base first:  docker compose build base
 #   PyTorch (default): docker compose run --rm pytorch llm-energy-measure --help
 #   vLLM:              docker compose run --rm vllm llm-energy-measure --help
+#   TensorRT:          docker compose run --rm tensorrt llm-energy-measure --help
 #   Development:       docker compose --profile dev run --rm pytorch-dev /bin/bash
 #
 # Examples:
@@ -13,11 +14,17 @@
 #   # vLLM backend
 #   docker compose run --rm vllm llm-energy-measure experiment config.yaml -d alpaca -n 100 --backend vllm
 #
+#   # TensorRT backend
+#   docker compose run --rm tensorrt llm-energy-measure experiment config.yaml -d alpaca -n 100 --backend tensorrt
+#
 #   # Development with PyTorch
 #   docker compose --profile dev run --rm pytorch-dev /bin/bash
 #
 #   # Development with vLLM
 #   docker compose --profile dev run --rm vllm-dev /bin/bash
+#
+#   # Development with TensorRT
+#   docker compose --profile dev run --rm tensorrt-dev /bin/bash
 
 # Shared configuration anchor
 x-common: &common
@@ -137,6 +144,45 @@ services:
     image: llm-energy-measure:vllm-dev
     depends_on:
       - base
+    entrypoint: ["/app/scripts/dev-entrypoint.sh"]
+    command: []
+
+  # ==========================================================================
+  # TensorRT-LLM Backend - High-performance compiled inference
+  # ==========================================================================
+  tensorrt:
+    <<: *common
+    # TensorRT-LLM requires shared memory for multiprocessing
+    ipc: host
+    volumes:
+      - ./configs:/app/configs:ro
+      - ./scripts:/app/scripts:ro
+      - ./results:/app/results
+      # Engine cache for compiled TensorRT engines
+      - ${TRT_ENGINE_CACHE:-~/.cache/tensorrt-engines}:/app/.cache/tensorrt-engines
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.tensorrt
+      target: runtime
+    image: llm-energy-measure:tensorrt
+    # Note: Uses NVIDIA's official TensorRT-LLM image, no base dependency
+
+  tensorrt-dev:
+    <<: *common
+    # TensorRT-LLM requires shared memory for multiprocessing
+    ipc: host
+    volumes:
+      - .:/app
+      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
+      # Engine cache for compiled TensorRT engines
+      - ${TRT_ENGINE_CACHE:-~/.cache/tensorrt-engines}:/app/.cache/tensorrt-engines
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.tensorrt
+      target: dev
+    image: llm-energy-measure:tensorrt-dev
+    # Note: Uses NVIDIA's official TensorRT-LLM image, no base dependency
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
     command: []
 

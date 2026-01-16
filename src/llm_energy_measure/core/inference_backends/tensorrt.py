@@ -1,0 +1,793 @@
+"""TensorRT-LLM inference backend.
+
+High-performance inference backend using NVIDIA TensorRT-LLM with compiled
+execution plans. Supports both pre-compiled engines and on-demand compilation
+from HuggingFace checkpoints.
+
+Key features:
+- Compiled inference plans optimised for specific GPU + configuration
+- Inflight batching for optimal throughput
+- Native tensor/pipeline parallelism
+- FP8/INT8/INT4 quantization support
+
+Config Mapping:
+- model_name → HF checkpoint for engine building
+- fp_precision → Build-time dtype
+- sharding.tensor_parallel_size → tp_size
+- tensorrt.engine_path → Pre-compiled engine (optional)
+- tensorrt.quantization.method → Quantization during build
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import time
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from loguru import logger
+
+from llm_energy_measure.core.inference_backends.protocols import (
+    BackendResult,
+    BackendRuntime,
+    ConfigWarning,
+    CudaManagement,
+    LaunchMode,
+    RuntimeCapabilities,
+)
+from llm_energy_measure.exceptions import (
+    BackendInferenceError,
+    BackendInitializationError,
+    BackendNotAvailableError,
+)
+
+if TYPE_CHECKING:
+    from llm_energy_measure.config.backend_configs import TensorRTConfig
+    from llm_energy_measure.config.models import ExperimentConfig
+    from llm_energy_measure.domain.model_info import ModelInfo
+
+
+# Default cache directory for compiled engines
+DEFAULT_ENGINE_CACHE_DIR = Path.home() / ".cache" / "llm-energy-measure" / "tensorrt-engines"
+
+# Parameters supported by TensorRT backend
+_SUPPORTED_PARAMS: set[str] = {
+    # Core
+    "model_name",
+    "fp_precision",
+    "max_input_tokens",
+    "max_output_tokens",
+    "min_output_tokens",
+    "random_seed",
+    # Batching (compile-time limits, runtime hints)
+    "batch_size",
+    "batching.batch_size",
+    "batching.max_tokens_per_batch",
+    # Note: batching.strategy is accepted but TRT uses inflight batching
+    "batching.strategy",
+    # Decoder/Generation
+    "decoder.preset",
+    "decoder.temperature",
+    "decoder.top_p",
+    "decoder.top_k",
+    "decoder.repetition_penalty",
+    # Note: min_p and no_repeat_ngram_size not supported
+    # Sharding (tensor parallelism)
+    "sharding.strategy",
+    "sharding.num_shards",
+    # Other
+    "save_outputs",
+    "num_input_prompts",
+    "gpus",
+    "num_processes",
+    # Streaming latency measurement
+    "streaming",
+    "streaming_warmup_requests",
+}
+
+# Parameters that require warnings
+_UNSUPPORTED_WITH_WARNING: dict[str, str] = {
+    "decoder.no_repeat_ngram_size": (
+        "no_repeat_ngram_size not supported by TensorRT-LLM. " "Use repetition_penalty instead."
+    ),
+    "decoder.min_p": "min_p not supported by TensorRT-LLM.",
+    "quantization.load_in_8bit": (
+        "BitsAndBytes 8-bit not supported. "
+        "Use tensorrt.quantization.method=int8_sq for TRT INT8."
+    ),
+    "quantization.load_in_4bit": (
+        "BitsAndBytes 4-bit not supported. "
+        "Use tensorrt.quantization.method=int4_awq or int4_gptq."
+    ),
+}
+
+
+def _check_tensorrt_available() -> bool:
+    """Check if TensorRT-LLM is installed and importable."""
+    try:
+        import tensorrt_llm  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def _get_tensorrt_version() -> str:
+    """Get TensorRT-LLM version string."""
+    try:
+        import tensorrt_llm
+
+        return f"tensorrt_llm={tensorrt_llm.__version__}"
+    except (ImportError, AttributeError):
+        return "tensorrt_llm=unknown"
+
+
+def _get_gpu_architecture() -> str:
+    """Get GPU compute capability string for cache key."""
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            props = torch.cuda.get_device_properties(0)
+            return f"sm_{props.major}{props.minor}"
+    except Exception:
+        pass
+    return "unknown"
+
+
+class EngineCacheManager:
+    """Manages TensorRT engine caching.
+
+    Engines are cached based on a composite key including:
+    - Model name and revision
+    - GPU architecture
+    - TensorRT-LLM version
+    - Build configuration (dtype, TP size, max lengths, quantization)
+    """
+
+    def __init__(self, cache_dir: Path | None = None):
+        """Initialise cache manager.
+
+        Args:
+            cache_dir: Directory for engine cache. Defaults to ~/.cache/llm-energy-measure/tensorrt-engines/
+        """
+        self.cache_dir = cache_dir or DEFAULT_ENGINE_CACHE_DIR
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def get_cache_key(self, config: ExperimentConfig) -> str:
+        """Generate cache key from configuration.
+
+        Args:
+            config: Experiment configuration.
+
+        Returns:
+            Hash string uniquely identifying this engine configuration.
+        """
+        trt_cfg: TensorRTConfig | None = config.tensorrt
+
+        key_components = {
+            "model": config.model_name,
+            "dtype": config.fp_precision,
+            "gpu_arch": _get_gpu_architecture(),
+            "trt_version": _get_tensorrt_version(),
+            "max_input": config.max_input_tokens,
+            "max_output": config.max_output_tokens,
+        }
+
+        if trt_cfg:
+            key_components.update(
+                {
+                    "max_batch": trt_cfg.max_batch_size,
+                    "tp_size": trt_cfg.tp_size or config.sharding_config.num_shards,
+                    "pp_size": trt_cfg.pp_size,
+                    "quant_method": trt_cfg.quantization.method,
+                    "builder_opt": trt_cfg.builder_opt_level,
+                }
+            )
+
+        # Create deterministic hash
+        key_str = json.dumps(key_components, sort_keys=True)
+        return hashlib.sha256(key_str.encode()).hexdigest()[:16]
+
+    def get_engine_path(self, config: ExperimentConfig) -> Path:
+        """Get path for cached engine.
+
+        Args:
+            config: Experiment configuration.
+
+        Returns:
+            Path to engine directory.
+        """
+        cache_key = self.get_cache_key(config)
+        model_name_safe = config.model_name.replace("/", "_")
+        return self.cache_dir / f"{model_name_safe}_{cache_key}"
+
+    def has_cached_engine(self, config: ExperimentConfig) -> bool:
+        """Check if a valid cached engine exists.
+
+        Args:
+            config: Experiment configuration.
+
+        Returns:
+            True if cached engine exists and is valid.
+        """
+        engine_path = self.get_engine_path(config)
+        if not engine_path.exists():
+            return False
+
+        # Check for required files
+        required_files = ["config.json", "rank0.engine"]
+        return all((engine_path / f).exists() for f in required_files)
+
+    def save_metadata(self, config: ExperimentConfig, build_time_sec: float) -> None:
+        """Save engine metadata.
+
+        Args:
+            config: Experiment configuration.
+            build_time_sec: Time taken to build the engine.
+        """
+        engine_path = self.get_engine_path(config)
+        metadata = {
+            "model_name": config.model_name,
+            "cache_key": self.get_cache_key(config),
+            "build_time_sec": build_time_sec,
+            "trt_version": _get_tensorrt_version(),
+            "gpu_arch": _get_gpu_architecture(),
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        with open(engine_path / "cache_metadata.json", "w") as f:
+            json.dump(metadata, f, indent=2)
+
+
+class TensorRTBackend:
+    """TensorRT-LLM inference backend with compiled execution plans.
+
+    TensorRT-LLM provides:
+    - Compiled inference plans optimised for specific GPU + configuration
+    - Inflight batching for optimal throughput
+    - Native tensor parallelism for multi-GPU inference
+    - FP8/INT8/INT4 quantization
+
+    Note: TensorRT-LLM manages its own model loading and CUDA context.
+    The BackendRuntime.accelerator field is ignored.
+    """
+
+    def __init__(self) -> None:
+        """Initialise backend (model loaded lazily in initialize())."""
+        self._executor: Any = None
+        self._tokenizer: Any = None
+        self._config: ExperimentConfig | None = None
+        self._runtime: BackendRuntime | None = None
+        self._model_info: ModelInfo | None = None
+        self._warmup_done: bool = False
+        self._cache_manager: EngineCacheManager | None = None
+        self._engine_path: Path | None = None
+
+    @property
+    def name(self) -> str:
+        """Backend identifier."""
+        return "tensorrt"
+
+    @property
+    def version(self) -> str:
+        """Backend version string."""
+        return _get_tensorrt_version()
+
+    def is_available(self) -> bool:
+        """Check if TensorRT-LLM is installed."""
+        return _check_tensorrt_available()
+
+    def get_runtime_capabilities(self) -> RuntimeCapabilities:
+        """Return TensorRT-LLM runtime requirements.
+
+        TensorRT-LLM manages its own CUDA context and uses MPI for
+        tensor parallelism. The orchestration layer MUST NOT call torch.cuda.*
+        functions before TensorRT initializes.
+        """
+        return RuntimeCapabilities(
+            launch_mode=LaunchMode.DIRECT,
+            cuda_management=CudaManagement.BACKEND,
+            supports_tensor_parallel=True,
+            supports_pipeline_parallel=False,  # Not in MVP
+            manages_own_batching=True,  # Inflight batching
+        )
+
+    def initialize(self, config: ExperimentConfig, runtime: BackendRuntime) -> None:
+        """Load or build TensorRT engine.
+
+        Args:
+            config: Experiment configuration.
+            runtime: Runtime context (device info largely ignored - TRT manages).
+
+        Raises:
+            BackendNotAvailableError: If TensorRT-LLM is not installed.
+            BackendInitializationError: If engine loading/building fails.
+        """
+        if not self.is_available():
+            raise BackendNotAvailableError(
+                "tensorrt", install_hint="pip install llm-energy-measure[tensorrt]"
+            )
+
+        self._config = config
+        self._runtime = runtime
+
+        trt_cfg: TensorRTConfig | None = config.tensorrt
+
+        # Determine cache directory
+        cache_dir = None
+        if trt_cfg and trt_cfg.engine_cache_dir:
+            cache_dir = Path(trt_cfg.engine_cache_dir)
+        self._cache_manager = EngineCacheManager(cache_dir)
+
+        try:
+            # Check for pre-compiled engine path
+            if trt_cfg and trt_cfg.engine_path:
+                engine_path = Path(trt_cfg.engine_path)
+                if not engine_path.exists():
+                    raise BackendInitializationError(
+                        f"Specified engine path does not exist: {engine_path}"
+                    )
+                self._engine_path = engine_path
+                logger.info(f"Using pre-compiled engine: {engine_path}")
+
+            # Check for cached engine
+            elif not (trt_cfg and trt_cfg.force_rebuild) and self._cache_manager.has_cached_engine(
+                config
+            ):
+                self._engine_path = self._cache_manager.get_engine_path(config)
+                logger.info(f"Using cached engine: {self._engine_path}")
+
+            # Build engine from HuggingFace checkpoint
+            else:
+                logger.info(f"Building TensorRT engine for {config.model_name}...")
+                self._engine_path = self._build_engine(config)
+                logger.info(f"Engine built and cached: {self._engine_path}")
+
+            # Load tokenizer
+            self._load_tokenizer(config)
+
+            # Initialize executor
+            self._initialize_executor(config)
+
+            # Perform warmup
+            self._perform_warmup()
+
+        except Exception as e:
+            raise BackendInitializationError(
+                f"Failed to initialize TensorRT with model '{config.model_name}': {e}"
+            ) from e
+
+    def _build_engine(self, config: ExperimentConfig) -> Path:
+        """Build TensorRT engine from HuggingFace checkpoint.
+
+        Args:
+            config: Experiment configuration.
+
+        Returns:
+            Path to built engine directory.
+        """
+        try:
+            from tensorrt_llm import LLM, BuildConfig
+        except ImportError as e:
+            raise BackendInitializationError(
+                "TensorRT-LLM not installed. Install with: pip install tensorrt-llm"
+            ) from e
+
+        trt_cfg: TensorRTConfig | None = config.tensorrt
+        assert self._cache_manager is not None, "Cache manager not initialized"
+        output_dir = self._cache_manager.get_engine_path(config)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Build configuration
+        build_config = BuildConfig()
+        build_config.max_batch_size = trt_cfg.max_batch_size if trt_cfg else 8
+        build_config.max_input_len = (
+            trt_cfg.max_input_len if trt_cfg and trt_cfg.max_input_len else config.max_input_tokens
+        )
+        build_config.max_seq_len = build_config.max_input_len + (
+            trt_cfg.max_output_len
+            if trt_cfg and trt_cfg.max_output_len
+            else config.max_output_tokens
+        )
+
+        if trt_cfg:
+            build_config.builder_opt = trt_cfg.builder_opt_level
+            if trt_cfg.strongly_typed:
+                build_config.strongly_typed = True
+
+        # Map precision
+        dtype_map = {
+            "float16": "float16",
+            "bfloat16": "bfloat16",
+            "float32": "float32",
+        }
+        dtype = dtype_map.get(config.fp_precision, "float16")
+
+        # Tensor parallelism
+        tp_size = 1
+        if trt_cfg and trt_cfg.tp_size:
+            tp_size = trt_cfg.tp_size
+        elif config.sharding_config.strategy == "tensor_parallel":
+            tp_size = config.sharding_config.num_shards
+
+        # Quantization
+        quantization = None
+        if trt_cfg and trt_cfg.quantization.method != "none":
+            quantization = self._map_quantization(trt_cfg.quantization.method)
+
+        logger.info(
+            f"Building engine: dtype={dtype}, tp_size={tp_size}, "
+            f"max_batch={build_config.max_batch_size}, quant={quantization}"
+        )
+
+        start_time = time.perf_counter()
+
+        # Use TensorRT-LLM's LLM class for building
+        llm = LLM(
+            model=config.model_name,
+            dtype=dtype,
+            tensor_parallel_size=tp_size,
+            quantization=quantization,
+            build_config=build_config,
+        )
+
+        # Save the engine
+        llm.save(str(output_dir))
+
+        build_time = time.perf_counter() - start_time
+        self._cache_manager.save_metadata(config, build_time)
+        logger.info(f"Engine built in {build_time:.1f}s")
+
+        return output_dir
+
+    def _map_quantization(self, method: str) -> str | None:
+        """Map quantization method to TensorRT-LLM format.
+
+        Args:
+            method: Quantization method from config.
+
+        Returns:
+            TensorRT-LLM quantization string or None.
+        """
+        mapping = {
+            "none": None,
+            "fp8": "fp8",
+            "int8_sq": "int8_sq",
+            "int8_weight_only": "int8_wo",
+            "int4_awq": "int4_awq",
+            "int4_gptq": "int4_gptq",
+        }
+        return mapping.get(method)
+
+    def _load_tokenizer(self, config: ExperimentConfig) -> None:
+        """Load tokenizer from HuggingFace.
+
+        Args:
+            config: Experiment configuration.
+        """
+        from transformers import AutoTokenizer
+
+        self._tokenizer = AutoTokenizer.from_pretrained(
+            config.model_name,
+            trust_remote_code=True,
+        )
+        if self._tokenizer.pad_token is None:
+            self._tokenizer.pad_token = self._tokenizer.eos_token
+
+    def _initialize_executor(self, config: ExperimentConfig) -> None:
+        """Initialize TensorRT-LLM executor.
+
+        Args:
+            config: Experiment configuration.
+        """
+        try:
+            from tensorrt_llm import LLM
+        except ImportError as e:
+            raise BackendInitializationError(
+                "TensorRT-LLM not installed. Install with: pip install tensorrt-llm"
+            ) from e
+
+        # Load from engine path
+        self._executor = LLM(model=str(self._engine_path))
+
+        logger.info(f"TensorRT executor initialized from {self._engine_path}")
+
+    def _perform_warmup(self) -> None:
+        """Perform warmup inference to trigger any JIT compilation."""
+        if self._warmup_done or self._executor is None:
+            return
+
+        logger.debug("Performing TensorRT warmup inference...")
+        warmup_prompt = "Hello"
+
+        try:
+            from tensorrt_llm import SamplingParams
+
+            warmup_params = SamplingParams(max_tokens=1)
+            self._executor.generate([warmup_prompt], warmup_params)
+            self._warmup_done = True
+            logger.debug("TensorRT warmup complete")
+        except Exception as e:
+            logger.warning(f"TensorRT warmup failed (non-fatal): {e}")
+
+    def run_inference(self, prompts: list[str], config: ExperimentConfig) -> BackendResult:
+        """Run inference using TensorRT-LLM.
+
+        Args:
+            prompts: List of input prompts.
+            config: Experiment configuration.
+
+        Returns:
+            BackendResult with token counts and timing.
+
+        Raises:
+            BackendInferenceError: If inference fails.
+        """
+        if self._executor is None:
+            raise BackendInferenceError("TensorRT not initialized. Call initialize() first.")
+
+        try:
+            return self._run_inference_batch(prompts, config)
+        except Exception as e:
+            raise BackendInferenceError(f"TensorRT inference failed: {e}") from e
+
+    def _run_inference_batch(self, prompts: list[str], config: ExperimentConfig) -> BackendResult:
+        """Run inference on all prompts."""
+
+        # Create sampling params
+        sampling_params = self._create_sampling_params(config)
+
+        start_time = time.perf_counter()
+
+        # Run inference
+        outputs = self._executor.generate(prompts, sampling_params)
+
+        inference_time = time.perf_counter() - start_time
+
+        return self._process_outputs(outputs, config, inference_time, len(prompts))
+
+    def _create_sampling_params(self, config: ExperimentConfig) -> Any:
+        """Create TensorRT-LLM sampling params from config.
+
+        Args:
+            config: Experiment configuration.
+
+        Returns:
+            Configured SamplingParams instance.
+        """
+        from tensorrt_llm import SamplingParams
+
+        decoder = config.decoder_config
+
+        params: dict[str, Any] = {
+            "max_tokens": config.max_output_tokens,
+        }
+
+        # Temperature
+        if decoder.temperature is not None:
+            params["temperature"] = decoder.temperature
+
+        # Top-p
+        if decoder.top_p is not None:
+            params["top_p"] = decoder.top_p
+
+        # Top-k
+        if decoder.top_k is not None and decoder.top_k > 0:
+            params["top_k"] = decoder.top_k
+
+        # Repetition penalty
+        if decoder.repetition_penalty is not None and decoder.repetition_penalty != 1.0:
+            params["repetition_penalty"] = decoder.repetition_penalty
+
+        # Seed
+        if config.random_seed is not None:
+            params["random_seed"] = config.random_seed
+
+        return SamplingParams(**params)
+
+    def _process_outputs(
+        self,
+        outputs: list[Any],
+        config: ExperimentConfig,
+        inference_time: float,
+        num_prompts: int,
+    ) -> BackendResult:
+        """Process TensorRT-LLM outputs into BackendResult."""
+        total_input_tokens = 0
+        total_output_tokens = 0
+        output_texts: list[str] = []
+
+        for output in outputs:
+            # Count tokens
+            if hasattr(output, "prompt_token_ids"):
+                total_input_tokens += len(output.prompt_token_ids)
+            if hasattr(output, "outputs") and output.outputs:
+                completion = output.outputs[0]
+                if hasattr(completion, "token_ids"):
+                    total_output_tokens += len(completion.token_ids)
+                if hasattr(completion, "text"):
+                    output_texts.append(completion.text)
+
+        total_tokens = total_input_tokens + total_output_tokens
+
+        logger.info(
+            f"TensorRT inference complete: {num_prompts} prompts, "
+            f"{total_tokens} tokens in {inference_time:.2f}s"
+        )
+
+        return BackendResult(
+            total_tokens=total_tokens,
+            input_tokens=total_input_tokens,
+            output_tokens=total_output_tokens,
+            inference_time_sec=inference_time,
+            output_texts=output_texts if config.save_outputs else None,
+            backend_metadata={
+                "backend": "tensorrt",
+                "version": self.version,
+                "engine_path": str(self._engine_path) if self._engine_path else None,
+                "inflight_batching": True,
+                "num_prompts": num_prompts,
+            },
+        )
+
+    def cleanup(self) -> None:
+        """Release TensorRT resources."""
+        if self._executor is not None:
+            logger.debug("Cleaning up TensorRT resources")
+            self._executor = None
+            self._tokenizer = None
+            self._warmup_done = False
+
+    def get_model_info(self) -> ModelInfo:
+        """Return model metadata.
+
+        Returns:
+            ModelInfo with model details.
+        """
+        from llm_energy_measure.domain.model_info import ModelInfo
+
+        if self._config is None:
+            return ModelInfo(
+                name="unknown",
+                num_parameters=0,
+                num_layers=0,
+                hidden_size=0,
+                num_attention_heads=0,
+                vocab_size=0,
+                model_type="unknown",
+                torch_dtype="float16",
+            )
+
+        # Try to get model config from HuggingFace
+        try:
+            from transformers import AutoConfig
+
+            hf_config = AutoConfig.from_pretrained(
+                self._config.model_name,
+                trust_remote_code=True,
+            )
+
+            # Estimate parameter count from config
+            param_count = 0
+            if hasattr(hf_config, "num_parameters"):
+                param_count = hf_config.num_parameters
+
+            return ModelInfo(
+                name=self._config.model_name,
+                num_parameters=param_count,
+                num_layers=getattr(hf_config, "num_hidden_layers", 0),
+                hidden_size=getattr(hf_config, "hidden_size", 0),
+                num_attention_heads=getattr(hf_config, "num_attention_heads", 0),
+                vocab_size=getattr(hf_config, "vocab_size", 0),
+                model_type=getattr(hf_config, "model_type", "unknown"),
+                torch_dtype=self._config.fp_precision,
+            )
+        except Exception:
+            return ModelInfo(
+                name=self._config.model_name,
+                num_parameters=0,
+                num_layers=0,
+                hidden_size=0,
+                num_attention_heads=0,
+                vocab_size=0,
+                model_type="unknown",
+                torch_dtype=self._config.fp_precision,
+            )
+
+    def get_supported_params(self) -> set[str]:
+        """Return parameters supported by TensorRT backend."""
+        return _SUPPORTED_PARAMS.copy()
+
+    def validate_config(self, config: ExperimentConfig) -> list[ConfigWarning]:
+        """Validate config compatibility with TensorRT.
+
+        Args:
+            config: Configuration to validate.
+
+        Returns:
+            List of warnings for incompatible or semantically different params.
+        """
+        warnings: list[ConfigWarning] = []
+        trt_cfg = config.tensorrt
+
+        # Check for unsupported quantization params
+        quant = config.quantization_config
+        if quant.load_in_8bit:
+            warnings.append(
+                ConfigWarning(
+                    param="quantization.load_in_8bit",
+                    message=_UNSUPPORTED_WITH_WARNING["quantization.load_in_8bit"],
+                    severity="error",
+                    suggestion="Use tensorrt.quantization.method=int8_sq",
+                    migration_hint="Move to tensorrt.quantization.method",
+                )
+            )
+        if quant.load_in_4bit:
+            warnings.append(
+                ConfigWarning(
+                    param="quantization.load_in_4bit",
+                    message=_UNSUPPORTED_WITH_WARNING["quantization.load_in_4bit"],
+                    severity="error",
+                    suggestion="Use tensorrt.quantization.method=int4_awq",
+                    migration_hint="Move to tensorrt.quantization.method",
+                )
+            )
+
+        # Check for unsupported decoder params
+        decoder = config.decoder_config
+        if decoder.no_repeat_ngram_size and decoder.no_repeat_ngram_size > 0:
+            warnings.append(
+                ConfigWarning(
+                    param="decoder.no_repeat_ngram_size",
+                    message=_UNSUPPORTED_WITH_WARNING["decoder.no_repeat_ngram_size"],
+                    severity="error",
+                    suggestion="Use repetition_penalty instead",
+                )
+            )
+        if decoder.min_p and decoder.min_p > 0:
+            warnings.append(
+                ConfigWarning(
+                    param="decoder.min_p",
+                    message=_UNSUPPORTED_WITH_WARNING["decoder.min_p"],
+                    severity="warning",
+                )
+            )
+
+        # Inform about batch_size semantics
+        warnings.append(
+            ConfigWarning(
+                param="batching.batch_size",
+                message="TensorRT uses compile-time batch limits. Runtime batching is managed by inflight batching.",
+                severity="info",
+            )
+        )
+
+        # Check INT8 calibration requirements
+        if (
+            trt_cfg
+            and trt_cfg.quantization.method == "int8_sq"
+            and trt_cfg.quantization.calibration is None
+        ):
+            warnings.append(
+                ConfigWarning(
+                    param="tensorrt.quantization.method",
+                    message="INT8 SmoothQuant requires calibration data for optimal accuracy.",
+                    severity="warning",
+                    suggestion="Add tensorrt.quantization.calibration.dataset",
+                )
+            )
+
+        # Check for FP8 on non-Hopper GPUs
+        if trt_cfg and trt_cfg.quantization.method == "fp8":
+            gpu_arch = _get_gpu_architecture()
+            if not gpu_arch.startswith("sm_9"):
+                warnings.append(
+                    ConfigWarning(
+                        param="tensorrt.quantization.method",
+                        message=f"FP8 quantization requires Hopper+ GPU (sm_90+). Detected: {gpu_arch}",
+                        severity="warning",
+                    )
+                )
+
+        return warnings

@@ -7087,6 +7087,18 @@ mpmath = ">=1.1.0,<1.4"
 dev = ["hypothesis (>=6.70.0)", "pytest (>=7.1.0)"]
 
 [[package]]
+name = "tensorrt-llm"
+version = "0.17.0.post1"
+description = "TensorRT-LLM: A TensorRT Toolbox for Large Language Models"
+optional = true
+python-versions = "<4,>=3.7"
+groups = ["main"]
+markers = "extra == \"tensorrt\" or extra == \"all\""
+files = [
+    {file = "tensorrt_llm-0.17.0.post1.tar.gz", hash = "sha256:678dfe04b2f638db32a63d966fdb84ff14087bf6aab9a16ff96de196cedec1d9"},
+]
+
+[[package]]
 name = "termcolor"
 version = "3.2.0"
 description = "ANSI color formatting for output in terminal"
@@ -8744,12 +8756,13 @@ test = ["big-O", "jaraco.functools", "jaraco.itertools", "jaraco.test", "more_it
 type = ["pytest-mypy"]
 
 [extras]
-all = ["accelerate", "bitsandbytes", "calflops", "commitizen", "mypy", "pre-commit", "pytest", "pytest-cov", "ruff", "transformers", "types-pyyaml", "vllm"]
+all = ["accelerate", "bitsandbytes", "calflops", "commitizen", "mypy", "pre-commit", "pytest", "pytest-cov", "ruff", "tensorrt-llm", "transformers", "types-pyyaml", "vllm"]
 dev = ["commitizen", "mypy", "pre-commit", "pytest", "pytest-cov", "ruff", "types-pyyaml"]
 pytorch = ["accelerate", "bitsandbytes", "calflops", "transformers"]
+tensorrt = ["tensorrt-llm"]
 vllm = ["vllm"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "7c5a5ec49b93b9ec830ed546f2aa808985cf463198164493e36be6b383357ee8"
+content-hash = "f1f8a530032d84cc35bd8a6cfd0b5c5efd1cb5b65d8842783b7cbfcc69f374ec"

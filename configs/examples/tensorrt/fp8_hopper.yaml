@@ -1,0 +1,37 @@
+# TensorRT-LLM FP8 configuration for Hopper GPUs (H100, H200)
+#
+# FP8 quantization provides ~2x speedup with minimal accuracy loss.
+# Requires NVIDIA Hopper architecture (sm_90) or newer.
+#
+# Usage:
+#   llm-energy-measure experiment configs/examples/tensorrt/fp8_hopper.yaml -n 100
+
+config_name: tensorrt_fp8_hopper
+model_name: meta-llama/Llama-2-7b-hf
+backend: tensorrt
+
+max_input_tokens: 2048
+max_output_tokens: 256
+num_input_prompts: 100
+gpus: [0]
+
+fp_precision: float16  # Base precision before FP8 quantization
+
+decoder:
+  preset: deterministic
+
+# TensorRT-specific configuration
+tensorrt:
+  # Build configuration
+  max_batch_size: 16
+  builder_opt_level: 3
+  strongly_typed: true  # Recommended for FP8
+
+  # FP8 quantization (Hopper+ only)
+  quantization:
+    method: fp8
+
+  # Runtime configuration
+  kv_cache_type: paged
+  enable_chunked_context: true
+  gpu_memory_utilization: 0.9
