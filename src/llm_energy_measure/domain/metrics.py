@@ -7,6 +7,163 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     pass
 
+# =============================================================================
+# Precision Metadata - For cross-backend comparisons
+# =============================================================================
+
+
+class PrecisionMetadata(BaseModel):
+    """Precision metadata for cross-backend efficiency comparisons.
+
+    Tracks the actual precision used for weights, activations, and compute
+    operations. This enables normalised efficiency comparisons across backends
+    using different quantization methods.
+
+    Precision factors for effective FLOPs:
+        FP32 = 1.0
+        FP16/BF16 = 1.0 (same effective ops)
+        FP8 = 0.5 (half precision)
+        INT8 = 0.5 (half precision)
+        INT4 = 0.25 (quarter precision)
+    """
+
+    weights: Literal["fp32", "fp16", "bf16", "fp8", "int8", "int4", "mixed"] = Field(
+        default="fp16",
+        description="Weight storage precision",
+    )
+    activations: Literal["fp32", "fp16", "bf16", "fp8", "int8"] = Field(
+        default="fp16",
+        description="Activation precision during inference",
+    )
+    compute: Literal["fp32", "fp16", "bf16", "fp8", "int8", "tf32"] = Field(
+        default="fp16",
+        description="Actual compute precision",
+    )
+
+    # For mixed precision - breakdown by layer type
+    mixed_precision_breakdown: dict[str, float] | None = Field(
+        default=None,
+        description="Breakdown of precision usage by layer type (for mixed precision)",
+    )
+
+    # Quality tracking
+    quantization_method: str | None = Field(
+        default=None,
+        description="Quantization method used (bitsandbytes, gptq, awq, trt_ptq, etc.)",
+    )
+    perplexity_degradation: float | None = Field(
+        default=None,
+        description="Estimated perplexity degradation vs FP16 baseline (0.0 = no degradation)",
+    )
+
+    @property
+    def precision_factor(self) -> float:
+        """Compute effective FLOPs factor based on precision.
+
+        Used to calculate effective_flops = theoretical_flops * precision_factor.
+        Lower precision = lower effective FLOPs (less computational work).
+        """
+        precision_factors = {
+            "fp32": 1.0,
+            "fp16": 1.0,
+            "bf16": 1.0,
+            "tf32": 1.0,
+            "fp8": 0.5,
+            "int8": 0.5,
+            "int4": 0.25,
+            "mixed": 0.75,  # Conservative estimate for mixed
+        }
+        return precision_factors.get(self.compute, 1.0)
+
+
+# =============================================================================
+# Normalised Metrics - For fair cross-backend comparisons
+# =============================================================================
+
+
+class NormalisedMetrics(BaseModel):
+    """Normalised efficiency metrics for cross-backend comparisons.
+
+    These metrics account for precision differences, enabling fair
+    comparison of efficiency across backends using different quantization.
+    """
+
+    # Primary efficiency metrics (higher = better)
+    tokens_per_joule: float = Field(
+        default=0.0,
+        description="Output tokens generated per Joule of energy",
+    )
+    tokens_per_effective_pflop: float = Field(
+        default=0.0,
+        description="Output tokens per effective peta-FLOP (precision-adjusted)",
+    )
+
+    # Power efficiency
+    tokens_per_second_per_watt: float = Field(
+        default=0.0,
+        description="Throughput normalised by power consumption",
+    )
+
+    # Raw vs effective FLOPs
+    theoretical_flops: float = Field(
+        default=0.0,
+        description="Theoretical FLOPs (2 * params * tokens)",
+    )
+    effective_flops: float = Field(
+        default=0.0,
+        description="Effective FLOPs accounting for precision (theoretical * precision_factor)",
+    )
+
+    # Precision metadata
+    precision: PrecisionMetadata | None = Field(
+        default=None,
+        description="Precision metadata used for normalisation",
+    )
+
+    @classmethod
+    def from_metrics(
+        cls,
+        total_output_tokens: int,
+        total_energy_j: float,
+        mean_power_w: float,
+        inference_time_sec: float,
+        theoretical_flops: float,
+        precision: PrecisionMetadata | None = None,
+    ) -> "NormalisedMetrics":
+        """Create normalised metrics from raw measurements.
+
+        Args:
+            total_output_tokens: Total output tokens generated.
+            total_energy_j: Total energy consumed in Joules.
+            mean_power_w: Mean power consumption in Watts.
+            inference_time_sec: Total inference time in seconds.
+            theoretical_flops: Theoretical FLOPs count.
+            precision: Precision metadata for normalisation.
+
+        Returns:
+            NormalisedMetrics with calculated efficiency values.
+        """
+        precision_factor = precision.precision_factor if precision else 1.0
+        effective = theoretical_flops * precision_factor
+
+        tokens_per_sec = total_output_tokens / inference_time_sec if inference_time_sec > 0 else 0.0
+
+        return cls(
+            tokens_per_joule=total_output_tokens / total_energy_j if total_energy_j > 0 else 0.0,
+            tokens_per_effective_pflop=(
+                total_output_tokens / (effective / 1e15) if effective > 0 else 0.0
+            ),
+            tokens_per_second_per_watt=tokens_per_sec / mean_power_w if mean_power_w > 0 else 0.0,
+            theoretical_flops=theoretical_flops,
+            effective_flops=effective,
+            precision=precision,
+        )
+
+
+# =============================================================================
+# FLOPs Result
+# =============================================================================
+
 
 class FlopsResult(BaseModel):
     """FLOPs estimation result with provenance tracking.
@@ -46,11 +203,11 @@ class InferenceMetrics(BaseModel):
     time_to_first_token_ms: float | None = Field(
         default=None, description="Average time to first token in ms (if available)"
     )
-    # Raw latency measurements for streaming mode (late aggregation)
+    # Raw latency measurements from streaming inference (for late aggregation)
     # Type is LatencyMeasurements from protocols.py (stored as Any to avoid circular import)
     latency_measurements: Any | None = Field(
         default=None,
-        description="Raw TTFT/ITL measurements from streaming inference (LatencyMeasurements)",
+        description="Raw TTFT/ITL samples from streaming inference (LatencyMeasurements)",
     )
 
     @property

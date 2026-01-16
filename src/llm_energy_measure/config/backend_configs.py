@@ -393,3 +393,204 @@ class PyTorchConfig(BaseModel):
         default_factory=dict,
         description="Additional kwargs passed to model.generate()",
     )
+
+
+# =============================================================================
+# TensorRT-LLM Backend Configuration
+# =============================================================================
+
+
+class TensorRTCalibrationConfig(BaseModel):
+    """TensorRT INT8/INT4 calibration configuration.
+
+    Required for post-training quantization (PTQ) with INT8 or INT4.
+    Calibration data is used to determine optimal scaling factors.
+    """
+
+    dataset: str = Field(
+        default="wikitext",
+        description="HuggingFace dataset name or local path for calibration data",
+    )
+    split: str = Field(
+        default="train",
+        description="Dataset split to use for calibration",
+    )
+    num_samples: int = Field(
+        default=512,
+        ge=64,
+        le=4096,
+        description="Number of samples for calibration (512-1024 typical)",
+    )
+    max_length: int = Field(
+        default=2048,
+        ge=128,
+        description="Maximum sequence length for calibration samples",
+    )
+
+
+class TensorRTQuantizationConfig(BaseModel):
+    """TensorRT-LLM quantization configuration.
+
+    Controls quantization method for TensorRT engine compilation.
+    Some methods require calibration data for optimal performance.
+
+    Methods:
+        none: No quantization (FP16/BF16)
+        fp8: FP8 quantization (Hopper+ GPUs, fast, minimal accuracy loss)
+        int8_sq: INT8 SmoothQuant (requires calibration)
+        int8_weight_only: INT8 weights, FP16 compute
+        int4_awq: INT4 AWQ (pre-quantized checkpoint)
+        int4_gptq: INT4 GPTQ (pre-quantized checkpoint)
+    """
+
+    method: Literal["none", "fp8", "int8_sq", "int8_weight_only", "int4_awq", "int4_gptq"] = Field(
+        default="none",
+        description="Quantization method for TRT engine",
+    )
+    calibration: TensorRTCalibrationConfig | None = Field(
+        default=None,
+        description="Calibration config (required for int8_sq)",
+    )
+
+
+class TensorRTConfig(BaseModel):
+    """TensorRT-LLM backend configuration.
+
+    TensorRT-LLM provides high-performance inference through compiled
+    execution plans. Engines can be pre-compiled or built on-demand.
+
+    Key concepts:
+    - Engine: Compiled inference plan optimised for specific GPU + config
+    - Build config: Compile-time settings (max batch/sequence lengths, etc.)
+    - Runtime config: Execution settings (KV cache, batching behaviour)
+
+    Usage in YAML:
+        backend: tensorrt
+        tensorrt:
+          max_batch_size: 8
+          builder_opt_level: 3
+          quantization:
+            method: fp8
+          enable_chunked_context: true
+    """
+
+    # -------------------------------------------------------------------------
+    # Engine Source
+    # -------------------------------------------------------------------------
+    engine_path: str | None = Field(
+        default=None,
+        description="Path to pre-compiled TRT engine directory. "
+        "If not set, engine will be built from HuggingFace checkpoint.",
+    )
+
+    # -------------------------------------------------------------------------
+    # Build Configuration (used when compiling from HF checkpoint)
+    # -------------------------------------------------------------------------
+    max_batch_size: int = Field(
+        default=8,
+        ge=1,
+        le=256,
+        description="Maximum batch size for compiled engine",
+    )
+    max_input_len: int | None = Field(
+        default=None,
+        description="Maximum input sequence length. Defaults to model's max_position_embeddings.",
+    )
+    max_output_len: int | None = Field(
+        default=None,
+        description="Maximum output tokens per request. Defaults to config.max_output_tokens.",
+    )
+    builder_opt_level: int = Field(
+        default=3,
+        ge=0,
+        le=5,
+        description="TensorRT builder optimization level (0-5). "
+        "Higher = slower build, faster inference.",
+    )
+    strongly_typed: bool = Field(
+        default=True,
+        description="Enable strong typing for FP8 precision (recommended for Hopper+)",
+    )
+
+    # -------------------------------------------------------------------------
+    # Quantization
+    # -------------------------------------------------------------------------
+    quantization: TensorRTQuantizationConfig = Field(
+        default_factory=TensorRTQuantizationConfig,
+        description="Quantization configuration",
+    )
+
+    # -------------------------------------------------------------------------
+    # Tensor Parallelism
+    # -------------------------------------------------------------------------
+    tp_size: int | None = Field(
+        default=None,
+        ge=1,
+        description="Tensor parallel size. If None, uses sharding.tensor_parallel_size.",
+    )
+    pp_size: int = Field(
+        default=1,
+        ge=1,
+        description="Pipeline parallel size (for very large models)",
+    )
+
+    # -------------------------------------------------------------------------
+    # Runtime Options
+    # -------------------------------------------------------------------------
+    kv_cache_type: Literal["paged", "continuous"] = Field(
+        default="paged",
+        description="KV cache management: paged (memory efficient) or continuous",
+    )
+    enable_chunked_context: bool = Field(
+        default=True,
+        description="Enable chunked context for long sequences",
+    )
+    max_num_tokens: int | None = Field(
+        default=None,
+        description="Maximum tokens per iteration (for inflight batching)",
+    )
+    gpu_memory_utilization: float = Field(
+        default=0.9,
+        ge=0.5,
+        le=0.99,
+        description="Fraction of GPU memory for KV cache (0.5-0.99)",
+    )
+
+    # -------------------------------------------------------------------------
+    # Cache Control
+    # -------------------------------------------------------------------------
+    engine_cache_dir: str | None = Field(
+        default=None,
+        description="Directory for caching compiled engines. "
+        "Defaults to ~/.cache/llm-energy-measure/tensorrt-engines/",
+    )
+    force_rebuild: bool = Field(
+        default=False,
+        description="Force engine rebuild even if cached version exists",
+    )
+
+    # -------------------------------------------------------------------------
+    # Speculative Decoding
+    # -------------------------------------------------------------------------
+    draft_model: str | None = Field(
+        default=None,
+        description="Draft model for speculative decoding",
+    )
+    num_draft_tokens: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Number of tokens to speculate per step",
+    )
+
+    # -------------------------------------------------------------------------
+    # Escape Hatches
+    # -------------------------------------------------------------------------
+    extra_build_args: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional kwargs passed to trtllm-build",
+    )
+    extra_runtime_args: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional kwargs passed to TRT-LLM runtime/executor",
+    )

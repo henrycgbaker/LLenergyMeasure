@@ -6,6 +6,9 @@ from pydantic import ValidationError
 from llm_energy_measure.config.backend_configs import (
     PyTorchAssistedGenerationConfig,
     PyTorchConfig,
+    TensorRTCalibrationConfig,
+    TensorRTConfig,
+    TensorRTQuantizationConfig,
     VLLMAttentionConfig,
     VLLMConfig,
     VLLMLoRAConfig,
@@ -526,3 +529,238 @@ class TestExperimentConfigBackendIntegration:
         assert restored.pytorch is not None
         assert restored.pytorch.attn_implementation == "flash_attention_2"
         assert restored.pytorch.assisted_generation is not None
+
+
+# =============================================================================
+# TensorRT Config Tests
+# =============================================================================
+
+
+class TestTensorRTCalibrationConfig:
+    """Tests for TensorRTCalibrationConfig."""
+
+    def test_defaults(self):
+        config = TensorRTCalibrationConfig()
+        assert config.dataset == "wikitext"
+        assert config.split == "train"
+        assert config.num_samples == 512
+        assert config.max_length == 2048
+
+    def test_valid_num_samples_range(self):
+        TensorRTCalibrationConfig(num_samples=64)
+        TensorRTCalibrationConfig(num_samples=4096)
+
+        with pytest.raises(ValidationError):
+            TensorRTCalibrationConfig(num_samples=63)
+
+        with pytest.raises(ValidationError):
+            TensorRTCalibrationConfig(num_samples=4097)
+
+    def test_custom_dataset(self):
+        config = TensorRTCalibrationConfig(
+            dataset="custom/dataset",
+            split="validation",
+            num_samples=1024,
+        )
+        assert config.dataset == "custom/dataset"
+        assert config.split == "validation"
+        assert config.num_samples == 1024
+
+
+class TestTensorRTQuantizationConfig:
+    """Tests for TensorRTQuantizationConfig."""
+
+    def test_defaults(self):
+        config = TensorRTQuantizationConfig()
+        assert config.method == "none"
+        assert config.calibration is None
+
+    def test_valid_methods(self):
+        for method in ["none", "fp8", "int8_sq", "int8_weight_only", "int4_awq", "int4_gptq"]:
+            config = TensorRTQuantizationConfig(method=method)
+            assert config.method == method
+
+    def test_invalid_method_rejected(self):
+        with pytest.raises(ValidationError):
+            TensorRTQuantizationConfig(method="invalid")
+
+    def test_int8_with_calibration(self):
+        config = TensorRTQuantizationConfig(
+            method="int8_sq",
+            calibration=TensorRTCalibrationConfig(
+                dataset="wikitext",
+                num_samples=512,
+            ),
+        )
+        assert config.method == "int8_sq"
+        assert config.calibration is not None
+        assert config.calibration.num_samples == 512
+
+
+class TestTensorRTConfig:
+    """Tests for TensorRTConfig."""
+
+    def test_defaults(self):
+        config = TensorRTConfig()
+        assert config.engine_path is None
+        assert config.max_batch_size == 8
+        assert config.max_input_len is None
+        assert config.max_output_len is None
+        assert config.builder_opt_level == 3
+        assert config.strongly_typed is True
+        assert config.tp_size is None
+        assert config.pp_size == 1
+        assert config.kv_cache_type == "paged"
+        assert config.enable_chunked_context is True
+        assert config.gpu_memory_utilization == 0.9
+        assert config.force_rebuild is False
+
+    def test_valid_batch_sizes(self):
+        TensorRTConfig(max_batch_size=1)
+        TensorRTConfig(max_batch_size=256)
+
+        with pytest.raises(ValidationError):
+            TensorRTConfig(max_batch_size=0)
+
+        with pytest.raises(ValidationError):
+            TensorRTConfig(max_batch_size=257)
+
+    def test_valid_builder_opt_levels(self):
+        for level in range(6):
+            config = TensorRTConfig(builder_opt_level=level)
+            assert config.builder_opt_level == level
+
+        with pytest.raises(ValidationError):
+            TensorRTConfig(builder_opt_level=-1)
+
+        with pytest.raises(ValidationError):
+            TensorRTConfig(builder_opt_level=6)
+
+    def test_valid_kv_cache_types(self):
+        for kv_type in ["paged", "continuous"]:
+            config = TensorRTConfig(kv_cache_type=kv_type)
+            assert config.kv_cache_type == kv_type
+
+        with pytest.raises(ValidationError):
+            TensorRTConfig(kv_cache_type="invalid")
+
+    def test_gpu_memory_utilization_range(self):
+        TensorRTConfig(gpu_memory_utilization=0.5)
+        TensorRTConfig(gpu_memory_utilization=0.99)
+
+        with pytest.raises(ValidationError):
+            TensorRTConfig(gpu_memory_utilization=0.49)
+
+        with pytest.raises(ValidationError):
+            TensorRTConfig(gpu_memory_utilization=1.0)
+
+    def test_tensor_parallelism(self):
+        config = TensorRTConfig(tp_size=4, pp_size=1)
+        assert config.tp_size == 4
+        assert config.pp_size == 1
+
+    def test_with_quantization(self):
+        config = TensorRTConfig(
+            quantization=TensorRTQuantizationConfig(
+                method="fp8",
+            )
+        )
+        assert config.quantization.method == "fp8"
+
+    def test_with_calibration(self):
+        config = TensorRTConfig(
+            quantization=TensorRTQuantizationConfig(
+                method="int8_sq",
+                calibration=TensorRTCalibrationConfig(
+                    dataset="wikitext",
+                    num_samples=1024,
+                ),
+            )
+        )
+        assert config.quantization.method == "int8_sq"
+        assert config.quantization.calibration is not None
+        assert config.quantization.calibration.num_samples == 1024
+
+    def test_extra_args(self):
+        config = TensorRTConfig(
+            extra_build_args={"custom_flag": True},
+            extra_runtime_args={"max_beam_width": 4},
+        )
+        assert config.extra_build_args["custom_flag"] is True
+        assert config.extra_runtime_args["max_beam_width"] == 4
+
+
+class TestTensorRTExperimentConfigIntegration:
+    """Tests for TensorRTConfig integration with ExperimentConfig."""
+
+    @pytest.fixture
+    def minimal_config(self):
+        return {
+            "config_name": "test",
+            "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+        }
+
+    def test_tensorrt_backend_with_config(self, minimal_config):
+        """TensorRT backend accepts tensorrt config."""
+        config = ExperimentConfig(
+            **minimal_config,
+            backend="tensorrt",
+            tensorrt=TensorRTConfig(
+                max_batch_size=16,
+                quantization=TensorRTQuantizationConfig(method="fp8"),
+            ),
+        )
+        assert config.backend == "tensorrt"
+        assert config.tensorrt is not None
+        assert config.tensorrt.max_batch_size == 16
+        assert config.tensorrt.quantization.method == "fp8"
+
+    def test_tensorrt_config_with_wrong_backend_rejected(self, minimal_config):
+        """TensorRT config rejected when backend is not tensorrt."""
+        with pytest.raises(ValueError, match="tensorrt config provided but backend is"):
+            ExperimentConfig(
+                **minimal_config,
+                backend="pytorch",
+                tensorrt=TensorRTConfig(),
+            )
+
+    def test_tensorrt_config_from_dict(self, minimal_config):
+        """TensorRT config can be specified as dict."""
+        config = ExperimentConfig(
+            **minimal_config,
+            backend="tensorrt",
+            tensorrt={
+                "max_batch_size": 32,
+                "builder_opt_level": 5,
+                "quantization": {"method": "fp8"},
+            },
+        )
+        assert config.tensorrt is not None
+        assert config.tensorrt.max_batch_size == 32
+        assert config.tensorrt.builder_opt_level == 5
+        assert config.tensorrt.quantization.method == "fp8"
+
+    def test_serialization_roundtrip_tensorrt(self, minimal_config):
+        """Full tensorrt config survives serialization roundtrip."""
+        config = ExperimentConfig(
+            **minimal_config,
+            backend="tensorrt",
+            tensorrt=TensorRTConfig(
+                max_batch_size=16,
+                builder_opt_level=4,
+                tp_size=2,
+                quantization=TensorRTQuantizationConfig(
+                    method="int8_sq",
+                    calibration=TensorRTCalibrationConfig(num_samples=256),
+                ),
+            ),
+        )
+        json_str = config.model_dump_json()
+        restored = ExperimentConfig.model_validate_json(json_str)
+        assert restored.tensorrt is not None
+        assert restored.tensorrt.max_batch_size == 16
+        assert restored.tensorrt.builder_opt_level == 4
+        assert restored.tensorrt.tp_size == 2
+        assert restored.tensorrt.quantization.method == "int8_sq"
+        assert restored.tensorrt.quantization.calibration is not None
+        assert restored.tensorrt.quantization.calibration.num_samples == 256
