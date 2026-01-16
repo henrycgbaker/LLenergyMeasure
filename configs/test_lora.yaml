@@ -1,0 +1,6 @@
+config_name: "lora-adapter-test"
+model_name: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+adapter: "TinyPixel/tinyllama-lora"
+backend: pytorch
+num_input_prompts: 5
+max_output_tokens: 32

@@ -181,6 +181,10 @@ def load_model_tokenizer(
     except Exception as e:
         raise ConfigurationError(f"Failed to load model {model_name}: {e}") from e
 
+    # Load and merge LoRA adapter if specified
+    if config.adapter:
+        model = _load_and_merge_adapter(model, config.adapter, dtype)
+
     # Apply post-load wrapping (needed for pipeline parallelism)
     model = strategy.wrap_model(model)
 
@@ -237,3 +241,51 @@ def _load_quantized_model(
         quantization_config=bnb_config,
         device_map="auto",
     )
+
+
+def _load_and_merge_adapter(
+    model: PreTrainedModel,
+    adapter_path: str,
+    dtype: torch.dtype,
+) -> PreTrainedModel:
+    """Load LoRA adapter and merge weights into base model.
+
+    Uses PEFT library to load adapter, then merges weights permanently.
+    After merging, the model behaves as a standard HuggingFace model.
+
+    Args:
+        model: Base model to apply adapter to.
+        adapter_path: HuggingFace Hub ID or local path to adapter.
+        dtype: Torch dtype for adapter loading.
+
+    Returns:
+        Model with merged adapter weights.
+
+    Raises:
+        ConfigurationError: If PEFT not installed or adapter load fails.
+    """
+    try:
+        from peft import PeftModel
+    except ImportError as e:
+        raise ConfigurationError(
+            "LoRA adapter loading requires the 'peft' package. " "Install with: pip install peft"
+        ) from e
+
+    logger.info(f"Loading LoRA adapter: {adapter_path}")
+
+    try:
+        # Load adapter weights
+        model = PeftModel.from_pretrained(
+            model,
+            adapter_path,
+            torch_dtype=dtype,
+        )
+
+        # Merge and unload - returns standard HF model
+        model = model.merge_and_unload()  # type: ignore[operator]
+
+        logger.info(f"LoRA adapter merged: {adapter_path}")
+        return model
+
+    except Exception as e:
+        raise ConfigurationError(f"Failed to load LoRA adapter '{adapter_path}': {e}") from e

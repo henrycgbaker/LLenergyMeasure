@@ -382,6 +382,10 @@ class ExperimentConfig(BaseModel):
     # Identity
     config_name: str = Field(..., min_length=1, description="Unique config identifier")
     model_name: str = Field(..., min_length=1, description="HuggingFace model name/path")
+    adapter: str | None = Field(
+        default=None,
+        description="LoRA adapter: HuggingFace Hub ID or local path",
+    )
 
     # Model properties
     is_encoder_decoder: bool = Field(default=False, description="Is encoder-decoder model")
