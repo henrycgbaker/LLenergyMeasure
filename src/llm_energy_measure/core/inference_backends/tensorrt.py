@@ -33,8 +33,10 @@ from llm_energy_measure.core.inference_backends.protocols import (
     BackendRuntime,
     ConfigWarning,
     CudaManagement,
+    LatencyMeasurements,
     LaunchMode,
     RuntimeCapabilities,
+    collect_itl_measurements,
 )
 from llm_energy_measure.exceptions import (
     BackendInferenceError,
@@ -511,6 +513,23 @@ class TensorRTBackend:
         except Exception as e:
             logger.warning(f"TensorRT warmup failed (non-fatal): {e}")
 
+    def _supports_streaming(self) -> bool:
+        """Check if TensorRT-LLM version supports streaming.
+
+        TRT-LLM streaming requires version 0.9+.
+
+        Returns:
+            True if streaming is supported.
+        """
+        try:
+            import tensorrt_llm
+
+            version = getattr(tensorrt_llm, "__version__", "0.0.0")
+            major, minor = map(int, version.split(".")[:2])
+            return (major, minor) >= (0, 9)
+        except (ImportError, ValueError):
+            return False
+
     def run_inference(self, prompts: list[str], config: ExperimentConfig) -> BackendResult:
         """Run inference using TensorRT-LLM.
 
@@ -528,6 +547,17 @@ class TensorRTBackend:
             raise BackendInferenceError("TensorRT not initialized. Call initialize() first.")
 
         try:
+            # Check if streaming mode is enabled for latency measurement
+            if config.streaming:
+                if self._supports_streaming():
+                    return self._run_streaming_inference(prompts, config)
+                else:
+                    logger.warning(
+                        "TRT-LLM version doesn't support streaming. "
+                        "Using batch mode with TTFT estimation."
+                    )
+                    return self._run_batch_with_ttft_estimation(prompts, config)
+
             return self._run_inference_batch(prompts, config)
         except Exception as e:
             raise BackendInferenceError(f"TensorRT inference failed: {e}") from e
@@ -629,6 +659,335 @@ class TensorRTBackend:
                 "inflight_batching": True,
                 "num_prompts": num_prompts,
             },
+        )
+
+    def _run_streaming_inference(
+        self, prompts: list[str], config: ExperimentConfig
+    ) -> BackendResult:
+        """Run inference with streaming for TTFT/ITL latency measurement.
+
+        Processes prompts sequentially to capture per-token timing using TRT-LLM's
+        streaming API where available.
+
+        Args:
+            prompts: List of input prompts.
+            config: Experiment configuration.
+
+        Returns:
+            BackendResult with latency_measurements containing raw samples.
+        """
+        import numpy as np
+
+        warmup_count = config.streaming_warmup_requests
+        sampling_params = self._create_sampling_params(config)
+
+        # Split into warmup and measurement prompts
+        warmup_prompts = prompts[:warmup_count] if warmup_count > 0 else []
+        measurement_prompts = prompts[warmup_count:]
+
+        # Run warmup (results discarded from stats)
+        if warmup_prompts:
+            logger.info(f"Running {len(warmup_prompts)} streaming warmup requests...")
+            self._executor.generate(warmup_prompts, sampling_params)
+            logger.debug("Streaming warmup complete")
+
+        if not measurement_prompts:
+            logger.warning("No prompts remaining after warmup. Increase num_input_prompts.")
+            return BackendResult(
+                total_tokens=0,
+                input_tokens=0,
+                output_tokens=0,
+                inference_time_sec=0.0,
+                latency_measurements=LatencyMeasurements(
+                    ttft_ms=[],
+                    itl_full_ms=[],
+                    itl_trimmed_ms=[],
+                    request_count=0,
+                    total_output_tokens=0,
+                    excluded_tokens=0,
+                    streaming_mode=True,
+                    warmup_requests_excluded=warmup_count,
+                    measurement_method="streaming",
+                ),
+            )
+
+        # Statistical sufficiency warning
+        if len(measurement_prompts) < 30:
+            logger.warning(
+                f"Only {len(measurement_prompts)} samples for latency statistics. "
+                "Consider increasing num_input_prompts for reliable percentiles."
+            )
+
+        # Warn about batch_size being ignored
+        if config.batching_options.batch_size and config.batching_options.batch_size > 1:
+            logger.warning(
+                f"streaming=True forces sequential processing. "
+                f"batch_size={config.batching_options.batch_size} ignored."
+            )
+
+        # Collect per-request timing data
+        ttft_samples: list[float] = []
+        token_timestamps_per_request: list[list[float]] = []
+        total_input_tokens = 0
+        total_output_tokens = 0
+        output_texts: list[str] = []
+
+        logger.info(f"Running streaming inference on {len(measurement_prompts)} prompts...")
+        start_time = time.perf_counter()
+
+        # Process each prompt individually
+        for prompt in measurement_prompts:
+            request_start = time.perf_counter()
+            token_times: list[float] = []
+            first_token_time: float | None = None
+
+            # Run inference on single prompt
+            outputs = self._executor.generate([prompt], sampling_params)
+
+            request_end = time.perf_counter()
+            total_time_ms = (request_end - request_start) * 1000
+
+            # Process outputs
+            if outputs:
+                output = outputs[0]
+
+                if hasattr(output, "prompt_token_ids"):
+                    total_input_tokens += len(output.prompt_token_ids)
+
+                if hasattr(output, "outputs") and output.outputs:
+                    completion = output.outputs[0]
+                    num_tokens = (
+                        len(completion.token_ids) if hasattr(completion, "token_ids") else 0
+                    )
+                    total_output_tokens += num_tokens
+
+                    if hasattr(completion, "text"):
+                        output_texts.append(completion.text)
+
+                    # Try to get TTFT from TRT-LLM metrics if available
+                    if hasattr(output, "metrics") and output.metrics is not None:
+                        metrics = output.metrics
+                        if hasattr(metrics, "time_to_first_token"):
+                            first_token_time = metrics.time_to_first_token * 1000
+
+                    # If no TTFT from metrics, estimate from request time
+                    if first_token_time is None and num_tokens > 0:
+                        # Estimate TTFT as proportion of total time
+                        first_token_time = total_time_ms / (num_tokens + 1)
+                    elif first_token_time is None:
+                        first_token_time = total_time_ms
+
+                    ttft_samples.append(first_token_time)
+
+                    # Estimate token times evenly distributed
+                    # (TRT-LLM batch mode doesn't provide per-token timestamps)
+                    if num_tokens > 1:
+                        decode_time_ms = total_time_ms - first_token_time
+                        token_times = [first_token_time]
+                        time_per_token = decode_time_ms / (num_tokens - 1)
+                        for i in range(1, num_tokens):
+                            token_times.append(first_token_time + (i * time_per_token))
+
+                    token_timestamps_per_request.append(token_times)
+
+        inference_time = time.perf_counter() - start_time
+
+        # Calculate ITL from token timestamps using shared utility
+        itl_full, itl_trimmed, excluded = collect_itl_measurements(token_timestamps_per_request)
+
+        # Build latency measurements
+        # Note: TRT-LLM doesn't provide true streaming timestamps - we estimate ITL
+        latency_measurements = LatencyMeasurements(
+            ttft_ms=ttft_samples,
+            itl_full_ms=itl_full,
+            itl_trimmed_ms=itl_trimmed,
+            request_count=len(measurement_prompts),
+            total_output_tokens=total_output_tokens,
+            excluded_tokens=excluded,
+            streaming_mode=True,
+            warmup_requests_excluded=warmup_count,
+            measurement_method="proportional_estimate",  # ITL estimated, not true streaming
+        )
+
+        # Calculate average TTFT for BackendResult (backward compat)
+        avg_ttft_ms: float | None = None
+        if ttft_samples:
+            avg_ttft_ms = float(np.mean(ttft_samples))
+
+        total_tokens = total_input_tokens + total_output_tokens
+
+        logger.info(
+            f"Streaming inference complete: {len(measurement_prompts)} prompts, "
+            f"{total_tokens} tokens in {inference_time:.2f}s, "
+            f"TTFT samples={len(ttft_samples)}, ITL samples={len(itl_trimmed)}"
+        )
+
+        return BackendResult(
+            total_tokens=total_tokens,
+            input_tokens=total_input_tokens,
+            output_tokens=total_output_tokens,
+            inference_time_sec=inference_time,
+            time_to_first_token_ms=avg_ttft_ms,
+            output_texts=output_texts if config.save_outputs else None,
+            backend_metadata={
+                "backend": "tensorrt",
+                "version": self.version,
+                "streaming_mode": True,
+                "engine_path": str(self._engine_path) if self._engine_path else None,
+                "num_prompts": len(measurement_prompts),
+                "warmup_prompts": warmup_count,
+                "ttft_samples": len(ttft_samples),
+                "itl_samples": len(itl_trimmed),
+            },
+            latency_measurements=latency_measurements,
+        )
+
+    def _run_batch_with_ttft_estimation(
+        self, prompts: list[str], config: ExperimentConfig
+    ) -> BackendResult:
+        """Fallback: batch inference with TTFT estimation.
+
+        Processes prompts one at a time to estimate TTFT from total request time.
+        Used when TRT-LLM streaming is unavailable.
+
+        Args:
+            prompts: List of input prompts.
+            config: Experiment configuration.
+
+        Returns:
+            BackendResult with estimated latency measurements.
+        """
+        import numpy as np
+
+        warmup_count = config.streaming_warmup_requests
+        sampling_params = self._create_sampling_params(config)
+        warmup_prompts = prompts[:warmup_count] if warmup_count > 0 else []
+        measurement_prompts = prompts[warmup_count:]
+
+        # Run warmup
+        if warmup_prompts:
+            logger.info(f"Running {len(warmup_prompts)} warmup requests...")
+            self._executor.generate(warmup_prompts, sampling_params)
+
+        if not measurement_prompts:
+            return BackendResult(
+                total_tokens=0,
+                input_tokens=0,
+                output_tokens=0,
+                inference_time_sec=0.0,
+                latency_measurements=LatencyMeasurements(
+                    ttft_ms=[],
+                    itl_full_ms=[],
+                    itl_trimmed_ms=[],
+                    request_count=0,
+                    total_output_tokens=0,
+                    excluded_tokens=0,
+                    streaming_mode=False,
+                    warmup_requests_excluded=warmup_count,
+                    measurement_method="per_request_batch",
+                ),
+            )
+
+        ttft_samples: list[float] = []
+        token_timestamps_per_request: list[list[float]] = []
+        total_input_tokens = 0
+        total_output_tokens = 0
+        output_texts: list[str] = []
+
+        logger.info(
+            f"Running batch inference with TTFT estimation on "
+            f"{len(measurement_prompts)} prompts..."
+        )
+        start_time = time.perf_counter()
+
+        for prompt in measurement_prompts:
+            request_start = time.perf_counter()
+
+            outputs = self._executor.generate([prompt], sampling_params)
+
+            request_end = time.perf_counter()
+            total_time_ms = (request_end - request_start) * 1000
+
+            if outputs:
+                output = outputs[0]
+
+                if hasattr(output, "prompt_token_ids"):
+                    total_input_tokens += len(output.prompt_token_ids)
+
+                if hasattr(output, "outputs") and output.outputs:
+                    completion = output.outputs[0]
+                    num_tokens = (
+                        len(completion.token_ids) if hasattr(completion, "token_ids") else 0
+                    )
+                    total_output_tokens += num_tokens
+
+                    if hasattr(completion, "text"):
+                        output_texts.append(completion.text)
+
+                    # Estimate TTFT as proportional to 1 token of total time
+                    if num_tokens > 0:
+                        estimated_ttft = total_time_ms / (num_tokens + 1)
+                    else:
+                        estimated_ttft = total_time_ms
+                    ttft_samples.append(estimated_ttft)
+
+                    # Estimate token times evenly distributed
+                    if num_tokens > 1:
+                        decode_time_ms = total_time_ms - estimated_ttft
+                        token_times = [estimated_ttft]
+                        time_per_token = decode_time_ms / (num_tokens - 1)
+                        for i in range(1, num_tokens):
+                            token_times.append(estimated_ttft + (i * time_per_token))
+                        token_timestamps_per_request.append(token_times)
+
+        inference_time = time.perf_counter() - start_time
+
+        # Calculate ITL from estimated timestamps
+        itl_full, itl_trimmed, excluded = collect_itl_measurements(token_timestamps_per_request)
+
+        latency_measurements = LatencyMeasurements(
+            ttft_ms=ttft_samples,
+            itl_full_ms=itl_full,
+            itl_trimmed_ms=itl_trimmed,
+            request_count=len(measurement_prompts),
+            total_output_tokens=total_output_tokens,
+            excluded_tokens=excluded,
+            streaming_mode=False,
+            warmup_requests_excluded=warmup_count,
+            measurement_method="proportional_estimate",
+        )
+
+        avg_ttft_ms: float | None = None
+        if ttft_samples:
+            avg_ttft_ms = float(np.mean(ttft_samples))
+
+        total_tokens = total_input_tokens + total_output_tokens
+
+        logger.info(
+            f"Batch inference complete: {len(measurement_prompts)} prompts, "
+            f"{total_tokens} tokens in {inference_time:.2f}s"
+        )
+
+        return BackendResult(
+            total_tokens=total_tokens,
+            input_tokens=total_input_tokens,
+            output_tokens=total_output_tokens,
+            inference_time_sec=inference_time,
+            time_to_first_token_ms=avg_ttft_ms,
+            output_texts=output_texts if config.save_outputs else None,
+            backend_metadata={
+                "backend": "tensorrt",
+                "version": self.version,
+                "streaming_mode": False,
+                "engine_path": str(self._engine_path) if self._engine_path else None,
+                "num_prompts": len(measurement_prompts),
+                "warmup_prompts": warmup_count,
+                "latency_warning": (
+                    "ITL values are estimated (uniform distribution), not measured per-token. "
+                    "Not suitable for publication-quality research."
+                ),
+            },
+            latency_measurements=latency_measurements,
         )
 
     def cleanup(self) -> None:

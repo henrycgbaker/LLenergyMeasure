@@ -107,6 +107,9 @@ def _create_pytorch_components(
 ) -> ExperimentComponents:
     """Create components for PyTorch/Transformers backend.
 
+    Uses the adapter pattern to route through PyTorchBackend.run_inference(),
+    which supports streaming latency measurement (TTFT/ITL).
+
     Args:
         ctx: Experiment context.
         backend: PyTorch backend instance.
@@ -115,17 +118,33 @@ def _create_pytorch_components(
         ExperimentComponents configured for PyTorch.
     """
     from llm_energy_measure.core.energy_backends import get_backend as get_energy_backend
-    from llm_energy_measure.core.implementations import (
-        HuggingFaceModelLoader,
-        ThroughputMetricsCollector,
-        TransformersInferenceEngine,
+    from llm_energy_measure.core.inference_backends.adapters import (
+        BackendInferenceEngineAdapter,
+        BackendMetricsCollectorAdapter,
+        BackendModelLoaderAdapter,
     )
+    from llm_energy_measure.core.inference_backends.protocols import BackendRuntime
     from llm_energy_measure.results.repository import FileSystemRepository
 
+    # Create runtime context for PyTorch
+    runtime = BackendRuntime(
+        device=ctx.device,
+        process_index=ctx.process_index,
+        num_processes=ctx.num_processes,
+        is_main_process=ctx.is_main_process,
+        accelerator=ctx.accelerator,
+    )
+
+    # Create adapters that wrap the PyTorch backend
+    # This enables streaming latency measurement via backend.run_inference()
+    model_loader = BackendModelLoaderAdapter(backend, runtime)
+    inference_engine = BackendInferenceEngineAdapter(backend)
+    metrics_collector = BackendMetricsCollectorAdapter(backend)
+
     return ExperimentComponents(
-        model_loader=HuggingFaceModelLoader(),
-        inference_engine=TransformersInferenceEngine(ctx.accelerator),
-        metrics_collector=ThroughputMetricsCollector(ctx.accelerator),
+        model_loader=model_loader,
+        inference_engine=inference_engine,
+        metrics_collector=metrics_collector,
         energy_backend=get_energy_backend("codecarbon"),
         repository=FileSystemRepository(),
         backend_name=backend.name,

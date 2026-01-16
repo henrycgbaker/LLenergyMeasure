@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     pass
 
+
 # =============================================================================
 # Precision Metadata - For cross-backend comparisons
 # =============================================================================
@@ -203,7 +204,7 @@ class InferenceMetrics(BaseModel):
     time_to_first_token_ms: float | None = Field(
         default=None, description="Average time to first token in ms (if available)"
     )
-    # Raw latency measurements from streaming inference (for late aggregation)
+    # Raw latency measurements for streaming mode (late aggregation)
     # Type is LatencyMeasurements from protocols.py (stored as Any to avoid circular import)
     latency_measurements: Any | None = Field(
         default=None,

@@ -182,28 +182,43 @@ def _display_config_summary(
     - Dim: Default values
     """
     console.print(f"\n[bold]Experiment: {config.config_name}[/bold]")
-
-    # Core settings
-    _print_value("model", config.model_name, False)
-    _print_value(
-        "processes", f"{config.num_processes} on GPUs {config.gpu_list}", config.num_processes == 1
-    )
-    _print_value("max_input_tokens", config.max_input_tokens, config.max_input_tokens == 512)
-    _print_value("max_output_tokens", config.max_output_tokens, config.max_output_tokens == 128)
-    _print_value("min_output_tokens", config.min_output_tokens, config.min_output_tokens == 0)
-    _print_value("num_input_prompts", config.num_input_prompts, config.num_input_prompts == 1)
-    _print_value("fp_precision", config.fp_precision, config.fp_precision == "float16")
-    _print_value("backend", config.backend, config.backend == "pytorch")
-    _print_value("task_type", config.task_type, config.task_type == "text_generation")
-    _print_value(
-        "inference_type", config.inference_type, config.inference_type == "pure_generative"
-    )
-    _print_value("num_cycles", config.num_cycles, config.num_cycles == 1)
-    _print_value("query_rate", config.query_rate, config.query_rate == 1.0)
-    _print_value("random_seed", config.random_seed, config.random_seed is None)
-
     if preset_name:
         console.print(f"  [cyan]Preset: {preset_name}[/cyan]")
+
+    # Core settings
+    console.print("  [bold]core:[/bold]")
+    _print_value("model", config.model_name, False, indent=4)
+    _print_value("backend", config.backend, config.backend == "pytorch", indent=4)
+    _print_value("precision", config.fp_precision, config.fp_precision == "float16", indent=4)
+    _print_value(
+        "processes",
+        f"{config.num_processes} on GPUs {config.gpu_list}",
+        config.num_processes == 1,
+        indent=4,
+    )
+    _print_value("task", config.task_type, config.task_type == "text_generation", indent=4)
+    _print_value(
+        "inference", config.inference_type, config.inference_type == "pure_generative", indent=4
+    )
+    _print_value("seed", config.random_seed, config.random_seed is None, indent=4)
+
+    # Token/prompt settings
+    console.print("  [bold]tokens:[/bold]")
+    _print_value("num_prompts", config.num_input_prompts, config.num_input_prompts == 1, indent=4)
+    _print_value("max_input", config.max_input_tokens, config.max_input_tokens == 512, indent=4)
+    _print_value("max_output", config.max_output_tokens, config.max_output_tokens == 128, indent=4)
+    _print_value("min_output", config.min_output_tokens, config.min_output_tokens == 0, indent=4)
+
+    # Streaming settings
+    console.print("  [bold]streaming:[/bold]")
+    _print_value("enabled", config.streaming, config.streaming is False, indent=4)
+    if config.streaming:
+        _print_value(
+            "warmup_requests",
+            config.streaming_warmup_requests,
+            config.streaming_warmup_requests == 2,
+            indent=4,
+        )
 
     # Batching
     console.print("  [bold]batching:[/bold]")
@@ -223,13 +238,15 @@ def _display_config_summary(
     _print_value("strategy", shard.strategy, shard.strategy == "none", indent=4)
     _print_value("num_shards", shard.num_shards, shard.num_shards == 1, indent=4)
 
-    # Traffic simulation
-    console.print("  [bold]traffic_simulation:[/bold]")
+    # Traffic/pacing settings
+    console.print("  [bold]traffic:[/bold]")
+    _print_value("query_rate", config.query_rate, config.query_rate == 1.0, indent=4)
     sim = config.latency_simulation
-    _print_value("enabled", sim.enabled, sim.enabled is False, indent=4)
-    _print_value("mode", sim.mode, sim.mode == "poisson", indent=4)
-    _print_value("target_qps", sim.target_qps, sim.target_qps == 1.0, indent=4)
-    _print_value("seed", sim.seed, sim.seed is None, indent=4)
+    _print_value("simulation", sim.enabled, sim.enabled is False, indent=4)
+    if sim.enabled:
+        _print_value("mode", sim.mode, sim.mode == "poisson", indent=4)
+        _print_value("target_qps", sim.target_qps, sim.target_qps == 1.0, indent=4)
+        _print_value("sim_seed", sim.seed, sim.seed is None, indent=4)
 
     # Decoder config
     console.print("  [bold]decoder:[/bold]")
@@ -279,13 +296,17 @@ def _display_config_summary(
 
     # Schedule config
     console.print("  [bold]schedule:[/bold]")
+    _print_value("cycles", config.num_cycles, config.num_cycles == 1, indent=4)
     sched = config.schedule_config
-    _print_value("enabled", sched.enabled, sched.enabled is False, indent=4)
-    _print_value("interval", sched.interval, sched.interval is None, indent=4)
-    _print_value("at", sched.at, sched.at is None, indent=4)
-    days_str = ", ".join(sched.days) if sched.days else None
-    _print_value("days", days_str, sched.days is None, indent=4)
-    _print_value("total_duration", sched.total_duration, sched.total_duration == "24h", indent=4)
+    _print_value("cron_enabled", sched.enabled, sched.enabled is False, indent=4)
+    if sched.enabled:
+        _print_value("interval", sched.interval, sched.interval is None, indent=4)
+        _print_value("at", sched.at, sched.at is None, indent=4)
+        days_str = ", ".join(sched.days) if sched.days else None
+        _print_value("days", days_str, sched.days is None, indent=4)
+        _print_value(
+            "total_duration", sched.total_duration, sched.total_duration == "24h", indent=4
+        )
 
     # Prompt source (if configured)
     if config.prompt_source is not None:
@@ -577,6 +598,20 @@ def experiment(
         int | None,
         typer.Option("--cycles", "-c", help="Number of cycles for statistical robustness (1-10)"),
     ] = None,
+    # Streaming latency measurement
+    streaming: Annotated[
+        bool | None,
+        typer.Option(
+            "--streaming/--no-streaming",
+            help="Enable streaming for TTFT/ITL latency measurement",
+        ),
+    ] = None,
+    streaming_warmup: Annotated[
+        int | None,
+        typer.Option(
+            "--streaming-warmup", help="Number of warmup requests for streaming (default: 3)"
+        ),
+    ] = None,
     # DEPRECATED: Testable params - use YAML config for formal experiments
     batch_size: Annotated[
         int | None,
@@ -800,6 +835,10 @@ def experiment(
             cli_overrides_dict["random_seed"] = seed
         if backend is not None:
             cli_overrides_dict["backend"] = backend
+        if streaming is not None:
+            cli_overrides_dict["streaming"] = streaming
+        if streaming_warmup is not None:
+            cli_overrides_dict["streaming_warmup_requests"] = streaming_warmup
 
         # Deprecated testable params - warn but still apply
         if batch_size is not None:
@@ -2333,46 +2372,73 @@ def _show_effective_config(
     table.add_column("Value")
 
     # =================================================================
-    # Core settings (always shown)
+    # Core settings
     # =================================================================
-    table.add_row(*_format_dict_field("model_name", config.get("model_name", "N/A"), None))
-    table.add_row(*_format_dict_field("num_processes", config.get("num_processes", 1), 1))
-    table.add_row(*_format_dict_field("gpu_list", config.get("gpu_list", [0]), [0]))
-    table.add_row(*_format_dict_field("max_input_tokens", config.get("max_input_tokens", 512), 512))
+    _add_section_header(table, "core")
+    table.add_row(*_format_dict_field("model", config.get("model_name", "N/A"), None, nested=True))
     table.add_row(
-        *_format_dict_field("max_output_tokens", config.get("max_output_tokens", 128), 128)
+        *_format_dict_field("backend", config.get("backend", "pytorch"), "pytorch", nested=True)
     )
-    table.add_row(*_format_dict_field("min_output_tokens", config.get("min_output_tokens", 0), 0))
-    table.add_row(*_format_dict_field("num_input_prompts", config.get("num_input_prompts", 1), 1))
-    table.add_row(
-        *_format_dict_field("fp_precision", config.get("fp_precision", "float16"), "float16")
-    )
-    table.add_row(*_format_dict_field("backend", config.get("backend", "pytorch"), "pytorch"))
     table.add_row(
         *_format_dict_field(
-            "task_type", config.get("task_type", "text_generation"), "text_generation"
+            "precision", config.get("fp_precision", "float16"), "float16", nested=True
+        )
+    )
+    num_procs = config.get("num_processes", 1)
+    gpu_list = config.get("gpu_list", [0])
+    table.add_row(
+        *_format_dict_field(
+            "processes", f"{num_procs} on GPUs {gpu_list}", "1 on GPUs [0]", nested=True
         )
     )
     table.add_row(
         *_format_dict_field(
-            "inference_type", config.get("inference_type", "pure_generative"), "pure_generative"
+            "task", config.get("task_type", "text_generation"), "text_generation", nested=True
         )
     )
-    table.add_row(
-        *_format_dict_field("is_encoder_decoder", config.get("is_encoder_decoder", False), False)
-    )
-    table.add_row(*_format_dict_field("save_outputs", config.get("save_outputs", False), False))
     table.add_row(
         *_format_dict_field(
-            "decode_token_to_text", config.get("decode_token_to_text", False), False
+            "inference",
+            config.get("inference_type", "pure_generative"),
+            "pure_generative",
+            nested=True,
         )
     )
-    table.add_row(*_format_dict_field("num_cycles", config.get("num_cycles", 1), 1))
-    table.add_row(*_format_dict_field("query_rate", config.get("query_rate", 1.0), 1.0))
-    table.add_row(*_format_dict_field("random_seed", config.get("random_seed"), None))
+    table.add_row(*_format_dict_field("seed", config.get("random_seed"), None, nested=True))
 
     # =================================================================
-    # Batching config (always shown)
+    # Token settings
+    # =================================================================
+    _add_section_header(table, "tokens")
+    table.add_row(
+        *_format_dict_field("num_prompts", config.get("num_input_prompts", 1), 1, nested=True)
+    )
+    table.add_row(
+        *_format_dict_field("max_input", config.get("max_input_tokens", 512), 512, nested=True)
+    )
+    table.add_row(
+        *_format_dict_field("max_output", config.get("max_output_tokens", 128), 128, nested=True)
+    )
+    table.add_row(
+        *_format_dict_field("min_output", config.get("min_output_tokens", 0), 0, nested=True)
+    )
+
+    # =================================================================
+    # Streaming settings
+    # =================================================================
+    _add_section_header(table, "streaming")
+    table.add_row(
+        *_format_dict_field("enabled", config.get("streaming", False), False, nested=True)
+    )
+    if config.get("streaming", False):
+        table.add_row(
+            *_format_dict_field(
+                "warmup_requests", config.get("streaming_warmup_requests", 2), 2, nested=True
+            )
+        )
+
+    # =================================================================
+    # Batching config
     # =================================================================
     _add_section_header(table, "batching")
     batch = config.get("batching_options", {})
@@ -2387,7 +2453,7 @@ def _show_effective_config(
     )
 
     # =================================================================
-    # Sharding config (always shown)
+    # Sharding config
     # =================================================================
     _add_section_header(table, "sharding")
     shard = config.get("sharding_config", {})
@@ -2397,37 +2463,45 @@ def _show_effective_config(
     table.add_row(*_format_dict_field("num_shards", shard.get("num_shards", 1), 1, nested=True))
 
     # =================================================================
-    # Traffic simulation (always shown)
+    # Traffic/pacing settings
     # =================================================================
-    _add_section_header(table, "traffic_simulation")
+    _add_section_header(table, "traffic")
+    table.add_row(
+        *_format_dict_field("query_rate", config.get("query_rate", 1.0), 1.0, nested=True)
+    )
     latency = config.get("latency_simulation", {})
-    table.add_row(*_format_dict_field("enabled", latency.get("enabled", False), False, nested=True))
     table.add_row(
-        *_format_dict_field("mode", latency.get("mode", "poisson"), "poisson", nested=True)
+        *_format_dict_field("simulation", latency.get("enabled", False), False, nested=True)
     )
-    table.add_row(
-        *_format_dict_field("target_qps", latency.get("target_qps", 1.0), 1.0, nested=True)
-    )
-    table.add_row(*_format_dict_field("seed", latency.get("seed"), None, nested=True))
+    if latency.get("enabled", False):
+        table.add_row(
+            *_format_dict_field("mode", latency.get("mode", "poisson"), "poisson", nested=True)
+        )
+        table.add_row(
+            *_format_dict_field("target_qps", latency.get("target_qps", 1.0), 1.0, nested=True)
+        )
+        table.add_row(*_format_dict_field("sim_seed", latency.get("seed"), None, nested=True))
 
     # =================================================================
-    # Schedule config (always shown)
+    # Schedule config
     # =================================================================
     _add_section_header(table, "schedule")
+    table.add_row(*_format_dict_field("cycles", config.get("num_cycles", 1), 1, nested=True))
     schedule = config.get("schedule_config", {})
     table.add_row(
-        *_format_dict_field("enabled", schedule.get("enabled", False), False, nested=True)
+        *_format_dict_field("cron_enabled", schedule.get("enabled", False), False, nested=True)
     )
-    table.add_row(*_format_dict_field("interval", schedule.get("interval"), None, nested=True))
-    table.add_row(*_format_dict_field("at", schedule.get("at"), None, nested=True))
-    days = schedule.get("days")
-    days_str = ", ".join(days) if days else None
-    table.add_row(*_format_dict_field("days", days_str, None, nested=True))
-    table.add_row(
-        *_format_dict_field(
-            "total_duration", schedule.get("total_duration", "24h"), "24h", nested=True
+    if schedule.get("enabled", False):
+        table.add_row(*_format_dict_field("interval", schedule.get("interval"), None, nested=True))
+        table.add_row(*_format_dict_field("at", schedule.get("at"), None, nested=True))
+        days = schedule.get("days")
+        days_str = ", ".join(days) if days else None
+        table.add_row(*_format_dict_field("days", days_str, None, nested=True))
+        table.add_row(
+            *_format_dict_field(
+                "total_duration", schedule.get("total_duration", "24h"), "24h", nested=True
+            )
         )
-    )
 
     # =================================================================
     # Decoder config (always shown)
