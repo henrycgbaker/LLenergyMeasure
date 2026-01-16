@@ -230,6 +230,13 @@ class AggregatedResult(BaseModel):
         description="Config validation warnings that were present at runtime",
     )
 
+    # Streaming latency statistics (computed at aggregation time from raw measurements)
+    # Type is LatencyStatistics from protocols.py (stored as Any to avoid circular import)
+    latency_stats: Any | None = Field(
+        default=None,
+        description="Computed TTFT/ITL statistics from streaming inference (LatencyStatistics)",
+    )
+
     model_config = {"frozen": True}
 
     @property

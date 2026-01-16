@@ -129,6 +129,7 @@ class BackendInferenceEngineAdapter:
             tokens_per_second=result.tokens_per_second,
             latency_per_token_ms=result.latency_per_token_ms,
             time_to_first_token_ms=result.time_to_first_token_ms,
+            latency_measurements=result.latency_measurements,
         )
 
         return BackendInferenceResult(

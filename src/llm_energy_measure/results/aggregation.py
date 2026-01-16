@@ -5,10 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from llm_energy_measure.constants import COMPLETION_MARKER_PREFIX
+from llm_energy_measure.core.inference_backends.protocols import (
+    LatencyMeasurements,
+    LatencyStatistics,
+)
 from llm_energy_measure.domain.experiment import (
     AggregatedResult,
     AggregationMetadata,
@@ -228,6 +233,29 @@ def aggregate_results(
         warnings=warnings,
     )
 
+    # Aggregate latency measurements if present (streaming mode)
+    latency_stats: LatencyStatistics | None = None
+    latency_measurements: list[LatencyMeasurements] = []
+    for r in raw_results:
+        lm = r.inference_metrics.latency_measurements
+        if lm is not None:
+            # Handle both LatencyMeasurements instance and dict (from JSON deserialization)
+            if isinstance(lm, LatencyMeasurements):
+                latency_measurements.append(lm)
+            elif isinstance(lm, dict) and "ttft_ms" in lm:
+                # Convert dict to LatencyMeasurements
+                latency_measurements.append(LatencyMeasurements(**lm))
+
+    if latency_measurements:
+        latency_stats = aggregate_latency_measurements(latency_measurements)
+        if latency_stats:
+            logger.info(
+                f"Latency stats: TTFT mean={latency_stats.ttft_mean_ms:.1f}ms, "
+                f"ITL mean={latency_stats.itl_mean_ms:.1f}ms"
+                if latency_stats.itl_mean_ms
+                else ""
+            )
+
     logger.info(
         f"Aggregated {num_processes} processes: "
         f"tokens={total_tokens}, energy={total_energy_j:.2f}J, "
@@ -265,6 +293,7 @@ def aggregate_results(
         effective_config=effective_config,
         cli_overrides=cli_overrides,
         config_warnings=config_warnings,
+        latency_stats=latency_stats,
     )
 
 
@@ -334,3 +363,84 @@ def calculate_efficiency_metrics(result: AggregatedResult) -> dict[str, float]:
     )
 
     return metrics
+
+
+def aggregate_latency_measurements(
+    measurements: list[LatencyMeasurements],
+) -> LatencyStatistics | None:
+    """Aggregate raw latency measurements from multiple processes.
+
+    Concatenates raw samples from all processes, then computes statistics.
+    This is the correct way to aggregate percentiles (not mean of percentiles).
+
+    Args:
+        measurements: List of LatencyMeasurements from each process.
+
+    Returns:
+        LatencyStatistics with computed percentiles, or None if no data.
+    """
+    if not measurements:
+        return None
+
+    # Concatenate all raw samples
+    all_ttft: list[float] = []
+    all_itl_full: list[float] = []
+    all_itl_trimmed: list[float] = []
+
+    for m in measurements:
+        all_ttft.extend(m.ttft_ms)
+        all_itl_full.extend(m.itl_full_ms)
+        all_itl_trimmed.extend(m.itl_trimmed_ms)
+
+    if not all_ttft:
+        logger.warning("No TTFT samples to aggregate")
+        return None
+
+    # Compute TTFT statistics
+    ttft_arr = np.array(all_ttft)
+
+    # Compute ITL statistics (trimmed - primary metric)
+    itl_mean_ms: float | None = None
+    itl_median_ms: float | None = None
+    itl_p95_ms: float | None = None
+    itl_p99_ms: float | None = None
+    itl_samples = 0
+
+    if all_itl_trimmed:
+        itl_arr = np.array(all_itl_trimmed)
+        itl_mean_ms = float(np.mean(itl_arr))
+        itl_median_ms = float(np.median(itl_arr))
+        itl_p95_ms = float(np.percentile(itl_arr, 95))
+        itl_p99_ms = float(np.percentile(itl_arr, 99))
+        itl_samples = len(all_itl_trimmed)
+
+    # Compute ITL full statistics (for comparison)
+    itl_full_mean_ms: float | None = None
+    itl_full_p99_ms: float | None = None
+
+    if all_itl_full:
+        itl_full_arr = np.array(all_itl_full)
+        itl_full_mean_ms = float(np.mean(itl_full_arr))
+        itl_full_p99_ms = float(np.percentile(itl_full_arr, 99))
+
+    logger.info(
+        f"Aggregated latency stats: TTFT samples={len(all_ttft)}, "
+        f"ITL samples={itl_samples} (trimmed)"
+    )
+
+    return LatencyStatistics(
+        ttft_mean_ms=float(np.mean(ttft_arr)),
+        ttft_median_ms=float(np.median(ttft_arr)),
+        ttft_p95_ms=float(np.percentile(ttft_arr, 95)),
+        ttft_p99_ms=float(np.percentile(ttft_arr, 99)),
+        ttft_min_ms=float(np.min(ttft_arr)),
+        ttft_max_ms=float(np.max(ttft_arr)),
+        ttft_samples=len(all_ttft),
+        itl_mean_ms=itl_mean_ms,
+        itl_median_ms=itl_median_ms,
+        itl_p95_ms=itl_p95_ms,
+        itl_p99_ms=itl_p99_ms,
+        itl_samples=itl_samples,
+        itl_full_mean_ms=itl_full_mean_ms,
+        itl_full_p99_ms=itl_full_p99_ms,
+    )

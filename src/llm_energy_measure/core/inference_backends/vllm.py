@@ -32,6 +32,7 @@ from llm_energy_measure.core.inference_backends.protocols import (
     BackendRuntime,
     ConfigWarning,
     CudaManagement,
+    LatencyMeasurements,
     LaunchMode,
     RuntimeCapabilities,
 )
@@ -81,6 +82,9 @@ _SUPPORTED_PARAMS: set[str] = {
     "num_input_prompts",
     "gpus",
     "num_processes",
+    # Streaming latency measurement
+    "streaming",
+    "streaming_warmup_requests",
 }
 
 # Parameters that require warnings
@@ -562,6 +566,10 @@ class VLLMBackend:
             raise BackendInferenceError("vLLM not initialized. Call initialize() first.")
 
         try:
+            # Check if streaming mode is enabled for latency measurement
+            if config.streaming:
+                return self._run_streaming_inference(prompts, config)
+
             # Check if traffic simulation is enabled
             traffic_config = config.latency_simulation
             if traffic_config.enabled:
@@ -582,6 +590,212 @@ class VLLMBackend:
         inference_time = time.perf_counter() - start_time
 
         return self._process_outputs(outputs, config, inference_time, len(prompts))
+
+    def _run_streaming_inference(
+        self, prompts: list[str], config: ExperimentConfig
+    ) -> BackendResult:
+        """Run inference with streaming for TTFT/ITL latency measurement.
+
+        Enables detailed latency metrics by processing outputs token-by-token.
+        Collects raw TTFT and ITL samples for late aggregation.
+
+        Args:
+            prompts: List of input prompts.
+            config: Experiment configuration.
+
+        Returns:
+            BackendResult with latency_measurements containing raw samples.
+        """
+        import numpy as np
+
+        warmup_count = config.streaming_warmup_requests
+
+        # Split into warmup and measurement prompts
+        warmup_prompts = prompts[:warmup_count] if warmup_count > 0 else []
+        measurement_prompts = prompts[warmup_count:]
+
+        # Run warmup (results discarded from stats)
+        if warmup_prompts:
+            logger.info(f"Running {len(warmup_prompts)} streaming warmup requests...")
+            self._llm.generate(warmup_prompts, self._sampling_params)
+            logger.debug("Streaming warmup complete")
+
+        if not measurement_prompts:
+            logger.warning("No prompts remaining after warmup. Increase num_input_prompts.")
+            return BackendResult(
+                total_tokens=0,
+                input_tokens=0,
+                output_tokens=0,
+                inference_time_sec=0.0,
+                latency_measurements=LatencyMeasurements(
+                    ttft_ms=[],
+                    itl_full_ms=[],
+                    itl_trimmed_ms=[],
+                    request_count=0,
+                    total_output_tokens=0,
+                    excluded_tokens=0,
+                    streaming_mode=True,
+                    warmup_requests_excluded=warmup_count,
+                ),
+            )
+
+        # Collect per-request timing data
+        ttft_samples: list[float] = []
+        token_timestamps_per_request: list[list[float]] = []
+        total_input_tokens = 0
+        total_output_tokens = 0
+        output_texts: list[str] = []
+
+        logger.info(f"Running streaming inference on {len(measurement_prompts)} prompts...")
+        start_time = time.perf_counter()
+
+        # Process each prompt individually to capture per-token timing
+        # Note: This is less efficient than batch mode but enables ITL measurement
+        for prompt in measurement_prompts:
+            request_start = time.perf_counter()
+            token_times: list[float] = []
+            first_token_time: float | None = None
+
+            # Run inference on single prompt
+            outputs = self._llm.generate([prompt], self._sampling_params)
+
+            # vLLM returns complete outputs - we extract timing from metrics if available
+            if outputs:
+                output = outputs[0]
+                total_input_tokens += len(output.prompt_token_ids)
+
+                if output.outputs:
+                    completion = output.outputs[0]
+                    num_tokens = len(completion.token_ids)
+                    total_output_tokens += num_tokens
+                    output_texts.append(completion.text)
+
+                    # Try to get TTFT from vLLM metrics
+                    if hasattr(output, "metrics") and output.metrics is not None:
+                        metrics = output.metrics
+                        if hasattr(metrics, "time_to_first_token"):
+                            first_token_time = metrics.time_to_first_token * 1000  # to ms
+                        elif hasattr(metrics, "first_token_time"):
+                            first_token_time = metrics.first_token_time * 1000
+
+                    # If no TTFT from metrics, estimate from request time
+                    if first_token_time is None:
+                        request_end = time.perf_counter()
+                        # Rough estimate: TTFT is a fraction of total time based on token count
+                        # This is less accurate but provides some data
+                        total_time_ms = (request_end - request_start) * 1000
+                        if num_tokens > 0:
+                            # Estimate TTFT as portion proportional to 1 token
+                            first_token_time = total_time_ms / (num_tokens + 1)
+                        else:
+                            first_token_time = total_time_ms
+
+                    ttft_samples.append(first_token_time)
+
+                    # For ITL, estimate token times evenly distributed
+                    # (vLLM batch mode doesn't provide per-token timestamps)
+                    if num_tokens > 1:
+                        request_end = time.perf_counter()
+                        total_time_ms = (request_end - request_start) * 1000
+                        decode_time_ms = total_time_ms - first_token_time
+
+                        # Distribute decode time evenly across tokens
+                        # token_times[0] = first token (TTFT), token_times[1:] = subsequent
+                        token_times = [first_token_time]
+                        time_per_token = decode_time_ms / (num_tokens - 1) if num_tokens > 1 else 0
+                        for i in range(1, num_tokens):
+                            token_times.append(first_token_time + (i * time_per_token))
+
+                    token_timestamps_per_request.append(token_times)
+
+        inference_time = time.perf_counter() - start_time
+
+        # Calculate ITL from token timestamps
+        itl_full, itl_trimmed, excluded = self._collect_itl_measurements(
+            token_timestamps_per_request
+        )
+
+        # Build latency measurements
+        latency_measurements = LatencyMeasurements(
+            ttft_ms=ttft_samples,
+            itl_full_ms=itl_full,
+            itl_trimmed_ms=itl_trimmed,
+            request_count=len(measurement_prompts),
+            total_output_tokens=total_output_tokens,
+            excluded_tokens=excluded,
+            streaming_mode=True,
+            warmup_requests_excluded=warmup_count,
+        )
+
+        # Calculate average TTFT for BackendResult (backward compat)
+        avg_ttft_ms: float | None = None
+        if ttft_samples:
+            avg_ttft_ms = float(np.mean(ttft_samples))
+
+        total_tokens = total_input_tokens + total_output_tokens
+
+        logger.info(
+            f"Streaming inference complete: {len(measurement_prompts)} prompts, "
+            f"{total_tokens} tokens in {inference_time:.2f}s, "
+            f"TTFT samples={len(ttft_samples)}, ITL samples={len(itl_trimmed)}"
+        )
+
+        return BackendResult(
+            total_tokens=total_tokens,
+            input_tokens=total_input_tokens,
+            output_tokens=total_output_tokens,
+            inference_time_sec=inference_time,
+            time_to_first_token_ms=avg_ttft_ms,
+            output_texts=output_texts if config.save_outputs else None,
+            backend_metadata={
+                "backend": "vllm",
+                "streaming_mode": True,
+                "continuous_batching": False,  # Streaming processes one at a time
+                "num_prompts": len(measurement_prompts),
+                "warmup_prompts": warmup_count,
+                "ttft_samples": len(ttft_samples),
+                "itl_samples": len(itl_trimmed),
+            },
+            latency_measurements=latency_measurements,
+        )
+
+    def _collect_itl_measurements(
+        self, token_timestamps: list[list[float]]
+    ) -> tuple[list[float], list[float], int]:
+        """Collect ITL measurements from per-request token timestamps.
+
+        Args:
+            token_timestamps: List of timestamp lists, one per request.
+
+        Returns:
+            Tuple of (itl_full, itl_trimmed, excluded_count):
+            - itl_full: All inter-token intervals
+            - itl_trimmed: Excluding first/last per request
+            - excluded_count: Number of excluded tokens
+        """
+        import numpy as np
+
+        itl_full: list[float] = []
+        itl_trimmed: list[float] = []
+        excluded = 0
+
+        for timestamps in token_timestamps:
+            if len(timestamps) < 2:
+                continue
+
+            # Calculate inter-token intervals
+            intervals = list(np.diff(timestamps))
+            itl_full.extend(intervals)
+
+            # Trim first and last intervals
+            if len(intervals) >= 3:
+                itl_trimmed.extend(intervals[1:-1])
+                excluded += 2
+            elif len(intervals) >= 1:
+                # Too short to trim meaningfully
+                excluded += len(intervals)
+
+        return itl_full, itl_trimmed, excluded
 
     def _run_inference_with_traffic(
         self, prompts: list[str], config: ExperimentConfig

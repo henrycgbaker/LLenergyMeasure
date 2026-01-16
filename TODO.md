@@ -29,7 +29,19 @@
 - [ ] Expose vLLM-specific params (speculative_decoding, paged_attention config)
 - [ ] PagedAttention memory efficiency reporting
 - [ ] LoRA adapter loading
-- [ ] Streaming output support
+
+### Streaming Latency Metrics (TTFT/ITL)
+- [ ] **vLLM streaming** - TTFT and ITL measurement via streaming API (in progress)
+- [ ] **PyTorch streaming** - Use `TextIteratorStreamer` for TTFT/ITL
+- [ ] **TensorRT-LLM streaming** - TRT-LLM streaming for TTFT/ITL
+
+### Streaming Enhancements (Future)
+- [ ] Real-time CLI token display during inference
+- [ ] TTFT component breakdown (tokenisation/prefill/decode phases)
+- [ ] vLLM queue time separation (isolate scheduling delay from compute)
+- [ ] Energy-per-token correlation (TTFT energy vs decode energy)
+- [ ] Speculative decoding acceptance rate metrics
+- [ ] KV cache hit rate metrics (prefix caching effectiveness)
 
 ### Documentation
 - [ ] Convert CLAUDE.md files to admin/developer READMEs (user-facing vs contributor docs)

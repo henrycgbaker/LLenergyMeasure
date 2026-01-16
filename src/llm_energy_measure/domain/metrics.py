@@ -1,8 +1,11 @@
 """Metrics domain models for LLM Bench."""
 
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    pass
 
 
 class FlopsResult(BaseModel):
@@ -42,6 +45,12 @@ class InferenceMetrics(BaseModel):
     latency_per_token_ms: float = Field(..., description="Average latency per token in ms")
     time_to_first_token_ms: float | None = Field(
         default=None, description="Average time to first token in ms (if available)"
+    )
+    # Raw latency measurements for streaming mode (late aggregation)
+    # Type is LatencyMeasurements from protocols.py (stored as Any to avoid circular import)
+    latency_measurements: Any | None = Field(
+        default=None,
+        description="Raw TTFT/ITL measurements from streaming inference (LatencyMeasurements)",
     )
 
     @property
