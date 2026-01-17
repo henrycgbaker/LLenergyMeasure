@@ -42,6 +42,7 @@ from llm_energy_measure.exceptions import (
     BackendInitializationError,
     BackendNotAvailableError,
 )
+from llm_energy_measure.progress import batch_progress, prompt_progress
 
 if TYPE_CHECKING:
     from llm_energy_measure.config.backend_configs import VLLMConfig
@@ -707,62 +708,72 @@ class VLLMBackend:
 
         # Process each prompt individually to capture per-token timing
         # Note: This is less efficient than batch mode but enables ITL measurement
-        for prompt in measurement_prompts:
-            request_start = time.perf_counter()
-            token_times: list[float] = []
-            first_token_time: float | None = None
+        with prompt_progress(
+            total=len(measurement_prompts),
+            desc="Streaming",
+            is_main_process=True,
+        ) as progress:
+            for prompt in measurement_prompts:
+                request_start = time.perf_counter()
+                token_times: list[float] = []
+                first_token_time: float | None = None
 
-            # Run inference on single prompt
-            outputs = self._llm.generate([prompt], self._sampling_params)
+                # Run inference on single prompt
+                outputs = self._llm.generate([prompt], self._sampling_params)
 
-            # vLLM returns complete outputs - we extract timing from metrics if available
-            if outputs:
-                output = outputs[0]
-                total_input_tokens += len(output.prompt_token_ids)
+                # vLLM returns complete outputs - we extract timing from metrics if available
+                if outputs:
+                    output = outputs[0]
+                    total_input_tokens += len(output.prompt_token_ids)
 
-                if output.outputs:
-                    completion = output.outputs[0]
-                    num_tokens = len(completion.token_ids)
-                    total_output_tokens += num_tokens
-                    output_texts.append(completion.text)
+                    if output.outputs:
+                        completion = output.outputs[0]
+                        num_tokens = len(completion.token_ids)
+                        total_output_tokens += num_tokens
+                        output_texts.append(completion.text)
 
-                    # Try to get TTFT from vLLM metrics
-                    if hasattr(output, "metrics") and output.metrics is not None:
-                        metrics = output.metrics
-                        if hasattr(metrics, "time_to_first_token"):
-                            first_token_time = metrics.time_to_first_token * 1000  # to ms
-                        elif hasattr(metrics, "first_token_time"):
-                            first_token_time = metrics.first_token_time * 1000
+                        # Try to get TTFT from vLLM metrics
+                        if hasattr(output, "metrics") and output.metrics is not None:
+                            metrics = output.metrics
+                            if hasattr(metrics, "time_to_first_token"):
+                                first_token_time = metrics.time_to_first_token * 1000  # to ms
+                            elif hasattr(metrics, "first_token_time"):
+                                first_token_time = metrics.first_token_time * 1000
 
-                    # If no TTFT from metrics, estimate from request time
-                    if first_token_time is None:
-                        request_end = time.perf_counter()
-                        # Rough estimate: TTFT is a fraction of total time based on token count
-                        # This is less accurate but provides some data
-                        total_time_ms = (request_end - request_start) * 1000
-                        if num_tokens > 0:
-                            # Estimate TTFT as portion proportional to 1 token
-                            first_token_time = total_time_ms / (num_tokens + 1)
-                        else:
-                            first_token_time = total_time_ms
+                        # If no TTFT from metrics, estimate from request time
+                        if first_token_time is None:
+                            request_end = time.perf_counter()
+                            # Rough estimate: TTFT is a fraction of total time based on token count
+                            # This is less accurate but provides some data
+                            total_time_ms = (request_end - request_start) * 1000
+                            if num_tokens > 0:
+                                # Estimate TTFT as portion proportional to 1 token
+                                first_token_time = total_time_ms / (num_tokens + 1)
+                            else:
+                                first_token_time = total_time_ms
 
-                    ttft_samples.append(first_token_time)
+                        ttft_samples.append(first_token_time)
 
-                    # For ITL, estimate token times evenly distributed
-                    # (vLLM batch mode doesn't provide per-token timestamps)
-                    if num_tokens > 1:
-                        request_end = time.perf_counter()
-                        total_time_ms = (request_end - request_start) * 1000
-                        decode_time_ms = total_time_ms - first_token_time
+                        # For ITL, estimate token times evenly distributed
+                        # (vLLM batch mode doesn't provide per-token timestamps)
+                        if num_tokens > 1:
+                            request_end = time.perf_counter()
+                            total_time_ms = (request_end - request_start) * 1000
+                            decode_time_ms = total_time_ms - first_token_time
 
-                        # Distribute decode time evenly across tokens
-                        # token_times[0] = first token (TTFT), token_times[1:] = subsequent
-                        token_times = [first_token_time]
-                        time_per_token = decode_time_ms / (num_tokens - 1) if num_tokens > 1 else 0
-                        for i in range(1, num_tokens):
-                            token_times.append(first_token_time + (i * time_per_token))
+                            # Distribute decode time evenly across tokens
+                            # token_times[0] = first token (TTFT), token_times[1:] = subsequent
+                            token_times = [first_token_time]
+                            time_per_token = (
+                                decode_time_ms / (num_tokens - 1) if num_tokens > 1 else 0
+                            )
+                            for i in range(1, num_tokens):
+                                token_times.append(first_token_time + (i * time_per_token))
 
-                    token_timestamps_per_request.append(token_times)
+                        token_timestamps_per_request.append(token_times)
+
+                # Update progress
+                progress.update(1, latency_ms=first_token_time)
 
         inference_time = time.perf_counter() - start_time
 
@@ -840,20 +851,30 @@ class VLLMBackend:
         all_outputs: list[Any] = []
         start_time = time.perf_counter()
 
-        for batch_idx, batch in enumerate(batches):
-            # Apply traffic delay (skip first batch)
-            if batch_idx > 0:
-                delay = generator.wait_for_next_request()
-                if delay > 0.1:
-                    logger.debug(f"Traffic delay: {delay:.3f}s before batch {batch_idx + 1}")
+        with batch_progress(
+            total=len(batches),
+            desc="Batches",
+            is_main_process=True,
+        ) as progress:
+            for batch_idx, batch in enumerate(batches):
+                # Apply traffic delay (skip first batch)
+                if batch_idx > 0:
+                    delay = generator.wait_for_next_request()
+                    if delay > 0.1:
+                        logger.debug(f"Traffic delay: {delay:.3f}s before batch {batch_idx + 1}")
 
-            # Run this batch (with optional LoRA adapter)
-            batch_outputs = self._llm.generate(
-                batch,
-                self._sampling_params,
-                lora_request=self._lora_request,
-            )
-            all_outputs.extend(batch_outputs)
+                # Run this batch (with optional LoRA adapter)
+                batch_start = time.perf_counter()
+                batch_outputs = self._llm.generate(
+                    batch,
+                    self._sampling_params,
+                    lora_request=self._lora_request,
+                )
+                batch_latency_ms = (time.perf_counter() - batch_start) * 1000
+                all_outputs.extend(batch_outputs)
+
+                # Update progress
+                progress.update(1, latency_ms=batch_latency_ms)
 
         inference_time = time.perf_counter() - start_time
 

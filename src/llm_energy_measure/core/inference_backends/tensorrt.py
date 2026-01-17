@@ -43,6 +43,7 @@ from llm_energy_measure.exceptions import (
     BackendInitializationError,
     BackendNotAvailableError,
 )
+from llm_energy_measure.progress import prompt_progress
 
 if TYPE_CHECKING:
     from llm_energy_measure.config.backend_configs import TensorRTConfig
@@ -735,60 +736,68 @@ class TensorRTBackend:
         logger.info(f"Running streaming inference on {len(measurement_prompts)} prompts...")
         start_time = time.perf_counter()
 
-        # Process each prompt individually
-        for prompt in measurement_prompts:
-            request_start = time.perf_counter()
-            token_times: list[float] = []
-            first_token_time: float | None = None
+        # Process each prompt individually with progress tracking
+        with prompt_progress(
+            total=len(measurement_prompts),
+            desc="Streaming",
+            is_main_process=True,
+        ) as progress:
+            for prompt in measurement_prompts:
+                request_start = time.perf_counter()
+                token_times: list[float] = []
+                first_token_time: float | None = None
 
-            # Run inference on single prompt
-            outputs = self._executor.generate([prompt], sampling_params)
+                # Run inference on single prompt
+                outputs = self._executor.generate([prompt], sampling_params)
 
-            request_end = time.perf_counter()
-            total_time_ms = (request_end - request_start) * 1000
+                request_end = time.perf_counter()
+                total_time_ms = (request_end - request_start) * 1000
 
-            # Process outputs
-            if outputs:
-                output = outputs[0]
+                # Process outputs
+                if outputs:
+                    output = outputs[0]
 
-                if hasattr(output, "prompt_token_ids"):
-                    total_input_tokens += len(output.prompt_token_ids)
+                    if hasattr(output, "prompt_token_ids"):
+                        total_input_tokens += len(output.prompt_token_ids)
 
-                if hasattr(output, "outputs") and output.outputs:
-                    completion = output.outputs[0]
-                    num_tokens = (
-                        len(completion.token_ids) if hasattr(completion, "token_ids") else 0
-                    )
-                    total_output_tokens += num_tokens
+                    if hasattr(output, "outputs") and output.outputs:
+                        completion = output.outputs[0]
+                        num_tokens = (
+                            len(completion.token_ids) if hasattr(completion, "token_ids") else 0
+                        )
+                        total_output_tokens += num_tokens
 
-                    if hasattr(completion, "text"):
-                        output_texts.append(completion.text)
+                        if hasattr(completion, "text"):
+                            output_texts.append(completion.text)
 
-                    # Try to get TTFT from TRT-LLM metrics if available
-                    if hasattr(output, "metrics") and output.metrics is not None:
-                        metrics = output.metrics
-                        if hasattr(metrics, "time_to_first_token"):
-                            first_token_time = metrics.time_to_first_token * 1000
+                        # Try to get TTFT from TRT-LLM metrics if available
+                        if hasattr(output, "metrics") and output.metrics is not None:
+                            metrics = output.metrics
+                            if hasattr(metrics, "time_to_first_token"):
+                                first_token_time = metrics.time_to_first_token * 1000
 
-                    # If no TTFT from metrics, estimate from request time
-                    if first_token_time is None and num_tokens > 0:
-                        # Estimate TTFT as proportion of total time
-                        first_token_time = total_time_ms / (num_tokens + 1)
-                    elif first_token_time is None:
-                        first_token_time = total_time_ms
+                        # If no TTFT from metrics, estimate from request time
+                        if first_token_time is None and num_tokens > 0:
+                            # Estimate TTFT as proportion of total time
+                            first_token_time = total_time_ms / (num_tokens + 1)
+                        elif first_token_time is None:
+                            first_token_time = total_time_ms
 
-                    ttft_samples.append(first_token_time)
+                        ttft_samples.append(first_token_time)
 
-                    # Estimate token times evenly distributed
-                    # (TRT-LLM batch mode doesn't provide per-token timestamps)
-                    if num_tokens > 1:
-                        decode_time_ms = total_time_ms - first_token_time
-                        token_times = [first_token_time]
-                        time_per_token = decode_time_ms / (num_tokens - 1)
-                        for i in range(1, num_tokens):
-                            token_times.append(first_token_time + (i * time_per_token))
+                        # Estimate token times evenly distributed
+                        # (TRT-LLM batch mode doesn't provide per-token timestamps)
+                        if num_tokens > 1:
+                            decode_time_ms = total_time_ms - first_token_time
+                            token_times = [first_token_time]
+                            time_per_token = decode_time_ms / (num_tokens - 1)
+                            for i in range(1, num_tokens):
+                                token_times.append(first_token_time + (i * time_per_token))
 
-                    token_timestamps_per_request.append(token_times)
+                        token_timestamps_per_request.append(token_times)
+
+                # Update progress
+                progress.update(1, latency_ms=first_token_time)
 
         inference_time = time.perf_counter() - start_time
 
@@ -900,45 +909,54 @@ class TensorRTBackend:
         )
         start_time = time.perf_counter()
 
-        for prompt in measurement_prompts:
-            request_start = time.perf_counter()
+        with prompt_progress(
+            total=len(measurement_prompts),
+            desc="Prompts",
+            is_main_process=True,
+        ) as progress:
+            for prompt in measurement_prompts:
+                request_start = time.perf_counter()
 
-            outputs = self._executor.generate([prompt], sampling_params)
+                outputs = self._executor.generate([prompt], sampling_params)
 
-            request_end = time.perf_counter()
-            total_time_ms = (request_end - request_start) * 1000
+                request_end = time.perf_counter()
+                total_time_ms = (request_end - request_start) * 1000
+                estimated_ttft: float | None = None
 
-            if outputs:
-                output = outputs[0]
+                if outputs:
+                    output = outputs[0]
 
-                if hasattr(output, "prompt_token_ids"):
-                    total_input_tokens += len(output.prompt_token_ids)
+                    if hasattr(output, "prompt_token_ids"):
+                        total_input_tokens += len(output.prompt_token_ids)
 
-                if hasattr(output, "outputs") and output.outputs:
-                    completion = output.outputs[0]
-                    num_tokens = (
-                        len(completion.token_ids) if hasattr(completion, "token_ids") else 0
-                    )
-                    total_output_tokens += num_tokens
+                    if hasattr(output, "outputs") and output.outputs:
+                        completion = output.outputs[0]
+                        num_tokens = (
+                            len(completion.token_ids) if hasattr(completion, "token_ids") else 0
+                        )
+                        total_output_tokens += num_tokens
 
-                    if hasattr(completion, "text"):
-                        output_texts.append(completion.text)
+                        if hasattr(completion, "text"):
+                            output_texts.append(completion.text)
 
-                    # Estimate TTFT as proportional to 1 token of total time
-                    if num_tokens > 0:
-                        estimated_ttft = total_time_ms / (num_tokens + 1)
-                    else:
-                        estimated_ttft = total_time_ms
-                    ttft_samples.append(estimated_ttft)
+                        # Estimate TTFT as proportional to 1 token of total time
+                        if num_tokens > 0:
+                            estimated_ttft = total_time_ms / (num_tokens + 1)
+                        else:
+                            estimated_ttft = total_time_ms
+                        ttft_samples.append(estimated_ttft)
 
-                    # Estimate token times evenly distributed
-                    if num_tokens > 1:
-                        decode_time_ms = total_time_ms - estimated_ttft
-                        token_times = [estimated_ttft]
-                        time_per_token = decode_time_ms / (num_tokens - 1)
-                        for i in range(1, num_tokens):
-                            token_times.append(estimated_ttft + (i * time_per_token))
-                        token_timestamps_per_request.append(token_times)
+                        # Estimate token times evenly distributed
+                        if num_tokens > 1:
+                            decode_time_ms = total_time_ms - estimated_ttft
+                            token_times = [estimated_ttft]
+                            time_per_token = decode_time_ms / (num_tokens - 1)
+                            for i in range(1, num_tokens):
+                                token_times.append(estimated_ttft + (i * time_per_token))
+                            token_timestamps_per_request.append(token_times)
+
+                # Update progress
+                progress.update(1, latency_ms=estimated_ttft)
 
         inference_time = time.perf_counter() - start_time
 

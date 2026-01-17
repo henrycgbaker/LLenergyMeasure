@@ -16,6 +16,7 @@ from llm_energy_measure.core.prompts import (
     tokenize_batch,
 )
 from llm_energy_measure.domain.metrics import InferenceMetrics
+from llm_energy_measure.progress import batch_progress
 
 if TYPE_CHECKING:
     from accelerate import Accelerator
@@ -120,35 +121,43 @@ def run_inference(
     # This ensures proper Poisson sequence with seeded reproducibility
     traffic_generator = _create_traffic_generator(config)
 
-    # Process batches
+    # Process batches with progress tracking
     all_outputs: list[torch.Tensor] = []
     all_input_ids: list[torch.Tensor] = []
     latencies: list[float] = []
     total_generated_tokens = 0
     total_input_tokens = 0
 
-    for batch_idx, batch in enumerate(batches):
-        result = _process_batch(
-            model=model,
-            batch=batch,
-            tokenizer=tokenizer,
-            device=device,
-            max_input_tokens=max_input_tokens,
-            max_output_tokens=max_output_tokens,
-            config=config,
-            batch_idx=batch_idx,
-            total_batches=len(batches),
-            accelerator=accelerator,
-            traffic_generator=traffic_generator,
-        )
+    with batch_progress(
+        total=len(batches),
+        desc="Batches",
+        is_main_process=accelerator.is_main_process,
+    ) as progress:
+        for batch_idx, batch in enumerate(batches):
+            result = _process_batch(
+                model=model,
+                batch=batch,
+                tokenizer=tokenizer,
+                device=device,
+                max_input_tokens=max_input_tokens,
+                max_output_tokens=max_output_tokens,
+                config=config,
+                batch_idx=batch_idx,
+                total_batches=len(batches),
+                accelerator=accelerator,
+                traffic_generator=traffic_generator,
+            )
 
-        all_input_ids.append(result.output_ids[:, :max_input_tokens])
-        latencies.append(result.latency_ms)
-        total_input_tokens += result.input_tokens
-        total_generated_tokens += result.generated_tokens
+            all_input_ids.append(result.output_ids[:, :max_input_tokens])
+            latencies.append(result.latency_ms)
+            total_input_tokens += result.input_tokens
+            total_generated_tokens += result.generated_tokens
 
-        if config.save_outputs:
-            all_outputs.append(result.output_ids)
+            # Update progress with latency
+            progress.update(1, latency_ms=result.latency_ms)
+
+            if config.save_outputs:
+                all_outputs.append(result.output_ids)
 
     concatenated_input_ids = torch.cat(all_input_ids, dim=0)
 

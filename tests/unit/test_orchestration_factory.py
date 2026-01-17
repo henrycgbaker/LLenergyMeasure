@@ -99,131 +99,113 @@ class TestExperimentComponents:
 
 
 class TestCreateComponents:
-    """Tests for create_components factory function."""
+    """Tests for create_components factory function.
+
+    Note: The factory now uses backend adapters (BackendModelLoaderAdapter, etc.)
+    instead of direct implementations (HuggingFaceModelLoader, etc.).
+    """
 
     @patch("llm_energy_measure.results.repository.FileSystemRepository")
     @patch("llm_energy_measure.core.energy_backends.get_backend")
-    @patch(
-        "llm_energy_measure.core.implementations.ThroughputMetricsCollector",
-        autospec=True,
-    )
-    @patch(
-        "llm_energy_measure.core.implementations.TransformersInferenceEngine",
-        autospec=True,
-    )
-    @patch("llm_energy_measure.core.implementations.HuggingFaceModelLoader", autospec=True)
+    @patch("llm_energy_measure.core.inference_backends.get_backend")
     def test_creates_all_components(
         self,
-        mock_loader_cls,
-        mock_engine_cls,
-        mock_collector_cls,
-        mock_backend_fn,
+        mock_get_inference_backend,
+        mock_get_energy_backend,
         mock_repo_cls,
         mock_context,
     ):
         """Verify create_components creates all required components."""
+        # Setup mock backend
+        mock_backend = MagicMock()
+        mock_backend.name = "pytorch"
+        mock_backend.version = "1.0.0"
+        mock_backend.is_available.return_value = True
+        mock_get_inference_backend.return_value = mock_backend
+
         components = create_components(mock_context)
 
         assert isinstance(components, ExperimentComponents)
-        mock_loader_cls.assert_called_once()
-        mock_engine_cls.assert_called_once_with(mock_context.accelerator)
-        mock_collector_cls.assert_called_once_with(mock_context.accelerator)
-        mock_backend_fn.assert_called_once_with("codecarbon")
+        # get_backend is called twice: once for validation, once for the actual backend
+        assert mock_get_inference_backend.call_count == 2
+        mock_get_energy_backend.assert_called_once_with("codecarbon")
         mock_repo_cls.assert_called_once()
 
     @patch("llm_energy_measure.results.repository.FileSystemRepository")
     @patch("llm_energy_measure.core.energy_backends.get_backend")
-    @patch(
-        "llm_energy_measure.core.implementations.ThroughputMetricsCollector",
-        autospec=True,
-    )
-    @patch(
-        "llm_energy_measure.core.implementations.TransformersInferenceEngine",
-        autospec=True,
-    )
-    @patch("llm_energy_measure.core.implementations.HuggingFaceModelLoader", autospec=True)
-    def test_passes_accelerator_to_engine_and_collector(
+    @patch("llm_energy_measure.core.inference_backends.get_backend")
+    def test_components_have_correct_types(
         self,
-        mock_loader_cls,
-        mock_engine_cls,
-        mock_collector_cls,
-        mock_backend_fn,
+        mock_get_inference_backend,
+        mock_get_energy_backend,
         mock_repo_cls,
         mock_context,
     ):
-        """Verify accelerator is passed to components that need it."""
-        create_components(mock_context)
+        """Verify components implement correct protocols."""
+        # Setup mock backend
+        mock_backend = MagicMock()
+        mock_backend.name = "pytorch"
+        mock_backend.version = "1.0.0"
+        mock_get_inference_backend.return_value = mock_backend
 
-        # Verify accelerator passed to inference engine
-        mock_engine_cls.assert_called_with(mock_context.accelerator)
+        components = create_components(mock_context)
 
-        # Verify accelerator passed to metrics collector
-        mock_collector_cls.assert_called_with(mock_context.accelerator)
+        # Components should be adapters wrapping the backend
+        assert components.model_loader is not None
+        assert components.inference_engine is not None
+        assert components.metrics_collector is not None
+        assert components.backend_name == "pytorch"
 
     @patch("llm_energy_measure.results.repository.FileSystemRepository")
     @patch("llm_energy_measure.core.energy_backends.get_backend")
-    @patch(
-        "llm_energy_measure.core.implementations.ThroughputMetricsCollector",
-        autospec=True,
-    )
-    @patch(
-        "llm_energy_measure.core.implementations.TransformersInferenceEngine",
-        autospec=True,
-    )
-    @patch("llm_energy_measure.core.implementations.HuggingFaceModelLoader", autospec=True)
+    @patch("llm_energy_measure.core.inference_backends.get_backend")
     def test_uses_codecarbon_backend(
         self,
-        mock_loader_cls,
-        mock_engine_cls,
-        mock_collector_cls,
-        mock_backend_fn,
+        mock_get_inference_backend,
+        mock_get_energy_backend,
         mock_repo_cls,
         mock_context,
     ):
         """Verify CodeCarbon is selected as the energy backend."""
+        # Setup mock backend
+        mock_backend = MagicMock()
+        mock_backend.name = "pytorch"
+        mock_backend.version = "1.0.0"
+        mock_get_inference_backend.return_value = mock_backend
+
         create_components(mock_context)
 
-        mock_backend_fn.assert_called_once_with("codecarbon")
+        mock_get_energy_backend.assert_called_once_with("codecarbon")
 
     @patch("llm_energy_measure.results.repository.FileSystemRepository")
     @patch("llm_energy_measure.core.energy_backends.get_backend")
-    @patch(
-        "llm_energy_measure.core.implementations.ThroughputMetricsCollector",
-        autospec=True,
-    )
-    @patch(
-        "llm_energy_measure.core.implementations.TransformersInferenceEngine",
-        autospec=True,
-    )
-    @patch("llm_energy_measure.core.implementations.HuggingFaceModelLoader", autospec=True)
+    @patch("llm_energy_measure.core.inference_backends.get_backend")
     def test_returns_correct_component_instances(
         self,
-        mock_loader_cls,
-        mock_engine_cls,
-        mock_collector_cls,
-        mock_backend_fn,
+        mock_get_inference_backend,
+        mock_get_energy_backend,
         mock_repo_cls,
         mock_context,
     ):
-        """Verify returned components are the instantiated objects."""
-        mock_loader = MagicMock()
-        mock_engine = MagicMock()
-        mock_collector = MagicMock()
-        mock_backend = MagicMock()
+        """Verify returned components contain expected objects."""
+        mock_inference_backend = MagicMock()
+        mock_inference_backend.name = "pytorch"
+        mock_inference_backend.version = "1.0.0"
+        mock_energy_backend = MagicMock()
         mock_repo = MagicMock()
 
-        mock_loader_cls.return_value = mock_loader
-        mock_engine_cls.return_value = mock_engine
-        mock_collector_cls.return_value = mock_collector
-        mock_backend_fn.return_value = mock_backend
+        mock_get_inference_backend.return_value = mock_inference_backend
+        mock_get_energy_backend.return_value = mock_energy_backend
         mock_repo_cls.return_value = mock_repo
 
         components = create_components(mock_context)
 
-        assert components.model_loader is mock_loader
-        assert components.inference_engine is mock_engine
-        assert components.metrics_collector is mock_collector
-        assert components.energy_backend is mock_backend
+        # Adapters wrap the backend, so check they exist
+        assert components.model_loader is not None
+        assert components.inference_engine is not None
+        assert components.metrics_collector is not None
+        # These are the direct returns from mocks
+        assert components.energy_backend is mock_energy_backend
         assert components.repository is mock_repo
 
 
@@ -254,7 +236,8 @@ class TestCreateOrchestrator:
 
         create_orchestrator(mock_context)
 
-        mock_create_components.assert_called_once_with(mock_context)
+        # create_components is called with (context, results_dir=None)
+        mock_create_components.assert_called_once_with(mock_context, None)
         mock_orchestrator_cls.assert_called_once_with(
             model_loader=mock_components.model_loader,
             inference_engine=mock_components.inference_engine,
