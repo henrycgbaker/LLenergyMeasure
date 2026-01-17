@@ -380,14 +380,14 @@ def run_from_config(
 
 def _extract_metadata(
     config_path: Path,
-) -> tuple[dict[str, Any], dict[str, Any], str | None, list[str]]:
+) -> tuple[dict[str, Any], dict[str, Any], str | None, list[str], str | None]:
     """Extract _metadata section from config file if present.
 
     Args:
         config_path: Path to the config file.
 
     Returns:
-        Tuple of (effective_config, cli_overrides, experiment_id).
+        Tuple of (effective_config, cli_overrides, experiment_id, config_warnings, results_dir).
     """
     import yaml
 
@@ -400,18 +400,21 @@ def _extract_metadata(
         cli_overrides = metadata.get("cli_overrides", {})
         experiment_id = metadata.get("experiment_id")
         config_warnings = metadata.get("config_warnings", [])
+        results_dir = metadata.get("results_dir")
 
-        return effective_config, cli_overrides, experiment_id, config_warnings
+        return effective_config, cli_overrides, experiment_id, config_warnings, results_dir
     except Exception as e:
         logger.debug(f"Could not extract _metadata from config: {e}")
-        return {}, {}, None, []
+        return {}, {}, None, [], None
 
 
-def _parse_args() -> tuple[Path, list[str], dict[str, Any], dict[str, Any], str | None, list[str]]:
+def _parse_args() -> (
+    tuple[Path, list[str], dict[str, Any], dict[str, Any], str | None, list[str], str | None]
+):
     """Parse command line arguments for accelerate launch.
 
     Returns:
-        Tuple of (config_path, prompts, effective_config, cli_overrides, experiment_id, config_warnings).
+        Tuple of (config_path, prompts, effective_config, cli_overrides, experiment_id, config_warnings, results_dir).
     """
     import argparse
 
@@ -433,7 +436,9 @@ def _parse_args() -> tuple[Path, list[str], dict[str, Any], dict[str, Any], str 
     args = parser.parse_args()
 
     # Extract metadata before loading config (Phase 0)
-    effective_config, cli_overrides, experiment_id, config_warnings = _extract_metadata(args.config)
+    effective_config, cli_overrides, experiment_id, config_warnings, results_dir = (
+        _extract_metadata(args.config)
+    )
 
     # Load config (ExperimentConfig ignores _metadata field)
     config = load_config(args.config)
@@ -473,21 +478,39 @@ def _parse_args() -> tuple[Path, list[str], dict[str, Any], dict[str, Any], str 
         prompts = ["Hello, how are you?"]
         logger.warning("No prompt source specified, using default prompt")
 
-    return args.config, prompts, effective_config, cli_overrides, experiment_id, config_warnings
+    return (
+        args.config,
+        prompts,
+        effective_config,
+        cli_overrides,
+        experiment_id,
+        config_warnings,
+        results_dir,
+    )
 
 
 if __name__ == "__main__":
+    from pathlib import Path as PathLib
+
     from llm_energy_measure.config.loader import load_config
     from llm_energy_measure.orchestration.context import experiment_context
     from llm_energy_measure.orchestration.factory import create_orchestrator
 
-    config_path, prompts, effective_config, cli_overrides, experiment_id, config_warnings = (
-        _parse_args()
-    )
+    (
+        config_path,
+        prompts,
+        effective_config,
+        cli_overrides,
+        experiment_id,
+        config_warnings,
+        results_dir,
+    ) = _parse_args()
     config = load_config(config_path)
 
     logger.info(f"Running experiment with {len(prompts)} prompts from config: {config_path}")
     logger.info(f"First prompt: {prompts[0][:50]}...")
+    if results_dir:
+        logger.info(f"Results directory: {results_dir}")
 
     with experiment_context(
         config,
@@ -496,7 +519,9 @@ if __name__ == "__main__":
         experiment_id=experiment_id,
         config_warnings=config_warnings,
     ) as ctx:
-        orchestrator = create_orchestrator(ctx)
+        # Pass results_dir to orchestrator (None uses default from constants/env)
+        results_path = PathLib(results_dir) if results_dir else None
+        orchestrator = create_orchestrator(ctx, results_dir=results_path)
         result_path = orchestrator.run(ctx, prompts)
 
         logger.info(f"Experiment {ctx.experiment_id} complete")

@@ -1,10 +1,12 @@
 """Constants for LLM Bench framework."""
 
+import os
 from pathlib import Path
 from typing import Any
 
 # Results directories
-DEFAULT_RESULTS_DIR = Path("results")
+# Precedence: CLI --results-dir > LLM_ENERGY_RESULTS_DIR env var > "results"
+DEFAULT_RESULTS_DIR = Path(os.environ.get("LLM_ENERGY_RESULTS_DIR", "results"))
 RAW_RESULTS_SUBDIR = "raw"
 AGGREGATED_RESULTS_SUBDIR = "aggregated"
 

@@ -9,6 +9,7 @@ Supports backend selection via config.backend field. Supported backends:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -60,7 +61,9 @@ def _validate_backend(backend_name: str) -> None:
         raise ConfigurationError(f"Backend '{backend_name}' is not available on this system.")
 
 
-def create_components(ctx: ExperimentContext) -> ExperimentComponents:
+def create_components(
+    ctx: ExperimentContext, results_dir: Path | None = None
+) -> ExperimentComponents:
     """Create all experiment components wired for the given context.
 
     Validates the requested backend and creates appropriate components.
@@ -68,6 +71,7 @@ def create_components(ctx: ExperimentContext) -> ExperimentComponents:
 
     Args:
         ctx: Experiment context with accelerator and config.
+        results_dir: Optional results directory (None uses default from constants/env).
 
     Returns:
         ExperimentComponents with all dependencies wired.
@@ -90,11 +94,11 @@ def create_components(ctx: ExperimentContext) -> ExperimentComponents:
 
     # Create backend-specific components
     if backend_name == "pytorch":
-        return _create_pytorch_components(ctx, backend)
+        return _create_pytorch_components(ctx, backend, results_dir)
     elif backend_name == "vllm":
-        return _create_vllm_components(ctx, backend)
+        return _create_vllm_components(ctx, backend, results_dir)
     elif backend_name == "tensorrt":
-        return _create_tensorrt_components(ctx, backend)
+        return _create_tensorrt_components(ctx, backend, results_dir)
     else:
         raise ConfigurationError(
             f"Backend '{backend_name}' is not yet integrated with the orchestrator. "
@@ -103,7 +107,7 @@ def create_components(ctx: ExperimentContext) -> ExperimentComponents:
 
 
 def _create_pytorch_components(
-    ctx: ExperimentContext, backend: InferenceBackend
+    ctx: ExperimentContext, backend: InferenceBackend, results_dir: Path | None = None
 ) -> ExperimentComponents:
     """Create components for PyTorch/Transformers backend.
 
@@ -113,6 +117,7 @@ def _create_pytorch_components(
     Args:
         ctx: Experiment context.
         backend: PyTorch backend instance.
+        results_dir: Optional results directory (None uses default).
 
     Returns:
         ExperimentComponents configured for PyTorch.
@@ -146,14 +151,14 @@ def _create_pytorch_components(
         inference_engine=inference_engine,
         metrics_collector=metrics_collector,
         energy_backend=get_energy_backend("codecarbon"),
-        repository=FileSystemRepository(),
+        repository=FileSystemRepository(results_dir),
         backend_name=backend.name,
         backend_version=backend.version,
     )
 
 
 def _create_vllm_components(
-    ctx: ExperimentContext, backend: InferenceBackend
+    ctx: ExperimentContext, backend: InferenceBackend, results_dir: Path | None = None
 ) -> ExperimentComponents:
     """Create components for vLLM backend.
 
@@ -163,6 +168,7 @@ def _create_vllm_components(
     Args:
         ctx: Experiment context.
         backend: vLLM backend instance.
+        results_dir: Optional results directory (None uses default).
 
     Returns:
         ExperimentComponents configured for vLLM.
@@ -196,14 +202,14 @@ def _create_vllm_components(
         inference_engine=inference_engine,
         metrics_collector=metrics_collector,
         energy_backend=get_energy_backend("codecarbon"),
-        repository=FileSystemRepository(),
+        repository=FileSystemRepository(results_dir),
         backend_name=backend.name,
         backend_version=backend.version,
     )
 
 
 def _create_tensorrt_components(
-    ctx: ExperimentContext, backend: InferenceBackend
+    ctx: ExperimentContext, backend: InferenceBackend, results_dir: Path | None = None
 ) -> ExperimentComponents:
     """Create components for TensorRT-LLM backend.
 
@@ -213,6 +219,7 @@ def _create_tensorrt_components(
     Args:
         ctx: Experiment context.
         backend: TensorRT backend instance.
+        results_dir: Optional results directory (None uses default).
 
     Returns:
         ExperimentComponents configured for TensorRT-LLM.
@@ -246,26 +253,29 @@ def _create_tensorrt_components(
         inference_engine=inference_engine,
         metrics_collector=metrics_collector,
         energy_backend=get_energy_backend("codecarbon"),
-        repository=FileSystemRepository(),
+        repository=FileSystemRepository(results_dir),
         backend_name=backend.name,
         backend_version=backend.version,
     )
 
 
-def create_orchestrator(ctx: ExperimentContext) -> ExperimentOrchestrator:
+def create_orchestrator(
+    ctx: ExperimentContext, results_dir: Path | None = None
+) -> ExperimentOrchestrator:
     """Create a fully wired ExperimentOrchestrator.
 
     Convenience function that creates components and instantiates orchestrator.
 
     Args:
         ctx: Experiment context.
+        results_dir: Optional results directory (None uses default from constants/env).
 
     Returns:
         Ready-to-use ExperimentOrchestrator.
     """
     from llm_energy_measure.orchestration.runner import ExperimentOrchestrator
 
-    components = create_components(ctx)
+    components = create_components(ctx, results_dir)
     return ExperimentOrchestrator(
         model_loader=components.model_loader,
         inference_engine=components.inference_engine,

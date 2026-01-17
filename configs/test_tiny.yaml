@@ -18,3 +18,7 @@ num_processes: 1
 # Batching
 batching:
   batch_size: 2
+
+# I/O paths (optional - defaults to ./results or LLM_ENERGY_RESULTS_DIR env var)
+# io:
+#   results_dir: /path/to/results

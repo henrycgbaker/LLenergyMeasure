@@ -225,6 +225,22 @@ class ScheduleConfig(BaseModel):
         return self
 
 
+class IOConfig(BaseModel):
+    """I/O configuration for experiment results and data paths.
+
+    Allows per-experiment override of results directory. Precedence:
+    1. CLI flag --results-dir (highest)
+    2. Config YAML io.results_dir
+    3. .env file LLM_ENERGY_RESULTS_DIR
+    4. Default "results/" (lowest)
+    """
+
+    results_dir: str | None = Field(
+        default=None,
+        description="Results output directory (overrides .env default)",
+    )
+
+
 # Sampling presets aligned with industry best practices (vLLM, OpenAI, MLPerf)
 SAMPLING_PRESETS: dict[str, dict[str, Any]] = {
     "deterministic": {"temperature": 0.0, "do_sample": False},
@@ -454,6 +470,11 @@ class ExperimentConfig(BaseModel):
         default_factory=ScheduleConfig,
         validation_alias=AliasChoices("schedule", "schedule_config"),
         description="Schedule config for daemon mode",
+    )
+    io_config: IOConfig = Field(
+        default_factory=IOConfig,
+        validation_alias=AliasChoices("io", "io_config"),
+        description="I/O paths config (results directory)",
     )
 
     # Precision and backend
