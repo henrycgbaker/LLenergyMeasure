@@ -1,9 +1,9 @@
 .PHONY: format lint typecheck check test test-integration test-all install dev clean
 .PHONY: docker-build docker-build-dev docker-check experiment datasets validate docker-shell docker-dev
 
-# Docker UID/GID for correct file ownership on bind mounts
-export DOCKER_UID := $(shell id -u)
-export DOCKER_GID := $(shell id -g)
+# PUID/PGID for correct file ownership on bind mounts (LinuxServer.io pattern)
+export PUID := $(shell id -u)
+export PGID := $(shell id -g)
 
 # =============================================================================
 # Local Development

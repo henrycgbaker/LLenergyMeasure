@@ -11,6 +11,7 @@
 FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS base
 
 # System dependencies shared by all backends
+# gosu: for dropping privileges in entrypoint (PUID/PGID support)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 \
     python3.11-venv \
@@ -19,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     git \
     curl \
+    gosu \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
     && ln -sf /usr/bin/python3.11 /usr/bin/python
@@ -35,5 +37,16 @@ RUN pip install --no-cache-dir --upgrade pip
 # Common working directory
 WORKDIR /app
 
+# Create writable directories for non-root users
+# - results: experiment outputs
+# - .state: experiment state/resumption
+# - .cache/huggingface: model cache
+RUN mkdir -p /app/results /app/.state /app/.cache/huggingface \
+    && chmod 777 /app/results /app/.state /app/.cache/huggingface
+
 # HuggingFace cache location
 ENV HF_HOME=/app/.cache/huggingface
+
+# Copy entrypoint script
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh

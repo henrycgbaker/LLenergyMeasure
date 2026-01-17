@@ -68,13 +68,15 @@ def get_persistent_unique_id(id_file: Path | None = None) -> str:
     """Retrieve and increment a persistent unique experiment ID.
 
     Args:
-        id_file: Path to store the ID counter. Defaults to experiment_id.txt.
+        id_file: Path to store the ID counter. Defaults to state_dir/experiment_id.txt.
 
     Returns:
         Zero-padded 4-digit unique ID string.
     """
     if id_file is None:
-        id_file = Path("persistent_progress_trackers/experiment_id.txt")
+        from llm_energy_measure.constants import DEFAULT_STATE_DIR
+
+        id_file = DEFAULT_STATE_DIR / "experiment_id.txt"
 
     id_file.parent.mkdir(parents=True, exist_ok=True)
 
