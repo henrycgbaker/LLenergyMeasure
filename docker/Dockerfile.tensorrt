@@ -48,10 +48,10 @@ COPY --from=builder /opt/venv /opt/venv
 
 # TensorRT engine cache directory
 ENV TRT_ENGINE_CACHE=/app/.cache/tensorrt-engines
-RUN mkdir -p ${TRT_ENGINE_CACHE}
+RUN mkdir -p ${TRT_ENGINE_CACHE} && chmod 777 ${TRT_ENGINE_CACHE}
 
-# Clear NVIDIA's entrypoint and set default command
-ENTRYPOINT []
+# Use entrypoint with PUID/PGID support
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["llm-energy-measure", "--help"]
 
 # ============================================================================

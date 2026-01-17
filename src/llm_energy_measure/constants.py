@@ -24,7 +24,8 @@ DEFAULT_TOP_P = 1.0
 SCHEMA_VERSION = "2.0.0"
 
 # State management
-DEFAULT_STATE_DIR = ".llm_energy_measure_state"
+# Precedence: LLM_ENERGY_STATE_DIR env var > ".state"
+DEFAULT_STATE_DIR = Path(os.environ.get("LLM_ENERGY_STATE_DIR", ".state"))
 COMPLETION_MARKER_PREFIX = ".completed_"
 GRACEFUL_SHUTDOWN_TIMEOUT_SEC = 2
 

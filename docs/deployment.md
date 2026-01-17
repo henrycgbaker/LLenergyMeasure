@@ -39,12 +39,23 @@ Create a `.env` file:
 # Required for gated models (Llama, etc.)
 HF_TOKEN=your_huggingface_token
 
+# Run as your host user (PUID/PGID pattern like LinuxServer.io)
+# This ensures files created in mounted volumes are owned by you
+PUID=1000  # Your user ID (run 'id -u' to get this)
+PGID=1000  # Your group ID (run 'id -g' to get this)
+
 # Optional: GPU selection
 CUDA_VISIBLE_DEVICES=0,1
 
 # Optional: CodeCarbon logging level
 CODECARBON_LOG_LEVEL=warning
+
+# Optional: Custom paths (defaults shown)
+# LLM_ENERGY_RESULTS_DIR=/app/results
+# LLM_ENERGY_STATE_DIR=/app/.state
 ```
+
+**PUID/PGID Pattern**: The container starts as root (needed for GPU access and initialisation), then the entrypoint script drops privileges to your specified user before running the application. This ensures all files created in mounted volumes are owned by your host user, not root.
 
 ### Makefile (Recommended)
 
@@ -122,9 +133,10 @@ make docker-dev
 
 | Host Path | Container Path | Purpose |
 |-----------|----------------|---------|
-| `~/.cache/huggingface` | `/tmp/hf_cache` | Model cache (optional) |
+| `~/.cache/huggingface` | `/app/.cache/huggingface` | Model cache (optional) |
 | `./configs` | `/app/configs` (ro) | Experiment configs |
 | `./results` | `/app/results` | Output results |
+| (created in image) | `/app/.state` | Experiment state/resumption |
 
 ## MIG GPU Support
 
@@ -201,14 +213,30 @@ docker run --privileged --gpus all ...
 nvidia-smi  # Check driver version
 ```
 
-### Permission Denied on Results
+### Permission Denied on Results/State
 
-**Solution**:
+The Docker image uses PUID/PGID to run as your host user. Set up your `.env` file:
+
 ```bash
-mkdir -p results
+# In your .env file
+PUID=1000  # Replace with your user ID (run 'id -u')
+PGID=1000  # Replace with your group ID (run 'id -g')
 ```
 
-Makefile commands (`make docker-dev`) run as your host user automatically.
+Or pass inline:
+
+```bash
+PUID=$(id -u) PGID=$(id -g) docker compose run --rm pytorch ...
+```
+
+If you previously ran as root and have root-owned files:
+
+```bash
+# Fix ownership (requires sudo or use Docker)
+docker run --rm -v $(pwd)/results:/results alpine chown -R $(id -u):$(id -g) /results
+```
+
+Makefile commands (`make docker-dev`) handle PUID/PGID automatically.
 
 ### MIG Device Errors
 

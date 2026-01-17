@@ -28,9 +28,9 @@
 
 # Shared configuration anchor
 x-common: &common
-  # Run as host user: DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose ...
-  # Defaults to root (0:0) for backwards compatibility
-  user: "${DOCKER_UID:-0}:${DOCKER_GID:-0}"
+  # PUID/PGID pattern for host permission mapping (like LinuxServer.io)
+  # Usage: PUID=$(id -u) PGID=$(id -g) docker compose run ...
+  # Container starts as root, entrypoint drops to PUID/PGID user
 
   # GPU access with privileged mode for NVML energy metrics
   privileged: true
@@ -44,6 +44,11 @@ x-common: &common
 
   # Environment variables
   environment:
+    # PUID/PGID for host permission mapping (entrypoint.sh handles these)
+    # Pass these when running: PUID=$(id -u) PGID=$(id -g) docker compose run ...
+    - PUID
+    - PGID
+    # Standard config
     - HF_TOKEN
     - CUDA_VISIBLE_DEVICES
     - HF_HOME=/app/.cache/huggingface
@@ -53,6 +58,7 @@ x-common: &common
     # Container sees /app paths regardless of host mount source
     - LLM_ENERGY_RESULTS_DIR=/app/results
     - LLM_ENERGY_CONFIGS_DIR=/app/configs
+    - LLM_ENERGY_STATE_DIR=/app/.state
 
   working_dir: /app
 

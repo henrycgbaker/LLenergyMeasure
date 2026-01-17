@@ -45,8 +45,8 @@ FROM ${BASE_IMAGE} AS runtime
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Clear NVIDIA's entrypoint and set default command
-ENTRYPOINT []
+# Use entrypoint with PUID/PGID support
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["llm-energy-measure", "--help"]
 
 # ============================================================================
