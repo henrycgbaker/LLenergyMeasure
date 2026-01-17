@@ -9,6 +9,12 @@ Provides commands for:
 
 from __future__ import annotations
 
+# Load .env file BEFORE any llm_energy_measure imports (constants reads env vars at import time)
+from dotenv import load_dotenv
+
+load_dotenv()  # Loads from .env in current directory or parents
+
+# ruff: noqa: E402 - imports must come after load_dotenv()
 import contextlib
 import copy
 import json
@@ -188,6 +194,7 @@ def _display_config_summary(
     # Core settings
     console.print("  [bold]core:[/bold]")
     _print_value("model", config.model_name, False, indent=4)
+    _print_value("adapter", config.adapter, config.adapter is None, indent=4)
     _print_value("backend", config.backend, config.backend == "pytorch", indent=4)
     _print_value("precision", config.fp_precision, config.fp_precision == "float16", indent=4)
     _print_value(
@@ -212,13 +219,12 @@ def _display_config_summary(
     # Streaming settings
     console.print("  [bold]streaming:[/bold]")
     _print_value("enabled", config.streaming, config.streaming is False, indent=4)
-    if config.streaming:
-        _print_value(
-            "warmup_requests",
-            config.streaming_warmup_requests,
-            config.streaming_warmup_requests == 2,
-            indent=4,
-        )
+    _print_value(
+        "warmup_requests",
+        config.streaming_warmup_requests,
+        config.streaming_warmup_requests == 2,
+        indent=4,
+    )
 
     # Batching
     console.print("  [bold]batching:[/bold]")
@@ -243,10 +249,9 @@ def _display_config_summary(
     _print_value("query_rate", config.query_rate, config.query_rate == 1.0, indent=4)
     sim = config.latency_simulation
     _print_value("simulation", sim.enabled, sim.enabled is False, indent=4)
-    if sim.enabled:
-        _print_value("mode", sim.mode, sim.mode == "poisson", indent=4)
-        _print_value("target_qps", sim.target_qps, sim.target_qps == 1.0, indent=4)
-        _print_value("sim_seed", sim.seed, sim.seed is None, indent=4)
+    _print_value("mode", sim.mode, sim.mode == "poisson", indent=4)
+    _print_value("target_qps", sim.target_qps, sim.target_qps == 1.0, indent=4)
+    _print_value("sim_seed", sim.seed, sim.seed is None, indent=4)
 
     # Decoder config
     console.print("  [bold]decoder:[/bold]")
@@ -299,14 +304,11 @@ def _display_config_summary(
     _print_value("cycles", config.num_cycles, config.num_cycles == 1, indent=4)
     sched = config.schedule_config
     _print_value("cron_enabled", sched.enabled, sched.enabled is False, indent=4)
-    if sched.enabled:
-        _print_value("interval", sched.interval, sched.interval is None, indent=4)
-        _print_value("at", sched.at, sched.at is None, indent=4)
-        days_str = ", ".join(sched.days) if sched.days else None
-        _print_value("days", days_str, sched.days is None, indent=4)
-        _print_value(
-            "total_duration", sched.total_duration, sched.total_duration == "24h", indent=4
-        )
+    _print_value("interval", sched.interval, sched.interval is None, indent=4)
+    _print_value("at", sched.at, sched.at is None, indent=4)
+    days_str = ", ".join(sched.days) if sched.days else None
+    _print_value("days", days_str, sched.days is None, indent=4)
+    _print_value("total_duration", sched.total_duration, sched.total_duration == "24h", indent=4)
 
     # Prompt source (if configured)
     if config.prompt_source is not None:
@@ -874,6 +876,13 @@ def experiment(
         config = ExperimentConfig(**config_dict)
         final_num_processes = config.num_processes
 
+        # 6b. Resolve results_dir with proper precedence:
+        #     CLI --results-dir > config io.results_dir > .env > default
+        if results_dir is None and config.io_config.results_dir:
+            # Config specifies results_dir and CLI didn't override
+            repo = FileSystemRepository(Path(config.io_config.results_dir))
+            actual_results_dir = repo._base
+
         # 7. Validate config and handle warnings
         config_warnings = validate_config(config)
         if config_warnings:
@@ -1005,6 +1014,7 @@ def experiment(
                 "original_config_path": str(config_path) if config_path else None,
                 "cycle_id": None,  # Set for multi-cycle experiments
                 "config_warnings": warning_strings,  # Embed in results for traceability
+                "results_dir": str(actual_results_dir),  # Pass custom results dir to subprocess
             }
         }
         config_with_metadata = {**effective_config, **metadata}
@@ -2376,6 +2386,7 @@ def _show_effective_config(
     # =================================================================
     _add_section_header(table, "core")
     table.add_row(*_format_dict_field("model", config.get("model_name", "N/A"), None, nested=True))
+    table.add_row(*_format_dict_field("adapter", config.get("adapter"), None, nested=True))
     table.add_row(
         *_format_dict_field("backend", config.get("backend", "pytorch"), "pytorch", nested=True)
     )
@@ -2430,12 +2441,11 @@ def _show_effective_config(
     table.add_row(
         *_format_dict_field("enabled", config.get("streaming", False), False, nested=True)
     )
-    if config.get("streaming", False):
-        table.add_row(
-            *_format_dict_field(
-                "warmup_requests", config.get("streaming_warmup_requests", 2), 2, nested=True
-            )
+    table.add_row(
+        *_format_dict_field(
+            "warmup_requests", config.get("streaming_warmup_requests", 2), 2, nested=True
         )
+    )
 
     # =================================================================
     # Batching config
@@ -2473,14 +2483,13 @@ def _show_effective_config(
     table.add_row(
         *_format_dict_field("simulation", latency.get("enabled", False), False, nested=True)
     )
-    if latency.get("enabled", False):
-        table.add_row(
-            *_format_dict_field("mode", latency.get("mode", "poisson"), "poisson", nested=True)
-        )
-        table.add_row(
-            *_format_dict_field("target_qps", latency.get("target_qps", 1.0), 1.0, nested=True)
-        )
-        table.add_row(*_format_dict_field("sim_seed", latency.get("seed"), None, nested=True))
+    table.add_row(
+        *_format_dict_field("mode", latency.get("mode", "poisson"), "poisson", nested=True)
+    )
+    table.add_row(
+        *_format_dict_field("target_qps", latency.get("target_qps", 1.0), 1.0, nested=True)
+    )
+    table.add_row(*_format_dict_field("sim_seed", latency.get("seed"), None, nested=True))
 
     # =================================================================
     # Schedule config
@@ -2491,17 +2500,16 @@ def _show_effective_config(
     table.add_row(
         *_format_dict_field("cron_enabled", schedule.get("enabled", False), False, nested=True)
     )
-    if schedule.get("enabled", False):
-        table.add_row(*_format_dict_field("interval", schedule.get("interval"), None, nested=True))
-        table.add_row(*_format_dict_field("at", schedule.get("at"), None, nested=True))
-        days = schedule.get("days")
-        days_str = ", ".join(days) if days else None
-        table.add_row(*_format_dict_field("days", days_str, None, nested=True))
-        table.add_row(
-            *_format_dict_field(
-                "total_duration", schedule.get("total_duration", "24h"), "24h", nested=True
-            )
+    table.add_row(*_format_dict_field("interval", schedule.get("interval"), None, nested=True))
+    table.add_row(*_format_dict_field("at", schedule.get("at"), None, nested=True))
+    days = schedule.get("days")
+    days_str = ", ".join(days) if days else None
+    table.add_row(*_format_dict_field("days", days_str, None, nested=True))
+    table.add_row(
+        *_format_dict_field(
+            "total_duration", schedule.get("total_duration", "24h"), "24h", nested=True
         )
+    )
 
     # =================================================================
     # Decoder config (always shown)

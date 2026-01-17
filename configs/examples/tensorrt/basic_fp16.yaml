@@ -33,3 +33,7 @@ tensorrt:
   # Runtime configuration
   kv_cache_type: paged
   enable_chunked_context: true
+
+# I/O paths (optional - defaults to ./results or LLM_ENERGY_RESULTS_DIR env var)
+# io:
+#   results_dir: /path/to/results

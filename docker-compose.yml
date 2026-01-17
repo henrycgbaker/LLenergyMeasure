@@ -50,6 +50,9 @@ x-common: &common
     - PIP_NO_CACHE_DIR=1
     - CODECARBON_LOG_LEVEL=warning
     - NVIDIA_DISABLE_REQUIRE=true
+    # Container sees /app paths regardless of host mount source
+    - LLM_ENERGY_RESULTS_DIR=/app/results
+    - LLM_ENERGY_CONFIGS_DIR=/app/configs
 
   working_dir: /app
 
@@ -75,9 +78,9 @@ services:
   pytorch:
     <<: *common
     volumes:
-      - ./configs:/app/configs:ro
+      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
       - ./scripts:/app/scripts:ro
-      - ./results:/app/results
+      - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
     build:
       context: .
       dockerfile: docker/Dockerfile.pytorch
@@ -114,9 +117,9 @@ services:
     # vLLM requires shared memory for multiprocessing
     ipc: host
     volumes:
-      - ./configs:/app/configs:ro
+      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
       - ./scripts:/app/scripts:ro
-      - ./results:/app/results
+      - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
     build:
       context: .
       dockerfile: docker/Dockerfile.vllm
@@ -155,9 +158,9 @@ services:
     # TensorRT-LLM requires shared memory for multiprocessing
     ipc: host
     volumes:
-      - ./configs:/app/configs:ro
+      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
       - ./scripts:/app/scripts:ro
-      - ./results:/app/results
+      - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
       # Engine cache for compiled TensorRT engines
       - ${TRT_ENGINE_CACHE:-~/.cache/tensorrt-engines}:/app/.cache/tensorrt-engines
     build:
