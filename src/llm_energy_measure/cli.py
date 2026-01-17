@@ -166,8 +166,21 @@ def _apply_cli_overrides(
     return config_dict, tracked_overrides
 
 
-def _print_value(name: str, value: Any, is_default: bool, indent: int = 2) -> None:
-    """Print a config value with dim styling for defaults."""
+def _print_value(
+    name: str, value: Any, is_default: bool, indent: int = 2, show_defaults: bool = True
+) -> None:
+    """Print a config value with dim styling for defaults.
+
+    Args:
+        name: Field name.
+        value: Field value.
+        is_default: Whether this is the default value.
+        indent: Indentation level.
+        show_defaults: If False, skip printing default values.
+    """
+    if not show_defaults and is_default:
+        return
+
     spaces = " " * indent
     if is_default:
         console.print(f"[dim]{spaces}{name}: {value}[/dim]")
@@ -182,149 +195,409 @@ def _display_config_summary(
 ) -> None:
     """Display config summary with override visibility.
 
-    Shows ALL configuration parameters with visual styling:
+    In normal mode: Shows only non-default values (compact display).
+    In verbose mode: Shows ALL configuration parameters.
+
+    Visual styling:
     - Bold: Section headers
     - Cyan: Non-default values
-    - Dim: Default values
+    - Dim: Default values (verbose mode only)
     """
+    # Determine if we should show defaults based on verbosity
+    verbosity = os.environ.get("LLM_ENERGY_VERBOSITY", "normal")
+    show_defaults = verbosity == "verbose"
+
+    # In quiet mode, skip config display entirely
+    if verbosity == "quiet":
+        return
+
     console.print(f"\n[bold]Experiment: {config.config_name}[/bold]")
     if preset_name:
         console.print(f"  [cyan]Preset: {preset_name}[/cyan]")
 
-    # Core settings
+    # Core settings - always show model
     console.print("  [bold]core:[/bold]")
-    _print_value("model", config.model_name, False, indent=4)
-    _print_value("adapter", config.adapter, config.adapter is None, indent=4)
-    _print_value("backend", config.backend, config.backend == "pytorch", indent=4)
-    _print_value("precision", config.fp_precision, config.fp_precision == "float16", indent=4)
+    _print_value("model", config.model_name, False, indent=4, show_defaults=True)  # Always show
+    _print_value(
+        "adapter", config.adapter, config.adapter is None, indent=4, show_defaults=show_defaults
+    )
+    _print_value(
+        "backend",
+        config.backend,
+        config.backend == "pytorch",
+        indent=4,
+        show_defaults=show_defaults,
+    )
+    _print_value(
+        "precision",
+        config.fp_precision,
+        config.fp_precision == "float16",
+        indent=4,
+        show_defaults=show_defaults,
+    )
     _print_value(
         "processes",
         f"{config.num_processes} on GPUs {config.gpu_list}",
         config.num_processes == 1,
         indent=4,
+        show_defaults=show_defaults,
     )
-    _print_value("task", config.task_type, config.task_type == "text_generation", indent=4)
     _print_value(
-        "inference", config.inference_type, config.inference_type == "pure_generative", indent=4
+        "task",
+        config.task_type,
+        config.task_type == "text_generation",
+        indent=4,
+        show_defaults=show_defaults,
     )
-    _print_value("seed", config.random_seed, config.random_seed is None, indent=4)
+    _print_value(
+        "inference",
+        config.inference_type,
+        config.inference_type == "pure_generative",
+        indent=4,
+        show_defaults=show_defaults,
+    )
+    _print_value(
+        "seed",
+        config.random_seed,
+        config.random_seed is None,
+        indent=4,
+        show_defaults=show_defaults,
+    )
 
     # Token/prompt settings
-    console.print("  [bold]tokens:[/bold]")
-    _print_value("num_prompts", config.num_input_prompts, config.num_input_prompts == 1, indent=4)
-    _print_value("max_input", config.max_input_tokens, config.max_input_tokens == 512, indent=4)
-    _print_value("max_output", config.max_output_tokens, config.max_output_tokens == 128, indent=4)
-    _print_value("min_output", config.min_output_tokens, config.min_output_tokens == 0, indent=4)
+    if show_defaults or any(
+        [
+            config.num_input_prompts != 1,
+            config.max_input_tokens != 512,
+            config.max_output_tokens != 128,
+            config.min_output_tokens != 0,
+        ]
+    ):
+        console.print("  [bold]tokens:[/bold]")
+        _print_value(
+            "num_prompts",
+            config.num_input_prompts,
+            config.num_input_prompts == 1,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "max_input",
+            config.max_input_tokens,
+            config.max_input_tokens == 512,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "max_output",
+            config.max_output_tokens,
+            config.max_output_tokens == 128,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "min_output",
+            config.min_output_tokens,
+            config.min_output_tokens == 0,
+            indent=4,
+            show_defaults=show_defaults,
+        )
 
     # Streaming settings
-    console.print("  [bold]streaming:[/bold]")
-    _print_value("enabled", config.streaming, config.streaming is False, indent=4)
-    _print_value(
-        "warmup_requests",
-        config.streaming_warmup_requests,
-        config.streaming_warmup_requests == 2,
-        indent=4,
-    )
+    if show_defaults or config.streaming or config.streaming_warmup_requests != 2:
+        console.print("  [bold]streaming:[/bold]")
+        _print_value(
+            "enabled",
+            config.streaming,
+            config.streaming is False,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "warmup_requests",
+            config.streaming_warmup_requests,
+            config.streaming_warmup_requests == 2,
+            indent=4,
+            show_defaults=show_defaults,
+        )
 
     # Batching
-    console.print("  [bold]batching:[/bold]")
     batch = config.batching_options
-    _print_value("batch_size", batch.batch_size, batch.batch_size == 1, indent=4)
-    _print_value("strategy", batch.strategy, batch.strategy == "static", indent=4)
-    _print_value(
-        "max_tokens_per_batch",
-        batch.max_tokens_per_batch,
-        batch.max_tokens_per_batch is None,
-        indent=4,
-    )
+    if show_defaults or any(
+        [
+            batch.batch_size != 1,
+            batch.strategy != "static",
+            batch.max_tokens_per_batch is not None,
+        ]
+    ):
+        console.print("  [bold]batching:[/bold]")
+        _print_value(
+            "batch_size",
+            batch.batch_size,
+            batch.batch_size == 1,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "strategy",
+            batch.strategy,
+            batch.strategy == "static",
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "max_tokens_per_batch",
+            batch.max_tokens_per_batch,
+            batch.max_tokens_per_batch is None,
+            indent=4,
+            show_defaults=show_defaults,
+        )
 
     # Sharding
-    console.print("  [bold]sharding:[/bold]")
     shard = config.sharding_config
-    _print_value("strategy", shard.strategy, shard.strategy == "none", indent=4)
-    _print_value("num_shards", shard.num_shards, shard.num_shards == 1, indent=4)
+    if show_defaults or shard.strategy != "none" or shard.num_shards != 1:
+        console.print("  [bold]sharding:[/bold]")
+        _print_value(
+            "strategy",
+            shard.strategy,
+            shard.strategy == "none",
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "num_shards",
+            shard.num_shards,
+            shard.num_shards == 1,
+            indent=4,
+            show_defaults=show_defaults,
+        )
 
     # Traffic/pacing settings
-    console.print("  [bold]traffic:[/bold]")
-    _print_value("query_rate", config.query_rate, config.query_rate == 1.0, indent=4)
     sim = config.latency_simulation
-    _print_value("simulation", sim.enabled, sim.enabled is False, indent=4)
-    _print_value("mode", sim.mode, sim.mode == "poisson", indent=4)
-    _print_value("target_qps", sim.target_qps, sim.target_qps == 1.0, indent=4)
-    _print_value("sim_seed", sim.seed, sim.seed is None, indent=4)
+    if show_defaults or any(
+        [
+            config.query_rate != 1.0,
+            sim.enabled,
+            sim.mode != "poisson",
+            sim.target_qps != 1.0,
+            sim.seed is not None,
+        ]
+    ):
+        console.print("  [bold]traffic:[/bold]")
+        _print_value(
+            "query_rate",
+            config.query_rate,
+            config.query_rate == 1.0,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "simulation", sim.enabled, sim.enabled is False, indent=4, show_defaults=show_defaults
+        )
+        _print_value("mode", sim.mode, sim.mode == "poisson", indent=4, show_defaults=show_defaults)
+        _print_value(
+            "target_qps",
+            sim.target_qps,
+            sim.target_qps == 1.0,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value("sim_seed", sim.seed, sim.seed is None, indent=4, show_defaults=show_defaults)
 
     # Decoder config
-    console.print("  [bold]decoder:[/bold]")
     decoder = config.decoder_config
-    _print_value("preset", decoder.preset, decoder.preset is None, indent=4)
-    mode = "deterministic (greedy)" if decoder.is_deterministic else "sampling"
-    _print_value("mode", mode, decoder.temperature == 1.0 and decoder.do_sample, indent=4)
-    _print_value("temperature", decoder.temperature, decoder.temperature == 1.0, indent=4)
-    _print_value("do_sample", decoder.do_sample, decoder.do_sample is True, indent=4)
-    _print_value("top_p", decoder.top_p, decoder.top_p == 1.0, indent=4)
-    _print_value("top_k", decoder.top_k, decoder.top_k == 50, indent=4)
-    _print_value("min_p", decoder.min_p, decoder.min_p == 0.0, indent=4)
-    _print_value(
-        "repetition_penalty",
-        decoder.repetition_penalty,
-        decoder.repetition_penalty == 1.0,
-        indent=4,
-    )
-    _print_value(
-        "no_repeat_ngram_size",
-        decoder.no_repeat_ngram_size,
-        decoder.no_repeat_ngram_size == 0,
-        indent=4,
-    )
+    if show_defaults or any(
+        [
+            decoder.preset is not None,
+            decoder.temperature != 1.0,
+            decoder.do_sample is not True,
+            decoder.top_p != 1.0,
+            decoder.top_k != 50,
+            decoder.min_p != 0.0,
+            decoder.repetition_penalty != 1.0,
+            decoder.no_repeat_ngram_size != 0,
+        ]
+    ):
+        console.print("  [bold]decoder:[/bold]")
+        _print_value(
+            "preset", decoder.preset, decoder.preset is None, indent=4, show_defaults=show_defaults
+        )
+        mode = "deterministic (greedy)" if decoder.is_deterministic else "sampling"
+        _print_value(
+            "mode",
+            mode,
+            decoder.temperature == 1.0 and decoder.do_sample,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "temperature",
+            decoder.temperature,
+            decoder.temperature == 1.0,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "do_sample",
+            decoder.do_sample,
+            decoder.do_sample is True,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "top_p", decoder.top_p, decoder.top_p == 1.0, indent=4, show_defaults=show_defaults
+        )
+        _print_value(
+            "top_k", decoder.top_k, decoder.top_k == 50, indent=4, show_defaults=show_defaults
+        )
+        _print_value(
+            "min_p", decoder.min_p, decoder.min_p == 0.0, indent=4, show_defaults=show_defaults
+        )
+        _print_value(
+            "repetition_penalty",
+            decoder.repetition_penalty,
+            decoder.repetition_penalty == 1.0,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "no_repeat_ngram_size",
+            decoder.no_repeat_ngram_size,
+            decoder.no_repeat_ngram_size == 0,
+            indent=4,
+            show_defaults=show_defaults,
+        )
 
     # Quantization
-    console.print("  [bold]quantization:[/bold]")
     q = config.quantization_config
-    _print_value("quantization", q.quantization, q.quantization is False, indent=4)
-    _print_value("load_in_4bit", q.load_in_4bit, q.load_in_4bit is False, indent=4)
-    _print_value("load_in_8bit", q.load_in_8bit, q.load_in_8bit is False, indent=4)
-    _print_value(
-        "bnb_4bit_compute_dtype",
-        q.bnb_4bit_compute_dtype,
-        q.bnb_4bit_compute_dtype == "float16",
-        indent=4,
-    )
-    _print_value(
-        "bnb_4bit_quant_type", q.bnb_4bit_quant_type, q.bnb_4bit_quant_type == "nf4", indent=4
-    )
-    _print_value(
-        "bnb_4bit_use_double_quant",
-        q.bnb_4bit_use_double_quant,
-        q.bnb_4bit_use_double_quant is False,
-        indent=4,
-    )
+    if show_defaults or any(
+        [
+            q.quantization,
+            q.load_in_4bit,
+            q.load_in_8bit,
+            q.bnb_4bit_compute_dtype != "float16",
+            q.bnb_4bit_quant_type != "nf4",
+            q.bnb_4bit_use_double_quant,
+        ]
+    ):
+        console.print("  [bold]quantization:[/bold]")
+        _print_value(
+            "quantization",
+            q.quantization,
+            q.quantization is False,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "load_in_4bit",
+            q.load_in_4bit,
+            q.load_in_4bit is False,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "load_in_8bit",
+            q.load_in_8bit,
+            q.load_in_8bit is False,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "bnb_4bit_compute_dtype",
+            q.bnb_4bit_compute_dtype,
+            q.bnb_4bit_compute_dtype == "float16",
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "bnb_4bit_quant_type",
+            q.bnb_4bit_quant_type,
+            q.bnb_4bit_quant_type == "nf4",
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "bnb_4bit_use_double_quant",
+            q.bnb_4bit_use_double_quant,
+            q.bnb_4bit_use_double_quant is False,
+            indent=4,
+            show_defaults=show_defaults,
+        )
 
     # Schedule config
-    console.print("  [bold]schedule:[/bold]")
-    _print_value("cycles", config.num_cycles, config.num_cycles == 1, indent=4)
     sched = config.schedule_config
-    _print_value("cron_enabled", sched.enabled, sched.enabled is False, indent=4)
-    _print_value("interval", sched.interval, sched.interval is None, indent=4)
-    _print_value("at", sched.at, sched.at is None, indent=4)
-    days_str = ", ".join(sched.days) if sched.days else None
-    _print_value("days", days_str, sched.days is None, indent=4)
-    _print_value("total_duration", sched.total_duration, sched.total_duration == "24h", indent=4)
+    if show_defaults or any(
+        [
+            config.num_cycles != 1,
+            sched.enabled,
+            sched.interval is not None,
+            sched.at is not None,
+            sched.days is not None,
+            sched.total_duration != "24h",
+        ]
+    ):
+        console.print("  [bold]schedule:[/bold]")
+        _print_value(
+            "cycles",
+            config.num_cycles,
+            config.num_cycles == 1,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "cron_enabled",
+            sched.enabled,
+            sched.enabled is False,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value(
+            "interval",
+            sched.interval,
+            sched.interval is None,
+            indent=4,
+            show_defaults=show_defaults,
+        )
+        _print_value("at", sched.at, sched.at is None, indent=4, show_defaults=show_defaults)
+        days_str = ", ".join(sched.days) if sched.days else None
+        _print_value("days", days_str, sched.days is None, indent=4, show_defaults=show_defaults)
+        _print_value(
+            "total_duration",
+            sched.total_duration,
+            sched.total_duration == "24h",
+            indent=4,
+            show_defaults=show_defaults,
+        )
 
-    # Prompt source (if configured)
+    # Prompt source (if configured) - always show when present
     if config.prompt_source is not None:
         console.print("  [bold]prompts:[/bold]")
         ps = config.prompt_source
-        _print_value("type", ps.type, False, indent=4)
+        _print_value("type", ps.type, False, indent=4, show_defaults=True)
         if ps.type == "file":
-            _print_value("path", ps.path, False, indent=4)
+            _print_value("path", ps.path, False, indent=4, show_defaults=True)
         else:  # huggingface
-            _print_value("dataset", ps.dataset, False, indent=4)
-            _print_value("split", ps.split, ps.split == "train", indent=4)
-            _print_value("subset", ps.subset, ps.subset is None, indent=4)
-            _print_value("column", ps.column, ps.column is None, indent=4)
-            _print_value("sample_size", ps.sample_size, ps.sample_size is None, indent=4)
-            _print_value("shuffle", ps.shuffle, ps.shuffle is False, indent=4)
-            _print_value("seed", ps.seed, ps.seed == 42, indent=4)
+            _print_value("dataset", ps.dataset, False, indent=4, show_defaults=True)
+            _print_value(
+                "split", ps.split, ps.split == "train", indent=4, show_defaults=show_defaults
+            )
+            _print_value(
+                "subset", ps.subset, ps.subset is None, indent=4, show_defaults=show_defaults
+            )
+            _print_value(
+                "column", ps.column, ps.column is None, indent=4, show_defaults=show_defaults
+            )
+            _print_value(
+                "sample_size",
+                ps.sample_size,
+                ps.sample_size is None,
+                indent=4,
+                show_defaults=show_defaults,
+            )
+            _print_value(
+                "shuffle", ps.shuffle, ps.shuffle is False, indent=4, show_defaults=show_defaults
+            )
+            _print_value("seed", ps.seed, ps.seed == 42, indent=4, show_defaults=show_defaults)
 
     # Show overrides
     if overrides:
@@ -416,12 +689,30 @@ def version_callback(value: bool) -> None:
 def main(
     version: Annotated[
         bool,
-        typer.Option("--version", "-v", callback=version_callback, is_eager=True),
+        typer.Option("--version", callback=version_callback, is_eager=True),
     ] = False,
-    verbose: Annotated[bool, typer.Option("--verbose", help="Enable debug logging")] = False,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", "-v", help="Enable full logs with timestamps")
+    ] = False,
+    quiet: Annotated[
+        bool, typer.Option("--quiet", "-q", help="Minimal output (warnings only)")
+    ] = False,
 ) -> None:
     """LLM inference efficiency measurement framework."""
-    setup_logging(level="DEBUG" if verbose else "INFO")
+    from llm_energy_measure.logging import VerbosityType
+
+    # Determine verbosity level
+    verbosity: VerbosityType
+    if quiet:
+        verbosity = "quiet"
+    elif verbose:
+        verbosity = "verbose"
+    else:
+        verbosity = "normal"
+
+    # Set environment variable for subprocesses and progress module
+    os.environ["LLM_ENERGY_VERBOSITY"] = verbosity
+    setup_logging(verbosity=verbosity)
 
 
 @app.command()  # type: ignore[misc]
@@ -963,7 +1254,10 @@ def experiment(
         # Build launch command based on backend
         # vLLM manages its own multiprocessing (spawn), incompatible with accelerate (fork)
         backend_name = config.backend if hasattr(config, "backend") else "pytorch"
-        subprocess_env: dict[str, str] | None = None  # Environment for subprocess
+
+        # Always set subprocess environment to pass verbosity
+        subprocess_env = os.environ.copy()
+        subprocess_env["LLM_ENERGY_VERBOSITY"] = os.environ.get("LLM_ENERGY_VERBOSITY", "normal")
 
         if backend_name == "vllm":
             # Direct launch for vLLM - it handles its own distribution
@@ -974,7 +1268,6 @@ def experiment(
             ]
             # vLLM v1 multiprocessing can have issues with CUDA initialization
             # Disable V1 multiprocessing to use simpler process model
-            subprocess_env = os.environ.copy()
             subprocess_env["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
             subprocess_env["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
             # Disable torch.compile - requires C compiler not present in minimal Docker images
@@ -1051,191 +1344,198 @@ def experiment(
             )
 
         # Multi-cycle support: run experiment multiple times for statistical robustness
+        from llm_energy_measure.progress import CycleProgress
+
         cycle_results: list[AggregatedResult] = []
         cycle_metadata_list: list[Any] = []
         base_experiment_id = experiment_id
 
-        for cycle_idx in range(effective_cycles):
-            # Generate cycle-specific experiment ID
-            if effective_cycles > 1:
-                cycle_experiment_id = f"{base_experiment_id}_c{cycle_idx}"
-                console.print(
-                    f"\n[bold cyan]━━━ Cycle {cycle_idx + 1}/{effective_cycles} ━━━[/bold cyan]"
-                )
-            else:
-                cycle_experiment_id = experiment_id
+        # Use cycle progress for multi-cycle runs
+        cycle_progress = CycleProgress(effective_cycles)
 
-            # Collect cycle metadata (temperature, load) before each cycle
-            from llm_energy_measure.results.cycle_statistics import (
-                create_cycle_metadata,
-                try_get_gpu_temperature,
-                try_get_system_load,
-            )
+        with cycle_progress:
+            for cycle_idx in range(effective_cycles):
+                # Generate cycle-specific experiment ID
+                if effective_cycles > 1:
+                    cycle_experiment_id = f"{base_experiment_id}_c{cycle_idx}"
+                    cycle_progress.info(f"\n━━━ Cycle {cycle_idx + 1}/{effective_cycles} ━━━")
+                else:
+                    cycle_experiment_id = experiment_id
 
-            cycle_meta = create_cycle_metadata(
-                cycle_id=cycle_idx,
-                timestamp=datetime.now(),
-                gpu_temperature_c=try_get_gpu_temperature(),
-                system_load=try_get_system_load(),
-            )
-            cycle_metadata_list.append(cycle_meta)
-
-            # Update temp config with cycle-specific experiment ID
-            metadata["_metadata"]["experiment_id"] = cycle_experiment_id
-            if effective_cycles > 1:
-                metadata["_metadata"]["cycle_id"] = cycle_idx
-            config_with_metadata = {**effective_config, **metadata}
-
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".yaml", delete=False, prefix="llm_energy_"
-            ) as tmp:
-                yaml.dump(config_with_metadata, tmp, default_flow_style=False)
-                cycle_tmp_config_path = tmp.name
-
-            # Update command with cycle-specific config
-            cycle_cmd = cmd.copy()
-            # Replace config path in command
-            config_idx = cycle_cmd.index("--config")
-            cycle_cmd[config_idx + 1] = cycle_tmp_config_path
-
-            # Create experiment state before launch (Phase 2)
-            current_state = ExperimentState(
-                experiment_id=cycle_experiment_id,
-                status=ExperimentStatus.RUNNING,
-                config_path=str(config_path) if config_path else None,
-                config_hash=config_hash,
-                model_name=config.model_name,
-                prompt_args={
-                    "dataset": dataset,
-                    "sample_size": sample_size,
-                    "prompts_file": str(prompts_file) if prompts_file else None,
-                },
-                num_processes=final_num_processes,
-                started_at=datetime.now(),
-            )
-
-            # Register signal handlers (Phase 3)
-            original_sigint = signal.signal(signal.SIGINT, _handle_interrupt)
-            original_sigterm = signal.signal(signal.SIGTERM, _handle_interrupt)
-
-            try:
-                # Run with Popen for better control (Phase 3)
-                # start_new_session=True creates a new process group, allowing us to
-                # kill all child processes (accelerate workers) with os.killpg()
-                subprocess_handle = subprocess.Popen(
-                    cycle_cmd, start_new_session=True, env=subprocess_env
-                )
-                current_state.subprocess_pid = subprocess_handle.pid
-                state_manager.save(current_state)
-
-                # Wait for completion
-                exit_code = subprocess_handle.wait()
-
-            finally:
-                # Restore signal handlers
-                signal.signal(signal.SIGINT, original_sigint)
-                signal.signal(signal.SIGTERM, original_sigterm)
-
-            # Handle subprocess result
-            if exit_code == 0:
-                # Update process state from completion markers (Phase 5)
-                current_state = _update_process_state_from_markers(
-                    current_state, state_manager, actual_results_dir
+                # Collect cycle metadata (temperature, load) before each cycle
+                from llm_energy_measure.results.cycle_statistics import (
+                    create_cycle_metadata,
+                    try_get_gpu_temperature,
+                    try_get_system_load,
                 )
 
-                if current_state.can_aggregate():
-                    current_state.status = ExperimentStatus.COMPLETED
+                cycle_meta = create_cycle_metadata(
+                    cycle_id=cycle_idx,
+                    timestamp=datetime.now(),
+                    gpu_temperature_c=try_get_gpu_temperature(),
+                    system_load=try_get_system_load(),
+                )
+                cycle_metadata_list.append(cycle_meta)
+
+                # Update temp config with cycle-specific experiment ID
+                metadata["_metadata"]["experiment_id"] = cycle_experiment_id
+                if effective_cycles > 1:
+                    metadata["_metadata"]["cycle_id"] = cycle_idx
+                config_with_metadata = {**effective_config, **metadata}
+
+                with tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".yaml", delete=False, prefix="llm_energy_"
+                ) as tmp:
+                    yaml.dump(config_with_metadata, tmp, default_flow_style=False)
+                    cycle_tmp_config_path = tmp.name
+
+                # Update command with cycle-specific config
+                cycle_cmd = cmd.copy()
+                # Replace config path in command
+                config_idx = cycle_cmd.index("--config")
+                cycle_cmd[config_idx + 1] = cycle_tmp_config_path
+
+                # Create experiment state before launch (Phase 2)
+                current_state = ExperimentState(
+                    experiment_id=cycle_experiment_id,
+                    status=ExperimentStatus.RUNNING,
+                    config_path=str(config_path) if config_path else None,
+                    config_hash=config_hash,
+                    model_name=config.model_name,
+                    prompt_args={
+                        "dataset": dataset,
+                        "sample_size": sample_size,
+                        "prompts_file": str(prompts_file) if prompts_file else None,
+                    },
+                    num_processes=final_num_processes,
+                    started_at=datetime.now(),
+                )
+
+                # Register signal handlers (Phase 3)
+                original_sigint = signal.signal(signal.SIGINT, _handle_interrupt)
+                original_sigterm = signal.signal(signal.SIGTERM, _handle_interrupt)
+
+                try:
+                    # Run with Popen for better control (Phase 3)
+                    # start_new_session=True creates a new process group, allowing us to
+                    # kill all child processes (accelerate workers) with os.killpg()
+                    subprocess_handle = subprocess.Popen(
+                        cycle_cmd, start_new_session=True, env=subprocess_env
+                    )
+                    current_state.subprocess_pid = subprocess_handle.pid
                     state_manager.save(current_state)
 
-                    # Auto-aggregate if not disabled (Phase 1)
-                    if not no_aggregate:
-                        try:
-                            console.print("[dim]Auto-aggregating cycle results...[/dim]")
-                            raw_results = repo.load_all_raw(current_state.experiment_id)
-                            agg_result = aggregate_results(
-                                experiment_id=current_state.experiment_id,
-                                raw_results=raw_results,
-                                expected_processes=final_num_processes,
-                                results_dir=actual_results_dir,
-                                strict=True,
-                            )
-                            result_path = repo.save_aggregated(agg_result)
-                            current_state.status = ExperimentStatus.AGGREGATED
-                            state_manager.delete(current_state.experiment_id)
-                            cycle_results.append(agg_result)
-                            if effective_cycles == 1:
-                                console.print(f"\n[green]Results saved to:[/green] {result_path}")
-                                # Show brief summary including streaming latency if present
-                                if agg_result.latency_stats is not None:
-                                    lat = agg_result.latency_stats
-                                    ttft_p99 = (
-                                        lat.get("ttft_p99_ms")
-                                        if isinstance(lat, dict)
-                                        else lat.ttft_p99_ms
-                                    )
-                                    itl_p99 = (
-                                        lat.get("itl_p99_ms")
-                                        if isinstance(lat, dict)
-                                        else lat.itl_p99_ms
-                                    )
+                    # Wait for completion
+                    exit_code = subprocess_handle.wait()
+
+                finally:
+                    # Restore signal handlers
+                    signal.signal(signal.SIGINT, original_sigint)
+                    signal.signal(signal.SIGTERM, original_sigterm)
+
+                # Handle subprocess result
+                if exit_code == 0:
+                    # Update process state from completion markers (Phase 5)
+                    current_state = _update_process_state_from_markers(
+                        current_state, state_manager, actual_results_dir
+                    )
+
+                    if current_state.can_aggregate():
+                        current_state.status = ExperimentStatus.COMPLETED
+                        state_manager.save(current_state)
+
+                        # Auto-aggregate if not disabled (Phase 1)
+                        if not no_aggregate:
+                            try:
+                                cycle_progress.info("Auto-aggregating cycle results...")
+                                raw_results = repo.load_all_raw(current_state.experiment_id)
+                                agg_result = aggregate_results(
+                                    experiment_id=current_state.experiment_id,
+                                    raw_results=raw_results,
+                                    expected_processes=final_num_processes,
+                                    results_dir=actual_results_dir,
+                                    strict=True,
+                                )
+                                result_path = repo.save_aggregated(agg_result)
+                                current_state.status = ExperimentStatus.AGGREGATED
+                                state_manager.delete(current_state.experiment_id)
+                                cycle_results.append(agg_result)
+                                if effective_cycles == 1:
                                     console.print(
-                                        f"  [dim]Streaming: TTFT p99={ttft_p99:.1f}ms"
-                                        + (f"  ITL p99={itl_p99:.1f}ms" if itl_p99 else "")
-                                        + "[/dim]"
+                                        f"\n[green]Results saved to:[/green] {result_path}"
                                     )
-                        except AggregationError as e:
-                            console.print(f"[yellow]Aggregation warning:[/yellow] {e}")
+                                    # Show brief summary including streaming latency if present
+                                    if agg_result.latency_stats is not None:
+                                        lat = agg_result.latency_stats
+                                        ttft_p99 = (
+                                            lat.get("ttft_p99_ms")
+                                            if isinstance(lat, dict)
+                                            else lat.ttft_p99_ms
+                                        )
+                                        itl_p99 = (
+                                            lat.get("itl_p99_ms")
+                                            if isinstance(lat, dict)
+                                            else lat.itl_p99_ms
+                                        )
+                                        console.print(
+                                            f"  [dim]Streaming: TTFT p99={ttft_p99:.1f}ms"
+                                            + (f"  ITL p99={itl_p99:.1f}ms" if itl_p99 else "")
+                                            + "[/dim]"
+                                        )
+                            except AggregationError as e:
+                                cycle_progress.warning(f"Aggregation warning: {e}")
+                                console.print(
+                                    f"Raw results available. Aggregate manually with: "
+                                    f"llm-energy-measure aggregate {current_state.experiment_id}"
+                                )
+                                state_manager.save(current_state)
+                                if effective_cycles > 1:
+                                    cycle_progress.warning("Cycle failed, stopping multi-cycle run")
+                                    raise typer.Exit(1) from None
+                        else:
                             console.print(
-                                f"Raw results available. Aggregate manually with: "
-                                f"llm-energy-measure aggregate {current_state.experiment_id}"
+                                f"[green]Cycle {cycle_idx + 1} complete.[/green] "
+                                f"Aggregate with: llm-energy-measure aggregate {current_state.experiment_id}"
                             )
                             state_manager.save(current_state)
-                            if effective_cycles > 1:
-                                console.print("[red]Cycle failed, stopping multi-cycle run[/red]")
-                                raise typer.Exit(1) from None
                     else:
+                        # Exit 0 but incomplete - anomaly
+                        cycle_progress.warning("Process exited successfully but results incomplete")
                         console.print(
-                            f"[green]Cycle {cycle_idx + 1} complete.[/green] "
-                            f"Aggregate with: llm-energy-measure aggregate {current_state.experiment_id}"
+                            f"  Completed: {current_state.processes_completed}/{current_state.num_processes}"
+                        )
+                        if effective_cycles > 1:
+                            cycle_progress.warning("Cycle incomplete, stopping multi-cycle run")
+                            raise typer.Exit(1)
+                        console.print(
+                            f"  Use 'llm-energy-measure aggregate {current_state.experiment_id} --force' "
+                            "to aggregate partial results"
                         )
                         state_manager.save(current_state)
+                        raise typer.Exit(0)
                 else:
-                    # Exit 0 but incomplete - anomaly
-                    console.print(
-                        "[yellow]Warning: Process exited successfully but results incomplete[/yellow]"
+                    # Non-zero exit - check what we got
+                    current_state = _update_process_state_from_markers(
+                        current_state, state_manager, actual_results_dir
                     )
+                    current_state.status = ExperimentStatus.FAILED
+                    current_state.error_message = f"Subprocess exited with code {exit_code}"
+                    state_manager.save(current_state)
+
+                    cycle_progress.warning(f"Experiment failed (exit code {exit_code})")
                     console.print(
                         f"  Completed: {current_state.processes_completed}/{current_state.num_processes}"
                     )
-                    if effective_cycles > 1:
-                        console.print("[red]Cycle incomplete, stopping multi-cycle run[/red]")
-                        raise typer.Exit(1)
-                    console.print(
-                        f"  Use 'llm-energy-measure aggregate {current_state.experiment_id} --force' "
-                        "to aggregate partial results"
-                    )
-                    state_manager.save(current_state)
-                    raise typer.Exit(0)
-            else:
-                # Non-zero exit - check what we got
-                current_state = _update_process_state_from_markers(
-                    current_state, state_manager, actual_results_dir
-                )
-                current_state.status = ExperimentStatus.FAILED
-                current_state.error_message = f"Subprocess exited with code {exit_code}"
-                state_manager.save(current_state)
+                    if current_state.processes_completed > 0:
+                        console.print(
+                            f"  Partial results available. Resume with: "
+                            f"llm-energy-measure experiment --resume {current_state.experiment_id}"
+                        )
 
-                console.print(f"[red]Experiment failed (exit code {exit_code})[/red]")
-                console.print(
-                    f"  Completed: {current_state.processes_completed}/{current_state.num_processes}"
-                )
-                if current_state.processes_completed > 0:
-                    console.print(
-                        f"  Partial results available. Resume with: "
-                        f"llm-energy-measure experiment --resume {current_state.experiment_id}"
-                    )
+                    raise typer.Exit(exit_code)
 
-                raise typer.Exit(exit_code)
+                # Advance cycle progress after successful cycle
+                cycle_progress.advance(cycle_idx)
 
         # Multi-cycle aggregation and statistics
         if effective_cycles > 1 and len(cycle_results) == effective_cycles:

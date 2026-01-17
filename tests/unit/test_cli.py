@@ -424,9 +424,8 @@ class TestExperimentCommand:
         import llm_energy_measure.constants
 
         # Use temp directory for state to avoid interference from real experiments
-        monkeypatch.setattr(
-            llm_energy_measure.constants, "DEFAULT_STATE_DIR", str(tmp_path / "state")
-        )
+        # Must be Path, not str, as code uses / operator for path joining
+        monkeypatch.setattr(llm_energy_measure.constants, "DEFAULT_STATE_DIR", tmp_path / "state")
 
         calls = []
 
@@ -481,9 +480,8 @@ class TestExperimentCommand:
         import llm_energy_measure.constants
 
         # Use temp directory for state to avoid interference from real experiments
-        monkeypatch.setattr(
-            llm_energy_measure.constants, "DEFAULT_STATE_DIR", str(tmp_path / "state")
-        )
+        # Must be Path, not str, as code uses / operator for path joining
+        monkeypatch.setattr(llm_energy_measure.constants, "DEFAULT_STATE_DIR", tmp_path / "state")
 
         calls = []
 
@@ -553,9 +551,8 @@ fp_precision: float32
         import llm_energy_measure.constants
 
         # Use temp directory for state to avoid interference from real experiments
-        monkeypatch.setattr(
-            llm_energy_measure.constants, "DEFAULT_STATE_DIR", str(tmp_path / "state")
-        )
+        # Must be Path, not str, as code uses / operator for path joining
+        monkeypatch.setattr(llm_energy_measure.constants, "DEFAULT_STATE_DIR", tmp_path / "state")
 
         calls = []
 

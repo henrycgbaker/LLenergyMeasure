@@ -9,19 +9,12 @@
 
 set -e
 
-# Colour codes for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Colour
-
 # Get PUID/PGID from environment, default to root if not set
 PUID=${PUID:-0}
 PGID=${PGID:-0}
 
 # If running as root and PUID/PGID specified, set up the user
 if [ "$(id -u)" = "0" ] && [ "$PUID" != "0" ]; then
-    echo -e "${GREEN}Setting up user with PUID=${PUID} PGID=${PGID}${NC}"
-
     # Create group if it doesn't exist
     if ! getent group appgroup >/dev/null 2>&1; then
         groupadd -g "$PGID" appgroup
