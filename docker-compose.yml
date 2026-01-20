@@ -87,6 +87,8 @@ services:
       - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
       - ./scripts:/app/scripts:ro
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
+      # Mount HF cache for gated models - avoids re-auth in child processes
+      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
     build:
       context: .
       dockerfile: docker/Dockerfile.pytorch
@@ -126,6 +128,8 @@ services:
       - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
       - ./scripts:/app/scripts:ro
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
+      # Mount HF cache for gated models - avoids re-auth in child processes
+      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
     build:
       context: .
       dockerfile: docker/Dockerfile.vllm
@@ -167,6 +171,8 @@ services:
       - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
       - ./scripts:/app/scripts:ro
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
+      # Mount HF cache for gated models - avoids re-auth in child processes
+      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
       # Engine cache for compiled TensorRT engines
       - ${TRT_ENGINE_CACHE:-~/.cache/tensorrt-engines}:/app/.cache/tensorrt-engines
     build:

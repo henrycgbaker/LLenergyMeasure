@@ -384,6 +384,46 @@ class TestExperimentConfig:
         config = ExperimentConfig(**minimal_config)
         assert config.prompt_source is None
 
+    def test_pytorch_pipeline_parallel_rejected(self, minimal_config):
+        """PyTorch backend with pipeline_parallel strategy is rejected.
+
+        Pipeline parallelism requires full model access for generate() which
+        PyTorch's pipelining abstraction can't provide for autoregressive
+        generation. Users should use vLLM or TensorRT for PP inference.
+        """
+        with pytest.raises(
+            ValidationError,
+            match="Pipeline parallelism is not supported with PyTorch backend",
+        ):
+            ExperimentConfig(
+                **minimal_config,
+                backend="pytorch",
+                gpu_list=[0, 1],
+                sharding_config={"strategy": "pipeline_parallel", "num_shards": 2},
+            )
+
+    def test_vllm_pipeline_parallel_allowed(self, minimal_config):
+        """vLLM backend supports pipeline_parallel strategy."""
+        config = ExperimentConfig(
+            **minimal_config,
+            backend="vllm",
+            gpu_list=[0, 1],
+            sharding_config={"strategy": "pipeline_parallel", "num_shards": 2},
+        )
+        assert config.sharding_config.strategy == "pipeline_parallel"
+        assert config.backend == "vllm"
+
+    def test_pytorch_tensor_parallel_allowed(self, minimal_config):
+        """PyTorch backend supports tensor_parallel strategy."""
+        config = ExperimentConfig(
+            **minimal_config,
+            backend="pytorch",
+            gpu_list=[0, 1],
+            sharding_config={"strategy": "tensor_parallel", "num_shards": 2},
+        )
+        assert config.sharding_config.strategy == "tensor_parallel"
+        assert config.backend == "pytorch"
+
 
 class TestFilePromptSource:
     """Tests for FilePromptSource config."""

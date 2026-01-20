@@ -1165,7 +1165,13 @@ def experiment(
 
         # 6. Create final config
         config = ExperimentConfig(**config_dict)
-        final_num_processes = config.num_processes
+
+        # Determine effective launcher processes based on backend capabilities
+        # vLLM/TensorRT manage parallelism internally = 1 launcher process
+        # PyTorch with Accelerate = config.num_processes launcher processes
+        from llm_energy_measure.orchestration.launcher import get_effective_launcher_processes
+
+        final_num_processes = get_effective_launcher_processes(config)
 
         # 6b. Resolve results_dir with proper precedence:
         #     CLI --results-dir > config io.results_dir > .env > default
@@ -1255,9 +1261,17 @@ def experiment(
         # vLLM manages its own multiprocessing (spawn), incompatible with accelerate (fork)
         backend_name = config.backend if hasattr(config, "backend") else "pytorch"
 
-        # Always set subprocess environment to pass verbosity
+        # Always set subprocess environment to pass verbosity and HF credentials
         subprocess_env = os.environ.copy()
         subprocess_env["LLM_ENERGY_VERBOSITY"] = os.environ.get("LLM_ENERGY_VERBOSITY", "normal")
+
+        # Explicitly propagate HuggingFace token to child processes
+        # This is critical for multi-process PyTorch experiments with gated models
+        # torch.distributed.run may not inherit env vars reliably with spawn method
+        if hf_token := os.environ.get("HF_TOKEN"):
+            subprocess_env["HF_TOKEN"] = hf_token
+            # Also set legacy env var for older transformers versions
+            subprocess_env["HUGGING_FACE_HUB_TOKEN"] = hf_token
 
         if backend_name == "vllm":
             # Direct launch for vLLM - it handles its own distribution
