@@ -283,8 +283,12 @@ class PipelineParallelStrategy(ParallelismStrategy):
     def wrap_model(self, model: PreTrainedModel) -> PreTrainedModel:
         """Split model into pipeline stages.
 
-        Attempts automatic splitting via torch.distributed.pipelining.
-        Falls back to manual layer-based splitting if that fails.
+        For single-stage (world_size=1), skips splitting entirely and uses
+        the model directly on GPU - this preserves generate() functionality.
+
+        For multi-stage distributed, attempts automatic splitting via
+        torch.distributed.pipelining, falling back to manual layer-based
+        splitting if that fails.
 
         Args:
             model: Model loaded on CPU.
@@ -292,6 +296,16 @@ class PipelineParallelStrategy(ParallelismStrategy):
         Returns:
             This rank's stage of the model, moved to appropriate GPU.
         """
+        # Single-stage case: skip splitting, just move to GPU
+        if self._world_size == 1:
+            logger.info(
+                "Pipeline parallel with world_size=1: skipping split, using model directly. "
+                "For true pipeline parallelism, run with torchrun --nproc_per_node=N"
+            )
+            model = model.to("cuda")
+            return model
+
+        # Multi-stage distributed case: attempt splitting
         try:
             return self._split_model_automatic(model)
         except Exception as e:
@@ -340,7 +354,21 @@ class PipelineParallelStrategy(ParallelismStrategy):
 
         This is a fallback for models that don't support torch.export.
         Splits based on the model's layer structure.
+
+        For single-stage (world_size=1) scenarios, falls back to device_map='auto'
+        since manual splitting provides no benefit and breaks generate().
         """
+        # For single-stage, don't use the wrapper - just use device_map='auto'
+        if self._world_size == 1:
+            logger.info(
+                "Single-stage pipeline parallel (world_size=1): "
+                "Using device_map='auto' instead of manual splitting"
+            )
+            # Move model to GPU with automatic layer placement
+            model = model.to("cuda")
+            return model
+
+        # Multi-stage distributed case: create stage wrapper
         # Identify model layers (dynamic attribute access based on model architecture)
         if hasattr(model, "model") and hasattr(model.model, "layers"):
             # Llama-style models
@@ -371,6 +399,7 @@ class PipelineParallelStrategy(ParallelismStrategy):
         logger.info(f"Rank {self._rank}: Manual split - layers {start_idx}-{end_idx} of {n_layers}")
 
         # Create a wrapper that only runs this rank's layers
+        # Pass original model reference for potential generate() fallback
         stage_model = _PipelineStageWrapper(
             rank=self._rank,
             world_size=self._world_size,
@@ -378,6 +407,7 @@ class PipelineParallelStrategy(ParallelismStrategy):
             embed=embed if self._rank == 0 else None,
             norm=norm if self._rank == self._world_size - 1 else None,
             lm_head=lm_head if self._rank == self._world_size - 1 else None,
+            original_model=model,  # Store for generate() delegation
         )
 
         device = torch.device(f"cuda:{self._rank}")
@@ -426,6 +456,12 @@ class _PipelineStageWrapper(torch.nn.Module):  # type: ignore[misc]
 
     This is used for manual layer-based pipeline splitting when
     torch.export-based splitting fails.
+
+    Note:
+        This wrapper stores a reference to the original model to support
+        generate() calls. For single-stage (world_size=1) scenarios, generate()
+        delegates to the original model. For multi-stage distributed scenarios,
+        generate() is not supported - use vLLM backend instead.
     """
 
     def __init__(
@@ -436,6 +472,7 @@ class _PipelineStageWrapper(torch.nn.Module):  # type: ignore[misc]
         embed: torch.nn.Module | None = None,
         norm: torch.nn.Module | None = None,
         lm_head: torch.nn.Module | None = None,
+        original_model: PreTrainedModel | None = None,
     ) -> None:
         super().__init__()
         self.rank = rank
@@ -444,6 +481,65 @@ class _PipelineStageWrapper(torch.nn.Module):  # type: ignore[misc]
         self.embed = embed
         self.norm = norm
         self.lm_head = lm_head
+        # Store original model for generate() delegation
+        self._original_model = original_model
+
+    @property
+    def dtype(self) -> torch.dtype:
+        """Return dtype from first parameter."""
+        return next(self.parameters()).dtype
+
+    @property
+    def device(self) -> torch.device:
+        """Return device from first parameter."""
+        return next(self.parameters()).device
+
+    @property
+    def config(self) -> Any:
+        """Return config from original model if available."""
+        if self._original_model is not None:
+            return self._original_model.config
+        raise AttributeError("No config available - original model not stored")
+
+    def generate(self, *args: Any, **kwargs: Any) -> Any:
+        """Generate text using the original model.
+
+        For single-stage (world_size=1) scenarios, delegates to the original
+        HuggingFace model's generate() method.
+
+        For multi-stage distributed scenarios, raises NotImplementedError
+        as coordinated generation across pipeline stages is not implemented.
+        Use the vLLM backend for production pipeline-parallel inference.
+
+        Args:
+            *args: Positional arguments passed to model.generate()
+            **kwargs: Keyword arguments passed to model.generate()
+
+        Returns:
+            Generated token IDs from the original model.
+
+        Raises:
+            NotImplementedError: If world_size > 1 (distributed pipeline).
+            RuntimeError: If original model is not available.
+        """
+        if self.world_size > 1:
+            raise NotImplementedError(
+                "generate() is not supported for distributed pipeline parallelism "
+                f"(world_size={self.world_size}). Pipeline parallel generation requires "
+                "coordinated execution across stages which is not implemented. "
+                "For multi-GPU inference, use: "
+                "1. vLLM backend with tensor_parallel_size > 1, or "
+                "2. PyTorch backend with sharding.strategy='none' (device_map='auto')"
+            )
+
+        if self._original_model is None:
+            raise RuntimeError(
+                "Cannot call generate() - original model not available. "
+                "This typically happens when using automatic pipeline splitting."
+            )
+
+        # Delegate to original model's generate()
+        return self._original_model.generate(*args, **kwargs)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Process input through this stage's layers.

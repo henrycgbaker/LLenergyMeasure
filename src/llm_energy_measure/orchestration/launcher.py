@@ -158,6 +158,51 @@ def _requires_direct_launch(config_data: dict[str, Any]) -> bool:
     return _get_launch_mode(config_data) == "direct"
 
 
+def get_effective_launcher_processes(config: ExperimentConfig) -> int:
+    """Determine actual launcher process count based on backend capabilities.
+
+    For backends with internal parallelism (vLLM, TensorRT-LLM), this always
+    returns 1 because those backends manage their own multiprocessing internally.
+    The launcher spawns a single process and the backend then creates its own
+    worker processes for tensor/pipeline parallelism.
+
+    For PyTorch with Accelerate, returns config.num_processes as each Accelerate
+    worker is a separate OS process that writes its own result file.
+
+    This function is critical for:
+    - ExperimentState: determines how many result files to expect
+    - Aggregation: knows when all processes have completed
+
+    Args:
+        config: Experiment configuration.
+
+    Returns:
+        Number of launcher processes (and expected result files).
+    """
+    from llm_energy_measure.core.inference_backends import get_backend
+    from llm_energy_measure.core.inference_backends.protocols import LaunchMode
+
+    try:
+        backend = get_backend(config.backend)
+        capabilities = backend.get_runtime_capabilities()
+
+        if capabilities.launch_mode == LaunchMode.DIRECT:
+            # Backend manages parallelism internally (vLLM, TensorRT-LLM)
+            # Single launcher process, single result file
+            return 1
+        else:
+            # External parallelism via Accelerate/torchrun
+            # Each process writes its own result file
+            return config.num_processes
+
+    except Exception as e:
+        # Fall back to safe defaults if backend can't be loaded
+        logger.warning(f"Could not get backend capabilities for {config.backend}: {e}")
+        if config.backend in ("vllm", "tensorrt"):
+            return 1
+        return config.num_processes
+
+
 def _build_launch_command(
     config_data: dict[str, Any],
     script_path: str | Path,

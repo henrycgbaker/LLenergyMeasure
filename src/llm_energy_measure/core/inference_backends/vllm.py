@@ -143,6 +143,7 @@ class VLLMBackend:
         self._model_info: ModelInfo | None = None
         self._warmup_done: bool = False
         self._lora_request: Any = None
+        self._tokenizer: Any = None
 
     @property
     def name(self) -> str:
@@ -602,6 +603,67 @@ class VLLMBackend:
         except Exception as e:
             logger.warning(f"vLLM warmup failed (non-fatal): {e}")
 
+    def _get_tokenizer(self) -> Any:
+        """Get tokenizer from vLLM engine (lazy initialization).
+
+        Returns:
+            HuggingFace tokenizer used by vLLM.
+        """
+        if self._tokenizer is None and self._llm is not None:
+            try:
+                # vLLM exposes tokenizer via get_tokenizer() method
+                self._tokenizer = self._llm.get_tokenizer()
+            except AttributeError:
+                # Fallback for older vLLM versions
+                self._tokenizer = self._llm.llm_engine.tokenizer.tokenizer
+        return self._tokenizer
+
+    def _truncate_prompts(self, prompts: list[str], max_input_tokens: int | None) -> list[str]:
+        """Truncate prompts to max_input_tokens for consistent behaviour with PyTorch backend.
+
+        vLLM doesn't automatically truncate prompts - it either accepts them fully
+        or rejects them if they exceed max_model_len. This method ensures prompts
+        are truncated to max_input_tokens, matching PyTorch backend behaviour.
+
+        Args:
+            prompts: List of prompt strings.
+            max_input_tokens: Maximum tokens per prompt (None = no truncation).
+
+        Returns:
+            List of (possibly truncated) prompt strings.
+        """
+        if max_input_tokens is None:
+            return prompts
+
+        tokenizer = self._get_tokenizer()
+        if tokenizer is None:
+            logger.warning("Cannot truncate prompts: tokenizer not available")
+            return prompts
+
+        truncated: list[str] = []
+        truncation_count = 0
+
+        for prompt in prompts:
+            # Tokenize the prompt (with special tokens to match vLLM's internal behaviour)
+            tokens = tokenizer.encode(prompt, add_special_tokens=True)
+
+            # Truncate if necessary
+            if len(tokens) > max_input_tokens:
+                tokens = tokens[:max_input_tokens]
+                truncation_count += 1
+
+            # Decode back to string, skipping special tokens so vLLM can add its own
+            # This prevents double-counting of BOS/EOS tokens
+            truncated_prompt = tokenizer.decode(tokens, skip_special_tokens=True)
+            truncated.append(truncated_prompt)
+
+        if truncation_count > 0:
+            logger.debug(
+                f"Truncated {truncation_count}/{len(prompts)} prompts to {max_input_tokens} tokens"
+            )
+
+        return truncated
+
     def run_inference(self, prompts: list[str], config: ExperimentConfig) -> BackendResult:
         """Run inference using vLLM.
 
@@ -635,6 +697,9 @@ class VLLMBackend:
 
     def _run_inference_batch(self, prompts: list[str], config: ExperimentConfig) -> BackendResult:
         """Run inference on all prompts at once (no traffic simulation)."""
+        # Truncate prompts to max_input_tokens (matches PyTorch backend behaviour)
+        prompts = self._truncate_prompts(prompts, config.max_input_tokens)
+
         start_time = time.perf_counter()
 
         # Run inference (with optional LoRA adapter)
@@ -664,6 +729,9 @@ class VLLMBackend:
             BackendResult with latency_measurements containing raw samples.
         """
         import numpy as np
+
+        # Truncate prompts to max_input_tokens (matches PyTorch backend behaviour)
+        prompts = self._truncate_prompts(prompts, config.max_input_tokens)
 
         warmup_count = config.streaming_warmup_requests
 
@@ -835,6 +903,9 @@ class VLLMBackend:
         realistic request patterns (Poisson or constant arrivals).
         """
         from llm_energy_measure.core.traffic import TrafficGenerator
+
+        # Truncate prompts to max_input_tokens (matches PyTorch backend behaviour)
+        prompts = self._truncate_prompts(prompts, config.max_input_tokens)
 
         traffic_config = config.latency_simulation
         generator = TrafficGenerator(traffic_config, seed=config.random_seed)

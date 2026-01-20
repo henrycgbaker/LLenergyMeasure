@@ -548,6 +548,16 @@ class ExperimentConfig(BaseModel):
                 f"max_output_tokens ({self.max_output_tokens})"
             )
 
+        # Validate backend supports the requested parallelism strategy
+        # PyTorch backend does not support pipeline parallelism for inference
+        # (generate() requires full model access for token-by-token generation)
+        if self.backend == "pytorch" and self.sharding_config.strategy == "pipeline_parallel":
+            raise ValueError(
+                "Pipeline parallelism is not supported with PyTorch backend for inference. "
+                "PyTorch's generate() requires full model access for autoregressive generation. "
+                "Use backend='vllm' or backend='tensorrt' for pipeline parallel inference."
+            )
+
         # Validate backend-specific config matches selected backend
         if self.vllm is not None and self.backend != "vllm":
             raise ValueError(

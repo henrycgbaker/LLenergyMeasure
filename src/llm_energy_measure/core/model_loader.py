@@ -188,8 +188,16 @@ def load_model_tokenizer(
     # Apply post-load wrapping (needed for pipeline parallelism)
     model = strategy.wrap_model(model)
 
+    # Get model dtype defensively (some wrappers may not expose .dtype directly)
+    model_dtype = getattr(model, "dtype", None)
+    if model_dtype is None:
+        try:
+            model_dtype = next(model.parameters()).dtype
+        except StopIteration:
+            model_dtype = "unknown"
+
     logger.info(
-        f"Model loaded: {model_name}, dtype={model.dtype}, "
+        f"Model loaded: {model_name}, dtype={model_dtype}, "
         f"strategy={sharding_config.strategy}, "
         f"params={sum(p.numel() for p in model.parameters()):,}"
     )
