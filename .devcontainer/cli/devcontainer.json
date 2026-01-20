@@ -1,7 +1,8 @@
 {
-  "name": "LLM Energy Measure",
+  "name": "LLM Energy Measure - CLI (GPU)",
   "build": {
-    "dockerfile": "../Dockerfile",
+    "context": "../..",
+    "dockerfile": "../../Dockerfile",
     "target": "dev"
   },
   "runArgs": ["--gpus", "all", "--privileged"],

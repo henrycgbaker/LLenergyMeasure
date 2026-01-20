@@ -1,0 +1,43 @@
+# Docker Compose for API devcontainer
+# Provides PostgreSQL + Python dev environment for FastAPI work
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: llm_bench
+      POSTGRES_USER: llm_bench
+      POSTGRES_PASSWORD: dev_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U llm_bench -d llm_bench"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.api
+    volumes:
+      # Mount workspace for live editing
+      - ../..:/app:cached
+      # Persist pip cache
+      - pip-cache:/root/.cache/pip
+    environment:
+      DATABASE_URL: postgresql+asyncpg://llm_bench:dev_password@db:5432/llm_bench
+      SECRET_KEY: dev-secret-key-change-in-production
+      CORS_ORIGINS: '["http://localhost:5173", "http://localhost:3000"]'
+      DEBUG: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    # Keep container running for devcontainer
+    command: sleep infinity
+
+volumes:
+  postgres_data:
+  pip-cache:

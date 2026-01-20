@@ -1,0 +1,35 @@
+{
+  "name": "LLM Energy Measure - Web API",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "api",
+  "workspaceFolder": "/app",
+  "remoteUser": "vscode",
+  "containerEnv": {
+    "DATABASE_URL": "postgresql+asyncpg://llm_bench:dev_password@db:5432/llm_bench",
+    "SECRET_KEY": "dev-secret-key-change-in-production",
+    "DEBUG": "true",
+    "PYTHONUNBUFFERED": "1"
+  },
+  "forwardPorts": [8000, 5432],
+  "postCreateCommand": "cd /app && pip install -e '.[api,dev]' && alembic -c api/alembic.ini upgrade head",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "tamasfe.even-better-toml",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.formatting.provider": "none",
+        "editor.formatOnSave": true,
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        }
+      }
+    }
+  }
+}
