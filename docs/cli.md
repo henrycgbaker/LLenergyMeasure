@@ -44,6 +44,14 @@ llm-energy-measure experiment [config.yaml] [OPTIONS]
 | `--preset` | Built-in preset (quick-test, benchmark, throughput) |
 | `--model, -m` | HuggingFace model name (required with --preset) |
 
+**Backend & Streaming Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--backend` | Inference backend: pytorch (default), vllm, tensorrt |
+| `--streaming` | Enable streaming latency measurement (TTFT/ITL) |
+| `--streaming-warmup` | Warmup requests for streaming (default: 5) |
+
 **Workflow Parameters:**
 
 | Option | Description |
@@ -191,6 +199,7 @@ llm-energy-measure aggregate [experiment_id] [OPTIONS]
 | `--results-dir, -o` | Results directory |
 | `--force, -f` | Re-aggregate even if result exists |
 | `--strict/--no-strict` | Fail if results incomplete (default: strict) |
+| `--allow-mixed-backends` | Allow aggregating results from different backends (not recommended) |
 
 **Examples:**
 
@@ -349,12 +358,13 @@ llm-energy-measure presets
 
 ## Built-in Datasets
 
-| Dataset | Source | Default Column |
-|---------|--------|----------------|
-| `alpaca` | tatsu-lab/alpaca | instruction |
-| `sharegpt` | ShareGPT_Vicuna | conversations |
-| `gsm8k` | gsm8k (main) | question |
-| `mmlu` | cais/mmlu (all) | question |
+| Dataset | Source | Default Column | Notes |
+|---------|--------|----------------|-------|
+| `ai-energy-score` | AIEnergyScore/text_generation | text | **Default** when no `--dataset` specified |
+| `alpaca` | tatsu-lab/alpaca | instruction | |
+| `sharegpt` | ShareGPT_Vicuna | conversations | |
+| `gsm8k` | gsm8k (main) | question | |
+| `mmlu` | cais/mmlu (all) | question | |
 
 ## Built-in Presets
 
@@ -363,6 +373,59 @@ llm-energy-measure presets
 | `quick-test` | Fast validation (batch=1, max_out=32) |
 | `benchmark` | Formal measurements (fp16, deterministic) |
 | `throughput` | Throughput testing (batch=8, dynamic batching) |
+
+## Configuration Precedence
+
+When parameters are specified in multiple places, they are resolved in this order (highest priority first):
+
+```
+CLI flags  >  Config file  >  Preset  >  Environment variables  >  Defaults
+```
+
+**Example:**
+```bash
+# Config file sets batch_size=4, CLI overrides to 8
+llm-energy-measure experiment config.yaml --batch-size 8
+# Result: batch_size=8
+```
+
+## Environment Variables
+
+The tool loads `.env` files automatically via dotenv.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `LLM_ENERGY_RESULTS_DIR` | Default results directory | `results/` |
+| `HF_TOKEN` | HuggingFace token for gated models | — |
+| `CUDA_VISIBLE_DEVICES` | GPU selection | All visible |
+| `CODECARBON_LOG_LEVEL` | CodeCarbon logging (warning recommended) | `info` |
+
+**Results directory precedence:**
+```
+--results-dir (CLI)  >  io.results_dir (config)  >  LLM_ENERGY_RESULTS_DIR (.env)  >  "results/"
+```
+
+**Example `.env` file:**
+```bash
+LLM_ENERGY_RESULTS_DIR=/data/experiments/results
+HF_TOKEN=hf_xxxxxxxxxxxxx
+CODECARBON_LOG_LEVEL=warning
+```
+
+## Deprecated CLI Flags
+
+These flags still work but emit deprecation warnings. Use YAML config fields instead for reproducible experiments:
+
+| Deprecated Flag | Replacement (YAML) | Notes |
+|-----------------|-------------------|-------|
+| `--batch-size, -b` | `batching.batch_size` | Use config for formal experiments |
+| `--precision` | `fp_precision` | Use config for formal experiments |
+| `--num-processes` | `num_processes` | Use config for formal experiments |
+| `--gpu-list` | `gpus` | Use config for formal experiments |
+| `--temperature` | `decoder.temperature` | Use config for formal experiments |
+| `--quantization` | `quantization.quantization` | Use config for formal experiments |
+
+**Why deprecated?** These flags encourage ad-hoc experiments that are harder to reproduce. For quick iteration they're fine, but formal experiments should use config files.
 
 ## Direct accelerate Usage
 

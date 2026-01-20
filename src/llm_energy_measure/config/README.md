@@ -361,6 +361,8 @@ llm-energy-measure config new --preset benchmark
 |--------------|----------|------|---------|-------------|
 | `config_name` | - | str | Required | Unique identifier |
 | `model_name` | `--model / -m` | str | Required | HuggingFace model path |
+| `adapter` | - | str\|None | None | LoRA adapter (HF Hub ID or local path) |
+| `backend` | `--backend` | str | pytorch | Inference backend (pytorch/vllm/tensorrt) |
 | `max_input_tokens` | - | int | 512 | Max input tokens |
 | `max_output_tokens` | `--max-tokens` | int | 128 | Max generated tokens |
 | `min_output_tokens` | - | int | 0 | Min generated tokens |
@@ -368,6 +370,8 @@ llm-energy-measure config new --preset benchmark
 | `num_processes` | `--num-processes` | int | 1 | Worker processes |
 | `gpus` | `--gpu-list` | list[int] | [0] | GPU indices |
 | `random_seed` | `--seed` | int\|None | None | Random seed |
+| `streaming` | `--streaming` | bool | false | Enable TTFT/ITL measurement |
+| `streaming_warmup_requests` | `--streaming-warmup` | int | 5 | Warmup requests (excluded) |
 | `batching.batch_size` | `--batch-size / -b` | int | 1 | Batch size |
 | `batching.strategy` | - | str | static | Batching strategy |
 | `traffic_simulation.enabled` | - | bool | false | Enable traffic simulation |
@@ -375,6 +379,7 @@ llm-energy-measure config new --preset benchmark
 | `traffic_simulation.target_qps` | - | float | 1.0 | Target queries per second |
 | `decoder.temperature` | `--temperature` | float | 1.0 | Decoder temperature |
 | `quantization.quantization` | `--quantization` | bool | false | Enable quantization |
+| `io.results_dir` | `--results-dir` | str\|None | None | Results directory override |
 
 ### Required Fields
 | Field | Type | Description |
@@ -435,8 +440,41 @@ pytorch:
 | `VLLMLoRAConfig` | LoRA adapter configuration |
 | `PyTorchConfig` | PyTorch/Transformers options |
 | `PyTorchAssistedGenerationConfig` | Assisted generation (speculative) |
+| `TensorRTConfig` | TensorRT-LLM engine and build options |
+| `TensorRTQuantizationConfig` | TensorRT quantization (FP8/INT8/INT4) |
+| `TensorRTCalibrationConfig` | INT8 calibration data settings |
 
 **Full documentation:** See [docs/backends.md](../../../docs/backends.md) for comprehensive parameter reference.
+
+## I/O Configuration
+
+Control results directory and data paths.
+
+```yaml
+io:
+  results_dir: /custom/results/path  # Override default results location
+```
+
+**Precedence:**
+1. `--results-dir` CLI flag (highest)
+2. `io.results_dir` in config YAML
+3. `LLM_ENERGY_RESULTS_DIR` environment variable
+4. Default `results/` directory (lowest)
+
+## Streaming Latency Configuration
+
+Enable Time to First Token (TTFT) and Inter-Token Latency (ITL) measurement.
+
+```yaml
+streaming: true                    # Enable streaming mode
+streaming_warmup_requests: 5       # Warmup requests (excluded from stats)
+```
+
+**Notes:**
+- Streaming mode processes prompts sequentially for accurate per-token timing
+- `batch_size` is ignored when streaming is enabled
+- Ensure `num_input_prompts > streaming_warmup_requests` for sufficient samples
+- Recommended: 30+ measurement samples for reliable percentiles
 
 ## Prompt Source Configuration
 
@@ -462,12 +500,13 @@ prompts:
 ```
 
 **Built-in dataset aliases:**
-| Alias | HuggingFace Path | Default Column |
-|-------|-----------------|----------------|
-| `alpaca` | tatsu-lab/alpaca | instruction |
-| `sharegpt` | anon8231489123/ShareGPT_Vicuna_unfiltered | conversations |
-| `gsm8k` | gsm8k (main subset) | question |
-| `mmlu` | cais/mmlu (all subset) | question |
+| Alias | HuggingFace Path | Default Column | Notes |
+|-------|-----------------|----------------|-------|
+| `ai-energy-score` | AIEnergyScore/text_generation | text | **Default** when no dataset specified |
+| `alpaca` | tatsu-lab/alpaca | instruction | |
+| `sharegpt` | anon8231489123/ShareGPT_Vicuna_unfiltered | conversations | |
+| `gsm8k` | gsm8k (main subset) | question | |
+| `mmlu` | cais/mmlu (all subset) | question | |
 
 **Auto-detect columns:** text, prompt, question, instruction, input, content
 

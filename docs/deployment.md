@@ -33,7 +33,7 @@ llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
 
 ### Environment Variables
 
-Create a `.env` file:
+Create a `.env` file (automatically loaded via dotenv):
 
 ```bash
 # Required for gated models (Llama, etc.)
@@ -43,6 +43,9 @@ HF_TOKEN=your_huggingface_token
 # This ensures files created in mounted volumes are owned by you
 PUID=1000  # Your user ID (run 'id -u' to get this)
 PGID=1000  # Your group ID (run 'id -g' to get this)
+
+# Optional: Custom results directory
+LLM_ENERGY_RESULTS_DIR=/data/experiments/results
 
 # Optional: GPU selection
 CUDA_VISIBLE_DEVICES=0,1
@@ -56,6 +59,12 @@ CODECARBON_LOG_LEVEL=warning
 ```
 
 **PUID/PGID Pattern**: The container starts as root (needed for GPU access and initialisation), then the entrypoint script drops privileges to your specified user before running the application. This ensures all files created in mounted volumes are owned by your host user, not root.
+
+**Results directory precedence:**
+1. `--results-dir` CLI flag (highest)
+2. `io.results_dir` in config YAML
+3. `LLM_ENERGY_RESULTS_DIR` environment variable
+4. Default `results/` (lowest)
 
 ### Makefile (Recommended)
 
