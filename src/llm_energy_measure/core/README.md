@@ -194,7 +194,8 @@ inference_backends/
 ├── __init__.py      # Registry with lazy loading
 ├── protocols.py     # InferenceBackend protocol, RuntimeCapabilities
 ├── pytorch.py       # HuggingFace Transformers + Accelerate
-└── vllm.py          # vLLM with PagedAttention
+├── vllm.py          # vLLM with PagedAttention
+└── tensorrt.py      # TensorRT-LLM with compiled engines
 ```
 
 **Key types:**

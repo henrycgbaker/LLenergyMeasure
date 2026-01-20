@@ -85,12 +85,15 @@ Use HuggingFace datasets as prompt sources instead of text files:
 llm-energy-measure datasets
 ```
 
-| Dataset | Source | Default Column |
-|---------|--------|----------------|
-| `alpaca` | tatsu-lab/alpaca | instruction |
-| `sharegpt` | ShareGPT_Vicuna | conversations |
-| `gsm8k` | gsm8k (main) | question |
-| `mmlu` | cais/mmlu (all) | question |
+| Dataset | Source | Default Column | Notes |
+|---------|--------|----------------|-------|
+| `ai-energy-score` | AIEnergyScore/text_generation | text | **Default** - used when no `--dataset` specified |
+| `alpaca` | tatsu-lab/alpaca | instruction | |
+| `sharegpt` | ShareGPT_Vicuna | conversations | |
+| `gsm8k` | gsm8k (main) | question | |
+| `mmlu` | cais/mmlu (all) | question | |
+
+**Note:** If no dataset is specified, `ai-energy-score` is used automatically for standardised energy benchmarking.
 
 You can also use any HuggingFace dataset:
 
@@ -156,6 +159,9 @@ For full configuration options, see [Configuration Guide](../src/llm_energy_meas
 | **Inference** | total_tokens, tokens_per_second, latency_per_token_ms |
 | **Energy** | total_energy_j, gpu_energy_j, cpu_energy_j, emissions_kg_co2 |
 | **Compute** | flops_total, flops_per_token, peak_memory_mb |
+| **Latency** | ttft_mean_ms, ttft_p95_ms, itl_mean_ms, itl_p95_ms (streaming mode) |
+
+**Note:** Latency metrics (TTFT/ITL) require `streaming: true` in config or `--streaming` CLI flag.
 
 ## Results Structure
 

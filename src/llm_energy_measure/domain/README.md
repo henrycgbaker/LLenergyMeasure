@@ -69,6 +69,34 @@ combined = CombinedMetrics(
 # combined.efficiency_flops_per_watt
 ```
 
+**LatencyMeasurements** - Streaming latency data:
+```python
+LatencyMeasurements(
+    ttft_ms=[45.2, 48.1, 42.8, ...],      # Time to first token samples
+    itl_full_ms=[12.1, 11.8, 13.2, ...],  # All inter-token latencies
+    itl_trimmed_ms=[12.1, 11.8, ...],     # ITL with first/last tokens removed
+    request_count=95,
+    total_output_tokens=12350,
+    excluded_tokens=190,                   # First/last tokens excluded from ITL
+    streaming_mode=True,
+    warmup_requests_excluded=5,
+    measurement_method="streaming",        # streaming | per_request_batch | proportional_estimate
+)
+```
+
+**LatencyStatistics** - Computed percentiles:
+```python
+LatencyStatistics(
+    mean_ms=46.5,
+    median_ms=45.8,
+    p95_ms=52.1,
+    p99_ms=58.3,
+    min_ms=38.2,
+    max_ms=62.1,
+    sample_count=95,
+)
+```
+
 ### experiment.py
 Experiment result models.
 

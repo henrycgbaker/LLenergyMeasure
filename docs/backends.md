@@ -8,24 +8,26 @@ LLM Energy Measure supports multiple inference backends, each optimised for diff
 |---------|--------|----------|--------------|
 | `pytorch` | **Default** | Research, experimentation | HuggingFace Transformers + Accelerate |
 | `vllm` | Available | Production, throughput testing | PagedAttention, continuous batching, native TP |
-| `tensorrt` | Planned | Enterprise, maximum efficiency | Compiled inference, TensorRT-LLM |
+| `tensorrt` | Available | Enterprise, maximum efficiency | Compiled inference, TensorRT-LLM, FP8/INT8/INT4 |
 
 ## Choosing a Backend
 
 ```
-                        ┌─────────────────────────────┐
-                        │  Which backend should I use? │
-                        └──────────────┬──────────────┘
-                                       │
-                    ┌──────────────────┴──────────────────┐
-                    │ Need production-grade throughput?   │
-                    └──────────────────┬──────────────────┘
-                               Yes     │     No
-                    ┌──────────────────┴──────────────────┐
-                    ▼                                      ▼
-              Use vllm                              Use pytorch
-         (continuous batching,                   (HuggingFace models,
-          PagedAttention)                        full decoder control)
+                         ┌─────────────────────────────────┐
+                         │   Which backend should I use?   │
+                         └──────────────┬──────────────────┘
+                                        │
+                    ┌───────────────────┼───────────────────┐
+                    │                   │                   │
+                    ▼                   ▼                   ▼
+           Need maximum         Production            Research &
+           efficiency?          serving?              flexibility?
+                │                   │                     │
+                ▼                   ▼                     ▼
+          Use tensorrt          Use vllm             Use pytorch
+         (compiled plans,    (continuous batching,  (HuggingFace,
+          FP8/INT8/INT4,      PagedAttention)       full control)
+          inflight batching)
 ```
 
 **Use `pytorch` (default) when:**
@@ -39,6 +41,13 @@ LLM Energy Measure supports multiple inference backends, each optimised for diff
 - Need high throughput with continuous batching
 - Using tensor parallelism for large models
 - Comparing optimised vs naive inference
+
+**Use `tensorrt` when:**
+- Maximum inference efficiency is critical
+- Using Hopper+ GPUs with FP8 quantization
+- Need compiled, optimised execution plans
+- Enterprise/production deployments requiring peak performance
+- Benchmarking with INT8/INT4 quantization
 
 ## Configuration
 
@@ -263,6 +272,86 @@ pytorch:
 | `reduce-overhead` | Medium | Better | Small batches, benchmarks |
 | `max-autotune` | Slow | Best | Production, long-running |
 
+### TensorRT-LLM Configuration (`tensorrt:`)
+
+TensorRT-LLM provides compiled inference plans optimised for specific GPU configurations. Engines can be pre-compiled or built on-demand from HuggingFace checkpoints.
+
+```yaml
+backend: tensorrt
+model_name: meta-llama/Llama-2-7b-hf
+
+tensorrt:
+  # Engine Source
+  engine_path: null                # Pre-compiled engine path (optional)
+  engine_cache_dir: null           # Cache dir (default: ~/.cache/llm-energy-measure/tensorrt-engines/)
+  force_rebuild: false             # Force rebuild even if cached
+
+  # Build Configuration (when compiling from HF checkpoint)
+  max_batch_size: 8                # Maximum batch size for compiled engine (1-256)
+  max_input_len: null              # Max input tokens (defaults to model's max)
+  max_output_len: null             # Max output tokens (defaults to config.max_output_tokens)
+  builder_opt_level: 3             # TensorRT optimization level (0-5, higher=slower build)
+  strongly_typed: true             # Enable strong typing for FP8 (recommended)
+
+  # Quantization
+  quantization:
+    method: none                   # none, fp8, int8_sq, int8_weight_only, int4_awq, int4_gptq
+    calibration:                   # Required for int8_sq
+      dataset: wikitext            # Calibration dataset
+      split: train
+      num_samples: 512             # Calibration samples (512-1024 typical)
+      max_length: 2048
+
+  # Tensor Parallelism
+  tp_size: null                    # TP size (defaults to sharding.num_shards)
+  pp_size: 1                       # Pipeline parallel size
+
+  # Runtime Options
+  kv_cache_type: paged             # paged (memory efficient) or continuous
+  enable_chunked_context: true     # Chunk long sequences
+  max_num_tokens: null             # Max tokens per iteration (inflight batching)
+  gpu_memory_utilization: 0.9      # GPU memory fraction for KV cache (0.5-0.99)
+
+  # Speculative Decoding
+  draft_model: null                # Draft model for speculation
+  num_draft_tokens: 5              # Tokens to speculate per step (1-10)
+
+  # Escape Hatches
+  extra_build_args: {}             # Additional trtllm-build kwargs
+  extra_runtime_args: {}           # Additional runtime kwargs
+```
+
+#### TensorRT Quantization Methods
+
+| Method | Precision | Requirements | Use Case |
+|--------|-----------|--------------|----------|
+| `none` | FP16/BF16 | — | Baseline accuracy |
+| `fp8` | FP8 | Hopper+ (sm_90+) | Fast, minimal accuracy loss |
+| `int8_sq` | INT8 | Calibration data | Best INT8 accuracy |
+| `int8_weight_only` | INT8 weights | — | Faster load, FP16 compute |
+| `int4_awq` | INT4 | Pre-quantized checkpoint | Maximum compression |
+| `int4_gptq` | INT4 | Pre-quantized checkpoint | Alternative INT4 method |
+
+#### Key TensorRT Parameters
+
+| Parameter | Impact | Recommendation |
+|-----------|--------|----------------|
+| `builder_opt_level` | Higher = slower build, faster inference | 3 for dev, 5 for production |
+| `max_batch_size` | Compile-time limit affects memory | Match expected workload |
+| `kv_cache_type: paged` | Memory-efficient KV management | Always use paged |
+| `enable_chunked_context` | Better long sequence handling | Enable for long contexts |
+| `quantization.method: fp8` | ~50% memory savings, minimal accuracy loss | Use on Hopper+ GPUs |
+
+#### TensorRT Limitations
+
+| Limitation | Workaround |
+|------------|------------|
+| No BitsAndBytes quantization | Use tensorrt.quantization.method instead |
+| No `no_repeat_ngram_size` | Use `repetition_penalty` |
+| No `min_p` sampling | Use `top_p` or `top_k` |
+| Engines tied to GPU architecture | Rebuild when changing GPU type |
+| Long initial build time | Use engine caching (automatic) |
+
 ### Backend-Specific Presets
 
 Built-in presets for common scenarios:
@@ -356,6 +445,131 @@ pytorch:
     "0": "20GiB"
 ```
 
+## Streaming Latency Metrics (TTFT/ITL)
+
+All backends support streaming latency measurement for Time to First Token (TTFT) and Inter-Token Latency (ITL) metrics.
+
+### Configuration
+
+```yaml
+streaming: true                    # Enable streaming latency measurement
+streaming_warmup_requests: 5       # Warmup requests (excluded from stats)
+```
+
+```bash
+# Or via CLI
+llm-energy-measure experiment config.yaml --streaming --streaming-warmup 5
+```
+
+### Metrics Collected
+
+| Metric | Description |
+|--------|-------------|
+| `ttft_mean_ms` | Mean time to first token |
+| `ttft_p50_ms` | Median TTFT |
+| `ttft_p95_ms` | 95th percentile TTFT |
+| `ttft_p99_ms` | 99th percentile TTFT |
+| `itl_mean_ms` | Mean inter-token latency |
+| `itl_p50_ms` | Median ITL |
+| `itl_p95_ms` | 95th percentile ITL |
+| `itl_p99_ms` | 99th percentile ITL |
+
+### Backend Measurement Methods
+
+| Backend | Method | Accuracy | Notes |
+|---------|--------|----------|-------|
+| `pytorch` | Streaming callbacks | High | True per-token timestamps |
+| `vllm` | Streaming API | High | Native async iteration |
+| `tensorrt` | Version-dependent | High/Medium | v0.9+: native streaming; older: estimated |
+
+### Important Caveats
+
+1. **Sequential Processing**: Streaming mode processes prompts one at a time to capture accurate per-token timing. `batch_size` is ignored when `streaming: true`.
+
+2. **Warmup Exclusion**: The first N requests (default 5) are excluded from statistics to avoid cold-start bias. Ensure `num_input_prompts > streaming_warmup_requests`.
+
+3. **Statistical Significance**: For reliable percentiles, use at least 30+ measurement samples (prompts after warmup).
+
+4. **TensorRT Estimation**: TensorRT-LLM versions prior to v0.9 don't provide native streaming timestamps. ITL values are estimated using proportional distribution and marked with `measurement_method: proportional_estimate`.
+
+5. **Energy Profile**: Streaming mode may affect energy consumption patterns differently than batch mode due to sequential processing.
+
+### Example Configuration
+
+```yaml
+# Streaming latency benchmark
+config_name: latency-benchmark
+model_name: meta-llama/Llama-2-7b-hf
+
+streaming: true
+streaming_warmup_requests: 5
+num_input_prompts: 100            # 95 measurement samples after warmup
+
+max_output_tokens: 128
+decoder:
+  preset: deterministic           # Reproducible results
+```
+
+## LoRA Adapter Support
+
+Load LoRA (Low-Rank Adaptation) adapters for fine-tuned model inference.
+
+### Configuration
+
+```yaml
+# Top-level adapter field
+model_name: meta-llama/Llama-2-7b-hf
+adapter: your-org/your-lora-adapter    # HuggingFace Hub ID or local path
+```
+
+### Backend Support
+
+| Backend | LoRA Support | Multi-LoRA | Notes |
+|---------|--------------|------------|-------|
+| `pytorch` | ✓ | Single | Via PEFT library |
+| `vllm` | ✓ | Multiple | Native support with concurrent adapters |
+| `tensorrt` | ✗ | — | LoRA must be merged before engine build |
+
+### vLLM Multi-LoRA Configuration
+
+vLLM supports serving multiple LoRA adapters concurrently:
+
+```yaml
+backend: vllm
+model_name: meta-llama/Llama-2-7b-hf
+adapter: your-org/default-adapter       # Default adapter
+
+vllm:
+  lora:
+    enabled: true
+    max_loras: 4                         # Max concurrent adapters
+    max_rank: 16                         # Max LoRA rank supported
+    extra_vocab_size: 256                # Extra vocab for adapters
+```
+
+### PyTorch LoRA Configuration
+
+PyTorch uses the PEFT library for LoRA loading:
+
+```yaml
+backend: pytorch
+model_name: meta-llama/Llama-2-7b-hf
+adapter: your-org/your-lora-adapter     # Loaded via PEFT
+```
+
+### TensorRT with LoRA
+
+TensorRT-LLM requires LoRA weights to be merged into the base model before engine compilation:
+
+```bash
+# 1. Merge LoRA weights (external step)
+python merge_lora.py --base meta-llama/Llama-2-7b-hf --lora your-adapter --output merged-model/
+
+# 2. Use merged model with TensorRT
+backend: tensorrt
+model_name: ./merged-model/
+```
+
 ## Limitations
 
 ### vLLM Backend
@@ -373,7 +587,17 @@ pytorch:
 |------------|------------|
 | Static batching | Use `strategy: dynamic` for token-aware batching |
 | Lower throughput | Use vLLM for production-grade throughput |
-| No TTFT metric | TTFT requires streaming callbacks (not implemented) |
+
+### TensorRT Backend
+
+| Limitation | Workaround |
+|------------|------------|
+| No BitsAndBytes quantization | Use tensorrt.quantization.method instead |
+| No `no_repeat_ngram_size` | Use `repetition_penalty` |
+| No `min_p` sampling | Use `top_p` or `top_k` instead |
+| Engines tied to GPU architecture | Rebuild when changing GPU type |
+| Long initial build time | Use engine caching (automatic) |
+| FP8 requires Hopper+ | Use INT8 on older GPUs |
 
 ## Cross-Backend Comparison
 
