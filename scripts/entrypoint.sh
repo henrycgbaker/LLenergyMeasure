@@ -5,11 +5,19 @@
 # Usage:
 #   docker run -e PUID=$(id -u) -e PGID=$(id -g) ...
 #
-# If PUID/PGID not set, runs as current container user (root by default)
+# If PUID/PGID not set, auto-detects from mounted /app/results directory ownership.
+# This allows zero-config usage while still supporting explicit overrides.
 
 set -e
 
-# Get PUID/PGID from environment, default to root if not set
+# Auto-detect PUID/PGID from mounted results directory if not explicitly set
+# Precedence: explicit env var > auto-detect from mount > root (fallback)
+if [ -z "$PUID" ] && [ -d "/app/results" ]; then
+    PUID=$(stat -c %u /app/results 2>/dev/null || echo "0")
+    PGID=$(stat -c %g /app/results 2>/dev/null || echo "0")
+fi
+
+# Fall back to root if detection fails or directory doesn't exist
 PUID=${PUID:-0}
 PGID=${PGID:-0}
 
