@@ -49,6 +49,89 @@ LLM Energy Measure supports multiple inference backends, each optimised for diff
 - Enterprise/production deployments requiring peak performance
 - Benchmarking with INT8/INT4 quantization
 
+## Feature Support Matrix
+
+Quick reference for feature availability across backends.
+
+### Core Capabilities
+
+| Feature | PyTorch | vLLM | TensorRT | Notes |
+|---------|:-------:|:----:|:--------:|-------|
+| **Inference Modes** |
+| Batch inference | ✓ | ✓ | ✓ | All support batched generation |
+| Streaming inference | ✓ | ✓ | ✓ | TTFT/ITL metrics |
+| Continuous batching | ✗ | ✓ | ✓ | vLLM/TRT manage batches internally |
+| **Parallelism** |
+| Tensor parallelism | ✓ | ✓ | ✓ | PyTorch via Accelerate |
+| Pipeline parallelism | ✗ | ✗ | ✓ | TensorRT only |
+| **Quantisation** |
+| BitsAndBytes 4-bit | ✓ | ✓ | ✗ | Use TRT's native INT4 instead |
+| BitsAndBytes 8-bit | ✓ | ✗ | ✗ | PyTorch only |
+| FP8 | ✗ | ✓ | ✓ | Hopper+ GPUs (sm_90+) |
+| INT8 (smooth quant) | ✗ | ✗ | ✓ | Requires calibration |
+| GPTQ | ✓ | ✓ | ✓ | Pre-quantised checkpoints |
+| AWQ | ✓ | ✓ | ✓ | Pre-quantised checkpoints |
+| **Optimisations** |
+| KV caching | ✓ | ✓ | ✓ | All support by default |
+| Prefix caching | ✗ | ✓ | ✗ | vLLM only |
+| PagedAttention | ✗ | ✓ | ✓ | Memory-efficient KV |
+| CUDA graphs | ✓ | ✓ | ✓ | `torch_compile`, automatic |
+| Flash Attention | ✓ | ✓ | ✓ | Different implementations |
+| **Speculative Decoding** |
+| Draft model | ✓ | ✓ | ✓ | Different APIs |
+| N-gram speculation | ✗ | ✓ | ✗ | vLLM only |
+| **Adapters** |
+| LoRA (single) | ✓ | ✓ | ✗ | TRT requires merged weights |
+| Multi-LoRA | ✗ | ✓ | ✗ | vLLM native support |
+
+### Decoder Parameters
+
+| Parameter | PyTorch | vLLM | TensorRT | Notes |
+|-----------|:-------:|:----:|:--------:|-------|
+| `temperature` | ✓ | ✓ | ✓ | Universal |
+| `top_p` | ✓ | ✓ | ✓ | Nucleus sampling |
+| `top_k` | ✓ (0=off) | ✓ (-1=off) | ✓ | Disable value differs |
+| `min_p` | ✓ | ✓ | ✗ | Use `top_p`/`top_k` instead |
+| `repetition_penalty` | ✓ | ✓ | ✓ | Universal |
+| `no_repeat_ngram_size` | ✓ | ✗ | ✗ | PyTorch only |
+| `do_sample` | ✓ | — | — | Implicit via temperature=0 |
+| `beam_search` | ✓ | ✓ | ✓ | `num_beams > 1` |
+
+### Batching Strategies
+
+| Strategy | PyTorch | vLLM | TensorRT | Notes |
+|----------|:-------:|:----:|:--------:|-------|
+| `static` | ✓ | — | — | Fixed batch size |
+| `dynamic` | ✓ | — | — | Token-aware batching |
+| `sorted_static` | ✓ | — | — | Length-sorted static |
+| `sorted_dynamic` | ✓ | — | — | Length-sorted dynamic |
+| Continuous batching | — | ✓ | ✓ | Automatic, always-on |
+
+**Legend:** ✓ = Supported, ✗ = Not supported, — = Not applicable (managed differently)
+
+### Latency Measurement Modes
+
+| Mode | PyTorch | vLLM | TensorRT | Description |
+|------|:-------:|:----:|:--------:|-------------|
+| `TRUE_STREAMING` | ✓ | ✓ | ✓* | Actual per-token timestamps |
+| `PER_REQUEST_BATCH` | ✓ | — | — | Batch mode with per-request timing |
+| `PROPORTIONAL_ESTIMATE` | ✓ | — | ✓* | Estimated ITL from total time |
+
+*TensorRT v0.9+ supports true streaming; older versions use estimation.
+
+### Runtime & Architecture
+
+| Property | PyTorch | vLLM | TensorRT |
+|----------|---------|------|----------|
+| Launch mode | Accelerate | Direct | Direct |
+| CUDA management | Orchestrator | Backend | Backend |
+| Process model | Single/Multi | Multiprocess (spawn) | Multiprocess |
+| Manages own batching | No | Yes | Yes |
+
+**Implications:**
+- **PyTorch**: Orchestration layer can call `torch.cuda.*` before backend init
+- **vLLM/TensorRT**: Backend manages CUDA; no `torch.cuda.*` calls before `initialize()`
+
 ## Configuration
 
 ### Selecting a Backend

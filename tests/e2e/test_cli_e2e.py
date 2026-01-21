@@ -42,7 +42,7 @@ class TestBenchmarkWorkflowE2E:
 # Base configuration for all experiments
 max_input_tokens: 1024
 max_output_tokens: 512
-decoder_config:
+decoder:
   temperature: 0.7
   top_p: 0.9
   do_sample: true
@@ -56,7 +56,7 @@ _extends: base.yaml
 config_name: llama-7b-benchmark
 model_name: meta-llama/Llama-2-7b-hf
 num_processes: 2
-gpu_list: [0, 1]
+gpus: [0, 1]
 """)
 
         mistral_config = workspace["configs"] / "mistral-7b.yaml"
@@ -65,7 +65,7 @@ _extends: base.yaml
 config_name: mistral-7b-benchmark
 model_name: mistralai/Mistral-7B-v0.1
 num_processes: 2
-gpu_list: [0, 1]
+gpus: [0, 1]
 """)
 
         # Create prompts file
@@ -233,14 +233,14 @@ class TestConfigManagementE2E:
         (configs / "defaults.yaml").write_text("""
 max_input_tokens: 512
 max_output_tokens: 256
-decoder_config:
+decoder:
   temperature: 1.0
   top_p: 1.0
 """)
 
         (configs / "llama-family.yaml").write_text("""
 _extends: defaults.yaml
-decoder_config:
+decoder:
   temperature: 0.7
 fp_precision: float16
 """)
@@ -249,11 +249,11 @@ fp_precision: float16
 _extends: llama-family.yaml
 config_name: llama-7b-4bit
 model_name: meta-llama/Llama-2-7b-hf
-quantization_config:
+quantization:
   quantization: true
   load_in_4bit: true
 num_processes: 1
-gpu_list: [0]
+gpus: [0]
 """)
 
         # Validate the final config
@@ -279,7 +279,7 @@ gpu_list: [0]
 config_name: invalid
 model_name: test-model
 num_processes: 4
-gpu_list: [0, 1]
+gpus: [0, 1]
 """)
 
         result = runner.invoke(app, ["config", "validate", str(configs / "invalid_gpus.yaml")])

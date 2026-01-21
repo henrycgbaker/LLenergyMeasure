@@ -10,52 +10,103 @@ This guide walks you through your first LLM efficiency measurement experiment.
 
 ## Installation
 
-### Poetry (Recommended)
+### Option 1: Local (pip)
 
 ```bash
-poetry install
-poetry shell  # Activate the virtual environment
+# Clone and install
+git clone https://github.com/henrycgbaker/llm-efficiency-measurement-tool
+cd llm-energy-measure
+
+conda create -n llm-energy python=3.10
+conda activate llm-energy
+pip install -e .
+
+# Verify
+lem --help
 ```
 
-### Docker
+### Option 2: Docker
 
 ```bash
-docker compose build
+# Clone and build
+git clone https://github.com/henrycgbaker/llm-efficiency-measurement-tool
+cd llm-energy-measure
+make docker-build-pytorch  # Or docker-build-all for all backends
+
+# Run commands via make
+make lem CMD="--help"
 ```
+
+**Docker backends:**
+
+| Backend | Build Command | Best For |
+|---------|--------------|----------|
+| PyTorch | `make docker-build-pytorch` | Development, flexibility (default) |
+| vLLM | `make docker-build-vllm` | High throughput, continuous batching |
+| TensorRT | `make docker-build-tensorrt` | Maximum performance (compiled) |
+| All | `make docker-build-all` | Build all backends at once |
+
+**Running commands in Docker:**
+```bash
+# Via make (recommended)
+make lem CMD="experiment configs/my_experiment.yaml"
+
+# Or directly
+docker compose run --rm pytorch lem experiment /app/configs/my_experiment.yaml
+```
+
+## Environment Variables
+
+Create a `.env` file in the project root (gitignored):
+
+```bash
+# .env
+HF_TOKEN=hf_your_token_here
+CUDA_VISIBLE_DEVICES=available_device_indices
+```
+NB: (if using poetry skip this, if using Docker:) the make command for docker compose reads `.env`, and PUID/PGID are auto-detected from the mounted directory ownership. If running docker compose directly you'll need to set PUID/PGID manually in the `.env`.
 
 ## Your First Experiment
 
 ### 1. Create a Configuration
 
-Create a YAML config file (e.g., `configs/my_experiment.yaml`):
+Copy an example config and modify for your experiment:
 
-```yaml
-config_name: llama2-7b-benchmark
-model_name: meta-llama/Llama-2-7b-hf
-
-# Token limits
-max_input_tokens: 512
-max_output_tokens: 128
-
-# GPU setup
-gpus: [0]
-num_processes: 1
-
-# Precision
-fp_precision: float16
+```bash
+cp configs/example_config.yaml configs/my_experiment.yaml
 ```
+**Available example configs:**
+
+| Config | Use Case |
+|--------|----------|
+| [example_config.yaml](../configs/example_config.yaml) | Minimal baseline (recommended starting point) |
+| [example_pytorch.yaml](../configs/example_pytorch.yaml) | Full PyTorch backend reference (all parameters) |
+| [example_vllm.yaml](../configs/example_vllm.yaml) | Full vLLM backend reference (all parameters) |
+| [example_tensorrt.yaml](../configs/example_tensorrt.yaml) | Full TensorRT backend reference (all parameters) |
 
 ### 2. Validate Your Configuration
 
+Ensure all the parameters are consistent (some combination of experimental parameters and inference backends etc are incompatible, this command will check)
+
 ```bash
-llm-energy-measure config validate configs/my_experiment.yaml
+lem config validate configs/my_experiment.yaml
 ```
 
 ### 3. Run the Experiment
 
+**Poetry:**
 ```bash
-# Using a built-in dataset (recommended)
-llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
+lem experiment configs/my_experiment.yaml
+```
+
+**Docker:**
+```bash
+docker compose run --rm pytorch lem experiment /app/configs/my_experiment.yaml
+```
+
+**Makefile (with CLI overrides):**
+```bash
+make experiment CONFIG=my_experiment.yaml
 ```
 
 The `experiment` command:
@@ -67,13 +118,13 @@ The `experiment` command:
 
 ```bash
 # List all experiments
-llm-energy-measure results list
+lem results list
 
 # Show aggregated results
-llm-energy-measure results show exp_20240115_123456
+lem results show exp_20240115_123456
 
 # Export as JSON
-llm-energy-measure results show exp_20240115_123456 --json
+lem results show exp_20240115_123456 --json
 ```
 
 ## Built-in Datasets
@@ -82,7 +133,7 @@ Use HuggingFace datasets as prompt sources instead of text files:
 
 ```bash
 # List available built-in datasets
-llm-energy-measure datasets
+lem datasets
 ```
 
 | Dataset | Source | Default Column | Notes |
@@ -95,11 +146,10 @@ llm-energy-measure datasets
 
 **Note:** If no dataset is specified, `ai-energy-score` is used automatically for standardised energy benchmarking.
 
-You can also use any HuggingFace dataset:
+You can also use any HuggingFace dataset via CLI override:
 
 ```bash
-llm-energy-measure experiment config.yaml \
-  --dataset squad --split validation --column question -n 50
+lem experiment config.yaml --dataset squad --split validation --column question -n 50
 ```
 
 ## Configuration Basics
@@ -111,13 +161,19 @@ llm-energy-measure experiment config.yaml \
 config_name: experiment-name
 model_name: org/model-name  # HuggingFace path
 
+# Dataset (recommended - keeps everything in config)
+dataset:
+  name: alpaca           # Built-in alias or HuggingFace path
+  sample_size: 100       # Optional: limit prompts
+  split: train           # Optional: default is "train"
+  column: instruction    # Optional: auto-detected if not set
+
 # Token limits
 max_input_tokens: 512
 max_output_tokens: 128
 
 # GPU setup
 gpus: [0, 1]        # GPU indices
-num_processes: 2    # Should match GPU count
 
 # Precision
 fp_precision: float16  # float32 | float16 | bfloat16
@@ -144,10 +200,10 @@ Use presets for common scenarios:
 
 ```bash
 # Quick validation
-llm-energy-measure experiment --preset quick-test --model meta-llama/Llama-2-7b-hf -d alpaca -n 10
+lem experiment --preset quick-test --model meta-llama/Llama-2-7b-hf -d alpaca -n 10
 
 # List available presets
-llm-energy-measure presets
+lem presets
 ```
 
 For full configuration options, see [Configuration Guide](../src/llm_energy_measure/config/README.md).
@@ -180,13 +236,13 @@ results/
 ### Resume an Interrupted Experiment
 
 ```bash
-llm-energy-measure experiment --resume <exp_id>
+lem experiment --resume <exp_id>
 ```
 
 ### Start Fresh (Ignore Incomplete)
 
 ```bash
-llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100 --fresh
+lem experiment configs/my_experiment.yaml --fresh
 ```
 
 ### Manual Aggregation
@@ -194,8 +250,8 @@ llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
 If you used `--no-aggregate` or need to re-aggregate:
 
 ```bash
-llm-energy-measure aggregate exp_20240115_123456
-llm-energy-measure aggregate --all  # All pending
+lem aggregate exp_20240115_123456
+lem aggregate --all  # All pending
 ```
 
 ## Next Steps

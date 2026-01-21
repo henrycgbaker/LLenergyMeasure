@@ -12,8 +12,8 @@ Supported strategies:
 Usage:
     from llm_energy_measure.core.parallelism import get_parallelism_strategy
 
-    strategy = get_parallelism_strategy(config.sharding_config)
-    strategy.setup(config.sharding_config, gpu_list)
+    strategy = get_parallelism_strategy(config.sharding)
+    strategy.setup(config.sharding, gpus)
     model_kwargs = strategy.prepare_model_kwargs()
     model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
     model = strategy.wrap_model(model)
@@ -61,12 +61,12 @@ class ParallelismStrategy(ABC):
     """
 
     @abstractmethod
-    def setup(self, config: ShardingConfig, gpu_list: list[int]) -> None:
+    def setup(self, config: ShardingConfig, gpus: list[int]) -> None:
         """Initialise the parallelism strategy.
 
         Args:
             config: Sharding configuration with strategy-specific options.
-            gpu_list: List of GPU indices available for this experiment.
+            gpus: List of GPU indices available for this experiment.
 
         Raises:
             ValueError: If configuration is invalid for available hardware.
@@ -115,7 +115,7 @@ class NoParallelism(ParallelismStrategy):
     different layers sequentially.
     """
 
-    def setup(self, config: ShardingConfig, gpu_list: list[int]) -> None:
+    def setup(self, config: ShardingConfig, gpus: list[int]) -> None:
         """No-op for default strategy."""
         logger.debug("NoParallelism strategy: using device_map='auto'")
 
@@ -159,19 +159,19 @@ class TensorParallelStrategy(ParallelismStrategy):
         self._num_shards: int = 1
         self._device_mesh_initialised: bool = False
 
-    def setup(self, config: ShardingConfig, gpu_list: list[int]) -> None:
+    def setup(self, config: ShardingConfig, gpus: list[int]) -> None:
         """Initialise tensor parallelism with device mesh.
 
         Args:
             config: Sharding config with num_shards.
-            gpu_list: Available GPUs.
+            gpus: Available GPUs.
 
         Raises:
             ValueError: If num_shards exceeds available GPUs.
         """
-        if config.num_shards > len(gpu_list):
+        if config.num_shards > len(gpus):
             raise ValueError(
-                f"num_shards ({config.num_shards}) exceeds available GPUs ({len(gpu_list)}). "
+                f"num_shards ({config.num_shards}) exceeds available GPUs ({len(gpus)}). "
                 f"Tensor parallelism requires 1 GPU per shard."
             )
 
@@ -242,19 +242,19 @@ class PipelineParallelStrategy(ParallelismStrategy):
         self._rank: int = 0
         self._world_size: int = 1
 
-    def setup(self, config: ShardingConfig, gpu_list: list[int]) -> None:
+    def setup(self, config: ShardingConfig, gpus: list[int]) -> None:
         """Initialise pipeline parallelism.
 
         Args:
             config: Sharding config with num_shards.
-            gpu_list: Available GPUs.
+            gpus: Available GPUs.
 
         Raises:
             ValueError: If num_shards exceeds available GPUs.
         """
-        if config.num_shards > len(gpu_list):
+        if config.num_shards > len(gpus):
             raise ValueError(
-                f"num_shards ({config.num_shards}) exceeds available GPUs ({len(gpu_list)}). "
+                f"num_shards ({config.num_shards}) exceeds available GPUs ({len(gpus)}). "
                 f"Pipeline parallelism requires 1 GPU per stage."
             )
 

@@ -20,6 +20,9 @@ DEFAULT_MAX_NEW_TOKENS = 256
 DEFAULT_TEMPERATURE = 1.0
 DEFAULT_TOP_P = 1.0
 
+# Streaming latency measurement
+DEFAULT_STREAMING_WARMUP_REQUESTS = 5
+
 # Schema version for result files
 SCHEMA_VERSION = "2.0.0"
 
@@ -27,7 +30,13 @@ SCHEMA_VERSION = "2.0.0"
 # Precedence: LLM_ENERGY_STATE_DIR env var > ".state"
 DEFAULT_STATE_DIR = Path(os.environ.get("LLM_ENERGY_STATE_DIR", ".state"))
 COMPLETION_MARKER_PREFIX = ".completed_"
+
+# Timeouts
 GRACEFUL_SHUTDOWN_TIMEOUT_SEC = 2
+DEFAULT_BARRIER_TIMEOUT_SEC = 600  # 10 minutes for distributed sync
+DEFAULT_FLOPS_TIMEOUT_SEC = 30
+DEFAULT_GPU_INFO_TIMEOUT_SEC = 10
+DEFAULT_SIGKILL_WAIT_SEC = 2
 
 # Built-in presets for quick experiment configuration
 # Presets provide convenience defaults but NOT model (model is always required)
@@ -150,3 +159,79 @@ PRESETS: dict[str, dict[str, Any]] = {
         },
     },
 }
+
+# Alias for backward compatibility
+EXPERIMENT_PRESETS = PRESETS
+
+
+# =============================================================================
+# DEPRECATED CLI FLAGS
+# =============================================================================
+#
+# CLI flags that should be set in config files instead.
+# Philosophy: CLI = workflow/meta params, YAML = testable experiment params
+#
+# These flags are deprecated but still work with a warning.
+# Use --allow-deprecated to suppress the warning during migration.
+
+DEPRECATED_CLI_FLAGS: dict[str, dict[str, str]] = {
+    "--batch-size": {
+        "canonical": "batching.batch_size",
+        "removal_version": "2.0",
+        "migration": "Set batching.batch_size in config YAML",
+    },
+    "-b": {
+        "canonical": "batching.batch_size",
+        "removal_version": "2.0",
+        "migration": "Set batching.batch_size in config YAML",
+    },
+    "--temperature": {
+        "canonical": "decoder.temperature",
+        "removal_version": "2.0",
+        "migration": "Set decoder.temperature in config YAML (or use decoder.preset)",
+    },
+    "--precision": {
+        "canonical": "fp_precision",
+        "removal_version": "2.0",
+        "migration": "Set fp_precision in config YAML",
+    },
+    "--num-processes": {
+        "canonical": "num_processes",
+        "removal_version": "2.0",
+        "migration": "Set num_processes in config YAML (or use parallelism settings)",
+    },
+    "--gpu-list": {
+        "canonical": "gpus",
+        "removal_version": "2.0",
+        "migration": "Set gpus in config YAML",
+    },
+    "--quantization": {
+        "canonical": "quantization.load_in_4bit",
+        "removal_version": "2.0",
+        "migration": "Set quantization settings in config YAML",
+    },
+}
+
+
+def is_cli_flag_deprecated(flag: str) -> bool:
+    """Check if a CLI flag is deprecated.
+
+    Args:
+        flag: CLI flag including dashes (e.g., "--batch-size")
+
+    Returns:
+        True if deprecated, False otherwise.
+    """
+    return flag in DEPRECATED_CLI_FLAGS
+
+
+def get_deprecation_info(flag: str) -> dict[str, str] | None:
+    """Get deprecation information for a CLI flag.
+
+    Args:
+        flag: CLI flag including dashes
+
+    Returns:
+        Deprecation info dict or None if not deprecated.
+    """
+    return DEPRECATED_CLI_FLAGS.get(flag)

@@ -21,9 +21,16 @@ from llm_energy_measure.core.inference_backends.protocols import (
     BackendRuntime,
     ConfigWarning,
     CudaManagement,
-    LatencyMeasurements,
     LaunchMode,
     RuntimeCapabilities,
+)
+from llm_energy_measure.core.inference_backends.shared import (
+    CORE_SUPPORTED_PARAMS,
+    create_precision_metadata,
+)
+from llm_energy_measure.domain.metrics import (
+    LatencyMeasurementMode,
+    LatencyMeasurements,
     collect_itl_measurements,
 )
 from llm_energy_measure.exceptions import (
@@ -38,26 +45,14 @@ if TYPE_CHECKING:
 
 
 # Parameters supported by PyTorch/Transformers backend
-_SUPPORTED_PARAMS: set[str] = {
-    # Core
-    "model_name",
+# Extends core params with PyTorch-specific options
+_SUPPORTED_PARAMS: set[str] = set(CORE_SUPPORTED_PARAMS) | {
+    # PyTorch-specific: LoRA adapter support
     "adapter",
-    "fp_precision",
-    "max_input_tokens",
-    "max_output_tokens",
-    "min_output_tokens",
-    "random_seed",
-    # Batching
-    "batch_size",
-    "batching.batch_size",
-    "batching.strategy",
+    # Extended batching
     "batching.max_tokens_per_batch",
-    # Decoder/Generation
-    "decoder.preset",
-    "decoder.temperature",
+    # Extended decoder options
     "decoder.do_sample",
-    "decoder.top_p",
-    "decoder.top_k",
     "decoder.min_p",
     "decoder.repetition_penalty",
     "decoder.no_repeat_ngram_size",
@@ -72,14 +67,6 @@ _SUPPORTED_PARAMS: set[str] = {
     "traffic_simulation.enabled",
     "traffic_simulation.mode",
     "traffic_simulation.target_qps",
-    # Other
-    "save_outputs",
-    "num_input_prompts",
-    "gpus",
-    "num_processes",
-    # Streaming latency measurement
-    "streaming",
-    "streaming_warmup_requests",
 }
 
 
@@ -179,44 +166,87 @@ class PyTorchBackend:
 
         return kwargs
 
-    def _build_generation_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
-        """Build kwargs for model.generate() from PyTorchConfig.
+    def _build_generation_kwargs(
+        self,
+        config: ExperimentConfig,
+        input_length: int | None = None,
+        max_output_tokens: int | None = None,
+    ) -> dict[str, Any]:
+        """Build comprehensive kwargs for model.generate().
+
+        Consolidates all generation parameters from:
+        - Decoder config (temperature, sampling, beam search)
+        - PyTorch-specific config (caching, compile options)
+        - Token limits
 
         Args:
             config: Experiment configuration.
+            input_length: Current input sequence length (for min_length calculation).
+            max_output_tokens: Override for max output tokens (defaults to config value).
 
         Returns:
-            Dict of additional kwargs for generate().
+            Dict of kwargs for model.generate().
         """
-        pytorch_cfg: PyTorchConfig | None = config.pytorch
         kwargs: dict[str, Any] = {}
+        decoder = config.decoder
+        pytorch_cfg: PyTorchConfig | None = config.pytorch
 
-        if pytorch_cfg is None:
-            return kwargs
+        # Token limits
+        effective_max_output = max_output_tokens or config.max_output_tokens
+        kwargs["max_new_tokens"] = effective_max_output
 
-        # KV caching
-        if not pytorch_cfg.use_cache:
-            kwargs["use_cache"] = False
+        if config.min_output_tokens:
+            if input_length is not None:
+                kwargs["min_length"] = input_length + config.min_output_tokens
+            else:
+                kwargs["min_new_tokens"] = config.min_output_tokens
 
-        # Beam search
-        if pytorch_cfg.num_beams > 1:
-            kwargs["num_beams"] = pytorch_cfg.num_beams
-            if pytorch_cfg.early_stopping:
+        # Temperature=0 forces greedy regardless of other settings
+        if decoder.temperature == 0.0:
+            kwargs["do_sample"] = False
+        else:
+            kwargs["do_sample"] = decoder.do_sample
+            kwargs["temperature"] = decoder.temperature
+
+            if decoder.do_sample:
+                # Nucleus/top sampling (only when sampling is enabled)
+                if decoder.top_k > 0:
+                    kwargs["top_k"] = decoder.top_k
+                if decoder.top_p < 1.0:
+                    kwargs["top_p"] = decoder.top_p
+                if decoder.min_p > 0.0:
+                    kwargs["min_p"] = decoder.min_p
+
+                # Repetition control
+                if decoder.repetition_penalty != 1.0:
+                    kwargs["repetition_penalty"] = decoder.repetition_penalty
+                if decoder.no_repeat_ngram_size > 0:
+                    kwargs["no_repeat_ngram_size"] = decoder.no_repeat_ngram_size
+
+        # Beam search from unified decoder config
+        beam_cfg = decoder.beam_search
+        if beam_cfg.enabled and beam_cfg.num_beams > 1:
+            kwargs["num_beams"] = beam_cfg.num_beams
+            if beam_cfg.early_stopping:
                 kwargs["early_stopping"] = True
-            if pytorch_cfg.length_penalty != 1.0:
-                kwargs["length_penalty"] = pytorch_cfg.length_penalty
+            if beam_cfg.length_penalty != 1.0:
+                kwargs["length_penalty"] = beam_cfg.length_penalty
 
-        # Output configuration
-        if pytorch_cfg.output_scores:
-            kwargs["output_scores"] = True
-        if pytorch_cfg.return_dict_in_generate:
-            kwargs["return_dict_in_generate"] = True
+        # PyTorch-specific options
+        if pytorch_cfg is not None:
+            # KV caching
+            if not pytorch_cfg.use_cache:
+                kwargs["use_cache"] = False
 
-        # Assisted generation (speculative decoding)
-        if pytorch_cfg.assisted_generation and pytorch_cfg.assisted_generation.model:
-            # The assistant model is loaded separately and passed to generate()
-            # This is handled in run_inference, not here
-            pass
+            # Cache implementation (static enables CUDA graphs)
+            if pytorch_cfg.cache_implementation:
+                kwargs["cache_implementation"] = pytorch_cfg.cache_implementation
+
+            # Output configuration
+            if pytorch_cfg.output_scores:
+                kwargs["output_scores"] = True
+            if pytorch_cfg.return_dict_in_generate:
+                kwargs["return_dict_in_generate"] = True
 
         return kwargs
 
@@ -398,7 +428,13 @@ class PyTorchBackend:
             raise BackendInferenceError(f"Inference failed: {e}") from e
 
     def _run_inference_batch(self, prompts: list[str], config: ExperimentConfig) -> BackendResult:
-        """Run batch inference using existing implementation.
+        """Run batch inference with full control over generation.
+
+        Self-contained batch processing that:
+        - Creates batches using prompts.py utilities
+        - Applies traffic simulation if configured
+        - Uses unified generation kwargs
+        - Tracks per-batch latencies
 
         Args:
             prompts: List of input prompts.
@@ -407,30 +443,192 @@ class PyTorchBackend:
         Returns:
             BackendResult with token counts and timing.
         """
-        from llm_energy_measure.core.inference import run_inference
+        import time
 
-        result = run_inference(
-            model=self._model,
-            config=config,
-            prompts=prompts,
-            tokenizer=self._tokenizer,
-            accelerator=self._accelerator,
+        from llm_energy_measure.core.prompts import (
+            tokenize_batch,
         )
+        from llm_energy_measure.core.traffic import TrafficGenerator, apply_traffic_delay
+        from llm_energy_measure.progress import batch_progress
+
+        device = self._accelerator.device
+        max_input_tokens = config.max_input_tokens
+        max_output_tokens = config.max_output_tokens
+
+        # Create batches based on strategy
+        batches = self._create_batches(prompts, config)
+
+        # Initialise traffic generator if enabled
+        traffic_generator: TrafficGenerator | None = None
+        if config.traffic_simulation.enabled:
+            traffic_generator = TrafficGenerator(config.traffic_simulation)
+
+        # Process batches
+        all_outputs: list[torch.Tensor] = []
+        latencies: list[float] = []
+        total_generated_tokens = 0
+        total_input_tokens = 0
+
+        with batch_progress(
+            total=len(batches),
+            desc="Batches",
+            is_main_process=self._accelerator.is_main_process,
+        ) as progress:
+            for batch_idx, batch in enumerate(batches):
+                # Apply traffic simulation delay if configured
+                if traffic_generator is not None:
+                    apply_traffic_delay(
+                        config=config.traffic_simulation,
+                        batch_idx=batch_idx,
+                        generator=traffic_generator,
+                    )
+
+                # Set seed for reproducible sampling
+                if config.random_seed is not None:
+                    batch_seed = config.random_seed + batch_idx
+                    torch.manual_seed(batch_seed)
+                    if torch.cuda.is_available():
+                        torch.cuda.manual_seed_all(batch_seed)
+
+                # Tokenise batch
+                tokenized = tokenize_batch(
+                    prompts=batch,
+                    tokenizer=self._tokenizer,
+                    max_length=max_input_tokens,
+                    batch_size=len(batch),
+                )
+
+                input_ids = tokenized["input_ids"].to(device)
+                attention_mask = tokenized.get("attention_mask")
+                if attention_mask is not None:
+                    attention_mask = attention_mask.to(device)
+
+                input_tokens = input_ids.numel()
+                total_input_tokens += input_tokens
+                current_length = input_ids.shape[1]
+
+                # Calculate allowed output tokens (respect model max length)
+                total_allowed = self._tokenizer.model_max_length
+                allowed_new = max(0, total_allowed - current_length)
+
+                # Build generation kwargs
+                generation_kwargs = self._build_generation_kwargs(
+                    config=config,
+                    input_length=current_length,
+                    max_output_tokens=min(max_output_tokens, allowed_new),
+                )
+
+                gpu_id = device.index if hasattr(device, "index") else 0
+                logger.debug(f"[GPU {gpu_id}] Processing batch {batch_idx + 1}/{len(batches)}")
+
+                # Run inference
+                start_time = time.perf_counter()
+
+                with torch.no_grad():
+                    outputs = self._model.generate(
+                        input_ids,
+                        attention_mask=attention_mask,
+                        pad_token_id=self._tokenizer.pad_token_id,
+                        **generation_kwargs,
+                    )
+
+                torch.cuda.synchronize(device)
+                end_time = time.perf_counter()
+                latency_ms = (end_time - start_time) * 1000.0
+                latencies.append(latency_ms)
+
+                logger.debug(
+                    f"[GPU {gpu_id}] Completed batch {batch_idx + 1}/{len(batches)} "
+                    f"in {latency_ms:.1f}ms"
+                )
+
+                # Count generated tokens
+                for j in range(input_ids.size(0)):
+                    prompt_len = input_ids[j].shape[0]
+                    gen_len = outputs[j].shape[0] - prompt_len
+                    total_generated_tokens += gen_len
+
+                # Update progress
+                progress.update(1, latency_ms=latency_ms)
+
+                if config.save_outputs:
+                    all_outputs.append(outputs)
+
+        # Calculate metrics
+        total_time_sec = sum(latencies) / 1000.0 if latencies else 0.0
+        total_tokens = total_input_tokens + total_generated_tokens
+        tokens_per_sec = total_generated_tokens / total_time_sec if total_time_sec > 0 else 0.0
+        latency_per_token_ms = 1000.0 / tokens_per_sec if tokens_per_sec > 0 else 0.0
+
+        # Get actual compute dtype from model
+        actual_dtype = str(self._model.dtype) if self._model is not None else None
 
         return BackendResult(
-            total_tokens=result.metrics.total_tokens,
-            input_tokens=result.metrics.input_tokens,
-            output_tokens=result.metrics.output_tokens,
-            inference_time_sec=result.metrics.inference_time_sec,
-            batch_latencies_ms=[],
+            total_tokens=total_tokens,
+            input_tokens=total_input_tokens,
+            output_tokens=total_generated_tokens,
+            inference_time_sec=total_time_sec,
+            batch_latencies_ms=latencies,
             output_texts=None,
             backend_metadata={
                 "backend": self.name,
                 "version": self.version,
                 "lora_adapter": config.adapter,
-                "tokens_per_second": result.metrics.tokens_per_second,
-                "latency_per_token_ms": result.metrics.latency_per_token_ms,
+                "tokens_per_second": tokens_per_sec,
+                "latency_per_token_ms": latency_per_token_ms,
+                "num_batches": len(batches),
+                "batching_strategy": config.batching.strategy,
             },
+            precision_metadata=create_precision_metadata(config, self.name, actual_dtype),
+        )
+
+    def _create_batches(self, prompts: list[str], config: ExperimentConfig) -> list[list[str]]:
+        """Create batches based on config batching strategy.
+
+        Industry-standard strategies (per MLPerf/vLLM terminology):
+        - static: Fixed batch size, pads to max_length (MLPerf offline scenario)
+        - dynamic: Token-aware batching with max_tokens_per_batch (MLPerf server scenario)
+        - sorted_static: Sort by length, then static batches (reduces padding waste)
+        - sorted_dynamic: Sort by length + dynamic token budget (optimal packing)
+
+        Args:
+            prompts: List of input prompts.
+            config: Experiment configuration.
+
+        Returns:
+            List of batches (each batch is a list of prompts).
+        """
+        from llm_energy_measure.core.prompts import (
+            create_adaptive_batches,
+            create_fixed_batches,
+        )
+
+        batching = config.batching
+        strategy = batching.strategy
+        max_tokens = batching.max_tokens_per_batch or config.max_input_tokens
+
+        # Sort prompts by length if strategy requires it
+        working_prompts = prompts
+        if strategy in ("sorted_static", "sorted_dynamic"):
+            working_prompts = sorted(prompts, key=len)
+            logger.debug(f"Sorted {len(prompts)} prompts by length for {strategy} strategy")
+
+        # Dispatch based on dynamic vs static batching
+        if strategy in ("dynamic", "sorted_dynamic"):
+            return create_adaptive_batches(
+                prompts=working_prompts,
+                tokenizer=self._tokenizer,
+                max_tokens_per_batch=max_tokens,
+                max_prompt_tokens=config.max_input_tokens,
+                max_batch_size=batching.batch_size,
+            )
+
+        # Default to static batching (static, sorted_static, or unknown)
+        if strategy not in ("static", "sorted_static"):
+            logger.warning(f"Unknown batching strategy '{strategy}', using static")
+        return create_fixed_batches(
+            prompts=working_prompts,
+            batch_size=batching.batch_size,
         )
 
     def _run_streaming_inference(
@@ -484,7 +682,7 @@ class PyTorchBackend:
                     excluded_tokens=0,
                     streaming_mode=True,
                     warmup_requests_excluded=warmup_count,
-                    measurement_method="streaming",
+                    measurement_mode=LatencyMeasurementMode.TRUE_STREAMING,
                 ),
             )
 
@@ -496,10 +694,10 @@ class PyTorchBackend:
             )
 
         # Warn about batch_size being ignored
-        if config.batching_options.batch_size and config.batching_options.batch_size > 1:
+        if config.batching.batch_size and config.batching.batch_size > 1:
             logger.warning(
                 f"streaming=True forces sequential processing. "
-                f"batch_size={config.batching_options.batch_size} ignored."
+                f"batch_size={config.batching.batch_size} ignored."
             )
 
         # Collect per-request timing data
@@ -512,21 +710,8 @@ class PyTorchBackend:
         logger.info(f"Running streaming inference on {len(measurement_prompts)} prompts...")
         start_time = time.perf_counter()
 
-        # Build generation kwargs from decoder config
+        # Build generation kwargs using unified method
         generation_kwargs = self._build_generation_kwargs(config)
-        generation_kwargs["max_new_tokens"] = config.max_output_tokens
-        if config.min_output_tokens:
-            generation_kwargs["min_new_tokens"] = config.min_output_tokens
-
-        # Decoder settings
-        decoder = config.decoder_config
-        if decoder.temperature is not None:
-            generation_kwargs["temperature"] = decoder.temperature
-            generation_kwargs["do_sample"] = decoder.temperature > 0
-        if decoder.top_p is not None:
-            generation_kwargs["top_p"] = decoder.top_p
-        if decoder.top_k is not None and decoder.top_k > 0:
-            generation_kwargs["top_k"] = decoder.top_k
 
         # Process each prompt individually with streaming
         for prompt in measurement_prompts:
@@ -591,7 +776,7 @@ class PyTorchBackend:
             excluded_tokens=excluded,
             streaming_mode=True,
             warmup_requests_excluded=warmup_count,
-            measurement_method="streaming",
+            measurement_mode=LatencyMeasurementMode.TRUE_STREAMING,
         )
 
         # Calculate average TTFT for BackendResult (backward compat)
@@ -606,6 +791,9 @@ class PyTorchBackend:
             f"{total_tokens} tokens in {inference_time:.2f}s, "
             f"TTFT samples={len(ttft_samples)}, ITL samples={len(itl_trimmed)}"
         )
+
+        # Get actual compute dtype from model
+        actual_dtype = str(self._model.dtype) if self._model is not None else None
 
         return BackendResult(
             total_tokens=total_tokens,
@@ -626,6 +814,7 @@ class PyTorchBackend:
                 "torch_compiled": self._is_compiled,
             },
             latency_measurements=latency_measurements,
+            precision_metadata=create_precision_metadata(config, self.name, actual_dtype),
         )
 
     def _run_batch_with_ttft_estimation(
@@ -673,7 +862,7 @@ class PyTorchBackend:
                     excluded_tokens=0,
                     streaming_mode=False,
                     warmup_requests_excluded=warmup_count,
-                    measurement_method="per_request_batch",
+                    measurement_mode=LatencyMeasurementMode.PER_REQUEST_BATCH,
                 ),
             )
 
@@ -689,6 +878,11 @@ class PyTorchBackend:
         )
         start_time = time.perf_counter()
 
+        # Build generation kwargs using unified method
+        generation_kwargs = self._build_generation_kwargs(config)
+        # Force return_dict_in_generate for output parsing
+        generation_kwargs["return_dict_in_generate"] = True
+
         for prompt in measurement_prompts:
             request_start = time.perf_counter()
 
@@ -698,8 +892,7 @@ class PyTorchBackend:
 
             outputs = self._model.generate(
                 **inputs,
-                max_new_tokens=config.max_output_tokens,
-                return_dict_in_generate=True,
+                **generation_kwargs,
             )
 
             request_end = time.perf_counter()
@@ -741,7 +934,7 @@ class PyTorchBackend:
             excluded_tokens=excluded,
             streaming_mode=False,
             warmup_requests_excluded=warmup_count,
-            measurement_method="proportional_estimate",
+            measurement_mode=LatencyMeasurementMode.PROPORTIONAL_ESTIMATE,
         )
 
         avg_ttft_ms: float | None = None
@@ -754,6 +947,9 @@ class PyTorchBackend:
             f"Batch inference complete: {len(measurement_prompts)} prompts, "
             f"{total_tokens} tokens in {inference_time:.2f}s"
         )
+
+        # Get actual compute dtype from model
+        actual_dtype = str(self._model.dtype) if self._model is not None else None
 
         return BackendResult(
             total_tokens=total_tokens,
@@ -775,6 +971,7 @@ class PyTorchBackend:
                 ),
             },
             latency_measurements=latency_measurements,
+            precision_metadata=create_precision_metadata(config, self.name, actual_dtype),
         )
 
     def cleanup(self) -> None:
@@ -811,7 +1008,7 @@ class PyTorchBackend:
         model_config = self._model.config
 
         # Determine quantization
-        quant_config = self._config.quantization_config
+        quant_config = self._config.quantization
         if quant_config.load_in_4bit:
             quant = QuantizationSpec(
                 enabled=True, bits=4, method="bitsandbytes", compute_dtype="float16"

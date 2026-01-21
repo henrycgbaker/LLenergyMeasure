@@ -91,7 +91,7 @@ max_output_tokens: 50
         invalid.write_text("""
 config_name: bad-quant
 model_name: test
-quantization_config:
+quantization:
   quantization: true
   load_in_4bit: true
   load_in_8bit: true

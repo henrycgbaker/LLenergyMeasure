@@ -34,6 +34,10 @@ def validate_path(path: Path, must_exist: bool = False, allow_relative: bool = T
 def is_safe_path(base_dir: Path, target_path: Path) -> bool:
     """Check if target_path is within base_dir (prevent path traversal).
 
+    Uses Path.is_relative_to() for robust checking - this correctly handles
+    edge cases like /foo/bar vs /foo/bar_malicious that string prefix
+    checks would fail on.
+
     Args:
         base_dir: The allowed base directory.
         target_path: The path to check.
@@ -44,7 +48,7 @@ def is_safe_path(base_dir: Path, target_path: Path) -> bool:
     try:
         base_resolved = base_dir.resolve()
         target_resolved = target_path.resolve()
-        return str(target_resolved).startswith(str(base_resolved))
+        return target_resolved.is_relative_to(base_resolved)
     except (OSError, ValueError):
         return False
 

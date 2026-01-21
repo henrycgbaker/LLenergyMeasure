@@ -33,9 +33,15 @@ from llm_energy_measure.core.inference_backends.protocols import (
     BackendRuntime,
     ConfigWarning,
     CudaManagement,
-    LatencyMeasurements,
     LaunchMode,
     RuntimeCapabilities,
+)
+from llm_energy_measure.core.inference_backends.shared import (
+    CORE_SUPPORTED_PARAMS,
+)
+from llm_energy_measure.domain.metrics import (
+    LatencyMeasurementMode,
+    LatencyMeasurements,
     collect_itl_measurements,
 )
 from llm_energy_measure.exceptions import (
@@ -55,38 +61,17 @@ if TYPE_CHECKING:
 DEFAULT_ENGINE_CACHE_DIR = Path.home() / ".cache" / "llm-energy-measure" / "tensorrt-engines"
 
 # Parameters supported by TensorRT backend
-_SUPPORTED_PARAMS: set[str] = {
-    # Core
-    "model_name",
-    "fp_precision",
-    "max_input_tokens",
-    "max_output_tokens",
-    "min_output_tokens",
-    "random_seed",
-    # Batching (compile-time limits, runtime hints)
-    "batch_size",
-    "batching.batch_size",
+# Extends core params with TensorRT-specific options
+# Note: TensorRT does NOT support LoRA adapters
+_SUPPORTED_PARAMS: set[str] = set(CORE_SUPPORTED_PARAMS) | {
+    # Extended batching (compile-time limits, runtime hints)
     "batching.max_tokens_per_batch",
-    # Note: batching.strategy is accepted but TRT uses inflight batching
-    "batching.strategy",
-    # Decoder/Generation
-    "decoder.preset",
-    "decoder.temperature",
-    "decoder.top_p",
-    "decoder.top_k",
+    # Extended decoder options
     "decoder.repetition_penalty",
     # Note: min_p and no_repeat_ngram_size not supported
     # Sharding (tensor parallelism)
     "sharding.strategy",
     "sharding.num_shards",
-    # Other
-    "save_outputs",
-    "num_input_prompts",
-    "gpus",
-    "num_processes",
-    # Streaming latency measurement
-    "streaming",
-    "streaming_warmup_requests",
 }
 
 # Parameters that require warnings
@@ -179,10 +164,16 @@ class EngineCacheManager:
         }
 
         if trt_cfg:
+            # Use parallelism.degree for TP size, fall back to sharding.num_shards for legacy
+            tp_size = (
+                config.parallelism.degree
+                if config.parallelism.strategy == "tensor_parallel"
+                else config.sharding.num_shards
+            )
             key_components.update(
                 {
                     "max_batch": trt_cfg.max_batch_size,
-                    "tp_size": trt_cfg.tp_size or config.sharding_config.num_shards,
+                    "tp_size": tp_size,
                     "pp_size": trt_cfg.pp_size,
                     "quant_method": trt_cfg.quantization.method,
                     "builder_opt": trt_cfg.builder_opt_level,
@@ -407,12 +398,13 @@ class TensorRTBackend:
         }
         dtype = dtype_map.get(config.fp_precision, "float16")
 
-        # Tensor parallelism
+        # Tensor parallelism - use unified parallelism config
         tp_size = 1
-        if trt_cfg and trt_cfg.tp_size:
-            tp_size = trt_cfg.tp_size
-        elif config.sharding_config.strategy == "tensor_parallel":
-            tp_size = config.sharding_config.num_shards
+        if config.parallelism.strategy == "tensor_parallel":
+            tp_size = config.parallelism.degree
+        elif config.sharding.strategy == "tensor_parallel":
+            # Legacy fallback
+            tp_size = config.sharding.num_shards
 
         # Quantization
         quantization = None
@@ -589,7 +581,7 @@ class TensorRTBackend:
         """
         from tensorrt_llm import SamplingParams
 
-        decoder = config.decoder_config
+        decoder = config.decoder
 
         params: dict[str, Any] = {
             "max_tokens": config.max_output_tokens,
@@ -708,7 +700,7 @@ class TensorRTBackend:
                     excluded_tokens=0,
                     streaming_mode=True,
                     warmup_requests_excluded=warmup_count,
-                    measurement_method="streaming",
+                    measurement_mode=LatencyMeasurementMode.TRUE_STREAMING,
                 ),
             )
 
@@ -720,10 +712,10 @@ class TensorRTBackend:
             )
 
         # Warn about batch_size being ignored
-        if config.batching_options.batch_size and config.batching_options.batch_size > 1:
+        if config.batching.batch_size and config.batching.batch_size > 1:
             logger.warning(
                 f"streaming=True forces sequential processing. "
-                f"batch_size={config.batching_options.batch_size} ignored."
+                f"batch_size={config.batching.batch_size} ignored."
             )
 
         # Collect per-request timing data
@@ -815,7 +807,7 @@ class TensorRTBackend:
             excluded_tokens=excluded,
             streaming_mode=True,
             warmup_requests_excluded=warmup_count,
-            measurement_method="proportional_estimate",  # ITL estimated, not true streaming
+            measurement_mode=LatencyMeasurementMode.PROPORTIONAL_ESTIMATE,  # ITL estimated, not true streaming
         )
 
         # Calculate average TTFT for BackendResult (backward compat)
@@ -893,7 +885,7 @@ class TensorRTBackend:
                     excluded_tokens=0,
                     streaming_mode=False,
                     warmup_requests_excluded=warmup_count,
-                    measurement_method="per_request_batch",
+                    measurement_mode=LatencyMeasurementMode.PER_REQUEST_BATCH,
                 ),
             )
 
@@ -972,7 +964,7 @@ class TensorRTBackend:
             excluded_tokens=excluded,
             streaming_mode=False,
             warmup_requests_excluded=warmup_count,
-            measurement_method="proportional_estimate",
+            measurement_mode=LatencyMeasurementMode.PROPORTIONAL_ESTIMATE,
         )
 
         avg_ttft_ms: float | None = None
@@ -1089,7 +1081,7 @@ class TensorRTBackend:
         trt_cfg = config.tensorrt
 
         # Check for unsupported quantization params
-        quant = config.quantization_config
+        quant = config.quantization
         if quant.load_in_8bit:
             warnings.append(
                 ConfigWarning(
@@ -1112,7 +1104,7 @@ class TensorRTBackend:
             )
 
         # Check for unsupported decoder params
-        decoder = config.decoder_config
+        decoder = config.decoder
         if decoder.no_repeat_ngram_size and decoder.no_repeat_ngram_size > 0:
             warnings.append(
                 ConfigWarning(

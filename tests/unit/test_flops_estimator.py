@@ -120,16 +120,16 @@ class TestFlopsEstimator:
     def test_get_compute_precision_quantized(self, estimator):
         """Test precision detection for quantized models (always FP16)."""
         config = MagicMock()
-        config.quantization_config = MagicMock()
-        config.quantization_config.quantization = True
+        config.quantization = MagicMock()
+        config.quantization.quantization = True
 
         assert estimator._get_compute_precision(config) == "fp16"
 
     def test_get_compute_precision_from_dtype(self, estimator):
         """Test precision detection from torch_dtype."""
         config = MagicMock()
-        config.quantization_config = MagicMock()
-        config.quantization_config.quantization = False
+        config.quantization = MagicMock()
+        config.quantization.quantization = False
         config.torch_dtype = "fp32"
 
         assert estimator._get_compute_precision(config) == "fp32"
@@ -318,7 +318,7 @@ class TestBNBQuantizationHandling:
         config = ExperimentConfig(
             config_name="test",
             model_name="test/model",
-            quantization_config=QuantizationConfig(
+            quantization=QuantizationConfig(
                 quantization=True,
                 load_in_4bit=True,
             ),
@@ -335,7 +335,7 @@ class TestBNBQuantizationHandling:
         config = ExperimentConfig(
             config_name="test",
             model_name="test/model",
-            quantization_config=QuantizationConfig(
+            quantization=QuantizationConfig(
                 quantization=True,
                 load_in_8bit=True,
             ),

@@ -25,7 +25,8 @@ WORKDIR /build
 # Install TensorRT-LLM (brings its own compatible PyTorch and CUDA libraries)
 # Pin version for reproducibility - update as needed
 # Note: tensorrt-llm has strict CUDA version requirements
-RUN pip install --no-cache-dir tensorrt-llm>=0.12.0
+# Requires NVIDIA PyPI index for the actual wheel download
+RUN pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com/ tensorrt-llm>=0.12.0
 
 # Copy project files
 COPY pyproject.toml poetry.lock* README.md ./
@@ -60,7 +61,7 @@ CMD ["llm-energy-measure", "--help"]
 FROM ${BASE_IMAGE} AS dev
 
 # Install TensorRT-LLM (brings its own PyTorch)
-RUN pip install --no-cache-dir tensorrt-llm>=0.12.0
+RUN pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com/ tensorrt-llm>=0.12.0
 
 # Copy project files and install with tensorrt + dev extras
 # (--no-deps to avoid torch conflict, then install remaining deps)

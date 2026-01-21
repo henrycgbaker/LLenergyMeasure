@@ -34,6 +34,16 @@ vllm = {version = ">=0.6.0", optional = true}
 # Note: Requires NVIDIA GPU with compute capability >= 8.0 (Ampere+)
 tensorrt-llm = {version = ">=0.12.0", optional = true}
 
+# Optional: API/Web backend
+fastapi = {version = "^0.115.0", optional = true}
+uvicorn = {version = "^0.32.0", optional = true}
+sqlalchemy = {version = "^2.0", extras = ["asyncio"], optional = true}
+asyncpg = {version = "^0.30.0", optional = true}
+alembic = {version = "^1.14.0", optional = true}
+pydantic-settings = {version = "^2.0", optional = true}
+python-jose = {version = "^3.3.0", extras = ["cryptography"], optional = true}
+httpx = {version = ">=0.23.0", optional = true}
+
 # Optional: dev dependencies
 pytest = {version = "^8.0", optional = true}
 pytest-cov = {version = "^4.0", optional = true}
@@ -58,6 +68,10 @@ vllm = ["vllm"]
 # Note: Requires NVIDIA GPU (Ampere+) and CUDA 12.x
 tensorrt = ["tensorrt-llm"]
 
+# Web API backend (leaderboard server)
+# Usage: pip install llm-energy-measure[api]
+api = ["fastapi", "uvicorn", "sqlalchemy", "asyncpg", "alembic", "pydantic-settings", "python-jose", "httpx"]
+
 # Development tools
 # Usage: pip install llm-energy-measure[dev]
 dev = ["pytest", "pytest-cov", "ruff", "mypy", "pre-commit", "types-pyyaml", "commitizen"]
@@ -70,6 +84,7 @@ all = ["transformers", "accelerate", "bitsandbytes", "calflops", "peft", "vllm",
 
 [tool.poetry.scripts]
 llm-energy-measure = "llm_energy_measure.cli:app"
+lem = "llm_energy_measure.cli:app"  # Short alias
 
 [build-system]
 requires = ["poetry-core"]

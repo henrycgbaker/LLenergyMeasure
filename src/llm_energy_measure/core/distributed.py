@@ -19,14 +19,14 @@ DEFAULT_BARRIER_TIMEOUT = 600
 
 
 def get_accelerator(
-    gpu_list: list[int] | None = None,
+    gpus: list[int] | None = None,
     num_processes: int | None = None,
 ) -> Accelerator:
     """Create and configure an Accelerator for distributed training.
 
     Args:
-        gpu_list: List of GPU indices to use. If None, uses all available.
-        num_processes: Number of processes to launch. Defaults to len(gpu_list).
+        gpus: List of GPU indices to use. If None, uses all available.
+        num_processes: Number of processes to launch. Defaults to len(gpus).
 
     Returns:
         Configured Accelerator instance.
@@ -37,14 +37,14 @@ def get_accelerator(
     # Disable CLI config to let script settings take priority
     os.environ["ACCELERATE_CONFIG_FILE"] = ""
 
-    if gpu_list is not None:
+    if gpus is not None:
         # Only set CUDA_VISIBLE_DEVICES if not already set to MIG/GPU UUIDs
         existing_cuda_env = os.environ.get("CUDA_VISIBLE_DEVICES", "")
         if "MIG-" not in existing_cuda_env and "GPU-" not in existing_cuda_env:
-            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_list)
+            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpus)
 
         if num_processes is not None:
-            available = len(gpu_list)
+            available = len(gpus)
             if num_processes > available:
                 logger.warning(
                     f"num_processes ({num_processes}) exceeds available GPUs ({available}). "

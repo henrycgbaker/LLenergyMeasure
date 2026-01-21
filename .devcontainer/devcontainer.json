@@ -4,7 +4,6 @@
     "dockerfile": "../Dockerfile",
     "target": "dev"
   },
-  "runArgs": ["--gpus", "all", "--privileged"],
   "containerEnv": {
     "HF_TOKEN": "${localEnv:HF_TOKEN}",
     "HF_HOME": "/app/.cache/huggingface",
@@ -16,7 +15,10 @@
   "remoteUser": "vscode",
   "updateRemoteUserUID": true,
   "onCreateCommand": "sudo chown -R $(id -u):$(id -g) /opt/venv",
-  "postCreateCommand": "pip install -e . && pip install pytest pytest-cov ruff mypy pre-commit types-pyyaml commitizen && pre-commit install",
+  "postCreateCommand": {
+    "install-package": "pip install -e '.[pytorch,dev]'",
+    "pre-commit": "pre-commit install || echo 'pre-commit install skipped (configure git user first)'"
+  },
   "customizations": {
     "vscode": {
       "extensions": [

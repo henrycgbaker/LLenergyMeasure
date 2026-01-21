@@ -121,7 +121,7 @@ def _get_launch_mode(config_data: dict[str, Any]) -> str:
             return "direct"
 
         # Check for sharding strategies that may need torchrun
-        sharding = config_data.get("sharding_config", config_data.get("sharding", {}))
+        sharding = config_data.get("sharding", {})
         strategy = sharding.get("strategy", "none")
 
         if strategy in ("tensor_parallel", "pipeline_parallel"):
@@ -166,8 +166,7 @@ def get_effective_launcher_processes(config: ExperimentConfig) -> int:
     The launcher spawns a single process and the backend then creates its own
     worker processes for tensor/pipeline parallelism.
 
-    For PyTorch with Accelerate, returns config.num_processes as each Accelerate
-    worker is a separate OS process that writes its own result file.
+    For PyTorch with Accelerate, uses parallelism.degree explicitly.
 
     This function is critical for:
     - ExperimentState: determines how many result files to expect
@@ -192,15 +191,15 @@ def get_effective_launcher_processes(config: ExperimentConfig) -> int:
             return 1
         else:
             # External parallelism via Accelerate/torchrun
-            # Each process writes its own result file
-            return config.num_processes
+            # Use explicit parallelism.degree from config
+            return config.parallelism.degree
 
     except Exception as e:
         # Fall back to safe defaults if backend can't be loaded
         logger.warning(f"Could not get backend capabilities for {config.backend}: {e}")
         if config.backend in ("vllm", "tensorrt"):
             return 1
-        return config.num_processes
+        return config.parallelism.degree
 
 
 def _build_launch_command(
@@ -223,7 +222,7 @@ def _build_launch_command(
     Returns:
         Complete command list for subprocess.run().
     """
-    gpu_list = config_data.get("gpu_list", [])
+    gpus = config_data.get("gpus", [])
     launch_mode = _get_launch_mode(config_data)
 
     if launch_mode == "direct":
@@ -242,8 +241,8 @@ def _build_launch_command(
 
     elif launch_mode == "torchrun":
         # Tensor/Pipeline parallelism: use torchrun
-        sharding = config_data.get("sharding_config", config_data.get("sharding", {}))
-        num_shards = sharding.get("num_shards", len(gpu_list))
+        sharding = config_data.get("sharding", {})
+        num_shards = sharding.get("num_shards", len(gpus))
 
         cmd = [
             "torchrun",
@@ -259,8 +258,8 @@ def _build_launch_command(
     else:
         # Default: use accelerate launch
         num_processes = min(
-            config_data.get("num_processes", len(gpu_list)),
-            len(gpu_list),
+            config_data.get("num_processes", len(gpus)),
+            len(gpus),
         )
 
         cmd = [
@@ -305,15 +304,15 @@ def launch_experiment_accelerate(
     config_path = get_config_file_path(config)
     config_data = json.loads(config_path.read_text())
 
-    gpu_list = config_data.get("gpu_list", [])
-    num_processes = min(config_data.get("num_processes", len(gpu_list)), len(gpu_list))
+    gpus = config_data.get("gpus", [])
+    num_processes = min(config_data.get("num_processes", len(gpus)), len(gpus))
 
-    if num_processes > len(gpu_list):
+    if num_processes > len(gpus):
         logger.warning(
-            f"num_processes ({num_processes}) exceeds GPUs ({len(gpu_list)}). "
-            f"Using {len(gpu_list)} processes."
+            f"num_processes ({num_processes}) exceeds GPUs ({len(gpus)}). "
+            f"Using {len(gpus)} processes."
         )
-        num_processes = len(gpu_list)
+        num_processes = len(gpus)
 
     attempt = 0
     last_error = ""
@@ -331,13 +330,13 @@ def launch_experiment_accelerate(
                 # User has set MIG/GPU UUIDs - respect that
                 uuid_count = len(existing_cuda_env.split(","))
                 logger.info(f"Using CUDA_VISIBLE_DEVICES UUIDs: {uuid_count} device(s)")
-                if len(gpu_list) != uuid_count:
+                if len(gpus) != uuid_count:
                     logger.warning(
-                        f"--gpu-list has {len(gpu_list)} entries but CUDA_VISIBLE_DEVICES "
+                        f"gpus config has {len(gpus)} entries but CUDA_VISIBLE_DEVICES "
                         f"has {uuid_count} UUIDs. Using CUDA_VISIBLE_DEVICES."
                     )
             else:
-                env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_list)
+                env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpus)
 
             # Set environment based on launcher type
             if _requires_direct_launch(config_data):
@@ -425,14 +424,23 @@ def run_from_config(
 
 def _extract_metadata(
     config_path: Path,
-) -> tuple[dict[str, Any], dict[str, Any], str | None, list[str], str | None]:
+) -> tuple[
+    dict[str, Any],
+    dict[str, Any],
+    str | None,
+    list[str],
+    str | None,
+    dict[str, dict[str, Any]],
+    list[str],
+]:
     """Extract _metadata section from config file if present.
 
     Args:
         config_path: Path to the config file.
 
     Returns:
-        Tuple of (effective_config, cli_overrides, experiment_id, config_warnings, results_dir).
+        Tuple of (effective_config, cli_overrides, experiment_id, config_warnings,
+                  results_dir, parameter_provenance, preset_chain).
     """
     import yaml
 
@@ -446,20 +454,41 @@ def _extract_metadata(
         experiment_id = metadata.get("experiment_id")
         config_warnings = metadata.get("config_warnings", [])
         results_dir = metadata.get("results_dir")
+        parameter_provenance = metadata.get("parameter_provenance", {})
+        preset_chain = metadata.get("preset_chain", [])
 
-        return effective_config, cli_overrides, experiment_id, config_warnings, results_dir
+        return (
+            effective_config,
+            cli_overrides,
+            experiment_id,
+            config_warnings,
+            results_dir,
+            parameter_provenance,
+            preset_chain,
+        )
     except Exception as e:
         logger.debug(f"Could not extract _metadata from config: {e}")
-        return {}, {}, None, [], None
+        return {}, {}, None, [], None, {}, []
 
 
 def _parse_args() -> (
-    tuple[Path, list[str], dict[str, Any], dict[str, Any], str | None, list[str], str | None]
+    tuple[
+        Path,
+        list[str],
+        dict[str, Any],
+        dict[str, Any],
+        str | None,
+        list[str],
+        str | None,
+        dict[str, dict[str, Any]],
+        list[str],
+    ]
 ):
     """Parse command line arguments for accelerate launch.
 
     Returns:
-        Tuple of (config_path, prompts, effective_config, cli_overrides, experiment_id, config_warnings, results_dir).
+        Tuple of (config_path, prompts, effective_config, cli_overrides, experiment_id,
+                  config_warnings, results_dir, parameter_provenance, preset_chain).
     """
     import argparse
 
@@ -481,9 +510,15 @@ def _parse_args() -> (
     args = parser.parse_args()
 
     # Extract metadata before loading config (Phase 0)
-    effective_config, cli_overrides, experiment_id, config_warnings, results_dir = (
-        _extract_metadata(args.config)
-    )
+    (
+        effective_config,
+        cli_overrides,
+        experiment_id,
+        config_warnings,
+        results_dir,
+        parameter_provenance,
+        preset_chain,
+    ) = _extract_metadata(args.config)
 
     # Load config (ExperimentConfig ignores _metadata field)
     config = load_config(args.config)
@@ -492,8 +527,8 @@ def _parse_args() -> (
     if not effective_config:
         effective_config = config.model_dump()
 
-    # Determine sample size: CLI -n > config.num_input_prompts > None (all)
-    effective_sample_size = args.sample_size if args.sample_size else config.num_input_prompts
+    # Determine sample size: CLI -n takes precedence over everything
+    cli_sample_size = args.sample_size  # None if not specified
 
     # Load prompts (CLI args > config > default)
     if args.dataset:
@@ -501,22 +536,33 @@ def _parse_args() -> (
             dataset=args.dataset,
             split=args.split,
             column=args.column,
-            sample_size=effective_sample_size,
+            sample_size=cli_sample_size or config.num_input_prompts,
         )
         prompts = load_prompts_from_source(source)
     elif args.prompts:
         prompts = load_prompts_from_file(args.prompts)
+        effective_sample_size = cli_sample_size or config.num_input_prompts
         if effective_sample_size:
             prompts = prompts[:effective_sample_size]
-    elif config.prompt_source:
-        # Override sample_size with effective_sample_size (CLI > config > source default)
-        cfg_source = config.prompt_source
-        if effective_sample_size and isinstance(cfg_source, HuggingFacePromptSource):
+    elif config.dataset:
+        # Simple dataset config (recommended approach)
+        # Priority: CLI -n > config.dataset.sample_size
+        source = HuggingFacePromptSource(
+            dataset=config.dataset.name,
+            split=config.dataset.split,
+            column=config.dataset.column,
+            sample_size=cli_sample_size or config.dataset.sample_size,
+        )
+        prompts = load_prompts_from_source(source)
+    elif config.prompts:
+        # Override sample_size with CLI value if provided (CLI > source default)
+        cfg_source = config.prompts
+        if cli_sample_size and isinstance(cfg_source, HuggingFacePromptSource):
             cfg_source = HuggingFacePromptSource(
                 dataset=cfg_source.dataset,
                 split=cfg_source.split,
                 column=cfg_source.column,
-                sample_size=effective_sample_size,
+                sample_size=cli_sample_size,
             )
         prompts = load_prompts_from_source(cfg_source)
     else:
@@ -531,6 +577,8 @@ def _parse_args() -> (
         experiment_id,
         config_warnings,
         results_dir,
+        parameter_provenance,
+        preset_chain,
     )
 
 
@@ -538,8 +586,12 @@ if __name__ == "__main__":
     from pathlib import Path as PathLib
 
     from llm_energy_measure.config.loader import load_config
+    from llm_energy_measure.logging import setup_logging
     from llm_energy_measure.orchestration.context import experiment_context
     from llm_energy_measure.orchestration.factory import create_orchestrator
+
+    # Configure logging for subprocess (inherits LLM_ENERGY_VERBOSITY from parent)
+    setup_logging()
 
     (
         config_path,
@@ -549,13 +601,30 @@ if __name__ == "__main__":
         experiment_id,
         config_warnings,
         results_dir,
+        parameter_provenance,
+        preset_chain,
     ) = _parse_args()
     config = load_config(config_path)
 
-    logger.info(f"Running experiment with {len(prompts)} prompts from config: {config_path}")
-    logger.info(f"First prompt: {prompts[0][:50]}...")
+    # Log experiment configuration summary
+    num_procs = get_effective_launcher_processes(config)
+    logger.info(f"Running experiment: {config.config_name}")
+    logger.info(f"  Model: {config.model_name} | Backend: {config.backend}")
+    logger.info(
+        f"  GPUs: {config.gpus} | Processes: {num_procs} | Precision: {config.fp_precision}"
+    )
+    logger.info(
+        f"  Batch size: {config.batching.batch_size} | "
+        f"Strategy: {config.batching.strategy} | "
+        f"Streaming: {config.streaming}"
+    )
+    if config.parallelism.strategy != "none":
+        logger.info(
+            f"  Parallelism: {config.parallelism.strategy} (degree={config.parallelism.degree})"
+        )
+    logger.info(f"  Prompts: {len(prompts)} | Max output tokens: {config.max_output_tokens}")
     if results_dir:
-        logger.info(f"Results directory: {results_dir}")
+        logger.info(f"  Results dir: {results_dir}")
 
     with experiment_context(
         config,
@@ -563,6 +632,8 @@ if __name__ == "__main__":
         cli_overrides=cli_overrides,
         experiment_id=experiment_id,
         config_warnings=config_warnings,
+        parameter_provenance=parameter_provenance,
+        preset_chain=preset_chain,
     ) as ctx:
         # Pass results_dir to orchestrator (None uses default from constants/env)
         results_path = PathLib(results_dir) if results_dir else None

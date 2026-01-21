@@ -201,12 +201,12 @@ model_name: meta-llama/Llama-2-7b-hf
 max_input_tokens: 1024
 max_output_tokens: 512
 
-decoder_config:
+decoder:
   temperature: 0.0
   do_sample: false
 
 num_processes: 2
-gpu_list: [0, 1]
+gpus: [0, 1]
 fp_precision: float16
 ```
 

@@ -1,9 +1,9 @@
 """Configuration models for LLM Bench experiments."""
 
+import warnings
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import (
-    AliasChoices,
     BaseModel,
     Discriminator,
     Field,
@@ -25,6 +25,12 @@ DEFAULT_DATASET = "ai-energy-score"
 # Built-in dataset aliases for prompt loading
 BUILTIN_DATASETS: dict[str, dict[str, str]] = {
     "ai-energy-score": {
+        "path": "AIEnergyScore/text_generation",
+        "column": "text",
+        "split": "train",
+    },
+    # Underscore variant for YAML convenience
+    "ai_energy_score": {
         "path": "AIEnergyScore/text_generation",
         "column": "text",
         "split": "train",
@@ -90,28 +96,81 @@ class BatchingConfig(BaseModel):
         return self
 
 
+class ParallelismConfig(BaseModel):
+    """Unified parallelism configuration for multi-GPU inference.
+
+    This config consolidates GPU parallelism settings that were previously split
+    between `num_processes`, `sharding.num_shards`, and `sharding.strategy`.
+
+    Strategies:
+    - none: Single GPU or device_map='auto' (sequential layer distribution)
+    - tensor_parallel: Split layers horizontally across GPUs
+    - pipeline_parallel: Split model vertically into sequential stages
+    - data_parallel: Replicate model across GPUs, split batches
+
+    Examples:
+        # Single GPU
+        parallelism:
+          strategy: none
+
+        # 2-way tensor parallelism
+        parallelism:
+          strategy: tensor_parallel
+          degree: 2
+
+        # 4-way data parallelism
+        parallelism:
+          strategy: data_parallel
+          degree: 4
+    """
+
+    strategy: Literal["none", "tensor_parallel", "pipeline_parallel", "data_parallel"] = Field(
+        default="none",
+        description="Parallelism strategy",
+    )
+    degree: int = Field(
+        default=1,
+        ge=1,
+        description="Number of GPUs/workers for parallelism",
+    )
+
+    # Advanced options
+    tp_plan: Literal["auto"] | None = Field(
+        default=None,
+        description="Tensor parallel plan ('auto' uses model's predefined config)",
+    )
+
+    @model_validator(mode="after")
+    def validate_parallelism(self) -> "ParallelismConfig":
+        """Validate parallelism settings and set defaults."""
+        from loguru import logger
+
+        # Warn if strategy=none but degree > 1 (contradiction)
+        if self.strategy == "none" and self.degree > 1:
+            logger.warning(
+                f"parallelism.strategy='none' with degree={self.degree} is contradictory. "
+                f"Setting degree=1. Use a parallelism strategy (tensor_parallel, "
+                f"data_parallel, pipeline_parallel) for multi-GPU."
+            )
+            object.__setattr__(self, "degree", 1)
+
+        # TP defaults to tp_plan="auto" if not specified
+        if self.strategy == "tensor_parallel" and self.tp_plan is None:
+            object.__setattr__(self, "tp_plan", "auto")
+
+        return self
+
+
 class ShardingConfig(BaseModel):
-    """Model sharding configuration for multi-GPU parallelism.
+    """[DEPRECATED] Use ParallelismConfig instead.
+
+    Model sharding configuration for multi-GPU parallelism.
+    Kept for backwards compatibility - values are migrated to ParallelismConfig.
 
     Strategies:
     - none: Default device_map='auto' behaviour (sequential layer distribution)
     - tensor_parallel: Split layers horizontally across GPUs (HuggingFace native)
     - pipeline_parallel: Split model vertically into sequential stages
-
-    Tensor Parallelism:
-        Requires torchrun launcher. Each GPU computes part of every layer in
-        parallel. Supported models: Llama, Mistral, Mixtral, Qwen, Phi, Gemma,
-        Falcon, MPT, BLOOM, OPT.
-
-    Pipeline Parallelism:
-        Splits model layers across GPUs (e.g., layers 0-15 on GPU 0, 16-31 on
-        GPU 1). Forward passes run sequentially through stages. Useful when
-        model doesn't fit on single GPU but TP isn't supported.
-
-    Note:
-        For production serving with advanced batching and scheduling, consider
-        using the vLLM backend (when available) which handles parallelism
-        internally with optimised kernels.
     """
 
     strategy: Literal["none", "tensor_parallel", "pipeline_parallel"] = Field(
@@ -132,6 +191,14 @@ class ShardingConfig(BaseModel):
         if self.strategy == "tensor_parallel" and self.tp_plan is None:
             object.__setattr__(self, "tp_plan", "auto")
         return self
+
+    def to_parallelism_config(self) -> ParallelismConfig:
+        """Convert to new ParallelismConfig format."""
+        return ParallelismConfig(
+            strategy=self.strategy,  # type: ignore[arg-type]
+            degree=self.num_shards,
+            tp_plan=self.tp_plan,
+        )
 
 
 class TrafficSimulation(BaseModel):
@@ -157,7 +224,7 @@ class TrafficSimulation(BaseModel):
     )
 
 
-# Backwards compatibility alias
+# Backwards compatibility alias (deprecated, use TrafficSimulation)
 LatencySimulation = TrafficSimulation
 
 # Valid day names for schedule configuration
@@ -250,6 +317,38 @@ SAMPLING_PRESETS: dict[str, dict[str, Any]] = {
 }
 
 
+class BeamSearchConfig(BaseModel):
+    """Beam search configuration for generation.
+
+    Beam search explores multiple candidate sequences in parallel, selecting
+    the most probable overall sequence. Generally produces higher quality
+    output at the cost of throughput.
+
+    Note: Beam search is typically mutually exclusive with sampling.
+    """
+
+    enabled: bool = Field(default=False, description="Enable beam search (disables sampling)")
+    num_beams: int = Field(
+        default=1,
+        ge=1,
+        le=16,
+        description="Beam width (1=greedy, >1=beam search)",
+    )
+    length_penalty: float = Field(
+        default=1.0,
+        description="Exponential length penalty (>1 favours longer, <1 favours shorter)",
+    )
+    early_stopping: bool = Field(
+        default=False,
+        description="Stop when num_beams best sequences complete",
+    )
+    no_repeat_ngram_size: int = Field(
+        default=0,
+        ge=0,
+        description="Prevent n-gram repetition within beam (0=disabled)",
+    )
+
+
 class DecoderConfig(BaseModel):
     """Decoder/generation configuration.
 
@@ -289,6 +388,12 @@ class DecoderConfig(BaseModel):
         default=0, ge=0, description="Prevent n-gram repetition (0=disabled)"
     )
 
+    # Beam search configuration (unified across backends)
+    beam_search: BeamSearchConfig = Field(
+        default_factory=BeamSearchConfig,
+        description="Beam search configuration",
+    )
+
     # Preset shortcut
     preset: Literal["deterministic", "standard", "creative", "factual"] | None = Field(
         default=None,
@@ -312,6 +417,11 @@ class DecoderConfig(BaseModel):
     def is_deterministic(self) -> bool:
         """True if using greedy decoding (temp=0 or do_sample=False)."""
         return self.temperature == 0.0 or not self.do_sample
+
+    @property
+    def use_beam_search(self) -> bool:
+        """True if beam search is enabled and num_beams > 1."""
+        return self.beam_search.enabled and self.beam_search.num_beams > 1
 
 
 class QuantizationConfig(BaseModel):
@@ -374,8 +484,8 @@ class HuggingFacePromptSource(BaseModel):
         return self
 
 
-def _get_prompt_source_type(v: Any) -> str:
-    """Discriminator function for PromptSourceConfig union."""
+def _get_prompts_type(v: Any) -> str:
+    """Discriminator function for prompts field union type."""
     if isinstance(v, dict):
         return str(v.get("type", "file"))
     return str(getattr(v, "type", "file"))
@@ -384,8 +494,33 @@ def _get_prompt_source_type(v: Any) -> str:
 PromptSourceConfig = Annotated[
     Annotated[FilePromptSource, Tag("file")]
     | Annotated[HuggingFacePromptSource, Tag("huggingface")],
-    Discriminator(_get_prompt_source_type),
+    Discriminator(_get_prompts_type),
 ]
+
+
+class DatasetConfig(BaseModel):
+    """Simple dataset configuration for convenience.
+
+    A streamlined way to specify a dataset without the full PromptSourceConfig.
+    For advanced options (shuffle, subset, custom seed), use the `prompts` field instead.
+
+    Examples:
+        dataset:
+          name: alpaca
+          sample_size: 100
+
+        dataset:
+          name: tatsu-lab/alpaca
+          split: validation
+          column: instruction
+    """
+
+    name: str = Field(..., description="Dataset name: built-in alias or HuggingFace path")
+    sample_size: int | None = Field(default=None, ge=1, description="Limit number of prompts")
+    split: str = Field(default="train", description="Dataset split")
+    column: str | None = Field(
+        default=None, description="Column for prompts (auto-detected if not set)"
+    )
 
 
 class ExperimentConfig(BaseModel):
@@ -422,59 +557,62 @@ class ExperimentConfig(BaseModel):
     save_outputs: bool = Field(default=False, description="Save generated outputs")
     decode_token_to_text: bool = Field(default=False, description="Decode tokens to text")
 
-    # Prompt source (optional - can also be specified via CLI)
-    # YAML alias: "prompts" (preferred) or "prompt_source" (legacy)
-    prompt_source: PromptSourceConfig | None = Field(
+    # Dataset configuration (simple form - recommended for most use cases)
+    dataset: DatasetConfig | None = Field(
         default=None,
-        validation_alias=AliasChoices("prompts", "prompt_source"),
-        description="Prompt source: file or huggingface dataset",
+        description="Simple dataset config. For advanced options, use 'prompts' instead.",
+    )
+
+    # Prompt source (advanced - for custom shuffle, subset, file source)
+    prompts: PromptSourceConfig | None = Field(
+        default=None,
+        description="Advanced prompt source: file or huggingface dataset with full options",
     )
 
     # Distributed configuration
-    # YAML alias: "gpus" (preferred) or "gpu_list" (legacy)
-    gpu_list: list[int] = Field(
+    gpus: list[int] = Field(
         default_factory=lambda: [0],
-        validation_alias=AliasChoices("gpus", "gpu_list"),
         description="GPU indices to use",
     )
-    num_processes: int = Field(default=1, ge=1, description="Number of processes")
+    # DEPRECATED: Use parallelism.degree instead. Kept for backwards compatibility.
+    num_processes: int = Field(
+        default=1,
+        ge=1,
+        description="[Deprecated] Number of processes. Use parallelism.degree instead.",
+    )
 
-    # Sub-configurations
-    # YAML aliases: short names (preferred) or full names (legacy)
-    batching_options: BatchingConfig = Field(
+    # Sub-configurations (canonical names only)
+    batching: BatchingConfig = Field(
         default_factory=BatchingConfig,
-        validation_alias=AliasChoices("batching", "batching_options"),
-        description="Batching config",
+        description="Batching configuration",
     )
-    sharding_config: ShardingConfig = Field(
+    sharding: ShardingConfig = Field(
         default_factory=ShardingConfig,
-        validation_alias=AliasChoices("sharding", "sharding_config"),
-        description="Sharding config",
+        description="[Deprecated] Use parallelism instead. Legacy sharding configuration.",
     )
-    latency_simulation: LatencySimulation = Field(
-        default_factory=LatencySimulation,
-        validation_alias=AliasChoices("traffic_simulation", "latency_simulation"),
-        description="Traffic simulation config",
+    parallelism: ParallelismConfig = Field(
+        default_factory=ParallelismConfig,
+        description="Unified parallelism configuration for multi-GPU inference",
     )
-    decoder_config: DecoderConfig = Field(
+    traffic_simulation: TrafficSimulation = Field(
+        default_factory=TrafficSimulation,
+        description="MLPerf-style traffic simulation",
+    )
+    decoder: DecoderConfig = Field(
         default_factory=DecoderConfig,
-        validation_alias=AliasChoices("decoder", "decoder_config"),
-        description="Decoder/generation config",
+        description="Decoder/generation configuration",
     )
-    quantization_config: QuantizationConfig = Field(
+    quantization: QuantizationConfig = Field(
         default_factory=QuantizationConfig,
-        validation_alias=AliasChoices("quantization", "quantization_config"),
-        description="Quantization config",
+        description="Quantization configuration",
     )
-    schedule_config: ScheduleConfig = Field(
+    schedule: ScheduleConfig = Field(
         default_factory=ScheduleConfig,
-        validation_alias=AliasChoices("schedule", "schedule_config"),
         description="Schedule config for daemon mode",
     )
-    io_config: IOConfig = Field(
+    io: IOConfig = Field(
         default_factory=IOConfig,
-        validation_alias=AliasChoices("io", "io_config"),
-        description="I/O paths config (results directory)",
+        description="I/O paths configuration",
     )
 
     # Precision and backend
@@ -533,12 +671,48 @@ class ExperimentConfig(BaseModel):
     model_config = {"extra": "allow"}
 
     @model_validator(mode="after")
-    def validate_config(self) -> "ExperimentConfig":
-        # Validate num_processes <= len(gpu_list)
-        if self.num_processes > len(self.gpu_list):
+    def validate_and_migrate_config(self) -> "ExperimentConfig":
+        """Validate config and migrate legacy fields to new unified structure."""
+        # Migrate legacy sharding config to new parallelism config
+        # Only migrate if sharding was explicitly configured (not default)
+        sharding_is_default = (
+            self.sharding.strategy == "none"
+            and self.sharding.num_shards == 1
+            and self.sharding.tp_plan is None
+        )
+        parallelism_is_default = (
+            self.parallelism.strategy == "none" and self.parallelism.degree == 1
+        )
+
+        if not sharding_is_default and parallelism_is_default:
+            # Migrate from legacy sharding to new parallelism
+            migrated = self.sharding.to_parallelism_config()
+            object.__setattr__(self, "parallelism", migrated)
+
+        # Migrate legacy num_processes to parallelism.degree for data parallelism
+        if (
+            self.num_processes > 1
+            and self.parallelism.degree == 1
+            and self.parallelism.strategy == "none"
+        ):
+            # Legacy num_processes implies data parallelism
+            migrated = ParallelismConfig(
+                strategy="data_parallel",
+                degree=self.num_processes,
+            )
+            object.__setattr__(self, "parallelism", migrated)
+
+        # Validate parallelism.degree <= len(gpus)
+        if self.parallelism.degree > len(self.gpus):
             raise ValueError(
-                f"num_processes ({self.num_processes}) must be <= "
-                f"len(gpu_list) ({len(self.gpu_list)})"
+                f"parallelism.degree ({self.parallelism.degree}) must be <= "
+                f"len(gpus) ({len(self.gpus)})"
+            )
+
+        # Legacy validation: num_processes <= len(gpus) (for backwards compatibility)
+        if self.num_processes > len(self.gpus):
+            raise ValueError(
+                f"num_processes ({self.num_processes}) must be <= " f"len(gpus) ({len(self.gpus)})"
             )
 
         # Validate min_output_tokens <= max_output_tokens
@@ -551,7 +725,7 @@ class ExperimentConfig(BaseModel):
         # Validate backend supports the requested parallelism strategy
         # PyTorch backend does not support pipeline parallelism for inference
         # (generate() requires full model access for token-by-token generation)
-        if self.backend == "pytorch" and self.sharding_config.strategy == "pipeline_parallel":
+        if self.backend == "pytorch" and self.parallelism.strategy == "pipeline_parallel":
             raise ValueError(
                 "Pipeline parallelism is not supported with PyTorch backend for inference. "
                 "PyTorch's generate() requires full model access for autoregressive generation. "
@@ -575,11 +749,21 @@ class ExperimentConfig(BaseModel):
                 "Set backend='tensorrt' or remove tensorrt config section."
             )
 
+        # Warn if both dataset and prompts are configured (redundant)
+        if self.dataset is not None and self.prompts is not None:
+            warnings.warn(
+                "Both 'dataset' and 'prompts' are set. 'dataset' takes precedence. "
+                "Consider using only one for clarity.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         return self
 
-    @field_validator("gpu_list", mode="before")
+    @field_validator("gpus", mode="before")
     @classmethod
-    def ensure_gpu_list(cls, v: Any) -> list[int]:
+    def ensure_gpus_list(cls, v: Any) -> list[int]:
+        """Ensure gpus is always a list of integers."""
         if isinstance(v, int):
             return [v]
         return list(v)

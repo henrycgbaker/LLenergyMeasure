@@ -32,9 +32,16 @@ from llm_energy_measure.core.inference_backends.protocols import (
     BackendRuntime,
     ConfigWarning,
     CudaManagement,
-    LatencyMeasurements,
     LaunchMode,
     RuntimeCapabilities,
+)
+from llm_energy_measure.core.inference_backends.shared import (
+    CORE_SUPPORTED_PARAMS,
+    create_precision_metadata,
+)
+from llm_energy_measure.domain.metrics import (
+    LatencyMeasurementMode,
+    LatencyMeasurements,
     collect_itl_measurements,
 )
 from llm_energy_measure.exceptions import (
@@ -51,26 +58,13 @@ if TYPE_CHECKING:
 
 
 # Parameters supported by vLLM backend
-_SUPPORTED_PARAMS: set[str] = {
-    # Core
-    "model_name",
+# Extends core params with vLLM-specific options
+_SUPPORTED_PARAMS: set[str] = set(CORE_SUPPORTED_PARAMS) | {
+    # vLLM-specific: LoRA adapter support
     "adapter",
-    "fp_precision",
-    "max_input_tokens",
-    "max_output_tokens",
-    "min_output_tokens",
-    "random_seed",
-    # Batching (hints only - vLLM uses continuous batching)
-    "batch_size",
-    "batching.batch_size",
+    # Extended batching (hints only - vLLM uses continuous batching)
     "batching.max_tokens_per_batch",
-    # Note: batching.strategy is accepted but ignored (vLLM always continuous)
-    "batching.strategy",
-    # Decoder/Generation
-    "decoder.preset",
-    "decoder.temperature",
-    "decoder.top_p",
-    "decoder.top_k",
+    # Extended decoder options
     "decoder.min_p",
     "decoder.repetition_penalty",
     # Note: do_sample not needed (vLLM uses temperature=0 for greedy)
@@ -80,14 +74,6 @@ _SUPPORTED_PARAMS: set[str] = {
     # Sharding (native tensor parallelism)
     "sharding.strategy",
     "sharding.num_shards",
-    # Other
-    "save_outputs",
-    "num_input_prompts",
-    "gpus",
-    "num_processes",
-    # Streaming latency measurement
-    "streaming",
-    "streaming_warmup_requests",
 }
 
 # Parameters that require warnings
@@ -256,7 +242,7 @@ class VLLMBackend:
         """
         import os
 
-        sharding = config.sharding_config
+        sharding = config.sharding
 
         # Check if tensor parallelism is explicitly requested
         if sharding.strategy == "tensor_parallel":
@@ -264,8 +250,8 @@ class VLLMBackend:
                 return sharding.num_shards
 
             # Use gpu_list if provided
-            if config.gpu_list:
-                return len(config.gpu_list)
+            if config.gpus:
+                return len(config.gpus)
 
             # Fall back to CUDA_VISIBLE_DEVICES (no torch.cuda.* calls!)
             cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
@@ -280,8 +266,8 @@ class VLLMBackend:
             return 1
 
         # Check GPU list
-        if config.gpu_list:
-            return len(config.gpu_list)
+        if config.gpus:
+            return len(config.gpus)
 
         # Default to 1
         return 1
@@ -316,7 +302,7 @@ class VLLMBackend:
         if config.vllm and config.vllm.quantization_method:
             return config.vllm.quantization_method
 
-        quant = config.quantization_config
+        quant = config.quantization
 
         # Check for BitsAndBytes 4-bit
         if quant.load_in_4bit:
@@ -485,10 +471,7 @@ class VLLMBackend:
         # Advanced sampling params
         if vllm_cfg.best_of is not None and vllm_cfg.best_of > 1:
             kwargs["best_of"] = vllm_cfg.best_of
-        if vllm_cfg.use_beam_search:
-            kwargs["use_beam_search"] = True
-            if vllm_cfg.length_penalty != 1.0:
-                kwargs["length_penalty"] = vllm_cfg.length_penalty
+        # Note: beam search params now come from config.decoder.beam_search
         if vllm_cfg.logprobs is not None:
             kwargs["logprobs"] = vllm_cfg.logprobs
         if vllm_cfg.logit_bias:
@@ -535,7 +518,7 @@ class VLLMBackend:
         Returns:
             Configured SamplingParams instance.
         """
-        decoder = config.decoder_config
+        decoder = config.decoder
 
         params: dict[str, Any] = {
             "max_tokens": config.max_output_tokens,
@@ -686,7 +669,7 @@ class VLLMBackend:
                 return self._run_streaming_inference(prompts, config)
 
             # Check if traffic simulation is enabled
-            traffic_config = config.latency_simulation
+            traffic_config = config.traffic_simulation
             if traffic_config.enabled:
                 return self._run_inference_with_traffic(prompts, config)
 
@@ -762,6 +745,7 @@ class VLLMBackend:
                     streaming_mode=True,
                     warmup_requests_excluded=warmup_count,
                 ),
+                precision_metadata=create_precision_metadata(config, self.name),
             )
 
         # Collect per-request timing data
@@ -859,7 +843,7 @@ class VLLMBackend:
             excluded_tokens=excluded,
             streaming_mode=True,
             warmup_requests_excluded=warmup_count,
-            measurement_method="proportional_estimate",  # ITL estimated, not true streaming
+            measurement_mode=LatencyMeasurementMode.PROPORTIONAL_ESTIMATE,  # ITL estimated, not true streaming
         )
 
         # Calculate average TTFT for BackendResult (backward compat)
@@ -892,6 +876,7 @@ class VLLMBackend:
                 "itl_samples": len(itl_trimmed),
             },
             latency_measurements=latency_measurements,
+            precision_metadata=create_precision_metadata(config, self.name),
         )
 
     def _run_inference_with_traffic(
@@ -907,11 +892,11 @@ class VLLMBackend:
         # Truncate prompts to max_input_tokens (matches PyTorch backend behaviour)
         prompts = self._truncate_prompts(prompts, config.max_input_tokens)
 
-        traffic_config = config.latency_simulation
+        traffic_config = config.traffic_simulation
         generator = TrafficGenerator(traffic_config, seed=config.random_seed)
 
         # Determine batch size for sub-batches
-        batch_size = config.batching_options.batch_size or len(prompts)
+        batch_size = config.batching.batch_size or len(prompts)
         batches = [prompts[i : i + batch_size] for i in range(0, len(prompts), batch_size)]
 
         logger.info(
@@ -1020,6 +1005,7 @@ class VLLMBackend:
             time_to_first_token_ms=avg_ttft_ms,
             output_texts=output_texts if config.save_outputs else None,
             backend_metadata=metadata,
+            precision_metadata=create_precision_metadata(config, self.name),
         )
 
     def cleanup(self) -> None:
@@ -1093,7 +1079,7 @@ class VLLMBackend:
         warnings: list[ConfigWarning] = []
 
         # Check for unsupported params that require warnings
-        quant = config.quantization_config
+        quant = config.quantization
         if quant.load_in_8bit:
             warnings.append(
                 ConfigWarning(
@@ -1104,7 +1090,7 @@ class VLLMBackend:
                 )
             )
 
-        decoder = config.decoder_config
+        decoder = config.decoder
         if decoder.no_repeat_ngram_size and decoder.no_repeat_ngram_size > 0:
             warnings.append(
                 ConfigWarning(
@@ -1115,7 +1101,7 @@ class VLLMBackend:
             )
 
         # Inform about semantic differences
-        batching = config.batching_options
+        batching = config.batching
         if batching.strategy in ("static", "sorted_static"):
             warnings.append(
                 ConfigWarning(

@@ -24,12 +24,6 @@ from llm_energy_measure.core.flops import (
 from llm_energy_measure.core.implementations import (
     HuggingFaceModelLoader,
     ThroughputMetricsCollector,
-    TransformersInferenceEngine,
-)
-from llm_energy_measure.core.inference import (
-    InferenceResult,
-    calculate_inference_metrics,
-    run_inference,
 )
 from llm_energy_measure.core.model_loader import (
     ModelWrapper,
@@ -50,14 +44,11 @@ __all__ = [
     "ComputeMetrics",
     "FlopsEstimator",
     "HuggingFaceModelLoader",
-    "InferenceResult",
     "MemoryStats",
     "ModelWrapper",
     "QuantizationSupport",
     "ThroughputMetricsCollector",
-    "TransformersInferenceEngine",
     "UtilizationStats",
-    "calculate_inference_metrics",
     "cleanup_distributed",
     "collect_compute_metrics",
     "create_adaptive_batches",
@@ -74,7 +65,6 @@ __all__ = [
     "get_shared_unique_id",
     "get_utilization_stats",
     "load_model_tokenizer",
-    "run_inference",
     "safe_wait",
     "sort_prompts_by_length",
     "tokenize_batch",

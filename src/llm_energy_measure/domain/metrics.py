@@ -1,5 +1,7 @@
 """Metrics domain models for LLM Bench."""
 
+from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
@@ -205,10 +207,10 @@ class InferenceMetrics(BaseModel):
         default=None, description="Average time to first token in ms (if available)"
     )
     # Raw latency measurements for streaming mode (late aggregation)
-    # Type is LatencyMeasurements from protocols.py (stored as Any to avoid circular import)
+    # Forward reference to LatencyMeasurements (defined below in this module)
     latency_measurements: Any | None = Field(
         default=None,
-        description="Raw TTFT/ITL samples from streaming inference (LatencyMeasurements)",
+        description="Raw TTFT/ITL samples from streaming inference",
     )
 
     @property
@@ -229,6 +231,28 @@ class EnergyMetrics(BaseModel):
     duration_sec: float = Field(..., description="Measurement duration in seconds")
     emissions_kg_co2: float = Field(0.0, description="Carbon emissions in kg CO2")
     energy_per_token_j: float = Field(0.0, description="Energy per token in Joules")
+
+    @classmethod
+    def placeholder(cls, duration_sec: float = 0.0) -> "EnergyMetrics":
+        """Create placeholder metrics when energy measurement is unavailable.
+
+        Args:
+            duration_sec: Optional duration to record (e.g. from inference time).
+
+        Returns:
+            EnergyMetrics with all values zeroed.
+        """
+        return cls(
+            total_energy_j=0.0,
+            gpu_energy_j=0.0,
+            cpu_energy_j=0.0,
+            ram_energy_j=0.0,
+            gpu_power_w=0.0,
+            cpu_power_w=0.0,
+            duration_sec=duration_sec,
+            emissions_kg_co2=0.0,
+            energy_per_token_j=0.0,
+        )
 
     @property
     def total_power_w(self) -> float:
@@ -272,3 +296,156 @@ class CombinedMetrics(BaseModel):
         if self.energy.total_power_w > 0:
             return self.compute.flops_per_second / self.energy.total_power_w
         return 0.0
+
+
+# =============================================================================
+# Latency Measurement Types - For streaming inference metrics
+# =============================================================================
+
+
+class LatencyMeasurementMode(Enum):
+    """How latency measurements were obtained.
+
+    Different backends have different latency measurement capabilities:
+    - PyTorch: True per-token timestamps via TextIteratorStreamer
+    - vLLM/TensorRT: May use proportional estimation from total time
+
+    This enum makes the measurement semantics explicit in results.
+    """
+
+    TRUE_STREAMING = "true_streaming"
+    """Actual per-token timestamps captured via streaming API.
+
+    Most accurate method. Each token timestamp represents when that
+    specific token was generated. PyTorch backend achieves this via
+    TextIteratorStreamer callback.
+    """
+
+    PER_REQUEST_BATCH = "per_request_batch"
+    """Per-request timing without streaming.
+
+    Measures total request latency but may estimate ITL by dividing
+    total time by token count. Less accurate than true streaming.
+    """
+
+    PROPORTIONAL_ESTIMATE = "proportional"
+    """Estimated from total inference time.
+
+    ITL calculated by distributing total time proportionally across
+    tokens. Least accurate - used as fallback when streaming not available.
+    """
+
+
+@dataclass
+class LatencyMeasurements:
+    """Raw latency measurements for late aggregation.
+
+    Stores raw samples from streaming inference. Statistics are computed
+    at aggregation time, enabling correct multi-process aggregation
+    (concatenate samples first, then compute percentiles).
+
+    Attributes:
+        ttft_ms: Per-request time-to-first-token in milliseconds.
+        itl_full_ms: All inter-token latencies (includes all intervals).
+        itl_trimmed_ms: Trimmed ITL excluding first/last per request
+            (first token is TTFT, last may have EOS anomalies).
+        request_count: Number of requests measured.
+        total_output_tokens: Total tokens generated across all requests.
+        excluded_tokens: Count of first+last tokens excluded from trimmed ITL.
+        streaming_mode: Whether streaming API was used for measurement.
+        warmup_requests_excluded: Number of warmup requests not included.
+        measurement_mode: How latency was measured (see LatencyMeasurementMode).
+    """
+
+    ttft_ms: list[float]
+    itl_full_ms: list[float]
+    itl_trimmed_ms: list[float]
+    request_count: int
+    total_output_tokens: int
+    excluded_tokens: int
+    streaming_mode: bool
+    warmup_requests_excluded: int
+    measurement_mode: LatencyMeasurementMode = LatencyMeasurementMode.TRUE_STREAMING
+
+    # Legacy alias for backwards compatibility
+    @property
+    def measurement_method(self) -> str:
+        """Legacy accessor - returns string value of measurement_mode."""
+        return self.measurement_mode.value
+
+
+@dataclass
+class LatencyStatistics:
+    """Computed statistics from raw latency measurements.
+
+    Created at aggregation time from LatencyMeasurements. This is the final
+    form stored in AggregatedResult and displayed in CLI output.
+
+    Primary metrics use trimmed ITL (excluding first/last tokens per request).
+    Full ITL stats are provided for comparison/debugging.
+    """
+
+    # TTFT statistics
+    ttft_mean_ms: float
+    ttft_median_ms: float
+    ttft_p95_ms: float
+    ttft_p99_ms: float
+    ttft_min_ms: float
+    ttft_max_ms: float
+    ttft_samples: int
+
+    # ITL statistics (trimmed - primary metric)
+    itl_mean_ms: float | None = None
+    itl_median_ms: float | None = None
+    itl_p95_ms: float | None = None
+    itl_p99_ms: float | None = None
+    itl_samples: int = 0
+
+    # ITL statistics (full - for comparison)
+    itl_full_mean_ms: float | None = None
+    itl_full_p99_ms: float | None = None
+
+
+def collect_itl_measurements(
+    token_timestamps_per_request: list[list[float]],
+) -> tuple[list[float], list[float], int]:
+    """Calculate ITL metrics from per-token timestamps.
+
+    Standard implementation used by all backends for consistent ITL calculation.
+    Extracts inter-token latencies from timestamp lists, optionally trimming
+    first/last intervals per request for cleaner statistics.
+
+    Args:
+        token_timestamps_per_request: Per-request list of token arrival times (ms).
+            Each inner list contains cumulative timestamps for one request.
+
+    Returns:
+        Tuple of (itl_full, itl_trimmed, excluded_count):
+            - itl_full: All inter-token intervals
+            - itl_trimmed: Excluding first/last per request (cleaner for percentiles)
+            - excluded_count: Number of excluded intervals
+    """
+    import numpy as np
+
+    itl_full: list[float] = []
+    itl_trimmed: list[float] = []
+    excluded = 0
+
+    for timestamps in token_timestamps_per_request:
+        if len(timestamps) < 2:
+            continue
+
+        # Calculate inter-token intervals
+        intervals = list(np.diff(timestamps))
+        itl_full.extend(intervals)
+
+        # Trim first and last intervals for cleaner statistics
+        # First interval may include warmup effects, last may have EOS anomalies
+        if len(intervals) >= 3:
+            itl_trimmed.extend(intervals[1:-1])
+            excluded += 2
+        elif len(intervals) >= 1:
+            # Too short to trim meaningfully
+            excluded += len(intervals)
+
+    return itl_full, itl_trimmed, excluded

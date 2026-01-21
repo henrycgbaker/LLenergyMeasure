@@ -21,7 +21,7 @@ def sample_config():
     return ExperimentConfig(
         config_name="test_config",
         model_name="test/model",
-        gpu_list=[0],
+        gpus=[0],
         num_processes=1,
     )
 
@@ -40,6 +40,9 @@ def mock_context(sample_config):
     # Provide proper dicts for effective_config and cli_overrides
     ctx.effective_config = {}
     ctx.cli_overrides = {}
+    ctx.config_warnings = []
+    ctx.parameter_provenance = {}
+    ctx.preset_chain = []
     return ctx
 
 
@@ -164,6 +167,9 @@ class TestExperimentOrchestrator:
         # Provide proper dicts for effective_config and cli_overrides
         ctx.effective_config = {}
         ctx.cli_overrides = {}
+        ctx.config_warnings = []
+        ctx.parameter_provenance = {}
+        ctx.preset_chain = []
 
         orchestrator = ExperimentOrchestrator(**mock_components)
         orchestrator.run(ctx, ["test"])

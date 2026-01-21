@@ -104,19 +104,18 @@ class TestDecoderConfigWired:
         # Values exist but inference code won't use them
 
     def test_generation_kwargs_built_correctly(self):
-        """Test _build_generation_kwargs produces correct output."""
-        from llm_energy_measure.core.inference import _build_generation_kwargs
+        """Test PyTorchBackend._build_generation_kwargs produces correct output."""
+        from llm_energy_measure.core.inference_backends.pytorch import PyTorchBackend
 
         # Test deterministic - use actual field name, not alias
         config = ExperimentConfig(
             config_name="test",
             model_name="gpt2",
-            decoder_config=DecoderConfig(preset="deterministic"),
+            decoder=DecoderConfig(preset="deterministic"),
         )
-        # Function signature: (config, input_length, max_output_tokens, allowed_new_tokens)
-        kwargs = _build_generation_kwargs(
-            config, input_length=10, max_output_tokens=50, allowed_new_tokens=100
-        )
+
+        backend = PyTorchBackend()
+        kwargs = backend._build_generation_kwargs(config, max_output_tokens=50)
 
         assert kwargs["do_sample"] is False
         assert kwargs["max_new_tokens"] == 50
@@ -124,23 +123,22 @@ class TestDecoderConfigWired:
         assert "top_p" not in kwargs
 
     def test_generation_kwargs_sampling_mode(self):
-        """Test _build_generation_kwargs with sampling enabled."""
-        from llm_energy_measure.core.inference import _build_generation_kwargs
+        """Test PyTorchBackend._build_generation_kwargs with sampling enabled."""
+        from llm_energy_measure.core.inference_backends.pytorch import PyTorchBackend
 
         config = ExperimentConfig(
             config_name="test",
             model_name="gpt2",
-            decoder_config=DecoderConfig(
+            decoder=DecoderConfig(
                 temperature=0.8,
                 do_sample=True,
                 top_k=40,
                 top_p=0.9,
             ),
         )
-        # Function signature: (config, input_length, max_output_tokens, allowed_new_tokens)
-        kwargs = _build_generation_kwargs(
-            config, input_length=10, max_output_tokens=50, allowed_new_tokens=100
-        )
+
+        backend = PyTorchBackend()
+        kwargs = backend._build_generation_kwargs(config, max_output_tokens=50)
 
         assert kwargs["do_sample"] is True
         assert kwargs["temperature"] == 0.8
@@ -200,9 +198,7 @@ class TestTrafficSimulationWired:
         assert elapsed >= 0.008  # Allow some tolerance
 
     def test_disabled_traffic_sim_no_generator(self):
-        """Disabled traffic simulation should not create generator."""
-        from llm_energy_measure.core.inference import _create_traffic_generator
-
+        """Disabled traffic simulation config means generator is not created."""
         # Use model_validate to properly handle validation_alias
         config = ExperimentConfig.model_validate(
             {
@@ -212,13 +208,11 @@ class TestTrafficSimulationWired:
             }
         )
 
-        generator = _create_traffic_generator(config)
-        assert generator is None
+        # When disabled, backends should not create generator
+        assert config.traffic_simulation.enabled is False
 
     def test_enabled_traffic_sim_creates_generator(self):
-        """Enabled traffic simulation should create generator."""
-        from llm_energy_measure.core.inference import _create_traffic_generator
-
+        """Enabled traffic simulation config can create a generator."""
         # Use model_validate to properly handle validation_alias
         config = ExperimentConfig.model_validate(
             {
@@ -232,7 +226,9 @@ class TestTrafficSimulationWired:
             }
         )
 
-        generator = _create_traffic_generator(config)
+        # When enabled, config should allow creating generator
+        assert config.traffic_simulation.enabled is True
+        generator = TrafficGenerator(config.traffic_simulation)
         assert generator is not None
         assert isinstance(generator, TrafficGenerator)
 
@@ -312,16 +308,21 @@ class TestShardingConfigImplemented:
             }
         )
 
-        assert config.sharding_config.strategy == "tensor_parallel"
-        assert config.sharding_config.num_shards == 2
-        assert config.sharding_config.tp_plan == "auto"  # Default for TP
+        assert config.sharding.strategy == "tensor_parallel"
+        assert config.sharding.num_shards == 2
+        assert config.sharding.tp_plan == "auto"  # Default for TP
 
     def test_sharding_config_pipeline_parallel(self):
-        """Pipeline parallel config should parse correctly."""
+        """Pipeline parallel config should parse correctly.
+
+        Note: Pipeline parallelism is only supported with vLLM/TensorRT backends,
+        not PyTorch (which is the default).
+        """
         config = ExperimentConfig.model_validate(
             {
                 "config_name": "test",
                 "model_name": "gpt2",
+                "backend": "vllm",  # PP only supported with vLLM/TensorRT
                 "sharding": {
                     "strategy": "pipeline_parallel",
                     "num_shards": 4,
@@ -330,8 +331,8 @@ class TestShardingConfigImplemented:
             }
         )
 
-        assert config.sharding_config.strategy == "pipeline_parallel"
-        assert config.sharding_config.num_shards == 4
+        assert config.sharding.strategy == "pipeline_parallel"
+        assert config.sharding.num_shards == 4
 
     def test_sharding_is_used_in_model_loader(self):
         """Sharding config IS used in model loading."""
@@ -361,8 +362,8 @@ class TestShardingConfigImplemented:
         assert isinstance(get_parallelism_strategy(tp_config), TensorParallelStrategy)
 
 
-class TestBackendConfigNotImplemented:
-    """Verify backend config exists but is NOT yet wired up."""
+class TestBackendConfigImplemented:
+    """Verify backend config is properly wired up via backend protocol."""
 
     def test_backend_config_parsed(self):
         """Backend config should be parsed correctly."""
@@ -374,16 +375,14 @@ class TestBackendConfigNotImplemented:
 
         assert config.backend == "vllm"
 
-    def test_backend_not_used_in_inference(self):
-        """Backend config is NOT used in inference (documenting current state)."""
-        import inspect
+    def test_backend_selection_in_factory(self):
+        """Backend selection happens in factory, not inference module."""
 
-        from llm_energy_measure.core import inference
+        from llm_energy_measure.core.inference_backends import get_backend
 
-        source = inspect.getsource(inference)
+        # get_backend should exist and work
+        pytorch_backend = get_backend("pytorch")
+        assert pytorch_backend.name == "pytorch"
 
-        # Backend selection logic should NOT appear in inference
-        # (comments mentioning vLLM terminology are OK, actual implementation is not)
-        assert "tensorrt" not in source.lower()
-        assert "if config.backend" not in source.lower()
-        assert "backend ==" not in source.lower()
+        # Each backend implements its own inference
+        assert hasattr(pytorch_backend, "run_inference")

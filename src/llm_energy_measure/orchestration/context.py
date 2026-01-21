@@ -83,6 +83,8 @@ class ExperimentContext:
     effective_config: dict[str, Any] = field(default_factory=dict)
     cli_overrides: dict[str, Any] = field(default_factory=dict)
     config_warnings: list[str] = field(default_factory=list)
+    parameter_provenance: dict[str, dict[str, Any]] = field(default_factory=dict)
+    preset_chain: list[str] = field(default_factory=list)
 
     @classmethod
     def create(
@@ -93,6 +95,8 @@ class ExperimentContext:
         cli_overrides: dict[str, Any] | None = None,
         experiment_id: str | None = None,
         config_warnings: list[str] | None = None,
+        parameter_provenance: dict[str, dict[str, Any]] | None = None,
+        preset_chain: list[str] | None = None,
     ) -> ExperimentContext:
         """Factory method to create context from config.
 
@@ -109,6 +113,8 @@ class ExperimentContext:
             cli_overrides: CLI parameters that overrode config values.
             experiment_id: Optional pre-generated experiment ID (from CLI).
             config_warnings: Config validation warnings to embed in results.
+            parameter_provenance: Full provenance tracking for each parameter.
+            preset_chain: Presets applied in order.
 
         Returns:
             Fully initialized ExperimentContext.
@@ -150,11 +156,13 @@ class ExperimentContext:
                 effective_config=effective_config or {},
                 cli_overrides=cli_overrides or {},
                 config_warnings=config_warnings or [],
+                parameter_provenance=parameter_provenance or {},
+                preset_chain=preset_chain or [],
             )
 
         # Standard path: orchestrator manages CUDA via Accelerator
         accelerator = get_accelerator(
-            gpu_list=config.gpu_list,
+            gpus=config.gpus,
             num_processes=config.num_processes,
         )
 
@@ -179,6 +187,8 @@ class ExperimentContext:
             effective_config=effective_config or {},
             cli_overrides=cli_overrides or {},
             config_warnings=config_warnings or [],
+            parameter_provenance=parameter_provenance or {},
+            preset_chain=preset_chain or [],
         )
 
     def cleanup(self) -> None:
@@ -209,6 +219,8 @@ def experiment_context(
     cli_overrides: dict[str, Any] | None = None,
     experiment_id: str | None = None,
     config_warnings: list[str] | None = None,
+    parameter_provenance: dict[str, dict[str, Any]] | None = None,
+    preset_chain: list[str] | None = None,
 ) -> Iterator[ExperimentContext]:
     """Context manager for experiment lifecycle.
 
@@ -222,6 +234,8 @@ def experiment_context(
         cli_overrides: CLI parameters that overrode config values.
         experiment_id: Optional pre-generated experiment ID (from CLI).
         config_warnings: Config validation warnings to embed in results.
+        parameter_provenance: Full provenance tracking for each parameter.
+        preset_chain: Presets applied in order.
 
     Yields:
         ExperimentContext instance.
@@ -232,7 +246,14 @@ def experiment_context(
         ...     results = run_inference(model, ctx)
     """
     ctx = ExperimentContext.create(
-        config, id_file, effective_config, cli_overrides, experiment_id, config_warnings
+        config,
+        id_file,
+        effective_config,
+        cli_overrides,
+        experiment_id,
+        config_warnings,
+        parameter_provenance,
+        preset_chain,
     )
     try:
         yield ctx

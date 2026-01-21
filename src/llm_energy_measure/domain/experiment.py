@@ -6,7 +6,12 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from llm_energy_measure.constants import SCHEMA_VERSION
-from llm_energy_measure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
+from llm_energy_measure.domain.metrics import (
+    ComputeMetrics,
+    EnergyMetrics,
+    InferenceMetrics,
+    LatencyStatistics,
+)
 
 
 class CycleStatistics(BaseModel):
@@ -143,6 +148,10 @@ class RawProcessResult(BaseModel):
         default=None,
         description="Warning about energy measurement accuracy (e.g., MIG limitations)",
     )
+    energy_tracking_failed: bool = Field(
+        default=False,
+        description="True if energy tracking failed during this run (metrics are placeholders)",
+    )
     config_name: str = Field(..., description="Configuration name for this experiment")
     model_name: str = Field(..., description="Model name/path used")
     timestamps: Timestamps = Field(..., description="Timing information")
@@ -162,6 +171,20 @@ class RawProcessResult(BaseModel):
     config_warnings: list[str] = Field(
         default_factory=list,
         description="Config validation warnings that were present at runtime",
+    )
+
+    # Parameter provenance tracking (new in schema v2)
+    parameter_provenance: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Full provenance for each parameter (path -> {value, source, source_detail})",
+    )
+    preset_chain: list[str] = Field(
+        default_factory=list,
+        description="Presets applied in order (for preset inheritance tracking)",
+    )
+    cycle_run_info: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Cycle metadata (cycle_id, cycle_count, total_cycles)",
     )
 
     model_config = {"frozen": True}
@@ -230,11 +253,26 @@ class AggregatedResult(BaseModel):
         description="Config validation warnings that were present at runtime",
     )
 
+    # Parameter provenance tracking (new in schema v2)
+    parameter_provenance: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Full provenance for each parameter (path -> {value, source, source_detail})",
+    )
+    preset_chain: list[str] = Field(
+        default_factory=list,
+        description="Presets applied in order (for preset inheritance tracking)",
+    )
+
     # Streaming latency statistics (computed at aggregation time from raw measurements)
-    # Type is LatencyStatistics from protocols.py (stored as Any to avoid circular import)
-    latency_stats: Any | None = Field(
+    latency_stats: LatencyStatistics | None = Field(
         default=None,
-        description="Computed TTFT/ITL statistics from streaming inference (LatencyStatistics)",
+        description="Computed TTFT/ITL statistics from streaming inference",
+    )
+
+    # Energy tracking status
+    energy_tracking_failed: bool = Field(
+        default=False,
+        description="True if any process had energy tracking failures (metrics may be incomplete)",
     )
 
     model_config = {"frozen": True}

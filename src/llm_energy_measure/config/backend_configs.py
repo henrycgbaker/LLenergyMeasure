@@ -53,6 +53,10 @@ class VLLMSpeculativeConfig(BaseModel):
     Speculative decoding uses a small draft model to propose multiple tokens,
     then the main model verifies them in a single forward pass. Can provide
     2-3x latency improvement for compatible model pairs.
+
+    Energy Impact:
+        Better n-gram tuning improves speculation hit rate → fewer wasted
+        draft computations → lower energy per token.
     """
 
     model: str | None = Field(
@@ -69,14 +73,26 @@ class VLLMSpeculativeConfig(BaseModel):
         default="ngram",
         description="Speculation method (ngram=prompt lookup, eagle/medusa=learned)",
     )
+    # Ngram lookup bounds (Phase 3.1 - energy impacting)
+    prompt_lookup_min: int = Field(
+        default=1,
+        ge=1,
+        description="Minimum n-gram window for prompt lookup speculation",
+    )
+    prompt_lookup_max: int | None = Field(
+        default=None,
+        ge=1,
+        description="Maximum n-gram window for prompt lookup speculation",
+    )
+    # Legacy aliases
     ngram_min: int = Field(
         default=1,
         ge=1,
-        description="Minimum n-gram window for prompt lookup",
+        description="[Deprecated] Use prompt_lookup_min instead",
     )
     ngram_max: int | None = Field(
         default=None,
-        description="Maximum n-gram window for prompt lookup",
+        description="[Deprecated] Use prompt_lookup_max instead",
     )
     draft_tp_size: int = Field(
         default=1,
@@ -237,20 +253,13 @@ class VLLMConfig(BaseModel):
     )
 
     # -------------------------------------------------------------------------
-    # Advanced Sampling (extends decoder config)
+    # Advanced Sampling (vLLM-specific extensions to decoder config)
+    # Note: Beam search params moved to DecoderConfig.beam_search
     # -------------------------------------------------------------------------
     best_of: int | None = Field(
         default=None,
         ge=1,
         description="Generate N sequences, return best (requires swap_space)",
-    )
-    use_beam_search: bool = Field(
-        default=False,
-        description="Enable beam search instead of sampling",
-    )
-    length_penalty: float = Field(
-        default=1.0,
-        description="Length penalty for beam search",
     )
     logprobs: int | None = Field(
         default=None,
@@ -340,6 +349,12 @@ class PyTorchConfig(BaseModel):
         default=True,
         description="Enable KV caching during generation (faster but uses memory)",
     )
+    # Phase 3.3: Cache implementation (energy impacting)
+    cache_implementation: Literal["dynamic", "static", "hybrid", "sliding_window"] | None = Field(
+        default=None,
+        description="KV cache implementation: 'static' enables CUDA graphs (lower energy), "
+        "'dynamic' (default), 'hybrid' (balance), 'sliding_window' (long context)",
+    )
 
     # -------------------------------------------------------------------------
     # Memory Management
@@ -363,20 +378,8 @@ class PyTorchConfig(BaseModel):
 
     # -------------------------------------------------------------------------
     # Generation Configuration
+    # Note: Beam search params moved to DecoderConfig.beam_search
     # -------------------------------------------------------------------------
-    num_beams: int = Field(
-        default=1,
-        ge=1,
-        description="Beam search width (1=greedy/sampling)",
-    )
-    early_stopping: bool = Field(
-        default=False,
-        description="Stop beam search when N best sequences complete",
-    )
-    length_penalty: float = Field(
-        default=1.0,
-        description="Exponential length penalty for beam search",
-    )
     output_scores: bool = Field(
         default=False,
         description="Return generation scores/logprobs",
@@ -521,17 +524,22 @@ class TensorRTConfig(BaseModel):
     )
 
     # -------------------------------------------------------------------------
-    # Tensor Parallelism
+    # Parallelism (uses config.parallelism for degree)
+    # Note: tp_size removed - use parallelism.degree with strategy=tensor_parallel
     # -------------------------------------------------------------------------
-    tp_size: int | None = Field(
-        default=None,
-        ge=1,
-        description="Tensor parallel size. If None, uses sharding.tensor_parallel_size.",
-    )
     pp_size: int = Field(
         default=1,
         ge=1,
         description="Pipeline parallel size (for very large models)",
+    )
+
+    # -------------------------------------------------------------------------
+    # Build Optimisation (Phase 3.2 - energy impacting)
+    # -------------------------------------------------------------------------
+    multiple_profiles: bool = Field(
+        default=False,
+        description="Build with multiple TensorRT profiles for different input shapes. "
+        "Enables better kernel selection per input shape (moderate energy impact).",
     )
 
     # -------------------------------------------------------------------------
@@ -554,6 +562,12 @@ class TensorRTConfig(BaseModel):
         ge=0.5,
         le=0.99,
         description="Fraction of GPU memory for KV cache (0.5-0.99)",
+    )
+    # Phase 3.2: KV cache reuse (energy impacting - high impact)
+    enable_kv_cache_reuse: bool = Field(
+        default=False,
+        description="Enable KV cache reuse for prefix caching. "
+        "Avoids recomputing attention for shared prefixes (high energy impact).",
     )
 
     # -------------------------------------------------------------------------

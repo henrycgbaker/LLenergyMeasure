@@ -2,7 +2,13 @@
 
 import pytest
 
-from llm_energy_measure.state.experiment_state import ExperimentState, StateManager
+from llm_energy_measure.exceptions import InvalidStateTransitionError
+from llm_energy_measure.state.experiment_state import (
+    EXPERIMENT_VALID_TRANSITIONS,
+    ExperimentState,
+    ExperimentStatus,
+    StateManager,
+)
 
 
 class TestExperimentState:
@@ -84,6 +90,103 @@ class TestExperimentState:
         assert state.is_pending("config_c") is True
         assert state.is_pending("config_a") is False
         assert state.is_pending("config_b") is False
+
+
+class TestStateTransitions:
+    """Tests for state machine transitions."""
+
+    def test_valid_transition_initialised_to_running(self):
+        state = ExperimentState(experiment_id="exp_001")
+        assert state.status == ExperimentStatus.INITIALISED
+
+        state.transition_to(ExperimentStatus.RUNNING)
+        assert state.status == ExperimentStatus.RUNNING
+
+    def test_valid_transition_running_to_completed(self):
+        state = ExperimentState(experiment_id="exp_001", status=ExperimentStatus.RUNNING)
+        state.transition_to(ExperimentStatus.COMPLETED)
+        assert state.status == ExperimentStatus.COMPLETED
+
+    def test_valid_transition_running_to_failed_with_message(self):
+        state = ExperimentState(experiment_id="exp_001", status=ExperimentStatus.RUNNING)
+        state.transition_to(
+            ExperimentStatus.FAILED,
+            error_message="CUDA OOM",
+        )
+        assert state.status == ExperimentStatus.FAILED
+        assert state.error_message == "CUDA OOM"
+
+    def test_valid_transition_running_to_interrupted(self):
+        state = ExperimentState(experiment_id="exp_001", status=ExperimentStatus.RUNNING)
+        state.transition_to(
+            ExperimentStatus.INTERRUPTED,
+            error_message="Interrupted by user",
+        )
+        assert state.status == ExperimentStatus.INTERRUPTED
+        assert state.error_message == "Interrupted by user"
+
+    def test_valid_transition_completed_to_aggregated(self):
+        state = ExperimentState(experiment_id="exp_001", status=ExperimentStatus.COMPLETED)
+        state.transition_to(ExperimentStatus.AGGREGATED)
+        assert state.status == ExperimentStatus.AGGREGATED
+
+    def test_valid_transition_failed_to_running(self):
+        """Test retry from FAILED state."""
+        state = ExperimentState(experiment_id="exp_001", status=ExperimentStatus.FAILED)
+        state.transition_to(ExperimentStatus.RUNNING)
+        assert state.status == ExperimentStatus.RUNNING
+
+    def test_valid_transition_interrupted_to_running(self):
+        """Test resume from INTERRUPTED state."""
+        state = ExperimentState(experiment_id="exp_001", status=ExperimentStatus.INTERRUPTED)
+        state.transition_to(ExperimentStatus.RUNNING)
+        assert state.status == ExperimentStatus.RUNNING
+
+    def test_invalid_transition_initialised_to_completed(self):
+        state = ExperimentState(experiment_id="exp_001")
+        with pytest.raises(InvalidStateTransitionError) as exc_info:
+            state.transition_to(ExperimentStatus.COMPLETED)
+
+        assert exc_info.value.from_status == "initialised"
+        assert exc_info.value.to_status == "completed"
+        assert exc_info.value.entity == "experiment"
+
+    def test_invalid_transition_aggregated_is_terminal(self):
+        state = ExperimentState(experiment_id="exp_001", status=ExperimentStatus.AGGREGATED)
+        with pytest.raises(InvalidStateTransitionError):
+            state.transition_to(ExperimentStatus.RUNNING)
+
+    def test_invalid_transition_completed_to_running(self):
+        state = ExperimentState(experiment_id="exp_001", status=ExperimentStatus.COMPLETED)
+        with pytest.raises(InvalidStateTransitionError):
+            state.transition_to(ExperimentStatus.RUNNING)
+
+    def test_transition_updates_timestamp(self):
+        state = ExperimentState(experiment_id="exp_001")
+        old_time = state.last_updated
+
+        state.transition_to(ExperimentStatus.RUNNING)
+        assert state.last_updated >= old_time
+
+    def test_transition_without_validation(self):
+        """Test that validate=False allows any transition."""
+        state = ExperimentState(experiment_id="exp_001")
+        # This would normally be invalid
+        state.transition_to(ExperimentStatus.AGGREGATED, validate=False)
+        assert state.status == ExperimentStatus.AGGREGATED
+
+    def test_can_transition_to(self):
+        state = ExperimentState(experiment_id="exp_001", status=ExperimentStatus.RUNNING)
+        assert state.can_transition_to(ExperimentStatus.COMPLETED) is True
+        assert state.can_transition_to(ExperimentStatus.FAILED) is True
+        assert state.can_transition_to(ExperimentStatus.INTERRUPTED) is True
+        assert state.can_transition_to(ExperimentStatus.AGGREGATED) is False
+        assert state.can_transition_to(ExperimentStatus.INITIALISED) is False
+
+    def test_valid_transitions_coverage(self):
+        """Ensure all statuses have defined transitions."""
+        for status in ExperimentStatus:
+            assert status in EXPERIMENT_VALID_TRANSITIONS
 
 
 class TestStateManager:

@@ -1,15 +1,20 @@
-"""Configuration loading with inheritance support."""
+"""Configuration loading with inheritance support and provenance tracking."""
+
+from __future__ import annotations
 
 import json
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
 
 from llm_energy_measure.config.models import ExperimentConfig
 from llm_energy_measure.exceptions import ConfigurationError
+
+if TYPE_CHECKING:
+    from llm_energy_measure.config.provenance import ResolvedConfig
 
 
 @dataclass
@@ -181,7 +186,7 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     # DISTRIBUTED CONFIG
     # =========================================================================
 
-    if config.num_processes > 1 and len(config.gpu_list) == 1:
+    if config.num_processes > 1 and len(config.gpus) == 1:
         warnings.append(
             ConfigWarning(
                 field="num_processes",
@@ -207,11 +212,11 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     # QUANTIZATION CONFIG
     # =========================================================================
 
-    quant = config.quantization_config
+    quant = config.quantization
     if quant.quantization and config.fp_precision == "float32":
         warnings.append(
             ConfigWarning(
-                field="quantization_config",
+                field="quantization",
                 message="Quantization enabled with float32 precision - quantization typically uses float16 compute",
                 severity="warning",
             )
@@ -220,7 +225,7 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     if quant.quantization and not quant.load_in_4bit and not quant.load_in_8bit:
         warnings.append(
             ConfigWarning(
-                field="quantization_config",
+                field="quantization",
                 message="quantization=True but neither load_in_4bit nor load_in_8bit specified",
                 severity="error",
             )
@@ -230,11 +235,11 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     # BATCHING CONFIG
     # =========================================================================
 
-    batch = config.batching_options
+    batch = config.batching
     if batch.strategy in ("dynamic", "sorted_dynamic") and batch.max_tokens_per_batch is None:
         warnings.append(
             ConfigWarning(
-                field="batching_options",
+                field="batching",
                 message=f"Dynamic batching strategy '{batch.strategy}' without max_tokens_per_batch - will use max_input_tokens as budget",
                 severity="info",
             )
@@ -243,7 +248,7 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     if batch.strategy in ("sorted_static", "sorted_dynamic") and batch.batch_size == 1:
         warnings.append(
             ConfigWarning(
-                field="batching_options",
+                field="batching",
                 message=f"Sorted strategy '{batch.strategy}' with batch_size=1 provides no benefit (sorting is pointless)",
                 severity="info",
             )
@@ -253,20 +258,20 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     # SHARDING CONFIG
     # =========================================================================
 
-    shard = config.sharding_config
+    shard = config.sharding
     if shard.strategy != "none":
-        if shard.num_shards > len(config.gpu_list):
+        if shard.num_shards > len(config.gpus):
             warnings.append(
                 ConfigWarning(
-                    field="sharding_config",
-                    message=f"num_shards={shard.num_shards} exceeds available GPUs ({len(config.gpu_list)})",
+                    field="sharding",
+                    message=f"num_shards={shard.num_shards} exceeds available GPUs ({len(config.gpus)})",
                     severity="error",
                 )
             )
-        if len(config.gpu_list) == 1:
+        if len(config.gpus) == 1:
             warnings.append(
                 ConfigWarning(
-                    field="sharding_config",
+                    field="sharding",
                     message=f"Sharding strategy '{shard.strategy}' with single GPU provides no benefit",
                     severity="info",
                 )
@@ -280,7 +285,7 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
         if not is_model_tp_compatible(config.model_name):
             warnings.append(
                 ConfigWarning(
-                    field="sharding_config",
+                    field="sharding",
                     message=(
                         f"Model '{config.model_name}' may not support HuggingFace native tensor parallelism. "
                         f"Supported architectures: Llama, Mistral, Mixtral, Qwen, Phi, Gemma, Falcon, MPT, BLOOM, OPT"
@@ -293,7 +298,7 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
         if quant.quantization:
             warnings.append(
                 ConfigWarning(
-                    field="sharding_config",
+                    field="sharding",
                     message="Quantization with tensor parallelism is experimental and may not work correctly",
                     severity="warning",
                 )
@@ -303,7 +308,7 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     # DECODER/SAMPLING CONFIG
     # =========================================================================
 
-    decoder = config.decoder_config
+    decoder = config.decoder
 
     # Sampling params have no effect in greedy/deterministic mode
     if decoder.is_deterministic:
@@ -320,7 +325,7 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
         if ignored_params:
             warnings.append(
                 ConfigWarning(
-                    field="decoder_config",
+                    field="decoder",
                     message=f"Sampling params [{', '.join(ignored_params)}] have no effect in deterministic mode (temp=0 or do_sample=False)",
                     severity="error",
                 )
@@ -330,7 +335,7 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     if decoder.do_sample and decoder.temperature == 0.0:
         warnings.append(
             ConfigWarning(
-                field="decoder_config.do_sample",
+                field="decoder.do_sample",
                 message="do_sample=True has no effect when temperature=0 (greedy decoding)",
                 severity="info",
             )
@@ -340,7 +345,7 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     if decoder.temperature != 1.0 and decoder.temperature != 0.0 and decoder.top_p != 1.0:
         warnings.append(
             ConfigWarning(
-                field="decoder_config",
+                field="decoder",
                 message="Both temperature and top_p modified - not recommended, alter one or the other",
                 severity="warning",
             )
@@ -350,7 +355,7 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     # TRAFFIC SIMULATION CONFIG
     # =========================================================================
 
-    traffic = config.latency_simulation
+    traffic = config.traffic_simulation
     if traffic.enabled and traffic.target_qps > 100:
         warnings.append(
             ConfigWarning(
@@ -399,3 +404,163 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
 def has_blocking_warnings(warnings: list[ConfigWarning]) -> bool:
     """Check if any warnings are blocking (error severity)."""
     return any(w.severity == "error" for w in warnings)
+
+
+def get_pydantic_defaults() -> dict[str, Any]:
+    """Extract default values from ExperimentConfig Pydantic model.
+
+    Returns:
+        Flattened dictionary of all default values.
+    """
+    from llm_energy_measure.config.provenance import flatten_dict
+
+    # Create a minimal config to get defaults
+    minimal: dict[str, Any] = {"config_name": "__defaults__", "model_name": "__defaults__"}
+    defaults_config = ExperimentConfig(**minimal)
+    defaults_dict = defaults_config.model_dump()
+
+    # Remove the placeholder values
+    defaults_dict.pop("config_name", None)
+    defaults_dict.pop("model_name", None)
+
+    return flatten_dict(defaults_dict)
+
+
+def load_config_with_provenance(
+    path: Path | str | None = None,
+    preset_name: str | None = None,
+    preset_dict: dict[str, Any] | None = None,
+    cli_overrides: dict[str, Any] | None = None,
+) -> ResolvedConfig:
+    """Load configuration with full provenance tracking.
+
+    Builds the final configuration by layering sources in order of precedence:
+    1. Pydantic defaults (lowest precedence)
+    2. Preset values (if preset_name or preset_dict provided)
+    3. Config file values (if path provided)
+    4. CLI overrides (highest precedence)
+
+    Each parameter's source is tracked for debugging and reproducibility.
+
+    Args:
+        path: Path to configuration file (optional).
+        preset_name: Name of preset to apply (optional).
+        preset_dict: Preset dictionary to apply (alternative to preset_name).
+        cli_overrides: CLI override dictionary (optional).
+
+    Returns:
+        ResolvedConfig with config and provenance information.
+
+    Raises:
+        ConfigurationError: If configuration is invalid.
+    """
+    from llm_energy_measure.config.provenance import (
+        ParameterProvenance,
+        ParameterSource,
+        ResolvedConfig,
+        compare_dicts,
+        flatten_dict,
+        unflatten_dict,
+    )
+    from llm_energy_measure.constants import EXPERIMENT_PRESETS
+
+    provenance: dict[str, ParameterProvenance] = {}
+    preset_chain: list[str] = []
+
+    # =================================================================
+    # Layer 1: Pydantic defaults
+    # =================================================================
+    pydantic_defaults = get_pydantic_defaults()
+
+    # Mark all defaults as PYDANTIC_DEFAULT
+    for path_key, value in pydantic_defaults.items():
+        provenance[path_key] = ParameterProvenance(
+            path=path_key,
+            value=value,
+            source=ParameterSource.PYDANTIC_DEFAULT,
+        )
+
+    # Start with empty config dict (will build from required fields)
+    config_dict: dict[str, Any] = {}
+
+    # =================================================================
+    # Layer 2: Preset values
+    # =================================================================
+    if preset_name:
+        if preset_name not in EXPERIMENT_PRESETS:
+            raise ConfigurationError(f"Unknown preset: {preset_name}")
+        preset_dict = EXPERIMENT_PRESETS[preset_name]
+        preset_chain.append(preset_name)
+
+    if preset_dict:
+        flat_preset = flatten_dict(preset_dict)
+        changed, _ = compare_dicts(pydantic_defaults, flat_preset)
+
+        for path_key, value in changed.items():
+            provenance[path_key] = ParameterProvenance(
+                path=path_key,
+                value=value,
+                source=ParameterSource.PRESET,
+                source_detail=preset_name,
+            )
+
+        config_dict = deep_merge(config_dict, preset_dict)
+
+    # =================================================================
+    # Layer 3: Config file values
+    # =================================================================
+    config_file_path: str | None = None
+    if path:
+        path = Path(path)
+        config_file_path = str(path)
+        file_dict = load_config_dict(path)
+        resolved_file_dict = resolve_inheritance(file_dict, path)
+
+        flat_file = flatten_dict(resolved_file_dict)
+        # Get current state for comparison
+        current_flat = flatten_dict(config_dict) if config_dict else pydantic_defaults
+        changed, _ = compare_dicts(current_flat, flat_file)
+
+        for path_key, value in changed.items():
+            provenance[path_key] = ParameterProvenance(
+                path=path_key,
+                value=value,
+                source=ParameterSource.CONFIG_FILE,
+                source_detail=str(path),
+            )
+
+        config_dict = deep_merge(config_dict, resolved_file_dict)
+
+    # =================================================================
+    # Layer 4: CLI overrides
+    # =================================================================
+    if cli_overrides:
+        flat_cli = flatten_dict(cli_overrides)
+
+        for path_key, value in flat_cli.items():
+            if value is not None:
+                provenance[path_key] = ParameterProvenance(
+                    path=path_key,
+                    value=value,
+                    source=ParameterSource.CLI,
+                    source_detail=path_key.replace(".", "_"),  # CLI flag approximation
+                )
+
+        # Apply CLI overrides (using deep merge with flattened then unflattened)
+        cli_nested = unflatten_dict({k: v for k, v in flat_cli.items() if v is not None})
+        config_dict = deep_merge(config_dict, cli_nested)
+
+    # =================================================================
+    # Build and validate final config
+    # =================================================================
+    try:
+        final_config = ExperimentConfig(**config_dict)
+    except Exception as e:
+        raise ConfigurationError(f"Invalid configuration: {e}") from e
+
+    return ResolvedConfig(
+        config=final_config,
+        provenance=provenance,
+        preset_chain=preset_chain,
+        config_file_path=config_file_path,
+    )

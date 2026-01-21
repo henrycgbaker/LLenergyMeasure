@@ -19,7 +19,7 @@ def sample_config():
     return ExperimentConfig(
         config_name="test_config",
         model_name="test/model",
-        gpu_list=[0],
+        gpus=[0],
         num_processes=1,
     )
 
@@ -117,7 +117,7 @@ class TestExperimentContextCreate:
         ctx = ExperimentContext.create(sample_config)
 
         mock_get_accel.assert_called_once_with(
-            gpu_list=[0],
+            gpus=[0],
             num_processes=1,
         )
         assert ctx.accelerator is mock_accelerator
@@ -252,7 +252,7 @@ class TestExperimentContextMultiProcess:
         config = ExperimentConfig(
             config_name="multi_gpu",
             model_name="test/model",
-            gpu_list=[0, 1, 2, 3],
+            gpus=[0, 1, 2, 3],
             num_processes=4,
         )
         mock_accelerator = MagicMock()
@@ -266,7 +266,7 @@ class TestExperimentContextMultiProcess:
         ctx = ExperimentContext.create(config)
 
         mock_get_accel.assert_called_once_with(
-            gpu_list=[0, 1, 2, 3],
+            gpus=[0, 1, 2, 3],
             num_processes=4,
         )
         assert ctx.is_main_process is False

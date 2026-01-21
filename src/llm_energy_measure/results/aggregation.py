@@ -10,14 +10,14 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from llm_energy_measure.constants import COMPLETION_MARKER_PREFIX
-from llm_energy_measure.core.inference_backends.protocols import (
-    LatencyMeasurements,
-    LatencyStatistics,
-)
 from llm_energy_measure.domain.experiment import (
     AggregatedResult,
     AggregationMetadata,
     RawProcessResult,
+)
+from llm_energy_measure.domain.metrics import (
+    LatencyMeasurements,
+    LatencyStatistics,
 )
 from llm_energy_measure.exceptions import AggregationError
 
@@ -262,6 +262,14 @@ def aggregate_results(
         f"throughput={avg_tokens_per_second:.2f} tok/s"
     )
 
+    # Check if any process had energy tracking failures
+    energy_tracking_failed = any(r.energy_tracking_failed for r in raw_results)
+    if energy_tracking_failed:
+        warnings.append(
+            "Energy tracking failed for one or more processes (metrics may be incomplete)"
+        )
+        logger.warning("Energy tracking failed for one or more processes")
+
     # Propagate effective_config, cli_overrides, config_warnings, and backend from first result
     # All processes have the same config/backend, so any result works
     effective_config: dict[str, Any] = {}
@@ -294,6 +302,7 @@ def aggregate_results(
         cli_overrides=cli_overrides,
         config_warnings=config_warnings,
         latency_stats=latency_stats,
+        energy_tracking_failed=energy_tracking_failed,
     )
 
 

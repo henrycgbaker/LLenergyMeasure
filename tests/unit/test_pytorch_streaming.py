@@ -52,9 +52,10 @@ class TestPyTorchStreamingFlags:
 class TestLatencyMeasurementsStructure:
     """Tests for LatencyMeasurements structure from PyTorch backend."""
 
-    def test_latency_measurements_has_measurement_method_field(self):
-        """LatencyMeasurements should have measurement_method field."""
+    def test_latency_measurements_has_measurement_mode_field(self):
+        """LatencyMeasurements should have measurement_mode field."""
         from llm_energy_measure.core.inference_backends.protocols import (
+            LatencyMeasurementMode,
             LatencyMeasurements,
         )
 
@@ -67,15 +68,18 @@ class TestLatencyMeasurementsStructure:
             excluded_tokens=1,
             streaming_mode=True,
             warmup_requests_excluded=0,
-            measurement_method="streaming",
+            measurement_mode=LatencyMeasurementMode.TRUE_STREAMING,
         )
 
-        assert hasattr(measurements, "measurement_method")
-        assert measurements.measurement_method == "streaming"
+        assert hasattr(measurements, "measurement_mode")
+        assert measurements.measurement_mode == LatencyMeasurementMode.TRUE_STREAMING
+        # Legacy property still available
+        assert measurements.measurement_method == "true_streaming"
 
-    def test_latency_measurements_default_method_is_streaming(self):
-        """Default measurement_method should be 'streaming'."""
+    def test_latency_measurements_default_method_is_true_streaming(self):
+        """Default measurement_mode should be TRUE_STREAMING."""
         from llm_energy_measure.core.inference_backends.protocols import (
+            LatencyMeasurementMode,
             LatencyMeasurements,
         )
 
@@ -90,7 +94,8 @@ class TestLatencyMeasurementsStructure:
             warmup_requests_excluded=0,
         )
 
-        assert measurements.measurement_method == "streaming"
+        assert measurements.measurement_mode == LatencyMeasurementMode.TRUE_STREAMING
+        assert measurements.measurement_method == "true_streaming"
 
 
 class TestPyTorchBackendResultStructure:
@@ -100,6 +105,7 @@ class TestPyTorchBackendResultStructure:
         """BackendResult should support latency_measurements field."""
         from llm_energy_measure.core.inference_backends.protocols import (
             BackendResult,
+            LatencyMeasurementMode,
             LatencyMeasurements,
         )
 
@@ -112,7 +118,7 @@ class TestPyTorchBackendResultStructure:
             excluded_tokens=6,
             streaming_mode=True,
             warmup_requests_excluded=2,
-            measurement_method="streaming",
+            measurement_mode=LatencyMeasurementMode.TRUE_STREAMING,
         )
 
         result = BackendResult(
@@ -126,7 +132,8 @@ class TestPyTorchBackendResultStructure:
 
         assert result.latency_measurements is not None
         assert result.latency_measurements.request_count == 3
-        assert result.latency_measurements.measurement_method == "streaming"
+        assert result.latency_measurements.measurement_mode == LatencyMeasurementMode.TRUE_STREAMING
+        assert result.latency_measurements.measurement_method == "true_streaming"
 
     def test_backend_result_latency_measurements_optional(self):
         """latency_measurements should be optional (None by default)."""

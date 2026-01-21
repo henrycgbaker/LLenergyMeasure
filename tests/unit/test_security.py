@@ -53,6 +53,22 @@ class TestIsSafePath:
         target = tmp_path / ".." / ".." / "etc" / "passwd"
         assert is_safe_path(tmp_path, target) is False
 
+    def test_prefix_attack_blocked(self, tmp_path):
+        """Test that paths with matching prefixes but different directories are blocked.
+
+        This tests the fix for a vulnerability where /foo/bar_malicious would be
+        incorrectly considered safe for base /foo/bar when using string prefix checks.
+        """
+        base = tmp_path / "results"
+        base.mkdir()
+        # Sibling directory with matching prefix
+        malicious = tmp_path / "results_malicious" / "file.txt"
+        assert is_safe_path(base, malicious) is False
+
+    def test_exact_base_path_is_safe(self, tmp_path):
+        """The base directory itself should be considered safe."""
+        assert is_safe_path(tmp_path, tmp_path) is True
+
 
 class TestSanitizeExperimentId:
     """Tests for sanitize_experiment_id function."""

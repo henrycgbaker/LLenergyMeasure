@@ -12,18 +12,22 @@ FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS base
 
 # System dependencies shared by all backends
 # gosu: for dropping privileges in entrypoint (PUID/PGID support)
+# Python 3.10: Required for tensorrt-llm compatibility (only supports 3.10/3.12)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 \
-    python3.11-venv \
-    python3.11-dev \
+    software-properties-common \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 \
+    python3.10-venv \
+    python3.10-dev \
     python3-pip \
     libgomp1 \
     git \
     curl \
     gosu \
     && rm -rf /var/lib/apt/lists/* \
-    && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
-    && ln -sf /usr/bin/python3.11 /usr/bin/python
+    && ln -sf /usr/bin/python3.10 /usr/bin/python3 \
+    && ln -sf /usr/bin/python3.10 /usr/bin/python
 
 # Create venv structure (backends will install into this)
 RUN python -m venv /opt/venv

@@ -31,7 +31,7 @@ class TestConfigToAggregationPipeline:
         base.write_text("""
 max_input_tokens: 1024
 max_output_tokens: 256
-decoder_config:
+decoder:
   temperature: 0.7
   top_p: 0.9
 """)
@@ -43,7 +43,7 @@ _extends: base.yaml
 config_name: llama-7b-benchmark
 model_name: meta-llama/Llama-2-7b-hf
 num_processes: 2
-gpu_list: [0, 1]
+gpus: [0, 1]
 """)
         return model_config
 
@@ -101,7 +101,7 @@ gpu_list: [0, 1]
         config = load_config(config_with_inheritance)
         assert config.config_name == "llama-7b-benchmark"
         assert config.max_input_tokens == 1024  # Inherited
-        assert config.decoder_config.temperature == 0.7  # Inherited
+        assert config.decoder.temperature == 0.7  # Inherited
 
         # Step 2: Save simulated raw results
         repo = FileSystemRepository(results_dir)
@@ -193,7 +193,7 @@ class TestMultiLevelConfigInheritance:
         base.write_text("""
 max_input_tokens: 512
 max_output_tokens: 128
-decoder_config:
+decoder:
   temperature: 1.0
   top_p: 1.0
   do_sample: true
@@ -203,7 +203,7 @@ decoder_config:
         family = tmp_path / "llama-family.yaml"
         family.write_text("""
 _extends: defaults.yaml
-decoder_config:
+decoder:
   temperature: 0.7
 fp_precision: float16
 """)
@@ -214,7 +214,7 @@ fp_precision: float16
 _extends: llama-family.yaml
 config_name: llama-7b-4bit
 model_name: meta-llama/Llama-2-7b-hf
-quantization_config:
+quantization:
   quantization: true
   load_in_4bit: true
 """)
@@ -223,15 +223,15 @@ quantization_config:
 
         # Level 1 inherited
         assert config.max_input_tokens == 512
-        assert config.decoder_config.do_sample is True
+        assert config.decoder.do_sample is True
 
         # Level 2 overrides
-        assert config.decoder_config.temperature == 0.7
+        assert config.decoder.temperature == 0.7
         assert config.fp_precision == "float16"
 
         # Level 3 specific
         assert config.config_name == "llama-7b-4bit"
-        assert config.quantization_config.load_in_4bit is True
+        assert config.quantization.load_in_4bit is True
 
 
 class TestAggregationValidation:
