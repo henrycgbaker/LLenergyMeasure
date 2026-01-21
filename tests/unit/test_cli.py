@@ -127,7 +127,7 @@ max_output_tokens: 256
 config_name: test_experiment
 model_name: meta-llama/Llama-2-7b-hf
 num_processes: 2
-gpu_list: [0, 1]
+gpus: [0, 1]
 """)
         result = runner.invoke(app, ["config", "show", str(config_file)])
         assert result.exit_code == 0
@@ -499,7 +499,7 @@ class TestExperimentCommand:
         config_file.write_text("""
 config_name: test_experiment
 model_name: meta-llama/Llama-2-7b-hf
-batching_options:
+batching:
   batch_size: 1
 fp_precision: float32
 """)
@@ -538,7 +538,7 @@ fp_precision: float32
         # Check the temp config contains overrides
         with open(temp_config_path) as f:
             temp_config = yaml.safe_load(f)
-        assert temp_config["batching_options"]["batch_size"] == 8
+        assert temp_config["batching"]["batch_size"] == 8
         assert temp_config["fp_precision"] == "float16"
         assert temp_config["max_output_tokens"] == 256
         assert temp_config["random_seed"] == 42
@@ -574,7 +574,7 @@ fp_precision: float32
         config_file.write_text("""
 config_name: test_experiment
 model_name: test/model
-gpu_list: [0, 1]
+gpus: [0, 1]
 num_processes: 2
 """)
         runner.invoke(
@@ -744,7 +744,7 @@ model_name: test/model
         config_file.write_text("""
 config_name: base_config
 model_name: test/model
-batching_options:
+batching:
   batch_size: 1
 """)
         output_dir = tmp_path / "grid"
@@ -756,7 +756,7 @@ batching_options:
                 "generate-grid",
                 str(config_file),
                 "--vary",
-                "batching_options.batch_size=1,2,4,8",
+                "batching.batch_size=1,2,4,8",
                 "--output-dir",
                 str(output_dir),
             ],
@@ -775,7 +775,7 @@ batching_options:
 config_name: base_config
 model_name: test/model
 fp_precision: float32
-batching_options:
+batching:
   batch_size: 1
 """)
         output_dir = tmp_path / "grid"
@@ -787,7 +787,7 @@ batching_options:
                 "generate-grid",
                 str(config_file),
                 "--vary",
-                "batching_options.batch_size=1,2,4",
+                "batching.batch_size=1,2,4",
                 "--vary",
                 "fp_precision=float16,float32",
                 "--output-dir",
@@ -807,7 +807,7 @@ batching_options:
         config_file.write_text("""
 config_name: base_config
 model_name: test/model
-batching_options:
+batching:
   batch_size: 1
 """)
         output_dir = tmp_path / "grid"
@@ -819,7 +819,7 @@ batching_options:
                 "generate-grid",
                 str(config_file),
                 "--vary",
-                "batching_options.batch_size=2,4",
+                "batching.batch_size=2,4",
                 "--output-dir",
                 str(output_dir),
             ],
@@ -833,8 +833,8 @@ batching_options:
         for yaml_file in output_dir.glob("*.yaml"):
             with open(yaml_file) as f:
                 content = yaml.safe_load(f)
-            assert "batching_options" in content
-            assert content["batching_options"]["batch_size"] in [2, 4]
+            assert "batching" in content
+            assert content["batching"]["batch_size"] in [2, 4]
 
 
 class TestBatchCommand:

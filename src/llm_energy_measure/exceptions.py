@@ -93,3 +93,20 @@ class BackendConfigError(BackendError):
         super().__init__(f"Backend '{backend}': parameter '{param}' - {message}")
         self.backend = backend
         self.param = param
+
+
+# State machine errors
+
+
+class InvalidStateTransitionError(LLMBenchError):
+    """Invalid state machine transition attempted.
+
+    Raised when code attempts to transition an experiment or process
+    to a state that is not valid from the current state.
+    """
+
+    def __init__(self, from_status: str, to_status: str, entity: str = "experiment"):
+        super().__init__(f"Invalid {entity} state transition: {from_status} -> {to_status}")
+        self.from_status = from_status
+        self.to_status = to_status
+        self.entity = entity

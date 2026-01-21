@@ -80,7 +80,6 @@ def create_components(
         ConfigurationError: If requested backend is not available or not yet supported.
     """
     from llm_energy_measure.core.inference_backends import get_backend as get_inference_backend
-    from llm_energy_measure.exceptions import ConfigurationError
 
     # Get backend name from config (default to pytorch)
     backend_name = getattr(ctx.config, "backend", "pytorch")
@@ -92,35 +91,27 @@ def create_components(
     backend = get_inference_backend(backend_name)
     logger.debug(f"Using inference backend: {backend.name} ({backend.version})")
 
-    # Create backend-specific components
-    if backend_name == "pytorch":
-        return _create_pytorch_components(ctx, backend, results_dir)
-    elif backend_name == "vllm":
-        return _create_vllm_components(ctx, backend, results_dir)
-    elif backend_name == "tensorrt":
-        return _create_tensorrt_components(ctx, backend, results_dir)
-    else:
-        raise ConfigurationError(
-            f"Backend '{backend_name}' is not yet integrated with the orchestrator. "
-            f"Supported backends: pytorch, vllm, tensorrt."
-        )
+    # Create components using unified function
+    return _create_backend_components(ctx, backend, results_dir)
 
 
-def _create_pytorch_components(
-    ctx: ExperimentContext, backend: InferenceBackend, results_dir: Path | None = None
+def _create_backend_components(
+    ctx: ExperimentContext,
+    backend: InferenceBackend,
+    results_dir: Path | None = None,
 ) -> ExperimentComponents:
-    """Create components for PyTorch/Transformers backend.
+    """Create experiment components for any backend.
 
-    Uses the adapter pattern to route through PyTorchBackend.run_inference(),
-    which supports streaming latency measurement (TTFT/ITL).
+    Uses RuntimeCapabilities to determine whether the backend manages its own
+    CUDA context and device allocation, adjusting the runtime context accordingly.
 
     Args:
-        ctx: Experiment context.
-        backend: PyTorch backend instance.
-        results_dir: Optional results directory (None uses default).
+        ctx: Experiment context with device/process info.
+        backend: The inference backend instance.
+        results_dir: Directory for results persistence.
 
     Returns:
-        ExperimentComponents configured for PyTorch.
+        ExperimentComponents with all adapters configured.
     """
     from llm_energy_measure.core.energy_backends import get_backend as get_energy_backend
     from llm_energy_measure.core.inference_backends.adapters import (
@@ -131,119 +122,20 @@ def _create_pytorch_components(
     from llm_energy_measure.core.inference_backends.protocols import BackendRuntime
     from llm_energy_measure.results.repository import FileSystemRepository
 
-    # Create runtime context for PyTorch
+    # Query backend capabilities to determine device/accelerator handling
+    capabilities = backend.get_runtime_capabilities()
+    manages_own_devices = not capabilities.orchestrator_may_call_cuda
+
+    # Create runtime context - backends that manage their own CUDA don't need device/accelerator
     runtime = BackendRuntime(
-        device=ctx.device,
+        device=None if manages_own_devices else ctx.device,
         process_index=ctx.process_index,
         num_processes=ctx.num_processes,
         is_main_process=ctx.is_main_process,
-        accelerator=ctx.accelerator,
+        accelerator=None if manages_own_devices else ctx.accelerator,
     )
 
-    # Create adapters that wrap the PyTorch backend
-    # This enables streaming latency measurement via backend.run_inference()
-    model_loader = BackendModelLoaderAdapter(backend, runtime)
-    inference_engine = BackendInferenceEngineAdapter(backend)
-    metrics_collector = BackendMetricsCollectorAdapter(backend)
-
-    return ExperimentComponents(
-        model_loader=model_loader,
-        inference_engine=inference_engine,
-        metrics_collector=metrics_collector,
-        energy_backend=get_energy_backend("codecarbon"),
-        repository=FileSystemRepository(results_dir),
-        backend_name=backend.name,
-        backend_version=backend.version,
-    )
-
-
-def _create_vllm_components(
-    ctx: ExperimentContext, backend: InferenceBackend, results_dir: Path | None = None
-) -> ExperimentComponents:
-    """Create components for vLLM backend.
-
-    vLLM manages its own model loading and distribution, so we use adapters
-    to integrate with the existing orchestrator architecture.
-
-    Args:
-        ctx: Experiment context.
-        backend: vLLM backend instance.
-        results_dir: Optional results directory (None uses default).
-
-    Returns:
-        ExperimentComponents configured for vLLM.
-    """
-    from llm_energy_measure.core.energy_backends import get_backend as get_energy_backend
-    from llm_energy_measure.core.inference_backends.adapters import (
-        BackendInferenceEngineAdapter,
-        BackendMetricsCollectorAdapter,
-        BackendModelLoaderAdapter,
-    )
-    from llm_energy_measure.core.inference_backends.protocols import BackendRuntime
-    from llm_energy_measure.results.repository import FileSystemRepository
-
-    # Create runtime context for vLLM
-    # vLLM manages its own distribution, so we don't pass the accelerator
-    runtime = BackendRuntime(
-        device=None,  # vLLM manages devices
-        process_index=ctx.process_index,
-        num_processes=ctx.num_processes,
-        is_main_process=ctx.is_main_process,
-        accelerator=None,  # vLLM doesn't use Accelerate
-    )
-
-    # Create adapters that wrap the vLLM backend
-    model_loader = BackendModelLoaderAdapter(backend, runtime)
-    inference_engine = BackendInferenceEngineAdapter(backend)
-    metrics_collector = BackendMetricsCollectorAdapter(backend)
-
-    return ExperimentComponents(
-        model_loader=model_loader,
-        inference_engine=inference_engine,
-        metrics_collector=metrics_collector,
-        energy_backend=get_energy_backend("codecarbon"),
-        repository=FileSystemRepository(results_dir),
-        backend_name=backend.name,
-        backend_version=backend.version,
-    )
-
-
-def _create_tensorrt_components(
-    ctx: ExperimentContext, backend: InferenceBackend, results_dir: Path | None = None
-) -> ExperimentComponents:
-    """Create components for TensorRT-LLM backend.
-
-    TensorRT-LLM manages its own model loading, CUDA context, and batching.
-    Uses the same adapter pattern as vLLM.
-
-    Args:
-        ctx: Experiment context.
-        backend: TensorRT backend instance.
-        results_dir: Optional results directory (None uses default).
-
-    Returns:
-        ExperimentComponents configured for TensorRT-LLM.
-    """
-    from llm_energy_measure.core.energy_backends import get_backend as get_energy_backend
-    from llm_energy_measure.core.inference_backends.adapters import (
-        BackendInferenceEngineAdapter,
-        BackendMetricsCollectorAdapter,
-        BackendModelLoaderAdapter,
-    )
-    from llm_energy_measure.core.inference_backends.protocols import BackendRuntime
-    from llm_energy_measure.results.repository import FileSystemRepository
-
-    # Create runtime context for TensorRT
-    # TensorRT manages its own distribution, so we don't pass the accelerator
-    runtime = BackendRuntime(
-        device=None,  # TensorRT manages devices
-        process_index=ctx.process_index,
-        num_processes=ctx.num_processes,
-        is_main_process=ctx.is_main_process,
-        accelerator=None,  # TensorRT doesn't use Accelerate
-    )
-
-    # Create adapters that wrap the TensorRT backend
+    # Create adapters that wrap the backend
     model_loader = BackendModelLoaderAdapter(backend, runtime)
     inference_engine = BackendInferenceEngineAdapter(backend)
     metrics_collector = BackendMetricsCollectorAdapter(backend)

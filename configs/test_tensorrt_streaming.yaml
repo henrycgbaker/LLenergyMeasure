@@ -1,7 +1,0 @@
-config_name: "tensorrt-streaming-test"
-model_name: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-backend: tensorrt
-num_input_prompts: 10
-max_output_tokens: 64
-streaming: true
-streaming_warmup_requests: 2

@@ -202,16 +202,8 @@ class BackendMetricsCollectorAdapter:
         # Return with placeholder energy - orchestrator fills this from energy backend
         return CombinedMetrics(
             inference=inference_result.metrics,
-            energy=EnergyMetrics(
-                total_energy_j=0.0,
-                gpu_energy_j=0.0,
-                cpu_energy_j=0.0,
-                ram_energy_j=0.0,
-                gpu_power_w=0.0,
-                cpu_power_w=0.0,
-                duration_sec=inference_result.metrics.inference_time_sec,
-                emissions_kg_co2=0.0,
-                energy_per_token_j=0.0,
+            energy=EnergyMetrics.placeholder(
+                duration_sec=inference_result.metrics.inference_time_sec
             ),
             compute=compute,
         )

@@ -29,7 +29,7 @@ def sample_config() -> ExperimentConfig:
     return ExperimentConfig(
         config_name="test_config",
         model_name="test/model",
-        gpu_list=[0],
+        gpus=[0],
         num_processes=1,
     )
 

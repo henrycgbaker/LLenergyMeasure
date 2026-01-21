@@ -149,8 +149,7 @@ class TestVLLMConfig:
         assert config.quantization_method is None
         assert config.load_format == "auto"
         assert config.best_of is None
-        assert config.use_beam_search is False
-        assert config.length_penalty == 1.0
+        # Note: use_beam_search and length_penalty moved to DecoderConfig.beam_search
         assert config.logprobs is None
         assert config.logit_bias is None
         assert config.extra == {}
@@ -315,12 +314,12 @@ class TestPyTorchConfig:
         assert config.torch_compile is False
         assert config.use_bettertransformer is False
         assert config.use_cache is True
+        # Note: cache_implementation is a new field for static/dynamic KV cache
+        assert config.cache_implementation is None
         assert config.low_cpu_mem_usage is True
         assert config.max_memory is None
         assert config.assisted_generation is None
-        assert config.num_beams == 1
-        assert config.early_stopping is False
-        assert config.length_penalty == 1.0
+        # Note: num_beams, early_stopping, length_penalty moved to DecoderConfig.beam_search
         assert config.output_scores is False
         assert config.return_dict_in_generate is False
         assert config.extra == {}
@@ -342,12 +341,15 @@ class TestPyTorchConfig:
             config = PyTorchConfig(torch_compile=mode)
             assert config.torch_compile == mode
 
-    def test_num_beams_positive(self):
-        PyTorchConfig(num_beams=1)
-        PyTorchConfig(num_beams=5)
+    def test_cache_implementation_values(self):
+        """Test valid cache implementation values."""
+        for impl in ["dynamic", "static", "hybrid", "sliding_window"]:
+            config = PyTorchConfig(cache_implementation=impl)
+            assert config.cache_implementation == impl
 
-        with pytest.raises(ValidationError):
-            PyTorchConfig(num_beams=0)
+        # None is allowed (default)
+        config = PyTorchConfig(cache_implementation=None)
+        assert config.cache_implementation is None
 
     def test_max_memory_dict(self):
         config = PyTorchConfig(max_memory={"0": "20GiB", "cpu": "30GiB"})
@@ -608,12 +610,15 @@ class TestTensorRTConfig:
         assert config.max_output_len is None
         assert config.builder_opt_level == 3
         assert config.strongly_typed is True
-        assert config.tp_size is None
+        # Note: tp_size removed - use parallelism.degree with strategy=tensor_parallel
         assert config.pp_size == 1
         assert config.kv_cache_type == "paged"
         assert config.enable_chunked_context is True
         assert config.gpu_memory_utilization == 0.9
         assert config.force_rebuild is False
+        # New energy-impacting options
+        assert config.multiple_profiles is False
+        assert config.enable_kv_cache_reuse is False
 
     def test_valid_batch_sizes(self):
         TensorRTConfig(max_batch_size=1)
@@ -654,10 +659,20 @@ class TestTensorRTConfig:
         with pytest.raises(ValidationError):
             TensorRTConfig(gpu_memory_utilization=1.0)
 
-    def test_tensor_parallelism(self):
-        config = TensorRTConfig(tp_size=4, pp_size=1)
-        assert config.tp_size == 4
-        assert config.pp_size == 1
+    def test_pipeline_parallelism(self):
+        """Test pipeline parallelism config."""
+        # Note: tp_size removed - use parallelism.degree with strategy=tensor_parallel
+        config = TensorRTConfig(pp_size=2)
+        assert config.pp_size == 2
+
+    def test_energy_impacting_options(self):
+        """Test new energy-impacting options."""
+        config = TensorRTConfig(
+            multiple_profiles=True,
+            enable_kv_cache_reuse=True,
+        )
+        assert config.multiple_profiles is True
+        assert config.enable_kv_cache_reuse is True
 
     def test_with_quantization(self):
         config = TensorRTConfig(
@@ -748,7 +763,8 @@ class TestTensorRTExperimentConfigIntegration:
             tensorrt=TensorRTConfig(
                 max_batch_size=16,
                 builder_opt_level=4,
-                tp_size=2,
+                pp_size=2,  # Note: tp_size removed, use parallelism.degree instead
+                enable_kv_cache_reuse=True,
                 quantization=TensorRTQuantizationConfig(
                     method="int8_sq",
                     calibration=TensorRTCalibrationConfig(num_samples=256),
@@ -760,7 +776,8 @@ class TestTensorRTExperimentConfigIntegration:
         assert restored.tensorrt is not None
         assert restored.tensorrt.max_batch_size == 16
         assert restored.tensorrt.builder_opt_level == 4
-        assert restored.tensorrt.tp_size == 2
+        assert restored.tensorrt.pp_size == 2
+        assert restored.tensorrt.enable_kv_cache_reuse is True
         assert restored.tensorrt.quantization.method == "int8_sq"
         assert restored.tensorrt.quantization.calibration is not None
         assert restored.tensorrt.quantization.calibration.num_samples == 256

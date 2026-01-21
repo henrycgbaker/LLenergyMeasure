@@ -290,7 +290,7 @@ class TestExperimentConfig:
         config = ExperimentConfig(**minimal_config)
         assert config.config_name == "test_config"
         assert config.model_name == "test-model"
-        assert config.gpu_list == [0]
+        assert config.gpus == [0]
         assert config.num_processes == 1
 
     def test_full_config(self, minimal_config):
@@ -298,7 +298,7 @@ class TestExperimentConfig:
             **minimal_config,
             "max_input_tokens": 1024,
             "max_output_tokens": 256,
-            "gpu_list": [0, 1, 2, 3],
+            "gpus": [0, 1, 2, 3],
             "num_processes": 4,
             "fp_precision": "float16",
         }
@@ -307,10 +307,12 @@ class TestExperimentConfig:
         assert config.num_processes == 4
 
     def test_num_processes_validation(self, minimal_config):
-        with pytest.raises(ValidationError, match="num_processes.*must be <=.*gpu_list"):
+        """Test that parallelism.degree cannot exceed available GPUs."""
+        # num_processes > 1 gets migrated to parallelism.degree, so error is about parallelism
+        with pytest.raises(ValidationError, match="parallelism.degree.*must be <=.*gpus"):
             ExperimentConfig(
                 **minimal_config,
-                gpu_list=[0, 1],
+                gpus=[0, 1],
                 num_processes=4,
             )
 
@@ -322,18 +324,18 @@ class TestExperimentConfig:
                 max_output_tokens=100,
             )
 
-    def test_gpu_list_from_int(self, minimal_config):
-        config = ExperimentConfig(**minimal_config, gpu_list=0)
-        assert config.gpu_list == [0]
+    def test_gpus_from_int(self, minimal_config):
+        config = ExperimentConfig(**minimal_config, gpus=0)
+        assert config.gpus == [0]
 
     def test_nested_configs(self, minimal_config):
         config = ExperimentConfig(
             **minimal_config,
-            quantization_config={"load_in_4bit": True},
-            decoder_config={"temperature": 0.7},
+            quantization={"load_in_4bit": True},
+            decoder={"temperature": 0.7},
         )
-        assert config.quantization_config.load_in_4bit is True
-        assert config.decoder_config.temperature == 0.7
+        assert config.quantization.load_in_4bit is True
+        assert config.decoder.temperature == 0.7
 
     def test_extra_metadata(self, minimal_config):
         config = ExperimentConfig(**minimal_config, extra_metadata={"custom": "value"})
@@ -353,36 +355,36 @@ class TestExperimentConfig:
         restored = ExperimentConfig.model_validate_json(json_str)
         assert restored.config_name == config.config_name
 
-    def test_prompt_source_file(self, minimal_config):
+    def test_prompts_file(self, minimal_config):
         """Config with file prompt source."""
         config = ExperimentConfig(
             **minimal_config,
-            prompt_source={"type": "file", "path": "/path/to/prompts.txt"},
+            prompts={"type": "file", "path": "/path/to/prompts.txt"},
         )
-        assert config.prompt_source is not None
-        assert isinstance(config.prompt_source, FilePromptSource)
-        assert config.prompt_source.path == "/path/to/prompts.txt"
+        assert config.prompts is not None
+        assert isinstance(config.prompts, FilePromptSource)
+        assert config.prompts.path == "/path/to/prompts.txt"
 
-    def test_prompt_source_huggingface(self, minimal_config):
+    def test_prompts_huggingface(self, minimal_config):
         """Config with HuggingFace prompt source."""
         config = ExperimentConfig(
             **minimal_config,
-            prompt_source={
+            prompts={
                 "type": "huggingface",
                 "dataset": "alpaca",
                 "sample_size": 1000,
             },
         )
-        assert config.prompt_source is not None
-        assert isinstance(config.prompt_source, HuggingFacePromptSource)
+        assert config.prompts is not None
+        assert isinstance(config.prompts, HuggingFacePromptSource)
         # Alias should be resolved
-        assert config.prompt_source.dataset == "tatsu-lab/alpaca"
-        assert config.prompt_source.sample_size == 1000
+        assert config.prompts.dataset == "tatsu-lab/alpaca"
+        assert config.prompts.sample_size == 1000
 
-    def test_prompt_source_none_default(self, minimal_config):
-        """Config without prompt source defaults to None."""
+    def test_prompts_none_default(self, minimal_config):
+        """Config without prompts defaults to None."""
         config = ExperimentConfig(**minimal_config)
-        assert config.prompt_source is None
+        assert config.prompts is None
 
     def test_pytorch_pipeline_parallel_rejected(self, minimal_config):
         """PyTorch backend with pipeline_parallel strategy is rejected.
@@ -398,8 +400,8 @@ class TestExperimentConfig:
             ExperimentConfig(
                 **minimal_config,
                 backend="pytorch",
-                gpu_list=[0, 1],
-                sharding_config={"strategy": "pipeline_parallel", "num_shards": 2},
+                gpus=[0, 1],
+                sharding={"strategy": "pipeline_parallel", "num_shards": 2},
             )
 
     def test_vllm_pipeline_parallel_allowed(self, minimal_config):
@@ -407,10 +409,10 @@ class TestExperimentConfig:
         config = ExperimentConfig(
             **minimal_config,
             backend="vllm",
-            gpu_list=[0, 1],
-            sharding_config={"strategy": "pipeline_parallel", "num_shards": 2},
+            gpus=[0, 1],
+            sharding={"strategy": "pipeline_parallel", "num_shards": 2},
         )
-        assert config.sharding_config.strategy == "pipeline_parallel"
+        assert config.sharding.strategy == "pipeline_parallel"
         assert config.backend == "vllm"
 
     def test_pytorch_tensor_parallel_allowed(self, minimal_config):
@@ -418,10 +420,10 @@ class TestExperimentConfig:
         config = ExperimentConfig(
             **minimal_config,
             backend="pytorch",
-            gpu_list=[0, 1],
-            sharding_config={"strategy": "tensor_parallel", "num_shards": 2},
+            gpus=[0, 1],
+            sharding={"strategy": "tensor_parallel", "num_shards": 2},
         )
-        assert config.sharding_config.strategy == "tensor_parallel"
+        assert config.sharding.strategy == "tensor_parallel"
         assert config.backend == "pytorch"
 
 

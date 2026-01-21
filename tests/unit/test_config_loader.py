@@ -131,7 +131,7 @@ max_output_tokens: 256
         base = tmp_path / "base.yaml"
         base.write_text("""
 max_input_tokens: 1024
-decoder_config:
+decoder:
   temperature: 0.7
   top_p: 0.9
 """)
@@ -142,15 +142,15 @@ decoder_config:
 _extends: base.yaml
 config_name: child_experiment
 model_name: test-model
-decoder_config:
+decoder:
   temperature: 0.5
 """)
 
         config = load_config(child)
         assert config.config_name == "child_experiment"
         assert config.max_input_tokens == 1024
-        assert config.decoder_config.temperature == 0.5
-        assert config.decoder_config.top_p == 0.9  # Inherited
+        assert config.decoder.temperature == 0.5
+        assert config.decoder.top_p == 0.9  # Inherited
 
     def test_load_invalid_config(self, tmp_path):
         config_file = tmp_path / "invalid.yaml"
@@ -177,7 +177,7 @@ class TestValidateConfig:
         config = ExperimentConfig(
             config_name="test",
             model_name="test-model",
-            gpu_list=[0],
+            gpus=[0],
             num_processes=1,  # Valid, but let's test multi-process
         )
         # This is valid, no warning
@@ -198,7 +198,7 @@ class TestValidateConfig:
             config_name="test",
             model_name="test-model",
             fp_precision="float32",
-            quantization_config={"quantization": True, "load_in_4bit": True},
+            quantization={"quantization": True, "load_in_4bit": True},
         )
         warnings = validate_config(config)
         assert any("quantization" in w.field for w in warnings)
@@ -208,19 +208,17 @@ class TestValidateConfig:
         config = ExperimentConfig(
             config_name="test",
             model_name="test-model",
-            decoder_config={"temperature": 0.7, "top_p": 0.9},
+            decoder={"temperature": 0.7, "top_p": 0.9},
         )
         warnings = validate_config(config)
-        assert any(
-            "decoder_config" in w.field and "temperature" in w.message.lower() for w in warnings
-        )
+        assert any("decoder" in w.field and "temperature" in w.message.lower() for w in warnings)
 
     def test_warning_for_do_sample_with_temp_zero(self):
         """Info warning when do_sample=True with temperature=0."""
         config = ExperimentConfig(
             config_name="test",
             model_name="test-model",
-            decoder_config={"temperature": 0.0, "do_sample": True},
+            decoder={"temperature": 0.0, "do_sample": True},
         )
         warnings = validate_config(config)
         assert any("do_sample" in w.field and w.severity == "info" for w in warnings)
@@ -230,7 +228,7 @@ class TestValidateConfig:
         config = ExperimentConfig(
             config_name="test",
             model_name="test-model",
-            decoder_config={"preset": "deterministic"},
+            decoder={"preset": "deterministic"},
         )
         warnings = validate_config(config)
         # Should have no decoder-related warnings (temp=0 with do_sample=False is fine)
@@ -285,55 +283,58 @@ class TestValidateConfig:
         from llm_energy_measure.config.loader import ConfigWarning
 
         warning = ConfigWarning(
-            field="decoder_config",
+            field="decoder",
             message="Sampling params ignored",
             severity="error",
         )
         result_str = warning.to_result_string()
-        assert result_str == "error: decoder_config - Sampling params ignored"
+        assert result_str == "error: decoder - Sampling params ignored"
 
     def test_error_for_quantization_without_bit_mode(self):
         """Error when quantization=True but no bit mode specified."""
         config = ExperimentConfig(
             config_name="test",
             model_name="test-model",
-            quantization_config={"quantization": True},  # No load_in_4bit or load_in_8bit
+            quantization={"quantization": True},  # No load_in_4bit or load_in_8bit
         )
         warnings = validate_config(config)
         error_warnings = [w for w in warnings if w.severity == "error"]
         assert any("quantization" in w.field and "4bit" in w.message for w in error_warnings)
 
     def test_error_for_sharding_exceeds_gpus(self):
-        """Error when num_shards exceeds available GPUs."""
-        config = ExperimentConfig(
-            config_name="test",
-            model_name="test-model",
-            gpu_list=[0, 1],
-            sharding_config={"strategy": "tensor_parallel", "num_shards": 4},
-        )
-        warnings = validate_config(config)
-        error_warnings = [w for w in warnings if w.severity == "error"]
-        assert any("sharding" in w.field.lower() for w in error_warnings)
+        """Error when num_shards exceeds available GPUs.
+
+        Note: With the new parallelism migration, this now fails at model
+        construction time rather than in validate_config(). We verify the
+        Pydantic validation error is raised.
+        """
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="parallelism.degree.*must be <=.*gpus"):
+            ExperimentConfig(
+                config_name="test",
+                model_name="test-model",
+                gpus=[0, 1],
+                sharding={"strategy": "tensor_parallel", "num_shards": 4},
+            )
 
     def test_error_for_sampling_params_in_deterministic_mode(self):
         """Error when sampling params set in deterministic mode."""
         config = ExperimentConfig(
             config_name="test",
             model_name="test-model",
-            decoder_config={"temperature": 0.0, "top_k": 100, "top_p": 0.9},
+            decoder={"temperature": 0.0, "top_k": 100, "top_p": 0.9},
         )
         warnings = validate_config(config)
         error_warnings = [w for w in warnings if w.severity == "error"]
-        assert any(
-            "decoder_config" in w.field and "deterministic" in w.message for w in error_warnings
-        )
+        assert any("decoder" in w.field and "deterministic" in w.message for w in error_warnings)
 
     def test_no_error_for_default_sampling_params_in_deterministic_mode(self):
         """No error when only default sampling params in deterministic mode."""
         config = ExperimentConfig(
             config_name="test",
             model_name="test-model",
-            decoder_config={"preset": "deterministic"},  # Default params, temp=0
+            decoder={"preset": "deterministic"},  # Default params, temp=0
         )
         warnings = validate_config(config)
         error_warnings = [w for w in warnings if w.severity == "error"]

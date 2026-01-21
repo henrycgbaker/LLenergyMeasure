@@ -21,6 +21,7 @@ A comprehensive tool for ML researchers to understand the **true cost** of LLM i
 | **Backends** | PyTorch, vLLM, TensorRT-LLM with backend-specific optimisations |
 | **Statistical** | Multi-cycle experiments, confidence intervals, late aggregation |
 | **Infrastructure** | Docker, MIG awareness, experiment resumption, config inheritance |
+| **Provenance** | Full parameter provenance tracking (source of every config value) |
 
 ### Known Limitations
 
@@ -249,6 +250,66 @@ User chooses preferred platform.
 
 ---
 
+## v3.3 — Analysis Features
+
+> **Theme:** Extract insights from experiment data.
+
+### 3.3.1 Correlation Analysis
+
+Automatically compute correlation between parameter values and energy/efficiency metrics across experiments.
+
+```bash
+$ llm-energy-measure analyse correlations --experiments exp1,exp2,exp3,...
+
+Parameter Correlations with Energy (J/token):
+  vllm.speculative.num_tokens:     r=-0.72 (p<0.01)  # more speculation = lower energy
+  batching.batch_size:             r=-0.45 (p<0.05)  # larger batches = lower energy
+  decoder.temperature:             r=+0.12 (p=0.31)  # no significant effect
+```
+
+**Requirements:**
+- Multiple experiments with varied parameters
+- Statistical analysis module (scipy/statsmodels)
+- Sufficient sample sizes for significance
+
+### 3.3.2 Multi-Experiment Comparison Dashboard
+
+Visual comparison of experiments highlighting parameter differences and their effects.
+
+**Features:**
+- Side-by-side metric comparison
+- Parameter diff highlighting
+- Trend visualisation across experiment series
+- Export to publication-ready formats
+
+### 3.3.3 Automated Parameter Sweep
+
+Given a base config, automatically vary parameters to find energy-optimal configurations.
+
+```bash
+$ llm-energy-measure sweep config.yaml \
+    --vary batching.batch_size=1,2,4,8 \
+    --vary vllm.speculative.num_tokens=3,5,7
+```
+
+**Features:**
+- Cartesian product of parameter variations
+- Optional early stopping for poor configurations
+- Pareto frontier identification (throughput vs energy)
+- Automatic best-config selection
+
+### 3.3.4 NormalisedMetrics Population
+
+Wire up the existing `NormalisedMetrics` model in `domain/metrics.py` to enable cross-backend efficiency comparisons with precision-adjusted FLOPs.
+
+**Features:**
+- Precision-adjusted FLOPs (INT4 ops vs FP16 ops)
+- Backend-normalised throughput
+- Energy efficiency per effective FLOP
+- Cross-hardware normalisation
+
+---
+
 ## Future — Architecture Expansion
 
 > **Theme:** Beyond Transformers.
@@ -287,6 +348,23 @@ Support for Mamba, RWKV, Jamba, and hybrid architectures.
 
 ---
 
+## Known High-Impact Parameters
+
+Parameters that empirically show large energy effects (for documentation/guidance):
+
+| Parameter | Typical Effect | Notes |
+|-----------|---------------|-------|
+| `vllm.speculative.method` | -30-50% energy | Speculative decoding reduces total compute |
+| `vllm.speculative.num_tokens` | Variable | Optimal varies by model/task |
+| `vllm.enable_prefix_caching` | -10-30% for repeated prefixes | Cache hit rate dependent |
+| `pytorch.torch_compile` | -5-15% after warmup | Compilation overhead on first run |
+| `batching.batch_size` | Higher = better efficiency | Diminishing returns, memory constrained |
+| `pytorch.attn_implementation` | flash_attention_2 most efficient | Hardware dependent |
+
+This is guidance only—users should measure actual effects for their specific workloads.
+
+---
+
 ## Implementation Principles
 
 1. **Measurement first** — Get accurate data before building analysis
@@ -308,6 +386,7 @@ v3.0.5 Environment Metadata     ━━━━━━━━━━━━━━━▶
 v3.0.6 Schema Migration         ━━━━━━━━━━▶
 v3.1.x Quality Metrics          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━▶
 v3.2.x Ecosystem Integration    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━▶
+v3.3.x Analysis Features        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━▶
 Future SSM/Hybrid Support       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━▶
 ```
 
@@ -329,4 +408,5 @@ When implementing roadmap items:
 
 | Date | Change |
 |------|--------|
+| 2026-01-21 | Added v3.3 Analysis Features section (correlation, sweep, comparison) |
 | 2025-01-21 | Initial roadmap created from research-pm and research-scientist review |

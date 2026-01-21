@@ -1,0 +1,62 @@
+# =============================================================================
+# Example Configuration - LLM Energy Measurement
+# =============================================================================
+# Copy this file and modify for your experiments.
+# For all available options, see: docs/configuration.md
+# =============================================================================
+
+# Required: Experiment identity
+config_name: example-experiment
+model_name: Qwen/Qwen2.5-0.5B  # Non-gated model for easy testing
+
+# Dataset configuration
+# Built-in aliases for common datasets: ai_energy_score, alpaca, sharegpt, gsm8k, mmlu
+# Or use any HuggingFace dataset path (e.g., tatsu-lab/alpaca)
+dataset:
+  name: ai_energy_score
+  sample_size: 10
+
+# Token limits
+max_input_tokens: 512
+max_output_tokens: 128
+
+# GPU setup (indices of GPUs to use)
+gpus: [0, 1]
+
+# Precision: float32 | float16 | bfloat16
+fp_precision: float16
+
+# Parallelism (for multi-GPU)
+parallelism:
+  strategy: none  # none | tensor_parallel | pipeline_parallel | data_parallel
+  degree: 1       # Must match strategy: use degree > 1 with tensor_parallel or data_parallel
+
+# Backend: pytorch | vllm | tensorrt
+backend: pytorch
+
+# -----------------------------------------------------------------------------
+# Optional: Advanced Configuration
+# Uncomment and modify as needed
+# -----------------------------------------------------------------------------
+
+# Batching (for throughput testing)
+# batching:
+#   batch_size: 4
+#   strategy: static  # static | dynamic | sorted_static | sorted_dynamic
+
+# Decoder/generation settings
+# decoder:
+#   preset: deterministic  # deterministic | standard | creative | factual
+#   # Or set individual parameters:
+#   # temperature: 0.7
+#   # top_p: 0.9
+#   # top_k: 50
+
+# Streaming mode (for TTFT/ITL latency metrics)
+# streaming: true
+
+# Multi-cycle experiments (for statistical robustness)
+# num_cycles: 3
+
+# Reproducibility
+# random_seed: 42

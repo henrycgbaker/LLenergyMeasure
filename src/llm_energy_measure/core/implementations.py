@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizer
 
     from llm_energy_measure.config.models import ExperimentConfig
-    from llm_energy_measure.core.inference import InferenceResult
     from llm_energy_measure.domain.metrics import CombinedMetrics
 
 
@@ -37,50 +36,11 @@ class HuggingFaceModelLoader:
         return load_model_tokenizer(config)
 
 
-class TransformersInferenceEngine:
-    """Inference engine using HuggingFace Transformers.
-
-    Implements InferenceEngine protocol by wrapping run_inference().
-    Requires accelerator at construction time for distributed setup.
-    """
-
-    def __init__(self, accelerator: Accelerator) -> None:
-        """Initialize with accelerator for distributed inference.
-
-        Args:
-            accelerator: HuggingFace Accelerator instance.
-        """
-        self._accelerator = accelerator
-
-    def run(
-        self,
-        model: Any,
-        tokenizer: Any,
-        prompts: list[str],
-        config: ExperimentConfig,
-    ) -> InferenceResult:
-        """Run inference on prompts.
-
-        Args:
-            model: Loaded model.
-            tokenizer: Loaded tokenizer.
-            prompts: List of prompts to process.
-            config: Experiment configuration.
-
-        Returns:
-            InferenceResult with metrics and outputs.
-        """
-        from llm_energy_measure.core.inference import run_inference
-
-        # Note: run_inference has param order (model, config, prompts, tokenizer, accelerator)
-        return run_inference(model, config, prompts, tokenizer, self._accelerator)
-
-
 class ThroughputMetricsCollector:
     """Metrics collector for throughput and compute metrics.
 
     Implements MetricsCollector protocol by wrapping collect_compute_metrics()
-    and combining with inference metrics from InferenceResult.
+    and combining with inference metrics from the inference result.
     """
 
     def __init__(self, accelerator: Accelerator) -> None:
@@ -94,7 +54,7 @@ class ThroughputMetricsCollector:
     def collect(
         self,
         model: Any,
-        inference_result: InferenceResult,
+        inference_result: Any,
         config: ExperimentConfig,
     ) -> CombinedMetrics:
         """Collect metrics from model and inference result.
@@ -121,16 +81,6 @@ class ThroughputMetricsCollector:
         # Return with placeholder energy - orchestrator uses energy from backend directly
         return CombinedMetrics(
             inference=inference_result.metrics,
-            energy=EnergyMetrics(
-                total_energy_j=0.0,
-                gpu_energy_j=0.0,
-                cpu_energy_j=0.0,
-                ram_energy_j=0.0,
-                gpu_power_w=0.0,
-                cpu_power_w=0.0,
-                duration_sec=0.0,
-                emissions_kg_co2=0.0,
-                energy_per_token_j=0.0,
-            ),
+            energy=EnergyMetrics.placeholder(),
             compute=compute,
         )

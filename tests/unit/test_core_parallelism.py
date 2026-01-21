@@ -53,7 +53,7 @@ class TestNoParallelism:
         strategy = NoParallelism()
         config = ShardingConfig(strategy="none")
         # Should not raise
-        strategy.setup(config, gpu_list=[0])
+        strategy.setup(config, gpus=[0])
 
     def test_prepare_model_kwargs_returns_device_map_auto(self):
         """Should return device_map='auto' for automatic placement."""
@@ -83,7 +83,7 @@ class TestTensorParallelStrategy:
         config = ShardingConfig(strategy="tensor_parallel", num_shards=4)
 
         with pytest.raises(ValueError, match="exceeds available GPUs"):
-            strategy.setup(config, gpu_list=[0, 1])  # Only 2 GPUs
+            strategy.setup(config, gpus=[0, 1])  # Only 2 GPUs
 
     def test_setup_accepts_valid_config(self):
         """Should succeed when GPUs are sufficient."""
@@ -91,7 +91,7 @@ class TestTensorParallelStrategy:
         config = ShardingConfig(strategy="tensor_parallel", num_shards=2)
 
         # Should not raise
-        strategy.setup(config, gpu_list=[0, 1])
+        strategy.setup(config, gpus=[0, 1])
 
     def test_prepare_model_kwargs_includes_tp_plan(self):
         """Should return tp_plan='auto' for HF native TP."""
@@ -122,7 +122,7 @@ class TestPipelineParallelStrategy:
         config = ShardingConfig(strategy="pipeline_parallel", num_shards=8)
 
         with pytest.raises(ValueError, match="exceeds available GPUs"):
-            strategy.setup(config, gpu_list=[0, 1])  # Only 2 GPUs
+            strategy.setup(config, gpus=[0, 1])  # Only 2 GPUs
 
     def test_prepare_model_kwargs_returns_cpu_device_map(self):
         """PP loads model on CPU first for splitting."""

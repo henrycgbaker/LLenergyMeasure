@@ -12,7 +12,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from llm_energy_measure.constants import DEFAULT_STATE_DIR
-from llm_energy_measure.exceptions import ConfigurationError
+from llm_energy_measure.exceptions import ConfigurationError, InvalidStateTransitionError
 from llm_energy_measure.security import is_safe_path, sanitize_experiment_id
 
 
@@ -25,6 +25,26 @@ class ExperimentStatus(str, Enum):
     AGGREGATED = "aggregated"
     FAILED = "failed"
     INTERRUPTED = "interrupted"
+
+
+# Valid state transitions for experiment lifecycle
+# Format: from_status -> set of allowed to_statuses
+EXPERIMENT_VALID_TRANSITIONS: dict[ExperimentStatus, frozenset[ExperimentStatus]] = {
+    ExperimentStatus.INITIALISED: frozenset(
+        {ExperimentStatus.RUNNING, ExperimentStatus.FAILED, ExperimentStatus.INTERRUPTED}
+    ),
+    ExperimentStatus.RUNNING: frozenset(
+        {ExperimentStatus.COMPLETED, ExperimentStatus.FAILED, ExperimentStatus.INTERRUPTED}
+    ),
+    ExperimentStatus.COMPLETED: frozenset({ExperimentStatus.AGGREGATED, ExperimentStatus.FAILED}),
+    ExperimentStatus.AGGREGATED: frozenset(),  # Terminal state
+    ExperimentStatus.FAILED: frozenset(
+        {ExperimentStatus.RUNNING}  # Retry
+    ),
+    ExperimentStatus.INTERRUPTED: frozenset(
+        {ExperimentStatus.RUNNING}  # Resume
+    ),
+}
 
 
 class ProcessStatus(str, Enum):
@@ -182,6 +202,52 @@ class ExperimentState(BaseModel):
             True if the config hasn't been run yet.
         """
         return config_name not in self.completed_runs and config_name not in self.failed_runs
+
+    def transition_to(
+        self,
+        new_status: ExperimentStatus,
+        *,
+        error_message: str | None = None,
+        validate: bool = True,
+    ) -> None:
+        """Transition experiment to a new status with validation.
+
+        Enforces valid state transitions as defined in EXPERIMENT_VALID_TRANSITIONS.
+        Updates last_updated timestamp and optionally sets error_message.
+
+        Args:
+            new_status: Target status to transition to.
+            error_message: Optional error message (typically for FAILED/INTERRUPTED).
+            validate: If True (default), raise on invalid transitions.
+                      If False, allow any transition (for migration/recovery).
+
+        Raises:
+            InvalidStateTransitionError: If transition is not valid and validate=True.
+        """
+        if validate and new_status not in EXPERIMENT_VALID_TRANSITIONS.get(
+            self.status, frozenset()
+        ):
+            raise InvalidStateTransitionError(
+                from_status=self.status.value,
+                to_status=new_status.value,
+                entity="experiment",
+            )
+
+        self.status = new_status
+        self.last_updated = datetime.now()
+        if error_message is not None:
+            self.error_message = error_message
+
+    def can_transition_to(self, new_status: ExperimentStatus) -> bool:
+        """Check if transition to new_status is valid.
+
+        Args:
+            new_status: Target status to check.
+
+        Returns:
+            True if the transition is valid.
+        """
+        return new_status in EXPERIMENT_VALID_TRANSITIONS.get(self.status, frozenset())
 
 
 def compute_config_hash(config_dict: dict[str, Any]) -> str:
@@ -347,8 +413,10 @@ class StateManager:
         cleaned = []
         for state in self.find_incomplete():
             if state.status == ExperimentStatus.RUNNING and not state.is_subprocess_running():
-                state.status = ExperimentStatus.INTERRUPTED
-                state.error_message = "Subprocess no longer running (stale state detected)"
+                state.transition_to(
+                    ExperimentStatus.INTERRUPTED,
+                    error_message="Subprocess no longer running (stale state detected)",
+                )
                 self.save(state)
                 cleaned.append(state.experiment_id)
         return cleaned

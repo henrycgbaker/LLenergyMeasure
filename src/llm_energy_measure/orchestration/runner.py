@@ -140,6 +140,7 @@ class ExperimentOrchestrator:
         # Stop energy tracking
         # Note: Energy tracking can fail with vLLM due to CUDA context issues
         # We continue with placeholder metrics if this happens
+        energy_tracking_failed = False
         try:
             energy_metrics = self._energy.stop_tracking(tracker)
             logger.debug("Energy tracking stopped")
@@ -147,17 +148,10 @@ class ExperimentOrchestrator:
             logger.warning(f"Energy tracking failed (non-fatal): {e}")
             from llm_energy_measure.domain.metrics import EnergyMetrics
 
-            energy_metrics = EnergyMetrics(
-                total_energy_j=0.0,
-                gpu_energy_j=0.0,
-                cpu_energy_j=0.0,
-                ram_energy_j=0.0,
-                gpu_power_w=0.0,
-                cpu_power_w=0.0,
-                duration_sec=0.0,
-                emissions_kg_co2=0.0,
-                energy_per_token_j=0.0,
+            energy_metrics = EnergyMetrics.placeholder(
+                duration_sec=inference_result.metrics.inference_time_sec
             )
+            energy_tracking_failed = True
 
         # Collect metrics
         # Note: Can fail with vLLM due to CUDA context issues
@@ -205,7 +199,7 @@ class ExperimentOrchestrator:
             )
             logger.warning(energy_warning)
 
-        # Build raw result with effective_config and cli_overrides (Phase 0)
+        # Build raw result with effective_config, cli_overrides, and provenance
         raw_result = RawProcessResult(
             experiment_id=ctx.experiment_id,
             backend=self._backend_name,
@@ -216,6 +210,7 @@ class ExperimentOrchestrator:
             gpu_is_mig=mig_info.get("gpu_is_mig", False),
             gpu_mig_profile=mig_info.get("gpu_mig_profile"),
             energy_measurement_warning=energy_warning,
+            energy_tracking_failed=energy_tracking_failed,
             config_name=ctx.config.config_name,
             model_name=ctx.config.model_name,
             timestamps=Timestamps(
@@ -229,6 +224,8 @@ class ExperimentOrchestrator:
             effective_config=ctx.effective_config,
             cli_overrides=ctx.cli_overrides,
             config_warnings=ctx.config_warnings,
+            parameter_provenance=ctx.parameter_provenance,
+            preset_chain=ctx.preset_chain,
         )
 
         # Save raw result

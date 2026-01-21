@@ -6,6 +6,7 @@ Tests the shared ITL collection utility and LatencyMeasurements dataclass.
 import pytest
 
 from llm_energy_measure.core.inference_backends.protocols import (
+    LatencyMeasurementMode,
     LatencyMeasurements,
     collect_itl_measurements,
 )
@@ -110,8 +111,8 @@ class TestCollectItlMeasurements:
 class TestLatencyMeasurements:
     """Tests for the LatencyMeasurements dataclass."""
 
-    def test_default_measurement_method_is_streaming(self):
-        """Default measurement_method should be 'streaming'."""
+    def test_default_measurement_method_is_true_streaming(self):
+        """Default measurement_mode should be TRUE_STREAMING."""
         measurements = LatencyMeasurements(
             ttft_ms=[10.0, 12.0],
             itl_full_ms=[5.0, 6.0, 7.0],
@@ -123,10 +124,11 @@ class TestLatencyMeasurements:
             warmup_requests_excluded=0,
         )
 
-        assert measurements.measurement_method == "streaming"
+        assert measurements.measurement_mode == LatencyMeasurementMode.TRUE_STREAMING
+        assert measurements.measurement_method == "true_streaming"  # Legacy property
 
-    def test_measurement_method_can_be_set(self):
-        """measurement_method can be explicitly set to other values."""
+    def test_measurement_mode_can_be_set(self):
+        """measurement_mode can be explicitly set to other values."""
         measurements = LatencyMeasurements(
             ttft_ms=[10.0],
             itl_full_ms=[5.0],
@@ -136,13 +138,14 @@ class TestLatencyMeasurements:
             excluded_tokens=1,
             streaming_mode=False,
             warmup_requests_excluded=0,
-            measurement_method="proportional_estimate",
+            measurement_mode=LatencyMeasurementMode.PROPORTIONAL_ESTIMATE,
         )
 
-        assert measurements.measurement_method == "proportional_estimate"
+        assert measurements.measurement_mode == LatencyMeasurementMode.PROPORTIONAL_ESTIMATE
+        assert measurements.measurement_method == "proportional"  # Legacy property
 
-    def test_measurement_method_per_request_batch(self):
-        """measurement_method can be set to per_request_batch."""
+    def test_measurement_mode_per_request_batch(self):
+        """measurement_mode can be set to PER_REQUEST_BATCH."""
         measurements = LatencyMeasurements(
             ttft_ms=[10.0],
             itl_full_ms=[5.0],
@@ -152,10 +155,11 @@ class TestLatencyMeasurements:
             excluded_tokens=1,
             streaming_mode=False,
             warmup_requests_excluded=0,
-            measurement_method="per_request_batch",
+            measurement_mode=LatencyMeasurementMode.PER_REQUEST_BATCH,
         )
 
-        assert measurements.measurement_method == "per_request_batch"
+        assert measurements.measurement_mode == LatencyMeasurementMode.PER_REQUEST_BATCH
+        assert measurements.measurement_method == "per_request_batch"  # Legacy property
 
     def test_all_fields_stored_correctly(self):
         """Verify all fields are stored correctly."""
@@ -168,7 +172,7 @@ class TestLatencyMeasurements:
             excluded_tokens=6,
             streaming_mode=True,
             warmup_requests_excluded=2,
-            measurement_method="streaming",
+            measurement_mode=LatencyMeasurementMode.TRUE_STREAMING,
         )
 
         assert measurements.ttft_ms == [10.0, 15.0, 12.0]
@@ -179,7 +183,8 @@ class TestLatencyMeasurements:
         assert measurements.excluded_tokens == 6
         assert measurements.streaming_mode is True
         assert measurements.warmup_requests_excluded == 2
-        assert measurements.measurement_method == "streaming"
+        assert measurements.measurement_mode == LatencyMeasurementMode.TRUE_STREAMING
+        assert measurements.measurement_method == "true_streaming"  # Legacy property
 
 
 class TestLatencyMeasurementsIntegration:
@@ -208,7 +213,7 @@ class TestLatencyMeasurementsIntegration:
             excluded_tokens=excluded,
             streaming_mode=True,
             warmup_requests_excluded=0,
-            measurement_method="streaming",
+            measurement_mode=LatencyMeasurementMode.TRUE_STREAMING,
         )
 
         # Verify results

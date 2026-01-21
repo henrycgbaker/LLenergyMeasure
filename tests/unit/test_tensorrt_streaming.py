@@ -55,6 +55,7 @@ class TestTensorRTLatencyMeasurements:
     def test_latency_measurements_structure(self):
         """LatencyMeasurements should have all required fields."""
         from llm_energy_measure.core.inference_backends.protocols import (
+            LatencyMeasurementMode,
             LatencyMeasurements,
         )
 
@@ -67,15 +68,17 @@ class TestTensorRTLatencyMeasurements:
             excluded_tokens=4,
             streaming_mode=True,
             warmup_requests_excluded=1,
-            measurement_method="proportional_estimate",
+            measurement_mode=LatencyMeasurementMode.PROPORTIONAL_ESTIMATE,
         )
 
         assert measurements.ttft_ms == [20.0, 25.0]
-        assert measurements.measurement_method == "proportional_estimate"
+        assert measurements.measurement_mode == LatencyMeasurementMode.PROPORTIONAL_ESTIMATE
+        assert measurements.measurement_method == "proportional"  # Legacy property
 
-    def test_estimation_fallback_uses_correct_method(self):
-        """Estimation fallback should use 'proportional_estimate' method."""
+    def test_estimation_fallback_uses_correct_mode(self):
+        """Estimation fallback should use PROPORTIONAL_ESTIMATE mode."""
         from llm_energy_measure.core.inference_backends.protocols import (
+            LatencyMeasurementMode,
             LatencyMeasurements,
         )
 
@@ -89,10 +92,11 @@ class TestTensorRTLatencyMeasurements:
             excluded_tokens=2,
             streaming_mode=True,
             warmup_requests_excluded=0,
-            measurement_method="proportional_estimate",
+            measurement_mode=LatencyMeasurementMode.PROPORTIONAL_ESTIMATE,
         )
 
-        assert measurements.measurement_method == "proportional_estimate"
+        assert measurements.measurement_mode == LatencyMeasurementMode.PROPORTIONAL_ESTIMATE
+        assert measurements.measurement_method == "proportional"
 
 
 class TestTensorRTBackendResultStructure:
@@ -102,6 +106,7 @@ class TestTensorRTBackendResultStructure:
         """BackendResult should properly contain latency measurements."""
         from llm_energy_measure.core.inference_backends.protocols import (
             BackendResult,
+            LatencyMeasurementMode,
             LatencyMeasurements,
         )
 
@@ -114,7 +119,7 @@ class TestTensorRTBackendResultStructure:
             excluded_tokens=6,
             streaming_mode=True,
             warmup_requests_excluded=2,
-            measurement_method="proportional_estimate",
+            measurement_mode=LatencyMeasurementMode.PROPORTIONAL_ESTIMATE,
         )
 
         result = BackendResult(
@@ -132,7 +137,11 @@ class TestTensorRTBackendResultStructure:
         )
 
         assert result.latency_measurements is not None
-        assert result.latency_measurements.measurement_method == "proportional_estimate"
+        assert (
+            result.latency_measurements.measurement_mode
+            == LatencyMeasurementMode.PROPORTIONAL_ESTIMATE
+        )
+        assert result.latency_measurements.measurement_method == "proportional"
         assert result.backend_metadata["streaming_mode"] is True
 
     def test_backend_metadata_contains_latency_warning(self):

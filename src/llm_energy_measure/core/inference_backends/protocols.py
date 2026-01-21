@@ -15,6 +15,23 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
+# Re-export latency types from domain.metrics for backward compatibility
+from llm_energy_measure.domain.metrics import (
+    LatencyMeasurementMode as LatencyMeasurementMode,
+)
+from llm_energy_measure.domain.metrics import (
+    LatencyMeasurements as LatencyMeasurements,
+)
+from llm_energy_measure.domain.metrics import (
+    LatencyStatistics as LatencyStatistics,
+)
+from llm_energy_measure.domain.metrics import (
+    PrecisionMetadata as PrecisionMetadata,
+)
+from llm_energy_measure.domain.metrics import (
+    collect_itl_measurements as collect_itl_measurements,
+)
+
 if TYPE_CHECKING:
     from llm_energy_measure.config.models import ExperimentConfig
     from llm_energy_measure.domain.model_info import ModelInfo
@@ -91,130 +108,6 @@ DEFAULT_RUNTIME_CAPABILITIES = RuntimeCapabilities()
 
 
 # =============================================================================
-# Latency Measurements (for streaming support)
-# =============================================================================
-
-
-@dataclass
-class LatencyMeasurements:
-    """Raw latency measurements for late aggregation.
-
-    Stores raw samples from streaming inference. Statistics are computed
-    at aggregation time, enabling correct multi-process aggregation
-    (concatenate samples first, then compute percentiles).
-
-    Attributes:
-        ttft_ms: Per-request time-to-first-token in milliseconds.
-        itl_full_ms: All inter-token latencies (includes all intervals).
-        itl_trimmed_ms: Trimmed ITL excluding first/last per request
-            (first token is TTFT, last may have EOS anomalies).
-        request_count: Number of requests measured.
-        total_output_tokens: Total tokens generated across all requests.
-        excluded_tokens: Count of first+last tokens excluded from trimmed ITL.
-        streaming_mode: Whether streaming API was used for measurement.
-        warmup_requests_excluded: Number of warmup requests not included.
-        measurement_method: How latency was measured:
-            - "streaming": True per-token timestamps via streaming API
-            - "per_request_batch": Per-request timing without streaming
-            - "proportional_estimate": Estimated from total time (less accurate)
-    """
-
-    ttft_ms: list[float]
-    itl_full_ms: list[float]
-    itl_trimmed_ms: list[float]
-    request_count: int
-    total_output_tokens: int
-    excluded_tokens: int
-    streaming_mode: bool
-    warmup_requests_excluded: int
-    measurement_method: Literal["streaming", "per_request_batch", "proportional_estimate"] = (
-        "streaming"
-    )
-
-
-@dataclass
-class LatencyStatistics:
-    """Computed statistics from raw latency measurements.
-
-    Created at aggregation time from LatencyMeasurements. This is the final
-    form stored in AggregatedResult and displayed in CLI output.
-
-    Primary metrics use trimmed ITL (excluding first/last tokens per request).
-    Full ITL stats are provided for comparison/debugging.
-    """
-
-    # TTFT statistics
-    ttft_mean_ms: float
-    ttft_median_ms: float
-    ttft_p95_ms: float
-    ttft_p99_ms: float
-    ttft_min_ms: float
-    ttft_max_ms: float
-    ttft_samples: int
-
-    # ITL statistics (trimmed - primary metric)
-    itl_mean_ms: float | None = None
-    itl_median_ms: float | None = None
-    itl_p95_ms: float | None = None
-    itl_p99_ms: float | None = None
-    itl_samples: int = 0
-
-    # ITL statistics (full - for comparison)
-    itl_full_mean_ms: float | None = None
-    itl_full_p99_ms: float | None = None
-
-
-# =============================================================================
-# Shared Utilities for Latency Measurement
-# =============================================================================
-
-
-def collect_itl_measurements(
-    token_timestamps_per_request: list[list[float]],
-) -> tuple[list[float], list[float], int]:
-    """Calculate ITL metrics from per-token timestamps.
-
-    Standard implementation used by all backends for consistent ITL calculation.
-    Extracts inter-token latencies from timestamp lists, optionally trimming
-    first/last intervals per request for cleaner statistics.
-
-    Args:
-        token_timestamps_per_request: Per-request list of token arrival times (ms).
-            Each inner list contains cumulative timestamps for one request.
-
-    Returns:
-        Tuple of (itl_full, itl_trimmed, excluded_count):
-            - itl_full: All inter-token intervals
-            - itl_trimmed: Excluding first/last per request (cleaner for percentiles)
-            - excluded_count: Number of excluded intervals
-    """
-    import numpy as np
-
-    itl_full: list[float] = []
-    itl_trimmed: list[float] = []
-    excluded = 0
-
-    for timestamps in token_timestamps_per_request:
-        if len(timestamps) < 2:
-            continue
-
-        # Calculate inter-token intervals
-        intervals = list(np.diff(timestamps))
-        itl_full.extend(intervals)
-
-        # Trim first and last intervals for cleaner statistics
-        # First interval may include warmup effects, last may have EOS anomalies
-        if len(intervals) >= 3:
-            itl_trimmed.extend(intervals[1:-1])
-            excluded += 2
-        elif len(intervals) >= 1:
-            # Too short to trim meaningfully
-            excluded += len(intervals)
-
-    return itl_full, itl_trimmed, excluded
-
-
-# =============================================================================
 # Backend Result and Runtime Context
 # =============================================================================
 
@@ -252,6 +145,10 @@ class BackendResult:
     # Raw latency measurements from streaming inference (for late aggregation)
     # None if streaming mode was not enabled
     latency_measurements: LatencyMeasurements | None = None
+
+    # Precision metadata for cross-backend efficiency comparisons
+    # Tracks actual precision used for weights, activations, and compute
+    precision_metadata: PrecisionMetadata | None = None
 
     @property
     def tokens_per_second(self) -> float:

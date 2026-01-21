@@ -17,7 +17,7 @@ class TestGetConfigFilePath:
     """Tests for get_config_file_path function."""
 
     def test_dict_creates_temp_file(self, tmp_path):
-        config = {"model_name": "test/model", "gpu_list": [0]}
+        config = {"model_name": "test/model", "gpus": [0]}
 
         with patch("tempfile.mkstemp") as mock_mkstemp:
             # Create a real temp file for the test
@@ -101,7 +101,7 @@ class TestRunFromConfig:
         config_data = {
             "config_name": "test",
             "model_name": "test/model",
-            "gpu_list": [0],
+            "gpus": [0],
             "num_processes": 1,
         }
 
@@ -119,7 +119,7 @@ class TestRunFromConfig:
         config_data = {
             "config_name": "test",
             "model_name": "test/model",
-            "gpu_list": [0],
+            "gpus": [0],
             "num_processes": 1,
         }
 
@@ -142,7 +142,7 @@ class TestRunFromConfig:
         config_data = {
             "config_name": "test",
             "model_name": "test/model",
-            "gpu_list": [0],
+            "gpus": [0],
             "num_processes": 1,
         }
 

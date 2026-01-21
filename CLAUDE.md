@@ -32,12 +32,13 @@ LLM inference efficiency measurement framework for benchmarking energy consumpti
 | Directory | Purpose | AI Context | Full Docs |
 |-----------|---------|------------|-----------|
 | `src/llm_energy_measure/` | Main package | [CLAUDE.md](src/llm_energy_measure/CLAUDE.md) | [README](src/llm_energy_measure/README.md) |
+| `src/.../cli/` | CLI package (modular) | [CLAUDE.md](src/llm_energy_measure/cli/CLAUDE.md) | - |
 | `src/.../config/` | Configuration system | [CLAUDE.md](src/llm_energy_measure/config/CLAUDE.md) | [README](src/llm_energy_measure/config/README.md) |
 | `src/.../core/` | Inference engine, metrics | [CLAUDE.md](src/llm_energy_measure/core/CLAUDE.md) | [README](src/llm_energy_measure/core/README.md) |
 | `src/.../domain/` | Domain models | [CLAUDE.md](src/llm_energy_measure/domain/CLAUDE.md) | [README](src/llm_energy_measure/domain/README.md) |
 | `src/.../orchestration/` | Experiment lifecycle | [CLAUDE.md](src/llm_energy_measure/orchestration/CLAUDE.md) | [README](src/llm_energy_measure/orchestration/README.md) |
 | `src/.../results/` | Results persistence | [CLAUDE.md](src/llm_energy_measure/results/CLAUDE.md) | [README](src/llm_energy_measure/results/README.md) |
-| `src/.../state/` | Experiment state | [CLAUDE.md](src/llm_energy_measure/state/CLAUDE.md) | [README](src/llm_energy_measure/state/README.md) |
+| `src/.../state/` | Experiment state, transitions | [CLAUDE.md](src/llm_energy_measure/state/CLAUDE.md) | [README](src/llm_energy_measure/state/README.md) |
 | `tests/` | Test suite | [CLAUDE.md](tests/CLAUDE.md) | [README](tests/README.md) |
 
 ## Quick Reference

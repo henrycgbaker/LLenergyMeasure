@@ -93,7 +93,7 @@ class FlopsEstimator:
             return "fp16"
 
         # BNB always dequantizes to FP16 for compute
-        if config.quantization_config.quantization:
+        if config.quantization.quantization:
             return "fp16"
 
         # Get torch_dtype if it exists on the config

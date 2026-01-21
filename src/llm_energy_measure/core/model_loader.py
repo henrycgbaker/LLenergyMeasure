@@ -106,7 +106,7 @@ def load_model_tokenizer(
 ) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
     """Load a model and tokenizer from HuggingFace.
 
-    Supports different parallelism strategies based on sharding_config:
+    Supports different parallelism strategies based on sharding config:
     - none: Default device_map='auto' behaviour
     - tensor_parallel: HuggingFace native TP via tp_plan
     - pipeline_parallel: PyTorch native PP with stage splitting
@@ -124,14 +124,14 @@ def load_model_tokenizer(
 
     model_name = config.model_name
     fp_precision = config.fp_precision
-    quant_config = config.quantization_config
-    sharding_config = config.sharding_config
+    quant_config = config.quantization
+    sharding = config.sharding
 
     logger.info(f"Loading model: {model_name}")
 
     # Get parallelism strategy
-    strategy = get_parallelism_strategy(sharding_config)
-    strategy.setup(sharding_config, config.gpu_list)
+    strategy = get_parallelism_strategy(sharding)
+    strategy.setup(sharding, config.gpus)
 
     # Load tokenizer
     try:
@@ -198,7 +198,7 @@ def load_model_tokenizer(
 
     logger.info(
         f"Model loaded: {model_name}, dtype={model_dtype}, "
-        f"strategy={sharding_config.strategy}, "
+        f"strategy={sharding.strategy}, "
         f"params={sum(p.numel() for p in model.parameters()):,}"
     )
 

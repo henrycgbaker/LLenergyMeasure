@@ -29,7 +29,7 @@ def config_hierarchy(tmp_path: Path) -> dict[str, Path]:
     base.write_text("""
 max_input_tokens: 1024
 max_output_tokens: 256
-decoder_config:
+decoder:
   temperature: 0.7
   top_p: 0.9
 """)
@@ -42,7 +42,7 @@ _extends: base.yaml
 config_name: llama-7b-test
 model_name: meta-llama/Llama-2-7b-hf
 num_processes: 2
-gpu_list: [0, 1]
+gpus: [0, 1]
 """)
     configs["model"] = model
 
@@ -51,7 +51,7 @@ gpu_list: [0, 1]
     quant.write_text("""
 _extends: llama-7b.yaml
 config_name: llama-7b-4bit
-quantization_config:
+quantization:
   quantization: true
   load_in_4bit: true
 """)

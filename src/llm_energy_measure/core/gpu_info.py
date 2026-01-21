@@ -359,13 +359,13 @@ def format_gpu_topology(topology: GPUTopology) -> str:
 
 
 def validate_gpu_selection(
-    gpu_list: list[int],
+    gpus: list[int],
     topology: GPUTopology,
 ) -> list[str]:
     """Validate GPU selection and return any warnings.
 
     Args:
-        gpu_list: List of GPU indices the user wants to use.
+        gpus: List of GPU indices the user wants to use.
         topology: Detected GPU topology.
 
     Returns:
@@ -379,7 +379,7 @@ def validate_gpu_selection(
 
     max_index = max(d.index for d in topology.devices)
 
-    for idx in gpu_list:
+    for idx in gpus:
         device = topology.get_device(idx)
         if device is None:
             warnings.append(f"GPU index {idx} not found (available: 0-{max_index})")
@@ -392,7 +392,7 @@ def validate_gpu_selection(
 
     # Check for mixing MIG and non-MIG
     selected_devices: list[GPUInfo] = [
-        d for d in (topology.get_device(i) for i in gpu_list) if d is not None
+        d for d in (topology.get_device(i) for i in gpus) if d is not None
     ]
 
     has_mig = any(d.is_mig_instance for d in selected_devices)

@@ -2,13 +2,18 @@
 
 These protocols define the interfaces for pluggable components,
 enabling dependency injection and easier testing.
+
+Note: Model and tokenizer parameters use `Any` because different backends
+use different types (torch.nn.Module, vLLM engine, etc.). The protocols
+define the interface contract, not the concrete types.
 """
 
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from llm_energy_measure.domain.experiment import RawProcessResult
+    from llm_energy_measure.config.models import ExperimentConfig
+    from llm_energy_measure.domain.experiment import AggregatedResult, RawProcessResult
     from llm_energy_measure.domain.metrics import CombinedMetrics, EnergyMetrics
 
 
@@ -16,14 +21,14 @@ if TYPE_CHECKING:
 class ModelLoader(Protocol):
     """Protocol for loading models and tokenizers."""
 
-    def load(self, config: Any) -> tuple[Any, Any]:
+    def load(self, config: "ExperimentConfig") -> tuple[Any, Any]:
         """Load model and tokenizer from config.
 
         Args:
             config: Experiment configuration.
 
         Returns:
-            Tuple of (model, tokenizer).
+            Tuple of (model, tokenizer). Types depend on backend.
         """
         ...
 
@@ -37,18 +42,19 @@ class InferenceEngine(Protocol):
         model: Any,
         tokenizer: Any,
         prompts: list[str],
-        config: Any,
+        config: "ExperimentConfig",
     ) -> Any:
         """Run inference on prompts.
 
         Args:
-            model: Loaded model.
-            tokenizer: Loaded tokenizer.
+            model: Loaded model (type depends on backend).
+            tokenizer: Loaded tokenizer (type depends on backend).
             prompts: List of prompts to process.
             config: Experiment configuration.
 
         Returns:
-            Inference result with generated outputs.
+            Inference result (type depends on backend, typically InferenceMetrics
+            or BackendInferenceResult).
         """
         ...
 
@@ -61,13 +67,13 @@ class MetricsCollector(Protocol):
         self,
         model: Any,
         inference_result: Any,
-        config: Any,
+        config: "ExperimentConfig",
     ) -> "CombinedMetrics":
         """Collect metrics from model and inference result.
 
         Args:
-            model: The model used for inference.
-            inference_result: Result from inference engine.
+            model: The model used for inference (type depends on backend).
+            inference_result: Result from inference engine (type depends on backend).
             config: Experiment configuration.
 
         Returns:
@@ -158,7 +164,7 @@ class ResultsRepository(Protocol):
         """
         ...
 
-    def save_aggregated(self, result: Any) -> Path:
+    def save_aggregated(self, result: "AggregatedResult") -> Path:
         """Save aggregated experiment result.
 
         Args:

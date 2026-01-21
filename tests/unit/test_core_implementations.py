@@ -9,10 +9,9 @@ from llm_energy_measure.config.models import ExperimentConfig
 from llm_energy_measure.core.implementations import (
     HuggingFaceModelLoader,
     ThroughputMetricsCollector,
-    TransformersInferenceEngine,
 )
 from llm_energy_measure.domain.metrics import InferenceMetrics
-from llm_energy_measure.protocols import InferenceEngine, MetricsCollector, ModelLoader
+from llm_energy_measure.protocols import MetricsCollector, ModelLoader
 
 # ============================================================
 # Fixtures
@@ -25,7 +24,7 @@ def sample_config() -> ExperimentConfig:
     return ExperimentConfig(
         config_name="test_config",
         model_name="test/model",
-        gpu_list=[0],
+        gpus=[0],
         num_processes=1,
     )
 
@@ -98,66 +97,6 @@ class TestHuggingFaceModelLoader:
 
         call_args = mock_load_fn.call_args[0]
         assert call_args[0] is sample_config
-
-
-# ============================================================
-# TransformersInferenceEngine Tests
-# ============================================================
-
-
-class TestTransformersInferenceEngine:
-    """Tests for TransformersInferenceEngine class."""
-
-    def test_implements_inference_engine_protocol(self, mock_accelerator):
-        """Verify class implements InferenceEngine protocol."""
-        engine = TransformersInferenceEngine(mock_accelerator)
-        assert isinstance(engine, InferenceEngine)
-
-    def test_stores_accelerator(self, mock_accelerator):
-        """Verify accelerator is stored for later use."""
-        engine = TransformersInferenceEngine(mock_accelerator)
-        assert engine._accelerator is mock_accelerator
-
-    def test_has_run_method(self, mock_accelerator):
-        """Verify engine has run method with correct signature."""
-        engine = TransformersInferenceEngine(mock_accelerator)
-        assert hasattr(engine, "run")
-        assert callable(engine.run)
-
-    @patch("llm_energy_measure.core.inference.run_inference")
-    def test_run_delegates_to_function(self, mock_run_fn, mock_accelerator, sample_config):
-        """Verify run() delegates to run_inference function."""
-        mock_result = MagicMock()
-        mock_run_fn.return_value = mock_result
-
-        mock_model = MagicMock()
-        mock_tokenizer = MagicMock()
-        prompts = ["Hello", "World"]
-
-        engine = TransformersInferenceEngine(mock_accelerator)
-        result = engine.run(mock_model, mock_tokenizer, prompts, sample_config)
-
-        # Verify correct call order: (model, config, prompts, tokenizer, accelerator)
-        mock_run_fn.assert_called_once_with(
-            mock_model,
-            sample_config,
-            prompts,
-            mock_tokenizer,
-            mock_accelerator,
-        )
-        assert result is mock_result
-
-    @patch("llm_energy_measure.core.inference.run_inference")
-    def test_run_passes_stored_accelerator(self, mock_run_fn, mock_accelerator, sample_config):
-        """Verify the stored accelerator is passed to run_inference."""
-        mock_run_fn.return_value = MagicMock()
-
-        engine = TransformersInferenceEngine(mock_accelerator)
-        engine.run(MagicMock(), MagicMock(), ["test"], sample_config)
-
-        call_args = mock_run_fn.call_args[0]
-        # accelerator is the 5th positional argument
-        assert call_args[4] is mock_accelerator
 
 
 # ============================================================
@@ -272,20 +211,16 @@ class TestImplementationsIntegration:
     def test_all_implementations_can_be_instantiated(self, mock_accelerator):
         """Verify all implementations can be created without error."""
         loader = HuggingFaceModelLoader()
-        engine = TransformersInferenceEngine(mock_accelerator)
         collector = ThroughputMetricsCollector(mock_accelerator)
 
         assert loader is not None
-        assert engine is not None
         assert collector is not None
 
     def test_implementations_satisfy_protocols_at_runtime(self, mock_accelerator):
         """Verify runtime_checkable protocols work with implementations."""
         loader = HuggingFaceModelLoader()
-        engine = TransformersInferenceEngine(mock_accelerator)
         collector = ThroughputMetricsCollector(mock_accelerator)
 
         # These should all pass due to @runtime_checkable
         assert isinstance(loader, ModelLoader)
-        assert isinstance(engine, InferenceEngine)
         assert isinstance(collector, MetricsCollector)

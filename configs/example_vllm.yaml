@@ -1,0 +1,250 @@
+# =============================================================================
+# FULL vLLM Backend Configuration
+# =============================================================================
+# Complete reference for all available parameters when using backend: vllm
+# Copy this file and modify for your experiments.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# REQUIRED: Experiment Identity
+# -----------------------------------------------------------------------------
+config_name: vllm-full-example
+model_name: Qwen/Qwen2.5-0.5B  # Non-gated. For Llama: meta-llama/Llama-2-7b-hf (requires HF_TOKEN)
+
+# Optional: LoRA adapter (HuggingFace Hub ID or local path)
+# adapter: tloen/alpaca-lora-7b  # Alpaca instruction-tuned adapter for Llama-2-7b
+
+# -----------------------------------------------------------------------------
+# DATASET CONFIGURATION
+# -----------------------------------------------------------------------------
+# Built-in aliases: ai_energy_score, alpaca, sharegpt, gsm8k, mmlu
+# Or use any HuggingFace dataset path (e.g., tatsu-lab/alpaca)
+dataset:
+  name: ai_energy_score
+  sample_size: 10
+  split: train
+  # column: text  # Auto-detected if not set
+
+# Alternative: Advanced prompt configuration (mutually exclusive with dataset)
+# prompts:
+#   type: huggingface
+#   dataset: tatsu-lab/alpaca
+#   split: train
+#   subset: null
+#   column: instruction
+#   sample_size: 100
+#   shuffle: false
+#   seed: 42
+
+# -----------------------------------------------------------------------------
+# TOKEN LIMITS
+# -----------------------------------------------------------------------------
+max_input_tokens: 512
+max_output_tokens: 128
+min_output_tokens: 0
+
+# -----------------------------------------------------------------------------
+# GPU CONFIGURATION
+# -----------------------------------------------------------------------------
+gpus: [0, 1]
+
+# -----------------------------------------------------------------------------
+# PRECISION
+# -----------------------------------------------------------------------------
+fp_precision: float16  # float32 | float16 | bfloat16
+
+# -----------------------------------------------------------------------------
+# BACKEND
+# -----------------------------------------------------------------------------
+backend: vllm
+
+# -----------------------------------------------------------------------------
+# MODEL PROPERTIES
+# -----------------------------------------------------------------------------
+is_encoder_decoder: false
+task_type: text_generation
+inference_type: pure_generative
+
+# -----------------------------------------------------------------------------
+# BATCHING CONFIGURATION
+# -----------------------------------------------------------------------------
+batching:
+  batch_size: 1
+  strategy: static  # static | dynamic | sorted_static | sorted_dynamic
+  max_tokens_per_batch: null
+
+# -----------------------------------------------------------------------------
+# PARALLELISM CONFIGURATION (Multi-GPU)
+# -----------------------------------------------------------------------------
+parallelism:
+  # vLLM supports all strategies:
+  # - none: Single GPU
+  # - tensor_parallel: Split layers horizontally
+  # - pipeline_parallel: Split model vertically into stages
+  # - data_parallel: Replicate model, split batches
+  strategy: none
+  degree: 1  # Use degree > 1 with tensor_parallel or data_parallel
+  # tp_plan: auto
+
+# -----------------------------------------------------------------------------
+# DECODER / GENERATION SETTINGS
+# -----------------------------------------------------------------------------
+decoder:
+  preset: null  # deterministic | standard | creative | factual
+  temperature: 1.0
+  do_sample: true
+  top_p: 1.0
+  top_k: 50
+  min_p: 0.0
+  repetition_penalty: 1.0
+  no_repeat_ngram_size: 0
+
+  beam_search:
+    enabled: false
+    num_beams: 1
+    length_penalty: 1.0
+    early_stopping: false
+    no_repeat_ngram_size: 0
+
+# -----------------------------------------------------------------------------
+# TRAFFIC SIMULATION
+# -----------------------------------------------------------------------------
+traffic_simulation:
+  enabled: false
+  mode: poisson
+  target_qps: 1.0
+  seed: null
+
+# -----------------------------------------------------------------------------
+# STREAMING
+# -----------------------------------------------------------------------------
+streaming: false
+streaming_warmup_requests: 5
+
+# -----------------------------------------------------------------------------
+# QUANTIZATION (Shared config - for BitsAndBytes style)
+# -----------------------------------------------------------------------------
+quantization:
+  quantization: false
+  load_in_4bit: false
+  load_in_8bit: false
+  bnb_4bit_compute_dtype: float16
+  bnb_4bit_quant_type: nf4
+  bnb_4bit_use_double_quant: false
+
+# -----------------------------------------------------------------------------
+# SCHEDULE
+# -----------------------------------------------------------------------------
+schedule:
+  enabled: false
+  interval: null
+  at: null
+  days: null
+  total_duration: 24h
+
+# -----------------------------------------------------------------------------
+# I/O CONFIGURATION
+# -----------------------------------------------------------------------------
+io:
+  results_dir: null
+
+# -----------------------------------------------------------------------------
+# EXPERIMENT TRACKING
+# -----------------------------------------------------------------------------
+num_cycles: 1
+query_rate: 1.0
+random_seed: null
+save_outputs: false
+decode_token_to_text: false
+
+# -----------------------------------------------------------------------------
+# VLLM-SPECIFIC CONFIGURATION
+# -----------------------------------------------------------------------------
+vllm:
+  # ===========================================================================
+  # Memory & Batching
+  # ===========================================================================
+  max_num_seqs: 256           # Maximum concurrent sequences per iteration (1-1024)
+  max_num_batched_tokens: null  # Maximum tokens per iteration (null=auto)
+  gpu_memory_utilization: 0.9   # Fraction of GPU memory for KV cache (0.5-0.99)
+  swap_space: 4.0               # CPU swap space per GPU in GiB
+  cpu_offload_gb: 0.0           # CPU memory for weight offloading in GiB
+
+  # ===========================================================================
+  # KV Cache Configuration
+  # ===========================================================================
+  enable_prefix_caching: false   # Automatic prefix caching (30-50% throughput gain)
+  enable_chunked_prefill: false  # Chunk large prefills with decode requests
+  kv_cache_dtype: auto           # auto | float16 | bfloat16 | fp8
+  block_size: 16                 # KV cache block size: 8 | 16 | 32
+
+  # ===========================================================================
+  # Context & Sequence Length
+  # ===========================================================================
+  max_model_len: null            # Maximum context length (null=model's native max)
+  max_seq_len_to_capture: null   # Maximum length for CUDA graph capture
+
+  # ===========================================================================
+  # Execution Mode
+  # ===========================================================================
+  enforce_eager: false  # Disable CUDA graphs (for debugging)
+
+  # ===========================================================================
+  # Parallelism (supplements shared parallelism config)
+  # ===========================================================================
+  distributed_backend: mp        # mp (multiprocessing) | ray (Ray cluster)
+  disable_custom_all_reduce: false
+
+  # ===========================================================================
+  # Attention Configuration
+  # ===========================================================================
+  attention: null
+  # attention:
+  #   backend: auto              # auto | FLASH_ATTN | FLASHINFER | TORCH_SDPA
+  #   flash_version: null        # 2 | 3 (3 for H100/Hopper GPUs)
+  #   disable_sliding_window: false
+
+  # ===========================================================================
+  # Speculative Decoding
+  # ===========================================================================
+  speculative: null
+  # speculative:
+  #   model: null                # Draft model name/path
+  #   num_tokens: 5              # Tokens to speculate per step (1-10)
+  #   method: ngram              # ngram | eagle | eagle3 | medusa | mlp | lookahead
+  #   prompt_lookup_min: 1       # Min n-gram window for ngram method
+  #   prompt_lookup_max: null    # Max n-gram window
+  #   draft_tp_size: 1           # Tensor parallel size for draft model
+
+  # ===========================================================================
+  # LoRA Adapter Configuration
+  # ===========================================================================
+  lora: null
+  # lora:
+  #   enabled: false
+  #   max_loras: 1         # Maximum concurrent LoRA adapters
+  #   max_rank: 16         # Maximum LoRA rank supported
+  #   extra_vocab_size: 256
+
+  # ===========================================================================
+  # Quantization (vLLM-specific methods)
+  # ===========================================================================
+  quantization_method: null      # gptq | awq | fp8 | marlin | etc.
+  load_format: auto              # auto | pt | safetensors | gguf
+
+  # ===========================================================================
+  # Advanced Sampling (vLLM-specific extensions)
+  # ===========================================================================
+  best_of: null       # Generate N sequences, return best (requires swap_space)
+  logprobs: null      # Return top-k log probabilities per token (1-20)
+  logit_bias: null    # Per-token logit adjustments {token_id: bias}
+
+  # ===========================================================================
+  # Escape Hatch
+  # ===========================================================================
+  extra: {}  # Additional kwargs passed directly to vLLM LLM()
+
+# -----------------------------------------------------------------------------
+# EXTRA METADATA
+# -----------------------------------------------------------------------------
+extra_metadata: {}

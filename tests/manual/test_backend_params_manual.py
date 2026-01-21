@@ -41,12 +41,12 @@ def subheader(title: str) -> None:
     print(f"\n--- {title} ---")
 
 
-def test_pass(name: str) -> None:
+def print_pass(name: str) -> None:
     """Print a passing test."""
     print(f"  ✓ {name}")
 
 
-def test_fail(name: str, error: str) -> None:
+def print_fail(name: str, error: str) -> None:
     """Print a failing test."""
     print(f"  ✗ {name}: {error}")
 
@@ -55,10 +55,10 @@ def expect_valid(name: str, factory: callable) -> Any:
     """Expect a config to be valid."""
     try:
         result = factory()
-        test_pass(name)
+        print_pass(name)
         return result
     except Exception as e:
-        test_fail(name, str(e))
+        print_fail(name, str(e))
         return None
 
 
@@ -66,16 +66,16 @@ def expect_invalid(name: str, factory: callable, match: str = "") -> bool:
     """Expect a config to be invalid."""
     try:
         factory()
-        test_fail(name, "Expected ValidationError but config was valid")
+        print_fail(name, "Expected ValidationError but config was valid")
         return False
     except ValidationError as e:
         if match and match.lower() not in str(e).lower():
-            test_fail(name, f"Expected error containing '{match}', got: {e}")
+            print_fail(name, f"Expected error containing '{match}', got: {e}")
             return False
-        test_pass(name)
+        print_pass(name)
         return True
     except Exception as e:
-        test_fail(name, f"Unexpected error: {e}")
+        print_fail(name, f"Unexpected error: {e}")
         return False
 
 
@@ -370,12 +370,7 @@ def test_vllm_config() -> None:
     expect_valid("best_of=5", lambda: VLLMConfig(best_of=5))
     expect_invalid("best_of=0 (should fail)", lambda: VLLMConfig(best_of=0))
 
-    # use_beam_search
-    expect_valid("use_beam_search=True", lambda: VLLMConfig(use_beam_search=True))
-
-    # length_penalty
-    expect_valid("length_penalty=0.5", lambda: VLLMConfig(length_penalty=0.5))
-    expect_valid("length_penalty=2.0", lambda: VLLMConfig(length_penalty=2.0))
+    # Note: use_beam_search and length_penalty moved to decoder.beam_search
 
     # logprobs (1-20)
     expect_valid("logprobs=None", lambda: VLLMConfig(logprobs=None))
@@ -503,16 +498,7 @@ def test_pytorch_config() -> None:
 
     subheader("PyTorchConfig - Generation")
 
-    # num_beams (>= 1)
-    expect_valid("num_beams=1", lambda: PyTorchConfig(num_beams=1))
-    expect_valid("num_beams=5", lambda: PyTorchConfig(num_beams=5))
-    expect_invalid("num_beams=0 (should fail)", lambda: PyTorchConfig(num_beams=0))
-
-    # early_stopping
-    expect_valid("early_stopping=True", lambda: PyTorchConfig(early_stopping=True))
-
-    # length_penalty
-    expect_valid("length_penalty=0.5", lambda: PyTorchConfig(length_penalty=0.5))
+    # Note: num_beams, early_stopping, length_penalty moved to decoder.beam_search
 
     # output_scores
     expect_valid("output_scores=True", lambda: PyTorchConfig(output_scores=True))
@@ -700,7 +686,7 @@ def test_experiment_config_integration() -> None:
         assert full_vllm.vllm.kv_cache_dtype == "fp8"
         assert full_vllm.vllm.speculative.method == "ngram"
         assert full_vllm.vllm.lora.max_loras == 4
-        test_pass("full vllm config values correct")
+        print_pass("full vllm config values correct")
 
     subheader("Full PyTorch Config (all params)")
 
@@ -721,9 +707,7 @@ def test_experiment_config_integration() -> None:
                     "model": "TinyLlama/TinyLlama-1.1B",
                     "num_tokens": 5,
                 },
-                "num_beams": 1,
-                "early_stopping": False,
-                "length_penalty": 1.0,
+                # Beam search params moved to decoder.beam_search
                 "output_scores": True,
                 "return_dict_in_generate": True,
             },
@@ -733,7 +717,7 @@ def test_experiment_config_integration() -> None:
         assert full_pytorch.pytorch.attn_implementation == "flash_attention_2"
         assert full_pytorch.pytorch.torch_compile == "reduce-overhead"
         assert full_pytorch.pytorch.assisted_generation.num_tokens == 5
-        test_pass("full pytorch config values correct")
+        print_pass("full pytorch config values correct")
 
 
 # =============================================================================
@@ -790,43 +774,43 @@ def test_presets() -> None:
     assert config.vllm.max_num_seqs == 512
     assert config.vllm.enable_chunked_prefill is True
     assert config.vllm.enable_prefix_caching is True
-    test_pass("vllm-throughput values correct")
+    print_pass("vllm-throughput values correct")
 
     # vllm-speculative
     config = ExperimentConfig(**base, **PRESETS["vllm-speculative"])
     assert config.vllm.speculative is not None
     assert config.vllm.speculative.method == "ngram"
-    test_pass("vllm-speculative values correct")
+    print_pass("vllm-speculative values correct")
 
     # vllm-memory-efficient
     config = ExperimentConfig(**base, **PRESETS["vllm-memory-efficient"])
     assert config.vllm.kv_cache_dtype == "fp8"
     assert config.vllm.gpu_memory_utilization == 0.95
-    test_pass("vllm-memory-efficient values correct")
+    print_pass("vllm-memory-efficient values correct")
 
     # vllm-low-latency
     config = ExperimentConfig(**base, **PRESETS["vllm-low-latency"])
     assert config.vllm.max_num_seqs == 32
     assert config.vllm.enforce_eager is True
-    test_pass("vllm-low-latency values correct")
+    print_pass("vllm-low-latency values correct")
 
     # pytorch-optimized
     config = ExperimentConfig(**base, **PRESETS["pytorch-optimized"])
     assert config.pytorch.attn_implementation == "flash_attention_2"
     assert config.pytorch.torch_compile == "reduce-overhead"
-    test_pass("pytorch-optimized values correct")
+    print_pass("pytorch-optimized values correct")
 
     # pytorch-speculative
     config = ExperimentConfig(**base, **PRESETS["pytorch-speculative"])
     assert config.pytorch.assisted_generation is not None
     assert config.pytorch.assisted_generation.num_tokens == 5
-    test_pass("pytorch-speculative values correct")
+    print_pass("pytorch-speculative values correct")
 
     # pytorch-compatible
     config = ExperimentConfig(**base, **PRESETS["pytorch-compatible"])
     assert config.pytorch.attn_implementation == "eager"
     assert config.pytorch.torch_compile is False
-    test_pass("pytorch-compatible values correct")
+    print_pass("pytorch-compatible values correct")
 
 
 # =============================================================================
@@ -857,7 +841,7 @@ def test_serialization() -> None:
     assert restored.vllm.max_num_seqs == 512
     assert restored.vllm.enable_prefix_caching is True
     assert restored.vllm.speculative.method == "ngram"
-    test_pass("vllm config roundtrip")
+    print_pass("vllm config roundtrip")
 
     subheader("PyTorch Config Roundtrip")
 
@@ -876,7 +860,7 @@ def test_serialization() -> None:
     assert restored.pytorch.attn_implementation == "flash_attention_2"
     assert restored.pytorch.torch_compile == "reduce-overhead"
     assert restored.pytorch.assisted_generation.num_tokens == 5
-    test_pass("pytorch config roundtrip")
+    print_pass("pytorch config roundtrip")
 
 
 # =============================================================================
@@ -926,52 +910,52 @@ def test_vllm_build_methods() -> None:
 
     # Verify all non-default params are mapped
     assert kwargs["max_num_seqs"] == 512, "max_num_seqs not mapped"
-    test_pass("max_num_seqs mapped")
+    print_pass("max_num_seqs mapped")
 
     assert kwargs["max_num_batched_tokens"] == 8192, "max_num_batched_tokens not mapped"
-    test_pass("max_num_batched_tokens mapped")
+    print_pass("max_num_batched_tokens mapped")
 
     assert kwargs["gpu_memory_utilization"] == 0.95, "gpu_memory_utilization not mapped"
-    test_pass("gpu_memory_utilization mapped")
+    print_pass("gpu_memory_utilization mapped")
 
     assert kwargs["swap_space"] == 8.0, "swap_space not mapped"
-    test_pass("swap_space mapped")
+    print_pass("swap_space mapped")
 
     assert kwargs["cpu_offload_gb"] == 2.0, "cpu_offload_gb not mapped"
-    test_pass("cpu_offload_gb mapped")
+    print_pass("cpu_offload_gb mapped")
 
     assert kwargs["enable_prefix_caching"] is True, "enable_prefix_caching not mapped"
-    test_pass("enable_prefix_caching mapped")
+    print_pass("enable_prefix_caching mapped")
 
     assert kwargs["enable_chunked_prefill"] is True, "enable_chunked_prefill not mapped"
-    test_pass("enable_chunked_prefill mapped")
+    print_pass("enable_chunked_prefill mapped")
 
     assert kwargs["kv_cache_dtype"] == "fp8", "kv_cache_dtype not mapped"
-    test_pass("kv_cache_dtype mapped")
+    print_pass("kv_cache_dtype mapped")
 
     assert kwargs["block_size"] == 32, "block_size not mapped"
-    test_pass("block_size mapped")
+    print_pass("block_size mapped")
 
     assert kwargs["max_model_len"] == 8192, "max_model_len not mapped"
-    test_pass("max_model_len mapped")
+    print_pass("max_model_len mapped")
 
     assert kwargs["max_seq_len_to_capture"] == 4096, "max_seq_len_to_capture not mapped"
-    test_pass("max_seq_len_to_capture mapped")
+    print_pass("max_seq_len_to_capture mapped")
 
     assert kwargs["enforce_eager"] is True, "enforce_eager not mapped"
-    test_pass("enforce_eager mapped")
+    print_pass("enforce_eager mapped")
 
     assert kwargs["distributed_executor_backend"] == "ray", "distributed_backend not mapped"
-    test_pass("distributed_backend mapped")
+    print_pass("distributed_backend mapped")
 
     assert kwargs["disable_custom_all_reduce"] is True, "disable_custom_all_reduce not mapped"
-    test_pass("disable_custom_all_reduce mapped")
+    print_pass("disable_custom_all_reduce mapped")
 
     assert kwargs["quantization"] == "awq", "quantization_method not mapped"
-    test_pass("quantization_method mapped")
+    print_pass("quantization_method mapped")
 
     assert kwargs["load_format"] == "safetensors", "load_format not mapped"
-    test_pass("load_format mapped")
+    print_pass("load_format mapped")
 
     # Test default values are NOT passed (clean kwargs)
     subheader("_build_engine_kwargs - Default Skipping")
@@ -985,15 +969,15 @@ def test_vllm_build_methods() -> None:
 
     # These should NOT be in kwargs since they're defaults
     assert "max_num_seqs" not in kwargs_defaults, "default max_num_seqs should not be passed"
-    test_pass("default max_num_seqs not passed")
+    print_pass("default max_num_seqs not passed")
     assert (
         "gpu_memory_utilization" not in kwargs_defaults
     ), "default gpu_memory_utilization should not be passed"
-    test_pass("default gpu_memory_utilization not passed")
+    print_pass("default gpu_memory_utilization not passed")
     assert "swap_space" not in kwargs_defaults, "default swap_space should not be passed"
-    test_pass("default swap_space not passed")
+    print_pass("default swap_space not passed")
     assert "block_size" not in kwargs_defaults, "default block_size should not be passed"
-    test_pass("default block_size not passed")
+    print_pass("default block_size not passed")
 
     subheader("_build_engine_kwargs - Speculative Config")
 
@@ -1015,16 +999,16 @@ def test_vllm_build_methods() -> None:
     spec_config = kwargs.get("speculative_config", {})
 
     assert spec_config.get("model") == "TinyLlama/TinyLlama-1.1B", "spec model not mapped"
-    test_pass("speculative.model mapped")
+    print_pass("speculative.model mapped")
 
     assert spec_config.get("num_speculative_tokens") == 5, "spec num_tokens not mapped"
-    test_pass("speculative.num_tokens mapped")
+    print_pass("speculative.num_tokens mapped")
 
     assert spec_config.get("ngram_prompt_lookup_max") == 4, "spec ngram_max not mapped"
-    test_pass("speculative.ngram_max mapped")
+    print_pass("speculative.ngram_max mapped")
 
     assert spec_config.get("draft_tensor_parallel_size") == 2, "spec draft_tp_size not mapped"
-    test_pass("speculative.draft_tp_size mapped")
+    print_pass("speculative.draft_tp_size mapped")
 
     subheader("_build_engine_kwargs - LoRA Config")
 
@@ -1044,16 +1028,16 @@ def test_vllm_build_methods() -> None:
     kwargs = backend._build_engine_kwargs(config)
 
     assert kwargs.get("enable_lora") is True, "lora.enabled not mapped"
-    test_pass("lora.enabled mapped")
+    print_pass("lora.enabled mapped")
 
     assert kwargs.get("max_loras") == 4, "lora.max_loras not mapped"
-    test_pass("lora.max_loras mapped")
+    print_pass("lora.max_loras mapped")
 
     assert kwargs.get("max_lora_rank") == 32, "lora.max_rank not mapped"
-    test_pass("lora.max_rank mapped")
+    print_pass("lora.max_rank mapped")
 
     assert kwargs.get("lora_extra_vocab_size") == 512, "lora.extra_vocab_size not mapped"
-    test_pass("lora.extra_vocab_size mapped")
+    print_pass("lora.extra_vocab_size mapped")
 
     subheader("_build_sampling_kwargs")
 
@@ -1062,8 +1046,7 @@ def test_vllm_build_methods() -> None:
         backend="vllm",
         vllm=VLLMConfig(
             best_of=3,
-            use_beam_search=True,
-            length_penalty=0.8,
+            # Note: use_beam_search and length_penalty moved to decoder.beam_search
             logprobs=5,
             logit_bias={123: -100.0, 456: 50.0},
         ),
@@ -1072,19 +1055,15 @@ def test_vllm_build_methods() -> None:
     kwargs = backend._build_sampling_kwargs(config)
 
     assert kwargs.get("best_of") == 3, "best_of not mapped"
-    test_pass("best_of mapped")
+    print_pass("best_of mapped")
 
-    assert kwargs.get("use_beam_search") is True, "use_beam_search not mapped"
-    test_pass("use_beam_search mapped")
-
-    assert kwargs.get("length_penalty") == 0.8, "length_penalty not mapped"
-    test_pass("length_penalty mapped")
+    # Note: use_beam_search and length_penalty are now in decoder.beam_search
 
     assert kwargs.get("logprobs") == 5, "logprobs not mapped"
-    test_pass("logprobs mapped")
+    print_pass("logprobs mapped")
 
     assert kwargs.get("logit_bias") == {123: -100.0, 456: 50.0}, "logit_bias not mapped"
-    test_pass("logit_bias mapped")
+    print_pass("logit_bias mapped")
 
 
 def test_pytorch_build_methods() -> None:
@@ -1117,18 +1096,18 @@ def test_pytorch_build_methods() -> None:
     assert (
         kwargs.get("attn_implementation") == "flash_attention_2"
     ), "attn_implementation not mapped"
-    test_pass("attn_implementation mapped")
+    print_pass("attn_implementation mapped")
 
     # low_cpu_mem_usage=True is the default but PyTorch backend passes it when True
     # (different from vLLM's skip-defaults pattern)
     assert kwargs.get("low_cpu_mem_usage") is True, "low_cpu_mem_usage not mapped"
-    test_pass("low_cpu_mem_usage mapped")
+    print_pass("low_cpu_mem_usage mapped")
 
     assert kwargs.get("max_memory") == {"0": "20GiB", "cpu": "30GiB"}, "max_memory not mapped"
-    test_pass("max_memory mapped")
+    print_pass("max_memory mapped")
 
     assert kwargs.get("trust_remote_code") is True, "extra params not mapped"
-    test_pass("extra params mapped")
+    print_pass("extra params mapped")
 
     # Test that sdpa (default) is NOT passed
     subheader("_build_model_kwargs - Default Skipping")
@@ -1144,21 +1123,27 @@ def test_pytorch_build_methods() -> None:
     assert (
         "attn_implementation" not in kwargs_defaults
     ), "default attn_implementation should not be passed"
-    test_pass("default attn_implementation not passed")
+    print_pass("default attn_implementation not passed")
 
     subheader("_build_generation_kwargs")
 
-    # Note: Backend only passes non-default values.
-    # num_beams default=1, only passed when >1
-    # early_stopping/length_penalty only passed with beam search
+    # Note: Beam search params (num_beams, early_stopping, length_penalty) moved to decoder.beam_search
+    # Backend reads from config.decoder.beam_search
+    from llm_energy_measure.config.models import BeamSearchConfig, DecoderConfig
+
     config = ExperimentConfig(
         **base,
         backend="pytorch",
+        decoder=DecoderConfig(
+            beam_search=BeamSearchConfig(
+                enabled=True,
+                num_beams=4,
+                early_stopping=True,
+                length_penalty=0.8,
+            ),
+        ),
         pytorch=PyTorchConfig(
             use_cache=False,  # non-default (default=True)
-            num_beams=4,  # non-default (default=1)
-            early_stopping=True,  # non-default, only applies with beam search
-            length_penalty=0.8,  # non-default (default=1.0)
             output_scores=True,  # non-default (default=False)
             return_dict_in_generate=True,  # non-default (default=False)
         ),
@@ -1167,22 +1152,25 @@ def test_pytorch_build_methods() -> None:
     kwargs = backend._build_generation_kwargs(config)
 
     assert kwargs.get("use_cache") is False, "use_cache not mapped"
-    test_pass("use_cache mapped")
+    print_pass("use_cache mapped")
 
-    assert kwargs.get("num_beams") == 4, "num_beams not mapped"
-    test_pass("num_beams mapped")
+    # Beam search params now from decoder.beam_search
+    assert kwargs.get("num_beams") == 4, "num_beams not mapped from decoder.beam_search"
+    print_pass("num_beams mapped from decoder.beam_search")
 
-    assert kwargs.get("early_stopping") is True, "early_stopping not mapped"
-    test_pass("early_stopping mapped")
+    assert (
+        kwargs.get("early_stopping") is True
+    ), "early_stopping not mapped from decoder.beam_search"
+    print_pass("early_stopping mapped from decoder.beam_search")
 
-    assert kwargs.get("length_penalty") == 0.8, "length_penalty not mapped"
-    test_pass("length_penalty mapped")
+    assert kwargs.get("length_penalty") == 0.8, "length_penalty not mapped from decoder.beam_search"
+    print_pass("length_penalty mapped from decoder.beam_search")
 
     assert kwargs.get("output_scores") is True, "output_scores not mapped"
-    test_pass("output_scores mapped")
+    print_pass("output_scores mapped")
 
     assert kwargs.get("return_dict_in_generate") is True, "return_dict_in_generate not mapped"
-    test_pass("return_dict_in_generate mapped")
+    print_pass("return_dict_in_generate mapped")
 
     # Test default values are NOT passed
     subheader("_build_generation_kwargs - Default Skipping")
@@ -1196,11 +1184,13 @@ def test_pytorch_build_methods() -> None:
 
     # These should NOT be in kwargs since they're defaults
     assert "use_cache" not in kwargs_defaults, "default use_cache should not be passed"
-    test_pass("default use_cache not passed")
-    assert "num_beams" not in kwargs_defaults, "default num_beams should not be passed"
-    test_pass("default num_beams not passed")
+    print_pass("default use_cache not passed")
+    assert (
+        "num_beams" not in kwargs_defaults
+    ), "default num_beams should not be passed (beam_search disabled)"
+    print_pass("default num_beams not passed")
     assert "output_scores" not in kwargs_defaults, "default output_scores should not be passed"
-    test_pass("default output_scores not passed")
+    print_pass("default output_scores not passed")
 
 
 # =============================================================================

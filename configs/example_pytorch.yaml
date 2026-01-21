@@ -1,0 +1,230 @@
+# =============================================================================
+# FULL PyTorch Backend Configuration
+# =============================================================================
+# Complete reference for all available parameters when using backend: pytorch
+# Copy this file and modify for your experiments.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# REQUIRED: Experiment Identity
+# -----------------------------------------------------------------------------
+config_name: pytorch-full-example
+model_name: Qwen/Qwen2.5-0.5B  # Non-gated. For Llama: meta-llama/Llama-2-7b-hf (requires HF_TOKEN)
+
+# Optional: LoRA adapter (HuggingFace Hub ID or local path)
+# adapter: tloen/alpaca-lora-7b  # Alpaca instruction-tuned adapter for Llama-2-7b
+
+# -----------------------------------------------------------------------------
+# DATASET CONFIGURATION
+# -----------------------------------------------------------------------------
+# Built-in aliases: ai_energy_score, alpaca, sharegpt, gsm8k, mmlu
+# Or use any HuggingFace dataset path (e.g., tatsu-lab/alpaca)
+dataset:
+  name: ai_energy_score
+  sample_size: 10
+  split: train
+  # column: text  # Auto-detected if not set
+
+# Alternative: Advanced prompt configuration (mutually exclusive with dataset)
+# prompts:
+#   type: huggingface
+#   dataset: tatsu-lab/alpaca
+#   split: train
+#   subset: null
+#   column: instruction
+#   sample_size: 100
+#   shuffle: false
+#   seed: 42
+
+# prompts:
+#   type: file
+#   path: /path/to/prompts.txt
+
+# -----------------------------------------------------------------------------
+# TOKEN LIMITS
+# -----------------------------------------------------------------------------
+max_input_tokens: 512
+max_output_tokens: 128
+min_output_tokens: 0  # Minimum tokens to generate (0 = no minimum)
+
+# -----------------------------------------------------------------------------
+# GPU CONFIGURATION AVAILEBLE TO TOOL
+# -----------------------------------------------------------------------------
+gpus: [0, 1]
+
+# -----------------------------------------------------------------------------
+# PRECISION
+# -----------------------------------------------------------------------------
+# Options: float32 | float16 | bfloat16
+fp_precision: float16
+
+# -----------------------------------------------------------------------------
+# BACKEND
+# -----------------------------------------------------------------------------
+backend: pytorch
+
+# -----------------------------------------------------------------------------
+# MODEL PROPERTIES
+# -----------------------------------------------------------------------------
+is_encoder_decoder: false  # Set true for T5, BART, etc.
+task_type: text_generation  # text_generation | translation | summarisation
+inference_type: pure_generative  # pure_generative | reasoning
+
+# -----------------------------------------------------------------------------
+# BATCHING CONFIGURATION
+# -----------------------------------------------------------------------------
+batching:
+  batch_size: 1
+  # Strategies (MLPerf terminology):
+  # - static: Fixed batch size, pads to uniform length
+  # - dynamic: Token-aware batching, groups by token budget
+  # - sorted_static: Sort by length then static batches (reduces padding waste)
+  # - sorted_dynamic: Sort by length + dynamic token budget (optimal packing)
+  strategy: static
+  max_tokens_per_batch: null  # For dynamic strategies (defaults to max_input_tokens)
+  # dynamic_batching: false  # [Deprecated] Use strategy='dynamic' instead
+
+# -----------------------------------------------------------------------------
+# PARALLELISM CONFIGURATION (Multi-GPU)
+# -----------------------------------------------------------------------------
+parallelism:
+  # Strategies:
+  # - none: Single GPU or device_map='auto'
+  # - tensor_parallel: Split layers horizontally across GPUs
+  # - data_parallel: Replicate model, split batches
+  # Note: pipeline_parallel NOT supported for PyTorch backend
+  strategy: none
+  degree: 1  # Use degree > 1 with tensor_parallel or data_parallel
+  # tp_plan: auto  # For tensor_parallel (uses model's predefined config)
+
+# Legacy (deprecated, use parallelism instead):
+# num_processes: 1
+# sharding:
+#   strategy: none
+#   num_shards: 1
+
+# -----------------------------------------------------------------------------
+# DECODER / GENERATION SETTINGS
+# -----------------------------------------------------------------------------
+decoder:
+  # Presets: deterministic | standard | creative | factual
+  # Setting a preset applies default values, then your overrides apply on top
+  preset: null
+
+  # Core sampling
+  temperature: 1.0  # 0.0 = greedy decoding
+  do_sample: true   # Enable sampling (ignored if temp=0)
+
+  # Nucleus/top sampling
+  top_p: 1.0   # Top-p nucleus sampling (1.0 = disabled)
+  top_k: 50    # Top-k sampling (0 = disabled)
+  min_p: 0.0   # Min probability relative to top token (0 = disabled)
+
+  # Repetition control
+  repetition_penalty: 1.0      # 1.0 = no penalty
+  no_repeat_ngram_size: 0      # Prevent n-gram repetition (0 = disabled)
+
+  # Beam search configuration
+  beam_search:
+    enabled: false
+    num_beams: 1       # 1 = greedy, >1 = beam search
+    length_penalty: 1.0        # >1 favours longer, <1 favours shorter
+    early_stopping: false      # Stop when num_beams best sequences complete
+    no_repeat_ngram_size: 0    # Prevent n-gram repetition within beam
+
+# -----------------------------------------------------------------------------
+# TRAFFIC SIMULATION (MLPerf-style load testing)
+# -----------------------------------------------------------------------------
+traffic_simulation:
+  enabled: false
+  mode: poisson    # constant | poisson
+  target_qps: 1.0  # Queries per second
+  seed: null       # Random seed for reproducible arrivals
+
+# -----------------------------------------------------------------------------
+# STREAMING (TTFT/ITL latency measurement)
+# -----------------------------------------------------------------------------
+streaming: false
+streaming_warmup_requests: 5  # Warmup requests excluded from stats
+
+# -----------------------------------------------------------------------------
+# QUANTIZATION (BitsAndBytes)
+# -----------------------------------------------------------------------------
+quantization:
+  quantization: false
+  load_in_4bit: false
+  load_in_8bit: false
+  bnb_4bit_compute_dtype: float16  # Compute dtype for 4-bit
+  bnb_4bit_quant_type: nf4         # nf4 | fp4
+  bnb_4bit_use_double_quant: false
+
+# -----------------------------------------------------------------------------
+# SCHEDULE (Daemon mode)
+# -----------------------------------------------------------------------------
+schedule:
+  enabled: false
+  interval: null       # e.g., '6h', '30m', '1d'
+  at: null             # e.g., '09:00', '14:30'
+  days: null           # e.g., ['mon', 'wed', 'fri'] or ['weekdays']
+  total_duration: 24h  # Total daemon duration
+
+# -----------------------------------------------------------------------------
+# I/O CONFIGURATION
+# -----------------------------------------------------------------------------
+io:
+  results_dir: null  # Override default results directory
+
+# -----------------------------------------------------------------------------
+# EXPERIMENT TRACKING
+# -----------------------------------------------------------------------------
+num_cycles: 1        # Cycles for statistical robustness (1-10)
+query_rate: 1.0      # Queries per second
+random_seed: null    # Random seed for reproducibility (null = non-deterministic)
+save_outputs: false  # Save generated text
+decode_token_to_text: false
+
+# -----------------------------------------------------------------------------
+# PYTORCH-SPECIFIC CONFIGURATION
+# -----------------------------------------------------------------------------
+pytorch:
+  # ---- Attention Implementation ----
+  # Options: sdpa (PyTorch native), flash_attention_2 (fastest), eager (compatible)
+  attn_implementation: sdpa
+
+  # ---- Compilation ----
+  # Options: false, true/'default', 'reduce-overhead' (small batches), 'max-autotune' (slowest compile)
+  torch_compile: false
+
+  # ---- Legacy Optimisations ----
+  use_bettertransformer: false  # Pre-PyTorch 2.0 optimisation
+
+  # ---- KV Caching ----
+  use_cache: true
+  # Cache implementations:
+  # - dynamic: Default, flexible
+  # - static: Enables CUDA graphs (lower energy)
+  # - hybrid: Balance of both
+  # - sliding_window: For long context
+  cache_implementation: null
+
+  # ---- Memory Management ----
+  low_cpu_mem_usage: true  # Memory-efficient loading
+  max_memory: null         # Per-device limits, e.g., {"0": "10GiB", "cpu": "30GiB"}
+
+  # ---- Assisted Generation (Speculative Decoding) ----
+  assisted_generation: null
+  # assisted_generation:
+  #   model: distilgpt2  # Small draft model
+  #   num_tokens: 5      # Tokens to speculate per step
+
+  # ---- Generation Output ----
+  output_scores: false          # Return generation scores/logprobs
+  return_dict_in_generate: false
+
+  # ---- Escape Hatch ----
+  extra: {}  # Additional kwargs passed to model.generate()
+
+# -----------------------------------------------------------------------------
+# EXTRA METADATA
+# -----------------------------------------------------------------------------
+extra_metadata: {}

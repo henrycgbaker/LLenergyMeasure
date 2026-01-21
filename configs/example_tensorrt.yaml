@@ -1,0 +1,242 @@
+# =============================================================================
+# FULL TensorRT-LLM Backend Configuration
+# =============================================================================
+# Complete reference for all available parameters when using backend: tensorrt
+# Copy this file and modify for your experiments.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# REQUIRED: Experiment Identity
+# -----------------------------------------------------------------------------
+config_name: tensorrt-full-example
+model_name: Qwen/Qwen2.5-0.5B  # Non-gated. For Llama: meta-llama/Llama-2-7b-hf (requires HF_TOKEN)
+
+# Optional: LoRA adapter (HuggingFace Hub ID or local path)
+# adapter: tloen/alpaca-lora-7b  # Alpaca instruction-tuned adapter for Llama-2-7b
+
+# -----------------------------------------------------------------------------
+# DATASET CONFIGURATION
+# -----------------------------------------------------------------------------
+# Built-in aliases: ai_energy_score, alpaca, sharegpt, gsm8k, mmlu
+# Or use any HuggingFace dataset path (e.g., tatsu-lab/alpaca)
+dataset:
+  name: ai_energy_score
+  sample_size: 10
+  split: train
+  # column: text  # Auto-detected if not set
+
+# Alternative: Advanced prompt configuration (mutually exclusive with dataset)
+# prompts:
+#   type: huggingface
+#   dataset: tatsu-lab/alpaca
+#   split: train
+#   subset: null
+#   column: instruction
+#   sample_size: 100
+#   shuffle: false
+#   seed: 42
+
+# -----------------------------------------------------------------------------
+# TOKEN LIMITS
+# -----------------------------------------------------------------------------
+max_input_tokens: 512
+max_output_tokens: 128
+min_output_tokens: 0
+
+# -----------------------------------------------------------------------------
+# GPU CONFIGURATION
+# -----------------------------------------------------------------------------
+gpus: [0, 1]
+
+# -----------------------------------------------------------------------------
+# PRECISION
+# -----------------------------------------------------------------------------
+fp_precision: float16  # float32 | float16 | bfloat16
+
+# -----------------------------------------------------------------------------
+# BACKEND
+# -----------------------------------------------------------------------------
+backend: tensorrt
+
+# -----------------------------------------------------------------------------
+# MODEL PROPERTIES
+# -----------------------------------------------------------------------------
+is_encoder_decoder: false
+task_type: text_generation
+inference_type: pure_generative
+
+# -----------------------------------------------------------------------------
+# BATCHING CONFIGURATION
+# -----------------------------------------------------------------------------
+batching:
+  batch_size: 1
+  strategy: static  # static | dynamic | sorted_static | sorted_dynamic
+  max_tokens_per_batch: null
+
+# -----------------------------------------------------------------------------
+# PARALLELISM CONFIGURATION (Multi-GPU)
+# -----------------------------------------------------------------------------
+parallelism:
+  # TensorRT supports all strategies:
+  # - none: Single GPU
+  # - tensor_parallel: Split layers horizontally
+  # - pipeline_parallel: Split model vertically into stages
+  # - data_parallel: Replicate model, split batches
+  strategy: none
+  degree: 1  # Use degree > 1 with tensor_parallel or data_parallel
+  # tp_plan: auto
+
+# -----------------------------------------------------------------------------
+# DECODER / GENERATION SETTINGS
+# -----------------------------------------------------------------------------
+decoder:
+  preset: null  # deterministic | standard | creative | factual
+  temperature: 1.0
+  do_sample: true
+  top_p: 1.0
+  top_k: 50
+  min_p: 0.0
+  repetition_penalty: 1.0
+  no_repeat_ngram_size: 0
+
+  beam_search:
+    enabled: false
+    num_beams: 1
+    length_penalty: 1.0
+    early_stopping: false
+    no_repeat_ngram_size: 0
+
+# -----------------------------------------------------------------------------
+# TRAFFIC SIMULATION
+# -----------------------------------------------------------------------------
+traffic_simulation:
+  enabled: false
+  mode: poisson
+  target_qps: 1.0
+  seed: null
+
+# -----------------------------------------------------------------------------
+# STREAMING
+# -----------------------------------------------------------------------------
+streaming: false
+streaming_warmup_requests: 5
+
+# -----------------------------------------------------------------------------
+# QUANTIZATION (Shared config - for BitsAndBytes style)
+# -----------------------------------------------------------------------------
+quantization:
+  quantization: false
+  load_in_4bit: false
+  load_in_8bit: false
+  bnb_4bit_compute_dtype: float16
+  bnb_4bit_quant_type: nf4
+  bnb_4bit_use_double_quant: false
+
+# -----------------------------------------------------------------------------
+# SCHEDULE
+# -----------------------------------------------------------------------------
+schedule:
+  enabled: false
+  interval: null
+  at: null
+  days: null
+  total_duration: 24h
+
+# -----------------------------------------------------------------------------
+# I/O CONFIGURATION
+# -----------------------------------------------------------------------------
+io:
+  results_dir: null
+
+# -----------------------------------------------------------------------------
+# EXPERIMENT TRACKING
+# -----------------------------------------------------------------------------
+num_cycles: 1
+query_rate: 1.0
+random_seed: null
+save_outputs: false
+decode_token_to_text: false
+
+# -----------------------------------------------------------------------------
+# TENSORRT-LLM SPECIFIC CONFIGURATION
+# -----------------------------------------------------------------------------
+tensorrt:
+  # ===========================================================================
+  # Engine Source
+  # ===========================================================================
+  # Path to pre-compiled TRT engine directory
+  # If not set, engine will be built from HuggingFace checkpoint
+  engine_path: null
+
+  # ===========================================================================
+  # Build Configuration (used when compiling from HF checkpoint)
+  # ===========================================================================
+  max_batch_size: 8              # Maximum batch size for compiled engine (1-256)
+  max_input_len: null            # Maximum input sequence length (null=model default)
+  max_output_len: null           # Maximum output tokens (null=config.max_output_tokens)
+  builder_opt_level: 3           # Optimisation level 0-5 (higher=slower build, faster inference)
+  strongly_typed: true           # Strong typing for FP8 (recommended for Hopper+)
+
+  # ===========================================================================
+  # Quantization (TensorRT-specific methods)
+  # ===========================================================================
+  quantization:
+    # Methods:
+    # - none: No quantization (FP16/BF16)
+    # - fp8: FP8 quantization (Hopper+ GPUs, minimal accuracy loss)
+    # - int8_sq: INT8 SmoothQuant (requires calibration)
+    # - int8_weight_only: INT8 weights, FP16 compute
+    # - int4_awq: INT4 AWQ (pre-quantized checkpoint)
+    # - int4_gptq: INT4 GPTQ (pre-quantized checkpoint)
+    method: none
+
+    # Calibration config (required for int8_sq)
+    calibration: null
+    # calibration:
+    #   dataset: wikitext        # HuggingFace dataset for calibration
+    #   split: train
+    #   num_samples: 512         # Samples for calibration (64-4096)
+    #   max_length: 2048         # Max sequence length for calibration
+
+  # ===========================================================================
+  # Parallelism (supplements shared parallelism config)
+  # ===========================================================================
+  # Note: Use parallelism.degree with strategy=tensor_parallel for TP
+  pp_size: 1  # Pipeline parallel size (for very large models)
+
+  # ===========================================================================
+  # Build Optimisation
+  # ===========================================================================
+  multiple_profiles: false  # Multiple TensorRT profiles for different input shapes
+
+  # ===========================================================================
+  # Runtime Options
+  # ===========================================================================
+  kv_cache_type: paged           # paged (memory efficient) | continuous
+  enable_chunked_context: true   # Chunked context for long sequences
+  max_num_tokens: null           # Maximum tokens per iteration (inflight batching)
+  gpu_memory_utilization: 0.9    # Fraction of GPU memory for KV cache (0.5-0.99)
+  enable_kv_cache_reuse: false   # KV cache reuse for prefix caching (high energy impact)
+
+  # ===========================================================================
+  # Cache Control
+  # ===========================================================================
+  engine_cache_dir: null   # Directory for caching compiled engines
+  force_rebuild: false     # Force engine rebuild even if cached
+
+  # ===========================================================================
+  # Speculative Decoding
+  # ===========================================================================
+  draft_model: null        # Draft model for speculative decoding
+  num_draft_tokens: 5      # Tokens to speculate per step (1-10)
+
+  # ===========================================================================
+  # Escape Hatches
+  # ===========================================================================
+  extra_build_args: {}     # Additional kwargs for trtllm-build
+  extra_runtime_args: {}   # Additional kwargs for TRT-LLM runtime
+
+# -----------------------------------------------------------------------------
+# EXTRA METADATA
+# -----------------------------------------------------------------------------
+extra_metadata: {}
