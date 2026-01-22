@@ -12,6 +12,7 @@ FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS base
 
 # System dependencies shared by all backends
 # gosu: for dropping privileges in entrypoint (PUID/PGID support)
+# build-essential: Required for Triton JIT compilation (vLLM LoRA, etc.)
 # Python 3.10: Required for tensorrt-llm compatibility (only supports 3.10/3.12)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
@@ -21,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10-venv \
     python3.10-dev \
     python3-pip \
+    build-essential \
     libgomp1 \
     git \
     curl \
@@ -42,11 +44,12 @@ RUN pip install --no-cache-dir --upgrade pip
 WORKDIR /app
 
 # Create writable directories for non-root users
+# - /app: working directory (TensorRT writes timing cache here)
 # - results: experiment outputs
 # - .state: experiment state/resumption
 # - .cache/huggingface: model cache
 RUN mkdir -p /app/results /app/.state /app/.cache/huggingface \
-    && chmod 777 /app/results /app/.state /app/.cache/huggingface
+    && chmod 777 /app /app/results /app/.state /app/.cache/huggingface
 
 # HuggingFace cache location
 ENV HF_HOME=/app/.cache/huggingface

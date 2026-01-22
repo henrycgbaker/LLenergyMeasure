@@ -282,7 +282,10 @@ The validator (`validate_config()`) checks for problematic configurations and re
 | Quantization | `quantization=True` with `fp_precision=float32` | warning | Quantization typically uses float16 compute, not float32 |
 | Quantization | `quantization=True` without 4bit/8bit specified | error | Must specify load_in_4bit or load_in_8bit |
 | Batching | Dynamic strategy without `max_tokens_per_batch` | info | Will use max_input_tokens as token budget |
+| Batching | Dynamic strategy with non-default `batch_size` | warning | batch_size is ignored for dynamic strategies |
 | Batching | Sorted strategy with `batch_size=1` | info | Sorting provides no benefit with batch_size=1 |
+| Parallelism | `data_parallel` with vLLM backend | error | data_parallel not supported for vLLM |
+| Parallelism | `degree > len(gpus)` | error | degree exceeds available GPUs |
 | Sharding | `num_shards > len(gpus)` | error | num_shards exceeds available GPUs |
 | Sharding | Sharding strategy with single GPU | info | Sharding provides no benefit with single GPU |
 | Sharding | TP with unsupported model | warning | Model may not support HF native tensor parallelism |
@@ -415,13 +418,23 @@ llm-energy-measure config new --preset benchmark
 
 Each inference backend exposes its own configuration section for advanced optimisation. These are defined in `backend_configs.py` and set via `vllm:` or `pytorch:` blocks in YAML.
 
+**Important:** Backend-specific settings are IN ADDITION to shared config (model, batching, decoder, etc.). Some shared settings map to backend params, others may be overridden:
+
+| Shared Config | vLLM Mapping | Notes |
+|--------------|--------------|-------|
+| `parallelism.degree` | `tensor_parallel_size` | Automatic mapping |
+| `batching.batch_size` | Ignored | vLLM uses continuous batching via `max_num_seqs` |
+| `decoder.*` | `SamplingParams` | Converted to vLLM sampling params |
+| `quantization.*` | May be overridden | `vllm.quantization_method` takes precedence |
+
 ```yaml
 # vLLM backend
 backend: vllm
 vllm:
-  gpu_memory_utilization: 0.9
-  enable_prefix_caching: true
-  kv_cache_dtype: fp8
+  gpu_memory_utilization: 0.9   # Most important: controls KV cache size
+  max_num_seqs: 256             # Max concurrent sequences (replaces batch_size)
+  enable_prefix_caching: true   # 30-50% throughput gain for repeated prefixes
+  kv_cache_dtype: fp8           # Memory-efficient KV cache
 
 # PyTorch backend (default)
 backend: pytorch
@@ -429,6 +442,8 @@ pytorch:
   attn_implementation: flash_attention_2
   torch_compile: reduce-overhead
 ```
+
+**Most users only need:** `gpu_memory_utilization`, `max_num_seqs`, `enable_prefix_caching`
 
 ### backend_configs.py
 
@@ -516,17 +531,19 @@ Industry-standard batching strategies for benchmarking:
 
 ```yaml
 batching:
-  batch_size: 4
   strategy: sorted_dynamic    # static | dynamic | sorted_static | sorted_dynamic
-  max_tokens_per_batch: 512   # For dynamic strategies
+  batch_size: 4               # Only used with static/sorted_static strategies
+  max_tokens_per_batch: 512   # Only used with dynamic/sorted_dynamic strategies
 ```
 
-| Strategy | Description |
-|----------|-------------|
-| `static` | Fixed batch size (default) |
-| `dynamic` | Token-aware batching respecting `max_tokens_per_batch` |
-| `sorted_static` | Sort prompts by length, then fixed batches |
-| `sorted_dynamic` | Sort prompts by length, then token-aware batching |
+| Strategy | Description | Key Parameter |
+|----------|-------------|---------------|
+| `static` | Fixed batch size (default) | `batch_size` |
+| `dynamic` | Token-aware batching by token budget | `max_tokens_per_batch` |
+| `sorted_static` | Sort prompts by length, then fixed batches | `batch_size` |
+| `sorted_dynamic` | Sort prompts by length, then token-aware batching | `max_tokens_per_batch` |
+
+**Important:** `batch_size` is ignored for dynamic strategies. Dynamic strategies group prompts by total token count using `max_tokens_per_batch` instead of a fixed number of prompts.
 
 **Length sorting** reduces padding waste by grouping similar-length prompts together.
 

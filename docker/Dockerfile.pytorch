@@ -29,7 +29,8 @@ COPY pyproject.toml poetry.lock* README.md ./
 COPY src/ ./src/
 
 # Install the package with PyTorch backend extras (torch already installed)
-RUN pip install --no-cache-dir ".[pytorch]"
+# Also install sentencepiece for Llama/Qwen tokenizers
+RUN pip install --no-cache-dir ".[pytorch]" sentencepiece
 
 # ============================================================================
 # Stage 2: Runtime - Minimal production image
@@ -57,7 +58,7 @@ RUN pip install --no-cache-dir \
 # (deps cached, source can be mounted at runtime for editable install)
 COPY pyproject.toml poetry.lock* README.md ./
 COPY src/ ./src/
-RUN pip install --no-cache-dir ".[pytorch,dev]"
+RUN pip install --no-cache-dir ".[pytorch,dev]" sentencepiece
 
 # Source can be mounted at runtime; run `pip install -e ".[pytorch,dev]"` for editable
 ENTRYPOINT []

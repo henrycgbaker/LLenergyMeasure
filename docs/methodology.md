@@ -16,16 +16,16 @@ These metrics are combined to derive efficiency ratios that enable fair comparis
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Experiment Runner                         │
+│                    Experiment Runner                        │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │
 │  │   Energy    │  │  Inference  │  │   FLOPs     │          │
 │  │   Backend   │  │   Engine    │  │  Estimator  │          │
 │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘          │
-│         │                │                │                  │
-│         ▼                ▼                ▼                  │
+│         │                │                │                 │
+│         ▼                ▼                ▼                 │
 │  ┌─────────────────────────────────────────────────┐        │
-│  │              Raw Process Results                 │        │
+│  │              Raw Process Results                │        │
 │  │  (per-GPU: tokens, energy, FLOPs, timestamps)   │        │
 │  └──────────────────────┬──────────────────────────┘        │
 └─────────────────────────┼───────────────────────────────────┘

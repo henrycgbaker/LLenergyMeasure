@@ -10,10 +10,10 @@ A Python framework for measuring LLM inference efficiency, including energy cons
 
 - **Energy Measurement** - Track GPU, CPU, and RAM energy via CodeCarbon
 - **Throughput Metrics** - Tokens/second, latency, batch processing stats
-- **FLOPs Estimation** - Multiple methods (calflops, architecture-based, parameter-based)
-- **Multi-GPU Support** - Distributed inference via `accelerate`
-- **Tensor & Pipeline Parallelism** - Native PyTorch TP/PP for large model inference
-- **Flexible Configuration** - YAML configs with inheritance and presets
+- **FLOPs Estimation** - Multiple methods (calflops, architecture-based, parameter-based - also profiler options)
+- **Multi-GPU Support** - Distributed inference via `accelerate`, vLLM, or TensorRT
+- **Tensor & Pipeline Parallelism** - Native PyTorch TP/PP for large model inference (TODO:  update based on vLLM / TensorRT)
+- **Flexible Configuration** - YAML configs with inheritance and presets (TODO update)
 - **Docker Ready** - GPU-enabled containerisation
 
 ## Implemented Testing Parameters

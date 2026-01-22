@@ -80,19 +80,41 @@ See [config/README.md](src/llm_energy_measure/config/README.md) for full preset 
 
 ## Running the Tool
 
-| Mode | Setup |
-|------|-------|
-| Host (local) | `poetry install --with dev` |
-| Docker prod | `docker compose build` |
-| Docker dev | `docker compose --profile dev build` |
-| VS Code devcontainer | "Reopen in Container" |
+### Backend Selection
+
+| Backend | Requirements | Install | Use Case |
+|---------|--------------|---------|----------|
+| **pytorch** | Any NVIDIA GPU | `pip install -e ".[pytorch]"` | Default, most compatible |
+| **vllm** | NVIDIA GPU, Linux only | `pip install -e ".[vllm]"` | High throughput |
+| **tensorrt** | Ampere+ GPU, CUDA 12.x, Linux | `pip install -e ".[tensorrt]"` | Highest performance |
+
+**⚠️ Backend Conflict**: vLLM and TensorRT-LLM have conflicting dependencies. Install only ONE at a time, or use separate Docker images.
+
+**TensorRT GPU Requirements**: Compute capability >= 8.0 (A100, A10, RTX 30xx/40xx, H100, L40). NOT supported: V100, T4, RTX 20xx, GTX.
+
+### Installation
 
 ```bash
-# Host
-poetry run llm-energy-measure experiment configs/test.yaml --dataset alpaca -n 100
+# Local (pick ONE backend)
+pip install -e ".[pytorch]"     # Most users
+pip install -e ".[vllm]"        # High throughput
+pip install -e ".[tensorrt]"    # Requires Ampere+ GPU
 
-# Docker
-docker compose run --rm llm-energy-measure-app llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
+# Docker (recommended for isolation)
+docker compose build pytorch    # Build PyTorch image
+docker compose build vllm       # Build vLLM image
+docker compose build tensorrt   # Build TensorRT image
+```
+
+### Running Experiments
+
+```bash
+# Local
+lem experiment configs/example_pytorch.yaml --dataset alpaca -n 100
+
+# Docker (use matching backend service)
+docker compose run --rm pytorch lem experiment /app/configs/example_pytorch.yaml -n 100
+docker compose run --rm vllm lem experiment /app/configs/example_vllm.yaml -n 100
 ```
 
 ## Development

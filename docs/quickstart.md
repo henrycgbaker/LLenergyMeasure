@@ -7,53 +7,96 @@ This guide walks you through your first LLM efficiency measurement experiment.
 - Python 3.10+
 - NVIDIA GPU with CUDA support
 - HuggingFace account (for gated models like Llama)
+- Docker (recommended for backend flexibility)
 
 ## Installation
 
-### Option 1: Local (pip)
+### Understanding Backends
+
+This tool supports three inference backends with different trade-offs:
+
+| Backend | Requirements | Best For |
+|---------|--------------|----------|
+| **PyTorch** | Any NVIDIA GPU | Development, flexibility, widest compatibility |
+| **vLLM** | NVIDIA GPU, Linux only | High throughput, continuous batching |
+| **TensorRT** | Ampere+ GPU¹, CUDA 12.x, Linux | Maximum performance (compiled inference) |
+
+¹ Ampere+ = compute capability ≥ 8.0: A100, A10, RTX 30xx/40xx, H100, L40. **NOT supported**: V100, T4, RTX 20xx, GTX.
+
+**Important**: vLLM and TensorRT-LLM have **conflicting dependencies** and cannot coexist in the same Python environment. Choose ONE approach:
+
+- **Local install**: Pick one backend per environment
+- **Docker** (recommended): Each backend is an isolated image—switch freely
+
+---
+
+### Option 1: Local Development (poetry/pip)
+
+Use this for development or if you only need **one backend**.
 
 ```bash
-# Clone and install
+# Clone
 git clone https://github.com/henrycgbaker/llm-efficiency-measurement-tool
 cd llm-energy-measure
 
+# Create environment
 conda create -n llm-energy python=3.10
 conda activate llm-energy
-pip install -e .
+
+# Install with ONE backend (pick one)
+pip install -e ".[pytorch]"     # Most compatible, recommended for dev
+pip install -e ".[vllm]"        # High throughput (Linux only)
+pip install -e ".[tensorrt]"    # Highest performance (Ampere+ GPU required)
+
+# Add dev tools
+pip install -e ".[pytorch,dev]"  # Backend + dev tools
 
 # Verify
 lem --help
 ```
 
-### Option 2: Docker
+**Switching backends locally**: You must create separate conda environments:
+```bash
+conda create -n llm-vllm python=3.10 && conda activate llm-vllm
+pip install -e ".[vllm]"
+```
+
+---
+
+### Option 2: Docker (Recommended)
+
+Use Docker to run experiments with **any backend** without dependency conflicts. Each backend is a separate image with isolated dependencies.
 
 ```bash
-# Clone and build
+# Clone
 git clone https://github.com/henrycgbaker/llm-efficiency-measurement-tool
 cd llm-energy-measure
-make docker-build-pytorch  # Or docker-build-all for all backends
 
-# Run commands via make
-make lem CMD="--help"
+# Build the backend you need
+docker compose build pytorch    # Most users
+docker compose build vllm       # High throughput
+docker compose build tensorrt   # Highest performance (Ampere+ only)
+
+# Or build all backends
+docker compose build base pytorch vllm tensorrt
 ```
 
-**Docker backends:**
-
-| Backend | Build Command | Best For |
-|---------|--------------|----------|
-| PyTorch | `make docker-build-pytorch` | Development, flexibility (default) |
-| vLLM | `make docker-build-vllm` | High throughput, continuous batching |
-| TensorRT | `make docker-build-tensorrt` | Maximum performance (compiled) |
-| All | `make docker-build-all` | Build all backends at once |
-
-**Running commands in Docker:**
+**Running experiments:**
 ```bash
-# Via make (recommended)
-make lem CMD="experiment configs/my_experiment.yaml"
+# Run with specific backend
+docker compose run --rm pytorch lem experiment /app/configs/example_pytorch.yaml
+docker compose run --rm vllm lem experiment /app/configs/example_vllm.yaml
+docker compose run --rm tensorrt lem experiment /app/configs/example_tensorrt.yaml
 
-# Or directly
-docker compose run --rm pytorch lem experiment /app/configs/my_experiment.yaml
+# Interactive shell
+docker compose run --rm pytorch /bin/bash
 ```
+
+**Why Docker is recommended:**
+- Switch between backends without reinstalling
+- Reproducible environments across machines
+- No dependency conflicts
+- Handles CUDA/driver compatibility
 
 ## Environment Variables
 
