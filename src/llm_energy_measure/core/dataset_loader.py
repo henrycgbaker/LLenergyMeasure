@@ -91,7 +91,6 @@ def load_prompts_from_hf(config: HuggingFacePromptSource) -> list[str]:
             config.dataset,
             config.subset,
             split=config.split,
-            trust_remote_code=True,
         )
 
         # Determine column

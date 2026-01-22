@@ -21,10 +21,10 @@ llm-energy-measure [OPTIONS] COMMAND [ARGS]
 
 ### experiment
 
-Run an experiment with automatic `accelerate launch` handling and result aggregation.
+Run an experiment with automatic launcher handling and result aggregation.
 
 ```bash
-llm-energy-measure experiment [config.yaml] [OPTIONS]
+llm-energy-measure experiment [path/to/config.yaml] [OPTIONS]
 ```
 
 **Prompt Source Options:**
@@ -125,6 +125,8 @@ llm-energy-measure batch "configs/*.yaml" --dry-run
 
 ### schedule
 
+TODO: ADD THIS AS A RUNNING CONTAINER SERVICE?
+
 Run experiments on a schedule (daemon mode) for temporal variation studies.
 
 ```bash
@@ -167,7 +169,9 @@ llm-energy-measure schedule --preset benchmark --model meta-llama/Llama-2-7b-hf 
 
 ### run
 
-Low-level inference command (called by `accelerate launch`). Use `experiment` instead.
+TODO DEEGRADED?
+
+Low-level inference command (called by `experiment`). Recommended to use `experiment` instead.
 
 ```bash
 llm-energy-measure run <config.yaml> [OPTIONS]
@@ -187,7 +191,7 @@ llm-energy-measure run <config.yaml> [OPTIONS]
 
 ### aggregate
 
-Aggregate raw per-process results into final metrics.
+Aggregate raw per-process results into final metrics. Called by `experiment`.
 
 ```bash
 llm-energy-measure aggregate [experiment_id] [OPTIONS]
@@ -318,7 +322,7 @@ llm-energy-measure results show <exp_id> [OPTIONS]
 
 ### gpus
 
-Show GPU topology including MIG instances.
+Show GPU topology (including MIG instances).
 
 ```bash
 llm-energy-measure gpus

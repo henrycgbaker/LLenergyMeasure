@@ -245,6 +245,16 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
             )
         )
 
+    # batch_size is ignored for dynamic strategies
+    if batch.strategy in ("dynamic", "sorted_dynamic") and batch.batch_size != 1:
+        warnings.append(
+            ConfigWarning(
+                field="batching.batch_size",
+                message=f"batch_size={batch.batch_size} is ignored with '{batch.strategy}' strategy. Dynamic strategies use max_tokens_per_batch instead.",
+                severity="warning",
+            )
+        )
+
     if batch.strategy in ("sorted_static", "sorted_dynamic") and batch.batch_size == 1:
         warnings.append(
             ConfigWarning(
@@ -305,10 +315,51 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
             )
 
     # =========================================================================
+    # PARALLELISM CONFIG (new unified config)
+    # =========================================================================
+
+    para = config.parallelism
+    if para.strategy == "data_parallel" and config.backend == "vllm":
+        warnings.append(
+            ConfigWarning(
+                field="parallelism.strategy",
+                message=(
+                    "data_parallel is not fully supported for vLLM. "
+                    "vLLM manages tensor/pipeline parallelism internally. "
+                    "For data parallelism, use multiple separate experiments or the PyTorch backend."
+                ),
+                severity="error",
+            )
+        )
+
+    if para.strategy != "none" and para.degree > len(config.gpus):
+        warnings.append(
+            ConfigWarning(
+                field="parallelism.degree",
+                message=f"degree={para.degree} exceeds available GPUs ({len(config.gpus)})",
+                severity="error",
+            )
+        )
+
+    # =========================================================================
     # DECODER/SAMPLING CONFIG
     # =========================================================================
 
     decoder = config.decoder
+
+    # Warn about preset + individual params (mutual exclusivity guidance)
+    if decoder.preset is not None:
+        warnings.append(
+            ConfigWarning(
+                field="decoder.preset",
+                message=(
+                    f"Using preset '{decoder.preset}'. Any individual params (temperature, top_p, etc.) "
+                    "set in config will override the preset defaults. "
+                    "Recommendation: use EITHER preset OR individual params, not both."
+                ),
+                severity="info",
+            )
+        )
 
     # Sampling params have no effect in greedy/deterministic mode
     if decoder.is_deterministic:

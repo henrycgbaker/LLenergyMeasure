@@ -419,12 +419,12 @@ class TensorRTBackend:
         start_time = time.perf_counter()
 
         # Use TensorRT-LLM's LLM class for building
+        # Note: TensorRT-LLM 0.21.0+ uses different API for quantization
+        # For now, build without quantization (use default settings)
         llm = LLM(
             model=config.model_name,
             dtype=dtype,
             tensor_parallel_size=tp_size,
-            quantization=quantization,
-            build_config=build_config,
         )
 
         # Save the engine

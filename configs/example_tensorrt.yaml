@@ -3,6 +3,15 @@
 # =============================================================================
 # Complete reference for all available parameters when using backend: tensorrt
 # Copy this file and modify for your experiments.
+#
+# REQUIREMENTS:
+#   - NVIDIA GPU with compute capability >= 8.0 (Ampere, Ada Lovelace, Hopper)
+#     Examples: A100, A10, RTX 30xx, RTX 40xx, H100, L40
+#     NOT supported: V100, T4, RTX 20xx, GTX series
+#   - CUDA 12.x (not CUDA 11.x)
+#   - Linux only (TensorRT-LLM does not support Windows/macOS)
+#   - Install: pip install llm-energy-measure[tensorrt]
+#   - WARNING: Do not install alongside [vllm] - dependency conflicts
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -44,7 +53,7 @@ max_output_tokens: 128
 min_output_tokens: 0
 
 # -----------------------------------------------------------------------------
-# GPU CONFIGURATION
+# GPU CONFIGURATION MADE AVAILABLE TO TOOL
 # -----------------------------------------------------------------------------
 gpus: [0, 1]
 
@@ -68,10 +77,13 @@ inference_type: pure_generative
 # -----------------------------------------------------------------------------
 # BATCHING CONFIGURATION
 # -----------------------------------------------------------------------------
+# Note: batch_size only applies to static strategies (static, sorted_static).
+# Dynamic strategies (dynamic, sorted_dynamic) ignore batch_size and use
+# max_tokens_per_batch to group prompts by token budget instead.
 batching:
-  batch_size: 1
-  strategy: static  # static | dynamic | sorted_static | sorted_dynamic
-  max_tokens_per_batch: null
+  strategy: sorted_dynamic  # static | dynamic | sorted_static | sorted_dynamic
+  batch_size: 4             # Only used with static/sorted_static strategies
+  max_tokens_per_batch: null  # Only used with dynamic/sorted_dynamic strategies
 
 # -----------------------------------------------------------------------------
 # PARALLELISM CONFIGURATION (Multi-GPU)
@@ -89,8 +101,16 @@ parallelism:
 # -----------------------------------------------------------------------------
 # DECODER / GENERATION SETTINGS
 # -----------------------------------------------------------------------------
+# Choose ONE approach:
+#   1. Use preset (recommended): sets all sampling params automatically
+#   2. Set individual params: leave preset: null
+#
+# If BOTH are set, preset values apply first, then individual params override.
+# This is typically not recommended - use one or the other.
 decoder:
-  preset: null  # deterministic | standard | creative | factual
+  preset: null  # deterministic | standard | creative | factual | null
+
+  # Individual params (only meaningful when preset: null)
   temperature: 1.0
   do_sample: true
   top_p: 1.0
@@ -122,17 +142,6 @@ streaming: false
 streaming_warmup_requests: 5
 
 # -----------------------------------------------------------------------------
-# QUANTIZATION (Shared config - for BitsAndBytes style)
-# -----------------------------------------------------------------------------
-quantization:
-  quantization: false
-  load_in_4bit: false
-  load_in_8bit: false
-  bnb_4bit_compute_dtype: float16
-  bnb_4bit_quant_type: nf4
-  bnb_4bit_use_double_quant: false
-
-# -----------------------------------------------------------------------------
 # SCHEDULE
 # -----------------------------------------------------------------------------
 schedule:
@@ -160,6 +169,18 @@ decode_token_to_text: false
 # -----------------------------------------------------------------------------
 # TENSORRT-LLM SPECIFIC CONFIGURATION
 # -----------------------------------------------------------------------------
+# This section contains TensorRT-LLM-specific parameters for the compiled engine.
+# These settings are IN ADDITION to the shared config above (model, batching, decoder, etc.).
+#
+# Key relationships to shared config:
+# - parallelism.degree → sets tensor_parallel_size for engine build
+# - batching.batch_size → limited by tensorrt.max_batch_size (compile-time limit)
+# - decoder.* → converted to TensorRT-LLM sampling config
+# - quantization.* → overridden by tensorrt.quantization.method
+#
+# Most users only need to adjust: max_batch_size, quantization.method, builder_opt_level
+#
+# IMPORTANT: Requires TensorRT-LLM to be installed. Not available on all systems.
 tensorrt:
   # ===========================================================================
   # Engine Source

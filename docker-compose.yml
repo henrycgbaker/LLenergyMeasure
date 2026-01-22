@@ -9,14 +9,13 @@
 #
 # Examples:
 #   # PyTorch backend (default)
-#   docker compose run --rm pytorch llm-energy-measure experiment config.yaml -d alpaca -n 100
+#   docker compose run --rm pytorch llm-energy-measure experiment configs/example_pytorch.yaml
 #
 #   # vLLM backend
-#   docker compose run --rm vllm llm-energy-measure experiment config.yaml -d alpaca -n 100 --backend vllm
+#   docker compose run --rm vllm llm-energy-measure experiment configs/example_vllm.yaml
 #
 #   # TensorRT backend
-#   docker compose run --rm tensorrt llm-energy-measure experiment config.yaml -d alpaca -n 100 --backend tensorrt
-#
+#   docker compose run --rm tensorrt llm-energy-measure experiment configs/example_tensorrt.yaml
 #   # Development with PyTorch
 #   docker compose --profile dev run --rm pytorch-dev /bin/bash
 #
@@ -118,7 +117,7 @@ services:
     command: []
 
   # ==========================================================================
-  # vLLM Backend - High-performance inference with PagedAttention
+  # vLLM Backend - High-performance inference with PagedAttention etc
   # ==========================================================================
   vllm:
     <<: *common

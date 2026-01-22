@@ -161,10 +161,9 @@ def _requires_direct_launch(config_data: dict[str, Any]) -> bool:
 def get_effective_launcher_processes(config: ExperimentConfig) -> int:
     """Determine actual launcher process count based on backend capabilities.
 
-    For backends with internal parallelism (vLLM, TensorRT-LLM), this always
-    returns 1 because those backends manage their own multiprocessing internally.
-    The launcher spawns a single process and the backend then creates its own
-    worker processes for tensor/pipeline parallelism.
+    For backends with internal parallelism (vLLM, TensorRT-LLM):
+    - tensor_parallel/pipeline_parallel: Returns 1 (backend manages internally)
+    - data_parallel: Returns parallelism.degree (separate processes needed)
 
     For PyTorch with Accelerate, uses parallelism.degree explicitly.
 
@@ -186,8 +185,11 @@ def get_effective_launcher_processes(config: ExperimentConfig) -> int:
         capabilities = backend.get_runtime_capabilities()
 
         if capabilities.launch_mode == LaunchMode.DIRECT:
-            # Backend manages parallelism internally (vLLM, TensorRT-LLM)
-            # Single launcher process, single result file
+            # Backend manages tensor/pipeline parallelism internally
+            # But data parallelism requires multiple separate processes
+            if config.parallelism.strategy == "data_parallel":
+                return config.parallelism.degree
+            # tensor_parallel/pipeline_parallel: single process, backend spawns workers
             return 1
         else:
             # External parallelism via Accelerate/torchrun
@@ -198,6 +200,8 @@ def get_effective_launcher_processes(config: ExperimentConfig) -> int:
         # Fall back to safe defaults if backend can't be loaded
         logger.warning(f"Could not get backend capabilities for {config.backend}: {e}")
         if config.backend in ("vllm", "tensorrt"):
+            if config.parallelism.strategy == "data_parallel":
+                return config.parallelism.degree
             return 1
         return config.parallelism.degree
 
@@ -340,9 +344,18 @@ def launch_experiment_accelerate(
 
             # Set environment based on launcher type
             if _requires_direct_launch(config_data):
-                # vLLM: direct launch, no special env vars needed
-                # vLLM manages its own distribution
-                pass
+                # vLLM: direct launch with multi-GPU NCCL fix
+                # Many PCIe-connected GPUs (without NVLink) fail NCCL P2P communication
+                # This is safe to set unconditionally - NVLink systems ignore it
+                parallelism = config_data.get("parallelism", {})
+                sharding = config_data.get("sharding", {})
+                # Check both new (parallelism.degree) and legacy (sharding.num_shards)
+                tp_degree = parallelism.get("degree", sharding.get("num_shards", 1))
+                if tp_degree > 1 and "NCCL_P2P_DISABLE" not in env:
+                    env["NCCL_P2P_DISABLE"] = "1"
+                    logger.info(
+                        f"Set NCCL_P2P_DISABLE=1 for vLLM tensor parallelism (tp={tp_degree})"
+                    )
             elif _requires_torchrun(config_data):
                 # torchrun handles distributed setup
                 pass
@@ -583,6 +596,59 @@ def _parse_args() -> (
 
 
 if __name__ == "__main__":
+    import os
+    import sys
+
+    # ==========================================================================
+    # EARLY NCCL FIX: Must be set BEFORE any vLLM/torch imports
+    # ==========================================================================
+    # Many PCIe-connected GPUs (without NVLink) fail NCCL P2P communication.
+    # This is safe to set unconditionally - NVLink systems just ignore it.
+    # We check if this is a vLLM multi-GPU run by parsing minimal config here.
+    def _early_nccl_fix() -> None:
+        """Set NCCL_P2P_DISABLE=1 for vLLM tensor parallelism before imports."""
+        if "NCCL_P2P_DISABLE" in os.environ:
+            return  # Already set by parent or user
+
+        # Quick parse of config to check if NCCL fix needed
+        # We do this before imports to avoid triggering vLLM init
+        config_arg = None
+        for i, arg in enumerate(sys.argv):
+            if arg == "--config" and i + 1 < len(sys.argv):
+                config_arg = sys.argv[i + 1]
+                break
+
+        if not config_arg:
+            return
+
+        try:
+            import yaml
+
+            with open(config_arg) as f:
+                config_data = yaml.safe_load(f)
+
+            backend = config_data.get("backend", "pytorch")
+            if backend not in ("vllm", "tensorrt"):
+                return  # NCCL fix only needed for these backends
+
+            parallelism = config_data.get("parallelism", {})
+            sharding = config_data.get("sharding", {})
+            tp_degree = parallelism.get("degree", sharding.get("num_shards", 1))
+
+            if tp_degree > 1:
+                os.environ["NCCL_P2P_DISABLE"] = "1"
+                # Can't use logger yet, print directly
+                print(
+                    f"[launcher] Set NCCL_P2P_DISABLE=1 for {backend} "
+                    f"tensor parallelism (tp={tp_degree})",
+                    file=sys.stderr,
+                )
+        except Exception:
+            pass  # Silently ignore - config will be validated later anyway
+
+    _early_nccl_fix()
+    # ==========================================================================
+
     from pathlib import Path as PathLib
 
     from llm_energy_measure.config.loader import load_config

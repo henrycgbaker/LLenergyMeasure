@@ -31,11 +31,12 @@ COPY pyproject.toml poetry.lock* README.md ./
 COPY src/ ./src/
 
 # Install the package with vllm extras (--no-deps to avoid torch conflict)
-# Then install pytorch extras for HuggingFace compatibility
+# Then install remaining dependencies for HuggingFace compatibility
+# Includes: peft (LoRA), sentencepiece (Llama/Qwen tokenizers), safetensors (model loading)
 RUN pip install --no-cache-dir --no-deps ".[vllm]" \
     && pip install --no-cache-dir \
-        pydantic loguru typer codecarbon pynvml datasets schedule \
-        transformers accelerate bitsandbytes calflops
+        pydantic loguru typer codecarbon nvidia-ml-py datasets schedule python-dotenv \
+        transformers accelerate huggingface_hub sentencepiece peft safetensors bitsandbytes calflops
 
 # ============================================================================
 # Stage 2: Runtime - Minimal production image
@@ -63,8 +64,8 @@ COPY pyproject.toml poetry.lock* README.md ./
 COPY src/ ./src/
 RUN pip install --no-cache-dir --no-deps ".[vllm]" \
     && pip install --no-cache-dir \
-        pydantic loguru typer codecarbon pynvml datasets schedule \
-        transformers accelerate bitsandbytes calflops \
+        pydantic loguru typer codecarbon nvidia-ml-py datasets schedule python-dotenv \
+        transformers accelerate huggingface_hub sentencepiece peft safetensors bitsandbytes calflops \
         pytest pytest-cov ruff mypy pre-commit commitizen
 
 # Source can be mounted at runtime for editable install
