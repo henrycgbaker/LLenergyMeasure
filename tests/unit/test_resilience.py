@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llm_energy_measure.exceptions import RetryableError
-from llm_energy_measure.resilience import cleanup_gpu_memory, retry_on_error, safe_cleanup
+from llenergymeasure.exceptions import RetryableError
+from llenergymeasure.resilience import cleanup_gpu_memory, retry_on_error, safe_cleanup
 
 
 class TestRetryOnError:
@@ -95,7 +95,7 @@ class TestCleanupGpuMemory:
 
         with patch.dict("sys.modules", {"torch": mock_torch}):
             # Re-import to get the mock
-            from llm_energy_measure import resilience
+            from llenergymeasure import resilience
 
             resilience.cleanup_gpu_memory()
 

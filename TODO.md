@@ -100,7 +100,7 @@
 ## Planned - CLI Tool
 
 ### Backend Enhancements
-- [ ] Cross-backend comparison CLI: `llm-energy-measure compare --backends pytorch,vllm`
+- [ ] Cross-backend comparison CLI: `lem compare --backends pytorch,vllm`
 - [ ] Cross-backend visualisation (energy vs throughput per backend)
 
 ### Streaming Latency

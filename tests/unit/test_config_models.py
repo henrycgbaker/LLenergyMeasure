@@ -8,7 +8,7 @@ Tests the backend-native configuration architecture with:
 import pytest
 from pydantic import ValidationError
 
-from llm_energy_measure.config.models import (
+from llenergymeasure.config.models import (
     BUILTIN_DATASETS,
     DecoderConfig,
     ExperimentConfig,

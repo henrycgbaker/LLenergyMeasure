@@ -3,10 +3,10 @@
 # Runs multiple experiment configs across multiple cycles for statistical comparison.
 #
 # Usage:
-#   llm-energy-measure campaign configs/examples/campaign_example.yaml
+#   lem campaign configs/examples/campaign_example.yaml
 #
 # Or override with CLI args:
-#   llm-energy-measure campaign configs/examples/campaign_example.yaml \
+#   lem campaign configs/examples/campaign_example.yaml \
 #     --cycles 3 --dataset alpaca -n 50
 
 # Required: descriptive name for this campaign (used in results)

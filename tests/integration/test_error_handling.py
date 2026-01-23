@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from llm_energy_measure.cli import app
-from llm_energy_measure.config.loader import load_config
-from llm_energy_measure.exceptions import ConfigurationError
-from llm_energy_measure.results.repository import FileSystemRepository
+from llenergymeasure.cli import app
+from llenergymeasure.config.loader import load_config
+from llenergymeasure.exceptions import ConfigurationError
+from llenergymeasure.results.repository import FileSystemRepository
 
 # Pass NO_COLOR to disable Rich colors in test output for consistent assertions
 runner = CliRunner(env={"NO_COLOR": "1"})
@@ -126,8 +126,8 @@ class TestRepositoryErrorHandling:
         """Test handling when some result files are missing."""
         from datetime import datetime
 
-        from llm_energy_measure.domain.experiment import RawProcessResult, Timestamps
-        from llm_energy_measure.domain.metrics import (
+        from llenergymeasure.domain.experiment import RawProcessResult, Timestamps
+        from llenergymeasure.domain.metrics import (
             ComputeMetrics,
             EnergyMetrics,
             InferenceMetrics,
@@ -205,7 +205,7 @@ class TestSecurityErrorHandling:
 
     def test_path_traversal_in_experiment_id(self, tmp_path: Path):
         """Test that path traversal characters are neutralized in experiment IDs."""
-        from llm_energy_measure.security import sanitize_experiment_id
+        from llenergymeasure.security import sanitize_experiment_id
 
         # These should have path separators removed (replaced with _)
         dangerous_ids = [
@@ -226,8 +226,8 @@ class TestSecurityErrorHandling:
         """Test handling of special characters in experiment IDs."""
         from datetime import datetime
 
-        from llm_energy_measure.domain.experiment import RawProcessResult, Timestamps
-        from llm_energy_measure.domain.metrics import (
+        from llenergymeasure.domain.experiment import RawProcessResult, Timestamps
+        from llenergymeasure.domain.metrics import (
             ComputeMetrics,
             EnergyMetrics,
             InferenceMetrics,
@@ -278,8 +278,8 @@ class TestAggregationErrorHandling:
 
     def test_aggregate_empty_results(self, tmp_path: Path):
         """Test aggregating empty results list."""
-        from llm_energy_measure.exceptions import AggregationError
-        from llm_energy_measure.results.aggregation import aggregate_results
+        from llenergymeasure.exceptions import AggregationError
+        from llenergymeasure.results.aggregation import aggregate_results
 
         with pytest.raises(AggregationError, match="[Ee]mpty"):
             aggregate_results("empty_exp", [])

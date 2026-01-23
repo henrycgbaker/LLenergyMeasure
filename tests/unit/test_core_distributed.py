@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from llm_energy_measure.core.distributed import (
+from llenergymeasure.core.distributed import (
     get_original_generate_method,
     get_persistent_unique_id,
 )

@@ -42,12 +42,12 @@ The project provides separate Docker services for each inference backend:
 
 | Service | Image Tag | Use Case |
 |---------|-----------|----------|
-| `pytorch` | `llm-energy-measure:pytorch` | Default, most compatible |
-| `vllm` | `llm-energy-measure:vllm` | High throughput with PagedAttention |
-| `tensorrt` | `llm-energy-measure:tensorrt` | Maximum performance (Ampere+ GPUs) |
-| `pytorch-dev` | `llm-energy-measure:pytorch-dev` | Development with PyTorch |
-| `vllm-dev` | `llm-energy-measure:vllm-dev` | Development with vLLM |
-| `tensorrt-dev` | `llm-energy-measure:tensorrt-dev` | Development with TensorRT |
+| `pytorch` | `lem:pytorch` | Default, most compatible |
+| `vllm` | `lem:vllm` | High throughput with PagedAttention |
+| `tensorrt` | `lem:tensorrt` | Maximum performance (Ampere+ GPUs) |
+| `pytorch-dev` | `lem:pytorch-dev` | Development with PyTorch |
+| `vllm-dev` | `lem:vllm-dev` | Development with vLLM |
+| `tensorrt-dev` | `lem:tensorrt-dev` | Development with TensorRT |
 
 **Note**: vLLM and TensorRT have conflicting PyTorch dependencies. Use separate images rather than installing multiple backends in one environment.
 
@@ -174,15 +174,15 @@ docker compose --profile dev build base pytorch-dev
 ```bash
 # PyTorch backend (default)
 docker compose run --rm pytorch \
-  llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
+  lem experiment /app/configs/test.yaml --dataset alpaca -n 100
 
 # vLLM backend
 docker compose run --rm vllm \
-  llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
+  lem experiment /app/configs/test.yaml --dataset alpaca -n 100
 
 # TensorRT backend
 docker compose run --rm tensorrt \
-  llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
+  lem experiment /app/configs/test.yaml --dataset alpaca -n 100
 
 # Interactive shell
 docker compose run --rm pytorch /bin/bash
@@ -201,7 +201,7 @@ docker compose --profile dev run --rm pytorch-dev
 
 # Run command in dev container
 docker compose --profile dev run --rm pytorch-dev \
-  llm-energy-measure experiment /app/configs/test.yaml -d alpaca -n 10
+  lem experiment /app/configs/test.yaml -d alpaca -n 10
 ```
 
 ### VS Code Devcontainer
@@ -271,13 +271,13 @@ nvidia-smi -L
 #   MIG 3g.20gb Device 1: (UUID: MIG-def456)
 
 # 2. Run on specific MIG instance
-CUDA_VISIBLE_DEVICES=MIG-abc123 llm-energy-measure experiment config.yaml --dataset alpaca -n 100
+CUDA_VISIBLE_DEVICES=MIG-abc123 lem experiment config.yaml --dataset alpaca -n 100
 
 # 3. Parallel experiments (separate terminals)
 # Terminal 1:
-CUDA_VISIBLE_DEVICES=MIG-abc123 llm-energy-measure experiment config1.yaml --dataset alpaca -n 100
+CUDA_VISIBLE_DEVICES=MIG-abc123 lem experiment config1.yaml --dataset alpaca -n 100
 # Terminal 2:
-CUDA_VISIBLE_DEVICES=MIG-def456 llm-energy-measure experiment config2.yaml --dataset alpaca -n 100
+CUDA_VISIBLE_DEVICES=MIG-def456 lem experiment config2.yaml --dataset alpaca -n 100
 ```
 
 ### MIG with Docker
@@ -285,7 +285,7 @@ CUDA_VISIBLE_DEVICES=MIG-def456 llm-energy-measure experiment config2.yaml --dat
 ```bash
 # Use specific MIG instance
 CUDA_VISIBLE_DEVICES=MIG-abc123 docker compose run --rm pytorch \
-  llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
+  lem experiment /app/configs/test.yaml --dataset alpaca -n 100
 
 # Or set in .env
 echo "CUDA_VISIBLE_DEVICES=MIG-abc123" >> .env
@@ -364,7 +364,7 @@ Run `./setup.sh` to create the `.env` file, or set PUID/PGID manually as shown a
 
 1. **Single-process on MIG** (recommended):
    ```bash
-   CUDA_VISIBLE_DEVICES=MIG-abc123 llm-energy-measure experiment config.yaml --dataset alpaca -n 100
+   CUDA_VISIBLE_DEVICES=MIG-abc123 lem experiment config.yaml --dataset alpaca -n 100
    ```
 
 2. **Distributed inference** - use full GPUs (non-MIG)
@@ -395,7 +395,7 @@ docker run --rm -v lem-hf-cache:/cache -v ~/.cache/huggingface:/host alpine cp -
 
 **Solutions**:
 - Ensure YAML format (not Python)
-- Validate first: `llm-energy-measure config validate config.yaml`
+- Validate first: `lem config validate config.yaml`
 - Check field names match schema
 
 ### Out of Memory (OOM)

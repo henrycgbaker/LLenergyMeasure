@@ -14,8 +14,8 @@ PUID=${PUID:-0}
 PGID=${PGID:-0}
 
 # Install in editable mode if not already installed (do this as root first)
-if ! pip show llm-energy-measure &>/dev/null; then
-    echo "Installing llm-energy-measure in editable mode..."
+if ! pip show llenergymeasure &>/dev/null; then
+    echo "Installing llenergymeasure in editable mode..."
     pip install -e /app --quiet
 fi
 

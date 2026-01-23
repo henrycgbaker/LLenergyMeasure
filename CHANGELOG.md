@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-## [v2.0.0](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/releases/tag/v2.0.0) (2026-01-14)
+## [v2.0.0](https://github.com/henrycgbaker/LLefficiencyMeasure/releases/tag/v2.0.0) (2026-01-14)
 
 Refactored CLI-based tool with clean architecture, comprehensive documentation, and improved configuration UX.
 
@@ -101,7 +101,7 @@ Refactored CLI-based tool with clean architecture, comprehensive documentation, 
 
 ---
 
-## [v1.16.0](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/releases/tag/v1.16.0) (2025-01-07)
+## [v1.16.0](https://github.com/henrycgbaker/LLefficiencyMeasure/releases/tag/v1.16.0) (2025-01-07)
 
 Production-ready containerisation with full GPU support and streamlined developer experience.
 
@@ -111,8 +111,8 @@ Production-ready containerisation with full GPU support and streamlined develope
   - Runtime stage for production deployment (~3GB image)
   - Dev stage for local development with editable installs
 - **Docker Compose profiles** separating production and development workflows
-  - `llm-energy-measure-app`: Production service with baked-in package
-  - `llm-energy-measure-dev`: Development service with source mounting
+  - `lem-app`: Production service with baked-in package
+  - `lem-dev`: Development service with source mounting
 - **VS Code devcontainer** configuration for seamless IDE integration
   - GPU passthrough with `--gpus all`
   - Privileged mode for NVML energy metrics
@@ -135,7 +135,7 @@ Production-ready containerisation with full GPU support and streamlined develope
 
 ---
 
-## [v1.15.0](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/releases/tag/v1.15.0) (2025-12-21)
+## [v1.15.0](https://github.com/henrycgbaker/LLefficiencyMeasure/releases/tag/v1.15.0) (2025-12-21)
 
 Comprehensive test coverage ensuring reliability across all components.
 
@@ -163,12 +163,12 @@ Comprehensive test coverage ensuring reliability across all components.
 
 ---
 
-## [v1.13.0](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/releases/tag/v1.13.0) (2025-12-21)
+## [v1.13.0](https://github.com/henrycgbaker/LLefficiencyMeasure/releases/tag/v1.13.0) (2025-12-21)
 
 User-friendly command-line interface replacing legacy entry points.
 
 ### Added
-- **Typer-based CLI** (`llm-energy-measure`) with intuitive subcommands:
+- **Typer-based CLI** (`lem`) with intuitive subcommands:
   - `experiment <config> --dataset <name> -n <samples>`: Run experiments with automatic `accelerate launch` wrapping
   - `aggregate <exp_id> | --all [--force]`: Combine raw per-process JSON results into aggregated metrics
   - `config validate <file>`: Check configuration syntax and required fields
@@ -191,24 +191,24 @@ User-friendly command-line interface replacing legacy entry points.
 ### Usage Examples
 ```bash
 # Run experiment with built-in dataset
-llm-energy-measure experiment configs/llama2-7b.yaml --dataset alpaca -n 1000
+lem experiment configs/llama2-7b.yaml --dataset alpaca -n 1000
 
 # Aggregate all pending results
-llm-energy-measure aggregate --all
+lem aggregate --all
 
 # Export results as JSON
-llm-energy-measure results show exp_20240115_123456 --json
+lem results show exp_20240115_123456 --json
 ```
 
 ---
 
-## [v1.10.0](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/releases/tag/v1.10.0) (2025-12-20)
+## [v1.10.0](https://github.com/henrycgbaker/LLefficiencyMeasure/releases/tag/v1.10.0) (2025-12-20)
 
 Major architectural refactor establishing clean module boundaries.
 
 ### Breaking Changes
-- **Package renamed**: `llm-bench` → `llm-energy-measure`
-- All imports now use `llm_energy_measure` instead of `llm_bench`
+- **Package renamed**: `llm-bench` → `lem`
+- All imports now use `llenergymeasure` instead of `llm_bench`
 
 ### Added
 - **Energy backend plugin registry** with automatic CodeCarbon registration
@@ -245,7 +245,7 @@ Major architectural refactor establishing clean module boundaries.
 
 ---
 
-## [v1.0.0](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/releases/tag/v1.0.0) (2025-12-16)
+## [v1.0.0](https://github.com/henrycgbaker/LLefficiencyMeasure/releases/tag/v1.0.0) (2025-12-16)
 
 Research phase complete — stable multi-model benchmarking validated on production hardware.
 
@@ -280,7 +280,7 @@ Research phase complete — stable multi-model benchmarking validated on product
 
 ---
 
-## [v0.5.0](https://github.com/henrycgbaker/llm-efficiency-measurement-tool/releases/tag/v0.5.0) (2025-03-22)
+## [v0.5.0](https://github.com/henrycgbaker/LLefficiencyMeasure/releases/tag/v0.5.0) (2025-03-22)
 
 Core measurement functionality establishing the foundation for all subsequent development.
 

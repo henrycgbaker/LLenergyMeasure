@@ -1,4 +1,4 @@
-# LLM Energy Measure
+# LLenergyMeasure
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -160,14 +160,14 @@ schedule:
 **2. Run experiment:**
 
 ```bash
-llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
+lem experiment configs/my_experiment.yaml --dataset alpaca -n 100
 ```
 
 **3. View results:**
 
 ```bash
-llm-energy-measure results list
-llm-energy-measure results show <exp_id>
+lem results list
+lem results show <exp_id>
 ```
 
 For a full tutorial, see the [Getting Started Guide](docs/quickstart.md).
@@ -180,7 +180,7 @@ For a full tutorial, see the [Getting Started Guide](docs/quickstart.md).
 | [CLI Reference](docs/cli.md) | All commands and options |
 | [Backends Guide](docs/backends.md) | PyTorch vs vLLM, backend-specific config |
 | [Deployment](docs/deployment.md) | Docker, MIG GPUs, troubleshooting |
-| [Configuration](src/llm_energy_measure/config/README.md) | Full config options, presets, validation |
+| [Configuration](src/llenergymeasure/config/README.md) | Full config options, presets, validation |
 
 ## Metrics Collected
 
@@ -201,7 +201,7 @@ make test     # Run tests
 ## Project Structure
 
 ```
-src/llm_energy_measure/
+src/llenergymeasure/
 ├── cli.py                 # Typer CLI
 ├── config/                # Configuration loading
 ├── core/                  # Inference engine & metrics

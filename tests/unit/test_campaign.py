@@ -7,12 +7,12 @@ from pathlib import Path
 import pytest
 import yaml
 
-from llm_energy_measure.config.campaign_config import (
+from llenergymeasure.config.campaign_config import (
     CampaignConfig,
     CampaignExecutionConfig,
     generate_campaign_id,
 )
-from llm_energy_measure.orchestration.campaign import CampaignRunner
+from llenergymeasure.orchestration.campaign import CampaignRunner
 
 
 class TestCampaignExecutionConfig:

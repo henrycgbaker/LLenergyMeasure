@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import torch
 
-from llm_energy_measure.core.model_loader import (
+from llenergymeasure.core.model_loader import (
     ModelWrapper,
     QuantizationSupport,
     detect_quantization_support,

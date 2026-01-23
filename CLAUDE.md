@@ -1,4 +1,4 @@
-# LLM Energy Measure
+# LLenergyMeasure
 
 LLM inference efficiency measurement framework for benchmarking energy consumption, throughput, and FLOPs across HuggingFace models.
 
@@ -31,14 +31,14 @@ LLM inference efficiency measurement framework for benchmarking energy consumpti
 
 | Directory | Purpose | AI Context | Full Docs |
 |-----------|---------|------------|-----------|
-| `src/llm_energy_measure/` | Main package | [CLAUDE.md](src/llm_energy_measure/CLAUDE.md) | [README](src/llm_energy_measure/README.md) |
-| `src/.../cli/` | CLI package (modular) | [CLAUDE.md](src/llm_energy_measure/cli/CLAUDE.md) | - |
-| `src/.../config/` | Configuration system | [CLAUDE.md](src/llm_energy_measure/config/CLAUDE.md) | [README](src/llm_energy_measure/config/README.md) |
-| `src/.../core/` | Inference engine, metrics | [CLAUDE.md](src/llm_energy_measure/core/CLAUDE.md) | [README](src/llm_energy_measure/core/README.md) |
-| `src/.../domain/` | Domain models | [CLAUDE.md](src/llm_energy_measure/domain/CLAUDE.md) | [README](src/llm_energy_measure/domain/README.md) |
-| `src/.../orchestration/` | Experiment lifecycle | [CLAUDE.md](src/llm_energy_measure/orchestration/CLAUDE.md) | [README](src/llm_energy_measure/orchestration/README.md) |
-| `src/.../results/` | Results persistence | [CLAUDE.md](src/llm_energy_measure/results/CLAUDE.md) | [README](src/llm_energy_measure/results/README.md) |
-| `src/.../state/` | Experiment state, transitions | [CLAUDE.md](src/llm_energy_measure/state/CLAUDE.md) | [README](src/llm_energy_measure/state/README.md) |
+| `src/llenergymeasure/` | Main package | [CLAUDE.md](src/llenergymeasure/CLAUDE.md) | [README](src/llenergymeasure/README.md) |
+| `src/.../cli/` | CLI package (modular) | [CLAUDE.md](src/llenergymeasure/cli/CLAUDE.md) | - |
+| `src/.../config/` | Configuration system | [CLAUDE.md](src/llenergymeasure/config/CLAUDE.md) | [README](src/llenergymeasure/config/README.md) |
+| `src/.../core/` | Inference engine, metrics | [CLAUDE.md](src/llenergymeasure/core/CLAUDE.md) | [README](src/llenergymeasure/core/README.md) |
+| `src/.../domain/` | Domain models | [CLAUDE.md](src/llenergymeasure/domain/CLAUDE.md) | [README](src/llenergymeasure/domain/README.md) |
+| `src/.../orchestration/` | Experiment lifecycle | [CLAUDE.md](src/llenergymeasure/orchestration/CLAUDE.md) | [README](src/llenergymeasure/orchestration/README.md) |
+| `src/.../results/` | Results persistence | [CLAUDE.md](src/llenergymeasure/results/CLAUDE.md) | [README](src/llenergymeasure/results/README.md) |
+| `src/.../state/` | Experiment state, transitions | [CLAUDE.md](src/llenergymeasure/state/CLAUDE.md) | [README](src/llenergymeasure/state/README.md) |
 | `tests/` | Test suite | [CLAUDE.md](tests/CLAUDE.md) | [README](tests/README.md) |
 
 ## Quick Reference
@@ -46,16 +46,16 @@ LLM inference efficiency measurement framework for benchmarking energy consumpti
 ### Core Commands
 ```bash
 # Run experiment
-llm-energy-measure experiment <config.yaml> --dataset alpaca -n 100
-llm-energy-measure experiment --preset quick-test --model <model> -d alpaca
+lem experiment <config.yaml> --dataset alpaca -n 100
+lem experiment --preset quick-test --model <model> -d alpaca
 
 # Configuration
-llm-energy-measure config validate <config.yaml>
-llm-energy-measure config generate-grid base.yaml --vary batch_size=1,2,4,8
+lem config validate <config.yaml>
+lem config generate-grid base.yaml --vary batch_size=1,2,4,8
 
 # Results
-llm-energy-measure results list
-llm-energy-measure results show <exp_id>
+lem results list
+lem results show <exp_id>
 ```
 
 ### Experiment Modes
@@ -76,7 +76,7 @@ llm-energy-measure results show <exp_id>
 | `benchmark` | Formal measurements (fp16, deterministic) |
 | `throughput` | Throughput testing (batch=8, dynamic batching) |
 
-See [config/README.md](src/llm_energy_measure/config/README.md) for full preset details.
+See [config/README.md](src/llenergymeasure/config/README.md) for full preset details.
 
 ## Running the Tool
 
@@ -140,7 +140,7 @@ make test     # Unit tests
 
 | Topic | Location |
 |-------|----------|
-| Configuration system | [config/README.md](src/llm_energy_measure/config/README.md) |
-| Core engine | [core/README.md](src/llm_energy_measure/core/README.md) |
-| Orchestration | [orchestration/README.md](src/llm_energy_measure/orchestration/README.md) |
-| Results persistence | [results/README.md](src/llm_energy_measure/results/README.md) |
+| Configuration system | [config/README.md](src/llenergymeasure/config/README.md) |
+| Core engine | [core/README.md](src/llenergymeasure/core/README.md) |
+| Orchestration | [orchestration/README.md](src/llenergymeasure/orchestration/README.md) |
+| Results persistence | [results/README.md](src/llenergymeasure/results/README.md) |

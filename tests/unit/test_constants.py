@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from llm_energy_measure.constants import (
+from llenergymeasure.constants import (
     AGGREGATED_RESULTS_SUBDIR,
     DEFAULT_ACCELERATE_PORT,
     DEFAULT_MAX_NEW_TOKENS,

@@ -8,17 +8,17 @@ different backends, optimisations, or hyperparameters.
 
 ```bash
 # Compare two configs with 3 cycles
-llm-energy-measure campaign configs/pytorch.yaml configs/vllm.yaml \
+lem campaign configs/pytorch.yaml configs/vllm.yaml \
   --campaign-name "backend-comparison" \
   --cycles 3 \
   --dataset alpaca \
   -n 100
 
 # Use a campaign YAML file
-llm-energy-measure campaign configs/examples/campaign_example.yaml
+lem campaign configs/examples/campaign_example.yaml
 
 # Dry-run to preview execution plan
-llm-energy-measure campaign configs/*.yaml --campaign-name "test" --dry-run
+lem campaign configs/*.yaml --campaign-name "test" --dry-run
 ```
 
 ## Why Use Campaigns?
@@ -68,7 +68,7 @@ schedule:
 All YAML fields have corresponding CLI flags:
 
 ```bash
-llm-energy-measure campaign CONFIG_PATHS... \
+lem campaign CONFIG_PATHS... \
   --campaign-name NAME          # Required when using multiple configs
   --dataset DATASET             # Dataset override
   --sample-size N               # Sample size override
@@ -172,7 +172,7 @@ Each experiment result includes campaign metadata:
 Compare PyTorch vs vLLM on the same model:
 
 ```bash
-llm-energy-measure campaign \
+lem campaign \
   configs/examples/pytorch_example.yaml \
   configs/examples/vllm_example.yaml \
   --campaign-name "llama-backend-comparison" \
@@ -215,7 +215,7 @@ schedule:
 Quick comparison with minimal resources:
 
 ```bash
-llm-energy-measure campaign configs/*.yaml \
+lem campaign configs/*.yaml \
   --campaign-name "quick-test" \
   --cycles 2 \
   --warmup-prompts 1 \
@@ -251,4 +251,4 @@ If seeing performance degradation:
 
 - [CLI Reference](cli.md) - Full command documentation
 - [Backends Guide](backends.md) - Backend-specific configuration
-- [Configuration](../src/llm_energy_measure/config/README.md) - Config schema details
+- [Configuration](../src/llenergymeasure/config/README.md) - Config schema details

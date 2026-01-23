@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# LLM Energy Measure - One-Click Setup
+# LLenergyMeasure - One-Click Setup
 # =============================================================================
 #
 # Usage:
@@ -69,7 +69,7 @@ done
 
 echo -e "${CYAN}"
 echo "╔═══════════════════════════════════════════════════════════════════╗"
-echo "║           LLM Energy Measure - Quick Setup                        ║"
+echo "║           LLenergyMeasure - Quick Setup                        ║"
 echo "╚═══════════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -146,7 +146,7 @@ if [ "$LOCAL_MODE" = true ]; then
         cat > lem << 'WRAPPER'
 #!/bin/bash
 # lem wrapper - local mode
-exec poetry run llm-energy-measure "$@"
+exec poetry run lem "$@"
 WRAPPER
         chmod +x lem
     fi
@@ -184,11 +184,11 @@ else
         cat > lem << 'WRAPPER'
 #!/bin/bash
 # =============================================================================
-# lem - Universal CLI wrapper for LLM Energy Measure
+# lem - Universal CLI wrapper for LLenergyMeasure
 # =============================================================================
 # Automatically detects environment and runs the right command:
-#   - Inside Docker container → exec llm-energy-measure directly
-#   - Local poetry install → exec poetry run llm-energy-measure
+#   - Inside Docker container → exec lem directly
+#   - Local poetry install → exec poetry run lem
 #   - Otherwise → docker compose run --rm <backend> lem ...
 #
 # Backend detection:
@@ -201,12 +201,12 @@ set -e
 
 # Detect if we're inside a container
 if [ -f /.dockerenv ] || grep -q docker /proc/1/cgroup 2>/dev/null; then
-    exec llm-energy-measure "$@"
+    exec lem "$@"
 fi
 
 # Detect if local install exists
-if command -v llm-energy-measure &> /dev/null; then
-    exec llm-energy-measure "$@"
+if command -v lem &> /dev/null; then
+    exec lem "$@"
 fi
 
 # Docker mode: detect backend from config or env
@@ -227,7 +227,7 @@ for arg in "$@"; do
 done
 
 # Check if the backend image exists
-IMAGE="llm-energy-measure:$BACKEND"
+IMAGE="llenergymeasure:$BACKEND"
 if ! docker image inspect "$IMAGE" &> /dev/null; then
     echo "Error: Docker image '$IMAGE' not found."
     echo ""
@@ -240,7 +240,7 @@ if ! docker image inspect "$IMAGE" &> /dev/null; then
 fi
 
 # Run in Docker
-exec docker compose run --rm "$BACKEND" llm-energy-measure "$@"
+exec docker compose run --rm "$BACKEND" lem "$@"
 WRAPPER
         chmod +x lem
         echo -e "  ${GREEN}✓${NC} Created ./lem wrapper"

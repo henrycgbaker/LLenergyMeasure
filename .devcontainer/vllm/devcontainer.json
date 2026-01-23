@@ -1,5 +1,5 @@
 {
-  "name": "LLM Energy Measure (vLLM)",
+  "name": "LLenergyMeasure (vLLM)",
   "dockerComposeFile": "../../docker-compose.yml",
   "service": "vllm-dev",
   "workspaceFolder": "/app",

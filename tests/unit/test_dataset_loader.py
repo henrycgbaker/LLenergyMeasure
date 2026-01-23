@@ -5,12 +5,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llm_energy_measure.config.models import (
+from llenergymeasure.config.models import (
     BUILTIN_DATASETS,
     FilePromptSource,
     HuggingFacePromptSource,
 )
-from llm_energy_measure.core.dataset_loader import (
+from llenergymeasure.core.dataset_loader import (
     _auto_detect_column,
     _extract_from_conversation,
     _extract_prompts,
@@ -19,7 +19,7 @@ from llm_energy_measure.core.dataset_loader import (
     load_prompts_from_hf,
     load_prompts_from_source,
 )
-from llm_energy_measure.exceptions import ConfigurationError
+from llenergymeasure.exceptions import ConfigurationError
 
 
 class TestFilePromptSource:

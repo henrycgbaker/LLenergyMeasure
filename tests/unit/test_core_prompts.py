@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from llm_energy_measure.core.prompts import (
+from llenergymeasure.core.prompts import (
     create_adaptive_batches,
     create_fixed_batches,
     filter_n_prompts,

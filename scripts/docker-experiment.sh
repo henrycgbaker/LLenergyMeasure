@@ -24,5 +24,5 @@ PROCS=$(python -c "import yaml,sys; print(yaml.safe_load(open(sys.argv[1])).get(
 echo "Running experiment with num_processes=$PROCS from config: $CONFIG"
 
 exec accelerate launch --num_processes "$PROCS" \
-    -m llm_energy_measure.orchestration.launcher \
+    -m llenergymeasure.orchestration.launcher \
     --config "$CONFIG" "$@"

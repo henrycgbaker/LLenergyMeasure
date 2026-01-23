@@ -9,15 +9,15 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from llm_energy_measure.core.inference_backends.protocols import (
+from llenergymeasure.core.inference_backends.protocols import (
     BackendResult,
     BackendRuntime,
     ConfigWarning,
 )
 
 if TYPE_CHECKING:
-    from llm_energy_measure.config.models import ExperimentConfig
-    from llm_energy_measure.domain.model_info import ModelInfo
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.domain.model_info import ModelInfo
 
 
 class MockBackend:
@@ -125,7 +125,7 @@ class MockBackend:
         Returns:
             ModelInfo with placeholder values.
         """
-        from llm_energy_measure.domain.model_info import ModelInfo, QuantizationSpec
+        from llenergymeasure.domain.model_info import ModelInfo, QuantizationSpec
 
         return ModelInfo(
             name=self._config.model_name if self._config else "mock-model",
@@ -166,6 +166,6 @@ class MockBackend:
 
 def register_mock_backend() -> None:
     """Register MockBackend in the backend registry for testing."""
-    from llm_energy_measure.core.inference_backends import register_backend
+    from llenergymeasure.core.inference_backends import register_backend
 
     register_backend("mock", MockBackend)

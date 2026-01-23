@@ -3,7 +3,7 @@
 
 This script provides a CLI interface to the introspection SSOT module.
 The actual parameter discovery logic lives in:
-    src/llm_energy_measure/config/introspection.py
+    src/llenergymeasure/config/introspection.py
 
 This is a thin wrapper for backwards compatibility and CLI usage.
 
@@ -47,14 +47,14 @@ def discover_params_from_model(
 
     Delegates to the SSOT introspection module.
     """
-    from llm_energy_measure.config.introspection import get_params_from_model
+    from llenergymeasure.config.introspection import get_params_from_model
 
     return get_params_from_model(model_class, prefix=prefix)
 
 
 def discover_all_backends() -> dict[str, dict[str, dict[str, Any]]]:
     """Discover params for all backends using SSOT introspection."""
-    from llm_energy_measure.config.introspection import get_all_params
+    from llenergymeasure.config.introspection import get_all_params
 
     all_params = get_all_params()
     # Return only backend sections (exclude 'shared')
@@ -67,7 +67,7 @@ def discover_all_backends() -> dict[str, dict[str, dict[str, Any]]]:
 
 def discover_shared_params() -> dict[str, dict[str, Any]]:
     """Discover shared params using SSOT introspection."""
-    from llm_energy_measure.config.introspection import get_shared_params
+    from llenergymeasure.config.introspection import get_shared_params
 
     return get_shared_params()
 
@@ -75,7 +75,7 @@ def discover_shared_params() -> dict[str, dict[str, Any]]:
 def format_as_text(all_params: dict[str, dict[str, dict[str, Any]]]) -> str:
     """Format discovered params as readable text."""
     lines = ["# Auto-Discovered Parameters", ""]
-    lines.append("Source: src/llm_energy_measure/config/introspection.py (SSOT)")
+    lines.append("Source: src/llenergymeasure/config/introspection.py (SSOT)")
     lines.append("")
 
     for backend, params in sorted(all_params.items()):

@@ -5,7 +5,7 @@
 # Shared system dependencies - backends install their own PyTorch version
 #
 # Usage:
-#   docker build -f docker/Dockerfile.base -t llm-energy-measure-base:latest .
+#   docker build -f docker/Dockerfile.base -t llenergymeasure-base:latest .
 # =============================================================================
 
 FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS base

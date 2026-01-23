@@ -37,7 +37,7 @@ Build a **community-facing benchmarking platform** with:
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| CLI tool | Production | `llm-energy-measure experiment` |
+| CLI tool | Production | `lem experiment` |
 | Pydantic models | Production | All data validated, easily serialisable |
 | CSV/JSON export | Production | `ResultsExporter` class |
 | File-based results | Production | `results/raw/`, `results/aggregated/` |
@@ -304,7 +304,7 @@ Workers on your infrastructure connect outbound to the cloud API:
 |  +--------------------------------------------------------+      |
 |  |              Worker Agent (Python)                      |      |
 |  |  +- Polls Redis for pending jobs                        |      |
-|  |  +- Runs llm-energy-measure CLI                         |      |
+|  |  +- Runs lem CLI                         |      |
 |  |  +- Uploads results to API                              |      |
 |  |  +- Reports progress via WebSocket                      |      |
 |  +--------------------------------------------------------+      |
@@ -322,7 +322,7 @@ Workers on your infrastructure connect outbound to the cloud API:
 - Authenticate with API using service token
 - Poll Redis queue for jobs (or use Celery worker)
 - Download experiment config
-- Execute `llm-energy-measure experiment <config>`
+- Execute `lem experiment <config>`
 - Stream logs to API (real-time progress)
 - Upload results on completion
 - Handle failures, retries, timeouts
@@ -469,7 +469,7 @@ Workers on your infrastructure connect outbound to the cloud API:
 The existing CLI tool provides:
 
 ```
-src/llm_energy_measure/
+src/llenergymeasure/
 +-- domain/models.py      -> API response schemas (direct reuse)
 +-- config/models.py      -> Form validation schemas (direct reuse)
 +-- results/repository.py -> Storage abstraction (extend for S3)

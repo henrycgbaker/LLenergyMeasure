@@ -75,7 +75,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.base
-    image: llm-energy-measure-base:latest
+    image: llenergymeasure-base:latest
 
   # ==========================================================================
   # PyTorch Backend - HuggingFace Transformers + Accelerate
@@ -95,8 +95,8 @@ services:
       dockerfile: docker/Dockerfile.pytorch
       target: runtime
       args:
-        BASE_IMAGE: llm-energy-measure-base:latest
-    image: llm-energy-measure:pytorch
+        BASE_IMAGE: llenergymeasure-base:latest
+    image: llenergymeasure:pytorch
     depends_on:
       - base
 
@@ -112,8 +112,8 @@ services:
       dockerfile: docker/Dockerfile.pytorch
       target: dev
       args:
-        BASE_IMAGE: llm-energy-measure-base:latest
-    image: llm-energy-measure:pytorch-dev
+        BASE_IMAGE: llenergymeasure-base:latest
+    image: llenergymeasure:pytorch-dev
     depends_on:
       - base
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
@@ -139,8 +139,8 @@ services:
       dockerfile: docker/Dockerfile.vllm
       target: runtime
       args:
-        BASE_IMAGE: llm-energy-measure-base:latest
-    image: llm-energy-measure:vllm
+        BASE_IMAGE: llenergymeasure-base:latest
+    image: llenergymeasure:vllm
     depends_on:
       - base
 
@@ -158,8 +158,8 @@ services:
       dockerfile: docker/Dockerfile.vllm
       target: dev
       args:
-        BASE_IMAGE: llm-energy-measure-base:latest
-    image: llm-energy-measure:vllm-dev
+        BASE_IMAGE: llenergymeasure-base:latest
+    image: llenergymeasure:vllm-dev
     depends_on:
       - base
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
@@ -186,8 +186,8 @@ services:
       dockerfile: docker/Dockerfile.tensorrt
       target: runtime
       args:
-        BASE_IMAGE: llm-energy-measure-base:latest
-    image: llm-energy-measure:tensorrt
+        BASE_IMAGE: llenergymeasure-base:latest
+    image: llenergymeasure:tensorrt
     depends_on:
       - base
 
@@ -206,8 +206,8 @@ services:
       dockerfile: docker/Dockerfile.tensorrt
       target: dev
       args:
-        BASE_IMAGE: llm-energy-measure-base:latest
-    image: llm-energy-measure:tensorrt-dev
+        BASE_IMAGE: llenergymeasure-base:latest
+    image: llenergymeasure:tensorrt-dev
     depends_on:
       - base
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
@@ -216,11 +216,11 @@ services:
   # ==========================================================================
   # Legacy aliases (backwards compatibility)
   # ==========================================================================
-  llm-energy-measure-app:
+  llenergymeasure-app:
     extends:
       service: pytorch
 
-  llm-energy-measure-dev:
+  llenergymeasure-dev:
     extends:
       service: pytorch-dev
     profiles: ["dev"]

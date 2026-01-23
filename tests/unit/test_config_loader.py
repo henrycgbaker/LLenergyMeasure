@@ -2,15 +2,15 @@
 
 import pytest
 
-from llm_energy_measure.config.loader import (
+from llenergymeasure.config.loader import (
     deep_merge,
     load_config,
     load_config_dict,
     resolve_inheritance,
     validate_config,
 )
-from llm_energy_measure.config.models import ExperimentConfig
-from llm_energy_measure.exceptions import ConfigurationError
+from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.exceptions import ConfigurationError
 
 
 class TestDeepMerge:
@@ -200,7 +200,7 @@ class TestValidateConfig:
         Backend-specific validation is delegated to the backend's validate_config().
         This test uses a mock since validate_config no longer checks this directly.
         """
-        from llm_energy_measure.config.backend_configs import PyTorchConfig
+        from llenergymeasure.config.backend_configs import PyTorchConfig
 
         config = ExperimentConfig(
             config_name="test",
@@ -259,7 +259,7 @@ class TestValidateConfig:
 
     def test_config_warning_str_format(self):
         """ConfigWarning __str__ produces expected format."""
-        from llm_energy_measure.config.loader import ConfigWarning
+        from llenergymeasure.config.loader import ConfigWarning
 
         warning = ConfigWarning(
             field="test_field",
@@ -272,7 +272,7 @@ class TestValidateConfig:
 
     def test_config_warning_info_severity(self):
         """ConfigWarning with info severity."""
-        from llm_energy_measure.config.loader import ConfigWarning
+        from llenergymeasure.config.loader import ConfigWarning
 
         warning = ConfigWarning(
             field="test_field",
@@ -284,7 +284,7 @@ class TestValidateConfig:
 
     def test_config_warning_error_severity(self):
         """ConfigWarning with error severity."""
-        from llm_energy_measure.config.loader import ConfigWarning
+        from llenergymeasure.config.loader import ConfigWarning
 
         warning = ConfigWarning(
             field="test_field",
@@ -296,7 +296,7 @@ class TestValidateConfig:
 
     def test_config_warning_to_result_string(self):
         """ConfigWarning.to_result_string() formats for embedding in results."""
-        from llm_energy_measure.config.loader import ConfigWarning
+        from llenergymeasure.config.loader import ConfigWarning
 
         warning = ConfigWarning(
             field="decoder",
@@ -312,7 +312,7 @@ class TestValidateConfig:
         In backend-native architecture, quantization is in pytorch config.
         The universal validate_config does not validate backend params.
         """
-        from llm_energy_measure.config.backend_configs import PyTorchConfig
+        from llenergymeasure.config.backend_configs import PyTorchConfig
 
         # This is now valid at the universal level - backend validates specifics
         config = ExperimentConfig(
@@ -331,7 +331,7 @@ class TestValidateConfig:
         - pytorch.parallelism_strategy
         - pytorch.parallelism_degree
         """
-        from llm_energy_measure.config.backend_configs import PyTorchConfig
+        from llenergymeasure.config.backend_configs import PyTorchConfig
 
         # Config with parallelism set via backend-native config
         config = ExperimentConfig(
@@ -375,12 +375,12 @@ class TestHasBlockingWarnings:
     """Tests for has_blocking_warnings function."""
 
     def test_no_blocking_with_empty_list(self):
-        from llm_energy_measure.config.loader import has_blocking_warnings
+        from llenergymeasure.config.loader import has_blocking_warnings
 
         assert has_blocking_warnings([]) is False
 
     def test_no_blocking_with_info_warnings(self):
-        from llm_energy_measure.config.loader import ConfigWarning, has_blocking_warnings
+        from llenergymeasure.config.loader import ConfigWarning, has_blocking_warnings
 
         warnings = [
             ConfigWarning(field="a", message="info 1", severity="info"),
@@ -389,7 +389,7 @@ class TestHasBlockingWarnings:
         assert has_blocking_warnings(warnings) is False
 
     def test_no_blocking_with_warning_warnings(self):
-        from llm_energy_measure.config.loader import ConfigWarning, has_blocking_warnings
+        from llenergymeasure.config.loader import ConfigWarning, has_blocking_warnings
 
         warnings = [
             ConfigWarning(field="a", message="warning 1", severity="warning"),
@@ -398,7 +398,7 @@ class TestHasBlockingWarnings:
         assert has_blocking_warnings(warnings) is False
 
     def test_blocking_with_error_warning(self):
-        from llm_energy_measure.config.loader import ConfigWarning, has_blocking_warnings
+        from llenergymeasure.config.loader import ConfigWarning, has_blocking_warnings
 
         warnings = [
             ConfigWarning(field="a", message="info 1", severity="info"),
@@ -407,7 +407,7 @@ class TestHasBlockingWarnings:
         assert has_blocking_warnings(warnings) is True
 
     def test_blocking_with_multiple_errors(self):
-        from llm_energy_measure.config.loader import ConfigWarning, has_blocking_warnings
+        from llenergymeasure.config.loader import ConfigWarning, has_blocking_warnings
 
         warnings = [
             ConfigWarning(field="a", message="error 1", severity="error"),

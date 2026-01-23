@@ -1,6 +1,6 @@
 # Inference Backends
 
-LLM Energy Measure supports multiple inference backends, each optimised for different use cases. This guide covers backend selection, configuration mapping, and compatibility.
+LLenergyMeasure supports multiple inference backends, each optimised for different use cases. This guide covers backend selection, configuration mapping, and compatibility.
 
 ## Backend Overview
 
@@ -143,17 +143,17 @@ backend: vllm  # or 'pytorch' (default)
 
 ```bash
 # Or via CLI
-llm-energy-measure experiment config.yaml --backend vllm
+lem experiment config.yaml --backend vllm
 ```
 
 ### Backend-Specific Docker Images
 
 ```bash
 # PyTorch backend (default)
-docker compose run --rm llm-energy-measure-app llm-energy-measure experiment ...
+docker compose run --rm lem-app lem experiment ...
 
 # vLLM backend
-docker compose run --rm vllm llm-energy-measure experiment ... --backend vllm
+docker compose run --rm vllm lem experiment ... --backend vllm
 ```
 
 ## Backend-Native Configuration Architecture
@@ -433,7 +433,7 @@ decoder:
 tensorrt:
   # Engine Source
   engine_path: null                # Pre-compiled engine path (optional)
-  engine_cache_dir: null           # Cache dir (default: ~/.cache/llm-energy-measure/tensorrt-engines/)
+  engine_cache_dir: null           # Cache dir (default: ~/.cache/lem/tensorrt-engines/)
   force_rebuild: false             # Force rebuild even if cached
 
   # Build Configuration (compile-time)
@@ -514,15 +514,15 @@ Built-in presets for common scenarios:
 
 ```bash
 # vLLM presets
-llm-energy-measure experiment --preset vllm-throughput --model <model>    # High throughput
-llm-energy-measure experiment --preset vllm-speculative --model <model>   # Speculative decoding
-llm-energy-measure experiment --preset vllm-memory-efficient --model <model>  # fp8 KV cache
-llm-energy-measure experiment --preset vllm-low-latency --model <model>   # Low latency
+lem experiment --preset vllm-throughput --model <model>    # High throughput
+lem experiment --preset vllm-speculative --model <model>   # Speculative decoding
+lem experiment --preset vllm-memory-efficient --model <model>  # fp8 KV cache
+lem experiment --preset vllm-low-latency --model <model>   # Low latency
 
 # PyTorch presets
-llm-energy-measure experiment --preset pytorch-optimized --model <model>  # Flash attn + compile
-llm-energy-measure experiment --preset pytorch-speculative --model <model> # Assisted generation
-llm-energy-measure experiment --preset pytorch-compatible --model <model>  # Maximum compatibility
+lem experiment --preset pytorch-optimized --model <model>  # Flash attn + compile
+lem experiment --preset pytorch-speculative --model <model> # Assisted generation
+lem experiment --preset pytorch-compatible --model <model>  # Maximum compatibility
 ```
 
 | Preset | Backend | Key Settings |
@@ -612,7 +612,7 @@ streaming_warmup_requests: 5       # Warmup requests (excluded from stats)
 
 ```bash
 # Or via CLI
-llm-energy-measure experiment config.yaml --streaming --streaming-warmup 5
+lem experiment config.yaml --streaming --streaming-warmup 5
 ```
 
 ### Metrics Collected
@@ -770,12 +770,12 @@ Comparing results across backends is scientifically valid when done correctly:
 
 ```bash
 # Run same workload on both backends
-llm-energy-measure experiment config.yaml --backend pytorch
-llm-energy-measure experiment config.yaml --backend vllm
+lem experiment config.yaml --backend pytorch
+lem experiment config.yaml --backend vllm
 
 # Compare results
-llm-energy-measure results show <pytorch_exp_id>
-llm-energy-measure results show <vllm_exp_id>
+lem results show <pytorch_exp_id>
+lem results show <vllm_exp_id>
 ```
 
 ## Architecture
@@ -853,7 +853,7 @@ class MyBackend:
 Register in `inference_backends/__init__.py`:
 
 ```python
-_LAZY_BACKENDS["mybackend"] = "llm_energy_measure.core.inference_backends.mybackend:MyBackend"
+_LAZY_BACKENDS["mybackend"] = "llenergymeasure.core.inference_backends.mybackend:MyBackend"
 ```
 
 ## Troubleshooting
@@ -862,12 +862,12 @@ _LAZY_BACKENDS["mybackend"] = "llm_energy_measure.core.inference_backends.myback
 
 ```
 ERROR: Backend 'vllm' requires extra dependencies.
-Install with: pip install llm-energy-measure[vllm]
+Install with: pip install lem[vllm]
 ```
 
 **Solution:** Install the backend extras:
 ```bash
-pip install llm-energy-measure[vllm]
+pip install lem[vllm]
 # Or use Docker images which include dependencies
 ```
 

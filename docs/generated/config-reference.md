@@ -64,7 +64,7 @@
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `dataset` | llm_energy_measure.config.models.DatasetConfig \| None | None | Simple dataset config. For advanced options, use 'prompts' instead. |
+| `dataset` | llenergymeasure.config.models.DatasetConfig \| None | None | Simple dataset config. For advanced options, use 'prompts' instead. |
 
 ## decode_token_to_text
 

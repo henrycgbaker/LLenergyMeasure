@@ -7,13 +7,13 @@ import time
 
 import pytest
 
-from llm_energy_measure.config.backend_configs import PyTorchConfig
-from llm_energy_measure.config.models import (
+from llenergymeasure.config.backend_configs import PyTorchConfig
+from llenergymeasure.config.models import (
     DecoderConfig,
     ExperimentConfig,
     TrafficSimulation,
 )
-from llm_energy_measure.core.traffic import TrafficGenerator
+from llenergymeasure.core.traffic import TrafficGenerator
 
 
 class TestBatchingConfigWired:
@@ -21,7 +21,7 @@ class TestBatchingConfigWired:
 
     def test_batch_size_affects_batch_count(self):
         """Batch size should determine number of batches created."""
-        from llm_energy_measure.core.prompts import create_fixed_batches
+        from llenergymeasure.core.prompts import create_fixed_batches
 
         prompts = [f"Prompt {i}" for i in range(20)]
 
@@ -40,7 +40,7 @@ class TestBatchingConfigWired:
 
     def test_strategy_static_uses_fixed_batches(self):
         """Static strategy should create fixed-size batches."""
-        from llm_energy_measure.core.prompts import create_fixed_batches
+        from llenergymeasure.core.prompts import create_fixed_batches
 
         prompts = ["short", "medium length prompt", "a very long prompt here"]
         batches = create_fixed_batches(prompts, batch_size=2)
@@ -104,7 +104,7 @@ class TestDecoderConfigWired:
 
     def test_generation_kwargs_built_correctly(self):
         """Test PyTorchBackend._build_generation_kwargs produces correct output."""
-        from llm_energy_measure.core.inference_backends.pytorch import PyTorchBackend
+        from llenergymeasure.core.inference_backends.pytorch import PyTorchBackend
 
         # Test deterministic - use actual field name, not alias
         config = ExperimentConfig(
@@ -123,7 +123,7 @@ class TestDecoderConfigWired:
 
     def test_generation_kwargs_sampling_mode(self):
         """Test PyTorchBackend._build_generation_kwargs with sampling enabled."""
-        from llm_energy_measure.core.inference_backends.pytorch import PyTorchBackend
+        from llenergymeasure.core.inference_backends.pytorch import PyTorchBackend
 
         config = ExperimentConfig(
             config_name="test",
@@ -299,7 +299,7 @@ class TestParallelismConfigImplemented:
 
     def test_vllm_parallelism_config_parsed(self):
         """vLLM parallelism config should be parsed correctly."""
-        from llm_energy_measure.config.backend_configs import VLLMConfig
+        from llenergymeasure.config.backend_configs import VLLMConfig
 
         config = ExperimentConfig(
             config_name="test",
@@ -319,7 +319,7 @@ class TestParallelismConfigImplemented:
         """Parallelism config IS used in launcher to determine process count."""
         import inspect
 
-        from llm_energy_measure.orchestration import launcher
+        from llenergymeasure.orchestration import launcher
 
         source = inspect.getsource(launcher.get_backend_parallelism)
 
@@ -330,7 +330,7 @@ class TestParallelismConfigImplemented:
 
     def test_parallelism_strategy_factory_exists(self):
         """Parallelism strategy factory should exist and work."""
-        from llm_energy_measure.core.parallelism import (
+        from llenergymeasure.core.parallelism import (
             NoParallelism,
             ParallelismConfig,
             TensorParallelStrategy,
@@ -361,7 +361,7 @@ class TestBackendConfigImplemented:
     def test_backend_selection_in_factory(self):
         """Backend selection happens in factory, not inference module."""
 
-        from llm_energy_measure.core.inference_backends import get_backend
+        from llenergymeasure.core.inference_backends import get_backend
 
         # get_backend should exist and work
         pytorch_backend = get_backend("pytorch")

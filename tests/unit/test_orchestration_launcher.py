@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llm_energy_measure.exceptions import ConfigurationError
-from llm_energy_measure.orchestration.launcher import (
+from llenergymeasure.exceptions import ConfigurationError
+from llenergymeasure.orchestration.launcher import (
     get_config_file_path,
     log_failed_experiment,
     run_from_config,
@@ -90,8 +90,8 @@ class TestLogFailedExperiment:
 class TestRunFromConfig:
     """Tests for run_from_config function."""
 
-    @patch("llm_energy_measure.orchestration.lifecycle.ensure_clean_start")
-    @patch("llm_energy_measure.orchestration.context.ExperimentContext.create")
+    @patch("llenergymeasure.orchestration.lifecycle.ensure_clean_start")
+    @patch("llenergymeasure.orchestration.context.ExperimentContext.create")
     def test_success_returns_true(self, mock_create, mock_clean):
         mock_ctx = MagicMock()
         mock_ctx.experiment_id = "0001"
@@ -111,8 +111,8 @@ class TestRunFromConfig:
         assert result == "0001"
         mock_clean.assert_called_once()
 
-    @patch("llm_energy_measure.orchestration.lifecycle.ensure_clean_start")
-    @patch("llm_energy_measure.orchestration.context.ExperimentContext.create")
+    @patch("llenergymeasure.orchestration.lifecycle.ensure_clean_start")
+    @patch("llenergymeasure.orchestration.context.ExperimentContext.create")
     def test_failure_returns_false(self, mock_create, mock_clean):
         mock_create.side_effect = RuntimeError("Failed")
 
@@ -128,9 +128,9 @@ class TestRunFromConfig:
         assert success is False
         assert result is None
 
-    @patch("llm_energy_measure.orchestration.launcher.time.sleep")
-    @patch("llm_energy_measure.orchestration.lifecycle.ensure_clean_start")
-    @patch("llm_energy_measure.orchestration.context.ExperimentContext.create")
+    @patch("llenergymeasure.orchestration.launcher.time.sleep")
+    @patch("llenergymeasure.orchestration.lifecycle.ensure_clean_start")
+    @patch("llenergymeasure.orchestration.context.ExperimentContext.create")
     def test_retries_on_failure(self, mock_create, mock_clean, mock_sleep):
         mock_ctx = MagicMock()
         mock_ctx.experiment_id = "0001"
