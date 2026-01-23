@@ -7,7 +7,7 @@
 # REQUIREMENTS:
 #   - NVIDIA GPU (any modern GPU with sufficient VRAM)
 #   - Linux only (vLLM does not support Windows/macOS)
-#   - Install: pip install llm-energy-measure[vllm]
+#   - Install: pip install lem[vllm]
 #   - WARNING: Do not install alongside [tensorrt] - dependency conflicts
 #
 # ARCHITECTURE NOTE:

@@ -6,8 +6,8 @@ This guide walks you through your first LLM efficiency measurement experiment.
 
 ```bash
 # Clone and setup
-git clone https://github.com/henrycgbaker/llm-efficiency-measurement-tool
-cd llm-efficiency-measurement-tool
+git clone https://github.com/henrycgbaker/LLefficiencyMeasure
+cd LLefficiencyMeasure
 ./setup.sh
 
 # Run your first experiment
@@ -49,8 +49,8 @@ The simplest way to get started. Each backend runs in an isolated container.
 
 ```bash
 # Clone
-git clone https://github.com/henrycgbaker/llm-efficiency-measurement-tool
-cd llm-efficiency-measurement-tool
+git clone https://github.com/henrycgbaker/LLefficiencyMeasure
+cd LLefficiencyMeasure
 
 # One-click setup (creates .env, builds PyTorch image, creates lem wrapper)
 ./setup.sh
@@ -79,8 +79,8 @@ Use this for development or if you only need **one backend**.
 
 ```bash
 # Clone
-git clone https://github.com/henrycgbaker/llm-efficiency-measurement-tool
-cd llm-efficiency-measurement-tool
+git clone https://github.com/henrycgbaker/LLefficiencyMeasure
+cd LLefficiencyMeasure
 
 # Local install mode
 ./setup.sh --local
@@ -255,7 +255,7 @@ lem experiment --preset quick-test --model meta-llama/Llama-2-7b-hf -d alpaca -n
 lem presets
 ```
 
-For full configuration options, see [Configuration Guide](../src/llm_energy_measure/config/README.md).
+For full configuration options, see [Configuration Guide](../src/llenergymeasure/config/README.md).
 
 ## Metrics Collected
 
@@ -307,4 +307,4 @@ lem aggregate --all  # All pending
 
 - [CLI Reference](cli.md) - Full command documentation
 - [Deployment Guide](deployment.md) - Docker, MIG GPUs, troubleshooting
-- [Configuration Guide](../src/llm_energy_measure/config/README.md) - All config options
+- [Configuration Guide](../src/llenergymeasure/config/README.md) - All config options

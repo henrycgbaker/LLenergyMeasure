@@ -4,11 +4,11 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from llm_energy_measure.domain.experiment import (
+from llenergymeasure.domain.experiment import (
     AggregatedResult,
     AggregationMetadata,
 )
-from llm_energy_measure.results.cycle_statistics import (
+from llenergymeasure.results.cycle_statistics import (
     calculate_cv,
     calculate_statistics,
     create_cycle_metadata,

@@ -2,8 +2,8 @@
 
 import pytest
 
-from llm_energy_measure.exceptions import InvalidStateTransitionError
-from llm_energy_measure.state.experiment_state import (
+from llenergymeasure.exceptions import InvalidStateTransitionError
+from llenergymeasure.state.experiment_state import (
     EXPERIMENT_VALID_TRANSITIONS,
     ExperimentState,
     ExperimentStatus,

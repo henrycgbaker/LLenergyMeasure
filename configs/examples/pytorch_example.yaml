@@ -6,7 +6,7 @@
 #
 # REQUIREMENTS:
 #   - NVIDIA GPU (any modern GPU with sufficient VRAM)
-#   - Install: pip install llm-energy-measure[pytorch]
+#   - Install: pip install lem[pytorch]
 #   - Most compatible backend - use this if unsure
 #
 # ARCHITECTURE NOTE:

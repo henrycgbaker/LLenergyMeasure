@@ -6,7 +6,7 @@ pipeline parallelism (PP) strategies for multi-GPU inference.
 
 import pytest
 
-from llm_energy_measure.core.parallelism import (
+from llenergymeasure.core.parallelism import (
     NoParallelism,
     ParallelismConfig,
     PipelineParallelStrategy,

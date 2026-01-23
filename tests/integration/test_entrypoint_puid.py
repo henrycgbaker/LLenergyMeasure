@@ -1,9 +1,9 @@
-"""Integration tests for Docker entrypoint PUID/PGID auto-detection.
+"""Integration tests for Docker entrypoint PUID/PGID handling.
 
 Tests the entrypoint.sh script logic for:
-1. Auto-detecting PUID/PGID from mounted directory ownership
-2. Explicit PUID/PGID override taking precedence
-3. Fallback to root when directory doesn't exist
+1. Requiring explicit PUID/PGID environment variables
+2. Creating user/group with specified IDs
+3. Setting correct file ownership
 """
 
 import shutil
@@ -27,115 +27,42 @@ def test_mount_dir(tmp_path: Path) -> Path:
     return mount_dir
 
 
-class TestEntrypointPuidDetection:
-    """Tests for PUID/PGID auto-detection logic in entrypoint.sh."""
+class TestEntrypointPuidRequirement:
+    """Tests for PUID/PGID requirement in entrypoint.sh."""
 
-    def test_autodetect_from_mounted_directory(self, entrypoint_path: Path, test_mount_dir: Path):
-        """PUID/PGID should be auto-detected from mounted directory ownership."""
-        # Get expected UID/GID from the test directory
-        stat_info = test_mount_dir.stat()
-        expected_uid = stat_info.st_uid
-        expected_gid = stat_info.st_gid
-
-        # Run the detection logic (extracted from entrypoint.sh)
-        result = subprocess.run(
-            [
-                "bash",
-                "-c",
-                f"""
-                # Simulate entrypoint detection logic
-                unset PUID PGID
-                TEST_DIR="{test_mount_dir}"
-                if [ -z "$PUID" ] && [ -d "$TEST_DIR" ]; then
-                    PUID=$(stat -c %u "$TEST_DIR" 2>/dev/null || echo "0")
-                    PGID=$(stat -c %g "$TEST_DIR" 2>/dev/null || echo "0")
-                fi
-                PUID=${{PUID:-0}}
-                PGID=${{PGID:-0}}
-                echo "$PUID $PGID"
-                """,
-            ],
-            capture_output=True,
-            text=True,
-        )
-
-        detected_uid, detected_gid = result.stdout.strip().split()
-        assert int(detected_uid) == expected_uid
-        assert int(detected_gid) == expected_gid
-
-    def test_explicit_override_takes_precedence(self, entrypoint_path: Path, test_mount_dir: Path):
-        """Explicit PUID/PGID env vars should override auto-detection."""
-        explicit_uid = 1000
-        explicit_gid = 1000
-
-        result = subprocess.run(
-            [
-                "bash",
-                "-c",
-                f"""
-                # Simulate entrypoint with explicit override
-                export PUID={explicit_uid}
-                export PGID={explicit_gid}
-                TEST_DIR="{test_mount_dir}"
-                if [ -z "$PUID" ] && [ -d "$TEST_DIR" ]; then
-                    PUID=$(stat -c %u "$TEST_DIR" 2>/dev/null || echo "0")
-                    PGID=$(stat -c %g "$TEST_DIR" 2>/dev/null || echo "0")
-                fi
-                PUID=${{PUID:-0}}
-                PGID=${{PGID:-0}}
-                echo "$PUID $PGID"
-                """,
-            ],
-            capture_output=True,
-            text=True,
-        )
-
-        detected_uid, detected_gid = result.stdout.strip().split()
-        assert int(detected_uid) == explicit_uid
-        assert int(detected_gid) == explicit_gid
-
-    def test_fallback_to_root_when_dir_missing(self, entrypoint_path: Path):
-        """Should fall back to root (0) when mount directory doesn't exist."""
-        result = subprocess.run(
-            [
-                "bash",
-                "-c",
-                """
-                # Simulate entrypoint with missing directory
-                unset PUID PGID
-                TEST_DIR="/nonexistent/path"
-                if [ -z "$PUID" ] && [ -d "$TEST_DIR" ]; then
-                    PUID=$(stat -c %u "$TEST_DIR" 2>/dev/null || echo "0")
-                    PGID=$(stat -c %g "$TEST_DIR" 2>/dev/null || echo "0")
-                fi
-                PUID=${PUID:-0}
-                PGID=${PGID:-0}
-                echo "$PUID $PGID"
-                """,
-            ],
-            capture_output=True,
-            text=True,
-        )
-
-        detected_uid, detected_gid = result.stdout.strip().split()
-        assert int(detected_uid) == 0
-        assert int(detected_gid) == 0
-
-    def test_entrypoint_script_exists_and_executable(self, entrypoint_path: Path):
-        """Verify entrypoint.sh exists and has correct structure."""
+    def test_entrypoint_script_exists(self, entrypoint_path: Path):
+        """Verify entrypoint.sh exists."""
         assert entrypoint_path.exists(), f"Entrypoint not found at {entrypoint_path}"
 
+    def test_entrypoint_requires_puid_pgid(self, entrypoint_path: Path):
+        """Verify entrypoint requires PUID/PGID to be set."""
         content = entrypoint_path.read_text()
 
-        # Check for auto-detection logic
-        assert "stat -c %u" in content, "Missing UID auto-detection via stat"
-        assert "stat -c %g" in content, "Missing GID auto-detection via stat"
-        assert "/app/results" in content, "Missing /app/results directory check"
+        # Check for PUID/PGID requirement validation
+        assert "PUID" in content, "Missing PUID handling"
+        assert "PGID" in content, "Missing PGID handling"
 
-        # Check for precedence comment
-        assert (
-            "Precedence" in content or "precedence" in content
-        ), "Missing precedence documentation in script"
+        # Check for error handling when not set
+        assert "ERROR" in content, "Missing error message for missing PUID/PGID"
+
+    def test_entrypoint_creates_directories(self, entrypoint_path: Path):
+        """Verify entrypoint creates required directories."""
+        content = entrypoint_path.read_text()
+
+        assert "/app/results" in content, "Missing /app/results directory setup"
+        assert "/app/.state" in content, "Missing /app/.state directory setup"
+        assert "/app/.cache" in content, "Missing /app/.cache directory setup"
+
+    def test_entrypoint_uses_gosu(self, entrypoint_path: Path):
+        """Verify entrypoint uses gosu for user switching."""
+        content = entrypoint_path.read_text()
+        assert "gosu" in content, "Missing gosu for user switching"
+
+    def test_entrypoint_creates_user(self, entrypoint_path: Path):
+        """Verify entrypoint creates appuser with PUID/PGID."""
+        content = entrypoint_path.read_text()
+        assert "appuser" in content, "Missing appuser creation"
+        assert "useradd" in content or "adduser" in content, "Missing user creation command"
 
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="Docker not available")
@@ -145,7 +72,7 @@ class TestEntrypointDocker:
     @pytest.fixture
     def docker_image(self) -> str:
         """Assume the image is already built."""
-        return "llm-energy-measure:pytorch"
+        return "llenergymeasure:pytorch"
 
     def test_docker_autodetect_puid(self, tmp_path: Path, docker_image: str):
         """Test PUID auto-detection in actual Docker container."""

@@ -12,7 +12,7 @@ class TestPyTorchStreamingSupport:
 
     def test_supports_streaming_when_available(self):
         """_supports_streaming returns True when TextIteratorStreamer available."""
-        from llm_energy_measure.core.inference_backends.pytorch import PyTorchBackend
+        from llenergymeasure.core.inference_backends.pytorch import PyTorchBackend
 
         backend = PyTorchBackend()
 
@@ -33,7 +33,7 @@ class TestPyTorchStreamingFlags:
 
     def test_is_compiled_initially_false(self):
         """_is_compiled should be False on init."""
-        from llm_energy_measure.core.inference_backends.pytorch import PyTorchBackend
+        from llenergymeasure.core.inference_backends.pytorch import PyTorchBackend
 
         backend = PyTorchBackend()
         assert backend._is_compiled is False
@@ -44,7 +44,7 @@ class TestLatencyMeasurementsStructure:
 
     def test_latency_measurements_has_measurement_mode_field(self):
         """LatencyMeasurements should have measurement_mode field."""
-        from llm_energy_measure.core.inference_backends.protocols import (
+        from llenergymeasure.core.inference_backends.protocols import (
             LatencyMeasurementMode,
             LatencyMeasurements,
         )
@@ -68,7 +68,7 @@ class TestLatencyMeasurementsStructure:
 
     def test_latency_measurements_default_method_is_true_streaming(self):
         """Default measurement_mode should be TRUE_STREAMING."""
-        from llm_energy_measure.core.inference_backends.protocols import (
+        from llenergymeasure.core.inference_backends.protocols import (
             LatencyMeasurementMode,
             LatencyMeasurements,
         )
@@ -93,7 +93,7 @@ class TestPyTorchBackendResultStructure:
 
     def test_backend_result_supports_latency_measurements(self):
         """BackendResult should support latency_measurements field."""
-        from llm_energy_measure.core.inference_backends.protocols import (
+        from llenergymeasure.core.inference_backends.protocols import (
             BackendResult,
             LatencyMeasurementMode,
             LatencyMeasurements,
@@ -127,7 +127,7 @@ class TestPyTorchBackendResultStructure:
 
     def test_backend_result_latency_measurements_optional(self):
         """latency_measurements should be optional (None by default)."""
-        from llm_energy_measure.core.inference_backends.protocols import BackendResult
+        from llenergymeasure.core.inference_backends.protocols import BackendResult
 
         result = BackendResult(
             total_tokens=100,
@@ -144,7 +144,7 @@ class TestCollectItlMeasurementsIntegration:
 
     def test_collect_itl_measurements_imported_in_pytorch(self):
         """collect_itl_measurements should be importable from protocols."""
-        from llm_energy_measure.core.inference_backends.protocols import (
+        from llenergymeasure.core.inference_backends.protocols import (
             collect_itl_measurements,
         )
 
@@ -152,7 +152,7 @@ class TestCollectItlMeasurementsIntegration:
 
     def test_itl_trimming_logic(self):
         """ITL trimming should exclude first and last intervals per request."""
-        from llm_energy_measure.core.inference_backends.protocols import (
+        from llenergymeasure.core.inference_backends.protocols import (
             collect_itl_measurements,
         )
 
@@ -175,7 +175,7 @@ class TestWarningBehavior:
 
     def test_torch_compile_warning_flag_tracked(self):
         """Backend should track _is_compiled flag for warning."""
-        from llm_energy_measure.core.inference_backends.pytorch import PyTorchBackend
+        from llenergymeasure.core.inference_backends.pytorch import PyTorchBackend
 
         backend = PyTorchBackend()
         assert hasattr(backend, "_is_compiled")

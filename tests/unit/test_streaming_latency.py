@@ -5,7 +5,7 @@ Tests the shared ITL collection utility and LatencyMeasurements dataclass.
 
 import pytest
 
-from llm_energy_measure.core.inference_backends.protocols import (
+from llenergymeasure.core.inference_backends.protocols import (
     LatencyMeasurementMode,
     LatencyMeasurements,
     collect_itl_measurements,

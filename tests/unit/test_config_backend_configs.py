@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from llm_energy_measure.config.backend_configs import (
+from llenergymeasure.config.backend_configs import (
     PyTorchAssistedGenerationConfig,
     PyTorchConfig,
     TensorRTCalibrationConfig,
@@ -13,7 +13,7 @@ from llm_energy_measure.config.backend_configs import (
     VLLMLoRAConfig,
     VLLMSpeculativeConfig,
 )
-from llm_energy_measure.config.models import ExperimentConfig
+from llenergymeasure.config.models import ExperimentConfig
 
 
 class TestVLLMAttentionConfig:

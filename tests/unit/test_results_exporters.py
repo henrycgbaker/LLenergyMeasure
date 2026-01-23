@@ -5,14 +5,14 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from llm_energy_measure.domain.experiment import (
+from llenergymeasure.domain.experiment import (
     AggregatedResult,
     AggregationMetadata,
     RawProcessResult,
     Timestamps,
 )
-from llm_energy_measure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
-from llm_energy_measure.results.exporters import (
+from llenergymeasure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
+from llenergymeasure.results.exporters import (
     ResultsExporter,
     export_aggregated_to_csv,
     export_raw_to_csv,

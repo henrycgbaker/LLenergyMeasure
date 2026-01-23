@@ -6,11 +6,11 @@
 #
 # Usage:
 #   docker build -f docker/Dockerfile.pytorch \
-#     --build-arg BASE_IMAGE=llm-energy-measure-base:latest \
-#     -t llm-energy-measure:pytorch .
+#     --build-arg BASE_IMAGE=llenergymeasure-base:latest \
+#     -t llenergymeasure:pytorch .
 # =============================================================================
 
-ARG BASE_IMAGE=llm-energy-measure-base:latest
+ARG BASE_IMAGE=llenergymeasure-base:latest
 
 # ============================================================================
 # Stage 1: Builder - Install dependencies
@@ -42,7 +42,7 @@ COPY --from=builder /opt/venv /opt/venv
 
 # Use entrypoint with PUID/PGID support
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["llm-energy-measure", "--help"]
+CMD ["lem", "--help"]
 
 # ============================================================================
 # Stage 3: Dev - For development with source mounting

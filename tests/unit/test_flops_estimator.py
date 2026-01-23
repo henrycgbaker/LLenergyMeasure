@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from llm_energy_measure.config.models import ExperimentConfig
-from llm_energy_measure.core.flops import FlopsEstimator, estimate_flops, get_flops_estimator
-from llm_energy_measure.domain.metrics import FlopsResult
+from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.core.flops import FlopsEstimator, estimate_flops, get_flops_estimator
+from llenergymeasure.domain.metrics import FlopsResult
 
 
 class TestFlopsResult:
@@ -327,7 +327,7 @@ class TestBNBQuantizationHandling:
 
     def test_bnb_4bit_uses_compute_dtype(self):
         """Test that 4-bit BNB models use the bnb_4bit_compute_dtype."""
-        from llm_energy_measure.config.backend_configs import PyTorchConfig
+        from llenergymeasure.config.backend_configs import PyTorchConfig
 
         estimator = FlopsEstimator()
 
@@ -346,7 +346,7 @@ class TestBNBQuantizationHandling:
 
     def test_bnb_8bit_uses_fp16_precision(self):
         """Test that 8-bit BNB models use FP16 precision."""
-        from llm_energy_measure.config.backend_configs import PyTorchConfig
+        from llenergymeasure.config.backend_configs import PyTorchConfig
 
         estimator = FlopsEstimator()
 

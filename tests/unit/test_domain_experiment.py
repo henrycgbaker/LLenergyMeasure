@@ -5,14 +5,14 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from llm_energy_measure.constants import SCHEMA_VERSION
-from llm_energy_measure.domain.experiment import (
+from llenergymeasure.constants import SCHEMA_VERSION
+from llenergymeasure.domain.experiment import (
     AggregatedResult,
     AggregationMetadata,
     RawProcessResult,
     Timestamps,
 )
-from llm_energy_measure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
+from llenergymeasure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
 
 
 class TestTimestamps:

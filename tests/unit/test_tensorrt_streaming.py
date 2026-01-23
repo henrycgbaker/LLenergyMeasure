@@ -40,7 +40,7 @@ class TestTensorRTStreamingFlags:
 
     def test_supported_params_includes_streaming(self):
         """Streaming params should be in supported params."""
-        from llm_energy_measure.core.inference_backends.tensorrt import TensorRTBackend
+        from llenergymeasure.core.inference_backends.tensorrt import TensorRTBackend
 
         backend = TensorRTBackend()
         supported = backend.get_supported_params()
@@ -54,7 +54,7 @@ class TestTensorRTLatencyMeasurements:
 
     def test_latency_measurements_structure(self):
         """LatencyMeasurements should have all required fields."""
-        from llm_energy_measure.core.inference_backends.protocols import (
+        from llenergymeasure.core.inference_backends.protocols import (
             LatencyMeasurementMode,
             LatencyMeasurements,
         )
@@ -77,7 +77,7 @@ class TestTensorRTLatencyMeasurements:
 
     def test_estimation_fallback_uses_correct_mode(self):
         """Estimation fallback should use PROPORTIONAL_ESTIMATE mode."""
-        from llm_energy_measure.core.inference_backends.protocols import (
+        from llenergymeasure.core.inference_backends.protocols import (
             LatencyMeasurementMode,
             LatencyMeasurements,
         )
@@ -104,7 +104,7 @@ class TestTensorRTBackendResultStructure:
 
     def test_backend_result_with_latency_measurements(self):
         """BackendResult should properly contain latency measurements."""
-        from llm_energy_measure.core.inference_backends.protocols import (
+        from llenergymeasure.core.inference_backends.protocols import (
             BackendResult,
             LatencyMeasurementMode,
             LatencyMeasurements,
@@ -146,7 +146,7 @@ class TestTensorRTBackendResultStructure:
 
     def test_backend_metadata_contains_latency_warning(self):
         """Estimation fallback should include warning in metadata."""
-        from llm_energy_measure.core.inference_backends.protocols import BackendResult
+        from llenergymeasure.core.inference_backends.protocols import BackendResult
 
         # When using estimation fallback, metadata should include warning
         result = BackendResult(
@@ -172,7 +172,7 @@ class TestCollectItlMeasurementsIntegration:
 
     def test_collect_itl_measurements_available(self):
         """collect_itl_measurements should be imported in tensorrt module."""
-        from llm_energy_measure.core.inference_backends.tensorrt import (
+        from llenergymeasure.core.inference_backends.tensorrt import (
             collect_itl_measurements,
         )
 
@@ -180,7 +180,7 @@ class TestCollectItlMeasurementsIntegration:
 
     def test_itl_calculation_with_estimated_timestamps(self):
         """ITL calculation should work with evenly-distributed timestamps."""
-        from llm_energy_measure.core.inference_backends.protocols import (
+        from llenergymeasure.core.inference_backends.protocols import (
             collect_itl_measurements,
         )
 

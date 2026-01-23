@@ -1,5 +1,5 @@
 {
-  "name": "LLM Energy Measure (PyTorch)",
+  "name": "LLenergyMeasure (PyTorch)",
   "dockerComposeFile": "../docker-compose.yml",
   "service": "pytorch-dev",
   "workspaceFolder": "/app",

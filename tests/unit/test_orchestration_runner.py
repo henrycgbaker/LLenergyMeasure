@@ -5,14 +5,14 @@ from unittest.mock import MagicMock, PropertyMock
 
 import pytest
 
-from llm_energy_measure.config.models import ExperimentConfig
-from llm_energy_measure.domain.metrics import (
+from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.domain.metrics import (
     CombinedMetrics,
     ComputeMetrics,
     EnergyMetrics,
     InferenceMetrics,
 )
-from llm_energy_measure.orchestration.runner import ExperimentOrchestrator
+from llenergymeasure.orchestration.runner import ExperimentOrchestrator
 
 
 @pytest.fixture

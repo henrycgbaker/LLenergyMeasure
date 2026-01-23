@@ -2,9 +2,9 @@
 
 import pytest
 
-from llm_energy_measure.config.backend_configs import PyTorchConfig
-from llm_energy_measure.config.models import DecoderConfig, ExperimentConfig
-from llm_energy_measure.core.inference_backends.pytorch import PyTorchBackend
+from llenergymeasure.config.backend_configs import PyTorchConfig
+from llenergymeasure.config.models import DecoderConfig, ExperimentConfig
+from llenergymeasure.core.inference_backends.pytorch import PyTorchBackend
 
 
 class TestBuildGenerationKwargs:

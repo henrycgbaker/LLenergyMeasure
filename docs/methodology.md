@@ -1,6 +1,6 @@
 # LLM Efficiency Measurement Methodology
 
-This document describes the methodology used by `llm-energy-measure` to measure LLM inference efficiency.
+This document describes the methodology used by `lem` to measure LLM inference efficiency.
 
 ## Overview
 

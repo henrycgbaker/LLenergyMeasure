@@ -2,7 +2,7 @@
 
 from loguru import logger
 
-from llm_energy_measure.logging import get_logger, setup_logging
+from llenergymeasure.logging import get_logger, setup_logging
 
 
 class TestSetupLogging:

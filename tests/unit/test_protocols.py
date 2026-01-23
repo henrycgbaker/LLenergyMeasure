@@ -3,8 +3,8 @@
 from pathlib import Path
 from typing import Any
 
-from llm_energy_measure.domain.metrics import EnergyMetrics
-from llm_energy_measure.protocols import (
+from llenergymeasure.domain.metrics import EnergyMetrics
+from llenergymeasure.protocols import (
     EnergyBackend,
     InferenceEngine,
     ModelLoader,

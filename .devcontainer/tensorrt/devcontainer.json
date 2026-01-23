@@ -1,5 +1,5 @@
 {
-  "name": "LLM Energy Measure (TensorRT)",
+  "name": "LLenergyMeasure (TensorRT)",
   "dockerComposeFile": "../../docker-compose.yml",
   "service": "tensorrt-dev",
   "workspaceFolder": "/app",

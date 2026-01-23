@@ -5,8 +5,8 @@ import time
 import numpy as np
 import pytest
 
-from llm_energy_measure.config.models import TrafficSimulation
-from llm_energy_measure.core.traffic import TrafficGenerator, apply_traffic_delay
+from llenergymeasure.config.models import TrafficSimulation
+from llenergymeasure.core.traffic import TrafficGenerator, apply_traffic_delay
 
 
 class TestTrafficGenerator:

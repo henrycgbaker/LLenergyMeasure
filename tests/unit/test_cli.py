@@ -6,15 +6,15 @@ from datetime import datetime
 import pytest
 from typer.testing import CliRunner
 
-from llm_energy_measure.cli import app
-from llm_energy_measure.domain.experiment import (
+from llenergymeasure.cli import app
+from llenergymeasure.domain.experiment import (
     AggregatedResult,
     AggregationMetadata,
     RawProcessResult,
     Timestamps,
 )
-from llm_energy_measure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
-from llm_energy_measure.results.repository import FileSystemRepository
+from llenergymeasure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
+from llenergymeasure.results.repository import FileSystemRepository
 
 
 def strip_ansi(text: str) -> str:
@@ -38,7 +38,7 @@ class TestMainApp:
     def test_version_displays(self):
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
-        assert "llm-energy-measure" in result.stdout
+        assert "lem" in result.stdout
 
 
 class TestRunCommand:
@@ -421,11 +421,11 @@ class TestExperimentCommand:
         import subprocess
         from unittest.mock import MagicMock
 
-        import llm_energy_measure.constants
+        import llenergymeasure.constants
 
         # Use temp directory for state to avoid interference from real experiments
         # Must be Path, not str, as code uses / operator for path joining
-        monkeypatch.setattr(llm_energy_measure.constants, "DEFAULT_STATE_DIR", tmp_path / "state")
+        monkeypatch.setattr(llenergymeasure.constants, "DEFAULT_STATE_DIR", tmp_path / "state")
 
         calls = []
 
@@ -478,11 +478,11 @@ class TestExperimentCommand:
 
         import yaml
 
-        import llm_energy_measure.constants
+        import llenergymeasure.constants
 
         # Use temp directory for state to avoid interference from real experiments
         # Must be Path, not str, as code uses / operator for path joining
-        monkeypatch.setattr(llm_energy_measure.constants, "DEFAULT_STATE_DIR", tmp_path / "state")
+        monkeypatch.setattr(llenergymeasure.constants, "DEFAULT_STATE_DIR", tmp_path / "state")
 
         calls = []
 
@@ -549,11 +549,11 @@ fp_precision: float32
         import subprocess
         from unittest.mock import MagicMock
 
-        import llm_energy_measure.constants
+        import llenergymeasure.constants
 
         # Use temp directory for state to avoid interference from real experiments
         # Must be Path, not str, as code uses / operator for path joining
-        monkeypatch.setattr(llm_energy_measure.constants, "DEFAULT_STATE_DIR", tmp_path / "state")
+        monkeypatch.setattr(llenergymeasure.constants, "DEFAULT_STATE_DIR", tmp_path / "state")
 
         calls = []
 

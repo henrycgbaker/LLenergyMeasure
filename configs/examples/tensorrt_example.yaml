@@ -10,7 +10,7 @@
 #     NOT supported: V100, T4, RTX 20xx, GTX series
 #   - CUDA 12.x (not CUDA 11.x)
 #   - Linux only (TensorRT-LLM does not support Windows/macOS)
-#   - Install: pip install llm-energy-measure[tensorrt]
+#   - Install: pip install lem[tensorrt]
 #   - WARNING: Do not install alongside [vllm] - dependency conflicts
 #
 # ARCHITECTURE NOTE:
@@ -168,7 +168,7 @@ tensorrt:
   # If not set, engine will be built from HuggingFace checkpoint
   engine_path: null
   force_rebuild: false  # Force rebuild even if cached
-  engine_cache_dir: null  # Default: ~/.cache/llm-energy-measure/tensorrt-engines/
+  engine_cache_dir: null  # Default: ~/.cache/lem/tensorrt-engines/
 
   # ===========================================================================
   # Build Configuration (compile-time)

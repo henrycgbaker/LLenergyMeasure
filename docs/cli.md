@@ -1,11 +1,11 @@
 # CLI Reference
 
-Complete command reference for `llm-energy-measure`.
+Complete command reference for `lem`.
 
 ## Usage
 
 ```
-llm-energy-measure [OPTIONS] COMMAND [ARGS]
+lem [OPTIONS] COMMAND [ARGS]
 ```
 
 ## Global Options
@@ -24,7 +24,7 @@ llm-energy-measure [OPTIONS] COMMAND [ARGS]
 Run an experiment with automatic launcher handling and result aggregation.
 
 ```bash
-llm-energy-measure experiment [path/to/config.yaml] [OPTIONS]
+lem experiment [path/to/config.yaml] [OPTIONS]
 ```
 
 **Prompt Source Options:**
@@ -76,19 +76,19 @@ llm-energy-measure experiment [path/to/config.yaml] [OPTIONS]
 
 ```bash
 # Basic experiment with dataset
-llm-energy-measure experiment configs/llama2.yaml --dataset alpaca -n 100
+lem experiment configs/llama2.yaml --dataset alpaca -n 100
 
 # Using preset (no config file needed)
-llm-energy-measure experiment --preset quick-test --model meta-llama/Llama-2-7b-hf -d alpaca -n 10
+lem experiment --preset quick-test --model meta-llama/Llama-2-7b-hf -d alpaca -n 10
 
 # Multiple cycles for statistical robustness
-llm-energy-measure experiment configs/llama2.yaml --dataset alpaca -n 100 --cycles 5
+lem experiment configs/llama2.yaml --dataset alpaca -n 100 --cycles 5
 
 # Resume interrupted experiment
-llm-energy-measure experiment --resume exp_20240115_123456
+lem experiment --resume exp_20240115_123456
 
 # Dry run to check config
-llm-energy-measure experiment configs/llama2.yaml --dataset alpaca -n 100 --dry-run
+lem experiment configs/llama2.yaml --dataset alpaca -n 100 --dry-run
 ```
 
 ---
@@ -98,7 +98,7 @@ llm-energy-measure experiment configs/llama2.yaml --dataset alpaca -n 100 --dry-
 Run multiple experiment configs in batch.
 
 ```bash
-llm-energy-measure batch <config_pattern> [OPTIONS]
+lem batch <config_pattern> [OPTIONS]
 ```
 
 | Option | Description |
@@ -112,13 +112,13 @@ llm-energy-measure batch <config_pattern> [OPTIONS]
 
 ```bash
 # Sequential batch run
-llm-energy-measure batch "configs/*.yaml" --dataset alpaca -n 100
+lem batch "configs/*.yaml" --dataset alpaca -n 100
 
 # Parallel (4 at a time)
-llm-energy-measure batch "configs/grid/*.yaml" --parallel 4 --dataset alpaca -n 100
+lem batch "configs/grid/*.yaml" --parallel 4 --dataset alpaca -n 100
 
 # Preview what would run
-llm-energy-measure batch "configs/*.yaml" --dry-run
+lem batch "configs/*.yaml" --dry-run
 ```
 
 ---
@@ -128,7 +128,7 @@ llm-energy-measure batch "configs/*.yaml" --dry-run
 Run multi-config campaigns for statistical comparison. See [Campaign Guide](campaigns.md) for full documentation.
 
 ```bash
-llm-energy-measure campaign CONFIG_PATHS... [OPTIONS]
+lem campaign CONFIG_PATHS... [OPTIONS]
 ```
 
 **Arguments:**
@@ -156,14 +156,14 @@ llm-energy-measure campaign CONFIG_PATHS... [OPTIONS]
 
 ```bash
 # Compare two configs with 5 cycles
-llm-energy-measure campaign configs/pytorch.yaml configs/vllm.yaml \
+lem campaign configs/pytorch.yaml configs/vllm.yaml \
   --campaign-name "backend-comparison" --cycles 5 -d alpaca -n 100
 
 # Use campaign YAML
-llm-energy-measure campaign configs/examples/campaign_example.yaml
+lem campaign configs/examples/campaign_example.yaml
 
 # Preview execution plan
-llm-energy-measure campaign configs/*.yaml --campaign-name "test" --dry-run
+lem campaign configs/*.yaml --campaign-name "test" --dry-run
 ```
 
 ---
@@ -173,7 +173,7 @@ llm-energy-measure campaign configs/*.yaml --campaign-name "test" --dry-run
 Run experiments on a schedule (daemon mode) for temporal variation studies.
 
 ```bash
-llm-energy-measure schedule [config.yaml] [OPTIONS]
+lem schedule [config.yaml] [OPTIONS]
 ```
 
 **Scheduling Options:**
@@ -199,13 +199,13 @@ llm-energy-measure schedule [config.yaml] [OPTIONS]
 
 ```bash
 # Run every 6 hours for 24 hours
-llm-energy-measure schedule config.yaml --interval 6h --dataset alpaca -n 100
+lem schedule config.yaml --interval 6h --dataset alpaca -n 100
 
 # Run at 9am on weekdays for a week
-llm-energy-measure schedule config.yaml --at 09:00 --days weekdays --duration 7d --dataset alpaca -n 100
+lem schedule config.yaml --at 09:00 --days weekdays --duration 7d --dataset alpaca -n 100
 
 # Using preset
-llm-energy-measure schedule --preset benchmark --model meta-llama/Llama-2-7b-hf --interval 12h
+lem schedule --preset benchmark --model meta-llama/Llama-2-7b-hf --interval 12h
 ```
 
 ---
@@ -217,7 +217,7 @@ llm-energy-measure schedule --preset benchmark --model meta-llama/Llama-2-7b-hf 
 Low-level inference command (called by `experiment`).
 
 ```bash
-llm-energy-measure run <config.yaml> [OPTIONS]
+lem run <config.yaml> [OPTIONS]
 ```
 
 | Option | Description |
@@ -237,7 +237,7 @@ llm-energy-measure run <config.yaml> [OPTIONS]
 Aggregate raw per-process results into final metrics. Called by `experiment`.
 
 ```bash
-llm-energy-measure aggregate [experiment_id] [OPTIONS]
+lem aggregate [experiment_id] [OPTIONS]
 ```
 
 | Option | Description |
@@ -252,13 +252,13 @@ llm-energy-measure aggregate [experiment_id] [OPTIONS]
 
 ```bash
 # Aggregate specific experiment
-llm-energy-measure aggregate exp_20240115_123456
+lem aggregate exp_20240115_123456
 
 # Aggregate all pending
-llm-energy-measure aggregate --all
+lem aggregate --all
 
 # Force re-aggregate
-llm-energy-measure aggregate exp_20240115_123456 --force
+lem aggregate exp_20240115_123456 --force
 ```
 
 ---
@@ -272,7 +272,7 @@ Configuration management commands.
 Validate a configuration file.
 
 ```bash
-llm-energy-measure config validate <config.yaml>
+lem config validate <config.yaml>
 ```
 
 Checks for valid YAML syntax, required fields, value constraints, and inheritance resolution.
@@ -282,7 +282,7 @@ Checks for valid YAML syntax, required fields, value constraints, and inheritanc
 Display resolved configuration (with inheritance applied).
 
 ```bash
-llm-energy-measure config show <config.yaml>
+lem config show <config.yaml>
 ```
 
 #### config new
@@ -290,7 +290,7 @@ llm-energy-measure config show <config.yaml>
 Interactive config builder for creating new experiment configs.
 
 ```bash
-llm-energy-measure config new [OPTIONS]
+lem config new [OPTIONS]
 ```
 
 | Option | Description |
@@ -303,7 +303,7 @@ llm-energy-measure config new [OPTIONS]
 Generate a grid of configs from a base config with parameter variations.
 
 ```bash
-llm-energy-measure config generate-grid <base_config.yaml> [OPTIONS]
+lem config generate-grid <base_config.yaml> [OPTIONS]
 ```
 
 | Option | Description |
@@ -317,13 +317,13 @@ llm-energy-measure config generate-grid <base_config.yaml> [OPTIONS]
 
 ```bash
 # Generate batch size × precision grid
-llm-energy-measure config generate-grid base.yaml \
+lem config generate-grid base.yaml \
   --vary batch_size=1,2,4,8 \
   --vary fp_precision=float16,float32 \
   --output-dir ./grid/
 
 # Only generate valid configs
-llm-energy-measure config generate-grid base.yaml \
+lem config generate-grid base.yaml \
   --vary batch_size=1,2,4,8,16,32 \
   --validate
 ```
@@ -339,7 +339,7 @@ Results inspection commands.
 List all experiments.
 
 ```bash
-llm-energy-measure results list [OPTIONS]
+lem results list [OPTIONS]
 ```
 
 | Option | Description |
@@ -352,7 +352,7 @@ llm-energy-measure results list [OPTIONS]
 Show experiment results.
 
 ```bash
-llm-energy-measure results show <exp_id> [OPTIONS]
+lem results show <exp_id> [OPTIONS]
 ```
 
 | Option | Description |
@@ -368,7 +368,7 @@ llm-energy-measure results show <exp_id> [OPTIONS]
 Show GPU topology (including MIG instances).
 
 ```bash
-llm-energy-measure gpus
+lem gpus
 ```
 
 **Example output:**
@@ -388,7 +388,7 @@ GPU Topology (4 device(s) detected)
 List available built-in datasets.
 
 ```bash
-llm-energy-measure datasets
+lem datasets
 ```
 
 ---
@@ -398,7 +398,7 @@ llm-energy-measure datasets
 List built-in experiment presets.
 
 ```bash
-llm-energy-measure presets
+lem presets
 ```
 
 ---
@@ -432,7 +432,7 @@ CLI flags  >  Config file  >  Preset  >  Environment variables  >  Defaults
 **Example:**
 ```bash
 # Config file sets batch_size=4, CLI overrides to 8
-llm-energy-measure experiment config.yaml --batch-size 8
+lem experiment config.yaml --batch-size 8
 # Result: batch_size=8
 ```
 
@@ -480,7 +480,7 @@ For advanced control, use `accelerate launch` directly:
 
 ```bash
 accelerate launch --num_processes 2 \
-  -m llm_energy_measure.orchestration.launcher \
+  -m llenergymeasure.orchestration.launcher \
   --config configs/my_experiment.yaml \
   --dataset alpaca -n 100
 ```

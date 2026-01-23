@@ -6,9 +6,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from llm_energy_measure.config.backend_configs import PyTorchConfig
-from llm_energy_measure.config.models import ExperimentConfig
-from llm_energy_measure.orchestration.context import (
+from llenergymeasure.config.backend_configs import PyTorchConfig
+from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.orchestration.context import (
     ExperimentContext,
     experiment_context,
 )
@@ -87,7 +87,7 @@ class TestExperimentContext:
 
         assert ctx.num_processes == 4
 
-    @patch("llm_energy_measure.orchestration.context.cleanup_distributed")
+    @patch("llenergymeasure.orchestration.context.cleanup_distributed")
     def test_cleanup_calls_distributed_cleanup(self, mock_cleanup, sample_config, mock_accelerator):
         """Test cleanup calls cleanup_distributed."""
         ctx = ExperimentContext(
@@ -107,8 +107,8 @@ class TestExperimentContext:
 class TestExperimentContextCreate:
     """Tests for ExperimentContext.create factory method."""
 
-    @patch("llm_energy_measure.orchestration.context.get_shared_unique_id")
-    @patch("llm_energy_measure.orchestration.context.get_accelerator")
+    @patch("llenergymeasure.orchestration.context.get_shared_unique_id")
+    @patch("llenergymeasure.orchestration.context.get_accelerator")
     def test_create_sets_up_accelerator(
         self, mock_get_accel, mock_get_id, sample_config, mock_accelerator
     ):
@@ -125,8 +125,8 @@ class TestExperimentContextCreate:
         assert ctx.accelerator is mock_accelerator
         assert ctx.experiment_id == "0042"
 
-    @patch("llm_energy_measure.orchestration.context.get_shared_unique_id")
-    @patch("llm_energy_measure.orchestration.context.get_accelerator")
+    @patch("llenergymeasure.orchestration.context.get_shared_unique_id")
+    @patch("llenergymeasure.orchestration.context.get_accelerator")
     def test_create_propagates_accelerator_properties(
         self, mock_get_accel, mock_get_id, sample_config, mock_accelerator
     ):
@@ -143,8 +143,8 @@ class TestExperimentContextCreate:
         assert ctx.process_index == 2
         assert ctx.device == torch.device("cuda:1")
 
-    @patch("llm_energy_measure.orchestration.context.get_shared_unique_id")
-    @patch("llm_energy_measure.orchestration.context.get_accelerator")
+    @patch("llenergymeasure.orchestration.context.get_shared_unique_id")
+    @patch("llenergymeasure.orchestration.context.get_accelerator")
     def test_create_sets_start_time(
         self, mock_get_accel, mock_get_id, sample_config, mock_accelerator
     ):
@@ -158,8 +158,8 @@ class TestExperimentContextCreate:
 
         assert before <= ctx.start_time <= after
 
-    @patch("llm_energy_measure.orchestration.context.get_shared_unique_id")
-    @patch("llm_energy_measure.orchestration.context.get_accelerator")
+    @patch("llenergymeasure.orchestration.context.get_shared_unique_id")
+    @patch("llenergymeasure.orchestration.context.get_accelerator")
     def test_create_with_custom_id_file(
         self, mock_get_accel, mock_get_id, sample_config, mock_accelerator, tmp_path
     ):
@@ -176,9 +176,9 @@ class TestExperimentContextCreate:
 class TestExperimentContextManager:
     """Tests for experiment_context context manager."""
 
-    @patch("llm_energy_measure.orchestration.context.cleanup_distributed")
-    @patch("llm_energy_measure.orchestration.context.get_shared_unique_id")
-    @patch("llm_energy_measure.orchestration.context.get_accelerator")
+    @patch("llenergymeasure.orchestration.context.cleanup_distributed")
+    @patch("llenergymeasure.orchestration.context.get_shared_unique_id")
+    @patch("llenergymeasure.orchestration.context.get_accelerator")
     def test_context_manager_yields_context(
         self, mock_get_accel, mock_get_id, mock_cleanup, sample_config, mock_accelerator
     ):
@@ -191,9 +191,9 @@ class TestExperimentContextManager:
             assert ctx.experiment_id == "0001"
             assert ctx.config is sample_config
 
-    @patch("llm_energy_measure.orchestration.context.cleanup_distributed")
-    @patch("llm_energy_measure.orchestration.context.get_shared_unique_id")
-    @patch("llm_energy_measure.orchestration.context.get_accelerator")
+    @patch("llenergymeasure.orchestration.context.cleanup_distributed")
+    @patch("llenergymeasure.orchestration.context.get_shared_unique_id")
+    @patch("llenergymeasure.orchestration.context.get_accelerator")
     def test_context_manager_cleans_up_on_exit(
         self, mock_get_accel, mock_get_id, mock_cleanup, sample_config, mock_accelerator
     ):
@@ -206,9 +206,9 @@ class TestExperimentContextManager:
 
         mock_cleanup.assert_called_once()
 
-    @patch("llm_energy_measure.orchestration.context.cleanup_distributed")
-    @patch("llm_energy_measure.orchestration.context.get_shared_unique_id")
-    @patch("llm_energy_measure.orchestration.context.get_accelerator")
+    @patch("llenergymeasure.orchestration.context.cleanup_distributed")
+    @patch("llenergymeasure.orchestration.context.get_shared_unique_id")
+    @patch("llenergymeasure.orchestration.context.get_accelerator")
     def test_context_manager_cleans_up_on_exception(
         self, mock_get_accel, mock_get_id, mock_cleanup, sample_config, mock_accelerator
     ):
@@ -221,9 +221,9 @@ class TestExperimentContextManager:
 
         mock_cleanup.assert_called_once()
 
-    @patch("llm_energy_measure.orchestration.context.cleanup_distributed")
-    @patch("llm_energy_measure.orchestration.context.get_shared_unique_id")
-    @patch("llm_energy_measure.orchestration.context.get_accelerator")
+    @patch("llenergymeasure.orchestration.context.cleanup_distributed")
+    @patch("llenergymeasure.orchestration.context.get_shared_unique_id")
+    @patch("llenergymeasure.orchestration.context.get_accelerator")
     def test_context_manager_with_custom_id_file(
         self,
         mock_get_accel,
@@ -247,8 +247,8 @@ class TestExperimentContextManager:
 class TestExperimentContextMultiProcess:
     """Tests for multi-process scenarios."""
 
-    @patch("llm_energy_measure.orchestration.context.get_shared_unique_id")
-    @patch("llm_energy_measure.orchestration.context.get_accelerator")
+    @patch("llenergymeasure.orchestration.context.get_shared_unique_id")
+    @patch("llenergymeasure.orchestration.context.get_accelerator")
     def test_multi_process_config(self, mock_get_accel, mock_get_id):
         """Test context creation with multi-process config.
 

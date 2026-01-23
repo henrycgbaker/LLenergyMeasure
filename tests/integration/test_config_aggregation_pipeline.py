@@ -9,15 +9,15 @@ from pathlib import Path
 
 import pytest
 
-from llm_energy_measure.config.loader import load_config
-from llm_energy_measure.domain.experiment import (
+from llenergymeasure.config.loader import load_config
+from llenergymeasure.domain.experiment import (
     RawProcessResult,
     Timestamps,
 )
-from llm_energy_measure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
-from llm_energy_measure.results.aggregation import aggregate_results, calculate_efficiency_metrics
-from llm_energy_measure.results.exporters import ResultsExporter
-from llm_energy_measure.results.repository import FileSystemRepository
+from llenergymeasure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
+from llenergymeasure.results.aggregation import aggregate_results, calculate_efficiency_metrics
+from llenergymeasure.results.exporters import ResultsExporter
+from llenergymeasure.results.repository import FileSystemRepository
 
 
 class TestConfigToAggregationPipeline:

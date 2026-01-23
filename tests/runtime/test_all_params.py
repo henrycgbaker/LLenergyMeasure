@@ -113,11 +113,11 @@ class TestReport:
 def get_discovered_params(backend: str) -> dict[str, list[Any]]:
     """Get auto-discovered params for a backend using SSOT introspection.
 
-    Uses llm_energy_measure.config.introspection as the Single Source of Truth.
+    Uses llenergymeasure.config.introspection as the Single Source of Truth.
     Falls back to manual definitions only if introspection import fails.
     """
     try:
-        from llm_energy_measure.config.introspection import get_backend_params
+        from llenergymeasure.config.introspection import get_backend_params
 
         # Convert introspection format to test values format
         introspected = get_backend_params(backend)
@@ -1226,7 +1226,7 @@ def main() -> None:
         return
 
     print("=" * 60)
-    print("LLM Energy Measure - Parameter Testing")
+    print("LLenergyMeasure - Parameter Testing")
     print("=" * 60)
     print(f"  Model: {TEST_MODEL}")
     print(f"  Sample size: {TEST_SAMPLE_SIZE}")

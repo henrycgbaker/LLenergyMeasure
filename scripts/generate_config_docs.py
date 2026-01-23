@@ -237,8 +237,8 @@ def _yaml_value(value: Any) -> str:
 
 def main() -> None:
     """Generate configuration documentation."""
-    from llm_energy_measure.config.models import ExperimentConfig
-    from llm_energy_measure.constants import PRESETS
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.constants import PRESETS
 
     print("Extracting field information from ExperimentConfig...")
     fields = extract_field_info(ExperimentConfig)

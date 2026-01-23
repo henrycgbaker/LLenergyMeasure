@@ -6,14 +6,14 @@
 #
 # Usage:
 #   docker build -f docker/Dockerfile.vllm \
-#     --build-arg BASE_IMAGE=llm-energy-measure-base:latest \
-#     -t llm-energy-measure:vllm .
+#     --build-arg BASE_IMAGE=llenergymeasure-base:latest \
+#     -t llenergymeasure:vllm .
 #
 # Note: vLLM installs its own PyTorch version (2.8+), which differs from
 # the pytorch backend (2.5.x). This is intentional for compatibility.
 # =============================================================================
 
-ARG BASE_IMAGE=llm-energy-measure-base:latest
+ARG BASE_IMAGE=llenergymeasure-base:latest
 
 # ============================================================================
 # Stage 1: Builder - Install vLLM and dependencies
@@ -48,7 +48,7 @@ COPY --from=builder /opt/venv /opt/venv
 
 # Use entrypoint with PUID/PGID support
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["llm-energy-measure", "--help"]
+CMD ["lem", "--help"]
 
 # ============================================================================
 # Stage 3: Dev - For development with source mounting

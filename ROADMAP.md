@@ -1,4 +1,4 @@
-# LLM Energy Measure Roadmap
+# LLenergyMeasure Roadmap
 
 > Research-focused efficiency measurement for LLM inference.
 > Complements MLPerf by providing energy, FLOPs, and quality-efficiency analysis.
@@ -259,7 +259,7 @@ User chooses preferred platform.
 Automatically compute correlation between parameter values and energy/efficiency metrics across experiments.
 
 ```bash
-$ llm-energy-measure analyse correlations --experiments exp1,exp2,exp3,...
+$ lem analyse correlations --experiments exp1,exp2,exp3,...
 
 Parameter Correlations with Energy (J/token):
   vllm.speculative.num_tokens:     r=-0.72 (p<0.01)  # more speculation = lower energy
@@ -287,7 +287,7 @@ Visual comparison of experiments highlighting parameter differences and their ef
 Given a base config, automatically vary parameters to find energy-optimal configurations.
 
 ```bash
-$ llm-energy-measure sweep config.yaml \
+$ lem sweep config.yaml \
     --vary batching.batch_size=1,2,4,8 \
     --vary vllm.speculative.num_tokens=3,5,7
 ```

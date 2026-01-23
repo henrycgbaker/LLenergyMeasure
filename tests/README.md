@@ -1,6 +1,6 @@
 # tests/ - Test Suite
 
-Unit, integration, e2e, and runtime tests for the LLM Energy Measure framework.
+Unit, integration, e2e, and runtime tests for the LLenergyMeasure framework.
 
 ## Structure
 
@@ -49,7 +49,7 @@ pytest tests/runtime/ -v --quick    # Quick subset
 poetry run pytest tests/unit/test_config_models.py -v
 
 # With coverage
-poetry run pytest tests/ --cov=llm_energy_measure --cov-report=html
+poetry run pytest tests/ --cov=llenergymeasure --cov-report=html
 ```
 
 ## Test Categories
@@ -186,7 +186,7 @@ Coverage reports uploaded to Codecov.
 
 ## Related
 
-- See `src/llm_energy_measure/README.md` for package structure
+- See `src/llenergymeasure/README.md` for package structure
 - See `Makefile` for test commands
 - See `tests/runtime/test_all_params.py` for parameter testing (canonical location)
 - See `scripts/generate_param_matrix.py` for docs generation

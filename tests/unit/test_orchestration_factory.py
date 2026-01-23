@@ -5,13 +5,13 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 import torch
 
-from llm_energy_measure.config.models import ExperimentConfig
-from llm_energy_measure.orchestration.factory import (
+from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.orchestration.factory import (
     ExperimentComponents,
     create_components,
     create_orchestrator,
 )
-from llm_energy_measure.protocols import (
+from llenergymeasure.protocols import (
     InferenceEngine,
     MetricsCollector,
     ModelLoader,
@@ -105,9 +105,9 @@ class TestCreateComponents:
     instead of direct implementations (HuggingFaceModelLoader, etc.).
     """
 
-    @patch("llm_energy_measure.results.repository.FileSystemRepository")
-    @patch("llm_energy_measure.core.energy_backends.get_backend")
-    @patch("llm_energy_measure.core.inference_backends.get_backend")
+    @patch("llenergymeasure.results.repository.FileSystemRepository")
+    @patch("llenergymeasure.core.energy_backends.get_backend")
+    @patch("llenergymeasure.core.inference_backends.get_backend")
     def test_creates_all_components(
         self,
         mock_get_inference_backend,
@@ -131,9 +131,9 @@ class TestCreateComponents:
         mock_get_energy_backend.assert_called_once_with("codecarbon")
         mock_repo_cls.assert_called_once()
 
-    @patch("llm_energy_measure.results.repository.FileSystemRepository")
-    @patch("llm_energy_measure.core.energy_backends.get_backend")
-    @patch("llm_energy_measure.core.inference_backends.get_backend")
+    @patch("llenergymeasure.results.repository.FileSystemRepository")
+    @patch("llenergymeasure.core.energy_backends.get_backend")
+    @patch("llenergymeasure.core.inference_backends.get_backend")
     def test_components_have_correct_types(
         self,
         mock_get_inference_backend,
@@ -156,9 +156,9 @@ class TestCreateComponents:
         assert components.metrics_collector is not None
         assert components.backend_name == "pytorch"
 
-    @patch("llm_energy_measure.results.repository.FileSystemRepository")
-    @patch("llm_energy_measure.core.energy_backends.get_backend")
-    @patch("llm_energy_measure.core.inference_backends.get_backend")
+    @patch("llenergymeasure.results.repository.FileSystemRepository")
+    @patch("llenergymeasure.core.energy_backends.get_backend")
+    @patch("llenergymeasure.core.inference_backends.get_backend")
     def test_uses_codecarbon_backend(
         self,
         mock_get_inference_backend,
@@ -177,9 +177,9 @@ class TestCreateComponents:
 
         mock_get_energy_backend.assert_called_once_with("codecarbon")
 
-    @patch("llm_energy_measure.results.repository.FileSystemRepository")
-    @patch("llm_energy_measure.core.energy_backends.get_backend")
-    @patch("llm_energy_measure.core.inference_backends.get_backend")
+    @patch("llenergymeasure.results.repository.FileSystemRepository")
+    @patch("llenergymeasure.core.energy_backends.get_backend")
+    @patch("llenergymeasure.core.inference_backends.get_backend")
     def test_returns_correct_component_instances(
         self,
         mock_get_inference_backend,
@@ -217,8 +217,8 @@ class TestCreateComponents:
 class TestCreateOrchestrator:
     """Tests for create_orchestrator factory function."""
 
-    @patch("llm_energy_measure.orchestration.runner.ExperimentOrchestrator")
-    @patch("llm_energy_measure.orchestration.factory.create_components")
+    @patch("llenergymeasure.orchestration.runner.ExperimentOrchestrator")
+    @patch("llenergymeasure.orchestration.factory.create_components")
     def test_creates_orchestrator_with_components(
         self, mock_create_components, mock_orchestrator_cls, mock_context
     ):
@@ -248,8 +248,8 @@ class TestCreateOrchestrator:
             backend_version=mock_components.backend_version,
         )
 
-    @patch("llm_energy_measure.orchestration.runner.ExperimentOrchestrator")
-    @patch("llm_energy_measure.orchestration.factory.create_components")
+    @patch("llenergymeasure.orchestration.runner.ExperimentOrchestrator")
+    @patch("llenergymeasure.orchestration.factory.create_components")
     def test_returns_orchestrator_instance(
         self, mock_create_components, mock_orchestrator_cls, mock_context
     ):
@@ -281,7 +281,7 @@ class TestCreateOrchestrator:
 class TestFactoryIntegration:
     """Integration tests for factory with real implementations."""
 
-    @patch("llm_energy_measure.core.energy_backends.get_backend")
+    @patch("llenergymeasure.core.energy_backends.get_backend")
     def test_create_components_produces_protocol_compliant_objects(
         self, mock_get_backend, mock_context
     ):
@@ -302,12 +302,12 @@ class TestFactoryIntegration:
         assert isinstance(components.repository, ResultsRepository)
         # EnergyBackend check - mock won't satisfy it, but real would
 
-    @patch("llm_energy_measure.core.energy_backends.get_backend")
+    @patch("llenergymeasure.core.energy_backends.get_backend")
     def test_create_orchestrator_returns_functional_orchestrator(
         self, mock_get_backend, mock_context
     ):
         """Verify create_orchestrator returns a functional orchestrator."""
-        from llm_energy_measure.orchestration.runner import ExperimentOrchestrator
+        from llenergymeasure.orchestration.runner import ExperimentOrchestrator
 
         mock_backend = MagicMock()
         mock_get_backend.return_value = mock_backend

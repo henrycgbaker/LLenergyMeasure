@@ -5,13 +5,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from llm_energy_measure.config.models import ExperimentConfig
-from llm_energy_measure.core.implementations import (
+from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.core.implementations import (
     HuggingFaceModelLoader,
     ThroughputMetricsCollector,
 )
-from llm_energy_measure.domain.metrics import InferenceMetrics
-from llm_energy_measure.protocols import MetricsCollector, ModelLoader
+from llenergymeasure.domain.metrics import InferenceMetrics
+from llenergymeasure.protocols import MetricsCollector, ModelLoader
 
 # ============================================================
 # Fixtures
@@ -73,7 +73,7 @@ class TestHuggingFaceModelLoader:
         assert hasattr(loader, "load")
         assert callable(loader.load)
 
-    @patch("llm_energy_measure.core.model_loader.load_model_tokenizer")
+    @patch("llenergymeasure.core.model_loader.load_model_tokenizer")
     def test_load_delegates_to_function(self, mock_load_fn, sample_config):
         """Verify load() delegates to load_model_tokenizer function."""
         mock_model = MagicMock()
@@ -87,7 +87,7 @@ class TestHuggingFaceModelLoader:
         assert model is mock_model
         assert tokenizer is mock_tokenizer
 
-    @patch("llm_energy_measure.core.model_loader.load_model_tokenizer")
+    @patch("llenergymeasure.core.model_loader.load_model_tokenizer")
     def test_load_passes_config_unchanged(self, mock_load_fn, sample_config):
         """Verify the config object is passed through unchanged."""
         mock_load_fn.return_value = (MagicMock(), MagicMock())
@@ -123,7 +123,7 @@ class TestThroughputMetricsCollector:
         assert hasattr(collector, "collect")
         assert callable(collector.collect)
 
-    @patch("llm_energy_measure.core.compute_metrics.collect_compute_metrics")
+    @patch("llenergymeasure.core.compute_metrics.collect_compute_metrics")
     def test_collect_delegates_to_function(
         self,
         mock_collect_fn,
@@ -132,7 +132,7 @@ class TestThroughputMetricsCollector:
         sample_config,
     ):
         """Verify collect() delegates to collect_compute_metrics function."""
-        from llm_energy_measure.domain.metrics import ComputeMetrics
+        from llenergymeasure.domain.metrics import ComputeMetrics
 
         mock_compute = ComputeMetrics(flops_total=1e12)
         mock_collect_fn.return_value = mock_compute
@@ -154,7 +154,7 @@ class TestThroughputMetricsCollector:
         assert result.inference is mock_inference_result.metrics
         assert result.compute is mock_compute
 
-    @patch("llm_energy_measure.core.compute_metrics.collect_compute_metrics")
+    @patch("llenergymeasure.core.compute_metrics.collect_compute_metrics")
     def test_collect_returns_placeholder_energy_metrics(
         self,
         mock_collect_fn,
@@ -163,7 +163,7 @@ class TestThroughputMetricsCollector:
         sample_config,
     ):
         """Verify collect() returns placeholder energy metrics."""
-        from llm_energy_measure.domain.metrics import ComputeMetrics
+        from llenergymeasure.domain.metrics import ComputeMetrics
 
         mock_collect_fn.return_value = ComputeMetrics(flops_total=1e12)
         mock_model = MagicMock()
@@ -176,7 +176,7 @@ class TestThroughputMetricsCollector:
         assert result.energy.gpu_energy_j == 0.0
         assert result.energy.duration_sec == 0.0
 
-    @patch("llm_energy_measure.core.compute_metrics.collect_compute_metrics")
+    @patch("llenergymeasure.core.compute_metrics.collect_compute_metrics")
     def test_collect_uses_device_from_accelerator(
         self,
         mock_collect_fn,
@@ -185,7 +185,7 @@ class TestThroughputMetricsCollector:
         sample_config,
     ):
         """Verify collect() uses device from stored accelerator."""
-        from llm_energy_measure.domain.metrics import ComputeMetrics
+        from llenergymeasure.domain.metrics import ComputeMetrics
 
         mock_collect_fn.return_value = ComputeMetrics(flops_total=1e12)
 

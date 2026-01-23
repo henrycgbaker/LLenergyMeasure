@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from llm_energy_measure.cli import app
-from llm_energy_measure.domain.experiment import RawProcessResult, Timestamps
-from llm_energy_measure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
-from llm_energy_measure.results.repository import FileSystemRepository
+from llenergymeasure.cli import app
+from llenergymeasure.domain.experiment import RawProcessResult, Timestamps
+from llenergymeasure.domain.metrics import ComputeMetrics, EnergyMetrics, InferenceMetrics
+from llenergymeasure.results.repository import FileSystemRepository
 
 # Pass NO_COLOR to disable Rich colors in test output for consistent assertions
 runner = CliRunner(env={"NO_COLOR": "1"})
