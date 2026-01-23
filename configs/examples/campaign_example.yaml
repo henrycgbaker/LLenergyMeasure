@@ -1,0 +1,46 @@
+# Example Campaign Configuration
+# ===============================
+# Runs multiple experiment configs across multiple cycles for statistical comparison.
+#
+# Usage:
+#   llm-energy-measure campaign configs/examples/campaign_example.yaml
+#
+# Or override with CLI args:
+#   llm-energy-measure campaign configs/examples/campaign_example.yaml \
+#     --cycles 3 --dataset alpaca -n 50
+
+# Required: descriptive name for this campaign (used in results)
+campaign_name: "pytorch-vs-vllm-comparison"
+
+# Prompt source (overrides individual config datasets)
+dataset: ai_energy_score
+num_samples: 100
+
+# Experiment configs to compare (relative paths resolved from this file's directory)
+configs:
+  - pytorch_example.yaml
+  - vllm_example.yaml
+
+# Execution parameters
+execution:
+  # Number of complete cycles through all configs
+  cycles: 5
+
+  # Execution order:
+  #   interleaved: A->B->C, A->B->C (fair comparison, fixed order per cycle)
+  #   shuffled: Random order within each cycle (eliminates ordering bias)
+  #   grouped: Ax3, Bx3, Cx3 (all cycles of one config before next)
+  structure: shuffled
+
+  # Warmup: dual-criteria (stops when EITHER is reached)
+  warmup_prompts: 5           # Min prompts before measurement
+  warmup_timeout_seconds: 30  # Max warmup time
+
+  # Thermal management
+  config_gap_seconds: 60      # Gap between configs (GPU thermal recovery)
+  cycle_gap_seconds: 300      # Gap between cycles (full thermal reset)
+
+# Optional: scheduled execution (for overnight runs)
+# schedule:
+#   at: "03:00"               # Run at 3 AM
+#   days: ["mon", "wed", "fri"]  # Or: "weekdays", "weekends"

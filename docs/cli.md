@@ -123,6 +123,51 @@ llm-energy-measure batch "configs/*.yaml" --dry-run
 
 ---
 
+### campaign
+
+Run multi-config campaigns for statistical comparison. See [Campaign Guide](campaigns.md) for full documentation.
+
+```bash
+llm-energy-measure campaign CONFIG_PATHS... [OPTIONS]
+```
+
+**Arguments:**
+- `CONFIG_PATHS`: Campaign YAML file OR multiple experiment config files
+
+**Campaign Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--campaign-name` | Campaign name (required for multiple configs) |
+| `--dataset, -d` | Dataset override for all experiments |
+| `--sample-size, -n` | Sample size override |
+| `--cycles, -c` | Number of cycles (default: 3) |
+| `--structure` | Execution order: interleaved, shuffled, grouped |
+| `--warmup-prompts` | Min warmup prompts per config |
+| `--warmup-timeout` | Max warmup time in seconds |
+| `--config-gap` | Gap between configs (seconds) |
+| `--cycle-gap` | Gap between cycles (seconds) |
+| `--seed` | Random seed for shuffled structure |
+| `--results-dir, -o` | Results directory |
+| `--dry-run` | Preview execution plan |
+| `--yes, -y` | Skip confirmation |
+
+**Examples:**
+
+```bash
+# Compare two configs with 5 cycles
+llm-energy-measure campaign configs/pytorch.yaml configs/vllm.yaml \
+  --campaign-name "backend-comparison" --cycles 5 -d alpaca -n 100
+
+# Use campaign YAML
+llm-energy-measure campaign configs/examples/campaign_example.yaml
+
+# Preview execution plan
+llm-energy-measure campaign configs/*.yaml --campaign-name "test" --dry-run
+```
+
+---
+
 ### schedule
 
 Run experiments on a schedule (daemon mode) for temporal variation studies.

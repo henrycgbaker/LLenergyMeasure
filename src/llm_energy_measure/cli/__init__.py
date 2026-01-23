@@ -81,18 +81,26 @@ def _register_commands() -> None:
 
     This is done in a function to control import order and avoid
     circular imports that can occur with typer.
-    """
-    from llm_energy_measure.cli import experiment
 
-    # Register experiment commands with their original signatures
+    Commands are imported directly from their defining modules to avoid
+    unnecessary re-exports and keep module responsibilities clear.
+    """
+    from llm_energy_measure.cli import batch, campaign, experiment, listing, schedule
+
+    # Core experiment commands
     app.command("run")(experiment.run_cmd)  # Legacy command
     app.command("experiment")(experiment.experiment_cmd)
     app.command("aggregate")(experiment.aggregate_cmd)
-    app.command("datasets")(experiment.list_datasets_cmd)
-    app.command("presets")(experiment.list_presets_cmd)
-    app.command("gpus")(experiment.list_gpus_cmd)
-    app.command("batch")(experiment.batch_run_cmd)
-    app.command("schedule")(experiment.schedule_experiment_cmd)
+
+    # Listing commands (informational)
+    app.command("datasets")(listing.list_datasets_cmd)
+    app.command("presets")(listing.list_presets_cmd)
+    app.command("gpus")(listing.list_gpus_cmd)
+
+    # Execution modes
+    app.command("batch")(batch.batch_run_cmd)
+    app.command("schedule")(schedule.schedule_experiment_cmd)
+    app.command("campaign")(campaign.campaign_cmd)
 
 
 # Register commands

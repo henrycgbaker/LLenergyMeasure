@@ -84,9 +84,9 @@ docker compose build base pytorch vllm tensorrt
 **Running experiments:**
 ```bash
 # Run with specific backend
-docker compose run --rm pytorch lem experiment /app/configs/example_pytorch.yaml
-docker compose run --rm vllm lem experiment /app/configs/example_vllm.yaml
-docker compose run --rm tensorrt lem experiment /app/configs/example_tensorrt.yaml
+docker compose run --rm pytorch lem experiment /app/configs/examples/pytorch_example.yaml
+docker compose run --rm vllm lem experiment /app/configs/examples/vllm_example.yaml
+docker compose run --rm tensorrt lem experiment /app/configs/examples/tensorrt_example.yaml
 
 # Interactive shell
 docker compose run --rm pytorch /bin/bash
@@ -122,10 +122,10 @@ cp configs/example_config.yaml configs/my_experiment.yaml
 
 | Config | Use Case |
 |--------|----------|
-| [example_config.yaml](../configs/example_config.yaml) | Minimal baseline (recommended starting point) |
-| [example_pytorch.yaml](../configs/example_pytorch.yaml) | Full PyTorch backend reference (all parameters) |
-| [example_vllm.yaml](../configs/example_vllm.yaml) | Full vLLM backend reference (all parameters) |
-| [example_tensorrt.yaml](../configs/example_tensorrt.yaml) | Full TensorRT backend reference (all parameters) |
+| [pytorch_example.yaml](../configs/examples/pytorch_example.yaml) | Full PyTorch backend reference (all parameters) |
+| [vllm_example.yaml](../configs/examples/vllm_example.yaml) | Full vLLM backend reference (all parameters) |
+| [tensorrt_example.yaml](../configs/examples/tensorrt_example.yaml) | Full TensorRT backend reference (all parameters) |
+| [campaign_example.yaml](../configs/examples/campaign_example.yaml) | Multi-config campaign comparison |
 
 ### 2. Validate Your Configuration
 

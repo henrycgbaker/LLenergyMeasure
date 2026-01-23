@@ -110,11 +110,11 @@ docker compose build tensorrt   # Build TensorRT image
 
 ```bash
 # Local
-lem experiment configs/example_pytorch.yaml --dataset alpaca -n 100
+lem experiment configs/examples/pytorch_example.yaml --dataset alpaca -n 100
 
 # Docker (use matching backend service)
-docker compose run --rm pytorch lem experiment /app/configs/example_pytorch.yaml -n 100
-docker compose run --rm vllm lem experiment /app/configs/example_vllm.yaml -n 100
+docker compose run --rm pytorch lem experiment /app/configs/examples/pytorch_example.yaml -n 100
+docker compose run --rm vllm lem experiment /app/configs/examples/vllm_example.yaml -n 100
 ```
 
 ## Development

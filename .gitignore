@@ -7,9 +7,9 @@
 # -----------------------------------------------------------------------------
 results/
 
-# User configs (example configs are tracked)
+# User configs (example configs are tracked in configs/examples/)
 configs/*
-!configs/example_*.yaml
+!configs/examples/
 var/
 persistent_progress_trackers/
 emissions*.csv
