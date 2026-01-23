@@ -1,28 +1,28 @@
 # Docker Compose with multiple backend support
 #
-# Usage:
+# Quick Start:
+#   ./setup.sh                    # One-time setup (creates .env, builds image)
+#   ./lem experiment config.yaml  # Run experiments
+#
+# Manual Usage:
 #   Build base first:  docker compose build base
-#   PyTorch (default): docker compose run --rm pytorch llm-energy-measure --help
-#   vLLM:              docker compose run --rm vllm llm-energy-measure --help
-#   TensorRT:          docker compose run --rm tensorrt llm-energy-measure --help
-#   Development:       docker compose --profile dev run --rm pytorch-dev /bin/bash
+#   PyTorch (default): docker compose run --rm pytorch lem --help
+#   vLLM:              docker compose run --rm vllm lem --help
+#   TensorRT:          docker compose run --rm tensorrt lem --help
 #
 # Examples:
 #   # PyTorch backend (default)
-#   docker compose run --rm pytorch llm-energy-measure experiment configs/examples/pytorch_example.yaml
+#   docker compose run --rm pytorch lem experiment configs/examples/pytorch_example.yaml
 #
 #   # vLLM backend
-#   docker compose run --rm vllm llm-energy-measure experiment configs/examples/vllm_example.yaml
+#   docker compose run --rm vllm lem experiment configs/examples/vllm_example.yaml
 #
 #   # TensorRT backend
-#   docker compose run --rm tensorrt llm-energy-measure experiment configs/examples/tensorrt_example.yaml
-#   # Development with PyTorch
+#   docker compose run --rm tensorrt lem experiment configs/examples/tensorrt_example.yaml
+#
+#   # Development shells
 #   docker compose --profile dev run --rm pytorch-dev /bin/bash
-#
-#   # Development with vLLM
 #   docker compose --profile dev run --rm vllm-dev /bin/bash
-#
-#   # Development with TensorRT
 #   docker compose --profile dev run --rm tensorrt-dev /bin/bash
 
 # Shared configuration anchor
@@ -43,10 +43,10 @@ x-common: &common
 
   # Environment variables
   environment:
-    # PUID/PGID for host permission mapping (entrypoint.sh handles these)
-    # Pass these when running: PUID=$(id -u) PGID=$(id -g) docker compose run ...
-    - PUID
-    - PGID
+    # PUID/PGID for host permission mapping (REQUIRED - set in .env)
+    # Run ./setup.sh to generate .env, or copy from .env.example
+    - PUID=${PUID:?Run ./setup.sh first or set PUID in .env}
+    - PGID=${PGID:?Run ./setup.sh first or set PGID in .env}
     # Standard config
     - HF_TOKEN
     - CUDA_VISIBLE_DEVICES
@@ -83,11 +83,13 @@ services:
   pytorch:
     <<: *common
     volumes:
-      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
-      - ./scripts:/app/scripts:ro
+      # Bind mounts: user-accessible data
+      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
-      # Mount HF cache for gated models - avoids re-auth in child processes
-      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
+      - ./scripts:/app/scripts:ro
+      # Named volumes: container-managed (no permission issues)
+      - hf-cache:/app/.cache/huggingface
+      - experiment-state:/app/.state
     build:
       context: .
       dockerfile: docker/Dockerfile.pytorch
@@ -102,7 +104,8 @@ services:
     <<: *common
     volumes:
       - .:/app
-      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
+      - hf-cache:/app/.cache/huggingface
+      - experiment-state:/app/.state
     profiles: ["dev"]
     build:
       context: .
@@ -124,11 +127,13 @@ services:
     # vLLM requires shared memory for multiprocessing
     ipc: host
     volumes:
-      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
-      - ./scripts:/app/scripts:ro
+      # Bind mounts: user-accessible data
+      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
-      # Mount HF cache for gated models - avoids re-auth in child processes
-      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
+      - ./scripts:/app/scripts:ro
+      # Named volumes: container-managed (no permission issues)
+      - hf-cache:/app/.cache/huggingface
+      - experiment-state:/app/.state
     build:
       context: .
       dockerfile: docker/Dockerfile.vllm
@@ -145,7 +150,8 @@ services:
     ipc: host
     volumes:
       - .:/app
-      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
+      - hf-cache:/app/.cache/huggingface
+      - experiment-state:/app/.state
     profiles: ["dev"]
     build:
       context: .
@@ -167,13 +173,14 @@ services:
     # TensorRT-LLM requires shared memory for multiprocessing
     ipc: host
     volumes:
-      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
-      - ./scripts:/app/scripts:ro
+      # Bind mounts: user-accessible data
+      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
-      # Mount HF cache for gated models - avoids re-auth in child processes
-      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
-      # Engine cache for compiled TensorRT engines
-      - ${TRT_ENGINE_CACHE:-~/.cache/tensorrt-engines}:/app/.cache/tensorrt-engines
+      - ./scripts:/app/scripts:ro
+      # Named volumes: container-managed (no permission issues)
+      - hf-cache:/app/.cache/huggingface
+      - trt-engine-cache:/app/.cache/tensorrt-engines
+      - experiment-state:/app/.state
     build:
       context: .
       dockerfile: docker/Dockerfile.tensorrt
@@ -190,9 +197,9 @@ services:
     ipc: host
     volumes:
       - .:/app
-      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
-      # Engine cache for compiled TensorRT engines
-      - ${TRT_ENGINE_CACHE:-~/.cache/tensorrt-engines}:/app/.cache/tensorrt-engines
+      - hf-cache:/app/.cache/huggingface
+      - trt-engine-cache:/app/.cache/tensorrt-engines
+      - experiment-state:/app/.state
     profiles: ["dev"]
     build:
       context: .
@@ -217,3 +224,26 @@ services:
     extends:
       service: pytorch-dev
     profiles: ["dev"]
+
+# =============================================================================
+# Named Volumes (Docker-managed, persist across container restarts)
+# =============================================================================
+# These volumes store large caches and internal state.
+# They persist unless you explicitly run: docker compose down -v
+#
+# To clear specific volumes:
+#   docker volume rm llm-efficiency-measurement-tool_hf-cache
+#   docker volume rm llm-efficiency-measurement-tool_experiment-state
+#
+volumes:
+  # HuggingFace model cache (10-100+ GB)
+  hf-cache:
+    name: lem-hf-cache
+
+  # TensorRT compiled engine cache (1-10+ GB)
+  trt-engine-cache:
+    name: lem-trt-engine-cache
+
+  # Experiment state and progress tracking
+  experiment-state:
+    name: lem-experiment-state

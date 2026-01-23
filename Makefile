@@ -1,10 +1,19 @@
 .PHONY: format lint typecheck check test test-integration test-all install dev clean
 .PHONY: docker-build docker-build-all docker-build-vllm docker-build-tensorrt
-.PHONY: docker-build-dev docker-check experiment datasets validate docker-shell docker-dev lem
+.PHONY: docker-build-dev docker-check experiment datasets validate docker-shell docker-dev
+.PHONY: setup lem-clean lem-clean-all
 
 # PUID/PGID for correct file ownership on bind mounts (LinuxServer.io pattern)
+# These are also set in .env by setup.sh - Makefile exports for convenience
 export PUID := $(shell id -u)
 export PGID := $(shell id -g)
+
+# =============================================================================
+# Quick Start (new users should use: ./setup.sh)
+# =============================================================================
+
+setup:
+	@./setup.sh
 
 # =============================================================================
 # Local Development
@@ -115,3 +124,27 @@ docker-build-dev:
 # Interactive dev shell with source mounted
 docker-dev:
 	docker compose --profile dev run --rm pytorch-dev
+
+# =============================================================================
+# Volume Management
+# =============================================================================
+
+# Clean experiment state volume (preserves caches)
+lem-clean-state:
+	docker volume rm lem-experiment-state 2>/dev/null || true
+	@echo "Cleared experiment state"
+
+# Clean HuggingFace cache volume (will need to re-download models)
+lem-clean-cache:
+	docker volume rm lem-hf-cache 2>/dev/null || true
+	@echo "Cleared HuggingFace cache"
+
+# Clean TensorRT engine cache
+lem-clean-trt:
+	docker volume rm lem-trt-engine-cache 2>/dev/null || true
+	@echo "Cleared TensorRT engine cache"
+
+# Clean all named volumes (state + caches)
+lem-clean-all:
+	docker volume rm lem-experiment-state lem-hf-cache lem-trt-engine-cache 2>/dev/null || true
+	@echo "Cleared all LEM volumes"
