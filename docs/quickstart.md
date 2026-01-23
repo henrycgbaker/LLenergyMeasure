@@ -2,16 +2,30 @@
 
 This guide walks you through your first LLM efficiency measurement experiment.
 
+## Quick Start (5 minutes)
+
+```bash
+# Clone and setup
+git clone https://github.com/henrycgbaker/llm-efficiency-measurement-tool
+cd llm-efficiency-measurement-tool
+./setup.sh
+
+# Run your first experiment
+./lem experiment configs/examples/pytorch_example.yaml -n 10
+
+# Or run a multi-config campaign
+./lem campaign configs/examples/campaign_example.yaml --dry-run
+```
+
+That's it! The `setup.sh` script handles Docker image building, environment configuration, and creates the `lem` CLI wrapper.
+
 ## Prerequisites
 
-- Python 3.10+
-- NVIDIA GPU with CUDA support
-- HuggingFace account (for gated models like Llama)
-- Docker (recommended for backend flexibility)
+- **NVIDIA GPU** with CUDA support
+- **Docker** with nvidia-container-toolkit (recommended)
+- **HuggingFace account** for gated models (Llama, Mistral, etc.)
 
-## Installation
-
-### Understanding Backends
+## Understanding Backends
 
 This tool supports three inference backends with different trade-offs:
 
@@ -23,39 +37,64 @@ This tool supports three inference backends with different trade-offs:
 
 ¹ Ampere+ = compute capability ≥ 8.0: A100, A10, RTX 30xx/40xx, H100, L40. **NOT supported**: V100, T4, RTX 20xx, GTX.
 
-**Important**: vLLM and TensorRT-LLM have **conflicting dependencies** and cannot coexist in the same Python environment. Choose ONE approach:
-
-- **Local install**: Pick one backend per environment
-- **Docker** (recommended): Each backend is an isolated image—switch freely
+**Important**: vLLM and TensorRT-LLM have **conflicting dependencies** and cannot coexist in the same Python environment. Docker isolates each backend.
 
 ---
 
-### Option 1: Local Development (poetry/pip)
+## Installation Options
+
+### Option 1: Docker with setup.sh (Recommended)
+
+The simplest way to get started. Each backend runs in an isolated container.
+
+```bash
+# Clone
+git clone https://github.com/henrycgbaker/llm-efficiency-measurement-tool
+cd llm-efficiency-measurement-tool
+
+# One-click setup (creates .env, builds PyTorch image, creates lem wrapper)
+./setup.sh
+
+# Build other backends if needed
+./setup.sh --backend vllm
+./setup.sh --backend tensorrt
+./setup.sh --all  # Build all backends
+```
+
+After setup, use the `lem` wrapper for all commands:
+```bash
+./lem experiment configs/examples/pytorch_example.yaml -n 10
+./lem campaign configs/examples/campaign_example.yaml --dry-run
+./lem results list
+```
+
+The `lem` wrapper automatically:
+- Detects the backend from your config file
+- Runs the correct Docker container
+- Handles volume mounts and permissions
+
+### Option 2: Local Development (poetry/pip)
 
 Use this for development or if you only need **one backend**.
 
 ```bash
 # Clone
 git clone https://github.com/henrycgbaker/llm-efficiency-measurement-tool
-cd llm-energy-measure
+cd llm-efficiency-measurement-tool
 
-# Create environment
-conda create -n llm-energy python=3.10
-conda activate llm-energy
+# Local install mode
+./setup.sh --local
 
-# Install with ONE backend (pick one)
-pip install -e ".[pytorch]"     # Most compatible, recommended for dev
+# Or manually:
+pip install -e ".[pytorch]"     # Most compatible
 pip install -e ".[vllm]"        # High throughput (Linux only)
-pip install -e ".[tensorrt]"    # Highest performance (Ampere+ GPU required)
-
-# Add dev tools
-pip install -e ".[pytorch,dev]"  # Backend + dev tools
+pip install -e ".[tensorrt]"    # Highest performance (Ampere+ required)
 
 # Verify
-lem --help
+./lem --help
 ```
 
-**Switching backends locally**: You must create separate conda environments:
+**Switching backends locally**: Create separate conda environments:
 ```bash
 conda create -n llm-vllm python=3.10 && conda activate llm-vllm
 pip install -e ".[vllm]"
@@ -63,51 +102,18 @@ pip install -e ".[vllm]"
 
 ---
 
-### Option 2: Docker (Recommended)
-
-Use Docker to run experiments with **any backend** without dependency conflicts. Each backend is a separate image with isolated dependencies.
-
-```bash
-# Clone
-git clone https://github.com/henrycgbaker/llm-efficiency-measurement-tool
-cd llm-energy-measure
-
-# Build the backend you need
-docker compose build pytorch    # Most users
-docker compose build vllm       # High throughput
-docker compose build tensorrt   # Highest performance (Ampere+ only)
-
-# Or build all backends
-docker compose build base pytorch vllm tensorrt
-```
-
-**Running experiments:**
-```bash
-# Run with specific backend
-docker compose run --rm pytorch lem experiment /app/configs/examples/pytorch_example.yaml
-docker compose run --rm vllm lem experiment /app/configs/examples/vllm_example.yaml
-docker compose run --rm tensorrt lem experiment /app/configs/examples/tensorrt_example.yaml
-
-# Interactive shell
-docker compose run --rm pytorch /bin/bash
-```
-
-**Why Docker is recommended:**
-- Switch between backends without reinstalling
-- Reproducible environments across machines
-- No dependency conflicts
-- Handles CUDA/driver compatibility
-
 ## Environment Variables
 
-Create a `.env` file in the project root (gitignored):
+The `setup.sh` script creates a `.env` file automatically with your user IDs for correct file permissions.
+
+To add a HuggingFace token for gated models:
 
 ```bash
-# .env
+# Edit .env and add your token
 HF_TOKEN=hf_your_token_here
-CUDA_VISIBLE_DEVICES=available_device_indices
 ```
-NB: (if using poetry skip this, if using Docker:) the make command for docker compose reads `.env`, and PUID/PGID are auto-detected from the mounted directory ownership. If running docker compose directly you'll need to set PUID/PGID manually in the `.env`.
+
+Get your token at: https://huggingface.co/settings/tokens
 
 ## Your First Experiment
 

@@ -39,6 +39,11 @@ class CampaignExperiment:
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
+    @property
+    def backend(self) -> str:
+        """Return the backend for this experiment."""
+        return getattr(self.config, "backend", "pytorch") or "pytorch"
+
 
 @dataclass
 class CampaignProgress:

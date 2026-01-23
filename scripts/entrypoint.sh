@@ -5,43 +5,64 @@
 # Usage:
 #   docker run -e PUID=$(id -u) -e PGID=$(id -g) ...
 #
-# If PUID/PGID not set, auto-detects from mounted /app/results directory ownership.
-# This allows zero-config usage while still supporting explicit overrides.
+# PUID/PGID are REQUIRED - no auto-detection magic that can fail silently.
+# Generate .env with: ./setup.sh (or copy from .env.example)
 
 set -e
 
-# Auto-detect PUID/PGID from mounted results directory if not explicitly set
-# Precedence: explicit env var > auto-detect from mount > root (fallback)
-if [ -z "$PUID" ] && [ -d "/app/results" ]; then
-    PUID=$(stat -c %u /app/results 2>/dev/null || echo "0")
-    PGID=$(stat -c %g /app/results 2>/dev/null || echo "0")
+# =============================================================================
+# Validate PUID/PGID are set (required - no auto-detection)
+# =============================================================================
+if [ -z "$PUID" ] || [ -z "$PGID" ]; then
+    echo "ERROR: PUID and PGID environment variables are required."
+    echo ""
+    echo "Quick fix:"
+    echo "  1. Run: ./setup.sh  (creates .env automatically)"
+    echo "  2. Or:  cp .env.example .env && edit .env"
+    echo "  3. Or:  PUID=\$(id -u) PGID=\$(id -g) docker compose run ..."
+    echo ""
+    echo "See docs/deployment.md for details."
+    exit 1
 fi
 
-# Fall back to root if detection fails or directory doesn't exist
-PUID=${PUID:-0}
-PGID=${PGID:-0}
-
-# If running as root and PUID/PGID specified, set up the user
+# =============================================================================
+# Set up user/group if running as root with non-root PUID
+# =============================================================================
 if [ "$(id -u)" = "0" ] && [ "$PUID" != "0" ]; then
     # Create group if it doesn't exist
     if ! getent group appgroup >/dev/null 2>&1; then
-        groupadd -g "$PGID" appgroup
+        groupadd -g "$PGID" appgroup 2>/dev/null || true
     fi
 
     # Create user if it doesn't exist
     if ! getent passwd appuser >/dev/null 2>&1; then
-        useradd -u "$PUID" -g appgroup -s /bin/bash -m appuser
+        useradd -u "$PUID" -g "$PGID" -s /bin/bash -m appuser 2>/dev/null || true
     fi
 
-    # Ensure writable directories have correct ownership
-    # Note: configs/ is writable for test scripts that generate config variations
-    for dir in /app/results /app/configs /app/.state /app/.cache/huggingface; do
-        if [ -d "$dir" ]; then
-            chown -R appuser:appgroup "$dir" 2>/dev/null || true
-        fi
-    done
+    # ==========================================================================
+    # Create and own directories BEFORE attempting chown
+    # This fixes the bootstrap problem where directories don't exist on first run
+    # ==========================================================================
 
-    # Run command as appuser using gosu
+    # Results directory: bind mount, needs ownership for writing
+    # Single-level chown only (not recursive) - fast even with many results
+    mkdir -p /app/results
+    chown appuser:appgroup /app/results 2>/dev/null || true
+
+    # State directory: named volume, just ensure it exists
+    # Named volumes are already owned correctly by Docker
+    mkdir -p /app/.state
+
+    # HF cache: named volume, no chown needed (Docker-managed)
+    # Just ensure the directory exists
+    mkdir -p /app/.cache/huggingface
+
+    # TensorRT cache: named volume, no chown needed (Docker-managed)
+    mkdir -p /app/.cache/tensorrt-engines
+
+    # ==========================================================================
+    # Run command as appuser
+    # ==========================================================================
     exec gosu appuser "$@"
 else
     # Running as non-root or PUID=0, just exec the command

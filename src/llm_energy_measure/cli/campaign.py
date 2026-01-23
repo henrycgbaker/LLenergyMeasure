@@ -306,6 +306,8 @@ def _run_single_experiment(
     """Run a single experiment via subprocess.
 
     Calls the existing experiment infrastructure with campaign metadata.
+    Automatically selects Docker container based on experiment's backend
+    when running from the host.
 
     Args:
         experiment: The campaign experiment to run.
@@ -334,31 +336,58 @@ def _run_single_experiment(
         "config_name": experiment.config_name,
     }
 
+    # Detect backend from experiment config
+    backend = _detect_backend(config_data)
+    console.print(f"  [dim]Backend: {backend}[/dim]")
+
+    # Determine execution mode: Docker host-side orchestration vs direct
+    use_docker = _should_use_docker()
+
     # Write temp config with metadata
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".yaml", delete=False, prefix="campaign_"
-    ) as tmp:
-        yaml.dump(config_data, tmp, default_flow_style=False)
-        tmp_config_path = tmp.name
+    # For Docker, write to a location accessible by the container
+    if use_docker:
+        # Write to configs/ directory which is mounted in container
+        tmp_dir = Path("configs")
+        tmp_dir.mkdir(exist_ok=True)
+        tmp_config_path = tmp_dir / f"_campaign_{experiment_id}.yaml"
+        with open(tmp_config_path, "w") as f:
+            yaml.dump(config_data, f, default_flow_style=False)
+        container_config_path = f"/app/configs/_campaign_{experiment_id}.yaml"
+    else:
+        # Direct execution: use system temp
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, prefix="campaign_"
+        ) as tmp:
+            yaml.dump(config_data, tmp, default_flow_style=False)
+            tmp_config_path = Path(tmp.name)
+            container_config_path = str(tmp_config_path)
 
     try:
-        # Build experiment command
-        cmd = [
-            sys.executable,
-            "-m",
-            "llm_energy_measure.cli",
-            "experiment",
-            tmp_config_path,
-            "--yes",  # Skip confirmation (we already confirmed campaign)
-        ]
-
-        # Add dataset/sample size overrides
-        if dataset or campaign.dataset:
-            cmd.extend(["--dataset", dataset or campaign.dataset])  # type: ignore[list-item]
-        if sample_size or campaign.num_samples:
-            cmd.extend(["--sample-size", str(sample_size or campaign.num_samples)])
-        if results_dir:
-            cmd.extend(["--results-dir", str(results_dir)])
+        if use_docker:
+            # Docker mode: spawn container for correct backend
+            cmd = _build_docker_command(
+                backend=backend,
+                config_path=container_config_path,
+                dataset=dataset or campaign.dataset,
+                sample_size=sample_size or campaign.num_samples,
+                results_dir=results_dir,
+            )
+        else:
+            # Direct execution (inside container or local install)
+            cmd = [
+                sys.executable,
+                "-m",
+                "llm_energy_measure.cli",
+                "experiment",
+                container_config_path,
+                "--yes",
+            ]
+            if dataset or campaign.dataset:
+                cmd.extend(["--dataset", dataset or campaign.dataset])  # type: ignore[list-item]
+            if sample_size or campaign.num_samples:
+                cmd.extend(["--sample-size", str(sample_size or campaign.num_samples)])
+            if results_dir:
+                cmd.extend(["--results-dir", str(results_dir)])
 
         # Run experiment
         console.print(f"  [dim]Running: {experiment.config_name}[/dim]")
@@ -372,7 +401,92 @@ def _run_single_experiment(
 
     finally:
         # Clean up temp file
-        Path(tmp_config_path).unlink(missing_ok=True)
+        tmp_config_path.unlink(missing_ok=True)
+
+
+def _detect_backend(config_data: dict[str, object]) -> str:
+    """Detect backend from experiment config.
+
+    Args:
+        config_data: Parsed YAML config data.
+
+    Returns:
+        Backend name: 'pytorch', 'vllm', or 'tensorrt'.
+    """
+    # Check explicit backend field
+    backend = config_data.get("backend")
+    if backend:
+        return str(backend).lower()
+
+    # Fallback to environment variable or default
+    return os.environ.get("LEM_BACKEND", "pytorch")
+
+
+def _should_use_docker() -> bool:
+    """Determine if we're running on host and should use Docker orchestration.
+
+    Returns:
+        True if running on host (should spawn Docker containers),
+        False if already in a container or local install available.
+    """
+    # Check if we're inside a Docker container
+    if Path("/.dockerenv").exists():
+        return False
+
+    # Check /proc/1/cgroup for docker/container signatures
+    try:
+        cgroup = Path("/proc/1/cgroup").read_text()
+        if "docker" in cgroup or "container" in cgroup:
+            return False
+    except (FileNotFoundError, PermissionError):
+        pass
+
+    # Check if local llm-energy-measure is available (poetry/pip install)
+    # If we're running via poetry, it's a local install
+    # Default to Docker mode on host otherwise
+    return not ("poetry" in sys.executable or ".venv" in sys.executable)
+
+
+def _build_docker_command(
+    backend: str,
+    config_path: str,
+    dataset: str | None,
+    sample_size: int | None,
+    results_dir: Path | None,
+) -> list[str]:
+    """Build docker compose command for running experiment.
+
+    Args:
+        backend: Backend service name (pytorch, vllm, tensorrt).
+        config_path: Path to config file (container path).
+        dataset: Dataset override.
+        sample_size: Sample size override.
+        results_dir: Results directory override.
+
+    Returns:
+        Command list for subprocess.run().
+    """
+    cmd = [
+        "docker",
+        "compose",
+        "run",
+        "--rm",
+        backend,
+        "llm-energy-measure",
+        "experiment",
+        config_path,
+        "--yes",
+    ]
+
+    if dataset:
+        cmd.extend(["--dataset", dataset])
+    if sample_size:
+        cmd.extend(["--sample-size", str(sample_size)])
+    if results_dir:
+        # Convert host path to container path
+        cmd.extend(["--results-dir", "/app/results"])
+
+    return cmd
 
 
 def _is_campaign_yaml(path: Path) -> bool:
@@ -494,19 +608,33 @@ def _display_execution_plan(
     """Display the execution plan as a table."""
     from rich.table import Table
 
+    # Check if we have multiple backends (worth showing)
+    backends = {exp.backend for exp in execution_order}
+    show_backend = len(backends) > 1
+
     table = Table(title="Execution Plan")
     table.add_column("#", style="dim")
     table.add_column("Cycle")
     table.add_column("Config")
+    if show_backend:
+        table.add_column("Backend", style="cyan")
 
     for idx, exp in enumerate(execution_order):
-        table.add_row(
+        row = [
             str(idx + 1),
             str(exp.cycle_index + 1),
             exp.config_name,
-        )
+        ]
+        if show_backend:
+            row.append(exp.backend)
+        table.add_row(*row)
 
     console.print(table)
+
+    if show_backend:
+        console.print(
+            "\n[dim]Multi-backend campaign: each experiment runs in its own container[/dim]"
+        )
 
 
 def _estimate_total_time(campaign: CampaignConfig, runner: CampaignRunner) -> float:
