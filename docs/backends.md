@@ -33,7 +33,7 @@ LLM Energy Measure supports multiple inference backends, each optimised for diff
 **Use `pytorch` (default) when:**
 - Experimenting with different models
 - Need full control over decoder parameters
-- Using BitsAndBytes 8-bit quantization
+- Using BitsAndBytes 4-bit/8-bit quantization (PyTorch only)
 - Research and development workflows
 
 **Use `vllm` when:**
@@ -63,9 +63,9 @@ Quick reference for feature availability across backends.
 | Continuous batching | ✗ | ✓ | ✓ | vLLM/TRT manage batches internally |
 | **Parallelism** |
 | Tensor parallelism | ✓ | ✓ | ✓ | PyTorch via Accelerate |
-| Pipeline parallelism | ✗ | ✗ | ✓ | TensorRT only |
+| Pipeline parallelism | ✗ | ✓ | ✓ | vLLM (0.6+) and TensorRT |
 | **Quantisation** |
-| BitsAndBytes 4-bit | ✓ | ✓ | ✗ | Use TRT's native INT4 instead |
+| BitsAndBytes 4-bit | ✓ | ✗ | ✗ | PyTorch only (use vLLM AWQ/GPTQ, TRT INT4) |
 | BitsAndBytes 8-bit | ✓ | ✗ | ✗ | PyTorch only |
 | FP8 | ✗ | ✓ | ✓ | Hopper+ GPUs (sm_90+) |
 | INT8 (smooth quant) | ✗ | ✗ | ✓ | Requires calibration |
@@ -73,7 +73,7 @@ Quick reference for feature availability across backends.
 | AWQ | ✓ | ✓ | ✓ | Pre-quantised checkpoints |
 | **Optimisations** |
 | KV caching | ✓ | ✓ | ✓ | All support by default |
-| Prefix caching | ✗ | ✓ | ✗ | vLLM only |
+| Prefix caching | ✗ | ✓ | ✓ | TensorRT via enable_kv_cache_reuse |
 | PagedAttention | ✗ | ✓ | ✓ | Memory-efficient KV |
 | CUDA graphs | ✓ | ✓ | ✓ | `torch_compile`, automatic |
 | Flash Attention | ✓ | ✓ | ✓ | Different implementations |
@@ -90,7 +90,7 @@ Quick reference for feature availability across backends.
 |-----------|:-------:|:----:|:--------:|-------|
 | `temperature` | ✓ | ✓ | ✓ | Universal |
 | `top_p` | ✓ | ✓ | ✓ | Nucleus sampling |
-| `top_k` | ✓ (0=off) | ✓ (-1=off) | ✓ | Disable value differs |
+| `top_k` | ✓ | ✓ | ✓ | Universal (in decoder config, 0=off) |
 | `min_p` | ✓ | ✓ | ✗ | Use `top_p`/`top_k` instead |
 | `repetition_penalty` | ✓ | ✓ | ✓ | Universal |
 | `no_repeat_ngram_size` | ✓ | ✗ | ✗ | PyTorch only |
@@ -156,9 +156,14 @@ docker compose run --rm llm-energy-measure-app llm-energy-measure experiment ...
 docker compose run --rm vllm llm-energy-measure experiment ... --backend vllm
 ```
 
-## Parameter Compatibility Matrix
+## Backend-Native Configuration Architecture
 
-### Universal Parameters
+This tool uses a **backend-native configuration architecture** with two tiers:
+
+- **Tier 1 (Universal)**: Parameters at the top level with identical semantics across all backends
+- **Tier 2 (Backend-Native)**: Parameters in backend sections (`pytorch:`, `vllm:`, `tensorrt:`) using native API names
+
+### Tier 1: Universal Parameters
 
 These work identically across all backends:
 
@@ -170,37 +175,42 @@ These work identically across all backends:
 | `min_output_tokens` | `min_output_tokens` | Minimum generated tokens |
 | `random_seed` | `random_seed` | Reproducibility seed |
 | `temperature` | `decoder.temperature` | Sampling temperature |
+| `top_k` | `decoder.top_k` | Top-k sampling (0 = disabled) |
 | `top_p` | `decoder.top_p` | Nucleus sampling threshold |
 | `repetition_penalty` | `decoder.repetition_penalty` | Repetition penalty |
+| `do_sample` | `decoder.do_sample` | Enable sampling |
+| `traffic_simulation` | `traffic_simulation.*` | MLPerf-style Poisson arrivals |
 
-### Backend-Specific Support
+### Tier 2: Backend-Native Parameters
 
-| Parameter | PyTorch | vLLM | Notes |
-|-----------|:-------:|:----:|-------|
-| `decoder.top_k` | ✓ (0=off) | ✓ (-1=off) | Semantic difference: PyTorch uses 0, vLLM uses -1 to disable |
-| `decoder.min_p` | ✓ | ✓ | Both support min_p sampling |
-| `decoder.no_repeat_ngram_size` | ✓ | ✗ | vLLM: use `repetition_penalty` instead |
-| `decoder.do_sample` | ✓ | — | vLLM: controlled via `temperature=0` for greedy |
-| `quantization.load_in_4bit` | ✓ | ✓ | BitsAndBytes 4-bit on both |
-| `quantization.load_in_8bit` | ✓ | ✗ | vLLM does not support BNB 8-bit |
-| `batching.batch_size` | ✓ (exact) | ✓ (hint) | vLLM: continuous batching makes this a hint |
-| `batching.strategy` | ✓ | — | vLLM always uses continuous batching |
-| `sharding.strategy` | ✓ | ✓ | Both support TP; PyTorch via Accelerate, vLLM native |
-| `traffic_simulation` | ✓ | ✓ | MLPerf-style Poisson arrivals |
+These parameters have different semantics per backend and use native API naming:
 
-### Semantic Differences
+| Capability | PyTorch Location | vLLM Location | TensorRT Location |
+|------------|------------------|---------------|-------------------|
+| **Batching** | `pytorch.batch_size`, `pytorch.batching_strategy` | `vllm.max_num_seqs` (continuous) | `tensorrt.max_batch_size` (compile-time) |
+| **Parallelism** | `pytorch.parallelism_strategy/degree` | `vllm.tensor_parallel_size/pipeline_parallel_size` | `tensorrt.tp_size/pp_size` |
+| **Quantisation** | `pytorch.load_in_4bit/8bit` (BitsAndBytes) | `vllm.quantization` (awq, gptq, fp8) | `tensorrt.quantization` (fp8, int8_sq) |
+| **Top-k sampling** | `decoder.top_k` (0=off) | `decoder.top_k` (0=off, converted to -1) | `decoder.top_k` (0=off) |
+| **Min-p sampling** | `pytorch.min_p` | `vllm.min_p` | Not supported |
+| **N-gram blocking** | `pytorch.no_repeat_ngram_size` | Not supported | Not supported |
+| **Beam search** | `pytorch.beam_search.*` | Not supported | Limited support |
 
-**`batch_size`**
-- **PyTorch**: Exact batch size for static batching
-- **vLLM**: Hint for `max_num_seqs` (concurrent requests); vLLM manages batching internally
+### Key Semantic Differences
 
-**`top_k`**
-- **PyTorch**: `0` disables top-k sampling
-- **vLLM**: `-1` disables top-k sampling (automatically converted)
+**Batching:**
+- **PyTorch**: Application-level batching via `pytorch.batch_size` and `pytorch.batching_strategy`
+- **vLLM**: Continuous batching via `vllm.max_num_seqs` (backend manages internally)
+- **TensorRT**: Compile-time max via `tensorrt.max_batch_size`, runtime uses inflight batching
 
-**`do_sample`**
-- **PyTorch**: Explicit flag to enable sampling
-- **vLLM**: Implicit; `temperature=0` means greedy decoding
+**Top-k sampling:**
+- **All backends**: `decoder.top_k=0` disables (universal parameter)
+- **vLLM internally**: Converts 0 to -1 (vLLM's native disabled convention)
+- **PyTorch/TensorRT**: Use 0 directly (native disabled convention)
+
+**Quantisation:**
+- **PyTorch**: BitsAndBytes (`pytorch.load_in_4bit`, `pytorch.load_in_8bit`)
+- **vLLM**: Native methods (`vllm.quantization`: awq, gptq, fp8, marlin)
+- **TensorRT**: Build-time methods (`tensorrt.quantization`: fp8, int8_sq, int4_awq)
 
 ## Backend-Specific Configuration
 
@@ -208,17 +218,34 @@ Each backend exposes its own configuration section for advanced optimisation. Th
 
 ### vLLM Configuration (`vllm:`)
 
+vLLM uses **backend-native parameter names** that map directly to `vLLM LLM()` constructor and `SamplingParams`.
+
 ```yaml
 backend: vllm
 model_name: meta-llama/Llama-2-7b-hf
 
+# Tier 1: Universal decoder params
+decoder:
+  temperature: 0.0
+  do_sample: false
+  top_k: 50                      # Top-k sampling (0=disabled) - UNIVERSAL
+  top_p: 1.0
+  repetition_penalty: 1.0
+
+# Tier 2: vLLM-native params
 vllm:
-  # Memory & Batching
+  # Memory & Concurrency
   max_num_seqs: 256              # Max concurrent sequences (1-1024)
   max_num_batched_tokens: null   # Max tokens per iteration (null=auto)
   gpu_memory_utilization: 0.9    # GPU memory fraction for KV cache (0.5-0.99)
   swap_space: 4.0                # CPU swap per GPU in GiB
   cpu_offload_gb: 0.0            # CPU offload for model weights
+
+  # Parallelism (native vLLM params)
+  tensor_parallel_size: 2        # Split layers across GPUs
+  pipeline_parallel_size: 1      # Pipeline stages (for very large models)
+  distributed_backend: mp        # mp (multiprocessing) or ray
+  disable_custom_all_reduce: false
 
   # KV Cache
   enable_prefix_caching: true    # Reuse KV cache for repeated prefixes
@@ -233,10 +260,6 @@ vllm:
   # Execution
   enforce_eager: false           # Disable CUDA graphs (for debugging)
 
-  # Parallelism
-  distributed_backend: mp        # mp (multiprocessing) or ray
-  disable_custom_all_reduce: false
-
   # Attention
   attention:
     backend: auto                # auto, FLASH_ATTN, FLASHINFER, TORCH_SDPA
@@ -245,11 +268,11 @@ vllm:
 
   # Speculative Decoding
   speculative:
-    model: "TinyLlama/TinyLlama-1.1B"  # Draft model
-    num_tokens: 5                # Tokens to speculate (1-10)
-    method: ngram                # ngram, eagle, eagle3, medusa, mlp
-    ngram_min: 1
-    ngram_max: 4
+    model: "TinyLlama/TinyLlama-1.1B"
+    num_tokens: 5
+    method: ngram
+    prompt_lookup_min: 1
+    prompt_lookup_max: 4
     draft_tp_size: 1
 
   # LoRA
@@ -259,18 +282,18 @@ vllm:
     max_rank: 16
     extra_vocab_size: 256
 
-  # Quantization
-  quantization_method: awq       # gptq, awq, fp8, marlin, etc.
+  # Quantization (vLLM-native methods)
+  quantization: awq              # gptq, awq, fp8, marlin, etc.
   load_format: safetensors       # auto, pt, safetensors, gguf
 
-  # Advanced Sampling
+  # Decoder Extensions (vLLM-specific)
+  # Note: top_k is now in universal decoder config above
+  min_p: 0.0                     # Min probability sampling
   best_of: 3                     # Generate N, return best
-  use_beam_search: false
-  length_penalty: 1.0
   logprobs: 5                    # Return top-k logprobs (1-20)
   logit_bias: {123: -100}        # Per-token bias
 
-  # Escape hatch for experimental options
+  # Escape hatch
   extra: {}
 ```
 
@@ -287,42 +310,77 @@ vllm:
 
 ### PyTorch Configuration (`pytorch:`)
 
+PyTorch uses **backend-native parameter names** that map to HuggingFace `transformers.GenerationConfig` and `model.from_pretrained()`.
+
 ```yaml
 backend: pytorch
 model_name: meta-llama/Llama-2-7b-hf
 
+# Tier 1: Universal decoder params
+decoder:
+  temperature: 0.0
+  do_sample: false
+  top_k: 50                      # Top-k sampling (0=disabled) - UNIVERSAL
+  top_p: 1.0
+  repetition_penalty: 1.0
+
+# Tier 2: PyTorch-native params
 pytorch:
+  # Batching (application-level)
+  batch_size: 1
+  batching_strategy: static      # static | dynamic | sorted_static | sorted_dynamic
+  max_tokens_per_batch: null     # For dynamic strategies
+
+  # Parallelism
+  parallelism_strategy: none     # none | tensor_parallel | data_parallel
+  parallelism_degree: 1
+
+  # Quantization (BitsAndBytes)
+  load_in_4bit: false
+  load_in_8bit: false
+  bnb_4bit_compute_dtype: float16
+  bnb_4bit_quant_type: nf4
+  bnb_4bit_use_double_quant: false
+
   # Attention Implementation
   attn_implementation: flash_attention_2  # sdpa, flash_attention_2, eager
 
   # Compilation
   torch_compile: reduce-overhead  # false, default, reduce-overhead, max-autotune
-
-  # Legacy (pre-PyTorch 2.0)
-  use_bettertransformer: false
+  torch_compile_backend: null     # inductor, cudagraphs, onnxrt, aot_eager
 
   # KV Caching
-  use_cache: true                # Disable to reduce memory at cost of speed
+  use_cache: true
+  cache_implementation: null      # dynamic | static | hybrid | sliding_window
 
   # Memory
-  low_cpu_mem_usage: true        # Load directly to GPU
-  max_memory:                    # Per-device limits
+  low_cpu_mem_usage: true
+  max_memory:
     "0": "20GiB"
     cpu: "30GiB"
 
-  # Assisted Generation (Speculative Decoding)
-  assisted_generation:
-    model: "TinyLlama/TinyLlama-1.1B"  # Assistant model
-    num_tokens: 5                # Tokens to speculate (1-10)
-
-  # Beam Search
-  num_beams: 1                   # 1=greedy/sampling, >1=beam search
-  early_stopping: false
-  length_penalty: 1.0
-
-  # Output Configuration
-  output_scores: false           # Return generation scores
+  # Decoder Extensions (PyTorch-specific)
+  # Note: top_k is now in universal decoder config above
+  min_p: 0.0                     # Min probability sampling
+  no_repeat_ngram_size: 0        # N-gram blocking (PyTorch only)
+  output_scores: false
   return_dict_in_generate: false
+
+  # Beam Search (PyTorch-specific)
+  beam_search:
+    enabled: false
+    num_beams: 1
+    length_penalty: 1.0
+    early_stopping: false
+    no_repeat_ngram_size: 0
+
+  # Speculative Decoding
+  assisted_generation:
+    model: "TinyLlama/TinyLlama-1.1B"
+    num_tokens: 5
+
+  # Legacy
+  use_bettertransformer: false
 
   # Escape hatch
   extra: {}
@@ -357,51 +415,65 @@ pytorch:
 
 ### TensorRT-LLM Configuration (`tensorrt:`)
 
-TensorRT-LLM provides compiled inference plans optimised for specific GPU configurations. Engines can be pre-compiled or built on-demand from HuggingFace checkpoints.
+TensorRT-LLM uses **backend-native parameter names** that map to `trtllm-build` and TensorRT-LLM runtime. Engines can be pre-compiled or built on-demand from HuggingFace checkpoints.
 
 ```yaml
 backend: tensorrt
 model_name: meta-llama/Llama-2-7b-hf
 
+# Tier 1: Universal decoder params
+decoder:
+  temperature: 0.0
+  do_sample: false
+  top_k: 50                      # Top-k sampling (0=disabled) - UNIVERSAL
+  top_p: 1.0
+  repetition_penalty: 1.0
+
+# Tier 2: TensorRT-native params
 tensorrt:
   # Engine Source
   engine_path: null                # Pre-compiled engine path (optional)
   engine_cache_dir: null           # Cache dir (default: ~/.cache/llm-energy-measure/tensorrt-engines/)
   force_rebuild: false             # Force rebuild even if cached
 
-  # Build Configuration (when compiling from HF checkpoint)
+  # Build Configuration (compile-time)
   max_batch_size: 8                # Maximum batch size for compiled engine (1-256)
   max_input_len: null              # Max input tokens (defaults to model's max)
   max_output_len: null             # Max output tokens (defaults to config.max_output_tokens)
   builder_opt_level: 3             # TensorRT optimization level (0-5, higher=slower build)
   strongly_typed: true             # Enable strong typing for FP8 (recommended)
+  multiple_profiles: false         # Multiple TRT profiles for different input shapes
 
-  # Quantization
-  quantization:
-    method: none                   # none, fp8, int8_sq, int8_weight_only, int4_awq, int4_gptq
-    calibration:                   # Required for int8_sq
-      dataset: wikitext            # Calibration dataset
-      split: train
-      num_samples: 512             # Calibration samples (512-1024 typical)
-      max_length: 2048
-
-  # Tensor Parallelism
-  tp_size: null                    # TP size (defaults to sharding.num_shards)
+  # Parallelism (native TRT-LLM params)
+  tp_size: 1                       # Tensor parallel size
   pp_size: 1                       # Pipeline parallel size
+
+  # Quantization (flattened - native TRT-LLM)
+  quantization: none               # none, fp8, int8_sq, int8_weight_only, int4_awq, int4_gptq
+  calibration:                     # Required for int8_sq
+    dataset: wikitext
+    split: train
+    num_samples: 512
+    max_length: 2048
 
   # Runtime Options
   kv_cache_type: paged             # paged (memory efficient) or continuous
   enable_chunked_context: true     # Chunk long sequences
   max_num_tokens: null             # Max tokens per iteration (inflight batching)
   gpu_memory_utilization: 0.9      # GPU memory fraction for KV cache (0.5-0.99)
+  enable_kv_cache_reuse: true      # Enable prefix caching
+
+  # Decoder Extensions (TensorRT-specific)
+  # Note: top_k is now in universal decoder config above
+  # Note: min_p and no_repeat_ngram_size NOT supported by TensorRT-LLM
 
   # Speculative Decoding
   draft_model: null                # Draft model for speculation
   num_draft_tokens: 5              # Tokens to speculate per step (1-10)
 
   # Escape Hatches
-  extra_build_args: {}             # Additional trtllm-build kwargs
-  extra_runtime_args: {}           # Additional runtime kwargs
+  extra_build_args: {}
+  extra_runtime_args: {}
 ```
 
 #### TensorRT Quantization Methods
@@ -423,6 +495,7 @@ tensorrt:
 | `max_batch_size` | Compile-time limit affects memory | Match expected workload |
 | `kv_cache_type: paged` | Memory-efficient KV management | Always use paged |
 | `enable_chunked_context` | Better long sequence handling | Enable for long contexts |
+| `enable_kv_cache_reuse` | Prefix caching, avoids recomputation | Enable for repeated prefixes |
 | `quantization.method: fp8` | ~50% memory savings, minimal accuracy loss | Use on Hopper+ GPUs |
 
 #### TensorRT Limitations
@@ -480,9 +553,8 @@ vllm:
 pytorch:
   attn_implementation: flash_attention_2
   torch_compile: reduce-overhead
-batching:
   batch_size: 8
-  strategy: dynamic
+  batching_strategy: dynamic     # Token-aware batching
 ```
 
 ### Latency Optimisation
@@ -501,10 +573,10 @@ vllm:
 ```yaml
 pytorch:
   attn_implementation: flash_attention_2
-  assisted_generation:
-    num_tokens: 5
-batching:
   batch_size: 1
+  assisted_generation:
+    model: "TinyLlama/TinyLlama-1.1B"
+    num_tokens: 5
 ```
 
 ### Memory Optimisation
@@ -520,9 +592,8 @@ vllm:
 **PyTorch:**
 ```yaml
 fp_precision: float16
-quantization:
-  load_in_4bit: true
 pytorch:
+  load_in_4bit: true             # BitsAndBytes 4-bit quantization
   low_cpu_mem_usage: true
   max_memory:
     "0": "20GiB"
@@ -659,7 +730,7 @@ model_name: ./merged-model/
 
 | Limitation | Workaround |
 |------------|------------|
-| No 8-bit BitsAndBytes | Use 4-bit or pre-quantized GPTQ/AWQ models |
+| No BitsAndBytes quantization | Use pre-quantized AWQ/GPTQ models or FP8 |
 | No `no_repeat_ngram_size` | Use `repetition_penalty` |
 | `batch_size` is a hint | vLLM's continuous batching optimises automatically |
 | Energy is aggregate only | Per-request energy not available |

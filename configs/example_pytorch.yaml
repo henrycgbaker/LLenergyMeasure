@@ -6,10 +6,19 @@
 #
 # REQUIREMENTS:
 #   - NVIDIA GPU (any modern GPU with sufficient VRAM)
-#   - Works on Linux, Windows, macOS (with limitations)
 #   - Install: pip install llm-energy-measure[pytorch]
 #   - Most compatible backend - use this if unsure
+#
+# ARCHITECTURE NOTE:
+#   This config follows "backend-native" architecture where:
+#   - Tier 1 (top-level): Universal params with identical semantics across backends
+#   - Tier 2 (pytorch section): PyTorch-specific params using native HuggingFace names
 # =============================================================================
+
+# =============================================================================
+# TIER 1: UNIVERSAL CONFIGURATION
+# =============================================================================
+# These parameters have identical semantics across all backends.
 
 # -----------------------------------------------------------------------------
 # REQUIRED: Experiment Identity
@@ -27,7 +36,7 @@ model_name: Qwen/Qwen2.5-0.5B  # Non-gated. For Llama: meta-llama/Llama-2-7b-hf 
 # Or use any HuggingFace dataset path (e.g., tatsu-lab/alpaca)
 dataset:
   name: ai_energy_score
-  sample_size: 10
+  sample_size: 100
   split: train
   # column: text  # Auto-detected if not set
 
@@ -54,7 +63,7 @@ max_output_tokens: 128
 min_output_tokens: 0  # Minimum tokens to generate (0 = no minimum)
 
 # -----------------------------------------------------------------------------
-# GPU CONFIGURATION MADE AVAILABLE TO TOOL
+# GPU CONFIGURATION
 # -----------------------------------------------------------------------------
 gpus: [0, 1]
 
@@ -70,117 +79,44 @@ fp_precision: float16
 backend: pytorch
 
 # -----------------------------------------------------------------------------
-# MODEL PROPERTIES
+# UNIVERSAL DECODER SETTINGS
 # -----------------------------------------------------------------------------
-is_encoder_decoder: false  # Set true for T5, BART, etc.
-task_type: text_generation  # text_generation | translation | summarisation
-inference_type: pure_generative  # pure_generative | reasoning
-
-# -----------------------------------------------------------------------------
-# BATCHING CONFIGURATION
-# -----------------------------------------------------------------------------
-# Note: batch_size only applies to static strategies (static, sorted_static).
-# Dynamic strategies (dynamic, sorted_dynamic) ignore batch_size and use
-# max_tokens_per_batch to group prompts by token budget instead.
-batching:
-  # Strategies (MLPerf terminology):
-  # - static: Fixed batch size, pads to uniform length
-  # - dynamic: Token-aware batching, groups by token budget
-  # - sorted_static: Sort by length then static batches (reduces padding waste)
-  # - sorted_dynamic: Sort by length + dynamic token budget (optimal packing)
-  strategy: static
-  batch_size: 1               # Only used with static/sorted_static strategies
-  max_tokens_per_batch: null  # Only used with dynamic/sorted_dynamic strategies
-  # dynamic_batching: false  # [Deprecated] Use strategy='dynamic' instead
-
-# -----------------------------------------------------------------------------
-# PARALLELISM CONFIGURATION (Multi-GPU)
-# -----------------------------------------------------------------------------
-parallelism:
-  # Strategies:
-  # - none: Single GPU or device_map='auto'
-  # - tensor_parallel: Split layers horizontally across GPUs
-  # - data_parallel: Replicate model, split batches
-  # Note: pipeline_parallel NOT supported for PyTorch backend
-  strategy: none
-  degree: 1  # Use degree > 1 with tensor_parallel or data_parallel
-  # tp_plan: auto  # For tensor_parallel (uses model's predefined config)
-
-# Legacy (deprecated, use parallelism instead):
-# num_processes: 1
-# sharding:
-#   strategy: none
-#   num_shards: 1
-
-# -----------------------------------------------------------------------------
-# DECODER / GENERATION SETTINGS
-# -----------------------------------------------------------------------------
+# These sampling params have identical semantics across all backends.
+# Backend-specific decoder extensions (min_p, beam_search) are in
+# the pytorch section below.
+#
 # Choose ONE approach:
 #   1. Use preset (recommended): sets all sampling params automatically
 #   2. Set individual params: leave preset: null
 #
-# If BOTH are set, preset values apply first, then individual params override.
-# This is typically not recommended - use one or the other.
+# top_k (Universal):
+#   All backends support top_k with the same semantics. The "disabled"
+#   convention differs: PyTorch/TensorRT use 0, vLLM uses -1.
+#   Set top_k=0 to disable; backends handle the conversion internally.
 decoder:
-  preset: null  # deterministic | standard | creative | factual | null
+  preset: standard  # deterministic | standard | creative | factual | null
 
-  # Individual params (only meaningful when preset: null)
-  temperature: 1.0  # 0.0 = greedy decoding
+  # Individual params (only meaningful when preset: null, or to override preset)
+  temperature: 0.7  # 0.0 = greedy decoding
   do_sample: true   # Enable sampling (ignored if temp=0)
-
-  # Nucleus/top sampling
-  top_p: 1.0   # Top-p nucleus sampling (1.0 = disabled)
-  top_k: 50    # Top-k sampling (0 = disabled)
-  min_p: 0.0   # Min probability relative to top token (0 = disabled)
-
-  # Repetition control
-  repetition_penalty: 1.0      # 1.0 = no penalty
-  no_repeat_ngram_size: 0      # Prevent n-gram repetition (0 = disabled)
-
-  # Beam search configuration
-  beam_search:
-    enabled: false
-    num_beams: 1       # 1 = greedy, >1 = beam search
-    length_penalty: 1.0        # >1 favours longer, <1 favours shorter
-    early_stopping: false      # Stop when num_beams best sequences complete
-    no_repeat_ngram_size: 0    # Prevent n-gram repetition within beam
+  top_k: 40         # Top-k sampling (0 = disabled) - UNIVERSAL across all backends
+  top_p: 0.9        # Top-p nucleus sampling (1.0 = disabled)
+  repetition_penalty: 1.1  # 1.0 = no penalty
 
 # -----------------------------------------------------------------------------
 # TRAFFIC SIMULATION (MLPerf-style load testing)
 # -----------------------------------------------------------------------------
 traffic_simulation:
-  enabled: false
+  enabled: true
   mode: poisson    # constant | poisson
-  target_qps: 1.0  # Queries per second
-  seed: null       # Random seed for reproducible arrivals
+  target_qps: 10.0 # Queries per second
+  seed: 42         # Random seed for reproducible arrivals
 
 # -----------------------------------------------------------------------------
 # STREAMING (TTFT/ITL latency measurement)
 # -----------------------------------------------------------------------------
-streaming: false
-streaming_warmup_requests: 5  # Warmup requests excluded from stats
-
-# -----------------------------------------------------------------------------
-# QUANTIZATION (BitsAndBytes)
-# -----------------------------------------------------------------------------
-# PyTorch uses BitsAndBytes for quantization (load_in_4bit/load_in_8bit).
-# This reduces memory usage and can improve throughput on consumer GPUs.
-#
-# Options:
-# - load_in_8bit: ~50% memory reduction, minimal quality loss
-# - load_in_4bit: ~75% memory reduction, some quality loss
-#   - nf4: Normalized Float 4-bit (recommended, better quality)
-#   - fp4: Float Point 4-bit (faster)
-#   - double_quant: Quantize the quantization constants (more compression)
-#
-# Note: Cannot enable both 4-bit and 8-bit simultaneously.
-quantization:
-  quantization: false             # Enable BitsAndBytes quantization
-  load_in_4bit: false             # 4-bit quantization (~75% memory reduction)
-  load_in_8bit: false             # 8-bit quantization (~50% memory reduction)
-  bnb_4bit_compute_dtype: float16 # Compute dtype: float16 | bfloat16
-  bnb_4bit_quant_type: nf4        # nf4 (better quality) | fp4 (faster)
-  bnb_4bit_use_double_quant: false # Double quantization (more compression)
+streaming: true
+streaming_warmup_requests: 10  # Warmup requests excluded from stats
 
 # -----------------------------------------------------------------------------
 # SCHEDULE (Daemon mode)
@@ -201,64 +137,129 @@ io:
 # -----------------------------------------------------------------------------
 # EXPERIMENT TRACKING
 # -----------------------------------------------------------------------------
-num_cycles: 1        # Cycles for statistical robustness (1-10)
-query_rate: 1.0      # Queries per second
-random_seed: null    # Random seed for reproducibility (null = non-deterministic)
-save_outputs: false  # Save generated text
-decode_token_to_text: false
-
-# -----------------------------------------------------------------------------
-# PYTORCH-SPECIFIC CONFIGURATION
-# -----------------------------------------------------------------------------
-# This section contains PyTorch/Transformers-specific parameters.
-# These settings are IN ADDITION to the shared config above (model, batching, decoder, etc.).
-#
-# Key relationships to shared config:
-# - parallelism.degree → controls data parallelism via Accelerate
-# - batching.batch_size → used directly for batch processing
-# - decoder.* → converted to model.generate() kwargs
-# - quantization.* → controls BitsAndBytes quantization
-#
-# Most users only need to adjust: attn_implementation, torch_compile, use_cache
-pytorch:
-  # ---- Attention Implementation ----
-  # Options: sdpa (PyTorch native), flash_attention_2 (fastest), eager (compatible)
-  attn_implementation: sdpa
-
-  # ---- Compilation ----
-  # Options: false, true/'default', 'reduce-overhead' (small batches), 'max-autotune' (slowest compile)
-  torch_compile: false
-
-  # ---- Legacy Optimisations ----
-  use_bettertransformer: false  # Pre-PyTorch 2.0 optimisation
-
-  # ---- KV Caching ----
-  use_cache: true
-  # Cache implementations:
-  # - dynamic: Default, flexible
-  # - static: Enables CUDA graphs (lower energy)
-  # - hybrid: Balance of both
-  # - sliding_window: For long context
-  cache_implementation: null
-
-  # ---- Memory Management ----
-  low_cpu_mem_usage: true  # Memory-efficient loading
-  max_memory: null         # Per-device limits, e.g., {"0": "10GiB", "cpu": "30GiB"}
-
-  # ---- Assisted Generation (Speculative Decoding) ----
-  assisted_generation: null
-  # assisted_generation:
-  #   model: distilgpt2  # Small draft model
-  #   num_tokens: 5      # Tokens to speculate per step
-
-  # ---- Generation Output ----
-  output_scores: false          # Return generation scores/logprobs
-  return_dict_in_generate: false
-
-  # ---- Escape Hatch ----
-  extra: {}  # Additional kwargs passed to model.generate()
+num_cycles: 3        # Cycles for statistical robustness (1-10)
+query_rate: 10.0     # Queries per second
+random_seed: 42      # Random seed for reproducibility (null = non-deterministic)
+save_outputs: true   # Save generated text
+decode_token_to_text: true
 
 # -----------------------------------------------------------------------------
 # EXTRA METADATA
 # -----------------------------------------------------------------------------
 extra_metadata: {}
+
+# =============================================================================
+# TIER 2: PYTORCH-SPECIFIC CONFIGURATION
+# =============================================================================
+# All PyTorch/HuggingFace-specific parameters using native naming conventions.
+# This section contains batching, parallelism, quantization, and decoder
+# extensions that have backend-specific semantics.
+
+pytorch:
+  # ===========================================================================
+  # Batching (Application-level)
+  # ===========================================================================
+  # Note: HuggingFace model.generate() doesn't have native batching - these
+  # control how we group prompts before calling generate().
+  batch_size: 8  # Batch size for static/sorted_static strategies
+  batching_strategy: sorted_dynamic  # static | dynamic | sorted_static | sorted_dynamic
+  max_tokens_per_batch: 4096  # Token budget for dynamic/sorted_dynamic strategies
+
+  # ===========================================================================
+  # Parallelism
+  # ===========================================================================
+  # Strategies:
+  # - none: Single GPU or device_map='auto'
+  # - tensor_parallel: Split layers horizontally across GPUs
+  # - data_parallel: Replicate model, split batches
+  # Note: pipeline_parallel NOT supported for PyTorch backend
+  parallelism_strategy: tensor_parallel  # Using TP across 2 GPUs
+  parallelism_degree: 2  # Use degree > 1 with tensor_parallel or data_parallel
+
+  # ===========================================================================
+  # Quantization (BitsAndBytes)
+  # ===========================================================================
+  # Native HuggingFace/BitsAndBytes parameters for memory reduction.
+  #
+  # Options:
+  # - load_in_8bit: ~50% memory reduction, minimal quality loss
+  # - load_in_4bit: ~75% memory reduction, some quality loss
+  #   - nf4: Normalized Float 4-bit (recommended, better quality)
+  #   - fp4: Float Point 4-bit (faster)
+  #   - double_quant: Quantize the quantization constants (more compression)
+  #
+  # Note: Cannot enable both 4-bit and 8-bit simultaneously.
+  load_in_4bit: true  # Enable 4-bit quantization for memory efficiency
+  load_in_8bit: false
+  bnb_4bit_compute_dtype: bfloat16  # bfloat16 for better training stability
+  bnb_4bit_quant_type: nf4  # nf4 (better quality) | fp4 (faster)
+  bnb_4bit_use_double_quant: true  # Extra compression with nested quantization
+
+  # ===========================================================================
+  # Attention
+  # ===========================================================================
+  # Native from_pretrained() parameter
+  attn_implementation: flash_attention_2  # sdpa | flash_attention_2 | eager
+
+  # ===========================================================================
+  # Compilation
+  # ===========================================================================
+  # Native torch.compile() parameters
+  torch_compile: reduce-overhead  # false | true | 'default' | 'reduce-overhead' | 'max-autotune'
+  torch_compile_backend: inductor  # inductor | cudagraphs | onnxrt | aot_eager
+
+  # ===========================================================================
+  # KV Cache
+  # ===========================================================================
+  # Native GenerationConfig parameters
+  use_cache: true
+  cache_implementation: null  # dynamic | static | hybrid | sliding_window
+
+  # ===========================================================================
+  # Memory
+  # ===========================================================================
+  # Native from_pretrained() parameters
+  low_cpu_mem_usage: true
+  max_memory: null  # {"0": "10GiB", "cpu": "30GiB"}
+
+  # ===========================================================================
+  # Decoder Extensions (PyTorch-specific)
+  # ===========================================================================
+  # These sampling params have PyTorch-specific semantics or are not
+  # supported by all backends.
+  # Note: top_k is now in the universal decoder section above.
+  min_p: 0.05  # Min probability relative to top token (0 = disabled)
+  no_repeat_ngram_size: 3  # Prevent 3-gram repetition (0 = disabled)
+  output_scores: true  # Return generation scores/logprobs
+  return_dict_in_generate: true
+
+  # ===========================================================================
+  # Beam Search
+  # ===========================================================================
+  # Note: Beam search is PyTorch-specific - vLLM and TensorRT have different
+  # beam search implementations or don't support it.
+  beam_search:
+    enabled: false
+    num_beams: 1  # 1 = greedy, >1 = beam search
+    length_penalty: 1.0  # >1 favours longer, <1 favours shorter
+    early_stopping: false  # Stop when num_beams best sequences complete
+    no_repeat_ngram_size: 0  # Prevent n-gram repetition within beam
+
+  # ===========================================================================
+  # Speculative Decoding (Assisted Generation)
+  # ===========================================================================
+  # Native HuggingFace assisted generation parameters
+  assisted_generation: null
+  # assisted_generation:
+  #   model: distilgpt2  # Small draft model
+  #   num_tokens: 5      # Tokens to speculate per step
+
+  # ===========================================================================
+  # Legacy
+  # ===========================================================================
+  use_bettertransformer: false  # Pre-PyTorch 2.0 optimisation (deprecated)
+
+  # ===========================================================================
+  # Escape Hatch
+  # ===========================================================================
+  extra: {}  # Additional kwargs passed to model.generate()

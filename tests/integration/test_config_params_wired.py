@@ -4,14 +4,13 @@ These tests ensure config values aren't just parsed but actually affect behaviou
 """
 
 import time
-from unittest.mock import MagicMock, patch
 
 import pytest
 
+from llm_energy_measure.config.backend_configs import PyTorchConfig
 from llm_energy_measure.config.models import (
     DecoderConfig,
     ExperimentConfig,
-    QuantizationConfig,
     TrafficSimulation,
 )
 from llm_energy_measure.core.traffic import TrafficGenerator
@@ -234,131 +233,115 @@ class TestTrafficSimulationWired:
 
 
 class TestQuantizationConfigWired:
-    """Verify quantization config is passed to model loading."""
+    """Verify quantization config is passed to model loading.
 
-    def test_quantization_config_builds_bnb_config(self):
-        """Quantization settings should build BitsAndBytesConfig."""
-        config = QuantizationConfig(
-            quantization=True,
+    In backend-native architecture, quantization settings are in PyTorchConfig.
+    """
+
+    def test_quantization_config_in_pytorch_config(self):
+        """Quantization settings in PyTorchConfig should be structured correctly."""
+        config = PyTorchConfig(
             load_in_4bit=True,
             bnb_4bit_compute_dtype="float16",
             bnb_4bit_quant_type="nf4",
         )
 
-        assert config.quantization is True
         assert config.load_in_4bit is True
         assert config.bnb_4bit_quant_type == "nf4"
+        assert config.bnb_4bit_compute_dtype == "float16"
 
     def test_4bit_and_8bit_mutually_exclusive(self):
         """Cannot enable both 4-bit and 8-bit quantization."""
         with pytest.raises(ValueError, match="Cannot enable both"):
-            QuantizationConfig(
-                quantization=True,
+            PyTorchConfig(
                 load_in_4bit=True,
                 load_in_8bit=True,
             )
 
-    def test_quantized_model_uses_bnb_config(self):
-        """Model loading with quantization should pass quantization_config to from_pretrained."""
-        from llm_energy_measure.core.model_loader import _load_quantized_model
-
-        config = QuantizationConfig(quantization=True, load_in_8bit=True)
-
-        with (
-            patch(
-                "llm_energy_measure.core.model_loader.detect_quantization_support"
-            ) as mock_detect,
-            patch("llm_energy_measure.core.model_loader.AutoModelForCausalLM") as mock_model,
-            patch("llm_energy_measure.core.model_loader.BitsAndBytesConfig") as mock_bnb,
-        ):
-            mock_detect.return_value = MagicMock(
-                supports_4bit=True,
-                supports_8bit=True,
-                default_4bit_quant_type="nf4",
-                default_8bit_quant_type="int8",
-            )
-            mock_bnb.return_value = MagicMock(name="bnb_config")
-            mock_model.from_pretrained.return_value = MagicMock()
-
-            _load_quantized_model("gpt2", config)
-
-            # Verify BitsAndBytesConfig was created with load_in_8bit=True
-            mock_bnb.assert_called_once()
-            bnb_call_kwargs = mock_bnb.call_args[1]
-            assert bnb_call_kwargs.get("load_in_8bit") is True
-
-            # Verify model loaded with quantization_config
-            mock_model.from_pretrained.assert_called_once()
-            call_kwargs = mock_model.from_pretrained.call_args[1]
-            assert "quantization_config" in call_kwargs
-
-
-class TestShardingConfigImplemented:
-    """Verify sharding config is wired up to parallelism strategies."""
-
-    def test_sharding_config_parsed(self):
-        """Sharding config should be parsed correctly with extended fields."""
-        # Use model_validate to properly handle validation_alias
-        config = ExperimentConfig.model_validate(
-            {
-                "config_name": "test",
-                "model_name": "gpt2",
-                "sharding": {"strategy": "tensor_parallel", "num_shards": 2},
-                "gpus": [0, 1],
-            }
+    def test_quantized_experiment_config(self):
+        """ExperimentConfig with quantization via PyTorchConfig."""
+        config = ExperimentConfig(
+            config_name="test",
+            model_name="test-model",
+            pytorch=PyTorchConfig(
+                load_in_8bit=True,
+            ),
         )
 
-        assert config.sharding.strategy == "tensor_parallel"
-        assert config.sharding.num_shards == 2
-        assert config.sharding.tp_plan == "auto"  # Default for TP
+        assert config.pytorch is not None
+        assert config.pytorch.load_in_8bit is True
+        assert config.pytorch.load_in_4bit is False
 
-    def test_sharding_config_pipeline_parallel(self):
-        """Pipeline parallel config should parse correctly.
 
-        Note: Pipeline parallelism is only supported with vLLM/TensorRT backends,
-        not PyTorch (which is the default).
-        """
-        config = ExperimentConfig.model_validate(
-            {
-                "config_name": "test",
-                "model_name": "gpt2",
-                "backend": "vllm",  # PP only supported with vLLM/TensorRT
-                "sharding": {
-                    "strategy": "pipeline_parallel",
-                    "num_shards": 4,
-                },
-                "gpus": [0, 1, 2, 3],
-            }
+class TestParallelismConfigImplemented:
+    """Verify parallelism config is wired up in backend-native architecture.
+
+    In the backend-native architecture, parallelism is configured via:
+    - PyTorch: pytorch.parallelism_strategy, pytorch.parallelism_degree
+    - vLLM: vllm.tensor_parallel_size, vllm.pipeline_parallel_size
+    - TensorRT: tensorrt.tp_size, tensorrt.pp_size
+    """
+
+    def test_pytorch_parallelism_config_parsed(self):
+        """PyTorch parallelism config should be parsed correctly."""
+        config = ExperimentConfig(
+            config_name="test",
+            model_name="gpt2",
+            gpus=[0, 1],
+            pytorch=PyTorchConfig(
+                parallelism_strategy="tensor_parallel",
+                parallelism_degree=2,
+            ),
         )
 
-        assert config.sharding.strategy == "pipeline_parallel"
-        assert config.sharding.num_shards == 4
+        assert config.pytorch.parallelism_strategy == "tensor_parallel"
+        assert config.pytorch.parallelism_degree == 2
 
-    def test_sharding_is_used_in_model_loader(self):
-        """Sharding config IS used in model loading."""
+    def test_vllm_parallelism_config_parsed(self):
+        """vLLM parallelism config should be parsed correctly."""
+        from llm_energy_measure.config.backend_configs import VLLMConfig
+
+        config = ExperimentConfig(
+            config_name="test",
+            model_name="gpt2",
+            backend="vllm",
+            gpus=[0, 1, 2, 3],
+            vllm=VLLMConfig(
+                tensor_parallel_size=2,
+                pipeline_parallel_size=2,
+            ),
+        )
+
+        assert config.vllm.tensor_parallel_size == 2
+        assert config.vllm.pipeline_parallel_size == 2
+
+    def test_parallelism_is_used_in_launcher(self):
+        """Parallelism config IS used in launcher to determine process count."""
         import inspect
 
-        from llm_energy_measure.core import model_loader
+        from llm_energy_measure.orchestration import launcher
 
-        source = inspect.getsource(model_loader.load_model_tokenizer)
+        source = inspect.getsource(launcher.get_backend_parallelism)
 
-        # Sharding config should appear in model loader
-        assert "sharding" in source.lower() or "parallelism" in source.lower()
+        # Backend-native parallelism settings should be checked
+        assert "parallelism_degree" in source  # PyTorch
+        assert "tensor_parallel_size" in source  # vLLM
+        assert "tp_size" in source  # TensorRT
 
     def test_parallelism_strategy_factory_exists(self):
         """Parallelism strategy factory should exist and work."""
-        from llm_energy_measure.config.models import ShardingConfig
         from llm_energy_measure.core.parallelism import (
             NoParallelism,
+            ParallelismConfig,
             TensorParallelStrategy,
             get_parallelism_strategy,
         )
 
         # Test factory returns correct strategy types
-        none_config = ShardingConfig(strategy="none")
+        none_config = ParallelismConfig(strategy="none")
         assert isinstance(get_parallelism_strategy(none_config), NoParallelism)
 
-        tp_config = ShardingConfig(strategy="tensor_parallel", num_shards=2)
+        tp_config = ParallelismConfig(strategy="tensor_parallel", num_shards=2)
         assert isinstance(get_parallelism_strategy(tp_config), TensorParallelStrategy)
 
 

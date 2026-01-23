@@ -455,3 +455,28 @@ def get_device_mig_info(cuda_device_index: int) -> dict[str, Any]:
             "gpu_mig_profile": None,
             "gpu_name": "unknown",
         }
+
+
+def get_gpu_architecture(device_index: int = 0) -> str:
+    """Get GPU compute capability string (e.g., "sm_80" for A100).
+
+    This is the SSOT for GPU architecture detection. Use this instead of
+    duplicating torch.cuda.get_device_properties() calls.
+
+    Args:
+        device_index: CUDA device index (default: 0).
+
+    Returns:
+        Architecture string like "sm_80" (A100) or "sm_89" (L40).
+        Returns "unknown" if detection fails.
+    """
+    try:
+        import torch
+
+        if torch.cuda.is_available() and device_index < torch.cuda.device_count():
+            props = torch.cuda.get_device_properties(device_index)
+            return f"sm_{props.major}{props.minor}"
+    except Exception as e:
+        logger.debug(f"Failed to get GPU architecture for device {device_index}: {e}")
+
+    return "unknown"

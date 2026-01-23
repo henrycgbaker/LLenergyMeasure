@@ -4,25 +4,25 @@ This module provides parallelism strategies that integrate with the model loadin
 and inference pipeline. Strategies modify how models are loaded and executed
 across multiple GPUs.
 
+Note: In the backend-native configuration architecture, parallelism settings are
+typically specified in the backend-specific config sections:
+- PyTorch: pytorch.parallelism_strategy, pytorch.parallelism_degree
+- vLLM: vllm.tensor_parallel_size, vllm.pipeline_parallel_size
+- TensorRT: tensorrt.tp_size, tensorrt.pp_size
+
+This module provides the underlying strategy implementations for PyTorch backend.
+
 Supported strategies:
 - NoParallelism: Default device_map="auto" behaviour
 - TensorParallelStrategy: HuggingFace native tensor parallelism (tp_plan="auto")
 - PipelineParallelStrategy: PyTorch native pipeline parallelism
-
-Usage:
-    from llm_energy_measure.core.parallelism import get_parallelism_strategy
-
-    strategy = get_parallelism_strategy(config.sharding)
-    strategy.setup(config.sharding, gpus)
-    model_kwargs = strategy.prepare_model_kwargs()
-    model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
-    model = strategy.wrap_model(model)
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal
 
 import torch
 import torch.distributed as dist
@@ -31,7 +31,19 @@ from loguru import logger
 if TYPE_CHECKING:
     from transformers import PreTrainedModel
 
-    from llm_energy_measure.config.models import ShardingConfig
+
+@dataclass
+class ParallelismConfig:
+    """Configuration for parallelism strategies.
+
+    This is a simplified config used internally by the parallelism module.
+    In the backend-native architecture, these values are derived from
+    the pytorch config section (pytorch.parallelism_strategy, etc.).
+    """
+
+    strategy: Literal["none", "tensor_parallel", "pipeline_parallel"] = "none"
+    num_shards: int = 1
+    tp_plan: str = "auto"
 
 
 # Models known to support HuggingFace native tensor parallelism
@@ -61,7 +73,7 @@ class ParallelismStrategy(ABC):
     """
 
     @abstractmethod
-    def setup(self, config: ShardingConfig, gpus: list[int]) -> None:
+    def setup(self, config: ParallelismConfig, gpus: list[int]) -> None:
         """Initialise the parallelism strategy.
 
         Args:
@@ -115,7 +127,7 @@ class NoParallelism(ParallelismStrategy):
     different layers sequentially.
     """
 
-    def setup(self, config: ShardingConfig, gpus: list[int]) -> None:
+    def setup(self, config: ParallelismConfig, gpus: list[int]) -> None:
         """No-op for default strategy."""
         logger.debug("NoParallelism strategy: using device_map='auto'")
 
@@ -159,7 +171,7 @@ class TensorParallelStrategy(ParallelismStrategy):
         self._num_shards: int = 1
         self._device_mesh_initialised: bool = False
 
-    def setup(self, config: ShardingConfig, gpus: list[int]) -> None:
+    def setup(self, config: ParallelismConfig, gpus: list[int]) -> None:
         """Initialise tensor parallelism with device mesh.
 
         Args:
@@ -242,7 +254,7 @@ class PipelineParallelStrategy(ParallelismStrategy):
         self._rank: int = 0
         self._world_size: int = 1
 
-    def setup(self, config: ShardingConfig, gpus: list[int]) -> None:
+    def setup(self, config: ParallelismConfig, gpus: list[int]) -> None:
         """Initialise pipeline parallelism.
 
         Args:
@@ -302,7 +314,7 @@ class PipelineParallelStrategy(ParallelismStrategy):
                 "Pipeline parallel with world_size=1: skipping split, using model directly. "
                 "For true pipeline parallelism, run with torchrun --nproc_per_node=N"
             )
-            model = model.to("cuda")
+            model = model.to("cuda")  # type: ignore[arg-type]
             return model
 
         # Multi-stage distributed case: attempt splitting
@@ -365,7 +377,7 @@ class PipelineParallelStrategy(ParallelismStrategy):
                 "Using device_map='auto' instead of manual splitting"
             )
             # Move model to GPU with automatic layer placement
-            model = model.to("cuda")
+            model = model.to("cuda")  # type: ignore[arg-type]
             return model
 
         # Multi-stage distributed case: create stage wrapper
@@ -539,7 +551,7 @@ class _PipelineStageWrapper(torch.nn.Module):  # type: ignore[misc]
             )
 
         # Delegate to original model's generate()
-        return self._original_model.generate(*args, **kwargs)
+        return self._original_model.generate(*args, **kwargs)  # type: ignore[operator]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Process input through this stage's layers.
@@ -568,7 +580,7 @@ class _PipelineStageWrapper(torch.nn.Module):  # type: ignore[misc]
         return hidden_states
 
 
-def get_parallelism_strategy(config: ShardingConfig) -> ParallelismStrategy:
+def get_parallelism_strategy(config: ParallelismConfig) -> ParallelismStrategy:
     """Factory function to get appropriate parallelism strategy.
 
     Args:

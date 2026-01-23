@@ -208,14 +208,14 @@ decoder:
 fp_precision: float16
 """)
 
-        # Level 3: Specific model config
+        # Level 3: Specific model config (backend-native: quantization in pytorch section)
         specific = tmp_path / "llama-7b-4bit.yaml"
         specific.write_text("""
 _extends: llama-family.yaml
 config_name: llama-7b-4bit
 model_name: meta-llama/Llama-2-7b-hf
-quantization:
-  quantization: true
+backend: pytorch
+pytorch:
   load_in_4bit: true
 """)
 
@@ -229,9 +229,9 @@ quantization:
         assert config.decoder.temperature == 0.7
         assert config.fp_precision == "float16"
 
-        # Level 3 specific
+        # Level 3 specific (backend-native architecture)
         assert config.config_name == "llama-7b-4bit"
-        assert config.quantization.load_in_4bit is True
+        assert config.pytorch.load_in_4bit is True
 
 
 class TestAggregationValidation:

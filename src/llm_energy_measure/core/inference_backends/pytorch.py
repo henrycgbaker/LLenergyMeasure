@@ -7,6 +7,11 @@ Design:
 - Composes existing ModelLoader and InferenceEngine implementations
 - Converts internal InferenceResult to protocol-agnostic BackendResult
 - Uses Accelerate for distributed execution and device management
+
+Backend-Native Architecture:
+- All PyTorch-specific params read from config.pytorch
+- Tier 1 (universal) params from top-level config (model_name, decoder, etc.)
+- Tier 2 (PyTorch-specific) params from config.pytorch section
 """
 
 from __future__ import annotations
@@ -25,7 +30,6 @@ from llm_energy_measure.core.inference_backends.protocols import (
     RuntimeCapabilities,
 )
 from llm_energy_measure.core.inference_backends.shared import (
-    CORE_SUPPORTED_PARAMS,
     create_precision_metadata,
 )
 from llm_energy_measure.domain.metrics import (
@@ -44,32 +48,6 @@ if TYPE_CHECKING:
     from llm_energy_measure.domain.model_info import ModelInfo
 
 
-# Parameters supported by PyTorch/Transformers backend
-# Extends core params with PyTorch-specific options
-_SUPPORTED_PARAMS: set[str] = set(CORE_SUPPORTED_PARAMS) | {
-    # PyTorch-specific: LoRA adapter support
-    "adapter",
-    # Extended batching
-    "batching.max_tokens_per_batch",
-    # Extended decoder options
-    "decoder.do_sample",
-    "decoder.min_p",
-    "decoder.repetition_penalty",
-    "decoder.no_repeat_ngram_size",
-    # Quantization (BitsAndBytes)
-    "quantization.load_in_4bit",
-    "quantization.load_in_8bit",
-    "quantization.quantization",
-    # Sharding (via Accelerate)
-    "sharding.strategy",
-    "sharding.num_shards",
-    # Traffic simulation
-    "traffic_simulation.enabled",
-    "traffic_simulation.mode",
-    "traffic_simulation.target_qps",
-}
-
-
 class PyTorchBackend:
     """HuggingFace Transformers inference backend.
 
@@ -81,12 +59,23 @@ class PyTorchBackend:
     It provides full backward compatibility with existing experiments while
     conforming to the InferenceBackend protocol.
 
-    PyTorch-specific configuration (config.pytorch) controls:
-    - Attention implementation (flash_attention_2, sdpa, eager)
-    - torch.compile optimization
-    - BetterTransformer conversion
-    - KV caching, memory management
-    - Assisted generation (speculative decoding)
+    Configuration (Backend-Native Architecture):
+        Tier 1 (Universal) - from top-level config:
+            - model_name, adapter, fp_precision
+            - decoder.temperature, decoder.do_sample, decoder.top_p, decoder.repetition_penalty
+            - max_input_tokens, max_output_tokens, min_output_tokens
+            - streaming, streaming_warmup_requests
+            - traffic_simulation.*
+
+        Tier 2 (PyTorch-specific) - from config.pytorch:
+            - batch_size, batching_strategy, max_tokens_per_batch
+            - parallelism_strategy, parallelism_degree
+            - load_in_4bit, load_in_8bit, bnb_4bit_*
+            - min_p, no_repeat_ngram_size (top_k moved to universal decoder)
+            - beam_search.*
+            - attn_implementation, torch_compile, torch_compile_backend
+            - use_cache, cache_implementation
+            - assisted_generation.*
     """
 
     def __init__(self) -> None:
@@ -175,8 +164,8 @@ class PyTorchBackend:
         """Build comprehensive kwargs for model.generate().
 
         Consolidates all generation parameters from:
-        - Decoder config (temperature, sampling, beam search)
-        - PyTorch-specific config (caching, compile options)
+        - Tier 1: Decoder config (temperature, do_sample, top_k, top_p, repetition_penalty)
+        - Tier 2: PyTorch-specific config (min_p, no_repeat_ngram_size, beam_search, caching)
         - Token limits
 
         Args:
@@ -191,7 +180,7 @@ class PyTorchBackend:
         decoder = config.decoder
         pytorch_cfg: PyTorchConfig | None = config.pytorch
 
-        # Token limits
+        # Token limits (Tier 1)
         effective_max_output = max_output_tokens or config.max_output_tokens
         kwargs["max_new_tokens"] = effective_max_output
 
@@ -201,7 +190,7 @@ class PyTorchBackend:
             else:
                 kwargs["min_new_tokens"] = config.min_output_tokens
 
-        # Temperature=0 forces greedy regardless of other settings
+        # Temperature=0 forces greedy regardless of other settings (Tier 1)
         if decoder.temperature == 0.0:
             kwargs["do_sample"] = False
         else:
@@ -209,31 +198,34 @@ class PyTorchBackend:
             kwargs["temperature"] = decoder.temperature
 
             if decoder.do_sample:
-                # Nucleus/top sampling (only when sampling is enabled)
-                if decoder.top_k > 0:
-                    kwargs["top_k"] = decoder.top_k
+                # Tier 1: top_p, repetition_penalty, top_k
                 if decoder.top_p < 1.0:
                     kwargs["top_p"] = decoder.top_p
-                if decoder.min_p > 0.0:
-                    kwargs["min_p"] = decoder.min_p
-
-                # Repetition control
                 if decoder.repetition_penalty != 1.0:
                     kwargs["repetition_penalty"] = decoder.repetition_penalty
-                if decoder.no_repeat_ngram_size > 0:
-                    kwargs["no_repeat_ngram_size"] = decoder.no_repeat_ngram_size
+                # top_k is now universal (0 = disabled for PyTorch)
+                if decoder.top_k > 0:
+                    kwargs["top_k"] = decoder.top_k
 
-        # Beam search from unified decoder config
-        beam_cfg = decoder.beam_search
-        if beam_cfg.enabled and beam_cfg.num_beams > 1:
-            kwargs["num_beams"] = beam_cfg.num_beams
-            if beam_cfg.early_stopping:
-                kwargs["early_stopping"] = True
-            if beam_cfg.length_penalty != 1.0:
-                kwargs["length_penalty"] = beam_cfg.length_penalty
+                # Tier 2 (PyTorch-specific): min_p, no_repeat_ngram_size
+                if pytorch_cfg is not None:
+                    if pytorch_cfg.min_p > 0.0:
+                        kwargs["min_p"] = pytorch_cfg.min_p
+                    if pytorch_cfg.no_repeat_ngram_size > 0:
+                        kwargs["no_repeat_ngram_size"] = pytorch_cfg.no_repeat_ngram_size
 
-        # PyTorch-specific options
+        # Beam search (Tier 2 - PyTorch-specific)
         if pytorch_cfg is not None:
+            beam_cfg = pytorch_cfg.beam_search
+            if beam_cfg.enabled and beam_cfg.num_beams > 1:
+                kwargs["num_beams"] = beam_cfg.num_beams
+                if beam_cfg.early_stopping:
+                    kwargs["early_stopping"] = True
+                if beam_cfg.length_penalty != 1.0:
+                    kwargs["length_penalty"] = beam_cfg.length_penalty
+                if beam_cfg.no_repeat_ngram_size > 0:
+                    kwargs["no_repeat_ngram_size"] = beam_cfg.no_repeat_ngram_size
+
             # KV caching
             if not pytorch_cfg.use_cache:
                 kwargs["use_cache"] = False
@@ -268,10 +260,13 @@ class PyTorchBackend:
         if isinstance(pytorch_cfg.torch_compile, str):
             mode = pytorch_cfg.torch_compile
 
-        logger.info(f"Applying torch.compile with mode='{mode}'")
+        # Determine backend (inductor is the default)
+        backend = pytorch_cfg.torch_compile_backend or "inductor"
+
+        logger.info(f"Applying torch.compile with mode='{mode}', backend='{backend}'")
 
         try:
-            self._model = torch.compile(self._model, mode=mode)
+            self._model = torch.compile(self._model, mode=mode, backend=backend)
             self._is_compiled = True
             logger.info("torch.compile applied successfully")
         except Exception as e:
@@ -431,7 +426,7 @@ class PyTorchBackend:
         """Run batch inference with full control over generation.
 
         Self-contained batch processing that:
-        - Creates batches using prompts.py utilities
+        - Creates batches using config.pytorch batching params
         - Applies traffic simulation if configured
         - Uses unified generation kwargs
         - Tracks per-batch latencies
@@ -454,6 +449,9 @@ class PyTorchBackend:
         device = self._accelerator.device
         max_input_tokens = config.max_input_tokens
         max_output_tokens = config.max_output_tokens
+
+        # Get PyTorch config for batching params
+        pytorch_cfg = config.pytorch
 
         # Create batches based on strategy
         batches = self._create_batches(prompts, config)
@@ -563,6 +561,11 @@ class PyTorchBackend:
         # Get actual compute dtype from model
         actual_dtype = str(self._model.dtype) if self._model is not None else None
 
+        # Get batching strategy for metadata
+        batching_strategy = "static"
+        if pytorch_cfg is not None:
+            batching_strategy = pytorch_cfg.batching_strategy
+
         return BackendResult(
             total_tokens=total_tokens,
             input_tokens=total_input_tokens,
@@ -577,13 +580,13 @@ class PyTorchBackend:
                 "tokens_per_second": tokens_per_sec,
                 "latency_per_token_ms": latency_per_token_ms,
                 "num_batches": len(batches),
-                "batching_strategy": config.batching.strategy,
+                "batching_strategy": batching_strategy,
             },
             precision_metadata=create_precision_metadata(config, self.name, actual_dtype),
         )
 
     def _create_batches(self, prompts: list[str], config: ExperimentConfig) -> list[list[str]]:
-        """Create batches based on config batching strategy.
+        """Create batches based on config.pytorch batching params.
 
         Industry-standard strategies (per MLPerf/vLLM terminology):
         - static: Fixed batch size, pads to max_length (MLPerf offline scenario)
@@ -603,9 +606,15 @@ class PyTorchBackend:
             create_fixed_batches,
         )
 
-        batching = config.batching
-        strategy = batching.strategy
-        max_tokens = batching.max_tokens_per_batch or config.max_input_tokens
+        # Get batching params from pytorch config (Tier 2)
+        pytorch_cfg = config.pytorch
+        if pytorch_cfg is None:
+            # Default to static batching with batch_size=1
+            return create_fixed_batches(prompts=prompts, batch_size=1)
+
+        strategy = pytorch_cfg.batching_strategy
+        batch_size = pytorch_cfg.batch_size
+        max_tokens = pytorch_cfg.max_tokens_per_batch or config.max_input_tokens
 
         # Sort prompts by length if strategy requires it
         working_prompts = prompts
@@ -620,7 +629,7 @@ class PyTorchBackend:
                 tokenizer=self._tokenizer,
                 max_tokens_per_batch=max_tokens,
                 max_prompt_tokens=config.max_input_tokens,
-                max_batch_size=batching.batch_size,
+                max_batch_size=batch_size,
             )
 
         # Default to static batching (static, sorted_static, or unknown)
@@ -628,7 +637,7 @@ class PyTorchBackend:
             logger.warning(f"Unknown batching strategy '{strategy}', using static")
         return create_fixed_batches(
             prompts=working_prompts,
-            batch_size=batching.batch_size,
+            batch_size=batch_size,
         )
 
     def _run_streaming_inference(
@@ -653,6 +662,7 @@ class PyTorchBackend:
         from transformers import TextIteratorStreamer
 
         warmup_count = config.streaming_warmup_requests
+        pytorch_cfg = config.pytorch
 
         # Split into warmup and measurement prompts
         warmup_prompts = prompts[:warmup_count] if warmup_count > 0 else []
@@ -693,11 +703,11 @@ class PyTorchBackend:
                 "Consider increasing num_input_prompts for reliable percentiles."
             )
 
-        # Warn about batch_size being ignored
-        if config.batching.batch_size and config.batching.batch_size > 1:
+        # Warn about batch_size being ignored (Tier 2 param)
+        if pytorch_cfg is not None and pytorch_cfg.batch_size > 1:
             logger.warning(
                 f"streaming=True forces sequential processing. "
-                f"batch_size={config.batching.batch_size} ignored."
+                f"pytorch.batch_size={pytorch_cfg.batch_size} ignored."
             )
 
         # Collect per-request timing data
@@ -1007,13 +1017,13 @@ class PyTorchBackend:
 
         model_config = self._model.config
 
-        # Determine quantization
-        quant_config = self._config.quantization
-        if quant_config.load_in_4bit:
+        # Determine quantization from PyTorch config (Tier 2)
+        pytorch_cfg = self._config.pytorch
+        if pytorch_cfg is not None and pytorch_cfg.load_in_4bit:
             quant = QuantizationSpec(
                 enabled=True, bits=4, method="bitsandbytes", compute_dtype="float16"
             )
-        elif quant_config.load_in_8bit:
+        elif pytorch_cfg is not None and pytorch_cfg.load_in_8bit:
             quant = QuantizationSpec(
                 enabled=True, bits=8, method="bitsandbytes", compute_dtype="float16"
             )
@@ -1034,10 +1044,6 @@ class PyTorchBackend:
             torch_dtype=str(self._model.dtype),
             quantization=quant,
         )
-
-    def get_supported_params(self) -> set[str]:
-        """Return parameters supported by this backend."""
-        return _SUPPORTED_PARAMS.copy()
 
     def validate_config(self, config: ExperimentConfig) -> list[ConfigWarning]:
         """Validate config compatibility with PyTorch backend.
@@ -1064,7 +1070,7 @@ class PyTorchBackend:
             except ImportError:
                 warnings.append(
                     ConfigWarning(
-                        param="pytorch.attn_implementation",
+                        field="pytorch.attn_implementation",
                         message=(
                             "flash_attention_2 requires the flash-attn package. "
                             "Falling back to sdpa."
@@ -1078,7 +1084,7 @@ class PyTorchBackend:
         if pytorch_cfg.use_bettertransformer and pytorch_cfg.attn_implementation != "eager":
             warnings.append(
                 ConfigWarning(
-                    param="pytorch.use_bettertransformer",
+                    field="pytorch.use_bettertransformer",
                     message=(
                         "BetterTransformer is deprecated and may conflict with "
                         f"attn_implementation='{pytorch_cfg.attn_implementation}'. "
@@ -1092,8 +1098,35 @@ class PyTorchBackend:
         if pytorch_cfg.torch_compile and pytorch_cfg.use_bettertransformer:
             warnings.append(
                 ConfigWarning(
-                    param="pytorch.torch_compile",
+                    field="pytorch.torch_compile",
                     message="torch.compile and BetterTransformer together may cause issues.",
+                    severity="warning",
+                )
+            )
+
+        # Validate batching configuration
+        if (
+            pytorch_cfg.batching_strategy in ("dynamic", "sorted_dynamic")
+            and pytorch_cfg.max_tokens_per_batch is None
+        ):
+            warnings.append(
+                ConfigWarning(
+                    field="pytorch.max_tokens_per_batch",
+                    message=(
+                        f"Dynamic batching strategy '{pytorch_cfg.batching_strategy}' "
+                        "works best with max_tokens_per_batch set. "
+                        "Falling back to max_input_tokens."
+                    ),
+                    severity="info",
+                )
+            )
+
+        # Validate quantization - can't use both 4bit and 8bit
+        if pytorch_cfg.load_in_4bit and pytorch_cfg.load_in_8bit:
+            warnings.append(
+                ConfigWarning(
+                    field="pytorch.load_in_4bit",
+                    message="Cannot enable both load_in_4bit and load_in_8bit. Using 4-bit.",
                     severity="warning",
                 )
             )

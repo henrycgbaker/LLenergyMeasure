@@ -1,73 +1,21 @@
-"""Tests for configuration models."""
+"""Tests for configuration models.
+
+Tests the backend-native configuration architecture with:
+- Tier 1: Universal params (config_name, model_name, decoder, etc.)
+- Tier 2: Backend-specific params (pytorch, vllm, tensorrt sections)
+"""
 
 import pytest
 from pydantic import ValidationError
 
 from llm_energy_measure.config.models import (
     BUILTIN_DATASETS,
-    BatchingConfig,
     DecoderConfig,
     ExperimentConfig,
     FilePromptSource,
     HuggingFacePromptSource,
-    LatencySimulation,
-    QuantizationConfig,
     TrafficSimulation,
 )
-
-
-class TestBatchingConfig:
-    """Tests for BatchingConfig with industry-standard strategies."""
-
-    def test_defaults(self):
-        config = BatchingConfig()
-        assert config.batch_size == 1
-        assert config.strategy == "static"
-        assert config.max_tokens_per_batch is None
-        assert config.dynamic_batching is False
-
-    def test_static_strategy(self):
-        """Static strategy: fixed batch size (MLPerf offline)."""
-        config = BatchingConfig(strategy="static", batch_size=8)
-        assert config.strategy == "static"
-        assert config.batch_size == 8
-
-    def test_dynamic_strategy(self):
-        """Dynamic strategy: token-aware batching (MLPerf server)."""
-        config = BatchingConfig(strategy="dynamic", batch_size=8, max_tokens_per_batch=2048)
-        assert config.strategy == "dynamic"
-        assert config.max_tokens_per_batch == 2048
-
-    def test_sorted_static_strategy(self):
-        """Sorted static: sort by length then fixed batches."""
-        config = BatchingConfig(strategy="sorted_static", batch_size=4)
-        assert config.strategy == "sorted_static"
-
-    def test_sorted_dynamic_strategy(self):
-        """Sorted dynamic: sort by length + token budget."""
-        config = BatchingConfig(strategy="sorted_dynamic", batch_size=8, max_tokens_per_batch=1024)
-        assert config.strategy == "sorted_dynamic"
-        assert config.max_tokens_per_batch == 1024
-
-    def test_legacy_dynamic_batching_flag(self):
-        """Legacy dynamic_batching=True maps to strategy='dynamic'."""
-        config = BatchingConfig(dynamic_batching=True)
-        assert config.strategy == "dynamic"
-
-    def test_legacy_flag_does_not_override_explicit_strategy(self):
-        """Explicit strategy takes precedence over legacy flag."""
-        config = BatchingConfig(strategy="sorted_static", dynamic_batching=True)
-        # sorted_static is not "static", so flag should not override
-        assert config.strategy == "sorted_static"
-
-    def test_batch_size_must_be_positive(self):
-        with pytest.raises(ValidationError):
-            BatchingConfig(batch_size=0)
-
-    def test_invalid_strategy_rejected(self):
-        """Invalid strategy value is rejected."""
-        with pytest.raises(ValidationError):
-            BatchingConfig(strategy="invalid")
 
 
 class TestTrafficSimulation:
@@ -109,48 +57,22 @@ class TestTrafficSimulation:
         with pytest.raises(ValidationError):
             TrafficSimulation(mode="invalid")
 
-    def test_backwards_compat_alias(self):
-        """LatencySimulation is an alias for TrafficSimulation."""
-        config = LatencySimulation()
-        assert isinstance(config, TrafficSimulation)
-
-
-class TestQuantizationConfig:
-    """Tests for QuantizationConfig."""
-
-    def test_defaults(self):
-        config = QuantizationConfig()
-        assert config.quantization is False
-        assert config.load_in_4bit is False
-        assert config.load_in_8bit is False
-
-    def test_4bit_config(self):
-        config = QuantizationConfig(load_in_4bit=True)
-        assert config.quantization is True  # Auto-enabled
-        assert config.load_in_4bit is True
-
-    def test_8bit_config(self):
-        config = QuantizationConfig(load_in_8bit=True)
-        assert config.quantization is True  # Auto-enabled
-
-    def test_mutual_exclusivity(self):
-        with pytest.raises(ValidationError, match="Cannot enable both 4-bit and 8-bit"):
-            QuantizationConfig(load_in_4bit=True, load_in_8bit=True)
-
 
 class TestDecoderConfig:
-    """Tests for DecoderConfig with sampling presets."""
+    """Tests for DecoderConfig with sampling presets.
+
+    Note: In the backend-native architecture, DecoderConfig only contains
+    universal params (temperature, do_sample, top_p, repetition_penalty, preset).
+    Backend-specific decoder extensions (top_k, min_p, etc.) are in backend configs.
+    """
 
     def test_defaults(self):
         """Default values match specification."""
         config = DecoderConfig()
         assert config.temperature == 1.0
         assert config.top_p == 1.0
-        assert config.top_k == 50
         assert config.do_sample is True
-        assert config.min_p == 0.0
         assert config.repetition_penalty == 1.0
-        assert config.no_repeat_ngram_size == 0
         assert config.preset is None
 
     def test_top_p_bounds(self):
@@ -187,27 +109,6 @@ class TestDecoderConfig:
         with pytest.raises(ValidationError):
             DecoderConfig(repetition_penalty=10.5)
 
-    def test_min_p_bounds(self):
-        """min_p must be in [0, 1]."""
-        # Valid range
-        DecoderConfig(min_p=0.0)
-        DecoderConfig(min_p=1.0)
-
-        # Invalid
-        with pytest.raises(ValidationError):
-            DecoderConfig(min_p=-0.1)
-
-        with pytest.raises(ValidationError):
-            DecoderConfig(min_p=1.1)
-
-    def test_no_repeat_ngram_non_negative(self):
-        """no_repeat_ngram_size must be >= 0."""
-        DecoderConfig(no_repeat_ngram_size=0)
-        DecoderConfig(no_repeat_ngram_size=3)
-
-        with pytest.raises(ValidationError):
-            DecoderConfig(no_repeat_ngram_size=-1)
-
     def test_preset_deterministic(self):
         """preset: deterministic expands to greedy settings."""
         config = DecoderConfig(preset="deterministic")
@@ -221,7 +122,6 @@ class TestDecoderConfig:
         assert config.temperature == 1.0
         assert config.do_sample is True
         assert config.top_p == 0.95
-        assert config.top_k == 50
 
     def test_preset_creative(self):
         """preset: creative expands to higher variance settings."""
@@ -236,7 +136,6 @@ class TestDecoderConfig:
         config = DecoderConfig(preset="factual")
         assert config.temperature == 0.3
         assert config.do_sample is True
-        assert config.top_k == 10
 
     def test_preset_with_override(self):
         """Explicit params override preset values."""
@@ -277,7 +176,7 @@ class TestDecoderConfig:
 
 
 class TestExperimentConfig:
-    """Tests for ExperimentConfig."""
+    """Tests for ExperimentConfig with backend-native architecture."""
 
     @pytest.fixture
     def minimal_config(self):
@@ -291,7 +190,6 @@ class TestExperimentConfig:
         assert config.config_name == "test_config"
         assert config.model_name == "test-model"
         assert config.gpus == [0]
-        assert config.num_processes == 1
 
     def test_full_config(self, minimal_config):
         full = {
@@ -299,22 +197,10 @@ class TestExperimentConfig:
             "max_input_tokens": 1024,
             "max_output_tokens": 256,
             "gpus": [0, 1, 2, 3],
-            "num_processes": 4,
             "fp_precision": "float16",
         }
         config = ExperimentConfig(**full)
         assert config.max_input_tokens == 1024
-        assert config.num_processes == 4
-
-    def test_num_processes_validation(self, minimal_config):
-        """Test that parallelism.degree cannot exceed available GPUs."""
-        # num_processes > 1 gets migrated to parallelism.degree, so error is about parallelism
-        with pytest.raises(ValidationError, match="parallelism.degree.*must be <=.*gpus"):
-            ExperimentConfig(
-                **minimal_config,
-                gpus=[0, 1],
-                num_processes=4,
-            )
 
     def test_min_max_tokens_validation(self, minimal_config):
         with pytest.raises(ValidationError, match="min_output_tokens.*must be <="):
@@ -328,13 +214,12 @@ class TestExperimentConfig:
         config = ExperimentConfig(**minimal_config, gpus=0)
         assert config.gpus == [0]
 
-    def test_nested_configs(self, minimal_config):
+    def test_nested_decoder_config(self, minimal_config):
+        """Decoder config can be set as dict."""
         config = ExperimentConfig(
             **minimal_config,
-            quantization={"load_in_4bit": True},
             decoder={"temperature": 0.7},
         )
-        assert config.quantization.load_in_4bit is True
         assert config.decoder.temperature == 0.7
 
     def test_extra_metadata(self, minimal_config):
@@ -386,45 +271,69 @@ class TestExperimentConfig:
         config = ExperimentConfig(**minimal_config)
         assert config.prompts is None
 
-    def test_pytorch_pipeline_parallel_rejected(self, minimal_config):
-        """PyTorch backend with pipeline_parallel strategy is rejected.
+    def test_backend_selection(self, minimal_config):
+        """Backend can be selected."""
+        for backend in ["pytorch", "vllm", "tensorrt"]:
+            config = ExperimentConfig(**minimal_config, backend=backend)
+            assert config.backend == backend
 
-        Pipeline parallelism requires full model access for generate() which
-        PyTorch's pipelining abstraction can't provide for autoregressive
-        generation. Users should use vLLM or TensorRT for PP inference.
-        """
-        with pytest.raises(
-            ValidationError,
-            match="Pipeline parallelism is not supported with PyTorch backend",
-        ):
-            ExperimentConfig(
-                **minimal_config,
-                backend="pytorch",
-                gpus=[0, 1],
-                sharding={"strategy": "pipeline_parallel", "num_shards": 2},
-            )
-
-    def test_vllm_pipeline_parallel_allowed(self, minimal_config):
-        """vLLM backend supports pipeline_parallel strategy."""
-        config = ExperimentConfig(
-            **minimal_config,
-            backend="vllm",
-            gpus=[0, 1],
-            sharding={"strategy": "pipeline_parallel", "num_shards": 2},
-        )
-        assert config.sharding.strategy == "pipeline_parallel"
-        assert config.backend == "vllm"
-
-    def test_pytorch_tensor_parallel_allowed(self, minimal_config):
-        """PyTorch backend supports tensor_parallel strategy."""
+    def test_pytorch_config_section(self, minimal_config):
+        """PyTorch backend config section works."""
         config = ExperimentConfig(
             **minimal_config,
             backend="pytorch",
-            gpus=[0, 1],
-            sharding={"strategy": "tensor_parallel", "num_shards": 2},
+            decoder={"top_k": 50},  # top_k is now universal in decoder
+            pytorch={
+                "batch_size": 4,
+                "batching_strategy": "dynamic",
+                "load_in_4bit": True,
+                "min_p": 0.1,  # min_p is still backend-specific
+            },
         )
-        assert config.sharding.strategy == "tensor_parallel"
-        assert config.backend == "pytorch"
+        assert config.pytorch is not None
+        assert config.pytorch.batch_size == 4
+        assert config.pytorch.batching_strategy == "dynamic"
+        assert config.pytorch.load_in_4bit is True
+        assert config.decoder.top_k == 50
+        assert config.pytorch.min_p == 0.1
+
+    def test_vllm_config_section(self, minimal_config):
+        """vLLM backend config section works."""
+        config = ExperimentConfig(
+            **minimal_config,
+            backend="vllm",
+            decoder={"top_k": 50},  # top_k is now universal in decoder
+            vllm={
+                "max_num_seqs": 128,
+                "tensor_parallel_size": 2,
+                "gpu_memory_utilization": 0.8,
+                "min_p": 0.1,  # min_p is still backend-specific
+            },
+        )
+        assert config.vllm is not None
+        assert config.vllm.max_num_seqs == 128
+        assert config.vllm.tensor_parallel_size == 2
+        assert config.vllm.gpu_memory_utilization == 0.8
+        assert config.decoder.top_k == 50
+        assert config.vllm.min_p == 0.1
+
+    def test_tensorrt_config_section(self, minimal_config):
+        """TensorRT backend config section works."""
+        config = ExperimentConfig(
+            **minimal_config,
+            backend="tensorrt",
+            decoder={"top_k": 50},  # top_k is now universal in decoder
+            tensorrt={
+                "max_batch_size": 16,
+                "tp_size": 2,
+                "quantization": "fp8",
+            },
+        )
+        assert config.tensorrt is not None
+        assert config.tensorrt.max_batch_size == 16
+        assert config.tensorrt.tp_size == 2
+        assert config.tensorrt.quantization == "fp8"
+        assert config.decoder.top_k == 50
 
 
 class TestFilePromptSource:
@@ -541,7 +450,5 @@ class TestExperimentConfigRandomSeed:
 
     def test_random_seed_negative_allowed(self, minimal_config):
         """random_seed allows negative integers (no constraint)."""
-        # Note: Whether negative seeds are allowed depends on your validation
-        # This test documents the current behavior
         config = ExperimentConfig(**minimal_config, random_seed=-1)
         assert config.random_seed == -1

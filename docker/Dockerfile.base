@@ -13,6 +13,7 @@ FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS base
 # System dependencies shared by all backends
 # gosu: for dropping privileges in entrypoint (PUID/PGID support)
 # build-essential: Required for Triton JIT compilation (vLLM LoRA, etc.)
+# libxcb1: Required for Ray dashboard (vLLM multi-GPU)
 # Python 3.10: Required for tensorrt-llm compatibility (only supports 3.10/3.12)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
@@ -24,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     build-essential \
     libgomp1 \
+    libxcb1 \
     git \
     curl \
     gosu \

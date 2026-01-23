@@ -2,6 +2,7 @@
 
 import pytest
 
+from llm_energy_measure.config.backend_configs import PyTorchConfig
 from llm_energy_measure.config.models import DecoderConfig, ExperimentConfig
 from llm_energy_measure.core.inference_backends.pytorch import PyTorchBackend
 
@@ -101,26 +102,30 @@ class TestBuildGenerationKwargs:
         assert "repetition_penalty" not in kwargs
 
     def test_min_p_applied_when_positive(self, backend, base_config):
-        """min_p is applied when > 0."""
-        base_config.decoder = DecoderConfig(temperature=1.0, min_p=0.05)
+        """min_p is applied when > 0 (from PyTorchConfig, Tier 2 param)."""
+        base_config.decoder = DecoderConfig(temperature=1.0)
+        base_config.pytorch = PyTorchConfig(min_p=0.05)
         kwargs = backend._build_generation_kwargs(config=base_config, max_output_tokens=128)
         assert kwargs["min_p"] == 0.05
 
     def test_min_p_not_applied_when_zero(self, backend, base_config):
-        """min_p is not applied when == 0.0 (disabled)."""
-        base_config.decoder = DecoderConfig(temperature=1.0, min_p=0.0)
+        """min_p is not applied when == 0.0 (disabled, Tier 2 param)."""
+        base_config.decoder = DecoderConfig(temperature=1.0)
+        base_config.pytorch = PyTorchConfig(min_p=0.0)
         kwargs = backend._build_generation_kwargs(config=base_config, max_output_tokens=128)
         assert "min_p" not in kwargs
 
     def test_no_repeat_ngram_applied_when_positive(self, backend, base_config):
-        """no_repeat_ngram_size is applied when > 0."""
-        base_config.decoder = DecoderConfig(temperature=1.0, no_repeat_ngram_size=3)
+        """no_repeat_ngram_size is applied when > 0 (from PyTorchConfig, Tier 2 param)."""
+        base_config.decoder = DecoderConfig(temperature=1.0)
+        base_config.pytorch = PyTorchConfig(no_repeat_ngram_size=3)
         kwargs = backend._build_generation_kwargs(config=base_config, max_output_tokens=128)
         assert kwargs["no_repeat_ngram_size"] == 3
 
     def test_no_repeat_ngram_not_applied_when_zero(self, backend, base_config):
-        """no_repeat_ngram_size is not applied when == 0 (disabled)."""
-        base_config.decoder = DecoderConfig(temperature=1.0, no_repeat_ngram_size=0)
+        """no_repeat_ngram_size is not applied when == 0 (disabled, Tier 2 param)."""
+        base_config.decoder = DecoderConfig(temperature=1.0)
+        base_config.pytorch = PyTorchConfig(no_repeat_ngram_size=0)
         kwargs = backend._build_generation_kwargs(config=base_config, max_output_tokens=128)
         assert "no_repeat_ngram_size" not in kwargs
 

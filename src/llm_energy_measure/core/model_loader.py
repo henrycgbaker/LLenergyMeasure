@@ -15,7 +15,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizer
 
-from llm_energy_measure.config.models import ExperimentConfig, QuantizationConfig
+from llm_energy_measure.config.backend_configs import PyTorchConfig
+from llm_energy_measure.config.models import ExperimentConfig
 from llm_energy_measure.exceptions import ConfigurationError
 
 
@@ -106,10 +107,8 @@ def load_model_tokenizer(
 ) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
     """Load a model and tokenizer from HuggingFace.
 
-    Supports different parallelism strategies based on sharding config:
-    - none: Default device_map='auto' behaviour
-    - tensor_parallel: HuggingFace native TP via tp_plan
-    - pipeline_parallel: PyTorch native PP with stage splitting
+    For PyTorch backend, supports optional BitsAndBytes quantization via
+    the pytorch config section.
 
     Args:
         config: Experiment configuration with model settings.
@@ -120,18 +119,11 @@ def load_model_tokenizer(
     Raises:
         ConfigurationError: If model loading fails.
     """
-    from llm_energy_measure.core.parallelism import get_parallelism_strategy
-
     model_name = config.model_name
     fp_precision = config.fp_precision
-    quant_config = config.quantization
-    sharding = config.sharding
+    pytorch_cfg = config.pytorch
 
     logger.info(f"Loading model: {model_name}")
-
-    # Get parallelism strategy
-    strategy = get_parallelism_strategy(sharding)
-    strategy.setup(sharding, config.gpus)
 
     # Load tokenizer
     try:
@@ -144,11 +136,10 @@ def load_model_tokenizer(
     # Determine dtype
     dtype = get_torch_dtype(fp_precision)
 
-    # Get parallelism-specific model kwargs
-    model_kwargs = strategy.prepare_model_kwargs()
+    # Build model kwargs
+    model_kwargs: dict[str, Any] = {"device_map": "auto"}
 
     # Merge PyTorch-specific model kwargs (if config.pytorch is set)
-    pytorch_cfg = config.pytorch
     if pytorch_cfg is not None:
         # Attention implementation
         if pytorch_cfg.attn_implementation != "sdpa":
@@ -166,14 +157,15 @@ def load_model_tokenizer(
 
     # Load model with optional quantization
     try:
-        if quant_config and quant_config.quantization:
+        # Check for BitsAndBytes quantization in pytorch config
+        use_quantization = pytorch_cfg and (pytorch_cfg.load_in_4bit or pytorch_cfg.load_in_8bit)
+
+        if use_quantization and pytorch_cfg:
             # Quantization uses its own loading path
-            # Note: quantization + TP/PP is experimental
-            model = _load_quantized_model(model_name, quant_config)
+            model = _load_quantized_model(model_name, pytorch_cfg)
         else:
-            # Merge dtype with parallelism kwargs
-            # Parallelism kwargs may override device_map
-            model_kwargs["dtype"] = model_kwargs.get("dtype", dtype)
+            # Standard loading with dtype
+            model_kwargs["torch_dtype"] = dtype
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 **model_kwargs,
@@ -185,9 +177,6 @@ def load_model_tokenizer(
     if config.adapter:
         model = _load_and_merge_adapter(model, config.adapter, dtype)
 
-    # Apply post-load wrapping (needed for pipeline parallelism)
-    model = strategy.wrap_model(model)
-
     # Get model dtype defensively (some wrappers may not expose .dtype directly)
     model_dtype = getattr(model, "dtype", None)
     if model_dtype is None:
@@ -198,7 +187,6 @@ def load_model_tokenizer(
 
     logger.info(
         f"Model loaded: {model_name}, dtype={model_dtype}, "
-        f"strategy={sharding.strategy}, "
         f"params={sum(p.numel() for p in model.parameters()):,}"
     )
 
@@ -207,13 +195,13 @@ def load_model_tokenizer(
 
 def _load_quantized_model(
     model_name: str,
-    quant_config: QuantizationConfig,
+    pytorch_cfg: PyTorchConfig,
 ) -> PreTrainedModel:
     """Load a model with BitsAndBytes quantization.
 
     Args:
         model_name: HuggingFace model name or path.
-        quant_config: Quantization configuration.
+        pytorch_cfg: PyTorch backend configuration with quantization settings.
 
     Returns:
         Quantized model.
@@ -222,17 +210,22 @@ def _load_quantized_model(
 
     bnb_kwargs: dict[str, Any] = {}
 
-    if quant_config.load_in_4bit:
+    if pytorch_cfg.load_in_4bit:
         if not qsupport.supports_4bit:
             raise ConfigurationError(
                 "4-bit quantization requested but not supported by bitsandbytes version"
             )
         bnb_kwargs["load_in_4bit"] = True
-        bnb_kwargs["bnb_4bit_compute_dtype"] = torch.float16
-        bnb_kwargs["bnb_4bit_quant_type"] = qsupport.default_4bit_quant_type
-        logger.info(f"Using 4-bit quantization with {qsupport.default_4bit_quant_type}")
+        # Use compute dtype from config, default to float16
+        compute_dtype_str = pytorch_cfg.bnb_4bit_compute_dtype
+        compute_dtype = torch.bfloat16 if compute_dtype_str == "bfloat16" else torch.float16
+        bnb_kwargs["bnb_4bit_compute_dtype"] = compute_dtype
+        bnb_kwargs["bnb_4bit_quant_type"] = pytorch_cfg.bnb_4bit_quant_type
+        if pytorch_cfg.bnb_4bit_use_double_quant:
+            bnb_kwargs["bnb_4bit_use_double_quant"] = True
+        logger.info(f"Using 4-bit quantization with {pytorch_cfg.bnb_4bit_quant_type}")
 
-    if quant_config.load_in_8bit:
+    if pytorch_cfg.load_in_8bit:
         if not qsupport.supports_8bit:
             raise ConfigurationError(
                 "8-bit quantization requested but not supported by bitsandbytes version"
@@ -283,7 +276,7 @@ def _load_and_merge_adapter(
 
     try:
         # Load adapter weights
-        model = PeftModel.from_pretrained(
+        model = PeftModel.from_pretrained(  # type: ignore[assignment]
             model,
             adapter_path,
             torch_dtype=dtype,

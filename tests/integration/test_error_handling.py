@@ -86,13 +86,13 @@ max_output_tokens: 50
         assert result.exit_code == 1
 
     def test_invalid_quantization_combo(self, tmp_path: Path):
-        """Test mutually exclusive quantization options."""
+        """Test mutually exclusive quantization options (backend-native architecture)."""
         invalid = tmp_path / "bad_quant.yaml"
         invalid.write_text("""
 config_name: bad-quant
 model_name: test
-quantization:
-  quantization: true
+backend: pytorch
+pytorch:
   load_in_4bit: true
   load_in_8bit: true
 """)

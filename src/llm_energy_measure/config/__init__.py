@@ -1,25 +1,36 @@
 """Configuration management for LLM Bench."""
 
-from llm_energy_measure.config.loader import ConfigWarning, load_config, validate_config
+from llm_energy_measure.config.introspection import (
+    get_all_params,
+    get_backend_params,
+    get_param_options,
+    get_param_test_values,
+    get_params_from_model,
+    get_shared_params,
+    list_all_param_paths,
+)
+from llm_energy_measure.config.loader import load_config, validate_config
 from llm_energy_measure.config.models import (
     SAMPLING_PRESETS,
-    BatchingConfig,
     DecoderConfig,
     ExperimentConfig,
-    LatencySimulation,
-    QuantizationConfig,
-    ShardingConfig,
+    TrafficSimulation,
 )
+from llm_energy_measure.config.validation import ConfigWarning
 
 __all__ = [
     "SAMPLING_PRESETS",
-    "BatchingConfig",
     "ConfigWarning",
     "DecoderConfig",
     "ExperimentConfig",
-    "LatencySimulation",
-    "QuantizationConfig",
-    "ShardingConfig",
+    "TrafficSimulation",
+    "get_all_params",
+    "get_backend_params",
+    "get_param_options",
+    "get_param_test_values",
+    "get_params_from_model",
+    "get_shared_params",
+    "list_all_param_paths",
     "load_config",
     "validate_config",
 ]

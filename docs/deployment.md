@@ -6,19 +6,24 @@ Docker deployment, GPU configuration, and troubleshooting.
 
 | Mode | Best For | Setup |
 |------|----------|-------|
-| **Host (Poetry)** | Quick local dev | `poetry install --with dev` |
-| **Docker prod** | Reproducible runs | `docker compose build` |
+| **Host (pip)** | Quick local dev | `pip install -e ".[pytorch]"` |
+| **Docker prod** | Reproducible runs | `docker compose build base pytorch` |
 | **Docker dev** | Test in container | `docker compose --profile dev build` |
 | **VS Code devcontainer** | Full IDE + GPU | "Reopen in Container" |
 
 ## Host Installation
 
 ```bash
-poetry install --with dev
-poetry run llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
+# Install with PyTorch backend (default)
+pip install -e ".[pytorch]"
 
-# Or activate venv first:
-poetry shell
+# Or with vLLM backend (high throughput)
+pip install -e ".[vllm]"
+
+# Or with TensorRT backend (requires Ampere+ GPU)
+pip install -e ".[tensorrt]"
+
+# Run experiment
 llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
 ```
 
@@ -27,9 +32,24 @@ llm-energy-measure experiment configs/my_experiment.yaml --dataset alpaca -n 100
 ### Requirements
 
 - **NVIDIA GPU** with CUDA support
-- **CUDA 12.4** compatible drivers (image uses `nvidia/cuda:12.4.1-runtime-ubuntu22.04`)
+- **CUDA 12.4** compatible drivers (base image uses `nvidia/cuda:12.4.1-runtime-ubuntu22.04`)
 - **nvidia-container-toolkit** installed and configured
 - **Privileged mode** for energy metrics (docker-compose.yml sets `privileged: true`)
+
+### Backend Services
+
+The project provides separate Docker services for each inference backend:
+
+| Service | Image Tag | Use Case |
+|---------|-----------|----------|
+| `pytorch` | `llm-energy-measure:pytorch` | Default, most compatible |
+| `vllm` | `llm-energy-measure:vllm` | High throughput with PagedAttention |
+| `tensorrt` | `llm-energy-measure:tensorrt` | Maximum performance (Ampere+ GPUs) |
+| `pytorch-dev` | `llm-energy-measure:pytorch-dev` | Development with PyTorch |
+| `vllm-dev` | `llm-energy-measure:vllm-dev` | Development with vLLM |
+| `tensorrt-dev` | `llm-energy-measure:tensorrt-dev` | Development with TensorRT |
+
+**Note**: vLLM and TensorRT have conflicting PyTorch dependencies. Use separate images rather than installing multiple backends in one environment.
 
 ### Environment Variables
 
@@ -44,9 +64,6 @@ HF_TOKEN=your_huggingface_token
 PUID=1000  # Your user ID (run 'id -u' to get this)
 PGID=1000  # Your group ID (run 'id -g' to get this)
 
-# Optional: Custom results directory
-LLM_ENERGY_RESULTS_DIR=/data/experiments/results
-
 # Optional: GPU selection
 CUDA_VISIBLE_DEVICES=0,1
 
@@ -54,11 +71,13 @@ CUDA_VISIBLE_DEVICES=0,1
 CODECARBON_LOG_LEVEL=warning
 
 # Optional: Custom paths (defaults shown)
-# LLM_ENERGY_RESULTS_DIR=/app/results
-# LLM_ENERGY_STATE_DIR=/app/.state
+# LLM_ENERGY_CONFIGS_DIR=./configs
+# LLM_ENERGY_RESULTS_DIR=./results
+# HF_HOME=~/.cache/huggingface
+# TRT_ENGINE_CACHE=~/.cache/tensorrt-engines  # TensorRT only
 ```
 
-**PUID/PGID Pattern**: The container starts as root (needed for GPU access and initialisation), then the entrypoint script drops privileges to your specified user before running the application. This ensures all files created in mounted volumes are owned by your host user, not root.
+**PUID/PGID Pattern**: The container starts as root (needed for GPU access and initialisation), then the entrypoint script drops privileges to your specified user before running the application. If not set, PUID/PGID are auto-detected from the mounted `/app/results` directory ownership.
 
 **Results directory precedence:**
 1. `--results-dir` CLI flag (highest)
@@ -71,46 +90,79 @@ CODECARBON_LOG_LEVEL=warning
 The Makefile handles UID/GID mapping automatically:
 
 ```bash
-make docker-build              # Build the image
-make datasets                  # List available datasets
+# Build backends
+make docker-build-pytorch     # Build PyTorch backend (default)
+make docker-build-vllm        # Build vLLM backend
+make docker-build-tensorrt    # Build TensorRT backend
+make docker-build-all         # Build all backends
+make docker-build-dev         # Build PyTorch dev image
+
+# Run commands
+make datasets                 # List available datasets
 make validate CONFIG=test.yaml # Validate a config
 make experiment CONFIG=test.yaml DATASET=alpaca SAMPLES=100
-make docker-shell              # Interactive shell
-make docker-dev                # Development shell
+make lem CMD="results list"   # Run any lem command
+
+# Interactive shells
+make docker-shell             # Production shell (pytorch)
+make docker-dev               # Development shell (pytorch-dev)
 ```
 
 ### Docker Compose
 
-The project uses profiles to separate production and development:
+#### Building Images
 
-| Service | Profile | Purpose |
-|---------|---------|---------|
-| `llm-energy-measure-app` | (default) | Production - baked-in package |
-| `llm-energy-measure-dev` | `dev` | Development - editable install |
-
-#### Production
+Build the base image first, then the backend you need:
 
 ```bash
-docker compose build
+# Build base + PyTorch (default)
+docker compose build base pytorch
 
-# Run experiment
-docker compose run --rm llm-energy-measure-app \
+# Build base + vLLM
+docker compose build base vllm
+
+# Build base + TensorRT
+docker compose build base tensorrt
+
+# Build all backends
+docker compose build base pytorch vllm tensorrt
+
+# Build dev images (include --profile dev)
+docker compose --profile dev build base pytorch-dev
+```
+
+#### Running Experiments
+
+```bash
+# PyTorch backend (default)
+docker compose run --rm pytorch \
+  llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
+
+# vLLM backend
+docker compose run --rm vllm \
+  llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
+
+# TensorRT backend
+docker compose run --rm tensorrt \
   llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
 
 # Interactive shell
-docker compose run --rm llm-energy-measure-app /bin/bash
+docker compose run --rm pytorch /bin/bash
 ```
 
-#### Development
+#### Development Mode
+
+Development containers mount the source code for live editing:
 
 ```bash
-docker compose --profile dev build
+# Build dev image
+docker compose --profile dev build base pytorch-dev
 
-# Interactive shell (source mounted)
-docker compose --profile dev run --rm llm-energy-measure-dev
+# Interactive shell (source mounted, editable install)
+docker compose --profile dev run --rm pytorch-dev
 
-# Run command
-docker compose --profile dev run --rm llm-energy-measure-dev \
+# Run command in dev container
+docker compose --profile dev run --rm pytorch-dev \
   llm-energy-measure experiment /app/configs/test.yaml -d alpaca -n 10
 ```
 
@@ -118,7 +170,7 @@ docker compose --profile dev run --rm llm-energy-measure-dev \
 
 1. Install [VS Code Remote - Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
 2. Set `HF_TOKEN` in your shell environment
-3. Open project → `Ctrl+Shift+P` → "Dev Containers: Reopen in Container"
+3. Open project and use `Ctrl+Shift+P` then "Dev Containers: Reopen in Container"
 
 The devcontainer:
 - Runs as root (avoids permission issues)
@@ -126,26 +178,31 @@ The devcontainer:
 - Mounts HuggingFace cache (models persist)
 - Has GPU passthrough enabled
 
-### Persistent Model Cache
-
-By default, production containers lose downloaded models on exit. To persist:
-
-```bash
-# Option 1: Uncomment in docker-compose.yml
-# - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
-
-# Option 2: Use dev profile (auto-mounts cache)
-make docker-dev
-```
-
 ### Volume Mounts
 
 | Host Path | Container Path | Purpose |
 |-----------|----------------|---------|
-| `~/.cache/huggingface` | `/app/.cache/huggingface` | Model cache (optional) |
-| `./configs` | `/app/configs` (ro) | Experiment configs |
+| `~/.cache/huggingface` | `/app/.cache/huggingface` | Model cache |
+| `./configs` | `/app/configs` | Experiment configs |
 | `./results` | `/app/results` | Output results |
+| `./scripts` | `/app/scripts` (ro) | Entrypoint scripts |
 | (created in image) | `/app/.state` | Experiment state/resumption |
+| `~/.cache/tensorrt-engines` | `/app/.cache/tensorrt-engines` | TensorRT engine cache (tensorrt only) |
+
+### Backend-Specific Notes
+
+#### vLLM
+
+- Uses `ipc: host` for shared memory (required for multiprocessing)
+- Installs its own PyTorch version (2.8+) for compatibility
+
+#### TensorRT
+
+- Uses `ipc: host` for shared memory (required for multiprocessing)
+- Requires compute capability >= 8.0 (Ampere: A100, A10, RTX 30xx/40xx, H100, L40)
+- NOT supported: V100, T4, RTX 20xx, GTX series
+- Mounts engine cache for compiled TensorRT engines
+- Requires MPI libraries (included in image)
 
 ## MIG GPU Support
 
@@ -187,7 +244,7 @@ CUDA_VISIBLE_DEVICES=MIG-def456 llm-energy-measure experiment config2.yaml --dat
 
 ```bash
 # Use specific MIG instance
-CUDA_VISIBLE_DEVICES=MIG-abc123 docker compose run --rm llm-energy-measure-app \
+CUDA_VISIBLE_DEVICES=MIG-abc123 docker compose run --rm pytorch \
   llm-energy-measure experiment /app/configs/test.yaml --dataset alpaca -n 100
 
 # Or set in .env
@@ -224,17 +281,14 @@ nvidia-smi  # Check driver version
 
 ### Permission Denied on Results/State
 
-The Docker image uses PUID/PGID to run as your host user. Set up your `.env` file:
+The Docker image uses PUID/PGID to run as your host user. The entrypoint auto-detects ownership from the mounted `/app/results` directory, but you can also set explicitly:
 
 ```bash
-# In your .env file
+# Option 1: Set in .env file
 PUID=1000  # Replace with your user ID (run 'id -u')
 PGID=1000  # Replace with your group ID (run 'id -g')
-```
 
-Or pass inline:
-
-```bash
+# Option 2: Pass inline
 PUID=$(id -u) PGID=$(id -g) docker compose run --rm pytorch ...
 ```
 
@@ -245,7 +299,7 @@ If you previously ran as root and have root-owned files:
 docker run --rm -v $(pwd)/results:/results alpine chown -R $(id -u):$(id -g) /results
 ```
 
-Makefile commands (`make docker-dev`) handle PUID/PGID automatically.
+Makefile commands (`make docker-dev`, `make experiment`) handle PUID/PGID automatically.
 
 ### MIG Device Errors
 
@@ -266,9 +320,19 @@ Makefile commands (`make docker-dev`) handle PUID/PGID automatically.
 
 ### Model Downloads Every Run
 
-**Cause**: HF cache is ephemeral in production containers.
+**Cause**: HF cache not mounted to container.
 
-**Solution**: Use dev profile or mount cache. See [Persistent Model Cache](#persistent-model-cache).
+**Solution**: The default docker-compose.yml mounts `~/.cache/huggingface`. Ensure this path exists on your host:
+
+```bash
+mkdir -p ~/.cache/huggingface
+```
+
+Or set a custom path:
+```bash
+export HF_HOME=/path/to/cache
+docker compose run --rm pytorch ...
+```
 
 ### Config Validation Errors
 
@@ -284,3 +348,14 @@ Makefile commands (`make docker-dev`) handle PUID/PGID automatically.
 - Reduce `max_input_tokens` / `max_output_tokens`
 - Enable quantization: `quantization.load_in_8bit: true`
 - Lower precision: `fp_precision: float16`
+
+### vLLM/TensorRT Shared Memory Errors
+
+**Symptom**: Errors about shared memory or IPC
+
+**Cause**: vLLM and TensorRT require shared memory for multiprocessing.
+
+**Solution**: The docker-compose.yml sets `ipc: host` for these services. If running manually:
+```bash
+docker run --ipc=host --gpus all ...
+```

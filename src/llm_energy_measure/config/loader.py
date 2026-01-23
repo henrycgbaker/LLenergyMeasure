@@ -4,39 +4,17 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
 from llm_energy_measure.config.models import ExperimentConfig
+from llm_energy_measure.config.validation import ConfigWarning
 from llm_energy_measure.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
     from llm_energy_measure.config.provenance import ResolvedConfig
-
-
-@dataclass
-class ConfigWarning:
-    """A configuration warning with severity level.
-
-    Severity levels:
-    - error: Impossible/invalid config combination (blocks execution without --force)
-    - warning: Problematic config that may cause unexpected behaviour
-    - info: Suboptimal but valid configuration
-    """
-
-    field: str
-    message: str
-    severity: Literal["error", "warning", "info"] = "warning"
-
-    def __str__(self) -> str:
-        return f"[{self.severity.upper()}] {self.field}: {self.message}"
-
-    def to_result_string(self) -> str:
-        """Format for embedding in results."""
-        return f"{self.severity}: {self.field} - {self.message}"
 
 
 def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
@@ -174,6 +152,10 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     - warning: Problematic config that may cause unexpected behaviour
     - info: Suboptimal but valid configuration
 
+    Note: Backend-specific validation (batching, quantization, parallelism) is
+    delegated to the backend's validate_config() method. This function handles
+    only universal (Tier 1) parameter validation.
+
     Args:
         config: Configuration to validate.
 
@@ -181,19 +163,6 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
         List of ConfigWarning objects (empty if no warnings).
     """
     warnings: list[ConfigWarning] = []
-
-    # =========================================================================
-    # DISTRIBUTED CONFIG
-    # =========================================================================
-
-    if config.num_processes > 1 and len(config.gpus) == 1:
-        warnings.append(
-            ConfigWarning(
-                field="num_processes",
-                message="Multiple processes with single GPU may not provide parallelism benefits",
-                severity="info",
-            )
-        )
 
     # =========================================================================
     # TOKEN CONFIG
@@ -209,140 +178,7 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
         )
 
     # =========================================================================
-    # QUANTIZATION CONFIG
-    # =========================================================================
-
-    quant = config.quantization
-    if quant.quantization and config.fp_precision == "float32":
-        warnings.append(
-            ConfigWarning(
-                field="quantization",
-                message="Quantization enabled with float32 precision - quantization typically uses float16 compute",
-                severity="warning",
-            )
-        )
-
-    if quant.quantization and not quant.load_in_4bit and not quant.load_in_8bit:
-        warnings.append(
-            ConfigWarning(
-                field="quantization",
-                message="quantization=True but neither load_in_4bit nor load_in_8bit specified",
-                severity="error",
-            )
-        )
-
-    # =========================================================================
-    # BATCHING CONFIG
-    # =========================================================================
-
-    batch = config.batching
-    if batch.strategy in ("dynamic", "sorted_dynamic") and batch.max_tokens_per_batch is None:
-        warnings.append(
-            ConfigWarning(
-                field="batching",
-                message=f"Dynamic batching strategy '{batch.strategy}' without max_tokens_per_batch - will use max_input_tokens as budget",
-                severity="info",
-            )
-        )
-
-    # batch_size is ignored for dynamic strategies
-    if batch.strategy in ("dynamic", "sorted_dynamic") and batch.batch_size != 1:
-        warnings.append(
-            ConfigWarning(
-                field="batching.batch_size",
-                message=f"batch_size={batch.batch_size} is ignored with '{batch.strategy}' strategy. Dynamic strategies use max_tokens_per_batch instead.",
-                severity="warning",
-            )
-        )
-
-    if batch.strategy in ("sorted_static", "sorted_dynamic") and batch.batch_size == 1:
-        warnings.append(
-            ConfigWarning(
-                field="batching",
-                message=f"Sorted strategy '{batch.strategy}' with batch_size=1 provides no benefit (sorting is pointless)",
-                severity="info",
-            )
-        )
-
-    # =========================================================================
-    # SHARDING CONFIG
-    # =========================================================================
-
-    shard = config.sharding
-    if shard.strategy != "none":
-        if shard.num_shards > len(config.gpus):
-            warnings.append(
-                ConfigWarning(
-                    field="sharding",
-                    message=f"num_shards={shard.num_shards} exceeds available GPUs ({len(config.gpus)})",
-                    severity="error",
-                )
-            )
-        if len(config.gpus) == 1:
-            warnings.append(
-                ConfigWarning(
-                    field="sharding",
-                    message=f"Sharding strategy '{shard.strategy}' with single GPU provides no benefit",
-                    severity="info",
-                )
-            )
-
-    # Tensor parallelism specific validation
-    if shard.strategy == "tensor_parallel":
-        # Check model support for native TP
-        from llm_energy_measure.core.parallelism import is_model_tp_compatible
-
-        if not is_model_tp_compatible(config.model_name):
-            warnings.append(
-                ConfigWarning(
-                    field="sharding",
-                    message=(
-                        f"Model '{config.model_name}' may not support HuggingFace native tensor parallelism. "
-                        f"Supported architectures: Llama, Mistral, Mixtral, Qwen, Phi, Gemma, Falcon, MPT, BLOOM, OPT"
-                    ),
-                    severity="warning",
-                )
-            )
-
-        # Quantization + TP warning
-        if quant.quantization:
-            warnings.append(
-                ConfigWarning(
-                    field="sharding",
-                    message="Quantization with tensor parallelism is experimental and may not work correctly",
-                    severity="warning",
-                )
-            )
-
-    # =========================================================================
-    # PARALLELISM CONFIG (new unified config)
-    # =========================================================================
-
-    para = config.parallelism
-    if para.strategy == "data_parallel" and config.backend == "vllm":
-        warnings.append(
-            ConfigWarning(
-                field="parallelism.strategy",
-                message=(
-                    "data_parallel is not fully supported for vLLM. "
-                    "vLLM manages tensor/pipeline parallelism internally. "
-                    "For data parallelism, use multiple separate experiments or the PyTorch backend."
-                ),
-                severity="error",
-            )
-        )
-
-    if para.strategy != "none" and para.degree > len(config.gpus):
-        warnings.append(
-            ConfigWarning(
-                field="parallelism.degree",
-                message=f"degree={para.degree} exceeds available GPUs ({len(config.gpus)})",
-                severity="error",
-            )
-        )
-
-    # =========================================================================
-    # DECODER/SAMPLING CONFIG
+    # DECODER/SAMPLING CONFIG (Universal params only)
     # =========================================================================
 
     decoder = config.decoder
@@ -364,12 +200,8 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     # Sampling params have no effect in greedy/deterministic mode
     if decoder.is_deterministic:
         ignored_params = []
-        if decoder.top_k != 50:  # Non-default
-            ignored_params.append(f"top_k={decoder.top_k}")
         if decoder.top_p != 1.0:  # Non-default
             ignored_params.append(f"top_p={decoder.top_p}")
-        if decoder.min_p != 0.0:  # Non-default
-            ignored_params.append(f"min_p={decoder.min_p}")
         if decoder.repetition_penalty != 1.0:  # Non-default
             ignored_params.append(f"repetition_penalty={decoder.repetition_penalty}")
 
@@ -378,7 +210,7 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
                 ConfigWarning(
                     field="decoder",
                     message=f"Sampling params [{', '.join(ignored_params)}] have no effect in deterministic mode (temp=0 or do_sample=False)",
-                    severity="error",
+                    severity="warning",
                 )
             )
 
@@ -410,7 +242,7 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     if traffic.enabled and traffic.target_qps > 100:
         warnings.append(
             ConfigWarning(
-                field="latency_simulation",
+                field="traffic_simulation",
                 message=f"target_qps={traffic.target_qps} is very high - may not achieve target rate",
                 severity="warning",
             )
@@ -420,7 +252,8 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     # BACKEND-SPECIFIC CONFIG VALIDATION
     # =========================================================================
 
-    # Validate config against the selected backend (if not default pytorch)
+    # Delegate to backend's validate_config() for backend-specific validation
+    # (batching, quantization, parallelism, decoder extensions like top_k/min_p)
     backend_name = getattr(config, "backend", "pytorch")
     try:
         from llm_energy_measure.core.inference_backends import get_backend
@@ -433,7 +266,7 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
             severity = bw.severity if bw.severity in ("error", "warning", "info") else "warning"
             warnings.append(
                 ConfigWarning(
-                    field=f"backend.{bw.param}",
+                    field=f"backend.{bw.field}",
                     message=bw.message,
                     severity=severity,  # type: ignore[arg-type]
                 )

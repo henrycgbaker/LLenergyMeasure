@@ -146,7 +146,7 @@ def run_cmd(
 
         console.print(f"[green]✓[/green] Config loaded: {config.config_name}")
         console.print(f"  Model: {config.model_name}")
-        console.print(f"  Processes: {config.num_processes}")
+        console.print(f"  Backend: {config.backend}")
         console.print(f"  GPUs: {config.gpus}")
 
         if dry_run:

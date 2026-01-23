@@ -83,7 +83,7 @@ services:
   pytorch:
     <<: *common
     volumes:
-      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
+      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
       - ./scripts:/app/scripts:ro
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
       # Mount HF cache for gated models - avoids re-auth in child processes
@@ -124,7 +124,7 @@ services:
     # vLLM requires shared memory for multiprocessing
     ipc: host
     volumes:
-      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
+      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
       - ./scripts:/app/scripts:ro
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
       # Mount HF cache for gated models - avoids re-auth in child processes
@@ -167,7 +167,7 @@ services:
     # TensorRT-LLM requires shared memory for multiprocessing
     ipc: host
     volumes:
-      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
+      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
       - ./scripts:/app/scripts:ro
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
       # Mount HF cache for gated models - avoids re-auth in child processes

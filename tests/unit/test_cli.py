@@ -453,6 +453,7 @@ class TestExperimentCommand:
                 "-n",
                 "10",
                 "--fresh",  # Skip incomplete experiment detection
+                "--yes",  # Accept config warnings in non-interactive mode
             ],
         )
         # Should exit with the mocked subprocess return code

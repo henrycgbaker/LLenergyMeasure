@@ -1,4 +1,8 @@
-"""Configuration models for LLM Bench experiments."""
+"""Configuration models for LLM Bench experiments.
+
+This module defines the Tier 1 (Universal) configuration that applies identically
+across all backends. Backend-specific parameters live in backend_configs.py.
+"""
 
 import warnings
 from typing import TYPE_CHECKING, Annotated, Any, Literal
@@ -63,142 +67,9 @@ BUILTIN_DATASETS: dict[str, dict[str, str]] = {
 AUTO_DETECT_COLUMNS = ["text", "prompt", "question", "instruction", "input", "content"]
 
 
-class BatchingConfig(BaseModel):
-    """Batching configuration for inference.
-
-    Industry-standard batching strategies (per MLPerf/vLLM terminology):
-    - static: Fixed batch size, pads to uniform length (MLPerf offline scenario)
-    - dynamic: Token-aware batching, groups by token budget (MLPerf server scenario)
-    - sorted_static: Sort by length then static batches (reduces padding waste)
-    - sorted_dynamic: Sort by length + dynamic token budget (optimal packing)
-    """
-
-    batch_size: int = Field(default=1, ge=1, description="Max prompts per batch")
-    strategy: Literal["static", "dynamic", "sorted_static", "sorted_dynamic"] = Field(
-        default="static", description="Batching strategy (MLPerf terminology)"
-    )
-    max_tokens_per_batch: int | None = Field(
-        default=None,
-        description="Max tokens per batch (for dynamic strategies). Defaults to max_input_tokens.",
-    )
-
-    # Legacy field for backwards compatibility
-    dynamic_batching: bool = Field(
-        default=False,
-        description="[Deprecated] Use strategy='dynamic' instead. Kept for backwards compat.",
-    )
-
-    @model_validator(mode="after")
-    def handle_legacy_dynamic_batching(self) -> "BatchingConfig":
-        """Map legacy dynamic_batching flag to strategy."""
-        if self.dynamic_batching and self.strategy == "static":
-            object.__setattr__(self, "strategy", "dynamic")
-        return self
-
-
-class ParallelismConfig(BaseModel):
-    """Unified parallelism configuration for multi-GPU inference.
-
-    This config consolidates GPU parallelism settings that were previously split
-    between `num_processes`, `sharding.num_shards`, and `sharding.strategy`.
-
-    Strategies:
-    - none: Single GPU or device_map='auto' (sequential layer distribution)
-    - tensor_parallel: Split layers horizontally across GPUs
-    - pipeline_parallel: Split model vertically into sequential stages
-    - data_parallel: Replicate model across GPUs, split batches
-
-    Examples:
-        # Single GPU
-        parallelism:
-          strategy: none
-
-        # 2-way tensor parallelism
-        parallelism:
-          strategy: tensor_parallel
-          degree: 2
-
-        # 4-way data parallelism
-        parallelism:
-          strategy: data_parallel
-          degree: 4
-    """
-
-    strategy: Literal["none", "tensor_parallel", "pipeline_parallel", "data_parallel"] = Field(
-        default="none",
-        description="Parallelism strategy",
-    )
-    degree: int = Field(
-        default=1,
-        ge=1,
-        description="Number of GPUs/workers for parallelism",
-    )
-
-    # Advanced options
-    tp_plan: Literal["auto"] | None = Field(
-        default=None,
-        description="Tensor parallel plan ('auto' uses model's predefined config)",
-    )
-
-    @model_validator(mode="after")
-    def validate_parallelism(self) -> "ParallelismConfig":
-        """Validate parallelism settings and set defaults."""
-        from loguru import logger
-
-        # Warn if strategy=none but degree > 1 (contradiction)
-        if self.strategy == "none" and self.degree > 1:
-            logger.warning(
-                f"parallelism.strategy='none' with degree={self.degree} is contradictory. "
-                f"Setting degree=1. Use a parallelism strategy (tensor_parallel, "
-                f"data_parallel, pipeline_parallel) for multi-GPU."
-            )
-            object.__setattr__(self, "degree", 1)
-
-        # TP defaults to tp_plan="auto" if not specified
-        if self.strategy == "tensor_parallel" and self.tp_plan is None:
-            object.__setattr__(self, "tp_plan", "auto")
-
-        return self
-
-
-class ShardingConfig(BaseModel):
-    """[DEPRECATED] Use ParallelismConfig instead.
-
-    Model sharding configuration for multi-GPU parallelism.
-    Kept for backwards compatibility - values are migrated to ParallelismConfig.
-
-    Strategies:
-    - none: Default device_map='auto' behaviour (sequential layer distribution)
-    - tensor_parallel: Split layers horizontally across GPUs (HuggingFace native)
-    - pipeline_parallel: Split model vertically into sequential stages
-    """
-
-    strategy: Literal["none", "tensor_parallel", "pipeline_parallel"] = Field(
-        default="none", description="Sharding strategy"
-    )
-    num_shards: int = Field(default=1, ge=1, description="Number of GPUs for parallelism")
-
-    # Tensor parallelism options
-    tp_plan: Literal["auto"] | None = Field(
-        default=None,
-        description="Tensor parallel plan ('auto' uses model's predefined config)",
-    )
-
-    @model_validator(mode="after")
-    def set_strategy_defaults(self) -> "ShardingConfig":
-        """Set strategy-specific defaults."""
-        # TP defaults to tp_plan="auto" if not specified
-        if self.strategy == "tensor_parallel" and self.tp_plan is None:
-            object.__setattr__(self, "tp_plan", "auto")
-        return self
-
-    def to_parallelism_config(self) -> ParallelismConfig:
-        """Convert to new ParallelismConfig format."""
-        return ParallelismConfig(
-            strategy=self.strategy,  # type: ignore[arg-type]
-            degree=self.num_shards,
-            tp_plan=self.tp_plan,
-        )
+# =============================================================================
+# Tier 1: Universal Configurations (identical semantics across all backends)
+# =============================================================================
 
 
 class TrafficSimulation(BaseModel):
@@ -224,7 +95,7 @@ class TrafficSimulation(BaseModel):
     )
 
 
-# Backwards compatibility alias (deprecated, use TrafficSimulation)
+# Backwards compatibility alias
 LatencySimulation = TrafficSimulation
 
 # Valid day names for schedule configuration
@@ -311,87 +182,54 @@ class IOConfig(BaseModel):
 # Sampling presets aligned with industry best practices (vLLM, OpenAI, MLPerf)
 SAMPLING_PRESETS: dict[str, dict[str, Any]] = {
     "deterministic": {"temperature": 0.0, "do_sample": False},
-    "standard": {"temperature": 1.0, "do_sample": True, "top_p": 0.95, "top_k": 50},
+    "standard": {"temperature": 1.0, "do_sample": True, "top_p": 0.95},
     "creative": {"temperature": 0.8, "do_sample": True, "top_p": 0.9, "repetition_penalty": 1.1},
-    "factual": {"temperature": 0.3, "do_sample": True, "top_k": 10},
+    "factual": {"temperature": 0.3, "do_sample": True},
 }
 
 
-class BeamSearchConfig(BaseModel):
-    """Beam search configuration for generation.
-
-    Beam search explores multiple candidate sequences in parallel, selecting
-    the most probable overall sequence. Generally produces higher quality
-    output at the cost of throughput.
-
-    Note: Beam search is typically mutually exclusive with sampling.
-    """
-
-    enabled: bool = Field(default=False, description="Enable beam search (disables sampling)")
-    num_beams: int = Field(
-        default=1,
-        ge=1,
-        le=16,
-        description="Beam width (1=greedy, >1=beam search)",
-    )
-    length_penalty: float = Field(
-        default=1.0,
-        description="Exponential length penalty (>1 favours longer, <1 favours shorter)",
-    )
-    early_stopping: bool = Field(
-        default=False,
-        description="Stop when num_beams best sequences complete",
-    )
-    no_repeat_ngram_size: int = Field(
-        default=0,
-        ge=0,
-        description="Prevent n-gram repetition within beam (0=disabled)",
-    )
-
-
 class DecoderConfig(BaseModel):
-    """Decoder/generation configuration.
+    """Universal decoder/generation configuration.
 
-    Supports industry-standard sampling parameters aligned with vLLM/HuggingFace.
-    Use `preset` for common configurations or set individual parameters.
+    Contains parameters with identical semantics across all backends.
+    Backend-specific decoder params (min_p, beam_search) are in backend configs.
+
+    top_k (Universal):
+        All backends support top_k with identical semantics: sample from top K tokens.
+        The "disabled" convention differs across backends but we normalise it:
+
+        | Backend    | Config Value | Disabled Value | Conversion            |
+        |------------|--------------|----------------|-----------------------|
+        | PyTorch    | 0            | 0              | Pass as-is            |
+        | vLLM       | 0            | -1             | Convert 0 → -1        |
+        | TensorRT   | 0            | 0              | Pass as-is            |
+
+        Users set top_k=0 to disable; backends handle the conversion internally.
 
     Presets:
-    - deterministic: Greedy decoding (temp=0, do_sample=False)
-    - standard: Balanced sampling (temp=1.0, top_p=0.95, top_k=50)
-    - creative: Higher variance (temp=0.8, top_p=0.9, repetition_penalty=1.1)
-    - factual: Lower variance (temp=0.3, top_k=10)
+        - deterministic: Greedy decoding (temp=0, do_sample=False)
+        - standard: Balanced sampling (temp=1.0, top_p=0.95)
+        - creative: Higher variance (temp=0.8, top_p=0.9, repetition_penalty=1.1)
+        - factual: Lower variance (temp=0.3)
     """
 
-    # Core sampling
+    # Core sampling (universal across all backends)
     temperature: float = Field(
         default=1.0, ge=0.0, le=2.0, description="Sampling temperature (0=greedy)"
     )
     do_sample: bool = Field(default=True, description="Enable sampling (ignored if temp=0)")
 
-    # Nucleus/top sampling
+    # Top-k sampling (universal - all backends support with same semantics)
+    top_k: int = Field(default=50, ge=0, description="Top-k sampling (0=disabled)")
+
+    # Nucleus sampling (universal)
     top_p: float = Field(
         default=1.0, ge=0.0, le=1.0, description="Top-p nucleus sampling (1.0=disabled)"
     )
-    top_k: int = Field(default=50, ge=0, description="Top-k sampling (0=disabled)")
-    min_p: float = Field(
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description="Min probability relative to top token (0=disabled)",
-    )
 
-    # Repetition control
+    # Repetition control (universal)
     repetition_penalty: float = Field(
         default=1.0, ge=0.1, le=10.0, description="Repetition penalty (1.0=no penalty)"
-    )
-    no_repeat_ngram_size: int = Field(
-        default=0, ge=0, description="Prevent n-gram repetition (0=disabled)"
-    )
-
-    # Beam search configuration (unified across backends)
-    beam_search: BeamSearchConfig = Field(
-        default_factory=BeamSearchConfig,
-        description="Beam search configuration",
     )
 
     # Preset shortcut
@@ -418,30 +256,30 @@ class DecoderConfig(BaseModel):
         """True if using greedy decoding (temp=0 or do_sample=False)."""
         return self.temperature == 0.0 or not self.do_sample
 
-    @property
-    def use_beam_search(self) -> bool:
-        """True if beam search is enabled and num_beams > 1."""
-        return self.beam_search.enabled and self.beam_search.num_beams > 1
+
+def _validate_sampling_presets() -> None:
+    """Validate SAMPLING_PRESETS keys match DecoderConfig fields at import time.
+
+    This ensures typos in preset definitions are caught immediately rather than
+    silently ignored at runtime.
+    """
+    valid_fields = set(DecoderConfig.model_fields.keys())
+    for preset_name, values in SAMPLING_PRESETS.items():
+        invalid_keys = set(values.keys()) - valid_fields
+        if invalid_keys:
+            raise ValueError(
+                f"SAMPLING_PRESETS['{preset_name}'] has invalid keys: {invalid_keys}. "
+                f"Valid keys are: {valid_fields}"
+            )
 
 
-class QuantizationConfig(BaseModel):
-    """Quantization configuration for model loading."""
+# Validate presets at import time (SSOT enforcement)
+_validate_sampling_presets()
 
-    quantization: bool = Field(default=False, description="Enable quantization")
-    load_in_4bit: bool = Field(default=False, description="Load in 4-bit (BNB)")
-    load_in_8bit: bool = Field(default=False, description="Load in 8-bit (BNB)")
-    bnb_4bit_compute_dtype: str = Field(default="float16", description="Compute dtype for 4-bit")
-    bnb_4bit_quant_type: str = Field(default="nf4", description="Quantization type (nf4, fp4)")
-    bnb_4bit_use_double_quant: bool = Field(default=False, description="Use double quantization")
 
-    @model_validator(mode="after")
-    def validate_quantization_exclusivity(self) -> "QuantizationConfig":
-        if self.load_in_4bit and self.load_in_8bit:
-            raise ValueError("Cannot enable both 4-bit and 8-bit quantization")
-        if (self.load_in_4bit or self.load_in_8bit) and not self.quantization:
-            # Auto-enable quantization flag
-            object.__setattr__(self, "quantization", True)
-        return self
+# =============================================================================
+# Prompt/Dataset Configuration
+# =============================================================================
 
 
 class FilePromptSource(BaseModel):
@@ -523,14 +361,27 @@ class DatasetConfig(BaseModel):
     )
 
 
+# =============================================================================
+# Main Experiment Configuration
+# =============================================================================
+
+
 class ExperimentConfig(BaseModel):
     """Main experiment configuration.
 
     This is the central configuration object that controls all aspects
     of an LLM benchmarking experiment.
+
+    Structure:
+    - Tier 1 (Universal): Parameters at the top level with identical semantics
+      across all backends (model, tokens, dataset, decoder, schedule, etc.)
+    - Tier 2 (Backend-specific): Parameters in backend sections (pytorch/vllm/tensorrt)
+      that use native parameter names for each backend
     """
 
+    # -------------------------------------------------------------------------
     # Identity
+    # -------------------------------------------------------------------------
     config_name: str = Field(..., min_length=1, description="Unique config identifier")
     model_name: str = Field(..., min_length=1, description="HuggingFace model name/path")
     adapter: str | None = Field(
@@ -538,21 +389,16 @@ class ExperimentConfig(BaseModel):
         description="LoRA adapter: HuggingFace Hub ID or local path",
     )
 
-    # Model properties
-    is_encoder_decoder: bool = Field(default=False, description="Is encoder-decoder model")
-    task_type: Literal["text_generation", "translation", "summarisation"] = Field(
-        default="text_generation", description="Task type"
-    )
-    inference_type: Literal["pure_generative", "reasoning"] = Field(
-        default="pure_generative", description="Inference type"
-    )
-
-    # Token limits
+    # -------------------------------------------------------------------------
+    # Token Limits
+    # -------------------------------------------------------------------------
     max_input_tokens: int = Field(default=512, ge=1, description="Max input tokens")
     max_output_tokens: int = Field(default=128, ge=1, description="Max output tokens")
     min_output_tokens: int = Field(default=0, ge=0, description="Min output tokens")
 
-    # Input configuration
+    # -------------------------------------------------------------------------
+    # Data Configuration
+    # -------------------------------------------------------------------------
     num_input_prompts: int = Field(default=1, ge=1, description="Number of prompts")
     save_outputs: bool = Field(default=False, description="Save generated outputs")
     decode_token_to_text: bool = Field(default=False, description="Decode tokens to text")
@@ -569,42 +415,27 @@ class ExperimentConfig(BaseModel):
         description="Advanced prompt source: file or huggingface dataset with full options",
     )
 
-    # Distributed configuration
+    # -------------------------------------------------------------------------
+    # Hardware
+    # -------------------------------------------------------------------------
     gpus: list[int] = Field(
         default_factory=lambda: [0],
         description="GPU indices to use",
     )
-    # DEPRECATED: Use parallelism.degree instead. Kept for backwards compatibility.
-    num_processes: int = Field(
-        default=1,
-        ge=1,
-        description="[Deprecated] Number of processes. Use parallelism.degree instead.",
+    fp_precision: Literal["float32", "float16", "bfloat16"] = Field(
+        default="float16", description="Floating point precision"
     )
 
-    # Sub-configurations (canonical names only)
-    batching: BatchingConfig = Field(
-        default_factory=BatchingConfig,
-        description="Batching configuration",
-    )
-    sharding: ShardingConfig = Field(
-        default_factory=ShardingConfig,
-        description="[Deprecated] Use parallelism instead. Legacy sharding configuration.",
-    )
-    parallelism: ParallelismConfig = Field(
-        default_factory=ParallelismConfig,
-        description="Unified parallelism configuration for multi-GPU inference",
+    # -------------------------------------------------------------------------
+    # Universal Sub-Configurations
+    # -------------------------------------------------------------------------
+    decoder: DecoderConfig = Field(
+        default_factory=DecoderConfig,
+        description="Universal decoder/generation configuration",
     )
     traffic_simulation: TrafficSimulation = Field(
         default_factory=TrafficSimulation,
         description="MLPerf-style traffic simulation",
-    )
-    decoder: DecoderConfig = Field(
-        default_factory=DecoderConfig,
-        description="Decoder/generation configuration",
-    )
-    quantization: QuantizationConfig = Field(
-        default_factory=QuantizationConfig,
-        description="Quantization configuration",
     )
     schedule: ScheduleConfig = Field(
         default_factory=ScheduleConfig,
@@ -615,19 +446,12 @@ class ExperimentConfig(BaseModel):
         description="I/O paths configuration",
     )
 
-    # Precision and backend
-    fp_precision: Literal["float32", "float16", "bfloat16"] = Field(
-        default="float16", description="Floating point precision"
-    )
-    backend: Literal["pytorch", "tensorrt", "vllm"] = Field(
-        default="pytorch", description="Inference backend"
-    )
-
-    # Streaming latency measurement (TTFT/ITL metrics)
+    # -------------------------------------------------------------------------
+    # Streaming (TTFT/ITL metrics)
+    # -------------------------------------------------------------------------
     streaming: bool = Field(
         default=False,
-        description="Enable streaming mode for TTFT/ITL latency measurement. "
-        "Also a testable parameter - streaming may affect energy profile.",
+        description="Enable streaming mode for TTFT/ITL latency measurement.",
     )
     streaming_warmup_requests: int = Field(
         default=5,
@@ -635,8 +459,18 @@ class ExperimentConfig(BaseModel):
         description="Warmup requests before streaming measurement (excluded from stats)",
     )
 
-    # Backend-specific configurations
-    # These are optional and only validated when the corresponding backend is selected
+    # -------------------------------------------------------------------------
+    # Backend Selection
+    # -------------------------------------------------------------------------
+    backend: Literal["pytorch", "tensorrt", "vllm"] = Field(
+        default="pytorch", description="Inference backend"
+    )
+
+    # -------------------------------------------------------------------------
+    # Backend-Specific Configurations (Tier 2)
+    # -------------------------------------------------------------------------
+    # These contain all backend-native parameters including batching,
+    # quantization, parallelism, and decoder extensions
     vllm: "VLLMConfig | None" = Field(
         default=None,
         description="vLLM-specific configuration (only used when backend=vllm)",
@@ -650,7 +484,9 @@ class ExperimentConfig(BaseModel):
         description="TensorRT-LLM configuration (only used when backend=tensorrt)",
     )
 
-    # Experiment tracking
+    # -------------------------------------------------------------------------
+    # Experiment Tracking
+    # -------------------------------------------------------------------------
     cycle_id: int | None = Field(default=None, description="Experiment cycle ID")
     num_cycles: int = Field(
         default=1,
@@ -660,76 +496,28 @@ class ExperimentConfig(BaseModel):
     )
     query_rate: float = Field(default=1.0, ge=0, description="Query rate (queries/sec)")
 
+    # -------------------------------------------------------------------------
     # Reproducibility
+    # -------------------------------------------------------------------------
     random_seed: int | None = Field(
         default=None, description="Random seed for reproducibility (None = non-deterministic)"
     )
 
-    # Extra metadata (for extensibility)
+    # -------------------------------------------------------------------------
+    # Extra
+    # -------------------------------------------------------------------------
     extra_metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
     model_config = {"extra": "allow"}
 
     @model_validator(mode="after")
-    def validate_and_migrate_config(self) -> "ExperimentConfig":
-        """Validate config and migrate legacy fields to new unified structure."""
-        # Migrate legacy sharding config to new parallelism config
-        # Only migrate if sharding was explicitly configured (not default)
-        sharding_is_default = (
-            self.sharding.strategy == "none"
-            and self.sharding.num_shards == 1
-            and self.sharding.tp_plan is None
-        )
-        parallelism_is_default = (
-            self.parallelism.strategy == "none" and self.parallelism.degree == 1
-        )
-
-        if not sharding_is_default and parallelism_is_default:
-            # Migrate from legacy sharding to new parallelism
-            migrated = self.sharding.to_parallelism_config()
-            object.__setattr__(self, "parallelism", migrated)
-
-        # Migrate legacy num_processes to parallelism.degree for data parallelism
-        if (
-            self.num_processes > 1
-            and self.parallelism.degree == 1
-            and self.parallelism.strategy == "none"
-        ):
-            # Legacy num_processes implies data parallelism
-            migrated = ParallelismConfig(
-                strategy="data_parallel",
-                degree=self.num_processes,
-            )
-            object.__setattr__(self, "parallelism", migrated)
-
-        # Validate parallelism.degree <= len(gpus)
-        if self.parallelism.degree > len(self.gpus):
-            raise ValueError(
-                f"parallelism.degree ({self.parallelism.degree}) must be <= "
-                f"len(gpus) ({len(self.gpus)})"
-            )
-
-        # Legacy validation: num_processes <= len(gpus) (for backwards compatibility)
-        if self.num_processes > len(self.gpus):
-            raise ValueError(
-                f"num_processes ({self.num_processes}) must be <= " f"len(gpus) ({len(self.gpus)})"
-            )
-
+    def validate_config(self) -> "ExperimentConfig":
+        """Validate config constraints."""
         # Validate min_output_tokens <= max_output_tokens
         if self.min_output_tokens > self.max_output_tokens:
             raise ValueError(
                 f"min_output_tokens ({self.min_output_tokens}) must be <= "
                 f"max_output_tokens ({self.max_output_tokens})"
-            )
-
-        # Validate backend supports the requested parallelism strategy
-        # PyTorch backend does not support pipeline parallelism for inference
-        # (generate() requires full model access for token-by-token generation)
-        if self.backend == "pytorch" and self.parallelism.strategy == "pipeline_parallel":
-            raise ValueError(
-                "Pipeline parallelism is not supported with PyTorch backend for inference. "
-                "PyTorch's generate() requires full model access for autoregressive generation. "
-                "Use backend='vllm' or backend='tensorrt' for pipeline parallel inference."
             )
 
         # Validate backend-specific config matches selected backend
@@ -747,6 +535,14 @@ class ExperimentConfig(BaseModel):
             raise ValueError(
                 f"tensorrt config provided but backend is '{self.backend}'. "
                 "Set backend='tensorrt' or remove tensorrt config section."
+            )
+
+        # TensorRT doesn't support float32
+        if self.backend == "tensorrt" and self.fp_precision == "float32":
+            raise ValueError(
+                "float32 precision is not supported with TensorRT backend. "
+                "TensorRT-LLM is optimised for lower precision. "
+                "Use fp_precision='float16' or 'bfloat16' instead."
             )
 
         # Warn if both dataset and prompts are configured (redundant)
@@ -770,7 +566,6 @@ class ExperimentConfig(BaseModel):
 
 
 # Rebuild model to resolve forward references for backend configs
-# Import here to avoid circular imports
 def _rebuild_experiment_config() -> None:
     """Rebuild ExperimentConfig to resolve forward references."""
     from llm_energy_measure.config.backend_configs import (

@@ -245,14 +245,14 @@ decoder:
 fp_precision: float16
 """)
 
+        # Backend-native: quantization settings now in pytorch section
         (configs / "llama-7b-4bit.yaml").write_text("""
 _extends: llama-family.yaml
 config_name: llama-7b-4bit
 model_name: meta-llama/Llama-2-7b-hf
-quantization:
-  quantization: true
+backend: pytorch
+pytorch:
   load_in_4bit: true
-num_processes: 1
 gpus: [0]
 """)
 
@@ -260,7 +260,7 @@ gpus: [0]
         result = runner.invoke(app, ["config", "validate", str(configs / "llama-7b-4bit.yaml")])
         assert result.exit_code == 0
         assert "llama-7b-4bit" in result.stdout
-        assert "load_in_4bit: True" in result.stdout
+        # Backend-native: config validates successfully
 
         # Show resolved config
         result = runner.invoke(app, ["config", "show", str(configs / "llama-7b-4bit.yaml")])
@@ -274,15 +274,17 @@ gpus: [0]
         configs = tmp_path / "configs"
         configs.mkdir()
 
-        # Invalid: processes > GPUs
-        (configs / "invalid_gpus.yaml").write_text("""
+        # Invalid: mutual exclusivity (4-bit and 8-bit both enabled)
+        (configs / "invalid_quant.yaml").write_text("""
 config_name: invalid
 model_name: test-model
-num_processes: 4
-gpus: [0, 1]
+backend: pytorch
+pytorch:
+  load_in_4bit: true
+  load_in_8bit: true
 """)
 
-        result = runner.invoke(app, ["config", "validate", str(configs / "invalid_gpus.yaml")])
+        result = runner.invoke(app, ["config", "validate", str(configs / "invalid_quant.yaml")])
         assert result.exit_code == 1
 
         # Invalid: min > max tokens

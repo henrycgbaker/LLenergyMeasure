@@ -34,7 +34,8 @@ if [ "$(id -u)" = "0" ] && [ "$PUID" != "0" ]; then
     fi
 
     # Ensure writable directories have correct ownership
-    for dir in /app/results /app/.state /app/.cache/huggingface; do
+    # Note: configs/ is writable for test scripts that generate config variations
+    for dir in /app/results /app/configs /app/.state /app/.cache/huggingface; do
         if [ -d "$dir" ]; then
             chown -R appuser:appgroup "$dir" 2>/dev/null || true
         fi
