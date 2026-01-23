@@ -10,12 +10,14 @@ Key features:
 - Native tensor/pipeline parallelism
 - FP8/INT8/INT4 quantization support
 
-Config Mapping:
+Config Mapping (backend-native architecture):
 - model_name → HF checkpoint for engine building
 - fp_precision → Build-time dtype
-- sharding.tensor_parallel_size → tp_size
+- tensorrt.tp_size → Tensor parallel size
+- tensorrt.pp_size → Pipeline parallel size
 - tensorrt.engine_path → Pre-compiled engine (optional)
-- tensorrt.quantization.method → Quantization during build
+- tensorrt.quantization → Quantization method during build
+- decoder.top_k → Top-k sampling (universal, moved from tensorrt.top_k)
 """
 
 from __future__ import annotations
@@ -64,29 +66,40 @@ DEFAULT_ENGINE_CACHE_DIR = Path.home() / ".cache" / "llm-energy-measure" / "tens
 # Extends core params with TensorRT-specific options
 # Note: TensorRT does NOT support LoRA adapters
 _SUPPORTED_PARAMS: set[str] = set(CORE_SUPPORTED_PARAMS) | {
-    # Extended batching (compile-time limits, runtime hints)
-    "batching.max_tokens_per_batch",
-    # Extended decoder options
-    "decoder.repetition_penalty",
-    # Note: min_p and no_repeat_ngram_size not supported
-    # Sharding (tensor parallelism)
-    "sharding.strategy",
-    "sharding.num_shards",
+    # All tensorrt.* section params
+    "tensorrt.engine_path",
+    "tensorrt.force_rebuild",
+    "tensorrt.engine_cache_dir",
+    "tensorrt.max_batch_size",
+    "tensorrt.max_input_len",
+    "tensorrt.max_output_len",
+    "tensorrt.builder_opt_level",
+    "tensorrt.strongly_typed",
+    "tensorrt.multiple_profiles",
+    "tensorrt.tp_size",
+    "tensorrt.pp_size",
+    "tensorrt.quantization",
+    "tensorrt.calibration",
+    "tensorrt.kv_cache_type",
+    "tensorrt.enable_chunked_context",
+    "tensorrt.enable_kv_cache_reuse",
+    "tensorrt.gpu_memory_utilization",
+    "tensorrt.max_num_tokens",
+    # Note: top_k is now universal in decoder config (decoder.top_k)
+    "tensorrt.draft_model",
+    "tensorrt.num_draft_tokens",
 }
 
-# Parameters that require warnings
-_UNSUPPORTED_WITH_WARNING: dict[str, str] = {
-    "decoder.no_repeat_ngram_size": (
-        "no_repeat_ngram_size not supported by TensorRT-LLM. " "Use repetition_penalty instead."
+# Parameters that require warnings (informational for users who might expect these)
+# Note: These are documented limitations, not config validation errors
+_UNSUPPORTED_FEATURES: dict[str, str] = {
+    "min_p": "min_p not supported by TensorRT-LLM. Use top_k or top_p instead.",
+    "no_repeat_ngram_size": (
+        "no_repeat_ngram_size not supported by TensorRT-LLM. Use repetition_penalty instead."
     ),
-    "decoder.min_p": "min_p not supported by TensorRT-LLM.",
-    "quantization.load_in_8bit": (
-        "BitsAndBytes 8-bit not supported. "
-        "Use tensorrt.quantization.method=int8_sq for TRT INT8."
-    ),
-    "quantization.load_in_4bit": (
-        "BitsAndBytes 4-bit not supported. "
-        "Use tensorrt.quantization.method=int4_awq or int4_gptq."
+    "bitsandbytes": (
+        "BitsAndBytes quantization not supported. "
+        "Use tensorrt.quantization=int8_sq, int4_awq, or int4_gptq."
     ),
 }
 
@@ -112,16 +125,13 @@ def _get_tensorrt_version() -> str:
 
 
 def _get_gpu_architecture() -> str:
-    """Get GPU compute capability string for cache key."""
-    try:
-        import torch
+    """Get GPU compute capability string for cache key.
 
-        if torch.cuda.is_available():
-            props = torch.cuda.get_device_properties(0)
-            return f"sm_{props.major}{props.minor}"
-    except Exception:
-        pass
-    return "unknown"
+    Delegates to SSOT in gpu_info module.
+    """
+    from llm_energy_measure.core.gpu_info import get_gpu_architecture
+
+    return get_gpu_architecture(device_index=0)
 
 
 class EngineCacheManager:
@@ -164,18 +174,12 @@ class EngineCacheManager:
         }
 
         if trt_cfg:
-            # Use parallelism.degree for TP size, fall back to sharding.num_shards for legacy
-            tp_size = (
-                config.parallelism.degree
-                if config.parallelism.strategy == "tensor_parallel"
-                else config.sharding.num_shards
-            )
             key_components.update(
                 {
                     "max_batch": trt_cfg.max_batch_size,
-                    "tp_size": tp_size,
+                    "tp_size": trt_cfg.tp_size,
                     "pp_size": trt_cfg.pp_size,
-                    "quant_method": trt_cfg.quantization.method,
+                    "quant_method": trt_cfg.quantization,
                     "builder_opt": trt_cfg.builder_opt_level,
                 }
             )
@@ -398,18 +402,13 @@ class TensorRTBackend:
         }
         dtype = dtype_map.get(config.fp_precision, "float16")
 
-        # Tensor parallelism - use unified parallelism config
-        tp_size = 1
-        if config.parallelism.strategy == "tensor_parallel":
-            tp_size = config.parallelism.degree
-        elif config.sharding.strategy == "tensor_parallel":
-            # Legacy fallback
-            tp_size = config.sharding.num_shards
+        # Tensor parallelism - read directly from tensorrt config
+        tp_size = trt_cfg.tp_size if trt_cfg else 1
 
         # Quantization
         quantization = None
-        if trt_cfg and trt_cfg.quantization.method != "none":
-            quantization = self._map_quantization(trt_cfg.quantization.method)
+        if trt_cfg and trt_cfg.quantization != "none":
+            quantization = self._map_quantization(trt_cfg.quantization)
 
         logger.info(
             f"Building engine: dtype={dtype}, tp_size={tp_size}, "
@@ -573,6 +572,9 @@ class TensorRTBackend:
     def _create_sampling_params(self, config: ExperimentConfig) -> Any:
         """Create TensorRT-LLM sampling params from config.
 
+        Reads universal decoder params from config.decoder and TensorRT-specific
+        params from config.tensorrt.
+
         Args:
             config: Experiment configuration.
 
@@ -587,19 +589,19 @@ class TensorRTBackend:
             "max_tokens": config.max_output_tokens,
         }
 
-        # Temperature
+        # Temperature (universal)
         if decoder.temperature is not None:
             params["temperature"] = decoder.temperature
 
-        # Top-p
+        # Top-p (universal)
         if decoder.top_p is not None:
             params["top_p"] = decoder.top_p
 
-        # Top-k
-        if decoder.top_k is not None and decoder.top_k > 0:
+        # Top-k (universal - 0 = disabled for TensorRT)
+        if decoder.top_k > 0:
             params["top_k"] = decoder.top_k
 
-        # Repetition penalty
+        # Repetition penalty (universal)
         if decoder.repetition_penalty is not None and decoder.repetition_penalty != 1.0:
             params["repetition_penalty"] = decoder.repetition_penalty
 
@@ -711,12 +713,8 @@ class TensorRTBackend:
                 "Consider increasing num_input_prompts for reliable percentiles."
             )
 
-        # Warn about batch_size being ignored
-        if config.batching.batch_size and config.batching.batch_size > 1:
-            logger.warning(
-                f"streaming=True forces sequential processing. "
-                f"batch_size={config.batching.batch_size} ignored."
-            )
+        # Note: TensorRT-LLM uses inflight batching internally
+        # streaming=True forces sequential processing for latency measurement
 
         # Collect per-request timing data
         ttft_samples: list[float] = []
@@ -1080,83 +1078,69 @@ class TensorRTBackend:
         warnings: list[ConfigWarning] = []
         trt_cfg = config.tensorrt
 
-        # Check for unsupported quantization params
-        quant = config.quantization
-        if quant.load_in_8bit:
+        if not trt_cfg:
             warnings.append(
                 ConfigWarning(
-                    param="quantization.load_in_8bit",
-                    message=_UNSUPPORTED_WITH_WARNING["quantization.load_in_8bit"],
-                    severity="error",
-                    suggestion="Use tensorrt.quantization.method=int8_sq",
-                    migration_hint="Move to tensorrt.quantization.method",
+                    field="tensorrt",
+                    message="No tensorrt config section. Using default TensorRT settings.",
+                    severity="info",
                 )
             )
-        if quant.load_in_4bit:
-            warnings.append(
-                ConfigWarning(
-                    param="quantization.load_in_4bit",
-                    message=_UNSUPPORTED_WITH_WARNING["quantization.load_in_4bit"],
-                    severity="error",
-                    suggestion="Use tensorrt.quantization.method=int4_awq",
-                    migration_hint="Move to tensorrt.quantization.method",
-                )
-            )
+            return warnings
 
-        # Check for unsupported decoder params
-        decoder = config.decoder
-        if decoder.no_repeat_ngram_size and decoder.no_repeat_ngram_size > 0:
-            warnings.append(
-                ConfigWarning(
-                    param="decoder.no_repeat_ngram_size",
-                    message=_UNSUPPORTED_WITH_WARNING["decoder.no_repeat_ngram_size"],
-                    severity="error",
-                    suggestion="Use repetition_penalty instead",
-                )
-            )
-        if decoder.min_p and decoder.min_p > 0:
-            warnings.append(
-                ConfigWarning(
-                    param="decoder.min_p",
-                    message=_UNSUPPORTED_WITH_WARNING["decoder.min_p"],
-                    severity="warning",
-                )
-            )
-
-        # Inform about batch_size semantics
+        # Inform about inflight batching semantics
         warnings.append(
             ConfigWarning(
-                param="batching.batch_size",
-                message="TensorRT uses compile-time batch limits. Runtime batching is managed by inflight batching.",
+                field="tensorrt.max_batch_size",
+                message=(
+                    f"TensorRT uses compile-time max_batch_size={trt_cfg.max_batch_size}. "
+                    "Runtime batching is managed by inflight batching."
+                ),
                 severity="info",
             )
         )
 
         # Check INT8 calibration requirements
-        if (
-            trt_cfg
-            and trt_cfg.quantization.method == "int8_sq"
-            and trt_cfg.quantization.calibration is None
-        ):
+        if trt_cfg.quantization == "int8_sq" and trt_cfg.calibration is None:
             warnings.append(
                 ConfigWarning(
-                    param="tensorrt.quantization.method",
+                    field="tensorrt.quantization",
                     message="INT8 SmoothQuant requires calibration data for optimal accuracy.",
                     severity="warning",
-                    suggestion="Add tensorrt.quantization.calibration.dataset",
+                    suggestion="Add tensorrt.calibration with dataset and num_samples",
                 )
             )
 
         # Check for FP8 on non-Hopper GPUs
-        if trt_cfg and trt_cfg.quantization.method == "fp8":
+        if trt_cfg.quantization == "fp8":
             gpu_arch = _get_gpu_architecture()
             if not gpu_arch.startswith("sm_9"):
                 warnings.append(
                     ConfigWarning(
-                        param="tensorrt.quantization.method",
+                        field="tensorrt.quantization",
                         message=f"FP8 quantization requires Hopper+ GPU (sm_90+). Detected: {gpu_arch}",
                         severity="warning",
                     )
                 )
+
+        # Check tensor parallel configuration against available GPUs
+        if trt_cfg.tp_size > 1:
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    gpu_count = torch.cuda.device_count()
+                    if trt_cfg.tp_size > gpu_count:
+                        warnings.append(
+                            ConfigWarning(
+                                field="tensorrt.tp_size",
+                                message=(
+                                    f"tp_size={trt_cfg.tp_size} exceeds available GPUs ({gpu_count})"
+                                ),
+                                severity="error",
+                            )
+                        )
+            except ImportError:
+                pass
 
         return warnings

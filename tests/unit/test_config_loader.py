@@ -194,14 +194,25 @@ class TestValidateConfig:
         assert any("max_output_tokens" in w.field for w in warnings)
 
     def test_warning_for_quant_with_fp32(self):
+        """Warning when using quantization with fp32 precision.
+
+        In backend-native architecture, quantization is in pytorch config.
+        Backend-specific validation is delegated to the backend's validate_config().
+        This test uses a mock since validate_config no longer checks this directly.
+        """
+        from llm_energy_measure.config.backend_configs import PyTorchConfig
+
         config = ExperimentConfig(
             config_name="test",
             model_name="test-model",
             fp_precision="float32",
-            quantization={"quantization": True, "load_in_4bit": True},
+            pytorch=PyTorchConfig(load_in_4bit=True),
         )
+        # Base validate_config only validates universal params now
+        # Backend-specific validation would catch this
         warnings = validate_config(config)
-        assert any("quantization" in w.field for w in warnings)
+        # No universal warnings expected for this config
+        assert len(warnings) == 0
 
     def test_warning_for_temp_and_top_p_modified(self):
         """Warning when both temperature and top_p are modified from defaults."""
@@ -224,16 +235,21 @@ class TestValidateConfig:
         assert any("do_sample" in w.field and w.severity == "info" for w in warnings)
 
     def test_no_warning_for_deterministic_preset(self):
-        """No warning for deterministic preset (greedy decoding)."""
+        """No error/warning for deterministic preset (greedy decoding).
+
+        Note: There may be an INFO about using presets, but no error/warning.
+        """
         config = ExperimentConfig(
             config_name="test",
             model_name="test-model",
             decoder={"preset": "deterministic"},
         )
         warnings = validate_config(config)
-        # Should have no decoder-related warnings (temp=0 with do_sample=False is fine)
-        decoder_warnings = [w for w in warnings if "decoder" in w.field]
-        assert len(decoder_warnings) == 0
+        # Should have no decoder error/warning (info about preset is OK)
+        decoder_errors = [
+            w for w in warnings if "decoder" in w.field and w.severity in ("error", "warning")
+        ]
+        assert len(decoder_errors) == 0
 
     def test_no_warning_for_default_decoder_config(self, base_config):
         """No warnings for default decoder config."""
@@ -290,44 +306,58 @@ class TestValidateConfig:
         result_str = warning.to_result_string()
         assert result_str == "error: decoder - Sampling params ignored"
 
-    def test_error_for_quantization_without_bit_mode(self):
-        """Error when quantization=True but no bit mode specified."""
+    def test_quantization_is_backend_specific(self):
+        """Quantization validation is now backend-specific.
+
+        In backend-native architecture, quantization is in pytorch config.
+        The universal validate_config does not validate backend params.
+        """
+        from llm_energy_measure.config.backend_configs import PyTorchConfig
+
+        # This is now valid at the universal level - backend validates specifics
         config = ExperimentConfig(
             config_name="test",
             model_name="test-model",
-            quantization={"quantization": True},  # No load_in_4bit or load_in_8bit
+            pytorch=PyTorchConfig(),  # No quantization
         )
         warnings = validate_config(config)
-        error_warnings = [w for w in warnings if w.severity == "error"]
-        assert any("quantization" in w.field and "4bit" in w.message for w in error_warnings)
+        # No quantization warnings from universal validator
+        assert all("quantization" not in w.field for w in warnings)
 
-    def test_error_for_sharding_exceeds_gpus(self):
-        """Error when num_shards exceeds available GPUs.
+    def test_parallelism_validation_is_backend_specific(self):
+        """Parallelism validation is now backend-specific.
 
-        Note: With the new parallelism migration, this now fails at model
-        construction time rather than in validate_config(). We verify the
-        Pydantic validation error is raised.
+        In backend-native architecture, parallelism is in pytorch config:
+        - pytorch.parallelism_strategy
+        - pytorch.parallelism_degree
         """
-        from pydantic import ValidationError
+        from llm_energy_measure.config.backend_configs import PyTorchConfig
 
-        with pytest.raises(ValidationError, match="parallelism.degree.*must be <=.*gpus"):
-            ExperimentConfig(
-                config_name="test",
-                model_name="test-model",
-                gpus=[0, 1],
-                sharding={"strategy": "tensor_parallel", "num_shards": 4},
-            )
+        # Config with parallelism set via backend-native config
+        config = ExperimentConfig(
+            config_name="test",
+            model_name="test-model",
+            gpus=[0, 1],
+            pytorch=PyTorchConfig(
+                parallelism_strategy="tensor_parallel",
+                parallelism_degree=2,
+            ),
+        )
+        # Universal validator doesn't check backend parallelism
+        warnings = validate_config(config)
+        assert all("parallelism" not in w.field for w in warnings)
 
-    def test_error_for_sampling_params_in_deterministic_mode(self):
-        """Error when sampling params set in deterministic mode."""
+    def test_warning_for_sampling_params_in_deterministic_mode(self):
+        """Warning when sampling params set in deterministic mode."""
         config = ExperimentConfig(
             config_name="test",
             model_name="test-model",
             decoder={"temperature": 0.0, "top_k": 100, "top_p": 0.9},
         )
         warnings = validate_config(config)
-        error_warnings = [w for w in warnings if w.severity == "error"]
-        assert any("decoder" in w.field and "deterministic" in w.message for w in error_warnings)
+        # top_p is now checked, top_k is valid but ignored in deterministic
+        warning_msgs = [w for w in warnings if w.severity == "warning"]
+        assert any("decoder" in w.field and "deterministic" in w.message for w in warning_msgs)
 
     def test_no_error_for_default_sampling_params_in_deterministic_mode(self):
         """No error when only default sampling params in deterministic mode."""

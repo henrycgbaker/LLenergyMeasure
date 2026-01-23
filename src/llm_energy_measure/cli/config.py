@@ -23,8 +23,8 @@ from llm_energy_measure.cli.display import (
     display_config_summary,
     format_field,
 )
+from llm_energy_measure.config import ConfigWarning
 from llm_energy_measure.config.loader import (
-    ConfigWarning,
     has_blocking_warnings,
     load_config,
     validate_config,
@@ -92,11 +92,11 @@ def config_show(
         table.add_column("Field")
         table.add_column("Value")
 
-        # Core settings (always shown)
+        # =====================================================================
+        # Tier 1: Universal Settings
+        # =====================================================================
         table.add_row(*format_field("model_name", config.model_name, False))
-        table.add_row(
-            *format_field("num_processes", config.num_processes, config.num_processes == 1)
-        )
+        table.add_row(*format_field("backend", config.backend, config.backend == "pytorch"))
         table.add_row(*format_field("gpus", config.gpus, config.gpus == [0]))
         table.add_row(
             *format_field(
@@ -121,20 +121,6 @@ def config_show(
         table.add_row(
             *format_field("fp_precision", config.fp_precision, config.fp_precision == "float16")
         )
-        table.add_row(*format_field("backend", config.backend, config.backend == "pytorch"))
-        table.add_row(
-            *format_field("task_type", config.task_type, config.task_type == "text_generation")
-        )
-        table.add_row(
-            *format_field(
-                "inference_type", config.inference_type, config.inference_type == "pure_generative"
-            )
-        )
-        table.add_row(
-            *format_field(
-                "is_encoder_decoder", config.is_encoder_decoder, config.is_encoder_decoder is False
-            )
-        )
         table.add_row(
             *format_field("save_outputs", config.save_outputs, config.save_outputs is False)
         )
@@ -148,34 +134,6 @@ def config_show(
         table.add_row(*format_field("num_cycles", config.num_cycles, config.num_cycles == 1))
         table.add_row(*format_field("query_rate", config.query_rate, config.query_rate == 1.0))
         table.add_row(*format_field("random_seed", config.random_seed, config.random_seed is None))
-
-        # Batching config
-        add_section_header(table, "batching")
-        batch = config.batching
-        table.add_row(
-            *format_field("batch_size", batch.batch_size, batch.batch_size == 1, nested=True)
-        )
-        table.add_row(
-            *format_field("strategy", batch.strategy, batch.strategy == "static", nested=True)
-        )
-        table.add_row(
-            *format_field(
-                "max_tokens_per_batch",
-                batch.max_tokens_per_batch,
-                batch.max_tokens_per_batch is None,
-                nested=True,
-            )
-        )
-
-        # Sharding config
-        add_section_header(table, "sharding")
-        shard = config.sharding
-        table.add_row(
-            *format_field("strategy", shard.strategy, shard.strategy == "none", nested=True)
-        )
-        table.add_row(
-            *format_field("num_shards", shard.num_shards, shard.num_shards == 1, nested=True)
-        )
 
         # Traffic simulation
         add_section_header(table, "traffic_simulation")
@@ -203,7 +161,7 @@ def config_show(
             )
         )
 
-        # Decoder config
+        # Decoder config (universal sampling params)
         add_section_header(table, "decoder")
         decoder = config.decoder
         table.add_row(*format_field("preset", decoder.preset, decoder.preset is None, nested=True))
@@ -223,7 +181,6 @@ def config_show(
         )
         table.add_row(*format_field("top_p", decoder.top_p, decoder.top_p == 1.0, nested=True))
         table.add_row(*format_field("top_k", decoder.top_k, decoder.top_k == 50, nested=True))
-        table.add_row(*format_field("min_p", decoder.min_p, decoder.min_p == 0.0, nested=True))
         table.add_row(
             *format_field(
                 "repetition_penalty",
@@ -232,51 +189,127 @@ def config_show(
                 nested=True,
             )
         )
-        table.add_row(
-            *format_field(
-                "no_repeat_ngram_size",
-                decoder.no_repeat_ngram_size,
-                decoder.no_repeat_ngram_size == 0,
-                nested=True,
-            )
-        )
 
-        # Quantization config
-        add_section_header(table, "quantization")
-        q = config.quantization
-        table.add_row(
-            *format_field("quantization", q.quantization, q.quantization is False, nested=True)
-        )
-        table.add_row(
-            *format_field("load_in_4bit", q.load_in_4bit, q.load_in_4bit is False, nested=True)
-        )
-        table.add_row(
-            *format_field("load_in_8bit", q.load_in_8bit, q.load_in_8bit is False, nested=True)
-        )
-        table.add_row(
-            *format_field(
-                "bnb_4bit_compute_dtype",
-                q.bnb_4bit_compute_dtype,
-                q.bnb_4bit_compute_dtype == "float16",
-                nested=True,
+        # =====================================================================
+        # Tier 2: Backend-Specific Settings
+        # =====================================================================
+        if config.backend == "pytorch" and config.pytorch:
+            add_section_header(table, "pytorch (backend)")
+            pt = config.pytorch
+            table.add_row(
+                *format_field("batch_size", pt.batch_size, pt.batch_size == 1, nested=True)
             )
-        )
-        table.add_row(
-            *format_field(
-                "bnb_4bit_quant_type",
-                q.bnb_4bit_quant_type,
-                q.bnb_4bit_quant_type == "nf4",
-                nested=True,
+            table.add_row(
+                *format_field(
+                    "batching_strategy",
+                    pt.batching_strategy,
+                    pt.batching_strategy == "static",
+                    nested=True,
+                )
             )
-        )
-        table.add_row(
-            *format_field(
-                "bnb_4bit_use_double_quant",
-                q.bnb_4bit_use_double_quant,
-                q.bnb_4bit_use_double_quant is False,
-                nested=True,
+            table.add_row(
+                *format_field(
+                    "parallelism_strategy",
+                    pt.parallelism_strategy,
+                    pt.parallelism_strategy == "none",
+                    nested=True,
+                )
             )
-        )
+            table.add_row(
+                *format_field(
+                    "parallelism_degree",
+                    pt.parallelism_degree,
+                    pt.parallelism_degree == 1,
+                    nested=True,
+                )
+            )
+            table.add_row(
+                *format_field(
+                    "load_in_4bit", pt.load_in_4bit, pt.load_in_4bit is False, nested=True
+                )
+            )
+            table.add_row(
+                *format_field(
+                    "load_in_8bit", pt.load_in_8bit, pt.load_in_8bit is False, nested=True
+                )
+            )
+            table.add_row(
+                *format_field(
+                    "torch_compile", pt.torch_compile, pt.torch_compile is False, nested=True
+                )
+            )
+            table.add_row(
+                *format_field(
+                    "attn_implementation",
+                    pt.attn_implementation,
+                    pt.attn_implementation == "sdpa",
+                    nested=True,
+                )
+            )
+            table.add_row(*format_field("min_p", pt.min_p, pt.min_p == 0.0, nested=True))
+
+        elif config.backend == "vllm" and config.vllm:
+            add_section_header(table, "vllm (backend)")
+            vl = config.vllm
+            table.add_row(
+                *format_field("max_num_seqs", vl.max_num_seqs, vl.max_num_seqs == 256, nested=True)
+            )
+            table.add_row(
+                *format_field(
+                    "tensor_parallel_size",
+                    vl.tensor_parallel_size,
+                    vl.tensor_parallel_size == 1,
+                    nested=True,
+                )
+            )
+            table.add_row(
+                *format_field(
+                    "gpu_memory_utilization",
+                    vl.gpu_memory_utilization,
+                    vl.gpu_memory_utilization == 0.9,
+                    nested=True,
+                )
+            )
+            table.add_row(
+                *format_field(
+                    "enable_prefix_caching",
+                    vl.enable_prefix_caching,
+                    vl.enable_prefix_caching is False,
+                    nested=True,
+                )
+            )
+            table.add_row(
+                *format_field("quantization", vl.quantization, vl.quantization is None, nested=True)
+            )
+            table.add_row(*format_field("min_p", vl.min_p, vl.min_p == 0.0, nested=True))
+
+        elif config.backend == "tensorrt" and config.tensorrt:
+            add_section_header(table, "tensorrt (backend)")
+            tr = config.tensorrt
+            table.add_row(
+                *format_field(
+                    "max_batch_size", tr.max_batch_size, tr.max_batch_size == 8, nested=True
+                )
+            )
+            table.add_row(*format_field("tp_size", tr.tp_size, tr.tp_size == 1, nested=True))
+            table.add_row(
+                *format_field(
+                    "builder_opt_level",
+                    tr.builder_opt_level,
+                    tr.builder_opt_level == 3,
+                    nested=True,
+                )
+            )
+            table.add_row(
+                *format_field(
+                    "kv_cache_type", tr.kv_cache_type, tr.kv_cache_type == "paged", nested=True
+                )
+            )
+            table.add_row(
+                *format_field(
+                    "quantization", tr.quantization, tr.quantization == "none", nested=True
+                )
+            )
 
         # Prompt source (if configured)
         if config.prompts is not None:
@@ -347,9 +380,15 @@ def config_new(
     config_dict["config_name"] = config_name
     config_dict["model_name"] = model_name
 
+    # Backend selection
+    backend = Prompt.ask(
+        "Backend (pytorch/vllm/tensorrt)",
+        default=config_dict.get("backend", "pytorch"),
+    )
+    config_dict["backend"] = backend
+
     # GPU configuration
     num_gpus = int(Prompt.ask("Number of GPUs", default="1"))
-    config_dict["num_processes"] = num_gpus
     if num_gpus > 1:
         gpus = [
             int(g)
@@ -369,17 +408,6 @@ def config_new(
     )
     config_dict["fp_precision"] = precision
 
-    # Batch size
-    batch_size = int(
-        Prompt.ask(
-            "Batch size",
-            default=str(config_dict.get("batching", {}).get("batch_size", 1)),
-        )
-    )
-    if "batching" not in config_dict:
-        config_dict["batching"] = {}
-    config_dict["batching"]["batch_size"] = batch_size
-
     # Token limits
     max_input = int(
         Prompt.ask(
@@ -396,15 +424,46 @@ def config_new(
     config_dict["max_input_tokens"] = max_input
     config_dict["max_output_tokens"] = max_output
 
-    # Quantization
-    use_quant = Confirm.ask("Enable quantization?", default=False)
-    if use_quant:
-        quant_bits = Prompt.ask("Quantization bits (4/8)", default="4")
-        config_dict["quantization"] = {
-            "quantization": True,
-            "load_in_4bit": quant_bits == "4",
-            "load_in_8bit": quant_bits == "8",
-        }
+    # Backend-specific configuration
+    if backend == "pytorch":
+        batch_size = int(
+            Prompt.ask(
+                "Batch size",
+                default=str(config_dict.get("pytorch", {}).get("batch_size", 1)),
+            )
+        )
+        if "pytorch" not in config_dict:
+            config_dict["pytorch"] = {}
+        config_dict["pytorch"]["batch_size"] = batch_size
+
+        # Quantization (PyTorch-specific via BitsAndBytes)
+        use_quant = Confirm.ask("Enable quantization (BitsAndBytes)?", default=False)
+        if use_quant:
+            quant_bits = Prompt.ask("Quantization bits (4/8)", default="4")
+            config_dict["pytorch"]["load_in_4bit"] = quant_bits == "4"
+            config_dict["pytorch"]["load_in_8bit"] = quant_bits == "8"
+
+    elif backend == "vllm":
+        max_num_seqs = int(
+            Prompt.ask(
+                "Max concurrent sequences",
+                default=str(config_dict.get("vllm", {}).get("max_num_seqs", 256)),
+            )
+        )
+        if "vllm" not in config_dict:
+            config_dict["vllm"] = {}
+        config_dict["vllm"]["max_num_seqs"] = max_num_seqs
+
+    elif backend == "tensorrt":
+        max_batch_size = int(
+            Prompt.ask(
+                "Max batch size (compile-time)",
+                default=str(config_dict.get("tensorrt", {}).get("max_batch_size", 8)),
+            )
+        )
+        if "tensorrt" not in config_dict:
+            config_dict["tensorrt"] = {}
+        config_dict["tensorrt"]["max_batch_size"] = max_batch_size
 
     # Validate config
     try:
@@ -475,10 +534,10 @@ def config_generate_grid(
         raise typer.Exit(1) from None
 
     # Shorthand mappings for common parameters (match CLI flag behavior)
+    # Note: batch_size now lives in backend-specific configs
     param_shortcuts: dict[str, str] = {
-        "batch_size": "batching.batch_size",
+        "batch_size": "pytorch.batch_size",  # Only works for PyTorch configs
         "temperature": "decoder.temperature",
-        "quantization": "quantization.quantization",
     }
 
     # Parse variations

@@ -28,13 +28,13 @@ test-integration:
 	poetry run pytest tests/integration/ -v
 
 test-all:
-	poetry run pytest tests/ -v --ignore=tests/manual/
+	poetry run pytest tests/ -v --ignore=tests/runtime/
 
-test-param-ci:
-	poetry run pytest tests/param_validation/test_config_parsing.py -v
+test-runtime:
+	poetry run pytest tests/runtime/ -v
 
-test-param-gpu:
-	poetry run pytest tests/param_validation/ -v
+test-runtime-quick:
+	poetry run pytest tests/runtime/ -v --quick
 
 install:
 	poetry install

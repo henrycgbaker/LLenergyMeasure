@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from llm_energy_measure.config.models import ExperimentConfig
 
 
-# Core parameters supported by all backends
-# Individual backends extend this with backend-specific params
+# Core parameters supported by all backends (Tier 1 universal params)
+# Individual backends extend this with backend-specific params from their sections
 CORE_SUPPORTED_PARAMS: frozenset[str] = frozenset(
     {
         # Core config
@@ -25,19 +25,15 @@ CORE_SUPPORTED_PARAMS: frozenset[str] = frozenset(
         "max_output_tokens",
         "min_output_tokens",
         "random_seed",
-        # Batching (basics)
-        "batch_size",
-        "batching.batch_size",
-        "batching.strategy",
-        # Decoder/Generation (basics)
+        # Decoder/Generation (universal)
         "decoder.preset",
         "decoder.temperature",
         "decoder.top_p",
-        "decoder.top_k",
+        "decoder.do_sample",
+        "decoder.repetition_penalty",
         # Execution
         "num_input_prompts",
         "gpus",
-        "num_processes",
         "save_outputs",
         # Streaming
         "streaming",
@@ -128,7 +124,12 @@ def validate_streaming_config(config: ExperimentConfig) -> str | None:
         if config.streaming_warmup_requests < 1:
             return "streaming_warmup_requests must be >= 1 when streaming is enabled"
 
-        if config.batching.batch_size > 1:
+        # Check batch_size from backend-specific config
+        batch_size = 1
+        if config.pytorch and config.pytorch.batch_size:
+            batch_size = config.pytorch.batch_size
+
+        if batch_size > 1:
             return (
                 "Streaming latency measurement with batch_size > 1 may not "
                 "accurately measure per-request TTFT/ITL"
@@ -174,44 +175,60 @@ def create_precision_metadata(
     """
     from llm_energy_measure.domain.metrics import PrecisionMetadata
 
-    # Normalise precision string to metric format
-    precision_str = config.fp_precision.lower().replace("float", "fp")
-    if precision_str == "fp32":
+    # Normalise precision string to metric format (must match PrecisionMetadata Literals)
+    precision_str = config.fp_precision.lower()
+    if precision_str in ("float32", "fp32"):
         precision_str = "fp32"
-    elif precision_str == "fp16" or precision_str == "float16":
+    elif precision_str in ("float16", "fp16"):
         precision_str = "fp16"
-    elif precision_str == "bfloat16" or precision_str == "bf16":
+    elif precision_str in ("bfloat16", "bf16"):
         precision_str = "bf16"
 
     # Determine weights precision (affected by quantization)
-    quant = config.quantization
     quantization_method: str | None = None
+    weights_precision = precision_str
 
-    if quant.load_in_4bit:
-        weights_precision = "int4"
-        quantization_method = "bitsandbytes"
-    elif quant.load_in_8bit:
-        weights_precision = "int8"
-        quantization_method = "bitsandbytes"
-    else:
-        # No quantization - weights match requested precision
-        weights_precision = precision_str  # type: ignore[assignment]
+    # Check backend-specific quantization configs
+    pytorch_cfg = config.pytorch
+    vllm_cfg = config.vllm
+    tensorrt_cfg = config.tensorrt
 
-    # vLLM may use different quantization methods
-    if backend == "vllm" and config.vllm and config.vllm.quantization_method:
-        quantization_method = config.vllm.quantization_method
-        # GPTQ/AWQ models use int4/int8 weights with fp16 compute
-        if config.vllm.quantization_method in ("gptq", "awq", "marlin", "squeezellm"):
+    if backend == "pytorch" and pytorch_cfg:
+        if pytorch_cfg.load_in_4bit:
             weights_precision = "int4"
+            quantization_method = "bitsandbytes"
+        elif pytorch_cfg.load_in_8bit:
+            weights_precision = "int8"
+            quantization_method = "bitsandbytes"
+    elif backend == "vllm" and vllm_cfg and vllm_cfg.quantization:
+        quantization_method = vllm_cfg.quantization
+        # GPTQ/AWQ models use int4/int8 weights with fp16 compute
+        if vllm_cfg.quantization in ("gptq", "awq", "marlin", "squeezellm"):
+            weights_precision = "int4"
+    elif backend == "tensorrt" and tensorrt_cfg and tensorrt_cfg.quantization != "none":
+        quantization_method = tensorrt_cfg.quantization
+        if tensorrt_cfg.quantization in ("int4_awq", "int4_gptq"):
+            weights_precision = "int4"
+        elif tensorrt_cfg.quantization in ("int8_sq", "int8_weight_only"):
+            weights_precision = "int8"
+
+    # Helper to normalise dtype string to PrecisionMetadata format
+    def normalise_dtype(dtype: str) -> str:
+        dtype = dtype.lower().replace("torch.", "")
+        if dtype in ("float32", "fp32"):
+            return "fp32"
+        if dtype in ("float16", "fp16"):
+            return "fp16"
+        if dtype in ("bfloat16", "bf16"):
+            return "bf16"
+        return dtype
 
     # Compute precision - for BitsAndBytes, compute happens at fp16 after dequant
     if actual_compute_dtype:
-        # Handle torch dtype strings like "torch.float16" -> "fp16"
-        dtype_str = actual_compute_dtype.lower().replace("torch.", "").replace("float", "fp")
-        compute_precision = dtype_str
-    elif quantization_method == "bitsandbytes":
+        compute_precision = normalise_dtype(actual_compute_dtype)
+    elif quantization_method == "bitsandbytes" and pytorch_cfg:
         # BitsAndBytes dequantizes to fp16 for compute
-        compute_precision = quant.bnb_4bit_compute_dtype.lower().replace("float", "fp")
+        compute_precision = normalise_dtype(pytorch_cfg.bnb_4bit_compute_dtype)
     else:
         compute_precision = precision_str
 

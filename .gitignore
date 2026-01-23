@@ -20,6 +20,17 @@ emissions*.csv
 .codecarbon.lock
 codecarbon.lock
 
+# Model/cache artifacts (leaked from containers)
+model.cache
+*.cache
+
+# Test output files
+test_results*.json
+
+# Downloaded installers
+Miniforge*.sh
+Miniconda*.sh
+
 # -----------------------------------------------------------------------------
 # Legacy/thesis files
 # -----------------------------------------------------------------------------

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from llm_energy_measure.config.models import ExperimentConfig, QuantizationConfig
+from llm_energy_measure.config.models import ExperimentConfig
 from llm_energy_measure.core.flops import FlopsEstimator, estimate_flops, get_flops_estimator
 from llm_energy_measure.domain.metrics import FlopsResult
 
@@ -117,20 +117,34 @@ class TestFlopsEstimator:
         """Test precision detection with no config."""
         assert estimator._get_compute_precision(None) == "fp16"
 
-    def test_get_compute_precision_quantized(self, estimator):
-        """Test precision detection for quantized models (always FP16)."""
+    def test_get_compute_precision_quantized_4bit(self, estimator):
+        """Test precision detection for 4-bit quantized models."""
         config = MagicMock()
-        config.quantization = MagicMock()
-        config.quantization.quantization = True
+        # In backend-native arch, quantization is in pytorch config
+        config.pytorch = MagicMock()
+        config.pytorch.load_in_4bit = True
+        config.pytorch.load_in_8bit = False
+        config.pytorch.bnb_4bit_compute_dtype = "float16"
+
+        assert estimator._get_compute_precision(config) == "float16"
+
+    def test_get_compute_precision_quantized_8bit(self, estimator):
+        """Test precision detection for 8-bit quantized models (always FP16)."""
+        config = MagicMock()
+        config.pytorch = MagicMock()
+        config.pytorch.load_in_4bit = False
+        config.pytorch.load_in_8bit = True
 
         assert estimator._get_compute_precision(config) == "fp16"
 
-    def test_get_compute_precision_from_dtype(self, estimator):
-        """Test precision detection from torch_dtype."""
+    def test_get_compute_precision_from_fp_precision(self, estimator):
+        """Test precision detection from fp_precision config."""
         config = MagicMock()
-        config.quantization = MagicMock()
-        config.quantization.quantization = False
-        config.torch_dtype = "fp32"
+        # No quantization
+        config.pytorch = MagicMock()
+        config.pytorch.load_in_4bit = False
+        config.pytorch.load_in_8bit = False
+        config.fp_precision = "float32"
 
         assert estimator._get_compute_precision(config) == "fp32"
 
@@ -309,34 +323,37 @@ class TestCalflopsIntegration:
 
 
 class TestBNBQuantizationHandling:
-    """Tests for BitsAndBytes quantization handling."""
+    """Tests for BitsAndBytes quantization handling in backend-native architecture."""
 
-    def test_bnb_4bit_uses_fp16_precision(self):
-        """Test that 4-bit BNB models use FP16 precision."""
+    def test_bnb_4bit_uses_compute_dtype(self):
+        """Test that 4-bit BNB models use the bnb_4bit_compute_dtype."""
+        from llm_energy_measure.config.backend_configs import PyTorchConfig
+
         estimator = FlopsEstimator()
 
         config = ExperimentConfig(
             config_name="test",
             model_name="test/model",
-            quantization=QuantizationConfig(
-                quantization=True,
+            pytorch=PyTorchConfig(
                 load_in_4bit=True,
+                bnb_4bit_compute_dtype="float16",
             ),
         )
 
         precision = estimator._get_compute_precision(config)
 
-        assert precision == "fp16"
+        assert precision == "float16"
 
     def test_bnb_8bit_uses_fp16_precision(self):
         """Test that 8-bit BNB models use FP16 precision."""
+        from llm_energy_measure.config.backend_configs import PyTorchConfig
+
         estimator = FlopsEstimator()
 
         config = ExperimentConfig(
             config_name="test",
             model_name="test/model",
-            quantization=QuantizationConfig(
-                quantization=True,
+            pytorch=PyTorchConfig(
                 load_in_8bit=True,
             ),
         )
@@ -345,16 +362,16 @@ class TestBNBQuantizationHandling:
 
         assert precision == "fp16"
 
-    def test_non_quantized_uses_config_dtype(self):
-        """Test that non-quantized models use config dtype."""
+    def test_non_quantized_uses_fp_precision(self):
+        """Test that non-quantized models use fp_precision config."""
         estimator = FlopsEstimator()
 
         config = ExperimentConfig(
             config_name="test",
             model_name="test/model",
-            torch_dtype="bfloat16",
+            fp_precision="bfloat16",
         )
 
         precision = estimator._get_compute_precision(config)
 
-        assert precision == "bfloat16"
+        assert precision == "bf16"

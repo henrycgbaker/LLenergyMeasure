@@ -2,6 +2,8 @@
 
 This module provides functions for displaying configuration summaries
 and experiment state information.
+
+Updated for backend-native configuration architecture.
 """
 
 from __future__ import annotations
@@ -73,23 +75,9 @@ def display_config_summary(
         show_defaults=show_defaults,
     )
     print_value(
-        "processes",
-        f"{config.num_processes} on GPUs {config.gpus}",
-        config.num_processes == 1,
-        indent=4,
-        show_defaults=show_defaults,
-    )
-    print_value(
-        "task",
-        config.task_type,
-        config.task_type == "text_generation",
-        indent=4,
-        show_defaults=show_defaults,
-    )
-    print_value(
-        "inference",
-        config.inference_type,
-        config.inference_type == "pure_generative",
+        "gpus",
+        str(config.gpus),
+        config.gpus == [0],
         indent=4,
         show_defaults=show_defaults,
     )
@@ -162,56 +150,102 @@ def display_config_summary(
             show_defaults=show_defaults,
         )
 
-    # Batching
-    batch = config.batching
-    if show_defaults or any(
-        [
-            batch.batch_size != 1,
-            batch.strategy != "static",
-            batch.max_tokens_per_batch is not None,
-        ]
-    ):
-        console.print("  [bold]batching:[/bold]")
-        print_value(
-            "batch_size",
-            batch.batch_size,
-            batch.batch_size == 1,
-            indent=4,
-            show_defaults=show_defaults,
-        )
-        print_value(
-            "strategy",
-            batch.strategy,
-            batch.strategy == "static",
-            indent=4,
-            show_defaults=show_defaults,
-        )
-        print_value(
-            "max_tokens_per_batch",
-            batch.max_tokens_per_batch,
-            batch.max_tokens_per_batch is None,
-            indent=4,
-            show_defaults=show_defaults,
-        )
+    # Backend-specific batching (PyTorch only)
+    if config.backend == "pytorch" and config.pytorch is not None:
+        pytorch_cfg = config.pytorch
+        if show_defaults or any(
+            [
+                pytorch_cfg.batch_size != 1,
+                pytorch_cfg.batching_strategy != "static",
+                pytorch_cfg.max_tokens_per_batch is not None,
+            ]
+        ):
+            console.print("  [bold]batching (pytorch):[/bold]")
+            print_value(
+                "batch_size",
+                pytorch_cfg.batch_size,
+                pytorch_cfg.batch_size == 1,
+                indent=4,
+                show_defaults=show_defaults,
+            )
+            print_value(
+                "strategy",
+                pytorch_cfg.batching_strategy,
+                pytorch_cfg.batching_strategy == "static",
+                indent=4,
+                show_defaults=show_defaults,
+            )
+            print_value(
+                "max_tokens_per_batch",
+                pytorch_cfg.max_tokens_per_batch,
+                pytorch_cfg.max_tokens_per_batch is None,
+                indent=4,
+                show_defaults=show_defaults,
+            )
 
-    # Sharding
-    shard = config.sharding
-    if show_defaults or shard.strategy != "none" or shard.num_shards != 1:
-        console.print("  [bold]sharding:[/bold]")
-        print_value(
-            "strategy",
-            shard.strategy,
-            shard.strategy == "none",
-            indent=4,
-            show_defaults=show_defaults,
-        )
-        print_value(
-            "num_shards",
-            shard.num_shards,
-            shard.num_shards == 1,
-            indent=4,
-            show_defaults=show_defaults,
-        )
+    # Backend-specific parallelism
+    if config.backend == "pytorch" and config.pytorch is not None:
+        pytorch_cfg = config.pytorch
+        if (
+            show_defaults
+            or pytorch_cfg.parallelism_strategy != "none"
+            or pytorch_cfg.parallelism_degree != 1
+        ):
+            console.print("  [bold]parallelism (pytorch):[/bold]")
+            print_value(
+                "strategy",
+                pytorch_cfg.parallelism_strategy,
+                pytorch_cfg.parallelism_strategy == "none",
+                indent=4,
+                show_defaults=show_defaults,
+            )
+            print_value(
+                "degree",
+                pytorch_cfg.parallelism_degree,
+                pytorch_cfg.parallelism_degree == 1,
+                indent=4,
+                show_defaults=show_defaults,
+            )
+    elif config.backend == "vllm" and config.vllm is not None:
+        vllm_cfg = config.vllm
+        if (
+            show_defaults
+            or vllm_cfg.tensor_parallel_size != 1
+            or vllm_cfg.pipeline_parallel_size != 1
+        ):
+            console.print("  [bold]parallelism (vllm):[/bold]")
+            print_value(
+                "tensor_parallel_size",
+                vllm_cfg.tensor_parallel_size,
+                vllm_cfg.tensor_parallel_size == 1,
+                indent=4,
+                show_defaults=show_defaults,
+            )
+            print_value(
+                "pipeline_parallel_size",
+                vllm_cfg.pipeline_parallel_size,
+                vllm_cfg.pipeline_parallel_size == 1,
+                indent=4,
+                show_defaults=show_defaults,
+            )
+    elif config.backend == "tensorrt" and config.tensorrt is not None:
+        trt_cfg = config.tensorrt
+        if show_defaults or trt_cfg.tp_size != 1 or trt_cfg.pp_size != 1:
+            console.print("  [bold]parallelism (tensorrt):[/bold]")
+            print_value(
+                "tp_size",
+                trt_cfg.tp_size,
+                trt_cfg.tp_size == 1,
+                indent=4,
+                show_defaults=show_defaults,
+            )
+            print_value(
+                "pp_size",
+                trt_cfg.pp_size,
+                trt_cfg.pp_size == 1,
+                indent=4,
+                show_defaults=show_defaults,
+            )
 
     # Traffic/pacing settings
     sim = config.traffic_simulation
@@ -245,7 +279,7 @@ def display_config_summary(
         )
         print_value("sim_seed", sim.seed, sim.seed is None, indent=4, show_defaults=show_defaults)
 
-    # Decoder config
+    # Decoder config (universal params)
     decoder = config.decoder
     if show_defaults or any(
         [
@@ -254,9 +288,7 @@ def display_config_summary(
             decoder.do_sample is not True,
             decoder.top_p != 1.0,
             decoder.top_k != 50,
-            decoder.min_p != 0.0,
             decoder.repetition_penalty != 1.0,
-            decoder.no_repeat_ngram_size != 0,
         ]
     ):
         console.print("  [bold]decoder:[/bold]")
@@ -292,78 +324,115 @@ def display_config_summary(
             "top_k", decoder.top_k, decoder.top_k == 50, indent=4, show_defaults=show_defaults
         )
         print_value(
-            "min_p", decoder.min_p, decoder.min_p == 0.0, indent=4, show_defaults=show_defaults
-        )
-        print_value(
             "repetition_penalty",
             decoder.repetition_penalty,
             decoder.repetition_penalty == 1.0,
             indent=4,
             show_defaults=show_defaults,
         )
-        print_value(
-            "no_repeat_ngram_size",
-            decoder.no_repeat_ngram_size,
-            decoder.no_repeat_ngram_size == 0,
-            indent=4,
-            show_defaults=show_defaults,
-        )
 
-    # Quantization
-    q = config.quantization
-    if show_defaults or any(
-        [
-            q.quantization,
-            q.load_in_4bit,
-            q.load_in_8bit,
-            q.bnb_4bit_compute_dtype != "float16",
-            q.bnb_4bit_quant_type != "nf4",
-            q.bnb_4bit_use_double_quant,
-        ]
-    ):
-        console.print("  [bold]quantization:[/bold]")
-        print_value(
-            "quantization",
-            q.quantization,
-            q.quantization is False,
-            indent=4,
-            show_defaults=show_defaults,
-        )
-        print_value(
-            "load_in_4bit",
-            q.load_in_4bit,
-            q.load_in_4bit is False,
-            indent=4,
-            show_defaults=show_defaults,
-        )
-        print_value(
-            "load_in_8bit",
-            q.load_in_8bit,
-            q.load_in_8bit is False,
-            indent=4,
-            show_defaults=show_defaults,
-        )
-        print_value(
-            "bnb_4bit_compute_dtype",
-            q.bnb_4bit_compute_dtype,
-            q.bnb_4bit_compute_dtype == "float16",
-            indent=4,
-            show_defaults=show_defaults,
-        )
-        print_value(
-            "bnb_4bit_quant_type",
-            q.bnb_4bit_quant_type,
-            q.bnb_4bit_quant_type == "nf4",
-            indent=4,
-            show_defaults=show_defaults,
-        )
-        print_value(
-            "bnb_4bit_use_double_quant",
-            q.bnb_4bit_use_double_quant,
-            q.bnb_4bit_use_double_quant is False,
-            indent=4,
-            show_defaults=show_defaults,
-        )
+    # Backend-specific decoder extensions
+    if config.backend == "pytorch" and config.pytorch is not None:
+        pytorch_cfg = config.pytorch
+        if show_defaults or pytorch_cfg.min_p != 0.0 or pytorch_cfg.no_repeat_ngram_size != 0:
+            console.print("  [bold]decoder extensions (pytorch):[/bold]")
+            print_value(
+                "min_p",
+                pytorch_cfg.min_p,
+                pytorch_cfg.min_p == 0.0,
+                indent=4,
+                show_defaults=show_defaults,
+            )
+            print_value(
+                "no_repeat_ngram_size",
+                pytorch_cfg.no_repeat_ngram_size,
+                pytorch_cfg.no_repeat_ngram_size == 0,
+                indent=4,
+                show_defaults=show_defaults,
+            )
+    elif config.backend == "vllm" and config.vllm is not None:
+        vllm_cfg = config.vllm
+        if show_defaults or vllm_cfg.min_p != 0.0:
+            console.print("  [bold]decoder extensions (vllm):[/bold]")
+            print_value(
+                "min_p",
+                vllm_cfg.min_p,
+                vllm_cfg.min_p == 0.0,
+                indent=4,
+                show_defaults=show_defaults,
+            )
+
+    # Backend-specific quantization
+    if config.backend == "pytorch" and config.pytorch is not None:
+        pytorch_cfg = config.pytorch
+        if show_defaults or any(
+            [
+                pytorch_cfg.load_in_4bit,
+                pytorch_cfg.load_in_8bit,
+                pytorch_cfg.bnb_4bit_compute_dtype != "float16",
+                pytorch_cfg.bnb_4bit_quant_type != "nf4",
+                pytorch_cfg.bnb_4bit_use_double_quant,
+            ]
+        ):
+            console.print("  [bold]quantization (pytorch):[/bold]")
+            print_value(
+                "load_in_4bit",
+                pytorch_cfg.load_in_4bit,
+                pytorch_cfg.load_in_4bit is False,
+                indent=4,
+                show_defaults=show_defaults,
+            )
+            print_value(
+                "load_in_8bit",
+                pytorch_cfg.load_in_8bit,
+                pytorch_cfg.load_in_8bit is False,
+                indent=4,
+                show_defaults=show_defaults,
+            )
+            if pytorch_cfg.load_in_4bit:
+                print_value(
+                    "bnb_4bit_compute_dtype",
+                    pytorch_cfg.bnb_4bit_compute_dtype,
+                    pytorch_cfg.bnb_4bit_compute_dtype == "float16",
+                    indent=4,
+                    show_defaults=show_defaults,
+                )
+                print_value(
+                    "bnb_4bit_quant_type",
+                    pytorch_cfg.bnb_4bit_quant_type,
+                    pytorch_cfg.bnb_4bit_quant_type == "nf4",
+                    indent=4,
+                    show_defaults=show_defaults,
+                )
+                print_value(
+                    "bnb_4bit_use_double_quant",
+                    pytorch_cfg.bnb_4bit_use_double_quant,
+                    pytorch_cfg.bnb_4bit_use_double_quant is False,
+                    indent=4,
+                    show_defaults=show_defaults,
+                )
+    elif config.backend == "vllm" and config.vllm is not None:
+        vllm_cfg = config.vllm
+        if show_defaults or vllm_cfg.quantization is not None:
+            console.print("  [bold]quantization (vllm):[/bold]")
+            print_value(
+                "quantization",
+                vllm_cfg.quantization,
+                vllm_cfg.quantization is None,
+                indent=4,
+                show_defaults=show_defaults,
+            )
+    elif config.backend == "tensorrt" and config.tensorrt is not None:
+        trt_cfg = config.tensorrt
+        if show_defaults or trt_cfg.quantization != "none":
+            console.print("  [bold]quantization (tensorrt):[/bold]")
+            print_value(
+                "quantization",
+                trt_cfg.quantization,
+                trt_cfg.quantization == "none",
+                indent=4,
+                show_defaults=show_defaults,
+            )
 
     # Schedule config
     sched = config.schedule
@@ -499,24 +568,8 @@ def show_effective_config(
             "precision", config.get("fp_precision", "float16"), "float16", nested=True
         )
     )
-    num_procs = config.get("num_processes", 1)
     gpus = config.get("gpus", [0])
-    table.add_row(
-        *format_dict_field("processes", f"{num_procs} on GPUs {gpus}", "1 on GPUs [0]", nested=True)
-    )
-    table.add_row(
-        *format_dict_field(
-            "task", config.get("task_type", "text_generation"), "text_generation", nested=True
-        )
-    )
-    table.add_row(
-        *format_dict_field(
-            "inference",
-            config.get("inference_type", "pure_generative"),
-            "pure_generative",
-            nested=True,
-        )
-    )
+    table.add_row(*format_dict_field("gpus", str(gpus), "[0]", nested=True))
     table.add_row(*format_dict_field("seed", config.get("random_seed"), None, nested=True))
 
     # Token settings
@@ -546,46 +599,95 @@ def show_effective_config(
         )
     )
 
-    # Batching config
-    add_section_header(table, "batching")
-    batch = config.get("batching", {})
-    table.add_row(*format_dict_field("batch_size", batch.get("batch_size", 1), 1, nested=True))
-    table.add_row(
-        *format_dict_field("strategy", batch.get("strategy", "static"), "static", nested=True)
-    )
-    table.add_row(
-        *format_dict_field(
-            "max_tokens_per_batch", batch.get("max_tokens_per_batch"), None, nested=True
-        )
-    )
+    # Backend-specific configs (handle dict from results)
+    backend = config.get("backend", "pytorch")
 
-    # Sharding config
-    add_section_header(table, "sharding")
-    shard = config.get("sharding", {})
-    table.add_row(
-        *format_dict_field("strategy", shard.get("strategy", "none"), "none", nested=True)
-    )
-    table.add_row(*format_dict_field("num_shards", shard.get("num_shards", 1), 1, nested=True))
+    # Batching (PyTorch)
+    if backend == "pytorch":
+        pytorch_cfg = config.get("pytorch", {})
+        if pytorch_cfg:
+            add_section_header(table, "pytorch")
+            table.add_row(
+                *format_dict_field("batch_size", pytorch_cfg.get("batch_size", 1), 1, nested=True)
+            )
+            table.add_row(
+                *format_dict_field(
+                    "batching_strategy",
+                    pytorch_cfg.get("batching_strategy", "static"),
+                    "static",
+                    nested=True,
+                )
+            )
+            table.add_row(
+                *format_dict_field(
+                    "parallelism_strategy",
+                    pytorch_cfg.get("parallelism_strategy", "none"),
+                    "none",
+                    nested=True,
+                )
+            )
+            table.add_row(
+                *format_dict_field(
+                    "load_in_4bit", pytorch_cfg.get("load_in_4bit", False), False, nested=True
+                )
+            )
+            table.add_row(
+                *format_dict_field(
+                    "load_in_8bit", pytorch_cfg.get("load_in_8bit", False), False, nested=True
+                )
+            )
+    elif backend == "vllm":
+        vllm_cfg = config.get("vllm", {})
+        if vllm_cfg:
+            add_section_header(table, "vllm")
+            table.add_row(
+                *format_dict_field(
+                    "max_num_seqs", vllm_cfg.get("max_num_seqs", 256), 256, nested=True
+                )
+            )
+            table.add_row(
+                *format_dict_field(
+                    "tensor_parallel_size", vllm_cfg.get("tensor_parallel_size", 1), 1, nested=True
+                )
+            )
+            table.add_row(
+                *format_dict_field("quantization", vllm_cfg.get("quantization"), None, nested=True)
+            )
+    elif backend == "tensorrt":
+        trt_cfg = config.get("tensorrt", {})
+        if trt_cfg:
+            add_section_header(table, "tensorrt")
+            table.add_row(
+                *format_dict_field(
+                    "max_batch_size", trt_cfg.get("max_batch_size", 8), 8, nested=True
+                )
+            )
+            table.add_row(*format_dict_field("tp_size", trt_cfg.get("tp_size", 1), 1, nested=True))
+            table.add_row(
+                *format_dict_field(
+                    "quantization", trt_cfg.get("quantization", "none"), "none", nested=True
+                )
+            )
 
     # Traffic/pacing settings
     add_section_header(table, "traffic")
     table.add_row(*format_dict_field("query_rate", config.get("query_rate", 1.0), 1.0, nested=True))
-    latency = config.get("latency_simulation", {})
+    traffic = config.get("traffic_simulation", {})
     table.add_row(
-        *format_dict_field("simulation", latency.get("enabled", False), False, nested=True)
+        *format_dict_field("simulation", traffic.get("enabled", False), False, nested=True)
     )
     table.add_row(
-        *format_dict_field("mode", latency.get("mode", "poisson"), "poisson", nested=True)
+        *format_dict_field("mode", traffic.get("mode", "poisson"), "poisson", nested=True)
     )
     table.add_row(
-        *format_dict_field("target_qps", latency.get("target_qps", 1.0), 1.0, nested=True)
+        *format_dict_field("target_qps", traffic.get("target_qps", 1.0), 1.0, nested=True)
     )
-    table.add_row(*format_dict_field("sim_seed", latency.get("seed"), None, nested=True))
+    table.add_row(*format_dict_field("sim_seed", traffic.get("seed"), None, nested=True))
 
     # Schedule config
     add_section_header(table, "schedule")
     table.add_row(*format_dict_field("cycles", config.get("num_cycles", 1), 1, nested=True))
-    schedule = config.get("schedule_config", {})
+    schedule = config.get("schedule", {})
     table.add_row(
         *format_dict_field("cron_enabled", schedule.get("enabled", False), False, nested=True)
     )
@@ -600,7 +702,7 @@ def show_effective_config(
         )
     )
 
-    # Decoder config
+    # Decoder config (universal)
     add_section_header(table, "decoder")
     decoder = config.get("decoder", {})
     table.add_row(*format_dict_field("preset", decoder.get("preset"), None, nested=True))
@@ -618,49 +720,9 @@ def show_effective_config(
     )
     table.add_row(*format_dict_field("top_p", decoder.get("top_p", 1.0), 1.0, nested=True))
     table.add_row(*format_dict_field("top_k", decoder.get("top_k", 50), 50, nested=True))
-    table.add_row(*format_dict_field("min_p", decoder.get("min_p", 0.0), 0.0, nested=True))
     table.add_row(
         *format_dict_field(
             "repetition_penalty", decoder.get("repetition_penalty", 1.0), 1.0, nested=True
-        )
-    )
-    table.add_row(
-        *format_dict_field(
-            "no_repeat_ngram_size", decoder.get("no_repeat_ngram_size", 0), 0, nested=True
-        )
-    )
-
-    # Quantization config
-    add_section_header(table, "quantization")
-    quant = config.get("quantization", {})
-    table.add_row(
-        *format_dict_field("quantization", quant.get("quantization", False), False, nested=True)
-    )
-    table.add_row(
-        *format_dict_field("load_in_4bit", quant.get("load_in_4bit", False), False, nested=True)
-    )
-    table.add_row(
-        *format_dict_field("load_in_8bit", quant.get("load_in_8bit", False), False, nested=True)
-    )
-    table.add_row(
-        *format_dict_field(
-            "bnb_4bit_compute_dtype",
-            quant.get("bnb_4bit_compute_dtype", "float16"),
-            "float16",
-            nested=True,
-        )
-    )
-    table.add_row(
-        *format_dict_field(
-            "bnb_4bit_quant_type", quant.get("bnb_4bit_quant_type", "nf4"), "nf4", nested=True
-        )
-    )
-    table.add_row(
-        *format_dict_field(
-            "bnb_4bit_use_double_quant",
-            quant.get("bnb_4bit_use_double_quant", False),
-            False,
-            nested=True,
         )
     )
 

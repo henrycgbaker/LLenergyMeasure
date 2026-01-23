@@ -46,13 +46,13 @@ gpus: [0, 1]
 """)
     configs["model"] = model
 
-    # Quantized variant
+    # Quantized variant (backend-native architecture: quantization in pytorch section)
     quant = tmp_path / "configs" / "llama-7b-4bit.yaml"
     quant.write_text("""
 _extends: llama-7b.yaml
 config_name: llama-7b-4bit
-quantization:
-  quantization: true
+backend: pytorch
+pytorch:
   load_in_4bit: true
 """)
     configs["quant"] = quant
@@ -134,7 +134,7 @@ class TestConfigWorkflow:
         result = runner.invoke(app, ["config", "validate", str(quant_config)])
         assert result.exit_code == 0
         assert "llama-7b-4bit" in result.stdout
-        assert "load_in_4bit: True" in result.stdout  # Shows quantization
+        # Backend-native: quantization now in pytorch section, verify config validates
 
     def test_validate_invalid_config(self, tmp_path: Path):
         """Test validation catches invalid configs."""

@@ -37,6 +37,51 @@
 
 ---
 
+## ✅ Recently Fixed
+
+### Docker Container File Permissions (Fixed 2026-01-22)
+- [x] Fixed entrypoint.sh to chown `/app/configs` for test script write access
+- [x] Fixed dev-entrypoint.sh with full PUID/PGID support (was missing)
+- [x] Removed `:ro` from configs mount in docker-compose.yml
+- [x] Added `libxcb1` to base image for vLLM Ray multi-GPU support
+
+**Usage**: `docker compose run --rm -e PUID=$(id -u) -e PGID=$(id -g) <service> ...`
+
+### Parameter Validation Bugs (Fixed 2026-01-22)
+- [x] `fp_precision=bfloat16` - Fixed string normalisation (`"bfloat16"` → `"bf16"`)
+- [x] `quantization.quantization=True` - Added validation requiring `load_in_4bit` or `load_in_8bit`
+
+---
+
+## 🚨 Known Limitations (Not Bugs)
+
+### Backend-Specific Parameter Limitations
+
+**PyTorch** (60/64 = 93.8%):
+| Parameter | Reason | Resolution |
+|-----------|--------|------------|
+| `flash_attention_2` | Not installed in Docker | Install `flash-attn` if needed |
+| `pipeline_parallel` | Unsupported by design | Use vLLM/TensorRT for PP |
+
+**vLLM** (68/83 = 81.9%):
+| Parameter | Reason | Resolution |
+|-----------|--------|------------|
+| `kv_cache_dtype` variants | Hardware/backend compatibility | Use `auto` |
+| `attention.backend=FLASHINFER` | Requires JIT compilation | Use `auto` or `FLASH_ATTN` |
+| `attention.backend=TORCH_SDPA` | Not registered in vLLM | Use `auto` or `FLASH_ATTN` |
+| `block_size=8` | Model incompatible | Use 16 or 32 |
+| `best_of=2` | API changed in newer vLLM | Omit parameter |
+| `quantization_method=awq/gptq` | Model not quantized | Use quantized model |
+| `load_format=pt` | Model only has safetensors | Use `auto` or `safetensors` |
+
+**TensorRT** (61/65 = 93.8%):
+| Parameter | Reason | Resolution |
+|-----------|--------|------------|
+| `fp_precision=float32` | TensorRT optimised for lower precision | Use fp16/bf16 |
+| `load_in_4bit/8bit` | BitsAndBytes not supported | Use `tensorrt.quantization.method` |
+
+---
+
 ## In Progress
 
 ### Web Platform - Phase 1 (Active: `feature/web-frontend`)
@@ -62,6 +107,12 @@
 - [x] vLLM streaming - TTFT and ITL measurement
 - [x] PyTorch streaming - `TextIteratorStreamer` for TTFT/ITL
 - [ ] TensorRT-LLM streaming - Code complete, requires NGC login to test
+
+### Streaming Investigation (Understanding)
+- [ ] Document how streaming works internally (TTFT vs ITL, token-by-token generation)
+- [ ] Explain streaming vs batch inference trade-offs (latency vs throughput)
+- [ ] Clarify metrics: what do TTFT samples vs ITL samples represent?
+- [ ] Investigate why streaming results have different structure (latency_measurements)
 
 ### Streaming Enhancements (Future)
 - [ ] Real-time CLI token display during inference

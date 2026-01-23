@@ -125,8 +125,6 @@ llm-energy-measure batch "configs/*.yaml" --dry-run
 
 ### schedule
 
-TODO: ADD THIS AS A RUNNING CONTAINER SERVICE?
-
 Run experiments on a schedule (daemon mode) for temporal variation studies.
 
 ```bash
@@ -169,9 +167,9 @@ llm-energy-measure schedule --preset benchmark --model meta-llama/Llama-2-7b-hf 
 
 ### run
 
-TODO DEEGRADED?
+**Legacy command** - kept for backwards compatibility. Use `experiment` instead for new work.
 
-Low-level inference command (called by `experiment`). Recommended to use `experiment` instead.
+Low-level inference command (called by `experiment`).
 
 ```bash
 llm-energy-measure run <config.yaml> [OPTIONS]

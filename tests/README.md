@@ -1,6 +1,6 @@
 # tests/ - Test Suite
 
-Unit, integration, and end-to-end tests for the LLM Energy Measure framework.
+Unit, integration, e2e, and runtime tests for the LLM Energy Measure framework.
 
 ## Structure
 
@@ -10,16 +10,17 @@ tests/
 ├── fixtures/            # Test data and fixtures
 ├── unit/                # Unit tests (fast, isolated)
 ├── integration/         # Integration tests (component interaction)
-└── e2e/                 # End-to-end tests (full workflows)
+├── e2e/                 # End-to-end tests (full workflows, simulated)
+└── runtime/             # Runtime tests (GPU-required, actual inference)
 ```
 
 ## Running Tests
 
 ```bash
-# Run all tests
+# Run all tests (excluding runtime)
 make test-all
 # or
-poetry run pytest tests/ -v
+poetry run pytest tests/ -v --ignore=tests/runtime/
 
 # Unit tests only (fast)
 make test
@@ -30,6 +31,19 @@ poetry run pytest tests/unit/ -v
 make test-integration
 # or
 poetry run pytest tests/integration/ -v
+
+# E2E tests (simulated, no GPU required)
+poetry run pytest tests/e2e/ -v
+
+# Runtime tests (requires GPU)
+make test-runtime
+# or
+poetry run pytest tests/runtime/ -v
+
+# Runtime tests with backend filter
+pytest tests/runtime/ -v --backend pytorch
+pytest tests/runtime/ -v --backend vllm
+pytest tests/runtime/ -v --quick    # Quick subset
 
 # Specific test file
 poetry run pytest tests/unit/test_config_models.py -v
@@ -54,26 +68,10 @@ Fast, isolated tests for individual components.
 | `test_core_model_loader.py` | Model loading logic |
 | `test_core_energy_backends.py` | Energy backend interface |
 | `test_core_compute_metrics.py` | Memory/utilization stats |
-| `test_core_traffic.py` | Traffic handling |
-| `test_core_implementations.py` | Implementation details |
-| `test_dataset_loader.py` | Dataset loading |
-| `test_cycle_statistics.py` | Cycle statistics |
-| `test_inference_generation.py` | Inference generation |
 | `test_domain_metrics.py` | Metric model validation |
 | `test_domain_experiment.py` | Result model validation |
-| `test_domain_model_info.py` | Model info models |
-| `test_orchestration_*.py` | Orchestration components |
 | `test_results_aggregation.py` | Aggregation logic |
 | `test_repository.py` | FileSystemRepository |
-| `test_results_exporters.py` | Export functionality |
-| `test_flops_estimator.py` | FLOPs estimation |
-| `test_resilience.py` | Retry/circuit breaker |
-| `test_security.py` | Path sanitization |
-| `test_exceptions.py` | Exception hierarchy |
-| `test_logging.py` | Logging setup |
-| `test_constants.py` | Constant values |
-| `test_protocols.py` | Protocol definitions |
-| `test_state.py` | State management |
 | `test_cli.py` | CLI command parsing |
 
 ### Integration Tests (`tests/integration/`)
@@ -90,11 +88,36 @@ Tests for component interaction.
 
 ### E2E Tests (`tests/e2e/`)
 
-Full workflow tests (may require GPU).
+Full workflow tests with simulated results (no GPU required).
 
 | File | Tests |
 |------|-------|
 | `test_cli_e2e.py` | Full CLI workflows |
+
+### Runtime Tests (`tests/runtime/`)
+
+GPU-required tests that run actual inference to validate parameters.
+
+| File | Purpose |
+|------|---------|
+| `conftest.py` | GPU fixtures, backend detection, skip markers |
+| `test_all_params.py` | CANONICAL param testing (standalone + importable) |
+| `test_runtime_params.py` | Pytest parametrised wrapper |
+| `discover_params.py` | Param discovery utility |
+
+**Features:**
+- **Single source of truth**: Params auto-discovered from Pydantic models
+- **Strict validation**: Tests fail if inference doesn't actually run
+- **Backend filtering**: `--backend pytorch` to test one backend
+- **Quick mode**: `--quick` for fewer parameter variations
+- **Discovery mode**: `--discover` to use auto-discovered params
+- **Result verification**: Checks output tokens, throughput, energy
+
+**Skip Markers:**
+- `@pytest.mark.requires_gpu` - CUDA GPU available
+- `@pytest.mark.requires_vllm` - vLLM installed
+- `@pytest.mark.requires_tensorrt` - TensorRT-LLM installed
+- `@pytest.mark.slow` - Test takes >1 minute
 
 ## Writing Tests
 
@@ -131,6 +154,26 @@ def mock_cuda():
 - `test_<class>_<method>_<scenario>` for methods
 - Use descriptive names: `test_load_config_with_inheritance_resolves_extends`
 
+## Generating Documentation
+
+After running runtime tests, generate the parameter support matrix:
+
+```bash
+# Run tests and generate results (from project root)
+python -m tests.runtime.test_all_params --backend pytorch --output results/test_results_pytorch.json
+
+# Or with auto-discovery from Pydantic models
+python -m tests.runtime.test_all_params --discover --backend pytorch --output results/test_results_pytorch.json
+
+# List discovered params without running tests
+python -m tests.runtime.test_all_params --list-params --backend pytorch
+
+# Generate documentation from results
+python scripts/generate_param_matrix.py
+```
+
+This generates `docs/generated/parameter-support-matrix.md`.
+
 ## CI Integration
 
 Tests run via GitHub Actions:
@@ -145,3 +188,5 @@ Coverage reports uploaded to Codecov.
 
 - See `src/llm_energy_measure/README.md` for package structure
 - See `Makefile` for test commands
+- See `tests/runtime/test_all_params.py` for parameter testing (canonical location)
+- See `scripts/generate_param_matrix.py` for docs generation

@@ -25,6 +25,75 @@ from loguru import logger
 from llm_energy_measure.config.models import ExperimentConfig
 from llm_energy_measure.exceptions import ConfigurationError
 
+# =============================================================================
+# Backend-Native Parallelism Helpers
+# =============================================================================
+
+
+def get_backend_parallelism(config: ExperimentConfig) -> tuple[str, int]:
+    """Extract parallelism strategy and degree from backend-specific config.
+
+    Each backend stores parallelism differently:
+    - PyTorch: parallelism_strategy + parallelism_degree
+    - vLLM: tensor_parallel_size + pipeline_parallel_size
+    - TensorRT: tp_size + pp_size
+
+    Returns:
+        Tuple of (strategy, degree) where strategy is 'none', 'tensor_parallel',
+        'pipeline_parallel', or 'data_parallel'.
+    """
+    if config.backend == "pytorch" and config.pytorch:
+        strategy = config.pytorch.parallelism_strategy
+        degree = config.pytorch.parallelism_degree
+        return (strategy, degree)
+
+    elif config.backend == "vllm" and config.vllm:
+        tp = config.vllm.tensor_parallel_size
+        pp = config.vllm.pipeline_parallel_size
+        if pp > 1:
+            return ("pipeline_parallel", pp)
+        elif tp > 1:
+            return ("tensor_parallel", tp)
+        return ("none", 1)
+
+    elif config.backend == "tensorrt" and config.tensorrt:
+        tp = config.tensorrt.tp_size
+        pp = config.tensorrt.pp_size
+        if pp > 1:
+            return ("pipeline_parallel", pp)
+        elif tp > 1:
+            return ("tensor_parallel", tp)
+        return ("none", 1)
+
+    # Default: no parallelism
+    return ("none", 1)
+
+
+def get_backend_batching(config: ExperimentConfig) -> tuple[int, str]:
+    """Extract batch size and strategy from backend-specific config.
+
+    Each backend stores batching differently:
+    - PyTorch: batch_size + batching_strategy
+    - vLLM: max_num_seqs (continuous batching, strategy is implicit)
+    - TensorRT: max_batch_size (compile-time, strategy is implicit)
+
+    Returns:
+        Tuple of (batch_size, strategy).
+    """
+    if config.backend == "pytorch" and config.pytorch:
+        return (config.pytorch.batch_size, config.pytorch.batching_strategy)
+
+    elif config.backend == "vllm" and config.vllm:
+        # vLLM uses continuous batching, max_num_seqs is like "batch capacity"
+        return (config.vllm.max_num_seqs, "continuous")
+
+    elif config.backend == "tensorrt" and config.tensorrt:
+        # TensorRT uses inflight batching
+        return (config.tensorrt.max_batch_size, "inflight")
+
+    # Default
+    return (1, "static")
+
 
 def get_config_file_path(config: dict[str, Any] | str | Path) -> Path:
     """Get or create a config file path.
@@ -163,9 +232,9 @@ def get_effective_launcher_processes(config: ExperimentConfig) -> int:
 
     For backends with internal parallelism (vLLM, TensorRT-LLM):
     - tensor_parallel/pipeline_parallel: Returns 1 (backend manages internally)
-    - data_parallel: Returns parallelism.degree (separate processes needed)
+    - data_parallel: Returns parallelism degree (separate processes needed)
 
-    For PyTorch with Accelerate, uses parallelism.degree explicitly.
+    For PyTorch with Accelerate, uses parallelism degree explicitly.
 
     This function is critical for:
     - ExperimentState: determines how many result files to expect
@@ -180,6 +249,8 @@ def get_effective_launcher_processes(config: ExperimentConfig) -> int:
     from llm_energy_measure.core.inference_backends import get_backend
     from llm_energy_measure.core.inference_backends.protocols import LaunchMode
 
+    strategy, degree = get_backend_parallelism(config)
+
     try:
         backend = get_backend(config.backend)
         capabilities = backend.get_runtime_capabilities()
@@ -187,23 +258,23 @@ def get_effective_launcher_processes(config: ExperimentConfig) -> int:
         if capabilities.launch_mode == LaunchMode.DIRECT:
             # Backend manages tensor/pipeline parallelism internally
             # But data parallelism requires multiple separate processes
-            if config.parallelism.strategy == "data_parallel":
-                return config.parallelism.degree
+            if strategy == "data_parallel":
+                return degree
             # tensor_parallel/pipeline_parallel: single process, backend spawns workers
             return 1
         else:
             # External parallelism via Accelerate/torchrun
-            # Use explicit parallelism.degree from config
-            return config.parallelism.degree
+            # Use explicit parallelism degree from config
+            return degree
 
     except Exception as e:
         # Fall back to safe defaults if backend can't be loaded
         logger.warning(f"Could not get backend capabilities for {config.backend}: {e}")
         if config.backend in ("vllm", "tensorrt"):
-            if config.parallelism.strategy == "data_parallel":
-                return config.parallelism.degree
+            if strategy == "data_parallel":
+                return degree
             return 1
-        return config.parallelism.degree
+        return degree
 
 
 def _build_launch_command(
@@ -679,15 +750,15 @@ if __name__ == "__main__":
     logger.info(
         f"  GPUs: {config.gpus} | Processes: {num_procs} | Precision: {config.fp_precision}"
     )
+    batch_size, batch_strategy = get_backend_batching(config)
     logger.info(
-        f"  Batch size: {config.batching.batch_size} | "
-        f"Strategy: {config.batching.strategy} | "
+        f"  Batch size: {batch_size} | "
+        f"Strategy: {batch_strategy} | "
         f"Streaming: {config.streaming}"
     )
-    if config.parallelism.strategy != "none":
-        logger.info(
-            f"  Parallelism: {config.parallelism.strategy} (degree={config.parallelism.degree})"
-        )
+    parallel_strategy, parallel_degree = get_backend_parallelism(config)
+    if parallel_strategy != "none":
+        logger.info(f"  Parallelism: {parallel_strategy} (degree={parallel_degree})")
     logger.info(f"  Prompts: {len(prompts)} | Max output tokens: {config.max_output_tokens}")
     if results_dir:
         logger.info(f"  Results dir: {results_dir}")

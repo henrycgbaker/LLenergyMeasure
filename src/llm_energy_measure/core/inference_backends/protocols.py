@@ -13,7 +13,10 @@ Design Philosophy:
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+# Import ConfigWarning from SSOT location
+from llm_energy_measure.config.validation import ConfigWarning as ConfigWarning
 
 # Re-export latency types from domain.metrics for backward compatibility
 from llm_energy_measure.domain.metrics import (
@@ -192,26 +195,6 @@ class BackendRuntime:
         return self.accelerator is None
 
 
-@dataclass
-class ConfigWarning:
-    """Warning about config/backend compatibility.
-
-    Used when a config parameter is set but not supported by the selected backend,
-    or when parameter semantics differ between backends.
-
-    Severity levels:
-    - info: Different semantics but works (e.g., batch_size hint vs exact)
-    - warning: Feature partially supported or has caveats
-    - error: Feature not supported, experiment may fail
-    """
-
-    param: str
-    message: str
-    severity: Literal["info", "warning", "error"] = "warning"
-    suggestion: str | None = None
-    migration_hint: str | None = None  # For deprecated/changed params
-
-
 @runtime_checkable
 class InferenceBackend(Protocol):
     """Unified interface for inference backends.
@@ -232,7 +215,7 @@ class InferenceBackend(Protocol):
 
         warnings = backend.validate_config(config)
         for w in warnings:
-            logger.warning(f"{w.param}: {w.message}")
+            logger.warning(f"{w.field}: {w.message}")
 
         backend.initialize(config, runtime)
         result = backend.run_inference(prompts, config)

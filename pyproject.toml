@@ -32,6 +32,10 @@ peft = {version = "^0.18.1", optional = true}
 # Note: Has dependency conflicts with TensorRT - install separately
 vllm = {version = ">=0.6.0", optional = true}
 
+# Optional: ONNX Runtime for torch.compile backend='onnxrt'
+# Enables torch.compile to use ONNX Runtime for execution
+onnxruntime-gpu = {version = ">=1.17.0", optional = true}
+
 # Optional: TensorRT-LLM backend (high-performance compiled inference)
 # Requires: NVIDIA GPU with compute capability >= 8.0 (Ampere/Ada/Hopper), CUDA 12.x, Linux only
 # Note: Has dependency conflicts with vLLM - install separately
@@ -59,7 +63,8 @@ commitizen = {version = "^4.0", optional = true}
 [tool.poetry.extras]
 # PyTorch/HuggingFace backend (works on any NVIDIA GPU)
 # Usage: pip install llm-energy-measure[pytorch]
-pytorch = ["accelerate", "bitsandbytes", "calflops", "peft"]
+# Includes ONNX Runtime for torch.compile backend='onnxrt' option
+pytorch = ["accelerate", "bitsandbytes", "calflops", "peft", "onnxruntime-gpu"]
 
 # vLLM backend (high-throughput inference)
 # Requires: NVIDIA GPU, Linux only

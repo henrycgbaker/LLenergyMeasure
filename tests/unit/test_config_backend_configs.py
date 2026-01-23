@@ -8,7 +8,6 @@ from llm_energy_measure.config.backend_configs import (
     PyTorchConfig,
     TensorRTCalibrationConfig,
     TensorRTConfig,
-    TensorRTQuantizationConfig,
     VLLMAttentionConfig,
     VLLMConfig,
     VLLMLoRAConfig,
@@ -56,8 +55,8 @@ class TestVLLMSpeculativeConfig:
         assert config.model is None
         assert config.num_tokens == 5
         assert config.method == "ngram"
-        assert config.ngram_min == 1
-        assert config.ngram_max is None
+        assert config.prompt_lookup_min == 1
+        assert config.prompt_lookup_max is None
         assert config.draft_tp_size == 1
 
     def test_valid_methods(self):
@@ -81,12 +80,12 @@ class TestVLLMSpeculativeConfig:
         with pytest.raises(ValidationError):
             VLLMSpeculativeConfig(num_tokens=11)
 
-    def test_ngram_min_positive(self):
-        config = VLLMSpeculativeConfig(ngram_min=1)
-        assert config.ngram_min == 1
+    def test_prompt_lookup_min_positive(self):
+        config = VLLMSpeculativeConfig(prompt_lookup_min=1)
+        assert config.prompt_lookup_min == 1
 
         with pytest.raises(ValidationError):
-            VLLMSpeculativeConfig(ngram_min=0)
+            VLLMSpeculativeConfig(prompt_lookup_min=0)
 
     def test_draft_tp_size_positive(self):
         config = VLLMSpeculativeConfig(draft_tp_size=4)
@@ -146,7 +145,7 @@ class TestVLLMConfig:
         assert config.attention is None
         assert config.speculative is None
         assert config.lora is None
-        assert config.quantization_method is None
+        assert config.quantization is None
         assert config.load_format == "auto"
         assert config.best_of is None
         # Note: use_beam_search and length_penalty moved to DecoderConfig.beam_search
@@ -569,36 +568,6 @@ class TestTensorRTCalibrationConfig:
         assert config.num_samples == 1024
 
 
-class TestTensorRTQuantizationConfig:
-    """Tests for TensorRTQuantizationConfig."""
-
-    def test_defaults(self):
-        config = TensorRTQuantizationConfig()
-        assert config.method == "none"
-        assert config.calibration is None
-
-    def test_valid_methods(self):
-        for method in ["none", "fp8", "int8_sq", "int8_weight_only", "int4_awq", "int4_gptq"]:
-            config = TensorRTQuantizationConfig(method=method)
-            assert config.method == method
-
-    def test_invalid_method_rejected(self):
-        with pytest.raises(ValidationError):
-            TensorRTQuantizationConfig(method="invalid")
-
-    def test_int8_with_calibration(self):
-        config = TensorRTQuantizationConfig(
-            method="int8_sq",
-            calibration=TensorRTCalibrationConfig(
-                dataset="wikitext",
-                num_samples=512,
-            ),
-        )
-        assert config.method == "int8_sq"
-        assert config.calibration is not None
-        assert config.calibration.num_samples == 512
-
-
 class TestTensorRTConfig:
     """Tests for TensorRTConfig."""
 
@@ -675,26 +644,33 @@ class TestTensorRTConfig:
         assert config.enable_kv_cache_reuse is True
 
     def test_with_quantization(self):
-        config = TensorRTConfig(
-            quantization=TensorRTQuantizationConfig(
-                method="fp8",
-            )
-        )
-        assert config.quantization.method == "fp8"
+        """Quantization is now a flat string literal."""
+        config = TensorRTConfig(quantization="fp8")
+        assert config.quantization == "fp8"
 
     def test_with_calibration(self):
+        """Calibration is now a separate field for INT8 SmoothQuant."""
         config = TensorRTConfig(
-            quantization=TensorRTQuantizationConfig(
-                method="int8_sq",
-                calibration=TensorRTCalibrationConfig(
-                    dataset="wikitext",
-                    num_samples=1024,
-                ),
-            )
+            quantization="int8_sq",
+            calibration=TensorRTCalibrationConfig(
+                dataset="wikitext",
+                num_samples=1024,
+            ),
         )
-        assert config.quantization.method == "int8_sq"
-        assert config.quantization.calibration is not None
-        assert config.quantization.calibration.num_samples == 1024
+        assert config.quantization == "int8_sq"
+        assert config.calibration is not None
+        assert config.calibration.num_samples == 1024
+
+    def test_valid_quantization_methods(self):
+        """All quantization methods are valid."""
+        for method in ["none", "fp8", "int8_sq", "int8_weight_only", "int4_awq", "int4_gptq"]:
+            config = TensorRTConfig(quantization=method)
+            assert config.quantization == method
+
+    def test_invalid_quantization_rejected(self):
+        """Invalid quantization method is rejected."""
+        with pytest.raises(ValidationError):
+            TensorRTConfig(quantization="invalid")
 
     def test_extra_args(self):
         config = TensorRTConfig(
@@ -722,13 +698,13 @@ class TestTensorRTExperimentConfigIntegration:
             backend="tensorrt",
             tensorrt=TensorRTConfig(
                 max_batch_size=16,
-                quantization=TensorRTQuantizationConfig(method="fp8"),
+                quantization="fp8",
             ),
         )
         assert config.backend == "tensorrt"
         assert config.tensorrt is not None
         assert config.tensorrt.max_batch_size == 16
-        assert config.tensorrt.quantization.method == "fp8"
+        assert config.tensorrt.quantization == "fp8"
 
     def test_tensorrt_config_with_wrong_backend_rejected(self, minimal_config):
         """TensorRT config rejected when backend is not tensorrt."""
@@ -747,13 +723,13 @@ class TestTensorRTExperimentConfigIntegration:
             tensorrt={
                 "max_batch_size": 32,
                 "builder_opt_level": 5,
-                "quantization": {"method": "fp8"},
+                "quantization": "fp8",
             },
         )
         assert config.tensorrt is not None
         assert config.tensorrt.max_batch_size == 32
         assert config.tensorrt.builder_opt_level == 5
-        assert config.tensorrt.quantization.method == "fp8"
+        assert config.tensorrt.quantization == "fp8"
 
     def test_serialization_roundtrip_tensorrt(self, minimal_config):
         """Full tensorrt config survives serialization roundtrip."""
@@ -763,12 +739,10 @@ class TestTensorRTExperimentConfigIntegration:
             tensorrt=TensorRTConfig(
                 max_batch_size=16,
                 builder_opt_level=4,
-                pp_size=2,  # Note: tp_size removed, use parallelism.degree instead
+                pp_size=2,
                 enable_kv_cache_reuse=True,
-                quantization=TensorRTQuantizationConfig(
-                    method="int8_sq",
-                    calibration=TensorRTCalibrationConfig(num_samples=256),
-                ),
+                quantization="int8_sq",
+                calibration=TensorRTCalibrationConfig(num_samples=256),
             ),
         )
         json_str = config.model_dump_json()
@@ -778,6 +752,6 @@ class TestTensorRTExperimentConfigIntegration:
         assert restored.tensorrt.builder_opt_level == 4
         assert restored.tensorrt.pp_size == 2
         assert restored.tensorrt.enable_kv_cache_reuse is True
-        assert restored.tensorrt.quantization.method == "int8_sq"
-        assert restored.tensorrt.quantization.calibration is not None
-        assert restored.tensorrt.quantization.calibration.num_samples == 256
+        assert restored.tensorrt.quantization == "int8_sq"
+        assert restored.tensorrt.calibration is not None
+        assert restored.tensorrt.calibration.num_samples == 256

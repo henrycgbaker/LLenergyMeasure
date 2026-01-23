@@ -6,9 +6,9 @@ pipeline parallelism (PP) strategies for multi-GPU inference.
 
 import pytest
 
-from llm_energy_measure.config.models import ShardingConfig
 from llm_energy_measure.core.parallelism import (
     NoParallelism,
+    ParallelismConfig,
     PipelineParallelStrategy,
     TensorParallelStrategy,
     get_parallelism_strategy,
@@ -20,24 +20,24 @@ class TestGetParallelismStrategy:
     """Tests for the factory function."""
 
     def test_none_strategy_returns_no_parallelism(self):
-        config = ShardingConfig(strategy="none")
+        config = ParallelismConfig(strategy="none")
         strategy = get_parallelism_strategy(config)
         assert isinstance(strategy, NoParallelism)
 
     def test_tensor_parallel_strategy(self):
-        config = ShardingConfig(strategy="tensor_parallel", num_shards=2)
+        config = ParallelismConfig(strategy="tensor_parallel", num_shards=2)
         strategy = get_parallelism_strategy(config)
         assert isinstance(strategy, TensorParallelStrategy)
 
     def test_pipeline_parallel_strategy(self):
-        config = ShardingConfig(strategy="pipeline_parallel", num_shards=2)
+        config = ParallelismConfig(strategy="pipeline_parallel", num_shards=2)
         strategy = get_parallelism_strategy(config)
         assert isinstance(strategy, PipelineParallelStrategy)
 
     def test_unknown_strategy_raises(self):
         """Unknown strategy should raise ValueError."""
         # Create config with valid strategy first, then modify
-        config = ShardingConfig(strategy="none")
+        config = ParallelismConfig(strategy="none")
         # Manually set invalid strategy (bypassing validation for test)
         object.__setattr__(config, "strategy", "invalid")
 
@@ -51,7 +51,7 @@ class TestNoParallelism:
     def test_setup_is_noop(self):
         """Setup should be a no-op for default strategy."""
         strategy = NoParallelism()
-        config = ShardingConfig(strategy="none")
+        config = ParallelismConfig(strategy="none")
         # Should not raise
         strategy.setup(config, gpus=[0])
 
@@ -80,7 +80,7 @@ class TestTensorParallelStrategy:
     def test_setup_validates_gpu_count(self):
         """Should raise if num_shards exceeds available GPUs."""
         strategy = TensorParallelStrategy()
-        config = ShardingConfig(strategy="tensor_parallel", num_shards=4)
+        config = ParallelismConfig(strategy="tensor_parallel", num_shards=4)
 
         with pytest.raises(ValueError, match="exceeds available GPUs"):
             strategy.setup(config, gpus=[0, 1])  # Only 2 GPUs
@@ -88,7 +88,7 @@ class TestTensorParallelStrategy:
     def test_setup_accepts_valid_config(self):
         """Should succeed when GPUs are sufficient."""
         strategy = TensorParallelStrategy()
-        config = ShardingConfig(strategy="tensor_parallel", num_shards=2)
+        config = ParallelismConfig(strategy="tensor_parallel", num_shards=2)
 
         # Should not raise
         strategy.setup(config, gpus=[0, 1])
@@ -119,7 +119,7 @@ class TestPipelineParallelStrategy:
     def test_setup_validates_gpu_count(self):
         """Should raise if num_shards exceeds available GPUs."""
         strategy = PipelineParallelStrategy()
-        config = ShardingConfig(strategy="pipeline_parallel", num_shards=8)
+        config = ParallelismConfig(strategy="pipeline_parallel", num_shards=8)
 
         with pytest.raises(ValueError, match="exceeds available GPUs"):
             strategy.setup(config, gpus=[0, 1])  # Only 2 GPUs
@@ -137,35 +137,34 @@ class TestPipelineParallelStrategy:
         assert strategy.requires_torchrun is True
 
 
-class TestShardingConfigExtensions:
-    """Tests for ShardingConfig extended fields."""
+class TestParallelismConfigExtensions:
+    """Tests for ParallelismConfig extended fields."""
 
     def test_defaults(self):
         """Default sharding config should be none strategy."""
-        config = ShardingConfig()
+        config = ParallelismConfig()
         assert config.strategy == "none"
         assert config.num_shards == 1
-        assert config.tp_plan is None
+        # tp_plan defaults to "auto" (used when tensor_parallel is selected)
+        assert config.tp_plan == "auto"
 
     def test_tp_plan_defaults_to_auto_for_tensor_parallel(self):
         """tp_plan should default to 'auto' when strategy is tensor_parallel."""
-        config = ShardingConfig(strategy="tensor_parallel", num_shards=2)
+        config = ParallelismConfig(strategy="tensor_parallel", num_shards=2)
         assert config.tp_plan == "auto"
 
-    def test_tp_plan_stays_none_for_other_strategies(self):
-        """tp_plan should stay None for non-TP strategies."""
-        config = ShardingConfig(strategy="none")
-        assert config.tp_plan is None
-
-        config = ShardingConfig(strategy="pipeline_parallel", num_shards=2)
-        assert config.tp_plan is None
+    def test_tp_plan_can_be_customized(self):
+        """tp_plan can be set to a custom value for tensor parallel."""
+        config = ParallelismConfig(strategy="tensor_parallel", num_shards=2, tp_plan="custom")
+        assert config.tp_plan == "custom"
 
     def test_pipeline_parallel_config(self):
         """Pipeline parallel config should just need strategy and num_shards."""
-        config = ShardingConfig(strategy="pipeline_parallel", num_shards=4)
+        config = ParallelismConfig(strategy="pipeline_parallel", num_shards=4)
         assert config.strategy == "pipeline_parallel"
         assert config.num_shards == 4
-        assert config.tp_plan is None  # TP options not used for PP
+        # tp_plan is present but not used for PP
+        assert config.tp_plan == "auto"
 
 
 class TestModelTPCompatibility:

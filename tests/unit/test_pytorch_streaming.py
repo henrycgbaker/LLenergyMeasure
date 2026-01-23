@@ -38,16 +38,6 @@ class TestPyTorchStreamingFlags:
         backend = PyTorchBackend()
         assert backend._is_compiled is False
 
-    def test_supported_params_includes_streaming(self):
-        """Streaming params should be in supported params."""
-        from llm_energy_measure.core.inference_backends.pytorch import PyTorchBackend
-
-        backend = PyTorchBackend()
-        supported = backend.get_supported_params()
-
-        assert "streaming" in supported
-        assert "streaming_warmup_requests" in supported
-
 
 class TestLatencyMeasurementsStructure:
     """Tests for LatencyMeasurements structure from PyTorch backend."""

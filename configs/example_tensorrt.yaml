@@ -12,7 +12,17 @@
 #   - Linux only (TensorRT-LLM does not support Windows/macOS)
 #   - Install: pip install llm-energy-measure[tensorrt]
 #   - WARNING: Do not install alongside [vllm] - dependency conflicts
+#
+# ARCHITECTURE NOTE:
+#   This config follows "backend-native" architecture where:
+#   - Tier 1 (top-level): Universal params with identical semantics across backends
+#   - Tier 2 (tensorrt section): TRT-LLM-specific params using native naming
 # =============================================================================
+
+# =============================================================================
+# TIER 1: UNIVERSAL CONFIGURATION
+# =============================================================================
+# These parameters have identical semantics across all backends.
 
 # -----------------------------------------------------------------------------
 # REQUIRED: Experiment Identity
@@ -20,8 +30,8 @@
 config_name: tensorrt-full-example
 model_name: Qwen/Qwen2.5-0.5B  # Non-gated. For Llama: meta-llama/Llama-2-7b-hf (requires HF_TOKEN)
 
-# Optional: LoRA adapter (HuggingFace Hub ID or local path)
-# adapter: tloen/alpaca-lora-7b  # Alpaca instruction-tuned adapter for Llama-2-7b
+# Optional: LoRA adapter - NOTE: TensorRT-LLM does NOT support LoRA adapters
+# adapter: null
 
 # -----------------------------------------------------------------------------
 # DATASET CONFIGURATION
@@ -30,7 +40,7 @@ model_name: Qwen/Qwen2.5-0.5B  # Non-gated. For Llama: meta-llama/Llama-2-7b-hf 
 # Or use any HuggingFace dataset path (e.g., tatsu-lab/alpaca)
 dataset:
   name: ai_energy_score
-  sample_size: 10
+  sample_size: 100
   split: train
   # column: text  # Auto-detected if not set
 
@@ -53,14 +63,15 @@ max_output_tokens: 128
 min_output_tokens: 0
 
 # -----------------------------------------------------------------------------
-# GPU CONFIGURATION MADE AVAILABLE TO TOOL
+# GPU CONFIGURATION
 # -----------------------------------------------------------------------------
 gpus: [0, 1]
 
 # -----------------------------------------------------------------------------
 # PRECISION
 # -----------------------------------------------------------------------------
-fp_precision: float16  # float32 | float16 | bfloat16
+# Note: float32 NOT recommended for TensorRT-LLM
+fp_precision: float16  # float16 | bfloat16
 
 # -----------------------------------------------------------------------------
 # BACKEND
@@ -68,78 +79,42 @@ fp_precision: float16  # float32 | float16 | bfloat16
 backend: tensorrt
 
 # -----------------------------------------------------------------------------
-# MODEL PROPERTIES
+# UNIVERSAL DECODER SETTINGS
 # -----------------------------------------------------------------------------
-is_encoder_decoder: false
-task_type: text_generation
-inference_type: pure_generative
-
-# -----------------------------------------------------------------------------
-# BATCHING CONFIGURATION
-# -----------------------------------------------------------------------------
-# Note: batch_size only applies to static strategies (static, sorted_static).
-# Dynamic strategies (dynamic, sorted_dynamic) ignore batch_size and use
-# max_tokens_per_batch to group prompts by token budget instead.
-batching:
-  strategy: sorted_dynamic  # static | dynamic | sorted_static | sorted_dynamic
-  batch_size: 4             # Only used with static/sorted_static strategies
-  max_tokens_per_batch: null  # Only used with dynamic/sorted_dynamic strategies
-
-# -----------------------------------------------------------------------------
-# PARALLELISM CONFIGURATION (Multi-GPU)
-# -----------------------------------------------------------------------------
-parallelism:
-  # TensorRT supports all strategies:
-  # - none: Single GPU
-  # - tensor_parallel: Split layers horizontally
-  # - pipeline_parallel: Split model vertically into stages
-  # - data_parallel: Replicate model, split batches
-  strategy: none
-  degree: 1  # Use degree > 1 with tensor_parallel or data_parallel
-  # tp_plan: auto
-
-# -----------------------------------------------------------------------------
-# DECODER / GENERATION SETTINGS
-# -----------------------------------------------------------------------------
-# Choose ONE approach:
-#   1. Use preset (recommended): sets all sampling params automatically
-#   2. Set individual params: leave preset: null
+# These sampling params have identical semantics across all backends.
+# Note: TensorRT-LLM has LIMITED sampling support compared to PyTorch/vLLM.
+#   - min_p: NOT supported
+#   - no_repeat_ngram_size: NOT supported
+#   - beam_search: Limited support
 #
-# If BOTH are set, preset values apply first, then individual params override.
-# This is typically not recommended - use one or the other.
+# top_k (Universal):
+#   All backends support top_k with the same semantics. The "disabled"
+#   convention differs: PyTorch/TensorRT use 0, vLLM uses -1.
+#   Set top_k=0 to disable; backends handle the conversion internally.
 decoder:
-  preset: null  # deterministic | standard | creative | factual | null
+  preset: standard  # deterministic | standard | creative | factual | null
 
-  # Individual params (only meaningful when preset: null)
-  temperature: 1.0
+  # Individual params (only meaningful when preset: null, or to override preset)
+  temperature: 0.7
   do_sample: true
-  top_p: 1.0
-  top_k: 50
-  min_p: 0.0
-  repetition_penalty: 1.0
-  no_repeat_ngram_size: 0
-
-  beam_search:
-    enabled: false
-    num_beams: 1
-    length_penalty: 1.0
-    early_stopping: false
-    no_repeat_ngram_size: 0
+  top_k: 40         # Top-k sampling (0 = disabled) - UNIVERSAL across all backends
+  top_p: 0.9
+  repetition_penalty: 1.1
 
 # -----------------------------------------------------------------------------
 # TRAFFIC SIMULATION
 # -----------------------------------------------------------------------------
 traffic_simulation:
-  enabled: false
+  enabled: true
   mode: poisson
-  target_qps: 1.0
-  seed: null
+  target_qps: 10.0
+  seed: 42
 
 # -----------------------------------------------------------------------------
 # STREAMING
 # -----------------------------------------------------------------------------
-streaming: false
-streaming_warmup_requests: 5
+streaming: true
+streaming_warmup_requests: 10
 
 # -----------------------------------------------------------------------------
 # SCHEDULE
@@ -160,27 +135,31 @@ io:
 # -----------------------------------------------------------------------------
 # EXPERIMENT TRACKING
 # -----------------------------------------------------------------------------
-num_cycles: 1
-query_rate: 1.0
-random_seed: null
-save_outputs: false
-decode_token_to_text: false
+num_cycles: 3
+query_rate: 10.0
+random_seed: 42
+save_outputs: true
+decode_token_to_text: true
 
 # -----------------------------------------------------------------------------
-# TENSORRT-LLM SPECIFIC CONFIGURATION
+# EXTRA METADATA
 # -----------------------------------------------------------------------------
-# This section contains TensorRT-LLM-specific parameters for the compiled engine.
-# These settings are IN ADDITION to the shared config above (model, batching, decoder, etc.).
+extra_metadata: {}
+
+# =============================================================================
+# TIER 2: TENSORRT-SPECIFIC CONFIGURATION
+# =============================================================================
+# All TensorRT-LLM-specific parameters using native naming conventions.
+# These map directly to trtllm-build and TensorRT-LLM runtime.
 #
-# Key relationships to shared config:
-# - parallelism.degree → sets tensor_parallel_size for engine build
-# - batching.batch_size → limited by tensorrt.max_batch_size (compile-time limit)
-# - decoder.* → converted to TensorRT-LLM sampling config
-# - quantization.* → overridden by tensorrt.quantization.method
-#
-# Most users only need to adjust: max_batch_size, quantization.method, builder_opt_level
-#
-# IMPORTANT: Requires TensorRT-LLM to be installed. Not available on all systems.
+# Key differences from PyTorch/vLLM:
+# - Compiled engine: TRT-LLM compiles optimised inference plans
+# - max_batch_size is compile-time: Cannot exceed at runtime
+# - Inflight batching: TRT-LLM manages batching internally
+# - Quantization: Uses TRT-native methods (fp8, int8_sq, int4_awq), NOT BitsAndBytes
+# - Limited sampling: min_p and no_repeat_ngram_size NOT supported
+# - top_k: Now in universal decoder config above
+
 tensorrt:
   # ===========================================================================
   # Engine Source
@@ -188,76 +167,68 @@ tensorrt:
   # Path to pre-compiled TRT engine directory
   # If not set, engine will be built from HuggingFace checkpoint
   engine_path: null
+  force_rebuild: false  # Force rebuild even if cached
+  engine_cache_dir: null  # Default: ~/.cache/llm-energy-measure/tensorrt-engines/
 
   # ===========================================================================
-  # Build Configuration (used when compiling from HF checkpoint)
+  # Build Configuration (compile-time)
   # ===========================================================================
-  max_batch_size: 8              # Maximum batch size for compiled engine (1-256)
-  max_input_len: null            # Maximum input sequence length (null=model default)
-  max_output_len: null           # Maximum output tokens (null=config.max_output_tokens)
-  builder_opt_level: 3           # Optimisation level 0-5 (higher=slower build, faster inference)
-  strongly_typed: true           # Strong typing for FP8 (recommended for Hopper+)
+  # Native trtllm-build parameters
+  max_batch_size: 16  # Maximum batch size for compiled engine (1-256)
+  max_input_len: 1024  # Maximum input sequence length (null = model's max_position_embeddings)
+  max_output_len: 256  # Maximum output tokens (null = config.max_output_tokens)
+  builder_opt_level: 4  # Optimisation level 0-5 (higher = slower build, faster inference)
+  strongly_typed: true  # Strong typing for FP8 (required for Hopper+)
+  multiple_profiles: true  # Multiple TensorRT profiles for different input shapes
 
   # ===========================================================================
-  # Quantization (TensorRT-specific methods)
+  # Parallelism
   # ===========================================================================
-  quantization:
-    # Methods:
-    # - none: No quantization (FP16/BF16)
-    # - fp8: FP8 quantization (Hopper+ GPUs, minimal accuracy loss)
-    # - int8_sq: INT8 SmoothQuant (requires calibration)
-    # - int8_weight_only: INT8 weights, FP16 compute
-    # - int4_awq: INT4 AWQ (pre-quantized checkpoint)
-    # - int4_gptq: INT4 GPTQ (pre-quantized checkpoint)
-    method: none
-
-    # Calibration config (required for int8_sq)
-    calibration: null
-    # calibration:
-    #   dataset: wikitext        # HuggingFace dataset for calibration
-    #   split: train
-    #   num_samples: 512         # Samples for calibration (64-4096)
-    #   max_length: 2048         # Max sequence length for calibration
-
-  # ===========================================================================
-  # Parallelism (supplements shared parallelism config)
-  # ===========================================================================
-  # Note: Use parallelism.degree with strategy=tensor_parallel for TP
+  # Native TRT-LLM parameters - compile-time setting
+  tp_size: 2  # Tensor parallel size (split layers across GPUs)
   pp_size: 1  # Pipeline parallel size (for very large models)
 
   # ===========================================================================
-  # Build Optimisation
+  # Quantization
   # ===========================================================================
-  multiple_profiles: false  # Multiple TensorRT profiles for different input shapes
+  # Native TRT-LLM quantization methods - applied during build
+  # Note: BitsAndBytes NOT supported. Use these native methods instead.
+  quantization: none  # none | fp8 | int8_sq | int8_weight_only | int4_awq | int4_gptq
+
+  # Calibration config (required for int8_sq)
+  calibration: null
+  # calibration:
+  #   dataset: wikitext  # HuggingFace dataset for calibration
+  #   split: train
+  #   num_samples: 512  # Samples for calibration (64-4096)
+  #   max_length: 2048  # Max sequence length for calibration
 
   # ===========================================================================
   # Runtime Options
   # ===========================================================================
-  kv_cache_type: paged           # paged (memory efficient) | continuous
-  enable_chunked_context: true   # Chunked context for long sequences
-  max_num_tokens: null           # Maximum tokens per iteration (inflight batching)
-  gpu_memory_utilization: 0.9    # Fraction of GPU memory for KV cache (0.5-0.99)
-  enable_kv_cache_reuse: false   # KV cache reuse for prefix caching (high energy impact)
+  # Native TRT-LLM executor parameters
+  kv_cache_type: paged  # paged (memory efficient) | continuous
+  enable_chunked_context: true  # Chunked context for long sequences
+  enable_kv_cache_reuse: true  # KV cache reuse for prefix caching
+  gpu_memory_utilization: 0.9  # Fraction of GPU memory for KV cache (0.5-0.99)
+  max_num_tokens: 8192  # Maximum tokens per iteration (for inflight batching)
 
   # ===========================================================================
-  # Cache Control
+  # Decoder Extensions (TensorRT-specific)
   # ===========================================================================
-  engine_cache_dir: null   # Directory for caching compiled engines
-  force_rebuild: false     # Force engine rebuild even if cached
+  # Note: TensorRT-LLM has LIMITED sampling support:
+  # - top_k: Now in universal decoder config above
+  # - min_p: NOT supported by TensorRT-LLM
+  # - no_repeat_ngram_size: NOT supported by TensorRT-LLM
 
   # ===========================================================================
   # Speculative Decoding
   # ===========================================================================
-  draft_model: null        # Draft model for speculative decoding
-  num_draft_tokens: 5      # Tokens to speculate per step (1-10)
+  draft_model: null  # Draft model for speculative decoding
+  num_draft_tokens: 5  # Tokens to speculate per step (1-10)
 
   # ===========================================================================
   # Escape Hatches
   # ===========================================================================
-  extra_build_args: {}     # Additional kwargs for trtllm-build
-  extra_runtime_args: {}   # Additional kwargs for TRT-LLM runtime
-
-# -----------------------------------------------------------------------------
-# EXTRA METADATA
-# -----------------------------------------------------------------------------
-extra_metadata: {}
+  extra_build_args: {}  # Additional kwargs for trtllm-build
+  extra_runtime_args: {}  # Additional kwargs for TRT-LLM runtime

@@ -92,13 +92,19 @@ class FlopsEstimator:
         if config is None:
             return "fp16"
 
-        # BNB always dequantizes to FP16 for compute
-        if config.quantization.quantization:
-            return "fp16"
+        # Check for BNB quantization in PyTorch config
+        pytorch_cfg = config.pytorch
+        if pytorch_cfg and (pytorch_cfg.load_in_4bit or pytorch_cfg.load_in_8bit):
+            # BNB always dequantizes to FP16 (or bfloat16 for 4bit compute dtype)
+            return pytorch_cfg.bnb_4bit_compute_dtype if pytorch_cfg.load_in_4bit else "fp16"
 
-        # Get torch_dtype if it exists on the config
-        torch_dtype = getattr(config, "torch_dtype", None)
-        return torch_dtype or "fp16"
+        # Use the config's fp_precision
+        precision = config.fp_precision.lower()
+        if precision in ("float32", "fp32"):
+            return "fp32"
+        if precision in ("bfloat16", "bf16"):
+            return "bf16"
+        return "fp16"
 
     def _try_calflops(
         self,
