@@ -923,23 +923,9 @@ def aggregate_cmd(
         raise typer.Exit(1)
 
 
-# Re-export moved functions for backward compatibility
-from llm_energy_measure.cli.batch import batch_run_cmd  # noqa: E402
-from llm_energy_measure.cli.listing import (  # noqa: E402
-    list_datasets_cmd,
-    list_gpus_cmd,
-    list_presets_cmd,
-)
-from llm_energy_measure.cli.schedule import schedule_experiment_cmd  # noqa: E402
-
 __all__ = [
     "aggregate_cmd",
-    "batch_run_cmd",
     "experiment_cmd",
-    "list_datasets_cmd",
-    "list_gpus_cmd",
-    "list_presets_cmd",
     "resolve_prompts",
     "run_cmd",
-    "schedule_experiment_cmd",
 ]

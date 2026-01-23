@@ -9,13 +9,13 @@
 #
 # Examples:
 #   # PyTorch backend (default)
-#   docker compose run --rm pytorch llm-energy-measure experiment configs/example_pytorch.yaml
+#   docker compose run --rm pytorch llm-energy-measure experiment configs/examples/pytorch_example.yaml
 #
 #   # vLLM backend
-#   docker compose run --rm vllm llm-energy-measure experiment configs/example_vllm.yaml
+#   docker compose run --rm vllm llm-energy-measure experiment configs/examples/vllm_example.yaml
 #
 #   # TensorRT backend
-#   docker compose run --rm tensorrt llm-energy-measure experiment configs/example_tensorrt.yaml
+#   docker compose run --rm tensorrt llm-energy-measure experiment configs/examples/tensorrt_example.yaml
 #   # Development with PyTorch
 #   docker compose --profile dev run --rm pytorch-dev /bin/bash
 #
