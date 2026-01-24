@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10-dev \
     python3-pip \
     build-essential \
+    ninja-build \
     libgomp1 \
     libxcb1 \
     git \

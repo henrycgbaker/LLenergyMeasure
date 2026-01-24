@@ -748,6 +748,12 @@ class TensorRTBackend:
                     if hasattr(output, "prompt_token_ids"):
                         total_input_tokens += len(output.prompt_token_ids)
 
+                    # Try to get TTFT from TRT-LLM metrics if available (works regardless of outputs)
+                    if hasattr(output, "metrics") and output.metrics is not None:
+                        metrics = output.metrics
+                        if hasattr(metrics, "time_to_first_token"):
+                            first_token_time = metrics.time_to_first_token * 1000
+
                     if hasattr(output, "outputs") and output.outputs:
                         completion = output.outputs[0]
                         num_tokens = (
@@ -757,12 +763,6 @@ class TensorRTBackend:
 
                         if hasattr(completion, "text"):
                             output_texts.append(completion.text)
-
-                        # Try to get TTFT from TRT-LLM metrics if available
-                        if hasattr(output, "metrics") and output.metrics is not None:
-                            metrics = output.metrics
-                            if hasattr(metrics, "time_to_first_token"):
-                                first_token_time = metrics.time_to_first_token * 1000
 
                         # If no TTFT from metrics, estimate from request time
                         if first_token_time is None and num_tokens > 0:
@@ -783,6 +783,29 @@ class TensorRTBackend:
                                 token_times.append(first_token_time + (i * time_per_token))
 
                         token_timestamps_per_request.append(token_times)
+                    else:
+                        # Handle empty outputs - TensorRT returned no completion tokens
+                        # Use request-level timing as fallback TTFT estimate
+                        if first_token_time is None:
+                            first_token_time = total_time_ms
+                        ttft_samples.append(first_token_time)
+                        token_timestamps_per_request.append([first_token_time])
+                        input_len = (
+                            len(output.prompt_token_ids)
+                            if hasattr(output, "prompt_token_ids")
+                            else 0
+                        )
+                        logger.warning(
+                            f"TensorRT returned empty outputs for prompt "
+                            f"(input_length={input_len}). "
+                            f"Using request timing as TTFT estimate: {first_token_time:.1f}ms"
+                        )
+                else:
+                    # Handle complete failure - no outputs at all
+                    logger.warning(
+                        f"TensorRT generate() returned no outputs for prompt. "
+                        f"Request time: {total_time_ms:.1f}ms"
+                    )
 
                 # Update progress
                 progress.update(1, latency_ms=first_token_time)

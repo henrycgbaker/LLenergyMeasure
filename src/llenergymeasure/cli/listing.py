@@ -14,6 +14,7 @@ def list_datasets_cmd() -> None:
     """List built-in dataset aliases for prompts.
 
     These aliases can be used with --dataset option or in config files.
+    Descriptions are from SSOT in config/models.py BUILTIN_DATASETS.
     """
     table = Table(title="Built-in Dataset Aliases")
     table.add_column("Alias", style="cyan")
@@ -21,19 +22,13 @@ def list_datasets_cmd() -> None:
     table.add_column("Column")
     table.add_column("Description")
 
-    descriptions = {
-        "alpaca": "Instruction-following prompts (52k)",
-        "sharegpt": "Real user conversations",
-        "gsm8k": "Primary school maths reasoning",
-        "mmlu": "Multi-task knowledge questions",
-    }
-
+    # SSOT: descriptions come from BUILTIN_DATASETS in config/models.py
     for alias, info in list_builtin_datasets().items():
         table.add_row(
             alias,
             info["path"],
             info.get("column", "auto"),
-            descriptions.get(alias, ""),
+            info.get("description", ""),  # SSOT: description from models.py
         )
 
     console.print(table)
@@ -45,19 +40,18 @@ def list_presets_cmd() -> None:
 
     Presets provide sensible defaults for common experiment scenarios.
     Use with: lem experiment --preset <name> --model <model>
+    Descriptions are from SSOT in constants.py PRESETS[name]["_meta"].
     """
     table = Table(title="Built-in Presets")
     table.add_column("Name", style="cyan")
     table.add_column("Description", style="green")
     table.add_column("Key Settings")
 
-    preset_descriptions = {
-        "quick-test": "Fast validation runs",
-        "benchmark": "Formal benchmark measurements",
-        "throughput": "Throughput-optimised testing",
-    }
-
     for name, config in PRESETS.items():
+        # SSOT: description from _meta in constants.py
+        meta = config.get("_meta", {})
+        description = meta.get("description", "")
+
         settings = []
         if "max_input_tokens" in config:
             settings.append(f"max_in={config['max_input_tokens']}")
@@ -70,7 +64,7 @@ def list_presets_cmd() -> None:
 
         table.add_row(
             name,
-            preset_descriptions.get(name, ""),
+            description,  # SSOT: from _meta
             ", ".join(settings),
         )
 

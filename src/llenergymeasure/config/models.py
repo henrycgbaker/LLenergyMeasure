@@ -26,40 +26,47 @@ if TYPE_CHECKING:
 # Default dataset for experiments (AI Energy Score standardised benchmark)
 DEFAULT_DATASET = "ai-energy-score"
 
-# Built-in dataset aliases for prompt loading
+# Built-in dataset aliases for prompt loading (SSOT for CLI + docs)
+# Each entry includes metadata used by: CLI listing, doc generation, tests
 BUILTIN_DATASETS: dict[str, dict[str, str]] = {
     "ai-energy-score": {
         "path": "AIEnergyScore/text_generation",
         "column": "text",
         "split": "train",
+        "description": "AI Energy Score benchmark (default)",
     },
     # Underscore variant for YAML convenience
     "ai_energy_score": {
         "path": "AIEnergyScore/text_generation",
         "column": "text",
         "split": "train",
+        "description": "AI Energy Score benchmark (alias)",
     },
     "alpaca": {
         "path": "tatsu-lab/alpaca",
         "column": "instruction",
         "split": "train",
+        "description": "Instruction-following prompts (52k)",
     },
     "sharegpt": {
         "path": "anon8231489123/ShareGPT_Vicuna_unfiltered",
         "column": "conversations",
         "split": "train",
+        "description": "Real user conversations",
     },
     "gsm8k": {
         "path": "gsm8k",
         "subset": "main",
         "column": "question",
         "split": "train",
+        "description": "Primary school maths reasoning",
     },
     "mmlu": {
         "path": "cais/mmlu",
         "subset": "all",
         "column": "question",
         "split": "test",
+        "description": "Multi-task knowledge questions",
     },
 }
 

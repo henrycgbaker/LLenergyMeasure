@@ -1,13 +1,13 @@
 # Parameter Support Matrix
 
 > Auto-generated from test results. Run `python scripts/generate_param_matrix.py` to update.
-> Last updated: 2026-01-22 23:54
+> Last updated: 2026-01-24 14:11
 
 ## Summary
 
-- **PYTORCH**: 0/3 (0.0%)
-- **VLLM**: 0/83 (0.0%)
-- **TENSORRT**: 0/65 (0.0%)
+- **PYTORCH**: 3/3 (100.0%) [failed: 0, skipped: 0]
+- **VLLM**: 68/83 (81.9%) [failed: 15, skipped: 0]
+- **TENSORRT**: 61/65 (93.8%) [failed: 4, skipped: 0]
 
 ## Legend
 

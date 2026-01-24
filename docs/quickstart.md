@@ -6,8 +6,8 @@ This guide walks you through your first LLM efficiency measurement experiment.
 
 ```bash
 # Clone and setup
-git clone https://github.com/henrycgbaker/LLefficiencyMeasure
-cd LLefficiencyMeasure
+git clone https://github.com/henrycgbaker/LLenergyMeasure
+cd LLenergyMeasure
 ./setup.sh
 
 # Run your first experiment
@@ -49,8 +49,8 @@ The simplest way to get started. Each backend runs in an isolated container.
 
 ```bash
 # Clone
-git clone https://github.com/henrycgbaker/LLefficiencyMeasure
-cd LLefficiencyMeasure
+git clone https://github.com/henrycgbaker/LLenergyMeasure
+cd LLenergyMeasure
 
 # One-click setup (creates .env, builds PyTorch image, creates lem wrapper)
 ./setup.sh
@@ -79,8 +79,8 @@ Use this for development or if you only need **one backend**.
 
 ```bash
 # Clone
-git clone https://github.com/henrycgbaker/LLefficiencyMeasure
-cd LLefficiencyMeasure
+git clone https://github.com/henrycgbaker/LLenergyMeasure
+cd LLenergyMeasure
 
 # Local install mode
 ./setup.sh --local

@@ -1,7 +1,7 @@
 # Configuration Reference
 
 > This file is auto-generated from Pydantic models. Do not edit manually.
-> Generated: 2026-01-22 23:54:17
+> Generated: 2026-01-24
 
 ## Table of Contents
 
@@ -229,6 +229,9 @@ Presets provide convenient defaults for common use cases.
 ### benchmark
 
 ```yaml
+_meta:
+  description: "Formal benchmark measurements"
+  use_case: "Reproducible benchmarks, paper results"
 max_input_tokens: 2048
 max_output_tokens: 512
 fp_precision: "float16"
@@ -241,6 +244,9 @@ decoder:
 ### pytorch-compatible
 
 ```yaml
+_meta:
+  description: "PyTorch maximum compatibility"
+  use_case: "Older GPUs, debugging, model issues"
 backend: "pytorch"
 max_input_tokens: 2048
 max_output_tokens: 512
@@ -255,6 +261,9 @@ pytorch:
 ### pytorch-optimized
 
 ```yaml
+_meta:
+  description: "PyTorch with Flash Attention + compile"
+  use_case: "Best PyTorch performance (Ampere+ GPU)"
 backend: "pytorch"
 max_input_tokens: 2048
 max_output_tokens: 512
@@ -269,6 +278,9 @@ pytorch:
 ### pytorch-speculative
 
 ```yaml
+_meta:
+  description: "PyTorch with assisted generation"
+  use_case: "Speculative decoding for lower latency"
 backend: "pytorch"
 max_input_tokens: 2048
 max_output_tokens: 256
@@ -284,6 +296,9 @@ pytorch:
 ### quick-test
 
 ```yaml
+_meta:
+  description: "Fast validation runs"
+  use_case: "Quick sanity checks, CI testing"
 max_input_tokens: 64
 max_output_tokens: 32
 num_processes: 1
@@ -297,6 +312,9 @@ decoder:
 ### throughput
 
 ```yaml
+_meta:
+  description: "Throughput-optimised testing"
+  use_case: "Maximum tokens/second measurement"
 max_input_tokens: 512
 max_output_tokens: 256
 fp_precision: "float16"
@@ -310,6 +328,9 @@ decoder:
 ### vllm-low-latency
 
 ```yaml
+_meta:
+  description: "vLLM optimised for TTFT"
+  use_case: "Interactive chat, low first-token latency"
 backend: "vllm"
 max_input_tokens: 512
 max_output_tokens: 128
@@ -325,6 +346,9 @@ vllm:
 ### vllm-memory-efficient
 
 ```yaml
+_meta:
+  description: "vLLM with FP8 KV cache"
+  use_case: "Large context, memory-constrained GPUs"
 backend: "vllm"
 max_input_tokens: 4096
 max_output_tokens: 512
@@ -340,6 +364,9 @@ vllm:
 ### vllm-speculative
 
 ```yaml
+_meta:
+  description: "vLLM with speculative decoding"
+  use_case: "Lower latency via n-gram speculation"
 backend: "vllm"
 max_input_tokens: 2048
 max_output_tokens: 256
@@ -356,6 +383,9 @@ vllm:
 ### vllm-throughput
 
 ```yaml
+_meta:
+  description: "vLLM high-throughput serving"
+  use_case: "Production serving, max tokens/second"
 backend: "vllm"
 max_input_tokens: 2048
 max_output_tokens: 512

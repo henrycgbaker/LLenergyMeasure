@@ -1,7 +1,7 @@
 # Invalid Parameter Combinations
 
 > Auto-generated from config validators and test results.
-> Last updated: 2026-01-22 23:54
+> Last updated: 2026-01-24 14:11
 
 This document lists parameter combinations that will fail validation or runtime.
 The tool validates these at config load time and provides clear error messages.
@@ -13,13 +13,35 @@ These combinations are rejected at config load time with a clear error message.
 | Backend | Invalid Combination | Reason | Resolution |
 |---------|---------------------|--------|------------|
 | pytorch | `parallelism.strategy=pipeline_parallel` | PyTorch's generate() requires full model access for autoregressive generation | Use backend='vllm' or backend='tensorrt' for pipeline parallel |
-| vllm | `parallelism.strategy=data_parallel` | vLLM manages multi-GPU internally via Ray/tensor parallel | Use parallelism.strategy='tensor_parallel' or 'pipeline_parallel' |
-| vllm | `quantization.load_in_8bit=True` | vLLM does not support bitsandbytes 8-bit quantization | Use vllm.quantization_method (awq, gptq, fp8) for quantized inference |
+| vllm | `parallelism.strategy=data_parallel` | vLLM manages multi-GPU internally via Ray/tensor parallel | Use tensor_parallel_size or pipeline_parallel_size |
+| vllm | `quantization.load_in_8bit=True` | vLLM does not support bitsandbytes 8-bit quantization | Use vllm.quantization (awq, gptq, fp8) for quantized inference |
 | tensorrt | `fp_precision=float32` | TensorRT-LLM is optimised for lower precision inference | Use fp_precision='float16' or 'bfloat16' |
-| tensorrt | `quantization.load_in_4bit=True` | TensorRT does not support bitsandbytes quantization | Use tensorrt.quantization.method (fp8, int8_sq, int4_awq) |
-| tensorrt | `quantization.load_in_8bit=True` | TensorRT does not support bitsandbytes quantization | Use tensorrt.quantization.method (fp8, int8_sq, int8_weight_only) |
-| all | `quantization.quantization=True (without method)` | quantization flag alone doesn't specify which method to use | Set load_in_4bit=True or load_in_8bit=True |
+| tensorrt | `quantization.load_in_4bit=True` | TensorRT does not support bitsandbytes quantization | Use tensorrt.quantization (fp8, int8_sq, int4_awq) |
+| tensorrt | `quantization.load_in_8bit=True` | TensorRT does not support bitsandbytes quantization | Use tensorrt.quantization (fp8, int8_sq, int8_weight_only) |
 | all | `quantization.load_in_4bit + load_in_8bit` | Cannot use both 4-bit and 8-bit quantization simultaneously | Choose one: load_in_4bit=True OR load_in_8bit=True |
+
+## Streaming Mode Constraints
+
+When `streaming=True`, certain parameters are ignored or behave differently
+because streaming requires sequential per-request processing to measure TTFT/ITL.
+
+| Backend | Parameter | Behaviour with streaming=True | Impact |
+|---------|-----------|------------------------------|--------|
+| pytorch | `pytorch.batch_size` | Ignored - streaming processes 1 request at a time | See docs |
+| pytorch | `pytorch.batching_strategy` | Ignored - always sequential in streaming mode | See docs |
+| vllm | `vllm.max_num_seqs` | Effectively 1 in streaming mode for accurate TTFT | See docs |
+| pytorch | `pytorch.torch_compile` | May cause graph-tracing errors, falls back to uncompiled | See docs |
+| vllm | `vllm.enable_chunked_prefill` | May interfere with TTFT measurement accuracy | See docs |
+
+**When to use streaming=True:**
+- Measuring user-perceived latency (TTFT, ITL)
+- Evaluating real-time chat/assistant workloads
+- MLPerf inference latency benchmarks
+
+**When to use streaming=False:**
+- Throughput benchmarking
+- Batch processing workloads
+- torch.compile optimisation testing
 
 ## Runtime Limitations
 
@@ -43,7 +65,8 @@ due to hardware, model, or package requirements.
 | Tensor Parallel | ✅ | ✅ | ✅ |
 | Pipeline Parallel | ❌ | ✅ | ✅ |
 | Data Parallel | ✅ | ❌ | ✅ |
-| BitsAndBytes (4/8-bit) | ✅ | ❌¹ | ❌ |
+| BitsAndBytes (4-bit) | ✅ | ❌ | ❌ |
+| BitsAndBytes (8-bit) | ✅ | ❌ | ❌ |
 | Native Quantization | ❌ | ✅ (AWQ/GPTQ/FP8) | ✅ (FP8/INT8) |
 | float32 precision | ✅ | ✅ | ❌ |
 | float16 precision | ✅ | ✅ | ✅ |
@@ -52,7 +75,9 @@ due to hardware, model, or package requirements.
 | LoRA Adapters | ✅ | ✅ | ✅ |
 | Speculative Decoding | ✅ | ✅ | ✅ |
 
-¹ vLLM supports 4-bit via AWQ/GPTQ quantized models, not bitsandbytes
+**Notes:**
+- vLLM supports 4-bit via AWQ/GPTQ quantized models, not bitsandbytes
+- TensorRT-LLM is optimised for FP16/BF16/INT8 precision, not FP32
 
 ## Recommended Configurations by Use Case
 

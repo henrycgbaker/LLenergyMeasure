@@ -84,7 +84,7 @@ services:
     <<: *common
     volumes:
       # Bind mounts: user-accessible data
-      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
+      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
       - ./scripts:/app/scripts:ro
       # Named volumes: container-managed (no permission issues)
@@ -128,7 +128,7 @@ services:
     ipc: host
     volumes:
       # Bind mounts: user-accessible data
-      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
+      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
       - ./scripts:/app/scripts:ro
       # Named volumes: container-managed (no permission issues)
@@ -174,7 +174,7 @@ services:
     ipc: host
     volumes:
       # Bind mounts: user-accessible data
-      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs:ro
+      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
       - ./scripts:/app/scripts:ro
       # Named volumes: container-managed (no permission issues)
@@ -232,8 +232,8 @@ services:
 # They persist unless you explicitly run: docker compose down -v
 #
 # To clear specific volumes:
-#   docker volume rm llm-efficiency-measurement-tool_hf-cache
-#   docker volume rm llm-efficiency-measurement-tool_experiment-state
+#   docker volume rm llenergymeasure_hf-cache
+#   docker volume rm llenergymeasure_experiment-state
 #
 volumes:
   # HuggingFace model cache (10-100+ GB)

@@ -308,7 +308,7 @@ class VLLMAttentionConfig(BaseModel):
     Set via VLLM_ATTENTION_BACKEND environment variable internally.
     """
 
-    backend: Literal["auto", "FLASH_ATTN", "FLASHINFER", "TORCH_SDPA"] = Field(
+    backend: Literal["auto", "FLASH_ATTN", "FLASHINFER"] = Field(
         default="auto",
         description="Attention backend (auto=let vLLM decide)",
     )
@@ -547,11 +547,7 @@ class VLLMConfig(BaseModel):
     # =========================================================================
     # Advanced Sampling (vLLM-specific)
     # =========================================================================
-    best_of: int | None = Field(
-        default=None,
-        ge=1,
-        description="Generate N sequences, return best (requires swap_space)",
-    )
+    # Note: best_of was removed in vLLM v1 (use beam search or repetition instead)
     logprobs: int | None = Field(
         default=None,
         ge=1,

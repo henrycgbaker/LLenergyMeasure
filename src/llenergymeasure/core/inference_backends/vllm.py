@@ -491,8 +491,7 @@ class VLLMBackend:
                 params["min_p"] = vllm_cfg.min_p
 
             # Advanced sampling (vLLM-specific)
-            if vllm_cfg.best_of is not None and vllm_cfg.best_of > 1:
-                params["best_of"] = vllm_cfg.best_of
+            # Note: best_of was removed in vLLM v1
             if vllm_cfg.logprobs is not None:
                 params["logprobs"] = vllm_cfg.logprobs
             if vllm_cfg.logit_bias:
@@ -671,19 +670,21 @@ class VLLMBackend:
                     output = outputs[0]
                     total_input_tokens += len(output.prompt_token_ids)
 
+                    # Extract TTFT from vLLM metrics if available (works regardless of outputs)
+                    if hasattr(output, "metrics") and output.metrics is not None:
+                        metrics = output.metrics
+                        if hasattr(metrics, "time_to_first_token"):
+                            first_token_time = metrics.time_to_first_token * 1000
+                        elif hasattr(metrics, "first_token_time"):
+                            first_token_time = metrics.first_token_time * 1000
+
                     if output.outputs:
                         completion = output.outputs[0]
                         num_tokens = len(completion.token_ids)
                         total_output_tokens += num_tokens
                         output_texts.append(completion.text)
 
-                        if hasattr(output, "metrics") and output.metrics is not None:
-                            metrics = output.metrics
-                            if hasattr(metrics, "time_to_first_token"):
-                                first_token_time = metrics.time_to_first_token * 1000
-                            elif hasattr(metrics, "first_token_time"):
-                                first_token_time = metrics.first_token_time * 1000
-
+                        # Fallback TTFT estimation if metrics unavailable
                         if first_token_time is None:
                             request_end = time.perf_counter()
                             total_time_ms = (request_end - request_start) * 1000
@@ -707,6 +708,28 @@ class VLLMBackend:
                                 token_times.append(first_token_time + (i * time_per_token))
 
                         token_timestamps_per_request.append(token_times)
+                    else:
+                        # Handle empty outputs - vLLM returned no completion tokens
+                        # Use request-level timing as fallback TTFT estimate
+                        request_end = time.perf_counter()
+                        total_time_ms = (request_end - request_start) * 1000
+                        if first_token_time is None:
+                            first_token_time = total_time_ms
+                        ttft_samples.append(first_token_time)
+                        token_timestamps_per_request.append([first_token_time])
+                        logger.warning(
+                            f"vLLM returned empty outputs for prompt "
+                            f"(length={len(output.prompt_token_ids)}). "
+                            f"Using request timing as TTFT estimate: {first_token_time:.1f}ms"
+                        )
+                else:
+                    # Handle complete failure - no outputs at all
+                    request_end = time.perf_counter()
+                    total_time_ms = (request_end - request_start) * 1000
+                    logger.warning(
+                        f"vLLM generate() returned no outputs for prompt. "
+                        f"Request time: {total_time_ms:.1f}ms"
+                    )
 
                 progress.update(1, latency_ms=first_token_time)
 

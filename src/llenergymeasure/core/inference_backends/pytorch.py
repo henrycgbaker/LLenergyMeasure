@@ -767,6 +767,20 @@ class PyTorchBackend:
 
             thread.join()
 
+            # Handle zero-token case: streamer produced no tokens
+            if num_tokens == 0:
+                request_end = time.perf_counter()
+                total_time_ms = (request_end - request_start) * 1000
+                # Use total request time as fallback TTFT estimate
+                first_token_time = total_time_ms
+                ttft_samples.append(first_token_time)
+                token_times.append(first_token_time)
+                logger.warning(
+                    f"Streamer produced zero tokens for prompt "
+                    f"(input_length={input_length}). "
+                    f"Using request timing as TTFT estimate: {first_token_time:.1f}ms"
+                )
+
             total_output_tokens += num_tokens
             output_texts.append(generated_text)
             token_timestamps_per_request.append(token_times)

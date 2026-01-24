@@ -147,7 +147,7 @@ def generate_markdown(fields: list[dict[str, Any]], presets: dict[str, Any]) -> 
         "# Configuration Reference",
         "",
         "> This file is auto-generated from Pydantic models. Do not edit manually.",
-        f"> Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"> Generated: {datetime.now().strftime('%Y-%m-%d')}",
         "",
         "## Table of Contents",
         "",

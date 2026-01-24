@@ -26,7 +26,8 @@ class TestVLLMAttentionConfig:
         assert config.disable_sliding_window is False
 
     def test_valid_backends(self):
-        for backend in ["auto", "FLASH_ATTN", "FLASHINFER", "TORCH_SDPA"]:
+        # Note: TORCH_SDPA was removed in vLLM v1 (not registered as valid backend)
+        for backend in ["auto", "FLASH_ATTN", "FLASHINFER"]:
             config = VLLMAttentionConfig(backend=backend)
             assert config.backend == backend
 
@@ -147,8 +148,7 @@ class TestVLLMConfig:
         assert config.lora is None
         assert config.quantization is None
         assert config.load_format == "auto"
-        assert config.best_of is None
-        # Note: use_beam_search and length_penalty moved to DecoderConfig.beam_search
+        # Note: best_of was removed in vLLM v1 (use beam search or repetition instead)
         assert config.logprobs is None
         assert config.logit_bias is None
         assert config.extra == {}
@@ -230,11 +230,7 @@ class TestVLLMConfig:
         with pytest.raises(ValidationError):
             VLLMConfig(logprobs=21)
 
-    def test_best_of_positive(self):
-        VLLMConfig(best_of=1)
-
-        with pytest.raises(ValidationError):
-            VLLMConfig(best_of=0)
+    # Note: test_best_of_positive removed - best_of was removed in vLLM v1
 
     def test_nested_attention_config(self):
         config = VLLMConfig(attention=VLLMAttentionConfig(backend="FLASH_ATTN", flash_version=2))
