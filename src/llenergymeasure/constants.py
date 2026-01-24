@@ -38,14 +38,22 @@ DEFAULT_FLOPS_TIMEOUT_SEC = 30
 DEFAULT_GPU_INFO_TIMEOUT_SEC = 10
 DEFAULT_SIGKILL_WAIT_SEC = 2
 
-# Built-in presets for quick experiment configuration
+# Built-in presets for quick experiment configuration (SSOT for CLI + docs)
 # Presets provide convenience defaults but NOT model (model is always required)
 # All presets use deterministic sampling for reproducible measurements
+#
+# Each preset includes _meta for CLI display and documentation:
+#   - description: Short description shown in `lem list presets`
+#   - use_case: When to use this preset
 PRESETS: dict[str, dict[str, Any]] = {
     # ==========================================================================
     # General presets (backend-agnostic)
     # ==========================================================================
     "quick-test": {
+        "_meta": {
+            "description": "Fast validation runs",
+            "use_case": "Quick sanity checks, CI testing",
+        },
         "max_input_tokens": 64,
         "max_output_tokens": 32,
         "num_processes": 1,
@@ -54,6 +62,10 @@ PRESETS: dict[str, dict[str, Any]] = {
         "decoder": {"preset": "deterministic"},  # Greedy for speed
     },
     "benchmark": {
+        "_meta": {
+            "description": "Formal benchmark measurements",
+            "use_case": "Reproducible benchmarks, paper results",
+        },
         "max_input_tokens": 2048,
         "max_output_tokens": 512,
         "fp_precision": "float16",
@@ -61,6 +73,10 @@ PRESETS: dict[str, dict[str, Any]] = {
         "decoder": {"preset": "deterministic"},  # Greedy for reproducibility
     },
     "throughput": {
+        "_meta": {
+            "description": "Throughput-optimised testing",
+            "use_case": "Maximum tokens/second measurement",
+        },
         "max_input_tokens": 512,
         "max_output_tokens": 256,
         "fp_precision": "float16",
@@ -71,6 +87,10 @@ PRESETS: dict[str, dict[str, Any]] = {
     # vLLM-specific presets
     # ==========================================================================
     "vllm-throughput": {
+        "_meta": {
+            "description": "vLLM high-throughput serving",
+            "use_case": "Production serving, max tokens/second",
+        },
         "backend": "vllm",
         "max_input_tokens": 2048,
         "max_output_tokens": 512,
@@ -83,6 +103,10 @@ PRESETS: dict[str, dict[str, Any]] = {
         },
     },
     "vllm-speculative": {
+        "_meta": {
+            "description": "vLLM with speculative decoding",
+            "use_case": "Lower latency via n-gram speculation",
+        },
         "backend": "vllm",
         "max_input_tokens": 2048,
         "max_output_tokens": 256,
@@ -97,6 +121,10 @@ PRESETS: dict[str, dict[str, Any]] = {
         },
     },
     "vllm-memory-efficient": {
+        "_meta": {
+            "description": "vLLM with FP8 KV cache",
+            "use_case": "Large context, memory-constrained GPUs",
+        },
         "backend": "vllm",
         "max_input_tokens": 4096,
         "max_output_tokens": 512,
@@ -109,6 +137,10 @@ PRESETS: dict[str, dict[str, Any]] = {
         },
     },
     "vllm-low-latency": {
+        "_meta": {
+            "description": "vLLM optimised for TTFT",
+            "use_case": "Interactive chat, low first-token latency",
+        },
         "backend": "vllm",
         "max_input_tokens": 512,
         "max_output_tokens": 128,
@@ -124,6 +156,10 @@ PRESETS: dict[str, dict[str, Any]] = {
     # PyTorch-specific presets
     # ==========================================================================
     "pytorch-optimized": {
+        "_meta": {
+            "description": "PyTorch with Flash Attention + compile",
+            "use_case": "Best PyTorch performance (Ampere+ GPU)",
+        },
         "backend": "pytorch",
         "max_input_tokens": 2048,
         "max_output_tokens": 512,
@@ -135,6 +171,10 @@ PRESETS: dict[str, dict[str, Any]] = {
         },
     },
     "pytorch-speculative": {
+        "_meta": {
+            "description": "PyTorch with assisted generation",
+            "use_case": "Speculative decoding for lower latency",
+        },
         "backend": "pytorch",
         "max_input_tokens": 2048,
         "max_output_tokens": 256,
@@ -148,6 +188,10 @@ PRESETS: dict[str, dict[str, Any]] = {
         },
     },
     "pytorch-compatible": {
+        "_meta": {
+            "description": "PyTorch maximum compatibility",
+            "use_case": "Older GPUs, debugging, model issues",
+        },
         "backend": "pytorch",
         "max_input_tokens": 2048,
         "max_output_tokens": 512,
@@ -159,6 +203,37 @@ PRESETS: dict[str, dict[str, Any]] = {
         },
     },
 }
+
+
+def get_preset_metadata(preset_name: str) -> dict[str, str] | None:
+    """Get metadata for a preset (SSOT accessor).
+
+    Args:
+        preset_name: Name of the preset.
+
+    Returns:
+        Dict with description and use_case, or None if preset not found.
+    """
+    preset = PRESETS.get(preset_name)
+    if preset:
+        return preset.get("_meta")
+    return None
+
+
+def get_preset_config(preset_name: str) -> dict[str, Any] | None:
+    """Get preset config without metadata (for applying to experiments).
+
+    Args:
+        preset_name: Name of the preset.
+
+    Returns:
+        Config dict (excluding _meta), or None if preset not found.
+    """
+    preset = PRESETS.get(preset_name)
+    if preset:
+        return {k: v for k, v in preset.items() if k != "_meta"}
+    return None
+
 
 # Alias for backward compatibility
 EXPERIMENT_PRESETS = PRESETS

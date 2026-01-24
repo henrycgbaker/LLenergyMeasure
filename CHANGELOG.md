@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-## [v2.0.0](https://github.com/henrycgbaker/LLefficiencyMeasure/releases/tag/v2.0.0) (2026-01-14)
+## [v2.0.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v2.0.0) (2026-01-14)
 
 Refactored CLI-based tool with clean architecture, comprehensive documentation, and improved configuration UX.
 
@@ -101,7 +101,7 @@ Refactored CLI-based tool with clean architecture, comprehensive documentation, 
 
 ---
 
-## [v1.16.0](https://github.com/henrycgbaker/LLefficiencyMeasure/releases/tag/v1.16.0) (2025-01-07)
+## [v1.16.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v1.16.0) (2025-01-07)
 
 Production-ready containerisation with full GPU support and streamlined developer experience.
 
@@ -135,7 +135,7 @@ Production-ready containerisation with full GPU support and streamlined develope
 
 ---
 
-## [v1.15.0](https://github.com/henrycgbaker/LLefficiencyMeasure/releases/tag/v1.15.0) (2025-12-21)
+## [v1.15.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v1.15.0) (2025-12-21)
 
 Comprehensive test coverage ensuring reliability across all components.
 
@@ -163,7 +163,7 @@ Comprehensive test coverage ensuring reliability across all components.
 
 ---
 
-## [v1.13.0](https://github.com/henrycgbaker/LLefficiencyMeasure/releases/tag/v1.13.0) (2025-12-21)
+## [v1.13.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v1.13.0) (2025-12-21)
 
 User-friendly command-line interface replacing legacy entry points.
 
@@ -202,7 +202,7 @@ lem results show exp_20240115_123456 --json
 
 ---
 
-## [v1.10.0](https://github.com/henrycgbaker/LLefficiencyMeasure/releases/tag/v1.10.0) (2025-12-20)
+## [v1.10.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v1.10.0) (2025-12-20)
 
 Major architectural refactor establishing clean module boundaries.
 
@@ -245,7 +245,7 @@ Major architectural refactor establishing clean module boundaries.
 
 ---
 
-## [v1.0.0](https://github.com/henrycgbaker/LLefficiencyMeasure/releases/tag/v1.0.0) (2025-12-16)
+## [v1.0.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v1.0.0) (2025-12-16)
 
 Research phase complete — stable multi-model benchmarking validated on production hardware.
 
@@ -280,7 +280,7 @@ Research phase complete — stable multi-model benchmarking validated on product
 
 ---
 
-## [v0.5.0](https://github.com/henrycgbaker/LLefficiencyMeasure/releases/tag/v0.5.0) (2025-03-22)
+## [v0.5.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v0.5.0) (2025-03-22)
 
 Core measurement functionality establishing the foundation for all subsequent development.
 

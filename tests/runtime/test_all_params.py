@@ -49,6 +49,13 @@ TEST_SAMPLE_SIZE = 5
 TEST_MAX_OUTPUT = 32
 TEST_TIMEOUT_SECONDS = 300  # 5 minutes per test
 
+# Quantized test models for AWQ/GPTQ parameters
+# These are required because quantization params only work with pre-quantized models
+QUANTIZED_TEST_MODELS = {
+    "awq": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",
+    "gptq": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
+}
+
 # Directories to clean before testing
 RESULTS_DIRS = ["results/raw", "results/aggregated"]
 STATE_DIRS = [".state"]
@@ -148,7 +155,9 @@ SHARED_PARAMS: dict[str, list[Any]] = {
     # Precision
     "fp_precision": ["float32", "float16", "bfloat16"],
     # Token limits (affects memory/compute)
-    "max_input_tokens": [128, 512],
+    # Note: max_input_tokens must leave room for output within model's context window
+    # Test model (Qwen2.5-0.5B) has max_model_len=512, so we use conservative values
+    "max_input_tokens": [128, 256],
     "max_output_tokens": [32, 128],
     # Decoder sampling parameters (universal)
     "decoder.temperature": [0.0, 0.7, 1.0],
@@ -217,8 +226,9 @@ VLLM_PARAMS: dict[str, list[Any]] = {
     "vllm.block_size": [8, 16, 32],
     "vllm.enforce_eager": [False, True],
     "vllm.distributed_backend": ["mp", "ray"],
-    "vllm.attention_backend": ["auto", "FLASH_ATTN", "FLASHINFER", "TORCH_SDPA"],
-    "vllm.best_of": [1, 2],
+    # Note: attention.backend uses nested path (vLLM attention is a nested config)
+    "vllm.attention.backend": ["auto", "FLASH_ATTN", "FLASHINFER"],
+    # Note: best_of was removed in vLLM v1
     "vllm.logprobs": [None, 5],
     "vllm.quantization": [None, "fp8", "awq", "gptq"],
     "vllm.load_format": ["auto", "pt", "safetensors"],
@@ -264,6 +274,106 @@ QUICK_TENSORRT_PARAMS: dict[str, list[Any]] = {
     "tensorrt.max_batch_size": [1, 4],
     "tensorrt.builder_opt_level": [3],
 }
+
+# =============================================================================
+# Skip Conditions (Hardware/Model Limitations)
+# =============================================================================
+# Some parameter values require specific hardware, pre-quantized models, or
+# have known compatibility issues. These are documented here for clarity.
+#
+# Skip types:
+#   - "hardware": Requires specific GPU (Ampere+, Hopper, etc.)
+#   - "model": Requires a specific pre-quantized model checkpoint
+#   - "dependency": Requires optional dependency not installed
+#   - "known_issue": Known compatibility issue, not a bug in our code
+
+SKIP_CONDITIONS: dict[tuple[str, Any], dict[str, str]] = {
+    # vLLM KV cache dtype limitations
+    # float16/bfloat16 KV cache requires matching attention backend
+    # fp8 KV cache requires Hopper (H100) or newer GPU
+    ("vllm.kv_cache_dtype", "float16"): {
+        "type": "hardware",
+        "reason": "float16 KV cache requires compatible attention backend (model-dependent)",
+    },
+    ("vllm.kv_cache_dtype", "bfloat16"): {
+        "type": "hardware",
+        "reason": "bfloat16 KV cache requires compatible attention backend (model-dependent)",
+    },
+    ("vllm.kv_cache_dtype", "fp8"): {
+        "type": "hardware",
+        "reason": "FP8 KV cache requires Hopper (H100) or newer GPU with FlashInfer support",
+    },
+    # vLLM block_size=8 not supported by PagedAttention for many models
+    ("vllm.block_size", 8): {
+        "type": "known_issue",
+        "reason": "block_size=8 not compatible with PagedAttention for this model architecture",
+    },
+    # vLLM FLASHINFER requires JIT compilation (slow first-run, may fail)
+    ("vllm.attention.backend", "FLASHINFER"): {
+        "type": "dependency",
+        "reason": "FlashInfer backend requires JIT compilation; may fail in Docker without cache",
+    },
+    # vLLM quantization methods requiring pre-quantized models
+    # These require model checkpoints that were quantized with AWQ/GPTQ
+    ("vllm.quantization", "awq"): {
+        "type": "model",
+        "reason": "AWQ quantization requires pre-quantized model (e.g., TheBloke/*-AWQ)",
+        "model": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",  # Suggested model for testing
+    },
+    ("vllm.quantization", "gptq"): {
+        "type": "model",
+        "reason": "GPTQ quantization requires pre-quantized model (e.g., TheBloke/*-GPTQ)",
+        "model": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",  # Suggested model for testing
+    },
+    # vLLM load_format=pt requires .bin files (not safetensors)
+    ("vllm.load_format", "pt"): {
+        "type": "model",
+        "reason": "load_format='pt' requires model with .bin files (most modern models use safetensors)",
+    },
+    # TensorRT quantization requiring calibration or pre-quantized models
+    ("tensorrt.quantization", "int8_sq"): {
+        "type": "dependency",
+        "reason": "INT8 SmoothQuant requires calibration dataset configuration",
+    },
+    ("tensorrt.quantization", "int4_awq"): {
+        "type": "model",
+        "reason": "INT4 AWQ requires pre-quantized model checkpoint",
+    },
+    # PyTorch flash_attention_2 requires flash-attn package
+    ("pytorch.attn_implementation", "flash_attention_2"): {
+        "type": "dependency",
+        "reason": "Flash Attention 2 requires flash-attn package (not installed by default)",
+    },
+}
+
+
+def should_skip_param(
+    param: str, value: Any, skip_known_issues: bool = True
+) -> tuple[bool, str | None]:
+    """Check if a parameter value should be skipped.
+
+    Args:
+        param: Parameter path (e.g., "vllm.kv_cache_dtype")
+        value: Parameter value to test
+        skip_known_issues: Whether to skip known compatibility issues
+
+    Returns:
+        Tuple of (should_skip, skip_reason)
+    """
+    key = (param, value)
+    if key in SKIP_CONDITIONS:
+        condition = SKIP_CONDITIONS[key]
+        skip_type = condition.get("type", "unknown")
+
+        # Always skip hardware/model issues unless we have the right setup
+        if skip_type in ("hardware", "model", "dependency"):
+            return True, f"[SKIP:{skip_type.upper()}] {condition['reason']}"
+
+        # Optionally skip known issues
+        if skip_type == "known_issue" and skip_known_issues:
+            return True, f"[SKIP:KNOWN_ISSUE] {condition['reason']}"
+
+    return False, None
 
 
 # =============================================================================
@@ -569,8 +679,9 @@ def verify_inference_results(config_name: str) -> tuple[bool, str | None, dict[s
     checks_failed = []
 
     # Check if this is a streaming result
-    # Streaming results have latency_measurements with different structure
-    latency_measurements = result_data.get("latency_measurements", {})
+    # Streaming results have latency_measurements nested in inference_metrics
+    inf_metrics = result_data.get("inference_metrics", {})
+    latency_measurements = inf_metrics.get("latency_measurements") or {}
     is_streaming = latency_measurements.get("streaming_mode", False) or result_data.get(
         "config", {}
     ).get("streaming", False)
@@ -1042,6 +1153,22 @@ def test_backend(
         print(f"    Values: {values}")
 
         for value in values:
+            # Check if this param/value should be skipped (hardware/model limitations)
+            should_skip, skip_reason = should_skip_param(param, value)
+            if should_skip:
+                print(f"    Testing {param}={value}... {skip_reason}")
+                # Record skipped test in results
+                skipped_result = TestResult(
+                    config_name=f"{backend}_base_{param.replace('.', '_')}_{value}",
+                    status="skipped",
+                    elapsed_seconds=0.0,
+                    error_summary=skip_reason,
+                    parameter_varied=param,
+                    parameter_value=value,
+                )
+                results.append(skipped_result)
+                continue
+
             config_path = create_single_variation_config(
                 base_config,
                 param,

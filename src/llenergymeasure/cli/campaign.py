@@ -374,10 +374,9 @@ def _run_single_experiment(
             )
         else:
             # Direct execution (inside container or local install)
+            # Use 'lem' entry point instead of python -m (package lacks __main__.py)
             cmd = [
-                sys.executable,
-                "-m",
-                "llenergymeasure.cli",
+                "lem",
                 "experiment",
                 container_config_path,
                 "--yes",

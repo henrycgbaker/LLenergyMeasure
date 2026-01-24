@@ -1,7 +1,7 @@
 .PHONY: format lint typecheck check test test-integration test-all install dev clean
 .PHONY: docker-build docker-build-all docker-build-vllm docker-build-tensorrt
 .PHONY: docker-build-dev docker-check experiment datasets validate docker-shell docker-dev
-.PHONY: setup lem-clean lem-clean-all
+.PHONY: setup lem-clean lem-clean-all generate-docs check-docs
 
 # PUID/PGID for correct file ownership on bind mounts (LinuxServer.io pattern)
 # These are also set in .env by setup.sh - Makefile exports for convenience
@@ -56,7 +56,21 @@ clean:
 	rm -rf .pytest_cache .ruff_cache .mypy_cache htmlcov .coverage dist/ build/
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
-ci: check test
+# Generate documentation from SSOT sources
+generate-docs:
+	python scripts/generate_invalid_combos_doc.py
+	python scripts/generate_param_matrix.py
+	python scripts/generate_config_docs.py
+	@echo "Generated docs in docs/generated/"
+
+# Check if generated docs are stale (CI validation)
+check-docs:
+	@python scripts/generate_invalid_combos_doc.py
+	@git diff --quiet docs/generated/ || \
+		(echo "ERROR: Generated docs are stale. Run 'make generate-docs' and commit." && exit 1)
+	@echo "Generated docs are up to date"
+
+ci: check test check-docs
 
 # =============================================================================
 # Docker Commands (Production)

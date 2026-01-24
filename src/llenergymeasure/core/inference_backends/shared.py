@@ -219,7 +219,7 @@ def create_precision_metadata(
             return "fp32"
         if dtype in ("float16", "fp16"):
             return "fp16"
-        if dtype in ("bfloat16", "bf16"):
+        if dtype in ("bfloat16", "bf16", "bfp16"):
             return "bf16"
         return dtype
 

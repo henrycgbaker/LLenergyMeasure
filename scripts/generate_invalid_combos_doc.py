@@ -4,13 +4,32 @@
 This script programmatically documents all invalid parameter combinations
 by extracting validation rules from the codebase and test results.
 
+The script uses the introspection module for streaming constraints (SSOT),
+but maintains static lists for validation errors and runtime limitations
+that require more context than can be extracted programmatically.
+
 Run: python scripts/generate_invalid_combos_doc.py
 """
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime
 from pathlib import Path
+
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+try:
+    from llenergymeasure.config.introspection import (
+        get_capability_matrix_markdown,
+        get_streaming_constraints,
+        get_validation_rules,
+    )
+
+    USE_INTROSPECTION = True
+except ImportError:
+    USE_INTROSPECTION = False
 
 # Invalid combinations extracted from validators and test results
 # Format: (backend, parameter/combo, reason, resolution)
@@ -64,6 +83,35 @@ INVALID_COMBOS: list[tuple[str, str, str, str]] = [
         "quantization.load_in_4bit + load_in_8bit",
         "Cannot use both 4-bit and 8-bit quantization simultaneously",
         "Choose one: load_in_4bit=True OR load_in_8bit=True",
+    ),
+]
+
+# Streaming mode constraints (params affected by streaming=True)
+# Format: (backend, parameter, behaviour with streaming, impact)
+STREAMING_CONSTRAINTS: list[tuple[str, str, str, str]] = [
+    (
+        "all",
+        "pytorch.batch_size / vllm.max_num_seqs",
+        "Ignored - processes 1 request at a time",
+        "Reduced throughput but accurate latency",
+    ),
+    (
+        "pytorch",
+        "pytorch.torch_compile",
+        "May cause graph-tracing errors",
+        "Falls back to non-compiled inference",
+    ),
+    (
+        "pytorch",
+        "pytorch.batching_strategy",
+        "Ignored - always sequential",
+        "No batching optimisation",
+    ),
+    (
+        "vllm",
+        "vllm.enable_chunked_prefill",
+        "May interfere with TTFT measurement",
+        "Consider disabling for accurate TTFT",
     ),
 ]
 
@@ -133,8 +181,60 @@ def generate_markdown() -> str:
         "|---------|---------------------|--------|------------|",
     ]
 
-    for backend, combo, reason, resolution in INVALID_COMBOS:
-        lines.append(f"| {backend} | `{combo}` | {reason} | {resolution} |")
+    # Use SSOT validation rules if available, otherwise fall back to static list
+    if USE_INTROSPECTION:
+        validation_rules = get_validation_rules()
+        for rule in validation_rules:
+            lines.append(
+                f"| {rule['backend']} | `{rule['combination']}` | "
+                f"{rule['reason']} | {rule['resolution']} |"
+            )
+    else:
+        for backend, combo, reason, resolution in INVALID_COMBOS:
+            lines.append(f"| {backend} | `{combo}` | {reason} | {resolution} |")
+
+    # Streaming constraints section
+    lines.extend(
+        [
+            "",
+            "## Streaming Mode Constraints",
+            "",
+            "When `streaming=True`, certain parameters are ignored or behave differently",
+            "because streaming requires sequential per-request processing to measure TTFT/ITL.",
+            "",
+            "| Backend | Parameter | Behaviour with streaming=True | Impact |",
+            "|---------|-----------|------------------------------|--------|",
+        ]
+    )
+
+    # Use introspection module if available (SSOT), otherwise fall back to static list
+    if USE_INTROSPECTION:
+        introspection_constraints = get_streaming_constraints()
+        for param, explanation in introspection_constraints.items():
+            backend = (
+                "pytorch"
+                if param.startswith("pytorch.")
+                else ("vllm" if param.startswith("vllm.") else "all")
+            )
+            lines.append(f"| {backend} | `{param}` | {explanation} | See docs |")
+    else:
+        for backend, param, behaviour, impact in STREAMING_CONSTRAINTS:
+            lines.append(f"| {backend} | `{param}` | {behaviour} | {impact} |")
+
+    lines.extend(
+        [
+            "",
+            "**When to use streaming=True:**",
+            "- Measuring user-perceived latency (TTFT, ITL)",
+            "- Evaluating real-time chat/assistant workloads",
+            "- MLPerf inference latency benchmarks",
+            "",
+            "**When to use streaming=False:**",
+            "- Throughput benchmarking",
+            "- Batch processing workloads",
+            "- torch.compile optimisation testing",
+        ]
+    )
 
     lines.extend(
         [
@@ -157,21 +257,35 @@ def generate_markdown() -> str:
             "",
             "## Backend Capability Matrix",
             "",
-            "| Feature | PyTorch | vLLM | TensorRT |",
-            "|---------|---------|------|----------|",
-            "| Tensor Parallel | ✅ | ✅ | ✅ |",
-            "| Pipeline Parallel | ❌ | ✅ | ✅ |",
-            "| Data Parallel | ✅ | ❌ | ✅ |",
-            "| BitsAndBytes (4/8-bit) | ✅ | ❌¹ | ❌ |",
-            "| Native Quantization | ❌ | ✅ (AWQ/GPTQ/FP8) | ✅ (FP8/INT8) |",
-            "| float32 precision | ✅ | ✅ | ❌ |",
-            "| float16 precision | ✅ | ✅ | ✅ |",
-            "| bfloat16 precision | ✅ | ✅ | ✅ |",
-            "| Streaming (TTFT/ITL) | ✅ | ✅ | ✅ |",
-            "| LoRA Adapters | ✅ | ✅ | ✅ |",
-            "| Speculative Decoding | ✅ | ✅ | ✅ |",
-            "",
-            "¹ vLLM supports 4-bit via AWQ/GPTQ quantized models, not bitsandbytes",
+        ]
+    )
+
+    # Use SSOT capability matrix if available
+    if USE_INTROSPECTION:
+        lines.append(get_capability_matrix_markdown())
+    else:
+        lines.extend(
+            [
+                "| Feature | PyTorch | vLLM | TensorRT |",
+                "|---------|---------|------|----------|",
+                "| Tensor Parallel | ✅ | ✅ | ✅ |",
+                "| Pipeline Parallel | ❌ | ✅ | ✅ |",
+                "| Data Parallel | ✅ | ❌ | ✅ |",
+                "| BitsAndBytes (4/8-bit) | ✅ | ❌¹ | ❌ |",
+                "| Native Quantization | ❌ | ✅ (AWQ/GPTQ/FP8) | ✅ (FP8/INT8) |",
+                "| float32 precision | ✅ | ✅ | ❌ |",
+                "| float16 precision | ✅ | ✅ | ✅ |",
+                "| bfloat16 precision | ✅ | ✅ | ✅ |",
+                "| Streaming (TTFT/ITL) | ✅ | ✅ | ✅ |",
+                "| LoRA Adapters | ✅ | ✅ | ✅ |",
+                "| Speculative Decoding | ✅ | ✅ | ✅ |",
+                "",
+                "¹ vLLM supports 4-bit via AWQ/GPTQ quantized models, not bitsandbytes",
+            ]
+        )
+
+    lines.extend(
+        [
             "",
             "## Recommended Configurations by Use Case",
             "",

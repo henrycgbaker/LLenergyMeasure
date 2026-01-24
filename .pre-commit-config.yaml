@@ -23,3 +23,28 @@ repos:
         additional_dependencies: [pydantic>=2.0, types-PyYAML]
         args: [--config-file=pyproject.toml]
         files: ^src/
+
+  # Local hooks: Regenerate docs when SSOT sources change
+  # Uses language: system to run with project venv (needs pydantic)
+  - repo: local
+    hooks:
+      - id: generate-invalid-combos
+        name: Regenerate invalid-combos.md
+        entry: python scripts/generate_invalid_combos_doc.py
+        language: system
+        pass_filenames: false
+        files: ^(src/llenergymeasure/config/.*\.py|scripts/generate_invalid_combos_doc\.py)$
+
+      - id: generate-param-matrix
+        name: Regenerate param-matrix.md
+        entry: python scripts/generate_param_matrix.py
+        language: system
+        pass_filenames: false
+        files: ^(src/llenergymeasure/config/.*\.py|scripts/generate_param_matrix\.py)$
+
+      - id: generate-config-docs
+        name: Regenerate config docs
+        entry: python scripts/generate_config_docs.py
+        language: system
+        pass_filenames: false
+        files: ^(src/llenergymeasure/config/.*\.py|scripts/generate_config_docs\.py)$

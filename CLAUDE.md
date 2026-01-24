@@ -26,6 +26,41 @@ LLM inference efficiency measurement framework for benchmarking energy consumpti
 - **Late Aggregation**: Raw per-process results saved separately, aggregated on-demand
 - **Dependency Injection**: `ExperimentOrchestrator` takes protocol-based components
 - **Pydantic Models**: All configs and results are validated Pydantic models
+- **SSOT (Single Source of Truth)**: Parameter metadata derived from code, not static lists
+
+### SSOT Architecture
+
+The configuration system follows SSOT principles - parameter metadata (test values, constraints, documentation) is **derived from Pydantic models**, not maintained in parallel lists.
+
+```
+Pydantic Models (backend_configs.py, models.py)
+              |
+              v
+    introspection.py (SSOT module)
+              |
+    +---------+---------+---------+
+    |         |         |         |
+    v         v         v         v
+get_backend  get_streaming  get_mutual   get_param
+_params()    _constraints() _exclusions() _test_values()
+    |              |              |              |
+    +------+-------+------+-------+------+-------+
+           |              |              |
+           v              v              v
+    Runtime Tests   Doc Generation   CLI Validation
+```
+
+**Key SSOT functions** ([introspection.py](src/llenergymeasure/config/introspection.py)):
+- `get_backend_params(backend)` - Auto-discover params from Pydantic models
+- `get_streaming_constraints()` - Params affected by streaming=True
+- `get_mutual_exclusions()` - Incompatible param combinations
+- `get_param_test_values(param)` - Test values derived from field types/constraints
+
+**When adding new parameters:**
+1. Add to Pydantic model (backend_configs.py or models.py)
+2. Introspection auto-discovers it
+3. Run `python scripts/generate_invalid_combos_doc.py` to update docs
+4. Runtime tests auto-include new params
 
 ## Key Directories
 

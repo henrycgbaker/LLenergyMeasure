@@ -141,10 +141,15 @@ def generate_markdown(
     for backend in ["pytorch", "vllm", "tensorrt"]:
         tests = results.get(backend, [])
         if tests:
-            passed = sum(1 for t in tests if t.get("passed", False))
+            # Note: test_all_params.py uses "status" field with values "passed"/"failed"/"skipped"
+            passed = sum(1 for t in tests if t.get("status") == "passed")
+            failed = sum(1 for t in tests if t.get("status") == "failed")
+            skipped = sum(1 for t in tests if t.get("status") == "skipped")
             total = len(tests)
             pct = (passed / total * 100) if total > 0 else 0
-            lines.append(f"- **{backend.upper()}**: {passed}/{total} ({pct:.1f}%)")
+            lines.append(
+                f"- **{backend.upper()}**: {passed}/{total} ({pct:.1f}%) [failed: {failed}, skipped: {skipped}]"
+            )
 
     lines.extend(
         [
