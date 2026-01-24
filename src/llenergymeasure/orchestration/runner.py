@@ -199,6 +199,71 @@ class ExperimentOrchestrator:
             )
             logger.warning(energy_warning)
 
+        # Compute extended efficiency metrics
+        from llenergymeasure.core.extended_metrics import compute_extended_metrics
+        from llenergymeasure.domain.metrics import ExtendedEfficiencyMetrics
+
+        # Get precision factor from backend result if available
+        precision_factor = 1.0
+        backend_result = getattr(inference_result, "backend_result", None)
+        if backend_result and backend_result.precision_metadata:
+            precision_factor = backend_result.precision_metadata.precision_factor
+
+        # Get ITL mean from latency measurements (for TPOT)
+        itl_mean_ms = None
+        latency_measurements = getattr(combined.inference, "latency_measurements", None)
+        if latency_measurements and latency_measurements.itl_trimmed_ms:
+            import numpy as np
+
+            itl_mean_ms = float(np.mean(latency_measurements.itl_trimmed_ms))
+
+        # Extract raw data from backend result for late aggregation
+        per_request_latencies = []
+        gpu_utilisation_samples = []
+        memory_stats = None
+        batch_stats = None
+        kv_cache_stats = None
+
+        if backend_result:
+            per_request_latencies = backend_result.per_request_latencies_ms
+            gpu_utilisation_samples = backend_result.gpu_utilisation_samples
+            memory_stats = backend_result.memory_stats or None
+            batch_stats = backend_result.batch_stats or None
+            kv_cache_stats = backend_result.kv_cache_stats or None
+
+        # Add memory stats from compute metrics if not from backend
+        if not memory_stats:
+            memory_stats = {
+                "peak_mb": combined.compute.peak_memory_mb,
+                "model_mb": combined.compute.model_memory_mb,
+            }
+            # Get total VRAM from GPU info
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    device_props = torch.cuda.get_device_properties(ctx.device)
+                    memory_stats["total_vram_mb"] = device_props.total_memory / (1024 * 1024)
+            except Exception:
+                pass
+
+        try:
+            extended_metrics = compute_extended_metrics(
+                output_tokens=combined.inference.output_tokens,
+                total_energy_j=energy_metrics.total_energy_j,
+                tokens_per_second=combined.inference.tokens_per_second,
+                precision_factor=precision_factor,
+                itl_mean_ms=itl_mean_ms,
+                per_request_latencies_ms=per_request_latencies or None,
+                gpu_utilisation_samples=gpu_utilisation_samples or None,
+                memory_stats=memory_stats,
+                batch_stats=batch_stats,
+                kv_cache_stats=kv_cache_stats,
+            )
+        except Exception as e:
+            logger.warning(f"Extended metrics computation failed (non-fatal): {e}")
+            extended_metrics = ExtendedEfficiencyMetrics()
+
         # Build raw result with effective_config, cli_overrides, and provenance
         raw_result = RawProcessResult(
             experiment_id=ctx.experiment_id,
@@ -226,6 +291,9 @@ class ExperimentOrchestrator:
             config_warnings=ctx.config_warnings,
             parameter_provenance=ctx.parameter_provenance,
             preset_chain=ctx.preset_chain,
+            extended_metrics=extended_metrics,
+            per_request_latencies_ms=per_request_latencies,
+            gpu_utilisation_samples=gpu_utilisation_samples,
         )
 
         # Save raw result

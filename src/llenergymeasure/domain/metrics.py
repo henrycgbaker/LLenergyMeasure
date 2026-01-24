@@ -299,6 +299,148 @@ class CombinedMetrics(BaseModel):
 
 
 # =============================================================================
+# Extended Efficiency Metrics - Consistent schema with conditional computation
+# =============================================================================
+
+
+class MemoryEfficiencyMetrics(BaseModel):
+    """Memory efficiency metrics.
+
+    All fields always present in schema. Values are null when not computable.
+    """
+
+    # Raw memory values (always available)
+    total_vram_mb: float = Field(default=0.0, description="Total GPU VRAM in MB")
+    model_memory_mb: float = Field(default=0.0, description="Model weights memory in MB")
+    peak_memory_mb: float = Field(default=0.0, description="Peak memory during inference in MB")
+    kv_cache_mb: float | None = Field(default=None, description="KV cache memory in MB (vLLM only)")
+
+    # Derived efficiency metrics (null if not computable)
+    tokens_per_gb_vram: float | None = Field(
+        default=None, description="Output tokens per GB of VRAM used"
+    )
+    model_memory_utilisation: float | None = Field(
+        default=None, description="Model memory / total VRAM (0.0-1.0)"
+    )
+    kv_cache_memory_ratio: float | None = Field(
+        default=None, description="KV cache / peak memory (vLLM only)"
+    )
+
+
+class GPUUtilisationMetrics(BaseModel):
+    """GPU utilisation during inference.
+
+    Collected via pynvml background sampling. Null if pynvml unavailable.
+    """
+
+    sm_utilisation_mean: float | None = Field(
+        default=None, description="Mean SM utilisation (0-100%)"
+    )
+    sm_utilisation_samples: int = Field(default=0, description="Number of samples collected")
+    memory_bandwidth_utilisation: float | None = Field(
+        default=None, description="Memory bandwidth utilisation (0-100%)"
+    )
+
+
+class BatchEfficiencyMetrics(BaseModel):
+    """Batch processing efficiency.
+
+    Only applicable for static batching (PyTorch, TensorRT). Null for vLLM
+    continuous batching.
+    """
+
+    effective_batch_size: float | None = Field(
+        default=None, description="Average actual batch size"
+    )
+    batch_utilisation: float | None = Field(
+        default=None, description="Actual / configured batch size (0.0-1.0)"
+    )
+    padding_overhead: float | None = Field(
+        default=None, description="Padding tokens / total tokens (0.0-1.0)"
+    )
+    num_batches: int | None = Field(default=None, description="Number of batches processed")
+
+
+class KVCacheEfficiencyMetrics(BaseModel):
+    """KV cache efficiency metrics.
+
+    vLLM-specific. Always null for PyTorch/TensorRT backends.
+    """
+
+    kv_cache_hit_rate: float | None = Field(
+        default=None, description="Prefix cache hit rate (0.0-1.0, vLLM only)"
+    )
+    kv_cache_blocks_used: int | None = Field(default=None, description="KV cache blocks used")
+    kv_cache_blocks_total: int | None = Field(
+        default=None, description="Total KV cache blocks available"
+    )
+
+
+class RequestLatencyMetrics(BaseModel):
+    """Per-request end-to-end latency statistics.
+
+    E2E latency = total time from request submission to completion.
+    """
+
+    e2e_latency_mean_ms: float | None = Field(
+        default=None, description="Mean E2E latency per request"
+    )
+    e2e_latency_median_ms: float | None = Field(default=None, description="Median E2E latency")
+    e2e_latency_p95_ms: float | None = Field(
+        default=None, description="95th percentile E2E latency"
+    )
+    e2e_latency_p99_ms: float | None = Field(
+        default=None, description="99th percentile E2E latency"
+    )
+    e2e_latency_samples: int = Field(default=0, description="Number of request samples")
+
+
+class ExtendedEfficiencyMetrics(BaseModel):
+    """Extended efficiency metrics container.
+
+    Consistent schema - all fields always present in results.
+    Individual values are null when not computable for the configuration.
+
+    Design principles:
+    - Graceful degradation: null values, never errors
+    - Backend-agnostic where possible
+    - Late aggregation: raw samples stored, stats computed at aggregation
+    """
+
+    # Core efficiency metrics
+    tpot_ms: float | None = Field(
+        default=None,
+        description="Time Per Output Token in ms (ITL mean, streaming only)",
+    )
+    token_efficiency_index: float | None = Field(
+        default=None,
+        description="Composite: throughput * tokens_per_joule * precision_factor",
+    )
+
+    # Grouped metrics (always present as objects, internal fields may be null)
+    memory: MemoryEfficiencyMetrics = Field(
+        default_factory=MemoryEfficiencyMetrics,
+        description="Memory efficiency metrics",
+    )
+    gpu_utilisation: GPUUtilisationMetrics = Field(
+        default_factory=GPUUtilisationMetrics,
+        description="GPU utilisation during inference",
+    )
+    batch: BatchEfficiencyMetrics = Field(
+        default_factory=BatchEfficiencyMetrics,
+        description="Batch efficiency (static batching only)",
+    )
+    kv_cache: KVCacheEfficiencyMetrics = Field(
+        default_factory=KVCacheEfficiencyMetrics,
+        description="KV cache efficiency (vLLM only)",
+    )
+    request_latency: RequestLatencyMetrics = Field(
+        default_factory=RequestLatencyMetrics,
+        description="Per-request E2E latency statistics",
+    )
+
+
+# =============================================================================
 # Latency Measurement Types - For streaming inference metrics
 # =============================================================================
 

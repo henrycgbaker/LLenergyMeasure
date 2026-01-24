@@ -89,6 +89,10 @@ def show_aggregated_result(result: AggregatedResult) -> None:
     if result.latency_stats is not None:
         _show_latency_stats(result.latency_stats)
 
+    # Show extended efficiency metrics
+    if result.extended_metrics is not None:
+        _show_extended_metrics(result.extended_metrics)
+
     # Show effective config if available
     if result.effective_config:
         show_effective_config(result.effective_config, result.cli_overrides)
@@ -108,6 +112,123 @@ def show_aggregated_result(result: AggregatedResult) -> None:
         console.print("[green]GPU attribution verified[/green]")
     for warning in meta.warnings:
         console.print(f"[yellow]Warning: {rich_escape(str(warning))}[/yellow]")
+
+
+def _format_metric(value: float | int | None, unit: str = "", fmt: str = ".2f") -> str:
+    """Format a metric value, showing N/A for null values.
+
+    Args:
+        value: The metric value (None = not available).
+        unit: Unit suffix to append.
+        fmt: Format specifier for the value.
+
+    Returns:
+        Formatted string like "123.45 ms" or "N/A".
+    """
+    if value is None:
+        return "[dim]N/A[/dim]"
+    suffix = f" {unit}" if unit else ""
+    return f"{value:{fmt}}{suffix}"
+
+
+def _show_extended_metrics(extended: dict[str, Any] | object | None) -> None:
+    """Display extended efficiency metrics.
+
+    Shows TPOT, Token Efficiency Index, Memory, GPU Utilisation, etc.
+    Displays N/A for metrics that couldn't be computed.
+
+    Args:
+        extended: ExtendedEfficiencyMetrics object or dict from JSON.
+    """
+    from llenergymeasure.domain.metrics import ExtendedEfficiencyMetrics
+
+    if extended is None:
+        return
+
+    # Handle both dict (from JSON) and object (ExtendedEfficiencyMetrics)
+    if isinstance(extended, dict):
+        tpot = extended.get("tpot_ms")
+        tei = extended.get("token_efficiency_index")
+        memory = extended.get("memory", {})
+        gpu_util = extended.get("gpu_utilisation", {})
+        batch = extended.get("batch", {})
+        kv_cache = extended.get("kv_cache", {})
+        request_lat = extended.get("request_latency", {})
+    elif isinstance(extended, ExtendedEfficiencyMetrics):
+        tpot = extended.tpot_ms
+        tei = extended.token_efficiency_index
+        memory = extended.memory
+        gpu_util = extended.gpu_utilisation
+        batch = extended.batch
+        kv_cache = extended.kv_cache
+        request_lat = extended.request_latency
+    else:
+        return
+
+    # Helper to safely get attribute or dict key
+    def _get(obj: dict[str, Any] | object, key: str) -> float | int | None:
+        if isinstance(obj, dict):
+            return obj.get(key)
+        return getattr(obj, key, None)
+
+    # Build extended metrics table
+    table = Table(title="Extended Efficiency Metrics")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", justify="right", style="green")
+
+    # Top-level metrics
+    table.add_row("TPOT (Time/Output Token)", _format_metric(tpot, "ms"))
+    table.add_row("Token Efficiency Index", _format_metric(tei, "", ".1f"))
+
+    # Memory efficiency
+    table.add_row("", "")  # Spacer
+    table.add_row("[bold]Memory[/bold]", "")
+    table.add_row(
+        "  Tokens per GB VRAM", _format_metric(_get(memory, "tokens_per_gb_vram"), "", ".1f")
+    )
+    table.add_row(
+        "  Model Memory Utilisation",
+        _format_metric(_get(memory, "model_memory_utilisation"), "%", ".1f"),
+    )
+    table.add_row(
+        "  KV Cache Memory Ratio", _format_metric(_get(memory, "kv_cache_memory_ratio"), "%", ".1f")
+    )
+
+    # GPU utilisation
+    table.add_row("", "")  # Spacer
+    table.add_row("[bold]GPU Utilisation[/bold]", "")
+    table.add_row(
+        "  SM Utilisation (mean)", _format_metric(_get(gpu_util, "sm_utilisation_mean"), "%", ".1f")
+    )
+    mem_bw = _get(gpu_util, "memory_bandwidth_utilisation")
+    table.add_row("  Memory Bandwidth", _format_metric(mem_bw, "%", ".1f"))
+
+    # Request latency
+    table.add_row("", "")  # Spacer
+    table.add_row("[bold]Request Latency[/bold]", "")
+    table.add_row("  E2E Mean", _format_metric(_get(request_lat, "e2e_latency_mean_ms"), "ms"))
+    table.add_row("  E2E P95", _format_metric(_get(request_lat, "e2e_latency_p95_ms"), "ms"))
+    table.add_row("  E2E P99", _format_metric(_get(request_lat, "e2e_latency_p99_ms"), "ms"))
+
+    # Batch efficiency (show only if available)
+    eff_batch = _get(batch, "effective_batch_size")
+    padding = _get(batch, "padding_overhead")
+    if eff_batch is not None or padding is not None:
+        table.add_row("", "")  # Spacer
+        table.add_row("[bold]Batch Efficiency[/bold]", "")
+        table.add_row("  Effective Batch Size", _format_metric(eff_batch, "", ".2f"))
+        table.add_row("  Padding Overhead", _format_metric(padding, "%", ".1f"))
+
+    # KV cache efficiency (vLLM only, show only if available)
+    hit_rate = _get(kv_cache, "kv_cache_hit_rate")
+    if hit_rate is not None:
+        table.add_row("", "")  # Spacer
+        table.add_row("[bold]KV Cache (vLLM)[/bold]", "")
+        table.add_row("  Hit Rate", _format_metric(hit_rate, "%", ".1f"))
+        table.add_row("  Blocks Used", _format_metric(_get(kv_cache, "kv_cache_blocks_used"), ""))
+        table.add_row("  Blocks Total", _format_metric(_get(kv_cache, "kv_cache_blocks_total"), ""))
+
+    console.print(table)
 
 
 def _show_latency_stats(lat: dict[str, float | int | None] | object) -> None:

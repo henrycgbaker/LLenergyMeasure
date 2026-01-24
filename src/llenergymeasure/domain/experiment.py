@@ -9,6 +9,7 @@ from llenergymeasure.constants import SCHEMA_VERSION
 from llenergymeasure.domain.metrics import (
     ComputeMetrics,
     EnergyMetrics,
+    ExtendedEfficiencyMetrics,
     InferenceMetrics,
     LatencyStatistics,
 )
@@ -187,6 +188,22 @@ class RawProcessResult(BaseModel):
         description="Cycle metadata (cycle_id, cycle_count, total_cycles)",
     )
 
+    # Extended efficiency metrics (always present, fields null when not computable)
+    extended_metrics: ExtendedEfficiencyMetrics = Field(
+        default_factory=ExtendedEfficiencyMetrics,
+        description="Extended efficiency metrics (TPOT, memory, GPU utilisation, etc.)",
+    )
+
+    # Raw data for late aggregation of extended metrics
+    per_request_latencies_ms: list[float] = Field(
+        default_factory=list,
+        description="Per-request E2E latencies for late aggregation",
+    )
+    gpu_utilisation_samples: list[float] = Field(
+        default_factory=list,
+        description="GPU utilisation samples for late aggregation",
+    )
+
     model_config = {"frozen": True}
 
 
@@ -273,6 +290,12 @@ class AggregatedResult(BaseModel):
     energy_tracking_failed: bool = Field(
         default=False,
         description="True if any process had energy tracking failures (metrics may be incomplete)",
+    )
+
+    # Extended efficiency metrics (aggregated from per-process metrics)
+    extended_metrics: ExtendedEfficiencyMetrics = Field(
+        default_factory=ExtendedEfficiencyMetrics,
+        description="Aggregated extended efficiency metrics",
     )
 
     model_config = {"frozen": True}
