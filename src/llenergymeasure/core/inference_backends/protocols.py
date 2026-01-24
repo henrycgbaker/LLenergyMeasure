@@ -153,6 +153,22 @@ class BackendResult:
     # Tracks actual precision used for weights, activations, and compute
     precision_metadata: PrecisionMetadata | None = None
 
+    # Extended metrics raw data (for late aggregation)
+    per_request_latencies_ms: list[float] = field(default_factory=list)
+    """Per-request E2E latencies in ms."""
+
+    gpu_utilisation_samples: list[float] = field(default_factory=list)
+    """GPU SM utilisation samples (0-100) collected during inference."""
+
+    memory_stats: dict[str, float] = field(default_factory=dict)
+    """Memory statistics: peak_mb, total_vram_mb, model_mb, kv_cache_mb."""
+
+    batch_stats: dict[str, Any] = field(default_factory=dict)
+    """Batch statistics: effective_batch_size, padding_overhead, num_batches."""
+
+    kv_cache_stats: dict[str, Any] = field(default_factory=dict)
+    """KV cache stats (vLLM): hit_rate, blocks_used, blocks_total."""
+
     @property
     def tokens_per_second(self) -> float:
         """Throughput in tokens/second."""

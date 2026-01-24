@@ -181,6 +181,89 @@ Warnings are generated if these checks fail.
 | FLOP/token | `total_flops / total_tokens` | Model complexity |
 | W per tok/s | `avg_power / throughput` | Power-performance ratio |
 
+## Extended Efficiency Metrics
+
+Beyond the primary metrics, the framework computes additional efficiency indicators when data is available. These use a **stable schema** - all fields are always present in results, but show N/A when not computable for a given configuration.
+
+### TPOT (Time Per Output Token)
+
+| Field | Unit | Description | Condition |
+|-------|------|-------------|-----------|
+| `tpot_ms` | ms | Mean inter-token latency | `streaming=True` |
+
+TPOT equals the mean ITL (Inter-Token Latency) from streaming inference. It represents the average time to generate each output token after the first.
+
+### Token Efficiency Index
+
+| Field | Formula | Description |
+|-------|---------|-------------|
+| `token_efficiency_index` | `throughput × tokens_per_joule × precision_factor` | Composite efficiency score |
+
+The Token Efficiency Index combines throughput and energy efficiency into a single comparable metric. The `precision_factor` adjusts for compute precision (higher precision = more efficient use of FLOPs).
+
+### Memory Efficiency
+
+| Field | Unit | Description | Condition |
+|-------|------|-------------|-----------|
+| `tokens_per_gb_vram` | tok/GB | Output tokens per GB VRAM used | Always |
+| `model_memory_utilisation` | 0.0-1.0 | Model memory / total VRAM | Always |
+| `kv_cache_memory_ratio` | 0.0-1.0 | KV cache / peak memory | vLLM only |
+
+### GPU Utilisation
+
+| Field | Unit | Description | Condition |
+|-------|------|-------------|-----------|
+| `sm_utilisation_mean` | % | Mean SM (streaming multiprocessor) utilisation | NVML available |
+| `memory_bandwidth_utilisation` | % | Memory bandwidth utilisation | NVML available |
+
+GPU utilisation is sampled in the background during inference using NVML (NVIDIA Management Library) via the `nvidia-ml-py` package. If NVML is unavailable (e.g., CUDA context conflicts with vLLM), these metrics show N/A.
+
+> **Note**: The package is `nvidia-ml-py` on PyPI but imports as `pynvml` in Python code. The old `pynvml` package on PyPI is deprecated.
+
+### Request Latency
+
+| Field | Unit | Description | Condition |
+|-------|------|-------------|-----------|
+| `e2e_latency_mean_ms` | ms | Mean end-to-end request latency | Always |
+| `e2e_latency_median_ms` | ms | Median E2E latency | Always |
+| `e2e_latency_p95_ms` | ms | 95th percentile E2E latency | Always |
+| `e2e_latency_p99_ms` | ms | 99th percentile E2E latency | Always |
+
+Request latency measures the total time from request submission to completion, useful for understanding serving performance.
+
+### Batch Efficiency
+
+| Field | Unit | Description | Condition |
+|-------|------|-------------|-----------|
+| `effective_batch_size` | count | Average actual batch size | Static batching |
+| `batch_utilisation` | 0.0-1.0 | Actual / configured batch size | Static batching |
+| `padding_overhead` | 0.0-1.0 | Padding tokens / total tokens | Static batching |
+
+These metrics are only relevant for backends using static batching (PyTorch, TensorRT). vLLM's continuous batching doesn't have a fixed batch size.
+
+### KV Cache Efficiency (vLLM Only)
+
+| Field | Unit | Description | Condition |
+|-------|------|-------------|-----------|
+| `kv_cache_hit_rate` | 0.0-1.0 | Prefix cache hit rate | vLLM + `enable_prefix_caching` |
+| `kv_cache_blocks_used` | count | KV cache blocks used | vLLM |
+| `kv_cache_blocks_total` | count | Total KV cache blocks | vLLM |
+
+KV cache metrics are specific to vLLM's paged attention mechanism. The hit rate is only available when prefix caching is enabled.
+
+### Late Aggregation
+
+Extended metrics use **late aggregation** - raw samples are stored per-process and statistics are computed during aggregation:
+
+```
+Per-process:                     Aggregation:
+├── per_request_latencies_ms     → Combine all latencies
+├── gpu_utilisation_samples      → Combine all GPU samples
+└── extended_metrics             → Recompute stats on combined data
+```
+
+This approach ensures statistically correct percentiles (not average-of-percentiles) when aggregating multi-GPU results.
+
 ## Experimental Controls
 
 ### Recommended Practices

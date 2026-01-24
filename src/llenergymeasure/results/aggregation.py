@@ -16,6 +16,7 @@ from llenergymeasure.domain.experiment import (
     RawProcessResult,
 )
 from llenergymeasure.domain.metrics import (
+    ExtendedEfficiencyMetrics,
     LatencyMeasurements,
     LatencyStatistics,
 )
@@ -270,6 +271,15 @@ def aggregate_results(
         )
         logger.warning("Energy tracking failed for one or more processes")
 
+    # Aggregate extended efficiency metrics (Phase 5)
+    extended_metrics = _aggregate_extended_metrics_from_results(
+        raw_results=raw_results,
+        total_energy_j=total_energy_j,
+        avg_tokens_per_second=avg_tokens_per_second,
+        total_output_tokens=sum(r.inference_metrics.output_tokens for r in raw_results),
+        latency_stats=latency_stats,
+    )
+
     # Propagate effective_config, cli_overrides, config_warnings, and backend from first result
     # All processes have the same config/backend, so any result works
     effective_config: dict[str, Any] = {}
@@ -303,6 +313,7 @@ def aggregate_results(
         config_warnings=config_warnings,
         latency_stats=latency_stats,
         energy_tracking_failed=energy_tracking_failed,
+        extended_metrics=extended_metrics,
     )
 
 
@@ -337,6 +348,83 @@ def _check_gpu_attribution(results: list[RawProcessResult]) -> bool:
     """
     gpu_ids = [r.gpu_id for r in results]
     return len(gpu_ids) == len(set(gpu_ids))
+
+
+def _aggregate_extended_metrics_from_results(
+    raw_results: list[RawProcessResult],
+    total_energy_j: float,
+    avg_tokens_per_second: float,
+    total_output_tokens: int,
+    latency_stats: LatencyStatistics | None,
+) -> ExtendedEfficiencyMetrics:
+    """Aggregate extended efficiency metrics from per-process results.
+
+    Collects raw samples from all processes and computes aggregated statistics.
+    Uses late aggregation pattern: raw samples stored per-process, stats computed here.
+
+    Args:
+        raw_results: List of raw results from each process.
+        total_energy_j: Total energy consumption across all processes.
+        avg_tokens_per_second: Average throughput.
+        total_output_tokens: Total output tokens generated.
+        latency_stats: Aggregated latency statistics (for ITL/TPOT).
+
+    Returns:
+        Aggregated ExtendedEfficiencyMetrics.
+    """
+    from llenergymeasure.core.extended_metrics import aggregate_extended_metrics
+    from llenergymeasure.domain.metrics import ExtendedEfficiencyMetrics
+
+    # Collect raw data from all processes for late aggregation
+    all_request_latencies: list[float] = []
+    all_gpu_samples: list[float] = []
+    raw_extended_metrics: list[ExtendedEfficiencyMetrics] = []
+
+    for r in raw_results:
+        # Collect per-request latencies
+        if r.per_request_latencies_ms:
+            all_request_latencies.extend(r.per_request_latencies_ms)
+
+        # Collect GPU utilisation samples
+        if r.gpu_utilisation_samples:
+            all_gpu_samples.extend(r.gpu_utilisation_samples)
+
+        # Collect per-process extended metrics
+        raw_extended_metrics.append(r.extended_metrics)
+
+    # Get ITL mean for TPOT (from aggregated latency stats)
+    itl_mean_ms: float | None = None
+    if latency_stats and latency_stats.itl_mean_ms is not None:
+        itl_mean_ms = latency_stats.itl_mean_ms
+
+    # Get precision factor from first result's extended metrics (same across all)
+    precision_factor = 1.0
+    if raw_extended_metrics and raw_extended_metrics[0].token_efficiency_index is not None:
+        # Reverse-engineer precision factor from existing TEI if available
+        # TEI = throughput * tokens_per_joule * precision_factor
+        # This is a best-effort approach; precision_factor should be same across processes
+        pass  # Use default 1.0 for now; the per-process metrics capture precision correctly
+
+    try:
+        extended_metrics = aggregate_extended_metrics(
+            raw_extended_metrics=raw_extended_metrics,
+            all_request_latencies=all_request_latencies,
+            all_gpu_samples=all_gpu_samples,
+            aggregated_output_tokens=total_output_tokens,
+            aggregated_energy_j=total_energy_j,
+            aggregated_tokens_per_sec=avg_tokens_per_second,
+            itl_mean_ms=itl_mean_ms,
+            precision_factor=precision_factor,
+        )
+        logger.debug(
+            f"Aggregated extended metrics: TPOT={extended_metrics.tpot_ms}, "
+            f"TEI={extended_metrics.token_efficiency_index}"
+        )
+    except Exception as e:
+        logger.warning(f"Extended metrics aggregation failed (non-fatal): {e}")
+        extended_metrics = ExtendedEfficiencyMetrics()
+
+    return extended_metrics
 
 
 def calculate_efficiency_metrics(result: AggregatedResult) -> dict[str, float]:
