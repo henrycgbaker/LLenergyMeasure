@@ -478,13 +478,15 @@ class VLLMConfig(BaseModel):
         description="Chunk large prefills and batch with decode requests. "
         "Improves latency for mixed workloads.",
     )
-    kv_cache_dtype: Literal["auto", "float16", "bfloat16", "fp8"] = Field(
+    kv_cache_dtype: Literal["auto", "fp8"] = Field(
         default="auto",
-        description="KV cache precision (fp8 saves ~50% memory)",
+        description="KV cache precision. 'auto' uses model dtype, 'fp8' saves ~50% memory "
+        "(requires Ampere+ GPU). Explicit float16/bfloat16 removed - vLLM v1 handles this automatically.",
     )
-    block_size: Literal[8, 16, 32] = Field(
+    block_size: Literal[16, 32] = Field(
         default=16,
-        description="KV cache block size in tokens (PagedAttention)",
+        description="KV cache block size in tokens (PagedAttention). "
+        "8 was removed as most model/attention configs don't support it.",
     )
 
     # =========================================================================
@@ -494,10 +496,7 @@ class VLLMConfig(BaseModel):
         default=None,
         description="Maximum context length (None=use model's native max)",
     )
-    max_seq_len_to_capture: int | None = Field(
-        default=None,
-        description="Maximum sequence length for CUDA graph capture",
-    )
+    # Note: max_seq_len_to_capture removed in vLLM v1 - CUDA graph capture is automatic
 
     # =========================================================================
     # Execution Mode
@@ -522,12 +521,15 @@ class VLLMConfig(BaseModel):
     quantization: Literal["awq", "gptq", "fp8", "marlin", "bitsandbytes", "squeezellm"] | None = (
         Field(
             default=None,
-            description="Quantization method for pre-quantized models",
+            description="Quantization method. REQUIRES pre-quantized model (e.g., "
+            "TheBloke/Llama-2-7B-AWQ for awq, TheBloke/Llama-2-7B-GPTQ for gptq). "
+            "Using a non-quantized model with this option will fail.",
         )
     )
-    load_format: Literal["auto", "pt", "safetensors", "gguf"] = Field(
+    load_format: Literal["auto", "safetensors"] = Field(
         default="auto",
-        description="Weight loading format",
+        description="Weight loading format. 'auto' detects automatically. "
+        "pt/gguf removed as most HuggingFace models use safetensors.",
     )
 
     # =========================================================================

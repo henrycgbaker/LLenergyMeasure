@@ -188,18 +188,28 @@ class TestVLLMConfig:
             VLLMConfig(cpu_offload_gb=-1.0)
 
     def test_kv_cache_dtype_values(self):
-        for dtype in ["auto", "float16", "bfloat16", "fp8"]:
+        # Only auto and fp8 supported - vLLM v1 handles dtype automatically
+        for dtype in ["auto", "fp8"]:
             config = VLLMConfig(kv_cache_dtype=dtype)
             assert config.kv_cache_dtype == dtype
 
+        # Explicit float16/bfloat16 removed - vLLM v1 handles this automatically
+        with pytest.raises(ValidationError):
+            VLLMConfig(kv_cache_dtype="float16")
+        with pytest.raises(ValidationError):
+            VLLMConfig(kv_cache_dtype="bfloat16")
         with pytest.raises(ValidationError):
             VLLMConfig(kv_cache_dtype="float32")
 
     def test_block_size_values(self):
-        for size in [8, 16, 32]:
+        # Only 16 and 32 supported - 8 removed as most model/attention configs don't support it
+        for size in [16, 32]:
             config = VLLMConfig(block_size=size)
             assert config.block_size == size
 
+        # block_size=8 removed - not supported by most model/attention configs
+        with pytest.raises(ValidationError):
+            VLLMConfig(block_size=8)
         with pytest.raises(ValidationError):
             VLLMConfig(block_size=64)
 
@@ -212,10 +222,16 @@ class TestVLLMConfig:
             VLLMConfig(distributed_backend="invalid")
 
     def test_load_format_values(self):
-        for fmt in ["auto", "pt", "safetensors", "gguf"]:
+        # Only auto and safetensors supported - most HuggingFace models use safetensors
+        for fmt in ["auto", "safetensors"]:
             config = VLLMConfig(load_format=fmt)
             assert config.load_format == fmt
 
+        # pt/gguf removed - most HuggingFace models use safetensors
+        with pytest.raises(ValidationError):
+            VLLMConfig(load_format="pt")
+        with pytest.raises(ValidationError):
+            VLLMConfig(load_format="gguf")
         with pytest.raises(ValidationError):
             VLLMConfig(load_format="invalid")
 

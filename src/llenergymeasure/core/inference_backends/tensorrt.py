@@ -674,9 +674,10 @@ class TensorRTBackend:
         warmup_count = config.streaming_warmup_requests
         sampling_params = self._create_sampling_params(config)
 
-        # Split into warmup and measurement prompts
-        warmup_prompts = prompts[:warmup_count] if warmup_count > 0 else []
-        measurement_prompts = prompts[warmup_count:]
+        # Warmup reuses first N prompts; measurement uses ALL prompts
+        # (warmup is additional overhead, not subtracted from measurement budget)
+        warmup_prompts = prompts[: min(warmup_count, len(prompts))] if warmup_count > 0 else []
+        measurement_prompts = prompts
 
         # Run warmup (results discarded from stats)
         if warmup_prompts:
@@ -685,7 +686,6 @@ class TensorRTBackend:
             logger.debug("Streaming warmup complete")
 
         if not measurement_prompts:
-            logger.warning("No prompts remaining after warmup. Increase num_input_prompts.")
             return BackendResult(
                 total_tokens=0,
                 input_tokens=0,
@@ -881,8 +881,9 @@ class TensorRTBackend:
 
         warmup_count = config.streaming_warmup_requests
         sampling_params = self._create_sampling_params(config)
-        warmup_prompts = prompts[:warmup_count] if warmup_count > 0 else []
-        measurement_prompts = prompts[warmup_count:]
+        # Warmup reuses first N prompts; measurement uses ALL prompts
+        warmup_prompts = prompts[: min(warmup_count, len(prompts))] if warmup_count > 0 else []
+        measurement_prompts = prompts
 
         # Run warmup
         if warmup_prompts:

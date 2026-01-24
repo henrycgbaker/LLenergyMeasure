@@ -172,6 +172,27 @@ def get_params_from_model(
     return params
 
 
+def _get_custom_test_values() -> dict[str, list[Any]]:
+    """Get custom test value overrides for params that need special handling.
+
+    Auto-generated test values from Pydantic models don't always work well
+    for params with constraints or dependencies. This provides manual overrides.
+
+    Returns:
+        Dict mapping param paths to custom test values.
+    """
+    return {
+        # vLLM: max_model_len must be >= prompt length (64+ tokens in test prompts)
+        # plus max_output_tokens (32 in tests). Use reasonable test values.
+        "vllm.max_model_len": [256, 512],
+        # vLLM: max_num_batched_tokens must satisfy scheduler constraints
+        # (must be >= max_model_len when chunked prefill is disabled)
+        "vllm.max_num_batched_tokens": [512, 2048],
+        # TensorRT: Similar constraints on max_input_len
+        "tensorrt.max_input_len": [256, 512],
+    }
+
+
 def get_backend_params(backend: str) -> dict[str, dict[str, Any]]:
     """Get all parameters for a backend from its Pydantic model.
 
@@ -200,7 +221,15 @@ def get_backend_params(backend: str) -> dict[str, dict[str, Any]]:
 
     model_class = backend_models[backend]
     # All values are Pydantic BaseModel subclasses, mypy can't infer this from dict
-    return get_params_from_model(model_class, prefix=backend)  # type: ignore[arg-type]
+    params = get_params_from_model(model_class, prefix=backend)  # type: ignore[arg-type]
+
+    # Apply custom test value overrides
+    custom_values = _get_custom_test_values()
+    for param_path, values in custom_values.items():
+        if param_path in params:
+            params[param_path]["test_values"] = values
+
+    return params
 
 
 def get_shared_params() -> dict[str, dict[str, Any]]:
@@ -248,7 +277,9 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "default": 512,
         "description": "Maximum input token length",
         "options": None,
-        "test_values": [128, 512, 1024],
+        # Test values must leave room for output tokens within model's max_model_len
+        # With max_model_len=512 and max_output_tokens=32, max safe input is ~480
+        "test_values": [64, 128, 256],
         "constraints": {"ge": 1},
         "optional": False,
     }
@@ -487,8 +518,21 @@ def get_param_skip_conditions() -> dict[str, str]:
         # Flash Attention 3 - Hopper only
         "vllm.attention.flash_version=3": "Requires Hopper GPU (H100)",
         # FP8 - Ampere or newer
-        "vllm.kv_cache_dtype=fp8": "Requires Ampere+ GPU",
+        "vllm.kv_cache_dtype=fp8": "Requires Ampere+ GPU and FLASHINFER",
         "tensorrt.quantization=fp8": "Requires Ampere+ GPU",
+        # FLASHINFER attention - JIT compile issues in containers
+        "vllm.attention.backend=FLASHINFER": "FLASHINFER JIT compilation fails in some environments",
+        # Quantization - requires pre-quantized models (see get_special_test_models)
+        "vllm.quantization=awq": "Requires AWQ-quantized model",
+        "vllm.quantization=gptq": "Requires GPTQ-quantized model",
+        "vllm.quantization=marlin": "Requires GPTQ-quantized model (Marlin kernel)",
+        "vllm.quantization=squeezellm": "Requires SqueezeLLM-quantized model",
+        "vllm.quantization=bitsandbytes": "Requires bitsandbytes-quantized model",
+        # PyTorch optional dependencies
+        "pytorch.attn_implementation=flash_attention_2": "Requires flash-attn package",
+        "pytorch.cache_implementation=static": "Requires CUDA development headers for JIT",
+        "pytorch.load_in_4bit": "Requires compatible bitsandbytes version",
+        "pytorch.load_in_8bit": "Requires compatible bitsandbytes version",
     }
 
 
