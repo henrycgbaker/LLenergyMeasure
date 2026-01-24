@@ -1160,7 +1160,9 @@ def test_backend(
                 # Record skipped test in results
                 skipped_result = TestResult(
                     config_name=f"{backend}_base_{param.replace('.', '_')}_{value}",
+                    config_path="",  # No config file for skipped tests
                     status="skipped",
+                    exit_code=0,  # Not a failure
                     elapsed_seconds=0.0,
                     error_summary=skip_reason,
                     parameter_varied=param,

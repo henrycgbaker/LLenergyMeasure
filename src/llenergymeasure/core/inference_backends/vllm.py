@@ -347,8 +347,7 @@ class VLLMBackend:
         # Context length (override Tier 1 if specified)
         if vllm_cfg.max_model_len is not None:
             kwargs["max_model_len"] = vllm_cfg.max_model_len
-        if vllm_cfg.max_seq_len_to_capture is not None:
-            kwargs["max_seq_len_to_capture"] = vllm_cfg.max_seq_len_to_capture
+        # Note: max_seq_len_to_capture removed in vLLM v1 - CUDA graph capture is automatic
 
         # Execution mode
         if vllm_cfg.enforce_eager:
@@ -617,8 +616,10 @@ class VLLMBackend:
 
         warmup_count = config.streaming_warmup_requests
 
-        warmup_prompts = prompts[:warmup_count] if warmup_count > 0 else []
-        measurement_prompts = prompts[warmup_count:]
+        # Warmup reuses first N prompts; measurement uses ALL prompts
+        # (warmup is additional overhead, not subtracted from measurement budget)
+        warmup_prompts = prompts[: min(warmup_count, len(prompts))] if warmup_count > 0 else []
+        measurement_prompts = prompts
 
         if warmup_prompts:
             logger.info(f"Running {len(warmup_prompts)} streaming warmup requests...")
@@ -626,7 +627,6 @@ class VLLMBackend:
             logger.debug("Streaming warmup complete")
 
         if not measurement_prompts:
-            logger.warning("No prompts remaining after warmup. Increase num_input_prompts.")
             return BackendResult(
                 total_tokens=0,
                 input_tokens=0,

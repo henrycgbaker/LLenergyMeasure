@@ -482,14 +482,14 @@ Enable Time to First Token (TTFT) and Inter-Token Latency (ITL) measurement.
 
 ```yaml
 streaming: true                    # Enable streaming mode
-streaming_warmup_requests: 5       # Warmup requests (excluded from stats)
+streaming_warmup_requests: 5       # Warmup requests (reuses first N prompts)
 ```
 
 **Notes:**
 - Streaming mode processes prompts sequentially for accurate per-token timing
 - `batch_size` is ignored when streaming is enabled
-- Ensure `num_input_prompts > streaming_warmup_requests` for sufficient samples
-- Recommended: 30+ measurement samples for reliable percentiles
+- Warmup is additional overhead: first N prompts run for warmup, then ALL prompts run for measurement
+- Recommended: 30+ prompts for reliable latency percentiles
 
 ## Prompt Source Configuration
 
