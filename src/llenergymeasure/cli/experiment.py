@@ -47,6 +47,67 @@ from llenergymeasure.state.experiment_state import (
 )
 
 
+def _display_measurement_summary(
+    repo: FileSystemRepository,
+    experiment_id: str,
+    effective_cycles: int,
+    cycle_results: list[AggregatedResult],
+) -> None:
+    """Display Phase 1 measurement summary after experiment.
+
+    Shows environment metadata, thermal throttle warnings, energy breakdown,
+    and warmup convergence status from the aggregated result.
+
+    Args:
+        repo: Results repository to load aggregated result from.
+        experiment_id: Base experiment ID (or cycle-specific for single-cycle).
+        effective_cycles: Number of cycles executed.
+        cycle_results: Already-loaded cycle results (for multi-cycle mode).
+    """
+    try:
+        # Load the aggregated result
+        result: AggregatedResult | None
+        if effective_cycles > 1 and cycle_results:
+            result = cycle_results[0]  # Use first cycle for environment info
+        else:
+            result = repo.load_aggregated(experiment_id)
+
+        if result is None:
+            return
+
+        # Environment summary
+        if result.environment is not None:
+            console.print(f"  Environment: {result.environment.summary_line}")
+
+        # Thermal throttle warning
+        if result.thermal_throttle is not None and result.thermal_throttle.detected:
+            console.print(
+                f"  [yellow]Warning: Thermal throttling detected "
+                f"({result.thermal_throttle.throttle_duration_sec:.1f}s)[/yellow]"
+            )
+
+        # Energy breakdown
+        if result.energy_breakdown is not None and result.energy_breakdown.adjusted_j is not None:
+            console.print(
+                f"  Energy: {result.energy_breakdown.raw_j:.2f}J raw, "
+                f"{result.energy_breakdown.adjusted_j:.2f}J adjusted "
+                f"(baseline: {result.energy_breakdown.baseline_power_w:.1f}W)"
+            )
+
+        # Warmup status (from first process result)
+        if result.process_results:
+            first_process = result.process_results[0]
+            if first_process.warmup_result is not None:
+                wr = first_process.warmup_result
+                status = "converged" if wr.converged else "not converged"
+                console.print(
+                    f"  Warmup: {wr.iterations_completed} prompts "
+                    f"({status}, CV={wr.final_cv:.3f})"
+                )
+    except Exception:
+        pass  # Measurement summary display is non-fatal
+
+
 def resolve_prompts(
     config: ExperimentConfig,
     prompts_file: Path | None,
@@ -854,6 +915,9 @@ def experiment_cmd(
             stats_path = actual_results_dir / f"{base_experiment_id}_multi_cycle.json"
             stats_path.write_text(multi_cycle_result.model_dump_json(indent=2))
             console.print(f"\n[dim]Statistics saved: {stats_path}[/dim]")
+
+        # --- Phase 1: Display environment/measurement summary ---
+        _display_measurement_summary(repo, base_experiment_id, effective_cycles, cycle_results)
 
         console.print("\n[green]✓ Experiment completed successfully[/green]")
 

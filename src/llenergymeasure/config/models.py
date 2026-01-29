@@ -369,6 +369,113 @@ class DatasetConfig(BaseModel):
 
 
 # =============================================================================
+# Measurement Configuration (Phase 1 extensions)
+# =============================================================================
+
+
+class WarmupConfig(BaseModel):
+    """Warmup convergence configuration.
+
+    Controls the warmup phase before measurement begins. Supports either
+    CV-based convergence detection (stop when latency stabilises) or
+    fixed iteration count.
+    """
+
+    enabled: bool = Field(default=True, description="Enable warmup phase before inference")
+    convergence_detection: bool = Field(
+        default=True,
+        description="Use CV-based convergence detection (false = fixed iterations)",
+    )
+    cv_threshold: float = Field(
+        default=0.05,
+        gt=0.0,
+        le=1.0,
+        description="Target CV threshold (default 5%)",
+    )
+    max_prompts: int = Field(
+        default=50,
+        ge=1,
+        le=200,
+        description="Maximum warmup iterations (safety cap)",
+    )
+    window_size: int = Field(
+        default=5,
+        ge=3,
+        le=20,
+        description="Rolling window size for CV calculation",
+    )
+    min_prompts: int = Field(
+        default=5,
+        ge=1,
+        description="Minimum warmup prompts before checking convergence",
+    )
+
+    @model_validator(mode="after")
+    def validate_window_size(self) -> "WarmupConfig":
+        """Ensure window_size and min_prompts are within max_prompts."""
+        if self.window_size > self.max_prompts:
+            raise ValueError(
+                f"window_size ({self.window_size}) must be <= max_prompts ({self.max_prompts})"
+            )
+        if self.min_prompts > self.max_prompts:
+            raise ValueError(
+                f"min_prompts ({self.min_prompts}) must be <= max_prompts ({self.max_prompts})"
+            )
+        return self
+
+
+class BaselineConfig(BaseModel):
+    """Baseline power measurement configuration.
+
+    Controls whether and how idle GPU power is measured before experiments,
+    enabling baseline-adjusted energy attribution.
+    """
+
+    enabled: bool = Field(default=True, description="Enable baseline power measurement")
+    required: bool = Field(
+        default=False,
+        description="Fail experiment if baseline measurement fails (false = warn and continue)",
+    )
+    duration_sec: float = Field(
+        default=30.0,
+        ge=5.0,
+        le=120.0,
+        description="Baseline measurement duration in seconds",
+    )
+    cache_ttl_sec: float = Field(
+        default=3600.0,
+        ge=60.0,
+        description="Cache validity in seconds (default 1 hour)",
+    )
+    sample_interval_ms: int = Field(
+        default=100,
+        ge=50,
+        le=1000,
+        description="Sampling interval in milliseconds",
+    )
+
+
+class TimeSeriesConfig(BaseModel):
+    """Time-series data collection configuration.
+
+    Controls whether power/temperature/utilisation time-series data
+    is collected and saved during experiments.
+    """
+
+    enabled: bool = Field(default=False, description="Enable time-series data collection")
+    save: bool = Field(
+        default=False,
+        description="Save time-series to separate file (--save-timeseries)",
+    )
+    sample_interval_ms: int = Field(
+        default=100,
+        ge=50,
+        le=5000,
+        description="Sampling interval in ms (100ms = 10Hz, 1000ms = 1Hz)",
+    )
+
+
+# =============================================================================
 # Main Experiment Configuration
 # =============================================================================
 
@@ -451,6 +558,22 @@ class ExperimentConfig(BaseModel):
     io: IOConfig = Field(
         default_factory=IOConfig,
         description="I/O paths configuration",
+    )
+
+    # -------------------------------------------------------------------------
+    # Measurement Configuration (Phase 1)
+    # -------------------------------------------------------------------------
+    warmup: WarmupConfig = Field(
+        default_factory=WarmupConfig,
+        description="Warmup convergence configuration",
+    )
+    baseline: BaselineConfig = Field(
+        default_factory=BaselineConfig,
+        description="Baseline power measurement configuration",
+    )
+    timeseries: TimeSeriesConfig = Field(
+        default_factory=TimeSeriesConfig,
+        description="Time-series data collection configuration",
     )
 
     # -------------------------------------------------------------------------

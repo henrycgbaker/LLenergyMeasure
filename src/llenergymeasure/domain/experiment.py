@@ -6,12 +6,16 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from llenergymeasure.constants import SCHEMA_VERSION
+from llenergymeasure.domain.environment import EnvironmentMetadata
 from llenergymeasure.domain.metrics import (
     ComputeMetrics,
+    EnergyBreakdown,
     EnergyMetrics,
     ExtendedEfficiencyMetrics,
     InferenceMetrics,
     LatencyStatistics,
+    ThermalThrottleInfo,
+    WarmupResult,
 )
 
 
@@ -204,6 +208,28 @@ class RawProcessResult(BaseModel):
         description="GPU utilisation samples for late aggregation",
     )
 
+    # Schema v3: Environment, energy breakdown, thermal, warmup
+    environment: EnvironmentMetadata | None = Field(
+        default=None,
+        description="Hardware/software environment metadata for reproducibility",
+    )
+    energy_breakdown: EnergyBreakdown | None = Field(
+        default=None,
+        description="Detailed energy breakdown with baseline adjustment",
+    )
+    thermal_throttle: ThermalThrottleInfo | None = Field(
+        default=None,
+        description="GPU thermal and power throttling information",
+    )
+    warmup_result: WarmupResult | None = Field(
+        default=None,
+        description="Warmup convergence detection result",
+    )
+    timeseries_path: str | None = Field(
+        default=None,
+        description="Path to time-series data file if saved",
+    )
+
     model_config = {"frozen": True}
 
 
@@ -296,6 +322,24 @@ class AggregatedResult(BaseModel):
     extended_metrics: ExtendedEfficiencyMetrics = Field(
         default_factory=ExtendedEfficiencyMetrics,
         description="Aggregated extended efficiency metrics",
+    )
+
+    # Schema v3: Environment, energy breakdown, thermal
+    environment: EnvironmentMetadata | None = Field(
+        default=None,
+        description="Hardware/software environment metadata (from first process)",
+    )
+    energy_breakdown: EnergyBreakdown | None = Field(
+        default=None,
+        description="Aggregated energy breakdown with baseline adjustment",
+    )
+    thermal_throttle: ThermalThrottleInfo | None = Field(
+        default=None,
+        description="GPU thermal and power throttling information",
+    )
+    timeseries_path: str | None = Field(
+        default=None,
+        description="Path to time-series data file if saved",
     )
 
     model_config = {"frozen": True}
