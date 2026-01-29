@@ -115,6 +115,10 @@ class ExperimentOrchestrator:
     def run(self, ctx: ExperimentContext, prompts: list[str]) -> Path:
         """Run experiment and save raw results.
 
+        Lifecycle: environment -> baseline -> model load -> warmup ->
+        sampler+inference -> energy breakdown -> thermal check ->
+        save results -> export timeseries.
+
         Args:
             ctx: Experiment context with config and accelerator.
             prompts: List of prompts to process.
@@ -125,16 +129,113 @@ class ExperimentOrchestrator:
         start = datetime.now()
         logger.info(f"Starting experiment {ctx.experiment_id} on process {ctx.process_index}")
 
+        # --- Phase 1: Collect environment metadata (MEAS-01) ---
+        environment = None
+        try:
+            from llenergymeasure.core.environment import collect_environment_metadata
+
+            environment = collect_environment_metadata(ctx.device.index or 0)
+            logger.info(f"Environment: {environment.summary_line}")
+        except Exception as e:
+            logger.warning(f"Environment metadata collection failed (non-fatal): {e}")
+
+        # --- Phase 1: Baseline power measurement (MEAS-02) ---
+        baseline = None
+        try:
+            from llenergymeasure.core.baseline import measure_baseline_power
+
+            if ctx.config.baseline.enabled:
+                baseline = measure_baseline_power(
+                    device_index=ctx.device.index or 0,
+                    duration_sec=ctx.config.baseline.duration_sec,
+                    sample_interval_ms=ctx.config.baseline.sample_interval_ms,
+                    cache_ttl_sec=ctx.config.baseline.cache_ttl_sec,
+                )
+                if baseline:
+                    logger.info(f"Baseline power: {baseline.power_w:.1f}W")
+                elif ctx.config.baseline.required:
+                    raise RuntimeError("Baseline measurement required but failed")
+                else:
+                    logger.warning("Baseline measurement failed, continuing with raw energy only")
+        except RuntimeError:
+            raise
+        except Exception as e:
+            if ctx.config.baseline.required:
+                raise RuntimeError(f"Baseline measurement required but failed: {e}") from e
+            logger.warning(f"Baseline measurement failed (non-fatal): {e}")
+
         # Load model
         model, tokenizer = self._loader.load(ctx.config)
         logger.info(f"Model loaded: {ctx.config.model_name}")
+
+        # --- Phase 1: Warmup convergence (MEAS-05) ---
+        warmup_result = None
+        try:
+            if ctx.config.warmup.enabled and model is not None and tokenizer is not None:
+                from llenergymeasure.core.warmup import (
+                    create_warmup_inference_fn,
+                    warmup_until_converged,
+                )
+
+                warmup_fn = create_warmup_inference_fn(
+                    model,
+                    tokenizer,
+                    prompts[0] if prompts else "Hello",
+                    max_new_tokens=min(32, ctx.config.max_output_tokens),
+                )
+                warmup_result = warmup_until_converged(
+                    warmup_fn, ctx.config.warmup, show_progress=True
+                )
+                if warmup_result.converged:
+                    logger.info(
+                        f"Warmup converged: {warmup_result.iterations_completed} prompts, "
+                        f"CV={warmup_result.final_cv:.3f}"
+                    )
+                else:
+                    logger.warning(
+                        f"Warmup did not converge after {warmup_result.iterations_completed} "
+                        f"prompts (CV={warmup_result.final_cv:.3f})"
+                    )
+            elif ctx.config.warmup.enabled:
+                logger.debug(
+                    "Warmup convergence skipped: backend manages model internally "
+                    "(using backend's own warmup)"
+                )
+        except Exception as e:
+            logger.warning(f"Warmup failed (non-fatal): {e}")
+
+        # --- Phase 1: PowerThermalSampler (MEAS-03, MEAS-04) ---
+        power_sampler = None
+        try:
+            from llenergymeasure.core.power_thermal import PowerThermalSampler
+
+            power_sampler = PowerThermalSampler(
+                device_index=ctx.device.index or 0,
+                sample_interval_ms=(
+                    ctx.config.timeseries.sample_interval_ms
+                    if ctx.config.timeseries.enabled
+                    else 100
+                ),
+            )
+        except Exception as e:
+            logger.warning(f"PowerThermalSampler creation failed (non-fatal): {e}")
 
         # Start energy tracking
         tracker = self._energy.start_tracking()
         logger.debug("Energy tracking started")
 
-        # Run inference
-        inference_result = self._inference.run(model, tokenizer, prompts, ctx.config)
+        # Run inference (with PowerThermalSampler if available)
+        if power_sampler is not None:
+            try:
+                with power_sampler:
+                    inference_result = self._inference.run(model, tokenizer, prompts, ctx.config)
+            except Exception:
+                # If sampler context fails, run inference without it
+                logger.warning("PowerThermalSampler context failed, running without it")
+                power_sampler = None
+                inference_result = self._inference.run(model, tokenizer, prompts, ctx.config)
+        else:
+            inference_result = self._inference.run(model, tokenizer, prompts, ctx.config)
         logger.info(f"Inference complete: {len(prompts)} prompts processed")
 
         # Stop energy tracking
@@ -264,6 +365,35 @@ class ExperimentOrchestrator:
             logger.warning(f"Extended metrics computation failed (non-fatal): {e}")
             extended_metrics = ExtendedEfficiencyMetrics()
 
+        # --- Phase 1: Energy breakdown (MEAS-02) ---
+        energy_breakdown = None
+        try:
+            from llenergymeasure.core.baseline import create_energy_breakdown
+
+            # Use actual experiment duration from timestamps, not energy_metrics.duration_sec
+            # which may be 0.0 from CodeCarbon's reporting
+            experiment_duration_sec = (end - start).total_seconds()
+            energy_breakdown = create_energy_breakdown(
+                total_energy_j=energy_metrics.total_energy_j,
+                baseline=baseline,
+                duration_sec=experiment_duration_sec,
+            )
+        except Exception as e:
+            logger.warning(f"Energy breakdown creation failed (non-fatal): {e}")
+
+        # --- Phase 1: Thermal throttle info (MEAS-03) ---
+        thermal_throttle = None
+        try:
+            if power_sampler is not None:
+                thermal_throttle = power_sampler.get_thermal_throttle_info()
+                if thermal_throttle.detected:
+                    logger.warning(
+                        f"Thermal throttling detected during experiment "
+                        f"({thermal_throttle.throttle_duration_sec:.1f}s)"
+                    )
+        except Exception as e:
+            logger.warning(f"Thermal throttle info failed (non-fatal): {e}")
+
         # Build raw result with effective_config, cli_overrides, and provenance
         raw_result = RawProcessResult(
             experiment_id=ctx.experiment_id,
@@ -294,11 +424,41 @@ class ExperimentOrchestrator:
             extended_metrics=extended_metrics,
             per_request_latencies_ms=per_request_latencies,
             gpu_utilisation_samples=gpu_utilisation_samples,
+            environment=environment,
+            energy_breakdown=energy_breakdown,
+            thermal_throttle=thermal_throttle,
+            warmup_result=warmup_result,
         )
 
         # Save raw result
         result_path = self._repository.save_raw(ctx.experiment_id, raw_result)
         logger.info(f"Raw result saved to {result_path}")
+
+        # --- Phase 1: Time-series export (MEAS-04) ---
+        timeseries_path_str = None
+        if power_sampler is not None and power_sampler.is_available and ctx.config.timeseries.save:
+            try:
+                from llenergymeasure.results.timeseries import export_timeseries
+
+                ts_path = export_timeseries(
+                    samples=power_sampler.get_samples(),
+                    experiment_id=ctx.experiment_id,
+                    process_index=ctx.process_index,
+                    output_dir=result_path.parent,
+                    sample_interval_ms=ctx.config.timeseries.sample_interval_ms,
+                )
+                timeseries_path_str = str(ts_path)
+                logger.info(f"Time-series saved: {ts_path}")
+            except Exception as e:
+                logger.warning(f"Time-series export failed (non-fatal): {e}")
+
+        # Update result with timeseries path if exported
+        # Since RawProcessResult is frozen, we need to reconstruct if timeseries was saved
+        if timeseries_path_str is not None:
+            raw_result = raw_result.model_copy(update={"timeseries_path": timeseries_path_str})
+            # Re-save with timeseries path
+            result_path = self._repository.save_raw(ctx.experiment_id, raw_result)
+            logger.debug("Result re-saved with timeseries path")
 
         # Write completion marker (Phase 5)
         _write_completion_marker(

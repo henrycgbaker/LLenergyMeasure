@@ -103,7 +103,16 @@ def _aggregated_to_row(
     result: AggregatedResult,
     include_process_breakdown: bool,
 ) -> dict[str, Any]:
-    """Convert an aggregated result to a flat row dict."""
+    """Convert an aggregated result to a flat row dict.
+
+    Columns are grouped by prefix for CSV readability:
+    - Core metrics (experiment_id, tokens, energy, throughput)
+    - energy_* : Energy breakdown (schema v3)
+    - thermal_* : Thermal throttling info
+    - env_* : Environment metadata
+    - gpu_*/latency_*/batch_*/kv_cache_* : Extended efficiency metrics
+    - timeseries_path : Reference to time-series data file
+    """
     row: dict[str, Any] = {
         "experiment_id": result.experiment_id,
         "start_time": result.start_time.isoformat(),
@@ -113,7 +122,7 @@ def _aggregated_to_row(
         "aggregation_method": result.aggregation.method,
         # Core metrics
         "total_tokens": result.total_tokens,
-        "total_energy_j": result.total_energy_j,
+        "energy_raw_j": result.total_energy_j,
         "total_inference_time_sec": result.total_inference_time_sec,
         "avg_tokens_per_second": result.avg_tokens_per_second,
         "avg_energy_per_token_j": result.avg_energy_per_token_j,
@@ -128,6 +137,42 @@ def _aggregated_to_row(
     if result.aggregation.warnings:
         row["warnings"] = "; ".join(result.aggregation.warnings)
 
+    # --- Energy breakdown (schema v3) ---
+    eb = result.energy_breakdown
+    row["energy_adjusted_j"] = eb.adjusted_j if eb else None
+    row["energy_baseline_w"] = eb.baseline_power_w if eb else None
+    row["energy_baseline_method"] = eb.baseline_method if eb else None
+
+    # --- Thermal throttling ---
+    tt = result.thermal_throttle
+    row["thermal_throttle_detected"] = tt.detected if tt else False
+    row["thermal_throttle_duration_sec"] = tt.throttle_duration_sec if tt else 0.0
+    row["thermal_max_temp_c"] = tt.max_temperature_c if tt else None
+
+    # --- Environment metadata ---
+    env = result.environment
+    row["env_gpu_name"] = env.gpu.name if env else None
+    row["env_gpu_vram_mb"] = env.gpu.vram_total_mb if env else None
+    row["env_cuda_version"] = env.cuda.version if env else None
+    row["env_driver_version"] = env.cuda.driver_version if env else None
+    row["env_gpu_temp_c"] = env.thermal.temperature_c if env else None
+    row["env_power_limit_w"] = env.thermal.power_limit_w if env else None
+    row["env_cpu_governor"] = env.cpu.governor if env else None
+    row["env_in_container"] = env.container.detected if env else None
+    row["env_summary"] = env.summary_line if env else None
+
+    # --- Extended efficiency metrics ---
+    em = result.extended_metrics
+    row["gpu_util_mean_pct"] = em.gpu_utilisation.sm_utilisation_mean if em else None
+    row["gpu_mem_peak_mb"] = em.memory.peak_memory_mb if em else None
+    row["latency_e2e_mean_ms"] = em.request_latency.e2e_latency_mean_ms if em else None
+    row["latency_e2e_p95_ms"] = em.request_latency.e2e_latency_p95_ms if em else None
+    row["batch_effective_size"] = em.batch.effective_batch_size if em else None
+    row["kv_cache_hit_rate"] = em.kv_cache.kv_cache_hit_rate if em else None
+
+    # --- Time-series reference ---
+    row["timeseries_path"] = result.timeseries_path
+
     # Optionally add per-process breakdown
     if include_process_breakdown:
         for proc in result.process_results:
@@ -141,16 +186,21 @@ def _aggregated_to_row(
 
 
 def _order_columns(keys: list[str]) -> list[str]:
-    """Order columns in a logical sequence."""
+    """Order columns in a logical sequence.
+
+    Groups related columns by prefix for CSV readability:
+    core > energy_ > thermal_ > env_ > gpu_/latency_/batch_/kv_cache_ > timeseries > process_
+    """
     # Priority ordering - these appear first
     priority = [
+        # Core identification and metrics
         "experiment_id",
         "start_time",
         "end_time",
         "duration_sec",
         "num_processes",
         "total_tokens",
-        "total_energy_j",
+        "energy_raw_j",
         "avg_tokens_per_second",
         "tokens_per_joule",
         "avg_energy_per_token_j",
@@ -160,6 +210,33 @@ def _order_columns(keys: list[str]) -> list[str]:
         "temporal_overlap_verified",
         "gpu_attribution_verified",
         "warnings",
+        # Energy breakdown (schema v3)
+        "energy_adjusted_j",
+        "energy_baseline_w",
+        "energy_baseline_method",
+        # Thermal throttling
+        "thermal_throttle_detected",
+        "thermal_throttle_duration_sec",
+        "thermal_max_temp_c",
+        # Environment metadata
+        "env_gpu_name",
+        "env_gpu_vram_mb",
+        "env_cuda_version",
+        "env_driver_version",
+        "env_gpu_temp_c",
+        "env_power_limit_w",
+        "env_cpu_governor",
+        "env_in_container",
+        "env_summary",
+        # Extended efficiency metrics
+        "gpu_util_mean_pct",
+        "gpu_mem_peak_mb",
+        "latency_e2e_mean_ms",
+        "latency_e2e_p95_ms",
+        "batch_effective_size",
+        "kv_cache_hit_rate",
+        # Time-series reference
+        "timeseries_path",
     ]
 
     ordered = [k for k in priority if k in keys]

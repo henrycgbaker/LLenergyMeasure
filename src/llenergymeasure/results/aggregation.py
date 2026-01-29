@@ -294,6 +294,51 @@ def aggregate_results(
         backend = raw_results[0].backend
         backend_version = raw_results[0].backend_version
 
+    # --- Schema v3: Aggregate environment, energy_breakdown, thermal_throttle ---
+
+    # Environment: take from first process (all processes share same GPU environment)
+    environment = raw_results[0].environment if raw_results else None
+
+    # Energy breakdown: sum raw_j and adjusted_j across processes
+    energy_breakdown = None
+    breakdowns = [p.energy_breakdown for p in raw_results if p.energy_breakdown]
+    if breakdowns:
+        total_raw = sum(b.raw_j for b in breakdowns)
+        adjusted_values = [b.adjusted_j for b in breakdowns if b.adjusted_j is not None]
+        total_adjusted = sum(adjusted_values) if adjusted_values else None
+        first = breakdowns[0]
+        from llenergymeasure.domain.metrics import EnergyBreakdown
+
+        energy_breakdown = EnergyBreakdown(
+            raw_j=total_raw,
+            adjusted_j=total_adjusted,
+            baseline_power_w=first.baseline_power_w,
+            baseline_method=first.baseline_method,
+            baseline_timestamp=first.baseline_timestamp,
+            baseline_cache_age_sec=first.baseline_cache_age_sec,
+        )
+
+    # Thermal throttle: merge across processes (any process throttled = throttled)
+    thermal_throttle = None
+    throttles = [p.thermal_throttle for p in raw_results if p.thermal_throttle]
+    if throttles:
+        from llenergymeasure.domain.metrics import ThermalThrottleInfo
+
+        max_temps = [t.max_temperature_c for t in throttles if t.max_temperature_c is not None]
+        thermal_throttle = ThermalThrottleInfo(
+            detected=any(t.detected for t in throttles),
+            thermal=any(t.thermal for t in throttles),
+            power=any(t.power for t in throttles),
+            sw_thermal=any(t.sw_thermal for t in throttles),
+            hw_thermal=any(t.hw_thermal for t in throttles),
+            hw_power=any(t.hw_power for t in throttles),
+            throttle_duration_sec=max(t.throttle_duration_sec for t in throttles),
+            max_temperature_c=max(max_temps) if max_temps else None,
+        )
+
+    # Timeseries path: take from first process that has one
+    timeseries_path = next((p.timeseries_path for p in raw_results if p.timeseries_path), None)
+
     return AggregatedResult(
         experiment_id=experiment_id,
         backend=backend,
@@ -314,6 +359,10 @@ def aggregate_results(
         latency_stats=latency_stats,
         energy_tracking_failed=energy_tracking_failed,
         extended_metrics=extended_metrics,
+        environment=environment,
+        energy_breakdown=energy_breakdown,
+        thermal_throttle=thermal_throttle,
+        timeseries_path=timeseries_path,
     )
 
 

@@ -24,7 +24,7 @@ DEFAULT_TOP_P = 1.0
 DEFAULT_STREAMING_WARMUP_REQUESTS = 5
 
 # Schema version for result files
-SCHEMA_VERSION = "2.0.0"
+SCHEMA_VERSION = "3.0.0"
 
 # State management
 # Precedence: LLM_ENERGY_STATE_DIR env var > ".state"

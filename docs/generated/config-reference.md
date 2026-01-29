@@ -1,12 +1,13 @@
 # Configuration Reference
 
 > This file is auto-generated from Pydantic models. Do not edit manually.
-> Generated: 2026-01-24
+> Generated: 2026-01-29
 
 ## Table of Contents
 
 - [adapter](#adapter)
 - [backend](#backend)
+- [baseline](#baseline)
 - [config_name](#config-name)
 - [cycle_id](#cycle-id)
 - [dataset](#dataset)
@@ -31,8 +32,10 @@
 - [streaming](#streaming)
 - [streaming_warmup_requests](#streaming-warmup-requests)
 - [tensorrt](#tensorrt)
+- [timeseries](#timeseries)
 - [traffic_simulation](#traffic-simulation)
 - [vllm](#vllm)
+- [warmup](#warmup)
 
 ---
 
@@ -47,6 +50,17 @@
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `backend` | Literal['pytorch', 'tensorrt', 'vllm'] | 'pytorch' | Inference backend |
+
+## baseline
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `baseline` | BaselineConfig | PydanticUndefined | Baseline power measurement configuration |
+| `baseline.enabled` | bool | True | Enable baseline power measurement |
+| `baseline.required` | bool | False | Fail experiment if baseline measurement fails (false = warn and continue) |
+| `baseline.duration_sec` | float | 30.0 | Baseline measurement duration in seconds |
+| `baseline.cache_ttl_sec` | float | 3600.0 | Cache validity in seconds (default 1 hour) |
+| `baseline.sample_interval_ms` | int | 100 | Sampling interval in milliseconds |
 
 ## config_name
 
@@ -204,6 +218,15 @@
 |-----------|------|---------|-------------|
 | `tensorrt` | TensorRTConfig \| None | None | TensorRT-LLM configuration (only used when backend=tensorrt) |
 
+## timeseries
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `timeseries` | TimeSeriesConfig | PydanticUndefined | Time-series data collection configuration |
+| `timeseries.enabled` | bool | False | Enable time-series data collection |
+| `timeseries.save` | bool | False | Save time-series to separate file (--save-timeseries) |
+| `timeseries.sample_interval_ms` | int | 100 | Sampling interval in ms (100ms = 10Hz, 1000ms = 1Hz) |
+
 ## traffic_simulation
 
 | Parameter | Type | Default | Description |
@@ -219,6 +242,18 @@
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `vllm` | VLLMConfig \| None | None | vLLM-specific configuration (only used when backend=vllm) |
+
+## warmup
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `warmup` | WarmupConfig | PydanticUndefined | Warmup convergence configuration |
+| `warmup.enabled` | bool | True | Enable warmup phase before inference |
+| `warmup.convergence_detection` | bool | True | Use CV-based convergence detection (false = fixed iterations) |
+| `warmup.cv_threshold` | float | 0.05 | Target CV threshold (default 5%) |
+| `warmup.max_prompts` | int | 50 | Maximum warmup iterations (safety cap) |
+| `warmup.window_size` | int | 5 | Rolling window size for CV calculation |
+| `warmup.min_prompts` | int | 5 | Minimum warmup prompts before checking convergence |
 
 ---
 

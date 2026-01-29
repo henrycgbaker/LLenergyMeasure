@@ -1,6 +1,7 @@
 """Metrics domain models for LLM Bench."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -258,6 +259,104 @@ class EnergyMetrics(BaseModel):
     def total_power_w(self) -> float:
         """Total average power consumption."""
         return self.gpu_power_w + self.cpu_power_w
+
+
+# =============================================================================
+# Schema v3: Energy Breakdown, Thermal Throttle, Warmup Result
+# =============================================================================
+
+
+class EnergyBreakdown(BaseModel):
+    """Detailed energy breakdown with baseline adjustment.
+
+    Separates raw measured energy from baseline-adjusted values to enable
+    accurate attribution of energy to inference work (not idle power).
+    """
+
+    raw_j: float = Field(..., description="Total measured energy in Joules")
+    adjusted_j: float | None = Field(
+        default=None,
+        description="Baseline-adjusted energy (raw - baseline * duration) in Joules",
+    )
+    baseline_power_w: float | None = Field(
+        default=None,
+        description="Measured baseline idle power in Watts",
+    )
+    baseline_method: str | None = Field(
+        default=None,
+        description="How baseline was obtained ('cached', 'fresh', 'unavailable')",
+    )
+    baseline_timestamp: datetime | None = Field(
+        default=None,
+        description="When baseline power was measured",
+    )
+    baseline_cache_age_sec: float | None = Field(
+        default=None,
+        description="Age of cached baseline measurement in seconds",
+    )
+
+
+class ThermalThrottleInfo(BaseModel):
+    """GPU thermal and power throttling information.
+
+    Tracks whether any throttling occurred during an experiment, which
+    can invalidate energy and performance measurements.
+    """
+
+    detected: bool = Field(
+        default=False,
+        description="Whether any throttling occurred during experiment",
+    )
+    thermal: bool = Field(
+        default=False,
+        description="GPU thermal throttling detected",
+    )
+    power: bool = Field(
+        default=False,
+        description="Power brake throttling detected",
+    )
+    sw_thermal: bool = Field(
+        default=False,
+        description="Software thermal slowdown detected",
+    )
+    hw_thermal: bool = Field(
+        default=False,
+        description="Hardware thermal slowdown detected",
+    )
+    hw_power: bool = Field(
+        default=False,
+        description="Hardware power brake slowdown detected",
+    )
+    throttle_duration_sec: float = Field(
+        default=0.0,
+        description="Estimated duration of throttling in seconds",
+    )
+    max_temperature_c: float | None = Field(
+        default=None,
+        description="Peak GPU temperature during experiment in Celsius",
+    )
+    throttle_timestamps: list[float] = Field(
+        default_factory=list,
+        description="Timestamps (seconds from start) when throttle was detected",
+    )
+
+
+class WarmupResult(BaseModel):
+    """Result of warmup convergence detection.
+
+    Records whether the warmup phase achieved stable latency (low CV)
+    before the measurement phase began.
+    """
+
+    converged: bool = Field(..., description="Whether convergence was achieved")
+    final_cv: float = Field(..., description="Final coefficient of variation")
+    iterations_completed: int = Field(..., description="Number of warmup prompts run")
+    target_cv: float = Field(..., description="Configured CV threshold")
+    max_prompts: int = Field(..., description="Configured maximum warmup iterations")
+    latencies_ms: list[float] = Field(
+        default_factory=list,
+        description="Warmup latencies in ms (for debugging)",
+    )
 
 
 class ComputeMetrics(BaseModel):
