@@ -749,6 +749,48 @@ def get_capability_matrix_markdown() -> str:
     return "\n".join(lines)
 
 
+def get_campaign_params() -> dict[str, dict[str, Any]]:
+    """Get all parameters from CampaignConfig and its nested models.
+
+    Introspects CampaignConfig, CampaignGridConfig, CampaignHealthCheckConfig,
+    CampaignColdStartConfig, CampaignDaemonConfig, CampaignIOConfig,
+    CampaignExecutionConfig, and CampaignScheduleConfig.
+
+    Returns:
+        Dict mapping param paths (e.g., "grid.backends", "health_check.gpu_memory_threshold_pct")
+        to metadata dicts.
+    """
+    from llenergymeasure.config.campaign_config import CampaignConfig
+
+    return get_params_from_model(CampaignConfig, prefix="", include_nested=True)
+
+
+def get_campaign_grid_params() -> dict[str, dict[str, Any]]:
+    """Get grid-related parameters from CampaignGridConfig.
+
+    Used by campaign grid validation to report available grid axes.
+
+    Returns:
+        Dict mapping param paths to metadata for grid fields only.
+    """
+    from llenergymeasure.config.campaign_config import CampaignGridConfig
+
+    return get_params_from_model(CampaignGridConfig, prefix="grid", include_nested=True)
+
+
+def get_campaign_health_check_params() -> dict[str, dict[str, Any]]:
+    """Get health check parameters from CampaignHealthCheckConfig.
+
+    Returns:
+        Dict mapping param paths to metadata for health check fields only.
+    """
+    from llenergymeasure.config.campaign_config import CampaignHealthCheckConfig
+
+    return get_params_from_model(
+        CampaignHealthCheckConfig, prefix="health_check", include_nested=True
+    )
+
+
 def get_validation_rules() -> list[dict[str, str]]:
     """Get validation rules from config validators for documentation.
 

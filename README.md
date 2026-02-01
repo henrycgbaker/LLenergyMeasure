@@ -55,13 +55,34 @@ All parameters below are fully wired and functional.
 
 ## Installation
 
-```bash
-# Poetry (recommended)
-poetry install
+### Local Install (most users)
 
-# Docker
-docker compose build
+```bash
+pip install -e .
+lem experiment configs/examples/pytorch_example.yaml -n 10
 ```
+
+Base install includes PyTorch backend — no extras needed.
+
+### Local + Docker (multi-backend campaigns)
+
+```bash
+pip install -e .
+docker compose build pytorch vllm
+lem campaign multi-backend-campaign.yaml
+```
+
+Docker required only for campaigns spanning multiple backends (vLLM and TensorRT have conflicting dependencies).
+
+### Optional Backends
+
+```bash
+pip install -e ".[vllm]"       # vLLM (high throughput, Linux only)
+pip install -e ".[tensorrt]"   # TensorRT (Ampere+ GPU, Linux only)
+pip install -e ".[dev]"        # Development tools (pytest, ruff, mypy)
+```
+
+Check your environment: `lem doctor`
 
 ## Quick Start
 
@@ -197,6 +218,8 @@ make dev      # Install + pre-commit hooks
 make check    # Format, lint, typecheck
 make test     # Run tests
 ```
+
+Check your setup: `lem doctor`
 
 ## Project Structure
 

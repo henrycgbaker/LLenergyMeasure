@@ -5,19 +5,22 @@ This guide walks you through your first LLM efficiency measurement experiment.
 ## Quick Start (5 minutes)
 
 ```bash
-# Clone and setup
+# Clone and install
 git clone https://github.com/henrycgbaker/LLenergyMeasure
 cd LLenergyMeasure
-./setup.sh
+pip install -e .
+
+# Check your setup
+lem doctor
 
 # Run your first experiment
-./lem experiment configs/examples/pytorch_example.yaml -n 10
+lem experiment configs/examples/pytorch_example.yaml -n 10
 
 # Or run a multi-config campaign
-./lem campaign configs/examples/campaign_example.yaml --dry-run
+lem campaign configs/examples/campaign_example.yaml --dry-run
 ```
 
-That's it! The `setup.sh` script handles Docker image building, environment configuration, and creates the `lem` CLI wrapper.
+That's it! Base install includes PyTorch backend — no extras needed.
 
 ## Prerequisites
 
@@ -43,55 +46,25 @@ This tool supports three inference backends with different trade-offs:
 
 ## Installation Options
 
-### Option 1: Docker with setup.sh (Recommended)
+### Option 1: Local Install (Recommended)
 
-The simplest way to get started. Each backend runs in an isolated container.
-
-```bash
-# Clone
-git clone https://github.com/henrycgbaker/LLenergyMeasure
-cd LLenergyMeasure
-
-# One-click setup (creates .env, builds PyTorch image, creates lem wrapper)
-./setup.sh
-
-# Build other backends if needed
-./setup.sh --backend vllm
-./setup.sh --backend tensorrt
-./setup.sh --all  # Build all backends
-```
-
-After setup, use the `lem` wrapper for all commands:
-```bash
-./lem experiment configs/examples/pytorch_example.yaml -n 10
-./lem campaign configs/examples/campaign_example.yaml --dry-run
-./lem results list
-```
-
-The `lem` wrapper automatically:
-- Detects the backend from your config file
-- Runs the correct Docker container
-- Handles volume mounts and permissions
-
-### Option 2: Local Development (poetry/pip)
-
-Use this for development or if you only need **one backend**.
+The simplest way to get started for single-backend experiments.
 
 ```bash
 # Clone
 git clone https://github.com/henrycgbaker/LLenergyMeasure
 cd LLenergyMeasure
 
-# Local install mode
-./setup.sh --local
+# Install
+pip install -e .                    # Includes PyTorch backend
+pip install -e ".[vllm]"            # Or vLLM (Linux only)
+pip install -e ".[tensorrt]"        # Or TensorRT (Ampere+ GPU)
 
-# Or manually:
-pip install -e ".[pytorch]"     # Most compatible
-pip install -e ".[vllm]"        # High throughput (Linux only)
-pip install -e ".[tensorrt]"    # Highest performance (Ampere+ required)
+# Check setup
+lem doctor
 
-# Verify
-./lem --help
+# Run experiment
+lem experiment configs/examples/pytorch_example.yaml -n 10
 ```
 
 **Switching backends locally**: Create separate conda environments:
@@ -100,20 +73,48 @@ conda create -n llm-vllm python=3.10 && conda activate llm-vllm
 pip install -e ".[vllm]"
 ```
 
+### Option 2: Docker for Multi-Backend Campaigns
+
+Use Docker when running campaigns that span multiple backends (vLLM and TensorRT have conflicting dependencies).
+
+```bash
+# Clone and install CLI tool locally
+git clone https://github.com/henrycgbaker/LLenergyMeasure
+cd LLenergyMeasure
+pip install -e .
+
+# Create .env file with your user IDs
+echo "PUID=$(id -u)" >> .env
+echo "PGID=$(id -g)" >> .env
+
+# Optional: Add HuggingFace token for gated models
+echo "HF_TOKEN=hf_your_token_here" >> .env
+
+# Build needed backend images
+docker compose build pytorch vllm
+
+# Run multi-backend campaign
+lem campaign configs/examples/campaign_example.yaml
+```
+
+The `lem campaign` command automatically dispatches to Docker when multiple backends are involved.
+
 ---
 
 ## Environment Variables
 
-The `setup.sh` script creates a `.env` file automatically with your user IDs for correct file permissions.
-
-To add a HuggingFace token for gated models:
+For Docker mode, create a `.env` file with your user IDs for correct file permissions:
 
 ```bash
-# Edit .env and add your token
-HF_TOKEN=hf_your_token_here
+# Required for Docker
+echo "PUID=$(id -u)" >> .env
+echo "PGID=$(id -g)" >> .env
+
+# Optional: Add HuggingFace token for gated models
+echo "HF_TOKEN=hf_your_token_here" >> .env
 ```
 
-Get your token at: https://huggingface.co/settings/tokens
+Get your HuggingFace token at: https://huggingface.co/settings/tokens
 
 ## Your First Experiment
 

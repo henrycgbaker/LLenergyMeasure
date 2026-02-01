@@ -590,3 +590,62 @@ def aggregate_latency_measurements(
         itl_full_mean_ms=itl_full_mean_ms,
         itl_full_p99_ms=itl_full_p99_ms,
     )
+
+
+def aggregate_campaign_results(
+    results_by_config: dict[str, list[AggregatedResult]],
+    confidence: float = 0.95,
+) -> dict[str, dict[str, Any]]:
+    """Aggregate campaign results by config with bootstrap confidence intervals.
+
+    Groups results from multiple cycles of the same config and computes
+    bootstrap CIs for key metrics.
+
+    Args:
+        results_by_config: Dict mapping config name to list of AggregatedResult
+            objects (one per cycle).
+        confidence: Confidence level for bootstrap CI (default 0.95).
+
+    Returns:
+        Dict mapping config name to aggregated metrics with CIs.
+    """
+    from llenergymeasure.results.bootstrap import bootstrap_ci
+
+    campaign: dict[str, dict[str, Any]] = {}
+
+    for config_name, cycle_results in results_by_config.items():
+        if not cycle_results:
+            continue
+
+        # Extract metric arrays across cycles
+        energy_samples = [r.total_energy_j for r in cycle_results]
+        throughput_samples = [r.avg_tokens_per_second for r in cycle_results]
+        token_samples = [float(r.total_tokens) for r in cycle_results]
+
+        entry: dict[str, Any] = {
+            "n_cycles": len(cycle_results),
+            "energy_j": bootstrap_ci(energy_samples, confidence=confidence).model_dump(),
+            "throughput_tps": bootstrap_ci(throughput_samples, confidence=confidence).model_dump(),
+            "total_tokens": bootstrap_ci(token_samples, confidence=confidence).model_dump(),
+        }
+
+        # Latency metrics if available (streaming mode)
+        ttft_samples = [
+            r.latency_stats.ttft_mean_ms
+            for r in cycle_results
+            if r.latency_stats is not None and r.latency_stats.ttft_mean_ms is not None
+        ]
+        if ttft_samples:
+            entry["ttft_mean_ms"] = bootstrap_ci(ttft_samples, confidence=confidence).model_dump()
+
+        itl_samples = [
+            r.latency_stats.itl_mean_ms
+            for r in cycle_results
+            if r.latency_stats is not None and r.latency_stats.itl_mean_ms is not None
+        ]
+        if itl_samples:
+            entry["itl_mean_ms"] = bootstrap_ci(itl_samples, confidence=confidence).model_dump()
+
+        campaign[config_name] = entry
+
+    return campaign

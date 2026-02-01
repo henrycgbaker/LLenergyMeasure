@@ -1,7 +1,7 @@
 # Configuration Reference
 
 > This file is auto-generated from Pydantic models. Do not edit manually.
-> Generated: 2026-01-29
+> Generated: 2026-02-01
 
 ## Table of Contents
 
@@ -151,7 +151,7 @@
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `num_cycles` | int | 1 | Number of cycles for statistical robustness (1-10) |
+| `num_cycles` | int | 1 | Number of cycles for statistical robustness (1-10). With 1 cycle, confidence intervals and robustness metrics cannot be computed. Use >= 3 cycles for basic statistical validity, >= 5 for publication-grade results. |
 
 ## num_input_prompts
 
