@@ -14,12 +14,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from loguru import logger
+
 from llenergymeasure.config.campaign_config import CampaignConfig
 from llenergymeasure.config.loader import load_config
 from llenergymeasure.config.models import ExperimentConfig
 
 if TYPE_CHECKING:
     from llenergymeasure.domain.experiment import AggregatedResult
+    from llenergymeasure.orchestration.manifest import (
+        CampaignManifest,
+        CampaignManifestEntry,
+    )
 
 
 @dataclass
@@ -38,6 +44,7 @@ class CampaignExperiment:
     warmup_completed: bool = False
     started_at: datetime | None = None
     completed_at: datetime | None = None
+    manifest_entry: CampaignManifestEntry | None = None
 
     @property
     def backend(self) -> str:
@@ -332,6 +339,224 @@ class CampaignRunner:
             for exp in self._experiments
             if exp.config_name == config_name and exp.experiment_id is not None
         ]
+
+    # ------------------------------------------------------------------
+    # Phase 2: Grid, manifest, resume, health check, cold start methods
+    # ------------------------------------------------------------------
+
+    def generate_execution_order_from_grid(self) -> list[CampaignExperiment]:
+        """Generate execution order from grid definition if present.
+
+        If ``campaign.grid`` is set, expands the grid into individual configs
+        using ``expand_campaign_grid`` and ``validate_campaign_grid``, then
+        converts valid configs into CampaignExperiment objects with cycle
+        expansion and ordering applied.
+
+        Falls back to :meth:`generate_execution_order` when no grid is defined.
+
+        Returns:
+            Ordered list of CampaignExperiment objects.
+        """
+        if self.campaign.grid is None:
+            return self.generate_execution_order()
+
+        from typing import Any
+
+        from llenergymeasure.orchestration.grid import (
+            expand_campaign_grid,
+            validate_campaign_grid,
+        )
+
+        # Build base_config from campaign-level defaults
+        base_config: dict[str, Any] = {}
+        if self.campaign.model:
+            base_config["model_name"] = self.campaign.model
+
+        # Expand grid into config dicts
+        config_dicts = expand_campaign_grid(self.campaign.grid, base_config=base_config)
+        result = validate_campaign_grid(config_dicts)
+
+        if not result.valid_configs:
+            logger.warning("Grid expansion produced 0 valid configs")
+            self._experiments = []
+            self._progress = CampaignProgress(total_experiments=0)
+            return []
+
+        # Convert valid config dicts into CampaignExperiment objects
+        base_experiments: list[CampaignExperiment] = []
+        for config_dict in result.valid_configs:
+            config = ExperimentConfig(**config_dict)
+            config_name = config_dict.get("config_name", config.config_name)
+            # Register in _configs so num_configs/is_cycle_complete work
+            self._configs[config_name] = config
+            base_experiments.append(
+                CampaignExperiment(
+                    config_path=Path(f"<grid:{config_name}>"),
+                    config_name=config_name,
+                    config=config,
+                    cycle_index=0,  # placeholder, set below
+                )
+            )
+
+        # Apply cycle expansion and ordering
+        experiments = self._apply_ordering(base_experiments)
+
+        self._experiments = experiments
+        self._progress = CampaignProgress(total_experiments=len(experiments))
+        return experiments
+
+    def _apply_ordering(
+        self, base_experiments: list[CampaignExperiment]
+    ) -> list[CampaignExperiment]:
+        """Apply cycle expansion and ordering to a list of base experiments.
+
+        Args:
+            base_experiments: One experiment per config (cycle_index=0).
+
+        Returns:
+            Expanded and ordered list with cycle_index set correctly.
+        """
+        structure = self.campaign.execution.structure
+        experiments: list[CampaignExperiment] = []
+
+        if structure == "grouped":
+            for exp in base_experiments:
+                for cycle in range(self.num_cycles):
+                    experiments.append(
+                        CampaignExperiment(
+                            config_path=exp.config_path,
+                            config_name=exp.config_name,
+                            config=exp.config,
+                            cycle_index=cycle,
+                        )
+                    )
+        else:
+            rng = random.Random(self.seed) if self.seed else random.Random()
+            for cycle in range(self.num_cycles):
+                cycle_exps = list(base_experiments)
+                if structure == "shuffled":
+                    rng.shuffle(cycle_exps)
+                for exp in cycle_exps:
+                    experiments.append(
+                        CampaignExperiment(
+                            config_path=exp.config_path,
+                            config_name=exp.config_name,
+                            config=exp.config,
+                            cycle_index=cycle,
+                        )
+                    )
+
+        return experiments
+
+    def create_manifest(self, execution_order: list[CampaignExperiment]) -> CampaignManifest:
+        """Create a campaign manifest from the execution order.
+
+        Each experiment gets a manifest entry with a config hash derived
+        from its serialised config dict.
+
+        Args:
+            execution_order: The ordered list of experiments to track.
+
+        Returns:
+            CampaignManifest with all entries as ``pending``.
+        """
+        import hashlib
+        import json
+
+        from llenergymeasure.core.distributed import get_persistent_unique_id
+        from llenergymeasure.orchestration.manifest import (
+            CampaignManifest,
+            CampaignManifestEntry,
+        )
+
+        entries: list[CampaignManifestEntry] = []
+        for exp in execution_order:
+            config_dict = exp.config.model_dump(mode="json")
+            config_hash = hashlib.md5(json.dumps(config_dict, sort_keys=True).encode()).hexdigest()[
+                :12
+            ]
+
+            entry = CampaignManifestEntry(
+                exp_id=get_persistent_unique_id(),
+                config_name=exp.config_name,
+                config_path=str(exp.config_path),
+                config_hash=config_hash,
+                backend=exp.backend,
+                container=exp.backend,  # service name == backend name
+                cycle_index=exp.cycle_index,
+                status="pending",
+            )
+            entries.append(entry)
+            exp.manifest_entry = entry
+
+        campaign_config_hash = hashlib.md5(self.campaign.model_dump_json().encode()).hexdigest()[
+            :12
+        ]
+
+        now = datetime.now()
+        return CampaignManifest(
+            campaign_id=self.campaign.campaign_id,
+            campaign_name=self.campaign.campaign_name,
+            created_at=now,
+            updated_at=now,
+            config_hash=campaign_config_hash,
+            total_experiments=len(entries),
+            experiments=entries,
+        )
+
+    def apply_resume_filter(
+        self,
+        manifest: CampaignManifest,
+        execution_order: list[CampaignExperiment],
+    ) -> list[CampaignExperiment]:
+        """Filter execution order to only pending or failed experiments.
+
+        Uses the manifest to determine which experiments still need to run.
+
+        Args:
+            manifest: Existing campaign manifest.
+            execution_order: Full execution order.
+
+        Returns:
+            Filtered list of experiments that need to run.
+        """
+        remaining_ids = {e.exp_id for e in manifest.get_remaining()}
+        filtered: list[CampaignExperiment] = []
+        for exp in execution_order:
+            if exp.manifest_entry and exp.manifest_entry.exp_id in remaining_ids:
+                filtered.append(exp)
+        return filtered
+
+    def should_health_check(self, experiment_index: int) -> bool:
+        """Check whether a health check should run after this experiment.
+
+        Health checks run:
+        - After each cycle completes (always, when health_check enabled)
+        - Every N experiments if ``health_check.interval_experiments > 0``
+
+        Args:
+            experiment_index: Zero-based index in execution order.
+
+        Returns:
+            True if a health check should run.
+        """
+        hc = self.campaign.health_check
+        if not hc.enabled:
+            return False
+
+        # After cycle completion
+        if self.num_configs > 0 and self.is_cycle_complete(experiment_index):
+            return True
+
+        # Interval-based
+        if hc.interval_experiments > 0:
+            return (experiment_index + 1) % hc.interval_experiments == 0
+
+        return False
+
+    def should_cold_start(self) -> bool:
+        """Check if cold start is configured for this campaign."""
+        return self.campaign.cold_start.force_cold_start
 
 
 def format_gap_time(seconds: float) -> str:

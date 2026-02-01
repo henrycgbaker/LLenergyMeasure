@@ -10,6 +10,44 @@ LLenergyMeasure supports multiple inference backends, each optimised for differe
 | `vllm` | Available | Production, throughput testing | PagedAttention, continuous batching, native TP |
 | `tensorrt` | Available | Enterprise, maximum efficiency | Compiled inference, TensorRT-LLM, FP8/INT8/INT4 |
 
+## Checking Your Environment
+
+Use `lem doctor` to verify your environment setup:
+
+```bash
+lem doctor
+```
+
+**Sample output:**
+
+```
+=== LLenergyMeasure Environment Check ===
+
+✓ Python: 3.10.12
+✓ CUDA available: True (12.4)
+✓ GPU count: 2
+  - GPU 0: NVIDIA A100-PCIE-40GB
+  - GPU 1: NVIDIA A100-PCIE-40GB
+
+Backends:
+✓ pytorch: Available (included in base install)
+✗ vllm: Not installed (pip install llenergymeasure[vllm])
+✗ tensorrt: Not installed (pip install llenergymeasure[tensorrt])
+
+Docker:
+✓ Docker available: 24.0.7
+✓ Docker Compose available: 2.21.0
+✓ nvidia-container-toolkit: installed
+
+=== Environment OK ===
+```
+
+This command checks:
+- Python version and CUDA availability
+- GPU detection and properties
+- Backend availability (PyTorch, vLLM, TensorRT)
+- Docker setup for multi-backend campaigns
+
 ## Choosing a Backend
 
 ```
@@ -134,6 +172,25 @@ Quick reference for feature availability across backends.
 
 ## Configuration
 
+### Installing Backends
+
+**PyTorch (included in base install):**
+```bash
+pip install -e .
+```
+
+**vLLM (optional):**
+```bash
+pip install -e ".[vllm]"
+```
+
+**TensorRT (optional):**
+```bash
+pip install -e ".[tensorrt]"
+```
+
+Check installation: `lem doctor`
+
 ### Selecting a Backend
 
 ```yaml
@@ -150,7 +207,7 @@ lem experiment config.yaml --backend vllm
 
 ```bash
 # PyTorch backend (default)
-docker compose run --rm lem-app lem experiment ...
+docker compose run --rm pytorch lem experiment ...
 
 # vLLM backend
 docker compose run --rm vllm lem experiment ... --backend vllm

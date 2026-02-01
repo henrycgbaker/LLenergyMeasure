@@ -1,19 +1,27 @@
 .PHONY: format lint typecheck check test test-integration test-all install dev clean
 .PHONY: docker-build docker-build-all docker-build-vllm docker-build-tensorrt
 .PHONY: docker-build-dev docker-check experiment datasets validate docker-shell docker-dev
-.PHONY: setup lem-clean lem-clean-all generate-docs check-docs
+.PHONY: setup docker-setup lem-clean lem-clean-all generate-docs check-docs
 
 # PUID/PGID for correct file ownership on bind mounts (LinuxServer.io pattern)
-# These are also set in .env by setup.sh - Makefile exports for convenience
 export PUID := $(shell id -u)
 export PGID := $(shell id -g)
 
 # =============================================================================
-# Quick Start (new users should use: ./setup.sh)
+# Quick Start
+#   Local:  make setup       (pip install + pre-commit)
+#   Docker: make docker-setup (above + docker compose build)
+#   Dev:    make dev          (poetry install + pre-commit)
 # =============================================================================
 
 setup:
-	@./setup.sh
+	pip install -e ".[dev]"
+	pre-commit install
+	@echo "Dev environment ready. Run: lem --help"
+
+docker-setup: setup
+	docker compose build
+	@echo "Docker environment ready. Run: lem campaign <config.yaml>"
 
 # =============================================================================
 # Local Development

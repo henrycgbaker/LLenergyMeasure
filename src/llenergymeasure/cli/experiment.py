@@ -638,7 +638,11 @@ def experiment_cmd(
             existing = state_manager.find_by_config_hash(config_hash)
             if existing and existing.status != ExperimentStatus.AGGREGATED:
                 display_incomplete_experiment(existing)
-                if Confirm.ask("\nResume this experiment?", default=True):
+                # Respect --yes flag for automated campaigns
+                if yes:
+                    resume = existing.experiment_id
+                    console.print(f"[dim]Auto-resuming experiment {resume} (--yes flag)[/dim]")
+                elif Confirm.ask("\nResume this experiment?", default=True):
                     resume = existing.experiment_id
                     console.print(f"[green]Resuming experiment {resume}[/green]")
                     # TODO: Actual resume logic
@@ -656,6 +660,11 @@ def experiment_cmd(
         if effective_cycles > 1:
             source = "CLI" if cycles is not None else "config"
             console.print(f"  [cyan]Multi-cycle mode:[/cyan] {effective_cycles} cycles ({source})")
+        else:
+            console.print(
+                "  [dim]Single cycle:[/dim] confidence intervals and robustness "
+                "metrics require >= 3 cycles (--cycles 3)"
+            )
 
         # Check for MIG instances and warn about energy measurement (Phase: MIG support)
         from llenergymeasure.core.gpu_info import detect_gpu_topology, validate_gpu_selection

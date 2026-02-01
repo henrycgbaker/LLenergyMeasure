@@ -622,7 +622,12 @@ class ExperimentConfig(BaseModel):
         default=1,
         ge=1,
         le=10,
-        description="Number of cycles for statistical robustness (1-10)",
+        description=(
+            "Number of cycles for statistical robustness (1-10). "
+            "With 1 cycle, confidence intervals and robustness metrics "
+            "cannot be computed. Use >= 3 cycles for basic statistical "
+            "validity, >= 5 for publication-grade results."
+        ),
     )
     query_rate: float = Field(default=1.0, ge=0, description="Query rate (queries/sec)")
 

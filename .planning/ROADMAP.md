@@ -19,7 +19,8 @@ The v2.0.0 milestone transforms LLenergyMeasure from a functional research tool 
 - Decimal phases (e.g., 2.1): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Measurement Foundations** - Fix systematic energy errors, capture environment metadata, enable warmup convergence
-- [ ] **Phase 2: Campaign Orchestrator** - Long-running containers, backend-aware grid generation, manifest tracking
+- [x] **Phase 2: Campaign Orchestrator** - Long-running containers, backend-aware grid generation, manifest tracking
+- [ ] **Phase 2.1: Zero-Config Install Experience** - Auto-detect Docker, auto-generate .env, PyPI-ready packaging (INSERTED)
 - [ ] **Phase 3: Parameter Completeness** - 90%+ backend coverage, version pinning, SSOT introspection updates
 - [ ] **Phase 4: Polish + UAT** - Cleanup, architectural refactor, documentation refresh, full workflow validation
 
@@ -76,26 +77,60 @@ Campaign (user interaction level)
 Experiments are atomic. Cycles repeat the full experiment set. Campaigns orchestrate everything.
 
 **Success Criteria** (what must be TRUE):
-1. User starts campaign and backend containers stay running across experiments (no `docker compose run --rm` overhead), receiving commands via `docker compose exec`
+1. User starts campaign and each experiment runs in an ephemeral container via `docker compose run --rm` — simple lifecycle, no health-check complexity, correct for workloads without cross-experiment model persistence
 2. User defines campaign with backend-aware grid generation (cartesian product respects per-backend param validity — no invalid backend × param combinations)
 3. User inspects campaign manifest and sees exp_id → config → backend → container → status → result_path tracking for all experiments
 4. User configures daemon mode and experiments run at scheduled times (not just sequential with thermal gaps)
 5. User sets `force_cold_start: true` and model unloads between experiments for cold-start benchmarking (warmup fairness is default)
-6. Containers undergo health checks, start only needed backends, graceful teardown after campaign completion
+6. Campaign dispatches to correct backend containers, checks images are built before execution, ephemeral containers auto-clean up via `--rm`
 7. Existing campaign features retained: randomisation within cycles, interleaved/shuffled/grouped structures, thermal gaps, cycle-as-highest-organisational-principle
 8. Cross-backend campaign runs successfully (PyTorch + vLLM + TensorRT experiments dispatched correctly), UAT validates orchestrator behaviour
 9. User runs multi-cycle campaign and receives 95% confidence intervals via bootstrap resampling (moved from Phase 1 — requires cycle-level data)
 10. All config extensions added in this phase threaded through SSOT introspection — appear in CLI outputs, results JSON/CSV, runtime validation tests, and generated docs (introspection.py auto-discovers new Pydantic fields)
 
-**Discussion points** (to address during planning):
-- IO path configuration: currently only `io.results_dir` exists. Campaign YAML should configure paths for configs, state, and shared volumes (especially for Docker volume mapping). Consider a broader `io` section or campaign-level path config with sensible defaults.
+**Context**: See `phases/02-CONTEXT.md` for detailed implementation decisions
 
-**Plans**: TBD
+**Plans**: 8 plans in 4 waves
 
 Plans:
-- [ ] 02-01: TBD during planning
-- [ ] 02-02: TBD during planning
-- [ ] 02-03: TBD during planning
+- [ ] 02-01-PLAN.md — Campaign config extensions (grid, manifest, cold start, health check, daemon, IO models) (Wave 1)
+- [ ] 02-02-PLAN.md — Docker dispatch via `docker compose run --rm` (Wave 1)
+- [ ] 02-03-PLAN.md — Bootstrap CI + campaign-level aggregation (Wave 1)
+- [ ] 02-04-PLAN.md — Campaign manifest persistence + resume (Wave 2)
+- [ ] 02-05-PLAN.md — Backend-aware grid expansion + validation (Wave 2)
+- [ ] 02-06-PLAN.md — Campaign orchestrator integration (CLI + CampaignRunner wiring) (Wave 3)
+- [ ] 02-07-PLAN.md — SSOT introspection threading for campaign config (Wave 3)
+- [ ] 02-08-PLAN.md — Unit tests + UAT round 2 (Wave 4)
+
+---
+
+### Phase 2.1: Zero-Config Install Experience (INSERTED)
+
+**Goal**: Users install via `pip install llenergymeasure` (or `pip install -e .`) and everything works out of the box — local-first with PyTorch default, Docker auto-detected for multi-backend campaigns, `.env` auto-generated on first Docker use. No manual `setup.sh` required.
+
+**Depends on**: Phase 2 (campaign orchestrator must exist before install experience can be validated end-to-end)
+
+**Requirements**: Derived from UAT pain points discovered during Phase 2 execution
+
+**Success Criteria** (what must be TRUE):
+1. User runs `pip install -e .` followed by `lem campaign config.yaml` and it works — no manual setup.sh, no missing .env errors
+2. Docker auto-detection: if Docker is available, .env is auto-generated with PUID/PGID; if not, falls back to local execution seamlessly
+3. Post-install hooks or first-run detection handles all configuration that setup.sh currently does manually
+4. Package is PyPI-publishable: `pip install llenergymeasure` from PyPI network works out of the box
+5. Both install paths (pip install + setup.sh Docker-first) produce identical working setups
+6. Local execution (conda, venv, poetry) correctly detected — no false Docker routing
+
+**Context**: Discovered during Phase 2 UAT — `_should_use_docker()` misidentified conda installs as needing Docker, `.env` with PUID/PGID required manual generation, `setup.sh` not triggered by pip install.
+
+**Plans**: 6 plans in 4 waves
+
+Plans:
+- [ ] 02.1-01-PLAN.md — Detection modules: docker_detection, backend_detection, env_setup (Wave 1)
+- [ ] 02.1-02-PLAN.md — CLI wiring: `lem docker` + `lem backend list` subcommands (Wave 2)
+- [ ] 02.1-06-PLAN.md — Campaign refactor: _should_use_docker + ensure_env_file wiring (Wave 2)
+- [ ] 02.1-03-PLAN.md — Packaging: PyTorch default + Makefile + delete setup.sh + PyPI validation (Wave 3)
+- [ ] 02.1-04-PLAN.md — Documentation refresh: README, quickstart, backends, deployment (Wave 3)
+- [ ] 02.1-05-PLAN.md — Unit tests + UAT verification checkpoint (Wave 4)
 
 ---
 
@@ -153,12 +188,13 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 → 2 → 2.1 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Measurement Foundations | 6/6 | Complete | 2026-01-29 |
-| 2. Campaign Orchestrator | 0/? | Not started | - |
+| 2. Campaign Orchestrator | 8/8 | Complete | 2026-01-30 |
+| 2.1 Zero-Config Install (INSERTED) | 0/5 | Not started | - |
 | 3. Parameter Completeness | 0/? | Not started | - |
 | 4. Polish + UAT | 0/? | Not started | - |
 
@@ -167,4 +203,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 **Total Requirements:** 27 v1 requirements mapped across 4 phases
 **Coverage:** 27/27 (100%)
 
-**Next:** `/gsd:plan-phase 2` to begin Phase 2 planning
+**Next:** `/gsd:execute-phase 2` to begin Phase 2 execution

@@ -8,7 +8,7 @@ packages = [{include = "llenergymeasure", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-# Core dependencies (all backends)
+# Core dependencies (includes PyTorch backend by default)
 torch = "^2.5.0"
 pydantic = "^2.0"
 loguru = "^0.7.0"
@@ -20,19 +20,20 @@ schedule = "^1.2.2"
 python-dotenv = "^1.0.0"
 tqdm = "^4.66.0"
 transformers = "^4.49.0"
-
-# Optional: PyTorch/HuggingFace backend
-accelerate = {version = "^1.4.0", optional = true}
-bitsandbytes = {version = "^0.45.0", optional = true}
-calflops = {version = "^0.2.0", optional = true}
-peft = {version = "^0.18.1", optional = true}
+pyyaml = ">=6.0"  # Config file parsing (used directly, not just transitively)
+numpy = ">=1.24"  # Statistics, metrics, bootstrap CI
+python-on-whales = ">=0.70"  # Docker container orchestration (default host workflow)
+accelerate = "^1.4.0"  # PyTorch backend (default)
+bitsandbytes = "^0.45.0"  # PyTorch backend (default)
+calflops = "^0.2.0"  # PyTorch backend (default)
+peft = "^0.18.1"  # PyTorch backend (default)
 
 # Optional: vLLM backend (high-throughput inference)
 # Requires: NVIDIA GPU, Linux only
 # Note: Has dependency conflicts with TensorRT - install separately
 vllm = {version = ">=0.6.0", optional = true}
 
-# Optional: ONNX Runtime for torch.compile backend='onnxrt'
+# Optional: ONNX Runtime optimization for PyTorch backend
 # Enables torch.compile to use ONNX Runtime for execution
 onnxruntime-gpu = {version = ">=1.17.0", optional = true}
 
@@ -61,10 +62,13 @@ types-pyyaml = {version = ">=6.0.12", optional = true}
 commitizen = {version = ">=4.0", optional = true}
 
 [tool.poetry.extras]
-# PyTorch/HuggingFace backend (works on any NVIDIA GPU)
-# Usage: pip install llenergymeasure[pytorch]
-# Includes ONNX Runtime for torch.compile backend='onnxrt' option
-pytorch = ["accelerate", "bitsandbytes", "calflops", "peft", "onnxruntime-gpu"]
+# Base install includes PyTorch backend (torch + transformers + accelerate + bitsandbytes + calflops + peft)
+# Usage: pip install llenergymeasure
+
+# ONNX Runtime optimization for PyTorch backend
+# Enables torch.compile to use ONNX Runtime for execution
+# Usage: pip install llenergymeasure[onnxrt]
+onnxrt = ["onnxruntime-gpu"]
 
 # vLLM backend (high-throughput inference)
 # Requires: NVIDIA GPU, Linux only
@@ -86,10 +90,9 @@ api = ["fastapi", "uvicorn", "sqlalchemy", "asyncpg", "alembic", "pydantic-setti
 # Usage: pip install llenergymeasure[dev]
 dev = ["pytest", "pytest-cov", "ruff", "mypy", "pre-commit", "types-pyyaml", "commitizen"]
 
-# PyTorch + dev (safe combination for development)
-# Usage: pip install llenergymeasure[pytorch,dev]
-# Note: Do NOT use [all] - backend extras conflict with each other
-all = ["accelerate", "bitsandbytes", "calflops", "peft", "pytest", "pytest-cov", "ruff", "mypy", "pre-commit", "types-pyyaml", "commitizen"]
+# Development + all extras (for testing)
+# Usage: pip install llenergymeasure[all]
+all = ["pytest", "pytest-cov", "ruff", "mypy", "pre-commit", "types-pyyaml", "commitizen"]
 
 [tool.poetry.scripts]
 llenergymeasure = "llenergymeasure.cli:app"

@@ -85,7 +85,7 @@ def _register_commands() -> None:
     Commands are imported directly from their defining modules to avoid
     unnecessary re-exports and keep module responsibilities clear.
     """
-    from llenergymeasure.cli import batch, campaign, experiment, listing, schedule
+    from llenergymeasure.cli import batch, campaign, doctor, experiment, listing, schedule
 
     # Core experiment commands
     app.command("run")(experiment.run_cmd)  # Legacy command
@@ -96,6 +96,7 @@ def _register_commands() -> None:
     app.command("datasets")(listing.list_datasets_cmd)
     app.command("presets")(listing.list_presets_cmd)
     app.command("gpus")(listing.list_gpus_cmd)
+    app.command("doctor")(doctor.doctor_cmd)
 
     # Execution modes
     app.command("batch")(batch.batch_run_cmd)
