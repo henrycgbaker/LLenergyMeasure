@@ -730,6 +730,14 @@ if __name__ == "__main__":
     # Configure logging for subprocess (inherits LLM_ENERGY_VERBOSITY from parent)
     setup_logging()
 
+    # Log campaign context if running as part of a campaign
+    campaign_id = os.environ.get("LEM_CAMPAIGN_ID")
+    if campaign_id:
+        campaign_name = os.environ.get("LEM_CAMPAIGN_NAME", "unknown")
+        cycle = os.environ.get("LEM_CYCLE", "?")
+        total_cycles = os.environ.get("LEM_TOTAL_CYCLES", "?")
+        logger.info(f"Running as part of campaign '{campaign_name}' (cycle {cycle}/{total_cycles})")
+
     (
         config_path,
         prompts,

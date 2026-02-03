@@ -6,11 +6,11 @@ The v2.0.0 milestone transforms LLenergyMeasure from a functional research tool 
 
 ## Milestones
 
-- ✅ **v1.19.0 Measurement Foundations** - Phase 1 (complete)
-- 📋 **v1.20.0 Campaign Orchestrator** - Phase 2 (planned)
-- 📋 **v1.21.0 Parameter Completeness** - Phase 3 (planned)
-- 📋 **v1.22.0 Polish + UAT** - Phase 4 (planned)
-- 🎯 **v2.0.0 Release** - Fully Working CLI milestone
+- **v1.19.0 Measurement Foundations** - Phase 1 (complete)
+- **v1.20.0 Campaign Orchestrator** - Phase 2 (planned)
+- **v1.21.0 Parameter Completeness** - Phase 3 (planned)
+- **v1.22.0 Polish + UAT** - Phase 4 (planned)
+- **v2.0.0 Release** - Fully Working CLI milestone
 
 ## Phases
 
@@ -20,7 +20,9 @@ The v2.0.0 milestone transforms LLenergyMeasure from a functional research tool 
 
 - [x] **Phase 1: Measurement Foundations** - Fix systematic energy errors, capture environment metadata, enable warmup convergence
 - [x] **Phase 2: Campaign Orchestrator** - Long-running containers, backend-aware grid generation, manifest tracking
-- [ ] **Phase 2.1: Zero-Config Install Experience** - Auto-detect Docker, auto-generate .env, PyPI-ready packaging (INSERTED)
+- [x] **Phase 2.1: Zero-Config Install Experience** - Auto-detect Docker, auto-generate .env, PyPI-ready packaging (INSERTED)
+- [ ] **Phase 2.2: Campaign Execution Model** - Fix container routing, cycle context, dual container strategy (INSERTED)
+- [ ] **Phase 2.3: Campaign State & Resume** - State persistence, `lem resume`, user preferences (INSERTED)
 - [ ] **Phase 3: Parameter Completeness** - 90%+ backend coverage, version pinning, SSOT introspection updates
 - [ ] **Phase 4: Polish + UAT** - Cleanup, architectural refactor, documentation refresh, full workflow validation
 
@@ -93,14 +95,14 @@ Experiments are atomic. Cycles repeat the full experiment set. Campaigns orchest
 **Plans**: 8 plans in 4 waves
 
 Plans:
-- [ ] 02-01-PLAN.md — Campaign config extensions (grid, manifest, cold start, health check, daemon, IO models) (Wave 1)
-- [ ] 02-02-PLAN.md — Docker dispatch via `docker compose run --rm` (Wave 1)
-- [ ] 02-03-PLAN.md — Bootstrap CI + campaign-level aggregation (Wave 1)
-- [ ] 02-04-PLAN.md — Campaign manifest persistence + resume (Wave 2)
-- [ ] 02-05-PLAN.md — Backend-aware grid expansion + validation (Wave 2)
-- [ ] 02-06-PLAN.md — Campaign orchestrator integration (CLI + CampaignRunner wiring) (Wave 3)
-- [ ] 02-07-PLAN.md — SSOT introspection threading for campaign config (Wave 3)
-- [ ] 02-08-PLAN.md — Unit tests + UAT round 2 (Wave 4)
+- [x] 02-01-PLAN.md — Campaign config extensions (grid, manifest, cold start, health check, daemon, IO models) (Wave 1)
+- [x] 02-02-PLAN.md — Docker dispatch via `docker compose run --rm` (Wave 1)
+- [x] 02-03-PLAN.md — Bootstrap CI + campaign-level aggregation (Wave 1)
+- [x] 02-04-PLAN.md — Campaign manifest persistence + resume (Wave 2)
+- [x] 02-05-PLAN.md — Backend-aware grid expansion + validation (Wave 2)
+- [x] 02-06-PLAN.md — Campaign orchestrator integration (CLI + CampaignRunner wiring) (Wave 3)
+- [x] 02-07-PLAN.md — SSOT introspection threading for campaign config (Wave 3)
+- [x] 02-08-PLAN.md — Unit tests + UAT round 2 (Wave 4)
 
 ---
 
@@ -125,12 +127,67 @@ Plans:
 **Plans**: 6 plans in 4 waves
 
 Plans:
-- [ ] 02.1-01-PLAN.md — Detection modules: docker_detection, backend_detection, env_setup (Wave 1)
-- [ ] 02.1-02-PLAN.md — CLI wiring: `lem docker` + `lem backend list` subcommands (Wave 2)
-- [ ] 02.1-06-PLAN.md — Campaign refactor: _should_use_docker + ensure_env_file wiring (Wave 2)
-- [ ] 02.1-03-PLAN.md — Packaging: PyTorch default + Makefile + delete setup.sh + PyPI validation (Wave 3)
-- [ ] 02.1-04-PLAN.md — Documentation refresh: README, quickstart, backends, deployment (Wave 3)
-- [ ] 02.1-05-PLAN.md — Unit tests + UAT verification checkpoint (Wave 4)
+- [x] 02.1-01-PLAN.md — Detection modules: docker_detection, backend_detection, env_setup (Wave 1)
+- [x] 02.1-02-PLAN.md — CLI wiring: `lem doctor` unified diagnostic command (Wave 2)
+- [x] 02.1-06-PLAN.md — Campaign refactor: _should_use_docker + ensure_env_file wiring (Wave 2)
+- [x] 02.1-03-PLAN.md — Packaging: PyTorch default + Makefile + delete setup.sh + PyPI validation (Wave 3)
+- [x] 02.1-04-PLAN.md — Documentation refresh: README, quickstart, backends, deployment (Wave 3)
+- [x] 02.1-05-PLAN.md — Unit tests + UAT verification checkpoint (Wave 4)
+
+---
+
+### Phase 2.2: Campaign Execution Model (INSERTED)
+
+**Goal**: Fix container routing bugs, propagate campaign context to experiments, implement dual container strategy (ephemeral vs persistent), ensure CI computed at campaign level only.
+
+**Depends on**: Phase 2.1 (needs working Docker detection and dispatch)
+
+**Requirements**: Derived from UAT bugs discovered during Phase 2/2.1 testing
+
+**Success Criteria** (what must be TRUE):
+1. TensorRT experiments route to `tensorrt` container (not `base`)
+2. Experiments running as part of campaign display "Part of campaign X, cycle Y/Z" instead of "single cycle" warning
+3. User can configure `docker.strategy: persistent` in `.lem-config.yaml` to use `up + exec` pattern
+4. Campaign CLI flag `--container-strategy [ephemeral|persistent]` overrides config
+5. CI warning suppressed for experiments within multi-cycle campaigns
+6. Thermal gap defaults configurable via user preferences
+
+**Context**: See `.planning/ARCHITECTURE-DISCUSSION.md` for decisions
+
+**Plans**: 4 plans in 3 waves
+
+Plans:
+- [ ] 02.2-01-PLAN.md — Campaign context propagation + CI warning suppression + remove --cycles from experiment (Wave 1)
+- [ ] 02.2-02-PLAN.md — Container routing fix + minimal user config loading for thermal gaps (Wave 1)
+- [ ] 02.2-03-PLAN.md — Dual container strategy (ephemeral default + persistent option) (Wave 2)
+- [ ] 02.2-04-PLAN.md — Unit tests + UAT verification checkpoint (Wave 3)
+
+---
+
+### Phase 2.3: Campaign State & Resume (INSERTED)
+
+**Goal**: Robust campaign state persistence with graceful interrupt handling, `lem resume` command, and user preferences configuration.
+
+**Depends on**: Phase 2.2 (needs correct execution model before adding state management)
+
+**Requirements**: Derived from feature requests and UAT feedback
+
+**Success Criteria** (what must be TRUE):
+1. Campaign state persists to `.lem-state/` directory with manifest and checkpoints
+2. `lem resume` command identifies interrupted campaign/experiment and offers options
+3. Ctrl+C during campaign saves state cleanly before exiting
+4. Resume check runs BEFORE config parsing at CLI entry points
+5. User preferences file `.lem-config.yaml` supports: default_backend, results_dir, thermal_gaps, docker preferences, notification webhooks
+6. Campaign precedence: if experiment interrupted mid-campaign, campaign is the resumption unit
+
+**Context**: See `.planning/ARCHITECTURE-DISCUSSION.md` for decisions
+
+**Plans**: TBD during planning
+
+Plans:
+- [ ] 02.3-01: TBD during planning
+- [ ] 02.3-02: TBD during planning
+- [ ] 02.3-03: TBD during planning
 
 ---
 
@@ -188,19 +245,21 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 2.1 → 3 → 4
+Phases execute in numeric order: 1 -> 2 -> 2.1 -> 2.2 -> 2.3 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Measurement Foundations | 6/6 | Complete | 2026-01-29 |
 | 2. Campaign Orchestrator | 8/8 | Complete | 2026-01-30 |
-| 2.1 Zero-Config Install (INSERTED) | 0/5 | Not started | - |
+| 2.1 Zero-Config Install (INSERTED) | 6/6 | Complete | 2026-01-31 |
+| 2.2 Campaign Execution Model (INSERTED) | 0/4 | Planned | - |
+| 2.3 Campaign State & Resume (INSERTED) | 0/? | Not started | - |
 | 3. Parameter Completeness | 0/? | Not started | - |
 | 4. Polish + UAT | 0/? | Not started | - |
 
 ---
 
-**Total Requirements:** 27 v1 requirements mapped across 4 phases
-**Coverage:** 27/27 (100%)
+**Total Requirements:** 27 v1 requirements mapped across 4 phases + 2 inserted phases for architecture fixes
+**Coverage:** 27/27 (100%) + additional UAT-derived requirements
 
-**Next:** `/gsd:execute-phase 2` to begin Phase 2 execution
+**Next:** `/gsd:execute-phase 2.2` to execute Campaign Execution Model phase

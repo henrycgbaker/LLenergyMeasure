@@ -28,6 +28,7 @@ from llenergymeasure.orchestration.campaign import (
 )
 
 if TYPE_CHECKING:
+    from llenergymeasure.orchestration.container import ContainerManager
     from llenergymeasure.orchestration.grid import GridExpansionResult
     from llenergymeasure.orchestration.manifest import CampaignManifest
 
@@ -124,6 +125,14 @@ def campaign_cmd(
         bool,
         typer.Option("--quiet", "-q", help="Suppress interactive output (for daemon mode)"),
     ] = False,
+    # Container strategy
+    container_strategy: Annotated[
+        str | None,
+        typer.Option(
+            "--container-strategy",
+            help="Container strategy: ephemeral (run --rm, default) or persistent (up + exec)",
+        ),
+    ] = None,
 ) -> None:
     """Run a multi-config campaign for statistical comparison.
 
@@ -165,6 +174,35 @@ def campaign_cmd(
 
     # Cast to Literal for type safety (validated above)
     structure_typed: Literal["interleaved", "shuffled", "grouped"] | None = structure  # type: ignore[assignment]
+
+    # Load user preferences (gracefully handles missing file)
+    from llenergymeasure.config.user_config import load_user_config
+
+    user_config = load_user_config()
+
+    # Determine effective container strategy (CLI > config > default)
+    effective_strategy: Literal["ephemeral", "persistent"]
+    if container_strategy is not None:
+        if container_strategy not in ("ephemeral", "persistent"):
+            console.print(f"[red]Error:[/red] Invalid container strategy: {container_strategy}")
+            console.print("Valid options: ephemeral, persistent")
+            raise typer.Exit(1)
+        effective_strategy = container_strategy  # type: ignore[assignment]
+    else:
+        effective_strategy = user_config.docker.strategy
+
+    # Log if using non-default thermal gaps from user config
+    if (
+        user_config.thermal_gaps.between_experiments != 60.0
+        or user_config.thermal_gaps.between_cycles != 300.0
+    ):
+        from loguru import logger
+
+        logger.debug(
+            "Using user config thermal gaps: {}s between experiments, {}s between cycles",
+            user_config.thermal_gaps.between_experiments,
+            user_config.thermal_gaps.between_cycles,
+        )
 
     # Expand glob patterns
     expanded_paths: list[Path] = []
@@ -217,13 +255,20 @@ def campaign_cmd(
             raise typer.Exit(1)
 
         # Build campaign config from CLI args
+        # Use user config defaults for thermal gaps when not specified via CLI
         execution = CampaignExecutionConfig(
             cycles=cycles or 3,
             structure=structure_typed or "interleaved",
             warmup_prompts=warmup_prompts if warmup_prompts is not None else 5,
             warmup_timeout_seconds=warmup_timeout if warmup_timeout is not None else 30.0,
-            config_gap_seconds=config_gap if config_gap is not None else 60.0,
-            cycle_gap_seconds=cycle_gap if cycle_gap is not None else 300.0,
+            config_gap_seconds=(
+                config_gap
+                if config_gap is not None
+                else user_config.thermal_gaps.between_experiments
+            ),
+            cycle_gap_seconds=(
+                cycle_gap if cycle_gap is not None else user_config.thermal_gaps.between_cycles
+            ),
         )
 
         campaign = CampaignConfig(
@@ -413,7 +458,10 @@ def campaign_cmd(
 
     # --- Docker dispatch setup ---
     backends_needed = list({exp.backend for exp in execution_order})
-    if _should_use_docker(backends_needed):
+    use_docker_dispatch = _should_use_docker(backends_needed)
+    container_manager = None  # For persistent mode
+
+    if use_docker_dispatch:
         # Ensure .env exists before any Docker compose operation
         from llenergymeasure.config.env_setup import ensure_env_file
 
@@ -424,20 +472,51 @@ def campaign_cmd(
         if missing_images:
             _prompt_docker_build(missing_images)
 
-        # Docker dispatch uses `docker compose run --rm` per experiment
-        # (containers are task runners, not long-running services)
-        console.print(
-            f"[dim]Docker dispatch: {', '.join(backends_needed)} "
-            f"(docker compose run --rm)[/dim]"
-        )
+        # Persistent mode warning and confirmation
+        if effective_strategy == "persistent":
+            console.print(
+                "\n[yellow]Persistent container mode:[/yellow] Containers will remain running "
+                "between experiments.\n"
+                "  - Faster execution (no container startup overhead)\n"
+                "  - Less isolation (GPU memory may accumulate)\n"
+                "  - Use --container-strategy ephemeral for better isolation\n"
+            )
+            if not yes:
+                from rich.prompt import Confirm
+
+                if not Confirm.ask("Continue with persistent mode?", default=True):
+                    console.print("[dim]Aborted. Use --container-strategy ephemeral[/dim]")
+                    raise typer.Exit(0)
+
+            # Create ContainerManager for persistent mode
+            from llenergymeasure.orchestration.container import ContainerManager
+
+            container_manager = ContainerManager(
+                services=backends_needed,
+                warmup_delay=user_config.docker.warmup_delay,
+                auto_teardown=user_config.docker.auto_teardown,
+            )
+            container_manager.start_all()
+            console.print(
+                f"[dim]Persistent containers: {', '.join(backends_needed)} "
+                f"(docker compose up + exec)[/dim]"
+            )
+        else:
+            # Ephemeral mode: docker compose run --rm per experiment
+            console.print(
+                f"[dim]Ephemeral containers: {', '.join(backends_needed)} "
+                f"(docker compose run --rm)[/dim]"
+            )
 
     # Execute campaign
-    use_docker_dispatch = _should_use_docker(backends_needed)
     console.print("\n[bold cyan]━━━ Starting Campaign ━━━[/bold cyan]\n")
     console.print(f"Campaign ID: [cyan]{campaign.campaign_id}[/cyan]")
     console.print(f"Campaign Name: [cyan]{campaign.campaign_name}[/cyan]")
     if use_docker_dispatch:
-        console.print("Execution: [green]Docker[/green] (per-experiment containers)")
+        if effective_strategy == "persistent":
+            console.print("Execution: [green]Docker[/green] (persistent containers)")
+        else:
+            console.print("Execution: [green]Docker[/green] (per-experiment containers)")
     else:
         console.print("Execution: [blue]Local[/blue] (direct process)")
     console.print()
@@ -482,6 +561,8 @@ def campaign_cmd(
             sample_size=sample_size,
             results_dir=results_dir,
             use_docker=use_docker_dispatch,
+            total_cycles=runner.num_cycles,
+            container_manager=container_manager,
         )
 
         # Check for interrupt signal (Ctrl+C) - abort entire campaign
@@ -537,6 +618,17 @@ def campaign_cmd(
             if gap > 0:
                 console.print(f"  [dim]Waiting {format_gap_time(gap)} before next cycle...[/dim]\n")
                 time.sleep(gap)
+
+    # Container teardown (persistent mode)
+    if container_manager is not None:
+        if user_config.docker.auto_teardown:
+            console.print("\n[dim]Stopping persistent containers...[/dim]")
+            container_manager.stop_all()
+        else:
+            console.print(
+                "\n[yellow]Note:[/yellow] Persistent containers still running. "
+                "Run 'docker compose down' to stop them."
+            )
 
     # Campaign summary
     console.print("\n[bold green]━━━ Campaign Complete ━━━[/bold green]")
@@ -647,6 +739,7 @@ def _run_campaign_loop(
             sample_size=sample_size,
             results_dir=results_dir,
             use_docker=use_docker_dispatch,
+            total_cycles=runner.num_cycles,
         )
 
         # Check for interrupt signal - abort daemon cycle
@@ -709,8 +802,10 @@ def _run_single_experiment(
     sample_size: int | None,
     results_dir: Path | None,
     use_docker: bool | None = None,
+    total_cycles: int | None = None,
+    container_manager: ContainerManager | None = None,
 ) -> tuple[str, int]:
-    """Run a single experiment via Docker compose run --rm or local subprocess.
+    """Run a single experiment via Docker compose run --rm, exec, or local subprocess.
 
     Args:
         experiment: The campaign experiment to run.
@@ -719,6 +814,8 @@ def _run_single_experiment(
         sample_size: Sample size override (None = use config).
         results_dir: Results directory override.
         use_docker: Campaign-level Docker decision. When None, auto-detects per-experiment.
+        total_cycles: Total cycles in campaign (for context propagation).
+        container_manager: If provided, uses exec into persistent container instead of run --rm.
 
     Returns:
         Tuple of (experiment_id, exit_code).
@@ -755,6 +852,15 @@ def _run_single_experiment(
     if use_docker is None:
         use_docker = _should_use_docker([backend])
 
+    # Build campaign context for environment variable propagation
+    # Cycle is 1-indexed for display (cycle_index is 0-indexed)
+    campaign_context = {
+        "LEM_CAMPAIGN_ID": campaign.campaign_id,
+        "LEM_CAMPAIGN_NAME": campaign.campaign_name,
+        "LEM_CYCLE": str(experiment.cycle_index + 1),
+        "LEM_TOTAL_CYCLES": str(total_cycles or campaign.execution.cycles),
+    }
+
     # Write temp config file
     if use_docker:
         # Write to configs/ directory (bind-mounted into container as /app/configs/)
@@ -776,13 +882,32 @@ def _run_single_experiment(
         console.print(f"  [dim]Running: {experiment.config_name}[/dim]")
 
         if use_docker:
-            cmd = _build_docker_command(
-                backend=backend,
-                config_path=container_config_path,
-                dataset=dataset or campaign.dataset,
-                sample_size=sample_size or campaign.num_samples,
-                results_dir=results_dir,
-            )
+            if container_manager is not None:
+                # Persistent mode: use docker compose exec into running container
+                cmd = ["lem", "experiment", container_config_path, "--yes", "--fresh"]
+                if dataset or campaign.dataset:
+                    cmd.extend(["--dataset", str(dataset or campaign.dataset)])
+                if sample_size or campaign.num_samples:
+                    cmd.extend(["--sample-size", str(sample_size or campaign.num_samples)])
+
+                # Add verbosity env var to context
+                env_vars = {
+                    **campaign_context,
+                    "LLM_ENERGY_VERBOSITY": os.environ.get("LLM_ENERGY_VERBOSITY", "normal"),
+                }
+
+                result = container_manager.exec(backend, cmd, env=env_vars)
+                return experiment_id, result.returncode
+            else:
+                # Ephemeral mode: docker compose run --rm
+                cmd = _build_docker_command(
+                    backend=backend,
+                    config_path=container_config_path,
+                    dataset=dataset or campaign.dataset,
+                    sample_size=sample_size or campaign.num_samples,
+                    results_dir=results_dir,
+                    campaign_context=campaign_context,
+                )
         else:
             # Direct execution (inside container or local install)
             extra_args: list[str] = []
@@ -797,6 +922,8 @@ def _run_single_experiment(
 
         env = os.environ.copy()
         env["LLM_ENERGY_VERBOSITY"] = os.environ.get("LLM_ENERGY_VERBOSITY", "normal")
+        # Add campaign context to subprocess environment (for local execution)
+        env.update(campaign_context)
         result = subprocess.run(cmd, env=env, check=False)
         return experiment_id, result.returncode
 
@@ -900,6 +1027,7 @@ def _build_docker_command(
     dataset: str | None,
     sample_size: int | None,
     results_dir: Path | None,
+    campaign_context: dict[str, str] | None = None,
 ) -> list[str]:
     """Build docker compose command for running experiment.
 
@@ -909,6 +1037,7 @@ def _build_docker_command(
         dataset: Dataset override.
         sample_size: Sample size override.
         results_dir: Results directory override.
+        campaign_context: Campaign context environment variables to pass.
 
     Returns:
         Command list for subprocess.run().
@@ -918,13 +1047,23 @@ def _build_docker_command(
         "compose",
         "run",
         "--rm",
-        backend,
-        "lem",
-        "experiment",
-        config_path,
-        "--yes",
-        "--fresh",
     ]
+
+    # Pass campaign context as environment variables
+    if campaign_context:
+        for key, value in campaign_context.items():
+            cmd.extend(["-e", f"{key}={value}"])
+
+    cmd.extend(
+        [
+            backend,
+            "lem",
+            "experiment",
+            config_path,
+            "--yes",
+            "--fresh",
+        ]
+    )
 
     if dataset:
         cmd.extend(["--dataset", dataset])
