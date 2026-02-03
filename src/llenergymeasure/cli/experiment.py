@@ -288,10 +288,6 @@ def experiment_cmd(
         str | None,
         typer.Option("--backend", help="Inference backend (pytorch, vllm)"),
     ] = None,
-    cycles: Annotated[
-        int | None,
-        typer.Option("--cycles", "-c", help="Number of cycles for statistical robustness (1-10)"),
-    ] = None,
     # Streaming latency measurement
     streaming: Annotated[
         bool | None,
@@ -367,10 +363,10 @@ def experiment_cmd(
     3. Config + CLI overrides (sweeps):
        lem experiment config.yaml -b 8 --precision int8
 
-    Multi-cycle mode for statistical robustness (academic benchmarking standard):
-       lem experiment config.yaml --cycles 5 --dataset alpaca -n 100
-
     Precedence: CLI > Config file > Preset > Defaults
+
+    Note: Multi-cycle experiments should use campaigns (lem campaign) for
+    statistical robustness. Single experiments are atomic.
 
     By default, results are auto-aggregated on success. Use --no-aggregate to skip.
     Interrupted experiments can be resumed with --resume <exp_id>.
@@ -518,8 +514,6 @@ def experiment_cmd(
             cli_overrides_dict["streaming"] = streaming
         if streaming_warmup is not None:
             cli_overrides_dict["streaming_warmup_requests"] = streaming_warmup
-        if cycles is not None:
-            cli_overrides_dict["num_cycles"] = cycles
 
         # Deprecated testable params - warn but still apply
         if batch_size is not None:
@@ -652,18 +646,36 @@ def experiment_cmd(
         # Display config with override visibility
         display_config_summary(config, tracked_overrides, preset)
 
-        # Resolve cycles: CLI > config.num_cycles > default (1)
-        effective_cycles = cycles if cycles is not None else config.num_cycles
+        # Detect if running as part of a campaign (via environment variables)
+        campaign_context = {
+            "campaign_id": os.environ.get("LEM_CAMPAIGN_ID"),
+            "campaign_name": os.environ.get("LEM_CAMPAIGN_NAME"),
+            "cycle": os.environ.get("LEM_CYCLE"),
+            "total_cycles": os.environ.get("LEM_TOTAL_CYCLES"),
+        }
+        in_campaign = campaign_context["campaign_id"] is not None
+
+        # Experiments are atomic - use config.num_cycles (defaults to 1)
+        # Multi-cycle experiments should use campaigns
+        effective_cycles = config.num_cycles
         if effective_cycles < 1 or effective_cycles > 10:
-            console.print("[red]Error:[/red] cycles must be between 1 and 10")
+            console.print("[red]Error:[/red] num_cycles must be between 1 and 10")
             raise typer.Exit(1)
         if effective_cycles > 1:
-            source = "CLI" if cycles is not None else "config"
-            console.print(f"  [cyan]Multi-cycle mode:[/cyan] {effective_cycles} cycles ({source})")
+            console.print(f"  [cyan]Multi-cycle mode:[/cyan] {effective_cycles} cycles (config)")
+        elif in_campaign:
+            # Running as part of campaign - don't show single cycle warning
+            # Campaign orchestrates cycles, not individual experiments
+            cycle = campaign_context["cycle"]
+            total = campaign_context["total_cycles"]
+            console.print(
+                f"  [cyan]Part of campaign:[/cyan] {campaign_context['campaign_name']} "
+                f"(cycle {cycle}/{total})"
+            )
         else:
             console.print(
-                "  [dim]Single cycle:[/dim] confidence intervals and robustness "
-                "metrics require >= 3 cycles (--cycles 3)"
+                "  [dim]Single cycle:[/dim] confidence intervals require campaigns "
+                "(lem campaign --cycles 3+)"
             )
 
         # Check for MIG instances and warn about energy measurement (Phase: MIG support)

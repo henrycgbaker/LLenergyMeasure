@@ -94,3 +94,21 @@ coverage.xml
 CLAUDE.md
 **/CLAUDE.md
 .state/
+.mcp.json
+
+# -----------------------------------------------------------------------------
+# Personal / Shell configs (leaked from home directory)
+# -----------------------------------------------------------------------------
+.bash_profile
+.bashrc
+.zshrc
+.zprofile
+.profile
+.gitconfig
+.gitmodules
+.ripgreprc
+
+# -----------------------------------------------------------------------------
+# Pytest temp directories
+# -----------------------------------------------------------------------------
+pytest-of-*/
