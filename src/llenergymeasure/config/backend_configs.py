@@ -134,20 +134,23 @@ class PyTorchConfig(BaseModel):
     )
 
     # =========================================================================
-    # Parallelism
+    # Parallelism (Data Parallel via Accelerate)
     # =========================================================================
-    parallelism_strategy: Literal["none", "tensor_parallel", "data_parallel"] = Field(
-        default="none",
-        description="Parallelism strategy: "
-        "none (single GPU), tensor_parallel (split layers), "
-        "data_parallel (replicate model)",
-    )
-    parallelism_degree: int = Field(
+    # PyTorch/HuggingFace uses Data Parallel (DDP) via Accelerate:
+    # - Model is replicated on each GPU
+    # - Batches are split across GPUs
+    # - Gradients synchronized (for training) or outputs gathered (for inference)
+    #
+    # Note: PyTorch does NOT support tensor parallelism for standard HuggingFace
+    # models. device_map="auto" is layer placement, not tensor parallelism.
+    # For true tensor/pipeline parallelism, use vLLM or TensorRT-LLM backends.
+    num_processes: int = Field(
         default=1,
         ge=1,
-        description="Number of GPUs for tensor/data parallelism",
+        description="Number of processes for data parallelism via Accelerate. "
+        "Each process runs a full model replica on a separate GPU. "
+        "Set to 1 for single-GPU inference, >1 for multi-GPU data parallel.",
     )
-    # Note: pipeline_parallel NOT supported for PyTorch generate()
 
     # =========================================================================
     # Quantization (BitsAndBytes)

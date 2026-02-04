@@ -34,18 +34,21 @@ def get_backend_parallelism(config: ExperimentConfig) -> tuple[str, int]:
     """Extract parallelism strategy and degree from backend-specific config.
 
     Each backend stores parallelism differently:
-    - PyTorch: parallelism_strategy + parallelism_degree
-    - vLLM: tensor_parallel_size + pipeline_parallel_size
-    - TensorRT: tp_size + pp_size
+    - PyTorch: num_processes (data parallelism via Accelerate)
+    - vLLM: tensor_parallel_size + pipeline_parallel_size (internal)
+    - TensorRT: tp_size + pp_size (internal)
 
     Returns:
         Tuple of (strategy, degree) where strategy is 'none', 'tensor_parallel',
         'pipeline_parallel', or 'data_parallel'.
     """
     if config.backend == "pytorch" and config.pytorch:
-        strategy = config.pytorch.parallelism_strategy
-        degree = config.pytorch.parallelism_degree
-        return (strategy, degree)
+        # PyTorch only supports data parallelism (model replication)
+        # num_processes > 1 means data parallel, otherwise single GPU
+        num_procs = config.pytorch.num_processes
+        if num_procs > 1:
+            return ("data_parallel", num_procs)
+        return ("none", 1)
 
     elif config.backend == "vllm" and config.vllm:
         tp = config.vllm.tensor_parallel_size
@@ -332,10 +335,22 @@ def _build_launch_command(
 
     else:
         # Default: use accelerate launch
-        num_processes = min(
-            config_data.get("num_processes", len(gpus)),
-            len(gpus),
-        )
+        # Determine process count from backend-specific parallelism config
+        try:
+            config = ExperimentConfig(**config_data)
+            num_processes = get_effective_launcher_processes(config)
+        except Exception as e:
+            # Fallback: use GPU count if config parsing fails
+            logger.warning(f"Could not determine parallelism from config: {e}. Using len(gpus).")
+            num_processes = len(gpus) if gpus else 1
+
+        # Cap at available GPU count
+        if num_processes > len(gpus):
+            logger.warning(
+                f"Parallelism degree ({num_processes}) exceeds available GPUs ({len(gpus)}). "
+                f"Using {len(gpus)} processes."
+            )
+            num_processes = len(gpus)
 
         cmd = [
             "accelerate",
@@ -380,11 +395,20 @@ def launch_experiment_accelerate(
     config_data = json.loads(config_path.read_text())
 
     gpus = config_data.get("gpus", [])
-    num_processes = min(config_data.get("num_processes", len(gpus)), len(gpus))
 
+    # Determine process count from backend-specific parallelism config
+    try:
+        exp_config = ExperimentConfig(**config_data)
+        num_processes = get_effective_launcher_processes(exp_config)
+    except Exception as e:
+        # Fallback: use GPU count if config parsing fails
+        logger.warning(f"Could not determine parallelism from config: {e}. Using len(gpus).")
+        num_processes = len(gpus) if gpus else 1
+
+    # Cap at available GPU count
     if num_processes > len(gpus):
         logger.warning(
-            f"num_processes ({num_processes}) exceeds GPUs ({len(gpus)}). "
+            f"Parallelism degree ({num_processes}) exceeds GPUs ({len(gpus)}). "
             f"Using {len(gpus)} processes."
         )
         num_processes = len(gpus)
@@ -729,6 +753,20 @@ if __name__ == "__main__":
 
     # Configure logging for subprocess (inherits LLM_ENERGY_VERBOSITY from parent)
     setup_logging()
+
+    # If parent process specified a log file, add file handler to capture subprocess logs
+    if log_file := os.environ.get("LLM_ENERGY_LOG_FILE"):
+        from llenergymeasure.logging import VERBOSE_FORMAT
+        from llenergymeasure.logging import logger as loguru_logger
+
+        loguru_logger.add(
+            log_file,
+            format=VERBOSE_FORMAT,
+            level="DEBUG",
+            rotation="50 MB",
+            retention="7 days",
+            enqueue=True,
+        )
 
     # Log campaign context if running as part of a campaign
     campaign_id = os.environ.get("LEM_CAMPAIGN_ID")

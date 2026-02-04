@@ -213,6 +213,93 @@ docker compose --profile dev run --rm pytorch-dev \
   lem experiment /app/configs/test.yaml -d alpaca -n 10
 ```
 
+### Container Strategies
+
+When running multi-backend campaigns with Docker, you can choose between two container strategies:
+
+#### Overview
+
+| Strategy | Startup Overhead | Isolation | Best For |
+|----------|------------------|-----------|----------|
+| **ephemeral** (default) | 3-5s per experiment | Perfect (fresh GPU state) | Most campaigns, reproducibility |
+| **persistent** | Once at campaign start | Shared (GPU memory accumulates) | Many short experiments, development |
+
+#### Ephemeral Mode (Default)
+
+Uses `docker compose run --rm` to create fresh containers for each experiment.
+
+**Characteristics:**
+- Fresh container = fresh GPU memory and CUDA context
+- Automatic cleanup on errors
+- Perfect isolation between experiments
+- Negligible overhead (~1.3% of typical campaign time)
+
+**Recommended for:**
+- Production measurements
+- Reproducibility requirements
+- Long experiments (>1 minute each)
+
+**Example:**
+```bash
+# Each experiment runs in a fresh container
+lem campaign multi-backend.yaml
+```
+
+#### Persistent Mode
+
+Uses `docker compose up -d` + `docker compose exec` to run experiments in long-running containers.
+
+**Characteristics:**
+- Containers stay running between experiments
+- Faster (no container startup overhead)
+- GPU memory may accumulate across experiments
+- Requires health monitoring and manual cleanup
+- Confirmation prompt (or `--yes` flag to skip)
+
+**Recommended for:**
+- Development and debugging
+- Many short experiments (<30 seconds each)
+- Iterating on configurations
+
+**Example:**
+```bash
+# Containers persist across experiments
+lem campaign multi-backend.yaml --container-strategy persistent --yes
+```
+
+#### Configuration
+
+**Via CLI flag:**
+```bash
+lem campaign config.yaml --container-strategy persistent
+```
+
+**Via user config (`.lem-config.yaml`):**
+```yaml
+docker:
+  strategy: persistent  # or ephemeral (default)
+  warmup_delay: 5.0     # seconds to wait after container start
+  auto_teardown: true   # cleanup containers after campaign completion
+```
+
+**Precedence:** CLI flag > user config > default (ephemeral)
+
+#### Choosing a Strategy
+
+**Use ephemeral (default) when:**
+- Running formal benchmark measurements
+- Reproducibility is critical
+- Experiments are long (>1 minute each)
+- Overhead of 3-5s per experiment is negligible
+
+**Use persistent when:**
+- Developing or debugging experiments
+- Running many short experiments (<30s each)
+- Container startup overhead is significant relative to experiment time
+- You understand the isolation tradeoffs
+
+**Performance note:** For typical campaigns (6 experiments, 5 minutes each), ephemeral overhead is ~24 seconds out of 30 minutes (1.3% of total time).
+
 ### VS Code Devcontainer
 
 1. Install [VS Code Remote - Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)

@@ -649,3 +649,110 @@ def aggregate_campaign_results(
         campaign[config_name] = entry
 
     return campaign
+
+
+def _extract_field_value(result: AggregatedResult, field_path: str) -> str:
+    """Extract value from AggregatedResult using dot-notation path.
+
+    Handles special fields (backend, model_name, config_name) and
+    traverses nested paths in effective_config.
+
+    Args:
+        result: The aggregated result to extract from.
+        field_path: Dot-notation path (e.g., "backend", "pytorch.batch_size").
+
+    Returns:
+        String value for the field, or "unknown" if not found.
+    """
+    # Handle special top-level fields
+    if field_path == "backend":
+        return result.backend
+    if field_path == "config_name":
+        return str(result.effective_config.get("config_name", "unknown"))
+    if field_path == "model_name":
+        return str(result.effective_config.get("model_name", "unknown"))
+
+    # Traverse nested path in effective_config
+    parts = field_path.split(".")
+    value: Any = result.effective_config
+    for part in parts:
+        if isinstance(value, dict) and part in value:
+            value = value[part]
+        else:
+            return "unknown"
+    return str(value)
+
+
+def aggregate_campaign_with_grouping(
+    results_by_config: dict[str, list[AggregatedResult]],
+    group_by: list[str],
+    confidence: float = 0.95,
+) -> dict[tuple[str, ...], dict[str, Any]]:
+    """Aggregate campaign results with configurable grouping.
+
+    Groups results across configs by specified fields and computes
+    bootstrap CIs for each group. This enables comparison by backend,
+    batch_size, or any config field.
+
+    Args:
+        results_by_config: Dict mapping config name to list of AggregatedResult
+            objects (one per cycle).
+        group_by: List of field paths to group by (e.g., ["backend", "model_name"]).
+        confidence: Confidence level for bootstrap CI (default 0.95).
+
+    Returns:
+        Dict mapping group key tuple to aggregated metrics with CIs.
+        Keys are tuples of field values (e.g., ("pytorch", "1")).
+    """
+    from collections import defaultdict
+
+    from llenergymeasure.results.bootstrap import bootstrap_ci
+
+    # Flatten all results and group by extracted key
+    groups: dict[tuple[str, ...], list[AggregatedResult]] = defaultdict(list)
+
+    for _config_name, cycle_results in results_by_config.items():
+        for result in cycle_results:
+            # Extract grouping key
+            key = tuple(_extract_field_value(result, field) for field in group_by)
+            groups[key].append(result)
+
+    # Compute CI for each group
+    aggregated: dict[tuple[str, ...], dict[str, Any]] = {}
+
+    for group_key, results in groups.items():
+        if not results:
+            continue
+
+        # Extract metric arrays
+        energy_samples = [r.total_energy_j for r in results]
+        throughput_samples = [r.avg_tokens_per_second for r in results]
+
+        entry: dict[str, Any] = {
+            "n_cycles": len(results),
+            "group_fields": group_by,
+            "group_values": list(group_key),
+            "energy_j": bootstrap_ci(energy_samples, confidence=confidence).model_dump(),
+            "throughput_tps": bootstrap_ci(throughput_samples, confidence=confidence).model_dump(),
+        }
+
+        # Latency metrics if available
+        ttft_samples = [
+            r.latency_stats.ttft_mean_ms
+            for r in results
+            if r.latency_stats is not None and r.latency_stats.ttft_mean_ms is not None
+        ]
+        if ttft_samples:
+            entry["ttft_mean_ms"] = bootstrap_ci(ttft_samples, confidence=confidence).model_dump()
+
+        itl_samples = [
+            r.latency_stats.itl_mean_ms
+            for r in results
+            if r.latency_stats is not None and r.latency_stats.itl_mean_ms is not None
+        ]
+        if itl_samples:
+            entry["itl_mean_ms"] = bootstrap_ci(itl_samples, confidence=confidence).model_dump()
+
+        aggregated[group_key] = entry
+
+    return aggregated

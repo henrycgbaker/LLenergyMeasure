@@ -5,27 +5,28 @@
 See: .planning/PROJECT.md (updated 2026-01-29)
 
 **Core value:** Accurate, comprehensive measurement of the true cost of LLM inference — energy, compute, and quality tradeoffs — with research-grade rigour.
-**Current focus:** Phase 2.2 execution (Campaign Execution Model)
+**Current focus:** Phase 3 planning (Parameter Completeness)
 
 ## Current Position
 
-Phase: 2.2 of 7 (Campaign Execution Model)
-Plan: 3 of 4 (02.2-01 + 02.2-02 + 02.2-03 complete)
+Phase: 2.4 of 7 (CLI Polish & Testing)
+Plan: 5 of 6 (remaining: 04)
 Status: In progress
-Last activity: 2026-02-03 — Completed 02.2-03-PLAN.md (dual container strategy)
+Last activity: 2026-02-04 — Completed 02.4-06-PLAN.md (Docker Lifecycle Output)
 
 Progress: [██████████] 100% Phase 1 (6/6)
           [██████████] 100% Phase 2 (8/8)
           [██████████] 100% Phase 2.1 (6/6)
-          [███████░░░] 75% Phase 2.2 (3/4)
-          [░░░░░░░░░░] 0% Phase 2.3 (not started)
+          [██████████] 100% Phase 2.2 (4/4) ✓
+          [██████████] 100% Phase 2.3 (4/4) ✓
+          [████████░░] 83% Phase 2.4 (5/6)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 24
-- Average duration: 5.0 min
-- Total execution time: 120 min
+- Total plans completed: 29
+- Average duration: 5.2 min
+- Total execution time: 150 min
 
 **By Phase:**
 
@@ -34,7 +35,8 @@ Progress: [██████████] 100% Phase 1 (6/6)
 | 01-measurement-foundations | 6/6 | 48 min | 7 min |
 | 02-campaign-orchestrator | 8/8 | 31 min | 3.9 min |
 | 02.1-zero-config-install | 6/6 | 27 min | 4.5 min |
-| 02.2-campaign-execution-model | 3/4 | 14 min | 4.7 min |
+| 02.2-campaign-execution-model | 4/4 | 18 min | 4.5 min |
+| 02.3-campaign-state-resume | 4/4 | 26 min | 6.5 min |
 
 **Recent Trend:**
 - 01-01: 7 min (2 tasks, domain models + config extensions)
@@ -58,7 +60,17 @@ Progress: [██████████] 100% Phase 1 (6/6)
 - 02.2-01: 3 min (3 tasks, campaign context propagation)
 - 02.2-02: 5 min (2 tasks, user config + container routing)
 - 02.2-03: 6 min (2 tasks, ContainerManager + dual container strategy)
-- Trend: Consistent ~4-7 min; 02.2 plans fast (config-focused work)
+- 02.2-04: 4 min (4 tasks, unit tests + manual verification)
+- 02.3-01: 7 min (2 tasks, webhook notifications + resume command)
+- 02.3-02: 7 min (2 tasks, lem init wizard)
+- 02.3-03: 7 min (3 tasks, unit tests for Phase 2.3)
+- 02.3-04: 5 min (1 task, manual verification checkpoint)
+- 02.4-02: 2 min (2 tasks, schema version + example configs)
+- 02.4-01: 5 min (2 tasks, config list + campaign grouping)
+- 02.4-05: 4 min (3 tasks, backend noise filtering + JSON output)
+- 02.4-03: 5 min (2 tasks, smoke test warning capture + issues.yaml)
+- 02.4-06: 5 min (4 tasks, Docker lifecycle output)
+- Trend: Consistent ~4-7 min; Phase 2.4 5/6 complete (remaining: 04)
 
 *Updated after each plan completion*
 
@@ -120,14 +132,41 @@ Recent decisions affecting current work:
 - [02.2-03] --container-strategy flag: ephemeral (default, run --rm) or persistent (up + exec)
 - [02.2-03] Strategy precedence: CLI > user config (.lem-config.yaml) > default
 - [02.2-03] Persistent mode shows warning and requires confirmation (unless --yes)
+- [02.3-01] Removed default_backend from UserConfig (backend must be explicit in config)
+- [02.3-01] Fail-fast validation on invalid .lem-config.yaml (raises ValueError vs silent defaults)
+- [02.3-01] Webhooks lazily imported at call sites in campaign.py
+- [02.3-01] Resume command guides to lem campaign --resume rather than direct resumption
+- [02.3-02] Environment detection reuses doctor.py patterns for consistency
+- [02.3-02] lem init runs doctor automatically after config creation for immediate feedback
+- [Quick-003] Webhook toggles conditional in init wizard (only shown when webhook_url provided)
+- [Quick-003] Advanced Docker options (warmup_delay, auto_teardown) remain config-file-only
+- [02.4-01] Campaign YAML files filtered from `lem config list` (identified by `campaign_name` key)
+- [02.4-01] Campaign grouping via `--group-by` supports dot-notation for nested fields (e.g., `pytorch.batch_size`)
+- [02.4-05] Backend filtering uses stdlib logging.getLogger().setLevel() to suppress noisy libraries
+- [02.4-05] Log files written to results/<exp_id>/logs/ with DEBUG level for full capture
+- [02.4-05] JSON output mode via --json global flag stored in LLM_ENERGY_JSON_OUTPUT env var
+- [02.4-03] Capture-first philosophy: capture ALL warnings/errors, filter known issues via issues.yaml
+- [02.4-03] Issue sources auto-detected from message content (vllm, torch, transformers, etc.)
+- [02.4-03] Status values for known issues: wip, wontfix, external
+- [02.4-06] _check_docker_images() returns tuple (existing, missing) for better status display
+- [02.4-06] ContainerManager uses StatusCallback type alias for status_callback parameter
+- [02.4-06] _handle_missing_images() offers interactive build prompt with progress
 
 ### Pending Todos
 
-- [Phase 2.1-06] Docker lifecycle CLI output: show image build progress, `docker compose up` status, and `exec` dispatch per container/config during campaigns. Discuss UX during 02.1-06 execution.
-- [cli] Review CLI args vs options pattern: audit whether positional arguments are incorrectly implemented as options (flags)
-- [cli] Improve CLI output readability for vLLM/TensorRT (quiet/standard/verbose modes)
-- [docs] Update example configs for latest functionality (campaigns, container strategy, thermal gaps)
-- [docs] Document container strategy tradeoffs (ephemeral=reproducible, persistent=faster)
+- **[CRITICAL] Context vs Plan Alignment Audit** — CONTEXT.md files for Phases 01, 02, 02.2, 02.3 were misplaced (in `.planning/phases/` instead of phase subdirectories). Plans may not reflect user decisions. Audit ALL completed phases for discrepancies between CONTEXT.md decisions and implemented plans. If gaps found, will require re-planning and re-implementation. Phases to audit: 01-measurement-foundations, 02-campaign-orchestrator, 02.2-campaign-execution-model, 02.3-campaign-state-resume.
+
+**Completed todos (moved to Phase 2.4 plans):**
+- ~~[Phase 2.1-06] Docker lifecycle CLI output~~ → Phase 2.4 plans
+- ~~[cli] Review CLI args vs options pattern~~ → Audited, found correct ✓
+- ~~[cli] Improve CLI output readability for vLLM/TensorRT~~ → Phase 2.4 plans (backend noise filtering)
+- ~~[cli] Add `lem config list` command~~ → Phase 2.4 Plan 01
+- ~~[docs] Update example configs~~ → Phase 2.4 Plan 02
+### Quick Tasks Completed
+
+- [Quick 001] Removed deprecated `lem run` command (2026-02-04) - Non-functional stub deleted, `lem experiment` is sole entry point
+- [Quick 002] Documented container strategies in deployment guide (2026-02-04) - Added Container Strategies section explaining ephemeral vs persistent modes with configuration examples
+- [Quick 003] Fixed lem init wizard (2026-02-04) - Added prompts for between_cycles thermal gap and webhook notification toggles (on_complete/on_failure)
 
 ### Roadmap Evolution
 
@@ -141,7 +180,7 @@ None. Phase 1 validated end-to-end on A100 GPU. Phase 2 local UAT passed.
 
 ## Session Continuity
 
-Last session: 2026-02-03
-Stopped at: Completed 02.2-03-PLAN.md (dual container strategy)
-Resume file: .planning/phases/02.2-campaign-execution-model/02.2-03-SUMMARY.md
-Next action: Continue with 02.2-04-PLAN.md (if any remaining)
+Last session: 2026-02-04
+Stopped at: Completed 02.4-06-PLAN.md (Docker Lifecycle Output)
+Resume file: None
+Next action: Continue Phase 2.4 (02.4-04-PLAN.md remaining)

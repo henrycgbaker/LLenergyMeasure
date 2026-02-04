@@ -36,6 +36,108 @@ from llenergymeasure.exceptions import ConfigurationError
 config_app = typer.Typer(help="Configuration management commands", invoke_without_command=True)
 
 
+@config_app.command("list")  # type: ignore[misc]
+def config_list(
+    directory: Annotated[
+        Path,
+        typer.Option("--directory", "-d", help="Config directory to scan"),
+    ] = Path("configs"),
+    show_user_config: Annotated[
+        bool,
+        typer.Option("--show-user-config", "-u", help="Also show .lem-config.yaml settings"),
+    ] = False,
+) -> None:
+    """List available configuration files with metadata.
+
+    Scans the specified directory for YAML configuration files and displays
+    a summary table showing the config name, backend, model, and path.
+    """
+    import yaml as yaml_lib
+
+    from llenergymeasure.config.user_config import load_user_config
+
+    # Find all YAML files recursively
+    yaml_files = list(directory.glob("**/*.yaml"))
+
+    if not yaml_files:
+        console.print(f"[yellow]No configuration files found in {directory}[/yellow]")
+        return
+
+    # Build table
+    table = Table(title="Available Configurations")
+    table.add_column("Name", style="bold")
+    table.add_column("Backend", style="cyan")
+    table.add_column("Model")
+    table.add_column("Path", style="dim")
+
+    skipped = 0
+    for yaml_path in sorted(yaml_files):
+        try:
+            with open(yaml_path) as f:
+                data = yaml_lib.safe_load(f)
+
+            if not isinstance(data, dict):
+                skipped += 1
+                continue
+
+            # Skip campaign configs (they have campaign_name, not config_name)
+            if "campaign_name" in data:
+                continue
+
+            # Extract fields
+            name = data.get("config_name", yaml_path.stem)
+            backend = data.get("backend", "-")
+            model = data.get("model_name", "-")
+
+            # Truncate model name if too long
+            if isinstance(model, str) and len(model) > 40:
+                model = model[:37] + "..."
+
+            # Relative path for display
+            try:
+                rel_path = yaml_path.relative_to(Path.cwd())
+            except ValueError:
+                rel_path = yaml_path
+
+            table.add_row(str(name), str(backend), str(model), str(rel_path))
+
+        except yaml_lib.YAMLError:
+            skipped += 1
+            continue
+        except Exception:
+            skipped += 1
+            continue
+
+    console.print(table)
+
+    if skipped > 0:
+        console.print(f"\n[dim]Skipped {skipped} invalid/unreadable files[/dim]")
+
+    # Show user config if requested
+    if show_user_config:
+        console.print()
+        try:
+            user_cfg = load_user_config()
+            user_table = Table(title="User Configuration (.lem-config.yaml)")
+            user_table.add_column("Setting")
+            user_table.add_column("Value")
+
+            user_table.add_row("Results directory", user_cfg.results_dir)
+            user_table.add_row(
+                "Thermal gaps",
+                f"{user_cfg.thermal_gaps.between_experiments}s / {user_cfg.thermal_gaps.between_cycles}s",
+            )
+            user_table.add_row("Docker strategy", user_cfg.docker.strategy)
+            webhook = user_cfg.notifications.webhook_url or "[dim]not configured[/dim]"
+            user_table.add_row("Webhook URL", webhook)
+
+            console.print(user_table)
+        except FileNotFoundError:
+            console.print("[dim]No .lem-config.yaml found (using defaults)[/dim]")
+        except ValueError as e:
+            console.print(f"[yellow]Warning: {e}[/yellow]")
+
+
 @config_app.callback()  # type: ignore[misc]
 def config_callback(ctx: typer.Context) -> None:
     """Configuration management commands."""
@@ -131,7 +233,6 @@ def config_show(
                 config.decode_token_to_text is False,
             )
         )
-        table.add_row(*format_field("num_cycles", config.num_cycles, config.num_cycles == 1))
         table.add_row(*format_field("query_rate", config.query_rate, config.query_rate == 1.0))
         table.add_row(*format_field("random_seed", config.random_seed, config.random_seed is None))
 
@@ -209,17 +310,9 @@ def config_show(
             )
             table.add_row(
                 *format_field(
-                    "parallelism_strategy",
-                    pt.parallelism_strategy,
-                    pt.parallelism_strategy == "none",
-                    nested=True,
-                )
-            )
-            table.add_row(
-                *format_field(
-                    "parallelism_degree",
-                    pt.parallelism_degree,
-                    pt.parallelism_degree == 1,
+                    "num_processes",
+                    pt.num_processes,
+                    pt.num_processes == 1,
                     nested=True,
                 )
             )

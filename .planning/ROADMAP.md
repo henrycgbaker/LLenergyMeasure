@@ -21,8 +21,9 @@ The v2.0.0 milestone transforms LLenergyMeasure from a functional research tool 
 - [x] **Phase 1: Measurement Foundations** - Fix systematic energy errors, capture environment metadata, enable warmup convergence
 - [x] **Phase 2: Campaign Orchestrator** - Long-running containers, backend-aware grid generation, manifest tracking
 - [x] **Phase 2.1: Zero-Config Install Experience** - Auto-detect Docker, auto-generate .env, PyPI-ready packaging (INSERTED)
-- [ ] **Phase 2.2: Campaign Execution Model** - Fix container routing, cycle context, dual container strategy (INSERTED)
-- [ ] **Phase 2.3: Campaign State & Resume** - State persistence, `lem resume`, user preferences (INSERTED)
+- [x] **Phase 2.2: Campaign Execution Model** - Fix container routing, cycle context, dual container strategy (INSERTED)
+- [x] **Phase 2.3: Campaign State & Resume** - State persistence, `lem resume`, user preferences (INSERTED)
+- [ ] **Phase 2.4: CLI Polish & Testing Infrastructure** - Aggregation group_by, CLI UX, example configs, smoke tests (INSERTED)
 - [ ] **Phase 3: Parameter Completeness** - 90%+ backend coverage, version pinning, SSOT introspection updates
 - [ ] **Phase 4: Polish + UAT** - Cleanup, architectural refactor, documentation refresh, full workflow validation
 
@@ -157,37 +158,70 @@ Plans:
 **Plans**: 4 plans in 3 waves
 
 Plans:
-- [ ] 02.2-01-PLAN.md — Campaign context propagation + CI warning suppression + remove --cycles from experiment (Wave 1)
-- [ ] 02.2-02-PLAN.md — Container routing fix + minimal user config loading for thermal gaps (Wave 1)
-- [ ] 02.2-03-PLAN.md — Dual container strategy (ephemeral default + persistent option) (Wave 2)
-- [ ] 02.2-04-PLAN.md — Unit tests + UAT verification checkpoint (Wave 3)
+- [x] 02.2-01-PLAN.md — Campaign context propagation + CI warning suppression + remove --cycles from experiment (Wave 1)
+- [x] 02.2-02-PLAN.md — Container routing fix + minimal user config loading for thermal gaps (Wave 1)
+- [x] 02.2-03-PLAN.md — Dual container strategy (ephemeral default + persistent option) (Wave 2)
+- [x] 02.2-04-PLAN.md — Unit tests + UAT verification checkpoint (Wave 3)
 
 ---
 
 ### Phase 2.3: Campaign State & Resume (INSERTED)
 
-**Goal**: Robust campaign state persistence with graceful interrupt handling, `lem resume` command, and user preferences configuration.
+**Goal**: Interactive campaign resume via `lem resume`, guided project setup via `lem init`, and webhook notification system for experiment completion/failure.
 
 **Depends on**: Phase 2.2 (needs correct execution model before adding state management)
 
 **Requirements**: Derived from feature requests and UAT feedback
 
 **Success Criteria** (what must be TRUE):
-1. Campaign state persists to `.lem-state/` directory with manifest and checkpoints
-2. `lem resume` command identifies interrupted campaign/experiment and offers options
-3. Ctrl+C during campaign saves state cleanly before exiting
-4. Resume check runs BEFORE config parsing at CLI entry points
-5. User preferences file `.lem-config.yaml` supports: default_backend, results_dir, thermal_gaps, docker preferences, notification webhooks
-6. Campaign precedence: if experiment interrupted mid-campaign, campaign is the resumption unit
+1. `lem resume` discovers interrupted campaigns in `.state/` and presents interactive menu
+2. `lem resume --dry-run` shows what would be resumed without executing
+3. `lem resume --wipe` clears all state after confirmation
+4. `lem init` walks user through guided setup wizard with environment detection
+5. `lem init --non-interactive` creates config with defaults or CLI-provided values
+6. User preferences file `.lem-config.yaml` supports: results_dir, thermal_gaps, docker preferences, notification webhooks (default_backend removed — must be explicit in config)
+7. Webhook notifications POST to configured URL on experiment completion/failure
 
-**Context**: See `.planning/ARCHITECTURE-DISCUSSION.md` for decisions
+**Context**: See `phases/02.3-CONTEXT.md` for detailed implementation decisions
 
-**Plans**: TBD during planning
+**Plans**: 4 plans in 2 waves
 
 Plans:
-- [ ] 02.3-01: TBD during planning
-- [ ] 02.3-02: TBD during planning
-- [ ] 02.3-03: TBD during planning
+- [x] 02.3-01-PLAN.md — `lem resume` command + UserConfig notifications + webhook sender (Wave 1)
+- [x] 02.3-02-PLAN.md — `lem init` interactive wizard (Wave 1)
+- [x] 02.3-03-PLAN.md — Unit tests for resume and init commands (Wave 2)
+- [x] 02.3-04-PLAN.md — Verification checkpoint (Wave 2)
+
+---
+
+### Phase 2.4: CLI Polish & Testing Infrastructure (INSERTED)
+
+**Goal**: Clean up CLI UX issues, improve developer experience with systematic smoke tests, and ensure all configurations and examples are up-to-date with schema v3.0.0.
+
+**Depends on**: Phase 2.3 (builds on complete campaign/resume functionality)
+
+**Requirements**: Derived from accumulated todos and UAT observations
+
+**Success Criteria** (what must be TRUE):
+1. Campaign aggregation supports configurable `group_by` — users specify how to group experiments for summary statistics (by model, by backend, by batch_size, etc.) with results printed in CLI and recorded in campaign metadata
+2. CLI commands follow Typer best practices — required inputs are positional arguments, optional modifiers are flags
+3. CLI output has three-tier verbosity (quiet/standard/verbose) with backend-specific noise filtered appropriately
+4. All example configs use schema v3.0.0, maximize each backend's functionality, and test_configs directory is complete
+5. `lem config list` command exists for discoverability of available configurations
+6. pyproject.toml and Docker dependencies follow consistent SSOT pattern
+7. Systematic inference smoke tests run actual inference across parameter combinations, capturing and reporting warnings/errors (e.g., flash_attention_2 fallback)
+
+**Context**: See `phases/02.4-CONTEXT.md` for implementation decisions, `phases/02.4-RESEARCH.md` for research findings
+
+**Plans**: 6 plans in 2 waves
+
+Plans:
+- [ ] 02.4-01-PLAN.md — `lem config list` command + campaign `--group-by` flag (Wave 1)
+- [ ] 02.4-02-PLAN.md — Example configs schema v3.0.0 + schema_version validation (Wave 1)
+- [ ] 02.4-03-PLAN.md — Smoke test suite with strict warning capture (Wave 1)
+- [ ] 02.4-05-PLAN.md — Backend noise filtering + log capture + --json output (Wave 1)
+- [ ] 02.4-06-PLAN.md — Docker lifecycle output (strategy display, build progress, dispatch status) (Wave 1)
+- [ ] 02.4-04-PLAN.md — Unit tests + verification checkpoint (Wave 2)
 
 ---
 
@@ -245,21 +279,22 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 2.1 -> 2.2 -> 2.3 -> 3 -> 4
+Phases execute in numeric order: 1 -> 2 -> 2.1 -> 2.2 -> 2.3 -> 2.4 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Measurement Foundations | 6/6 | Complete | 2026-01-29 |
 | 2. Campaign Orchestrator | 8/8 | Complete | 2026-01-30 |
 | 2.1 Zero-Config Install (INSERTED) | 6/6 | Complete | 2026-01-31 |
-| 2.2 Campaign Execution Model (INSERTED) | 0/4 | Planned | - |
-| 2.3 Campaign State & Resume (INSERTED) | 0/? | Not started | - |
+| 2.2 Campaign Execution Model (INSERTED) | 4/4 | Complete | 2026-02-03 |
+| 2.3 Campaign State & Resume (INSERTED) | 4/4 | Complete | 2026-02-04 |
+| 2.4 CLI Polish & Testing Infrastructure (INSERTED) | 0/6 | Planned | - |
 | 3. Parameter Completeness | 0/? | Not started | - |
 | 4. Polish + UAT | 0/? | Not started | - |
 
 ---
 
-**Total Requirements:** 27 v1 requirements mapped across 4 phases + 2 inserted phases for architecture fixes
+**Total Requirements:** 27 v1 requirements mapped across 4 phases + 3 inserted phases for architecture fixes
 **Coverage:** 27/27 (100%) + additional UAT-derived requirements
 
-**Next:** `/gsd:execute-phase 2.2` to execute Campaign Execution Model phase
+**Next:** Execute Phase 2.4 with `/gsd:execute-phase 02.4`

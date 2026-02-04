@@ -69,7 +69,7 @@ class PyTorchBackend:
 
         Tier 2 (PyTorch-specific) - from config.pytorch:
             - batch_size, batching_strategy, max_tokens_per_batch
-            - parallelism_strategy, parallelism_degree
+            - num_processes (data parallelism via Accelerate)
             - load_in_4bit, load_in_8bit, bnb_4bit_*
             - min_p, no_repeat_ngram_size (top_k moved to universal decoder)
             - beam_search.*
@@ -115,11 +115,15 @@ class PyTorchBackend:
 
         The orchestration layer manages CUDA context via Accelerate.
         torch.cuda.* calls are safe before this backend initializes.
+
+        Note: This backend uses device_map="auto" for automatic device placement,
+        NOT true tensor parallelism via distributed primitives. Only data_parallel
+        (model replication) is supported via Accelerate's default parallel mode.
         """
         return RuntimeCapabilities(
             launch_mode=LaunchMode.ACCELERATE,
             cuda_management=CudaManagement.ORCHESTRATOR,
-            supports_tensor_parallel=True,
+            supports_tensor_parallel=False,
             supports_pipeline_parallel=False,
             manages_own_batching=False,
         )

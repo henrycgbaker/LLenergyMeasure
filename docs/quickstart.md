@@ -10,8 +10,8 @@ git clone https://github.com/henrycgbaker/LLenergyMeasure
 cd LLenergyMeasure
 pip install -e .
 
-# Check your setup
-lem doctor
+# Run setup wizard (detects environment, creates config)
+lem init
 
 # Run your first experiment
 lem experiment configs/examples/pytorch_example.yaml -n 10
@@ -21,6 +21,12 @@ lem campaign configs/examples/campaign_example.yaml --dry-run
 ```
 
 That's it! Base install includes PyTorch backend — no extras needed.
+
+The `lem init` wizard:
+- Detects your environment (GPU, Docker, installed backends)
+- Creates `.lem-config.yaml` with your preferences
+- Explains multi-backend setup (vLLM/TensorRT require Docker)
+- Runs `lem doctor` to verify your setup
 
 ## Prerequisites
 
@@ -289,6 +295,21 @@ results/
 lem experiment --resume <exp_id>
 ```
 
+### Resume an Interrupted Campaign
+
+```bash
+# Discover and select interrupted campaigns
+lem resume
+
+# Preview what would be resumed
+lem resume --dry-run
+
+# Clear all campaign state
+lem resume --wipe
+```
+
+The `lem resume` command scans `.state/` for interrupted campaigns and presents an interactive menu if multiple are found.
+
 ### Start Fresh (Ignore Incomplete)
 
 ```bash
@@ -303,6 +324,37 @@ If you used `--no-aggregate` or need to re-aggregate:
 lem aggregate exp_20240115_123456
 lem aggregate --all  # All pending
 ```
+
+## User Configuration
+
+The `lem init` wizard creates `.lem-config.yaml` with your preferences:
+
+```yaml
+# Results directory (relative to project root)
+results_dir: results
+
+# Thermal cooling gaps between experiments
+thermal_gaps:
+  between_experiments: 30.0
+  between_cycles: 60.0
+
+# Docker container strategy for multi-backend campaigns
+docker:
+  strategy: ephemeral    # ephemeral (fresh per experiment) or persistent (faster)
+
+# Webhook notifications
+notifications:
+  webhook_url: https://hooks.slack.com/services/...
+  on_complete: true      # Notify when experiment completes
+  on_failure: true       # Notify when experiment fails
+```
+
+**Webhook notifications** send HTTP POST requests with experiment status, useful for:
+- Slack/Discord notifications for long-running campaigns
+- CI/CD pipeline integration
+- Custom monitoring dashboards
+
+Run `lem init` again to update your configuration.
 
 ## Next Steps
 

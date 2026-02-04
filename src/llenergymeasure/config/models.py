@@ -23,6 +23,9 @@ if TYPE_CHECKING:
         VLLMConfig,
     )
 
+# Current schema version (increment when config structure changes)
+CURRENT_SCHEMA_VERSION = "3.0.0"
+
 # Default dataset for experiments (AI Energy Score standardised benchmark)
 DEFAULT_DATASET = "ai-energy-score"
 
@@ -494,6 +497,14 @@ class ExperimentConfig(BaseModel):
     """
 
     # -------------------------------------------------------------------------
+    # Schema Version
+    # -------------------------------------------------------------------------
+    schema_version: str | None = Field(
+        default=None,
+        description="Schema version (e.g., '3.0.0'). Used for config compatibility tracking.",
+    )
+
+    # -------------------------------------------------------------------------
     # Identity
     # -------------------------------------------------------------------------
     config_name: str = Field(..., min_length=1, description="Unique config identifier")
@@ -615,20 +626,8 @@ class ExperimentConfig(BaseModel):
     )
 
     # -------------------------------------------------------------------------
-    # Experiment Tracking
+    # Traffic Simulation
     # -------------------------------------------------------------------------
-    cycle_id: int | None = Field(default=None, description="Experiment cycle ID")
-    num_cycles: int = Field(
-        default=1,
-        ge=1,
-        le=10,
-        description=(
-            "Number of cycles for statistical robustness (1-10). "
-            "With 1 cycle, confidence intervals and robustness metrics "
-            "cannot be computed. Use >= 3 cycles for basic statistical "
-            "validity, >= 5 for publication-grade results."
-        ),
-    )
     query_rate: float = Field(default=1.0, ge=0, description="Query rate (queries/sec)")
 
     # -------------------------------------------------------------------------

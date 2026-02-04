@@ -1,7 +1,7 @@
 # Configuration Reference
 
 > This file is auto-generated from Pydantic models. Do not edit manually.
-> Generated: 2026-02-01
+> Generated: 2026-02-04
 
 ## Table of Contents
 
@@ -9,7 +9,6 @@
 - [backend](#backend)
 - [baseline](#baseline)
 - [config_name](#config-name)
-- [cycle_id](#cycle-id)
 - [dataset](#dataset)
 - [decode_token_to_text](#decode-token-to-text)
 - [decoder](#decoder)
@@ -21,7 +20,6 @@
 - [max_output_tokens](#max-output-tokens)
 - [min_output_tokens](#min-output-tokens)
 - [model_name](#model-name)
-- [num_cycles](#num-cycles)
 - [num_input_prompts](#num-input-prompts)
 - [prompts](#prompts)
 - [pytorch](#pytorch)
@@ -29,6 +27,7 @@
 - [random_seed](#random-seed)
 - [save_outputs](#save-outputs)
 - [schedule](#schedule)
+- [schema_version](#schema-version)
 - [streaming](#streaming)
 - [streaming_warmup_requests](#streaming-warmup-requests)
 - [tensorrt](#tensorrt)
@@ -67,12 +66,6 @@
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `config_name` | str | PydanticUndefined *(required)* | Unique config identifier |
-
-## cycle_id
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `cycle_id` | int \| None | None | Experiment cycle ID |
 
 ## dataset
 
@@ -147,12 +140,6 @@
 |-----------|------|---------|-------------|
 | `model_name` | str | PydanticUndefined *(required)* | HuggingFace model name/path |
 
-## num_cycles
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `num_cycles` | int | 1 | Number of cycles for statistical robustness (1-10). With 1 cycle, confidence intervals and robustness metrics cannot be computed. Use >= 3 cycles for basic statistical validity, >= 5 for publication-grade results. |
-
 ## num_input_prompts
 
 | Parameter | Type | Default | Description |
@@ -199,6 +186,12 @@
 | `schedule.at` | str \| None | None | Specific time of day to run (e.g., '09:00', '14:30') |
 | `schedule.days` | list[str] \| None | None | Days to run on (e.g., ['mon', 'wed', 'fri'] or ['weekdays']) |
 | `schedule.total_duration` | str | '24h' | Total duration to run daemon (e.g., '24h', '7d') |
+
+## schema_version
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `schema_version` | str \| None | None | Schema version (e.g., '3.0.0'). Used for config compatibility tracking. |
 
 ## streaming
 

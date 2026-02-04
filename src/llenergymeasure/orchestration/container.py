@@ -13,10 +13,14 @@ Persistent mode trades isolation for speed:
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
 from loguru import logger
+
+# Type alias for status callback: (service_name, status) -> None
+StatusCallback = Callable[[str, str], None]
 
 
 @dataclass
@@ -53,8 +57,12 @@ class ContainerManager:
         for service in self.services:
             self._states[service] = ContainerState(service=service, status="stopped")
 
-    def start_all(self) -> bool:
+    def start_all(self, status_callback: StatusCallback | None = None) -> bool:
         """Start all managed containers.
+
+        Args:
+            status_callback: Optional callback(service, status) for progress updates.
+                Called with status "starting" before and "ready"/"failed" after each service.
 
         Returns:
             True if all containers started successfully.
@@ -65,6 +73,12 @@ class ContainerManager:
 
         logger.info("Starting containers: {}", ", ".join(self.services))
 
+        # Notify starting for all services
+        for service in self.services:
+            self._states[service].status = "starting"
+            if status_callback:
+                status_callback(service, "starting")
+
         cmd = ["docker", "compose", "up", "-d", *self.services]
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
@@ -72,10 +86,14 @@ class ContainerManager:
             logger.error("Failed to start containers: {}", result.stderr)
             for service in self.services:
                 self._states[service].status = "error"
+                if status_callback:
+                    status_callback(service, "failed")
             return False
 
         for service in self.services:
             self._states[service].status = "running"
+            if status_callback:
+                status_callback(service, "ready")
 
         self._started = True
 
@@ -134,8 +152,12 @@ class ContainerManager:
         logger.debug("Executing in {}: {}", service, " ".join(command[:3]))
         return subprocess.run(cmd, capture_output=False, text=True, check=False)
 
-    def stop_all(self) -> bool:
+    def stop_all(self, status_callback: StatusCallback | None = None) -> bool:
         """Stop all managed containers.
+
+        Args:
+            status_callback: Optional callback(service, status) for progress updates.
+                Called with status "stopping" before and "stopped"/"failed" after.
 
         Returns:
             True if all containers stopped successfully.
@@ -146,18 +168,45 @@ class ContainerManager:
 
         logger.info("Stopping containers: {}", ", ".join(self.services))
 
+        # Notify stopping for all services
+        for service in self.services:
+            if status_callback:
+                status_callback(service, "stopping")
+
         cmd = ["docker", "compose", "down"]
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
         if result.returncode != 0:
             logger.error("Failed to stop containers: {}", result.stderr)
+            for service in self.services:
+                if status_callback:
+                    status_callback(service, "failed")
             return False
 
         for service in self.services:
             self._states[service].status = "stopped"
+            if status_callback:
+                status_callback(service, "stopped")
 
         self._started = False
         return True
+
+    def get_status(self, service: str) -> str:
+        """Get current status of a service.
+
+        Args:
+            service: Service name to query.
+
+        Returns:
+            Status string: 'stopped', 'starting', 'running', or 'error'.
+
+        Raises:
+            ValueError: If service is not managed by this manager.
+        """
+        if service not in self._states:
+            msg = f"Unknown service: {service}"
+            raise ValueError(msg)
+        return self._states[service].status
 
     def restart_service(self, service: str) -> bool:
         """Restart a single service.

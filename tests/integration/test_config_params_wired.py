@@ -277,9 +277,9 @@ class TestParallelismConfigImplemented:
     """Verify parallelism config is wired up in backend-native architecture.
 
     In the backend-native architecture, parallelism is configured via:
-    - PyTorch: pytorch.parallelism_strategy, pytorch.parallelism_degree
-    - vLLM: vllm.tensor_parallel_size, vllm.pipeline_parallel_size
-    - TensorRT: tensorrt.tp_size, tensorrt.pp_size
+    - PyTorch: pytorch.num_processes (data parallelism via Accelerate)
+    - vLLM: vllm.tensor_parallel_size, vllm.pipeline_parallel_size (internal)
+    - TensorRT: tensorrt.tp_size, tensorrt.pp_size (internal)
     """
 
     def test_pytorch_parallelism_config_parsed(self):
@@ -288,14 +288,10 @@ class TestParallelismConfigImplemented:
             config_name="test",
             model_name="gpt2",
             gpus=[0, 1],
-            pytorch=PyTorchConfig(
-                parallelism_strategy="tensor_parallel",
-                parallelism_degree=2,
-            ),
+            pytorch=PyTorchConfig(num_processes=2),
         )
 
-        assert config.pytorch.parallelism_strategy == "tensor_parallel"
-        assert config.pytorch.parallelism_degree == 2
+        assert config.pytorch.num_processes == 2
 
     def test_vllm_parallelism_config_parsed(self):
         """vLLM parallelism config should be parsed correctly."""
@@ -324,7 +320,7 @@ class TestParallelismConfigImplemented:
         source = inspect.getsource(launcher.get_backend_parallelism)
 
         # Backend-native parallelism settings should be checked
-        assert "parallelism_degree" in source  # PyTorch
+        assert "num_processes" in source  # PyTorch
         assert "tensor_parallel_size" in source  # vLLM
         assert "tp_size" in source  # TensorRT
 

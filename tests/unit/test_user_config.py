@@ -6,6 +6,7 @@ import pytest
 
 from llenergymeasure.config.user_config import (
     DockerConfig,
+    NotificationsConfig,
     ThermalGapConfig,
     UserConfig,
     load_user_config,
@@ -24,8 +25,19 @@ class TestUserConfig:
         assert config.docker.strategy == "ephemeral"
         assert config.docker.warmup_delay == 0.0
         assert config.docker.auto_teardown is True
-        assert config.default_backend == "pytorch"
         assert config.results_dir == "results"
+        # Verify notifications defaults
+        assert config.notifications.on_complete is True
+        assert config.notifications.on_failure is True
+        assert config.notifications.webhook_url is None
+
+    def test_user_config_no_default_backend(self) -> None:
+        """Verify default_backend not in UserConfig.model_fields (removed in 2.3-01)."""
+        assert "default_backend" not in UserConfig.model_fields
+
+    def test_user_config_has_notifications(self) -> None:
+        """Verify notifications field exists in UserConfig."""
+        assert "notifications" in UserConfig.model_fields
 
     def test_thermal_gaps_config(self) -> None:
         """ThermalGapConfig validates values."""
@@ -67,7 +79,10 @@ thermal_gaps:
 docker:
   strategy: persistent
   warmup_delay: 5.0
-default_backend: vllm
+notifications:
+  webhook_url: https://example.com/hook
+  on_complete: true
+  on_failure: false
 """)
 
         config = load_user_config(config_path)
@@ -76,7 +91,9 @@ default_backend: vllm
         assert config.thermal_gaps.between_cycles == 180.0
         assert config.docker.strategy == "persistent"
         assert config.docker.warmup_delay == 5.0
-        assert config.default_backend == "vllm"
+        assert config.notifications.webhook_url == "https://example.com/hook"
+        assert config.notifications.on_complete is True
+        assert config.notifications.on_failure is False
 
     def test_partial_config_uses_defaults(self, tmp_path: Path) -> None:
         """Partial config file fills in missing values with defaults."""
@@ -102,12 +119,45 @@ thermal_gaps:
         assert config.thermal_gaps.between_experiments == 60.0
         assert config.docker.strategy == "ephemeral"
 
-    def test_invalid_yaml_returns_defaults(self, tmp_path: Path) -> None:
-        """Invalid YAML returns defaults without crashing."""
+    def test_invalid_yaml_raises_value_error(self, tmp_path: Path) -> None:
+        """Invalid YAML raises ValueError (fail-fast validation)."""
         config_path = tmp_path / ".lem-config.yaml"
         config_path.write_text("invalid: yaml: content: [")
 
-        config = load_user_config(config_path)
+        with pytest.raises(ValueError, match="Invalid YAML"):
+            load_user_config(config_path)
 
-        assert config.thermal_gaps.between_experiments == 60.0
-        assert config.docker.strategy == "ephemeral"
+    def test_invalid_config_raises_value_error(self, tmp_path: Path) -> None:
+        """Invalid config values raise ValueError (fail-fast validation)."""
+        config_path = tmp_path / ".lem-config.yaml"
+        config_path.write_text("""
+docker:
+  strategy: invalid_strategy
+""")
+
+        with pytest.raises(ValueError, match="Invalid config"):
+            load_user_config(config_path)
+
+
+class TestNotificationsConfig:
+    """Tests for NotificationsConfig model."""
+
+    def test_notifications_config_defaults(self) -> None:
+        """NotificationsConfig has correct defaults."""
+        config = NotificationsConfig()
+
+        assert config.on_complete is True
+        assert config.on_failure is True
+        assert config.webhook_url is None
+
+    def test_notifications_config_with_url(self) -> None:
+        """NotificationsConfig accepts webhook URL."""
+        config = NotificationsConfig(
+            webhook_url="https://example.com/hook",
+            on_complete=False,
+            on_failure=True,
+        )
+
+        assert config.webhook_url == "https://example.com/hook"
+        assert config.on_complete is False
+        assert config.on_failure is True

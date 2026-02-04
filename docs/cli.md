@@ -210,28 +210,6 @@ lem schedule --preset benchmark --model meta-llama/Llama-2-7b-hf --interval 12h
 
 ---
 
-### run
-
-**Legacy command** - kept for backwards compatibility. Use `experiment` instead for new work.
-
-Low-level inference command (called by `experiment`).
-
-```bash
-lem run <config.yaml> [OPTIONS]
-```
-
-| Option | Description |
-|--------|-------------|
-| `--prompts, -p` | Path to prompts file |
-| `--dataset, -d` | HuggingFace dataset |
-| `--split` | Dataset split |
-| `--column` | Dataset column |
-| `--sample-size, -n` | Limit prompts |
-| `--results-dir, -o` | Results directory |
-| `--dry-run` | Validate without running |
-
----
-
 ### aggregate
 
 Aggregate raw per-process results into final metrics. Called by `experiment`.
