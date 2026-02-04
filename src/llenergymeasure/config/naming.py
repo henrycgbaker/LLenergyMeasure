@@ -208,13 +208,6 @@ PARAMETER_ALIASES: dict[str, dict[str, Any]] = {
         "description": "Random seed for reproducibility",
         # Not deprecated - this is a workflow param
     },
-    "num_cycles": {
-        "cli": ["--cycles"],
-        "yaml_legacy": [],
-        "canonical": "num_cycles",
-        "description": "Number of experiment cycles for statistical robustness",
-        # Not deprecated - this is a workflow param
-    },
 }
 
 

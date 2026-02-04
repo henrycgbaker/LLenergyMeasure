@@ -69,6 +69,16 @@ TEST_CONFIG_DIR = "configs/test_grid"
 
 
 @dataclass
+class CapturedIssue:
+    """A warning or error captured during test execution."""
+
+    category: str  # "warning", "error", "deprecation"
+    source: str  # e.g., "vllm", "torch", "transformers", "ray"
+    message: str  # Full message text
+    severity: str  # "warning", "error", "critical"
+
+
+@dataclass
 class ValidationResult:
     """Result of validating parameter application."""
 
@@ -96,6 +106,7 @@ class TestResult:
     stderr: str = ""
     traceback: str | None = None
     validation: ValidationResult | None = None
+    captured_issues: list[CapturedIssue] = field(default_factory=list)
 
 
 @dataclass
@@ -110,6 +121,7 @@ class TestReport:
     failed_tests: list[dict[str, Any]]
     warnings_by_type: dict[str, int]
     baseline_metrics: dict[str, float] | None = None
+    issues_by_source: dict[str, int] = field(default_factory=dict)
 
 
 # =============================================================================
@@ -174,8 +186,8 @@ SHARED_PARAMS: dict[str, list[Any]] = {
 
 # Parallelism (2 GPUs) - backend-native names
 PARALLELISM_PYTORCH: dict[str, list[Any]] = {
-    "pytorch.parallelism_strategy": ["none", "tensor_parallel", "data_parallel"],
-    "pytorch.parallelism_degree": [1, 2],
+    # PyTorch only supports data parallelism via Accelerate
+    "pytorch.num_processes": [1, 2],
 }
 
 PARALLELISM_VLLM: dict[str, list[Any]] = {
@@ -377,6 +389,135 @@ def should_skip_param(
 
 
 # =============================================================================
+# Comprehensive Issue Capture
+# =============================================================================
+
+
+def _identify_source(message: str) -> str:
+    """Identify the source library from a warning/error message."""
+    message_lower = message.lower()
+    if "vllm" in message_lower or "ray" in message_lower:
+        return "vllm"
+    if "tensorrt" in message_lower or "trt" in message_lower:
+        return "tensorrt"
+    if "transformers" in message_lower or "huggingface" in message_lower:
+        return "transformers"
+    if "torch" in message_lower or "cuda" in message_lower:
+        return "torch"
+    if "flash" in message_lower and "attention" in message_lower:
+        return "flash_attention"
+    return "unknown"
+
+
+def extract_all_issues(stdout: str, stderr: str) -> list[CapturedIssue]:
+    """Extract ALL warnings and errors from combined output.
+
+    This function is deliberately comprehensive - it captures everything
+    that might indicate a problem. The philosophy is "capture first,
+    filter known issues later" rather than a predefined checklist.
+
+    Patterns captured:
+    - Python warnings (Warning:, DeprecationWarning, FutureWarning, UserWarning, etc.)
+    - Library-specific warnings (vLLM, TensorRT, transformers, Ray)
+    - Error messages (Error:, Exception:, Failed:)
+    - Fallback notifications (e.g., "flash_attention_2 not available, using sdpa")
+    - GPU/CUDA warnings
+    """
+    issues: list[CapturedIssue] = []
+    combined = stdout + "\n" + stderr
+
+    # Generic warning patterns (catch-all)
+    warning_patterns: list[tuple[str, str]] = [
+        (r"(?i)(warning|warn):\s*(.+)", "warning"),
+        (r"(?i)deprecat\w*:\s*(.+)", "deprecation"),
+        (r"(?i)futurewarning:\s*(.+)", "deprecation"),
+        (r"(?i)userwarning:\s*(.+)", "warning"),
+        (r"(?i)runtimewarning:\s*(.+)", "warning"),
+    ]
+
+    # Error patterns
+    error_patterns: list[tuple[str, str]] = [
+        (r"(?i)error:\s*(.+)", "error"),
+        (r"(?i)exception:\s*(.+)", "error"),
+        (r"(?i)failed:\s*(.+)", "error"),
+        (r"(?i)traceback \(most recent call last\)", "error"),
+    ]
+
+    # Fallback patterns (indicate something didn't work as expected)
+    fallback_patterns: list[tuple[str, str]] = [
+        (r"(?i)falling back to\s*(.+)", "warning"),
+        (r"(?i)using\s+(\w+)\s+instead of\s+(\w+)", "warning"),
+        (r"(?i)not available.*using\s*(.+)", "warning"),
+        (r"(?i)flash.?attention.*not.*available", "warning"),
+        (r"(?i)cuda.*not.*available", "warning"),
+    ]
+
+    # Library-specific patterns
+    library_patterns: list[tuple[str, str]] = [
+        # vLLM
+        (r"(?i)\[vllm\].*warning", "warning"),
+        (r"(?i)ray.*warning", "warning"),
+        # TensorRT
+        (r"(?i)\[TensorRT\].*warning", "warning"),
+        (r"(?i)engine.*warning", "warning"),
+        # PyTorch/transformers
+        (r"(?i)transformers.*warning", "warning"),
+        (r"(?i)torch.*warning", "warning"),
+    ]
+
+    all_patterns = warning_patterns + error_patterns + fallback_patterns + library_patterns
+
+    for pattern, severity in all_patterns:
+        for match in re.finditer(pattern, combined, re.MULTILINE):
+            # Determine source from context
+            source = _identify_source(match.group(0))
+            issues.append(
+                CapturedIssue(
+                    category=severity if severity in ("warning", "error") else "warning",
+                    source=source,
+                    message=match.group(0).strip()[:500],  # Truncate long messages
+                    severity=severity,
+                )
+            )
+
+    # Deduplicate by message
+    seen: set[tuple[str, str]] = set()
+    unique_issues: list[CapturedIssue] = []
+    for issue in issues:
+        key = (issue.category, issue.message[:100])
+        if key not in seen:
+            seen.add(key)
+            unique_issues.append(issue)
+
+    return unique_issues
+
+
+def load_known_issues() -> dict[str, dict[str, Any]]:
+    """Load known issues from issues.yaml for exception handling."""
+    issues_path = Path(__file__).parent / "issues.yaml"
+    if not issues_path.exists():
+        return {}
+    try:
+        import yaml
+
+        with open(issues_path) as f:
+            data = yaml.safe_load(f) or {}
+        # Handle None when known_issues key exists but has no entries
+        return data.get("known_issues") or {}
+    except Exception:
+        return {}
+
+
+def is_known_issue(issue: CapturedIssue, known_issues: dict[str, dict[str, Any]]) -> bool:
+    """Check if an issue matches a known issue pattern."""
+    for _issue_id, info in known_issues.items():
+        pattern = info.get("pattern", "")
+        if pattern and re.search(pattern, issue.message, re.IGNORECASE):
+            return True
+    return False
+
+
+# =============================================================================
 # Helper Functions
 # =============================================================================
 
@@ -464,9 +605,9 @@ def create_parallelism_config(backend: str, strategy: str, output_dir: Path) -> 
     """Create config for parallelism testing (2 GPUs).
 
     Uses backend-native parallelism parameters:
-    - PyTorch: parallelism_strategy, parallelism_degree
-    - vLLM: tensor_parallel_size, pipeline_parallel_size
-    - TensorRT: tp_size, pp_size
+    - PyTorch: num_processes (data parallelism via Accelerate)
+    - vLLM: tensor_parallel_size, pipeline_parallel_size (internal)
+    - TensorRT: tp_size, pp_size (internal)
     """
     import yaml
 
@@ -485,12 +626,12 @@ def create_parallelism_config(backend: str, strategy: str, output_dir: Path) -> 
 
     # Backend-specific parallelism (backend-native architecture)
     if backend == "pytorch":
+        # PyTorch only supports data parallelism via Accelerate
         config["pytorch"] = {
             "batch_size": 1,
             "batching_strategy": "static",
             "attn_implementation": "sdpa",
-            "parallelism_strategy": strategy,
-            "parallelism_degree": 2,
+            "num_processes": 2 if strategy == "data_parallel" else 1,
         }
     elif backend == "vllm":
         config["vllm"] = {
@@ -726,8 +867,13 @@ def verify_inference_results(config_name: str) -> tuple[bool, str | None, dict[s
     return True, None, metrics
 
 
-def run_experiment(config_path: Path) -> TestResult:
-    """Run an experiment and capture all output."""
+def run_experiment(config_path: Path, smoke_mode: bool = False) -> TestResult:
+    """Run an experiment and capture all output.
+
+    Args:
+        config_path: Path to the experiment config file
+        smoke_mode: If True, fail on ANY warning or error detected
+    """
     import time
 
     config_name = config_path.stem
@@ -784,6 +930,17 @@ def run_experiment(config_path: Path) -> TestResult:
                 if inference_metrics:
                     warnings.append(f"Partial metrics: {inference_metrics}")
 
+        # Capture all issues from output
+        captured_issues = extract_all_issues(result.stdout, result.stderr)
+
+        # In smoke mode, fail if any unknown issues detected
+        if smoke_mode and captured_issues and status == "passed":
+            known = load_known_issues()
+            unknown_issues = [i for i in captured_issues if not is_known_issue(i, known)]
+            if unknown_issues:
+                status = "failed"
+                error_summary = f"Smoke test: {len(unknown_issues)} unknown issues detected"
+
         return TestResult(
             config_name=config_name,
             config_path=str(config_path),
@@ -797,6 +954,7 @@ def run_experiment(config_path: Path) -> TestResult:
             stdout=result.stdout,
             stderr=result.stderr,
             traceback=traceback_str,
+            captured_issues=captured_issues,
         )
 
     except subprocess.TimeoutExpired:
@@ -1027,6 +1185,12 @@ def generate_report(
                 }
             )
 
+    # Count issues by source (from comprehensive issue capture)
+    issues_by_source: dict[str, int] = {}
+    for result in results:
+        for issue in result.captured_issues:
+            issues_by_source[issue.source] = issues_by_source.get(issue.source, 0) + 1
+
     return TestReport(
         run_id=run_id,
         timestamp=timestamp,
@@ -1041,6 +1205,7 @@ def generate_report(
         failed_tests=failed_tests,
         warnings_by_type=warnings_by_type,
         baseline_metrics=baseline_metrics,
+        issues_by_source=issues_by_source,
     )
 
 
@@ -1085,6 +1250,7 @@ def test_backend(
     quick_mode: bool,
     output_dir: Path,
     discover_mode: bool = False,
+    smoke_mode: bool = False,
 ) -> list[TestResult]:
     """Test all parameters for a specific backend.
 
@@ -1093,6 +1259,7 @@ def test_backend(
         quick_mode: Use fewer parameter variations
         output_dir: Directory for generated configs
         discover_mode: Auto-discover params from Pydantic models
+        smoke_mode: If True, fail on ANY warning or error detected
     """
     results: list[TestResult] = []
 
@@ -1184,7 +1351,7 @@ def test_backend(
 
             print(f"    Testing {param}={value}...", end=" ", flush=True)
 
-            result = run_experiment(config_path)
+            result = run_experiment(config_path, smoke_mode=smoke_mode)
             result.parameter_varied = param
             result.parameter_value = value
 
@@ -1223,7 +1390,7 @@ def test_backend(
                 output_dir / "parallelism",
             )
 
-            result = run_experiment(config_path)
+            result = run_experiment(config_path, smoke_mode=smoke_mode)
             result.parameter_varied = "parallelism.strategy"
             result.parameter_value = strategy
 
@@ -1287,6 +1454,14 @@ def print_summary(report: TestReport) -> None:
     print(f"    NO_EFFECT:  {no_effect} (param applied but no metric change)")
     print(f"    UNVERIFIED: {unverified} (no evidence param was applied)")
 
+    # Print issues by source (comprehensive capture)
+    if report.issues_by_source:
+        print("\n  Issues by source:")
+        for source, count in sorted(report.issues_by_source.items(), key=lambda x: -x[1]):
+            print(f"    {source}: {count}")
+    else:
+        print("\n  Issues by source: None detected")
+
 
 def list_discovered_params(backend: str | None = None) -> None:
     """List all auto-discovered parameters for debugging."""
@@ -1346,6 +1521,11 @@ def main() -> None:
         action="store_true",
         help="List discovered parameters and exit (no tests run)",
     )
+    parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Run in smoke test mode: fail on ANY warning or error",
+    )
 
     args = parser.parse_args()
 
@@ -1363,6 +1543,7 @@ def main() -> None:
     print(f"  Timeout: {TEST_TIMEOUT_SECONDS}s per test")
     print(f"  Quick mode: {args.quick}")
     print(f"  Discover mode: {args.discover}")
+    print(f"  Smoke mode: {args.smoke}")
 
     # Reset environment
     reset_environment(keep_results=args.no_cleanup)
@@ -1382,6 +1563,7 @@ def main() -> None:
             args.quick,
             output_dir / backend,
             discover_mode=args.discover,
+            smoke_mode=args.smoke,
         )
         all_results.extend(results)
 

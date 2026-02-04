@@ -1,0 +1,38 @@
+# =============================================================================
+# PyTorch Parallelism Test Config
+# =============================================================================
+# Tests data parallelism via Accelerate (model replication).
+# Use with: lem experiment tests/configs/parallelism_test_pytorch.yaml
+#
+# Expected behaviour:
+# - Accelerate launches 2 processes
+# - Each process loads full model replica on separate GPU
+# - Batches split between processes
+# =============================================================================
+
+config_name: pytorch-parallelism-test
+model_name: Qwen/Qwen2.5-0.5B  # Small model for quick testing
+
+dataset:
+  name: ai_energy_score
+  sample_size: 20
+
+max_input_tokens: 256
+max_output_tokens: 32
+gpus: [0, 1]  # Use 2 GPUs
+backend: pytorch
+
+decoder:
+  preset: deterministic  # Reproducible outputs
+
+pytorch:
+  # Data parallelism: model replicated on 2 GPUs
+  num_processes: 2
+
+  # Minimal batching for testing
+  batch_size: 4
+  batching_strategy: static
+
+  # No quantization for cleaner test
+  load_in_4bit: false
+  load_in_8bit: false

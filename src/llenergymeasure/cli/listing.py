@@ -32,7 +32,7 @@ def list_datasets_cmd() -> None:
         )
 
     console.print(table)
-    console.print("\n[dim]Usage: lem run config.yaml --dataset alpaca -n 1000[/dim]")
+    console.print("\n[dim]Usage: lem experiment config.yaml --dataset alpaca -n 1000[/dim]")
 
 
 def list_presets_cmd() -> None:

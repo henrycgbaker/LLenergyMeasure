@@ -1,46 +1,40 @@
-# Example Campaign Configuration
-# ===============================
-# Runs multiple experiment configs across multiple cycles for statistical comparison.
-#
-# Usage:
-#   lem campaign configs/examples/campaign_example.yaml
-#
-# Or override with CLI args:
-#   lem campaign configs/examples/campaign_example.yaml \
-#     --cycles 3 --dataset alpaca -n 50
+schema_version: '3.0.0'
+campaign_name: backend-comparison
 
-# Required: descriptive name for this campaign (used in results)
-campaign_name: "pytorch-vs-vllm-comparison"
+# Model to benchmark across backends
+model: Qwen/Qwen2.5-0.5B
 
-# Prompt source (overrides individual config datasets)
+# Dataset for all experiments
 dataset: ai_energy_score
 num_samples: 100
 
-# Experiment configs to compare (relative paths resolved from this file's directory)
-configs:
-  - pytorch_example.yaml
-  - vllm_example.yaml
+# Grid expansion - generates configs for each combination
+grid:
+  backends: [pytorch, vllm]
+  axes:
+    batch_size: [1, 4, 8]
+    fp_precision: [float16, bfloat16]
 
-# Execution parameters
+# Execution settings
 execution:
-  # Number of complete cycles through all configs
-  cycles: 5
+  cycles: 3  # Repeat for statistical robustness
+  structure: interleaved  # Fair comparison ordering
+  warmup_prompts: 5
+  warmup_timeout_seconds: 30
+  config_gap_seconds: 60  # Thermal recovery between configs
+  cycle_gap_seconds: 300  # Full thermal reset between cycles
 
-  # Execution order:
-  #   interleaved: A->B->C, A->B->C (fair comparison, fixed order per cycle)
-  #   shuffled: Random order within each cycle (eliminates ordering bias)
-  #   grouped: Ax3, Bx3, Cx3 (all cycles of one config before next)
-  structure: shuffled
+# Cold start benchmarking (optional)
+cold_start:
+  force_cold_start: false  # Set true for cold-start benchmarks
 
-  # Warmup: dual-criteria (stops when EITHER is reached)
-  warmup_prompts: 5           # Min prompts before measurement
-  warmup_timeout_seconds: 30  # Max warmup time
+# Daemon mode (optional, for scheduled benchmarks)
+# daemon:
+#   enabled: true
+#   at: "02:00"  # Run at 2 AM
+#   interval: "24h"
 
-  # Thermal management
-  config_gap_seconds: 60      # Gap between configs (GPU thermal recovery)
-  cycle_gap_seconds: 300      # Gap between cycles (full thermal reset)
+# Results grouping (for summary output)
+# Use with: lem campaign campaign.yaml --group-by backend,batch_size
 
-# Optional: scheduled execution (for overnight runs)
-# schedule:
-#   at: "03:00"               # Run at 3 AM
-#   days: ["mon", "wed", "fri"]  # Or: "weekdays", "weekends"
+# See docs/cli.md for campaign configuration reference

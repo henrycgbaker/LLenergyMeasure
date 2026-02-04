@@ -1,7 +1,7 @@
 # Invalid Parameter Combinations
 
 > Auto-generated from config validators and test results.
-> Last updated: 2026-02-01 14:13
+> Last updated: 2026-02-04 14:04
 
 This document lists parameter combinations that will fail validation or runtime.
 The tool validates these at config load time and provides clear error messages.
@@ -62,9 +62,9 @@ due to hardware, model, or package requirements.
 
 | Feature | PyTorch | vLLM | TensorRT |
 |---------|---------|------|----------|
-| Tensor Parallel | ✅ | ✅ | ✅ |
+| Tensor Parallel | ❌ | ✅ | ✅ |
 | Pipeline Parallel | ❌ | ✅ | ✅ |
-| Data Parallel | ✅ | ❌ | ✅ |
+| Data Parallel | ✅ | ❌ | ❌ |
 | BitsAndBytes (4-bit) | ✅ | ❌ | ❌ |
 | BitsAndBytes (8-bit) | ✅ | ❌ | ❌ |
 | Native Quantization | ❌ | ✅ (AWQ/GPTQ/FP8) | ✅ (FP8/INT8) |

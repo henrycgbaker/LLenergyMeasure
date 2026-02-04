@@ -186,23 +186,20 @@ def display_config_summary(
     # Backend-specific parallelism
     if config.backend == "pytorch" and config.pytorch is not None:
         pytorch_cfg = config.pytorch
-        if (
-            show_defaults
-            or pytorch_cfg.parallelism_strategy != "none"
-            or pytorch_cfg.parallelism_degree != 1
-        ):
+        if show_defaults or pytorch_cfg.num_processes != 1:
             console.print("  [bold]parallelism (pytorch):[/bold]")
+            strategy = "data_parallel" if pytorch_cfg.num_processes > 1 else "none"
             print_value(
                 "strategy",
-                pytorch_cfg.parallelism_strategy,
-                pytorch_cfg.parallelism_strategy == "none",
+                strategy,
+                strategy == "none",
                 indent=4,
                 show_defaults=show_defaults,
             )
             print_value(
-                "degree",
-                pytorch_cfg.parallelism_degree,
-                pytorch_cfg.parallelism_degree == 1,
+                "num_processes",
+                pytorch_cfg.num_processes,
+                pytorch_cfg.num_processes == 1,
                 indent=4,
                 show_defaults=show_defaults,
             )
@@ -438,7 +435,6 @@ def display_config_summary(
     sched = config.schedule
     if show_defaults or any(
         [
-            config.num_cycles != 1,
             sched.enabled,
             sched.interval is not None,
             sched.at is not None,
@@ -447,13 +443,6 @@ def display_config_summary(
         ]
     ):
         console.print("  [bold]schedule:[/bold]")
-        print_value(
-            "cycles",
-            config.num_cycles,
-            config.num_cycles == 1,
-            indent=4,
-            show_defaults=show_defaults,
-        )
         print_value(
             "cron_enabled",
             sched.enabled,
@@ -620,9 +609,9 @@ def show_effective_config(
             )
             table.add_row(
                 *format_dict_field(
-                    "parallelism_strategy",
-                    pytorch_cfg.get("parallelism_strategy", "none"),
-                    "none",
+                    "num_processes",
+                    pytorch_cfg.get("num_processes", 1),
+                    1,
                     nested=True,
                 )
             )
@@ -686,7 +675,6 @@ def show_effective_config(
 
     # Schedule config
     add_section_header(table, "schedule")
-    table.add_row(*format_dict_field("cycles", config.get("num_cycles", 1), 1, nested=True))
     schedule = config.get("schedule", {})
     table.add_row(
         *format_dict_field("cron_enabled", schedule.get("enabled", False), False, nested=True)

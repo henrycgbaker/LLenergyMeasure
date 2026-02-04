@@ -328,20 +328,16 @@ class TestValidateConfig:
         """Parallelism validation is now backend-specific.
 
         In backend-native architecture, parallelism is in pytorch config:
-        - pytorch.parallelism_strategy
-        - pytorch.parallelism_degree
+        - pytorch.num_processes (data parallelism via Accelerate)
         """
         from llenergymeasure.config.backend_configs import PyTorchConfig
 
-        # Config with parallelism set via backend-native config
+        # Config with data parallelism via num_processes
         config = ExperimentConfig(
             config_name="test",
             model_name="test-model",
             gpus=[0, 1],
-            pytorch=PyTorchConfig(
-                parallelism_strategy="tensor_parallel",
-                parallelism_degree=2,
-            ),
+            pytorch=PyTorchConfig(num_processes=2),
         )
         # Universal validator doesn't check backend parallelism
         warnings = validate_config(config)

@@ -33,6 +33,56 @@ if TYPE_CHECKING:
     from llenergymeasure.orchestration.manifest import CampaignManifest
 
 
+def _is_json_output_mode() -> bool:
+    """Check if JSON output mode is enabled."""
+    return os.environ.get("LLM_ENERGY_JSON_OUTPUT") == "true"
+
+
+def _display_campaign_summary_json(
+    manifest: CampaignManifest,
+    campaign: CampaignConfig,
+    runner: CampaignRunner,
+    failed_experiments: list[tuple[str, int]],
+) -> None:
+    """Output campaign summary as JSON.
+
+    Args:
+        manifest: Campaign manifest with experiment entries.
+        campaign: Campaign configuration.
+        runner: Campaign runner with execution state.
+        failed_experiments: List of (config_name, exit_code) for failed experiments.
+    """
+    import json
+
+    # Build results by config
+    results_by_config = {}
+    for config_name, experiments in runner.get_experiments_by_config().items():
+        experiment_ids = runner.get_completed_experiment_ids(config_name)
+        results_by_config[config_name] = {
+            "total_experiments": len(experiments),
+            "experiment_ids": experiment_ids,
+        }
+
+    # Build failed experiments list
+    failed_list = [
+        {"config_name": config_name, "exit_code": exit_code}
+        for config_name, exit_code in failed_experiments
+    ]
+
+    output = {
+        "campaign_name": campaign.campaign_name,
+        "campaign_id": campaign.campaign_id,
+        "total_experiments": len(manifest.experiments),
+        "completed": manifest.completed_count,
+        "failed": manifest.failed_count,
+        "cycles": runner.num_cycles,
+        "results_by_config": results_by_config,
+        "failed_experiments": failed_list,
+    }
+
+    print(json.dumps(output, indent=2, default=str))
+
+
 def campaign_cmd(
     config_paths: Annotated[
         list[Path],
@@ -131,6 +181,14 @@ def campaign_cmd(
         typer.Option(
             "--container-strategy",
             help="Container strategy: ephemeral (run --rm, default) or persistent (up + exec)",
+        ),
+    ] = None,
+    # Grouping
+    group_by: Annotated[
+        str | None,
+        typer.Option(
+            "--group-by",
+            help="Comma-separated fields to group results by (e.g., backend,batch_size)",
         ),
     ] = None,
 ) -> None:
@@ -467,16 +525,21 @@ def campaign_cmd(
 
         ensure_env_file()
 
-        # Check images are built
-        missing_images = _check_docker_images(backends_needed)
+        # Check and display image status
+        existing_images, missing_images = _check_docker_images(backends_needed)
+        _display_image_status(existing_images, missing_images)
+
+        # Handle missing images (prompt to build)
         if missing_images:
-            _prompt_docker_build(missing_images)
+            _handle_missing_images(missing_images, yes=yes)
+
+        # Display Docker strategy information
+        _display_docker_strategy(effective_strategy, backends_needed, use_docker_dispatch)
 
         # Persistent mode warning and confirmation
         if effective_strategy == "persistent":
             console.print(
-                "\n[yellow]Persistent container mode:[/yellow] Containers will remain running "
-                "between experiments.\n"
+                "[yellow]Warning:[/yellow] Containers will remain running between experiments.\n"
                 "  - Faster execution (no container startup overhead)\n"
                 "  - Less isolation (GPU memory may accumulate)\n"
                 "  - Use --container-strategy ephemeral for better isolation\n"
@@ -496,29 +559,19 @@ def campaign_cmd(
                 warmup_delay=user_config.docker.warmup_delay,
                 auto_teardown=user_config.docker.auto_teardown,
             )
-            container_manager.start_all()
-            console.print(
-                f"[dim]Persistent containers: {', '.join(backends_needed)} "
-                f"(docker compose up + exec)[/dim]"
-            )
-        else:
-            # Ephemeral mode: docker compose run --rm per experiment
-            console.print(
-                f"[dim]Ephemeral containers: {', '.join(backends_needed)} "
-                f"(docker compose run --rm)[/dim]"
-            )
+
+            # Start containers with status display
+            console.print("[bold]Starting containers...[/bold]")
+            container_manager.start_all(status_callback=_container_status_callback)
+            console.print()
+    else:
+        # Local execution - show local strategy
+        _display_docker_strategy(effective_strategy, [], use_docker=False)
 
     # Execute campaign
-    console.print("\n[bold cyan]━━━ Starting Campaign ━━━[/bold cyan]\n")
+    console.print("[bold cyan]━━━ Starting Campaign ━━━[/bold cyan]\n")
     console.print(f"Campaign ID: [cyan]{campaign.campaign_id}[/cyan]")
     console.print(f"Campaign Name: [cyan]{campaign.campaign_name}[/cyan]")
-    if use_docker_dispatch:
-        if effective_strategy == "persistent":
-            console.print("Execution: [green]Docker[/green] (persistent containers)")
-        else:
-            console.print("Execution: [green]Docker[/green] (per-experiment containers)")
-    else:
-        console.print("Execution: [blue]Local[/blue] (direct process)")
     console.print()
 
     failed_experiments: list[tuple[str, int]] = []
@@ -526,10 +579,21 @@ def campaign_cmd(
     for idx, experiment in enumerate(execution_order):
         cycle_num = experiment.cycle_index + 1
         config_name = experiment.config_name
+        backend = experiment.backend
 
         console.print(
             f"[bold]Experiment {idx + 1}/{len(execution_order)}:[/bold] "
             f"{config_name} (cycle {cycle_num}/{runner.num_cycles})"
+        )
+
+        # Display dispatch method (Docker container routing)
+        _display_experiment_dispatch(
+            config_name=config_name,
+            index=idx + 1,
+            total=len(execution_order),
+            backend=backend,
+            use_docker=use_docker_dispatch,
+            strategy=effective_strategy,
         )
 
         # Config gap (thermal recovery between experiments)
@@ -552,8 +616,9 @@ def campaign_cmd(
             )
             manifest_mgr.save(manifest)
 
-        # Run the experiment
+        # Run the experiment with timing
         runner.record_experiment_start(experiment)
+        exp_start = time.time()
         experiment_id, exit_code = _run_single_experiment(
             experiment=experiment,
             campaign=campaign,
@@ -564,6 +629,7 @@ def campaign_cmd(
             total_cycles=runner.num_cycles,
             container_manager=container_manager,
         )
+        exp_elapsed = time.time() - exp_start
 
         # Check for interrupt signal (Ctrl+C) - abort entire campaign
         if exit_code == 130:
@@ -581,7 +647,11 @@ def campaign_cmd(
             raise typer.Exit(130)
 
         if exit_code == 0:
-            console.print(f"  [green]✓[/green] Completed (experiment_id: {experiment_id})")
+            _display_experiment_result(
+                success=True,
+                experiment_id=experiment_id,
+                elapsed=exp_elapsed,
+            )
             runner.record_experiment_complete(experiment, experiment_id)
             if experiment.manifest_entry:
                 from datetime import datetime
@@ -596,8 +666,21 @@ def campaign_cmd(
                     result_path=result_path,
                 )
                 manifest_mgr.save(manifest)
+            # Send webhook notification on completion
+            from llenergymeasure.notifications import send_webhook_notification
+
+            send_webhook_notification(
+                event_type="complete",
+                experiment_id=experiment_id,
+                campaign_id=campaign.campaign_id,
+                payload={"config_name": config_name, "cycle": experiment.cycle_index},
+            )
         else:
-            console.print(f"  [red]✗[/red] Failed (exit code: {exit_code})")
+            _display_experiment_result(
+                success=False,
+                experiment_id=experiment_id,
+                exit_code=exit_code,
+            )
             failed_experiments.append((config_name, exit_code))
             runner.record_experiment_complete(experiment, experiment_id)
             if experiment.manifest_entry:
@@ -610,6 +693,15 @@ def campaign_cmd(
                     error=f"Exit code {exit_code}",
                 )
                 manifest_mgr.save(manifest)
+            # Send webhook notification on failure
+            from llenergymeasure.notifications import send_webhook_notification
+
+            send_webhook_notification(
+                event_type="failure",
+                experiment_id=experiment_id,
+                campaign_id=campaign.campaign_id,
+                payload={"config_name": config_name, "exit_code": exit_code},
+            )
 
         # Cycle gap (full thermal reset between cycles)
         if runner.is_cycle_complete(idx) and idx < len(execution_order) - 1:
@@ -622,8 +714,8 @@ def campaign_cmd(
     # Container teardown (persistent mode)
     if container_manager is not None:
         if user_config.docker.auto_teardown:
-            console.print("\n[dim]Stopping persistent containers...[/dim]")
-            container_manager.stop_all()
+            console.print("\n[bold]Stopping containers...[/bold]")
+            container_manager.stop_all(status_callback=_container_status_callback)
         else:
             console.print(
                 "\n[yellow]Note:[/yellow] Persistent containers still running. "
@@ -631,22 +723,31 @@ def campaign_cmd(
             )
 
     # Campaign summary
-    console.print("\n[bold green]━━━ Campaign Complete ━━━[/bold green]")
+    # Check for JSON output mode
+    if _is_json_output_mode():
+        _display_campaign_summary_json(manifest, campaign, runner, failed_experiments)
+    else:
+        console.print("\n[bold green]━━━ Campaign Complete ━━━[/bold green]")
 
-    if failed_experiments:
-        console.print(f"\n[yellow]Warning: {len(failed_experiments)} experiments failed[/yellow]")
+        if failed_experiments:
+            console.print(
+                f"\n[yellow]Warning: {len(failed_experiments)} experiments failed[/yellow]"
+            )
 
-    console.print("\nResults by config:")
-    for config_name, experiments in runner.get_experiments_by_config().items():
-        experiment_ids = runner.get_completed_experiment_ids(config_name)
-        console.print(f"  {config_name}: {len(experiments)} experiments")
-        console.print(f"    IDs: {', '.join(experiment_ids)}")
+        console.print("\nResults by config:")
+        for config_name, experiments in runner.get_experiments_by_config().items():
+            experiment_ids = runner.get_completed_experiment_ids(config_name)
+            console.print(f"  {config_name}: {len(experiments)} experiments")
+            console.print(f"    IDs: {', '.join(experiment_ids)}")
 
-    # Bootstrap CI display for multi-cycle campaigns
-    if runner.num_cycles > 1:
-        _display_campaign_ci_summary(manifest, campaign)
-    elif runner.num_cycles == 1:
-        console.print("\n[dim]Single cycle: use --cycles 3+ for confidence intervals[/dim]")
+        # Bootstrap CI display for multi-cycle campaigns
+        # Parse group_by fields
+        group_by_fields = group_by.split(",") if group_by else None
+
+        if runner.num_cycles > 1:
+            _display_campaign_ci_summary(manifest, campaign, group_by_fields)
+        elif runner.num_cycles == 1:
+            console.print("\n[dim]Single cycle: use --cycles 3+ for confidence intervals[/dim]")
 
     if failed_experiments:
         raise typer.Exit(1)
@@ -712,7 +813,7 @@ def _run_campaign_loop(
 
         ensure_env_file()
 
-        missing_images = _check_docker_images(backends_needed)
+        _existing, missing_images = _check_docker_images(backends_needed)
         if missing_images:
             _prompt_docker_build(missing_images)
 
@@ -771,6 +872,15 @@ def _run_campaign_loop(
                     result_path=result_path,
                 )
                 manifest_mgr.save(manifest)
+            # Send webhook notification on completion
+            from llenergymeasure.notifications import send_webhook_notification
+
+            send_webhook_notification(
+                event_type="complete",
+                experiment_id=experiment_id,
+                campaign_id=campaign.campaign_id,
+                payload={"config_name": experiment.config_name, "cycle": experiment.cycle_index},
+            )
         else:
             failed.append((experiment.config_name, exit_code))
             runner.record_experiment_complete(experiment, experiment_id)
@@ -784,6 +894,15 @@ def _run_campaign_loop(
                     error=f"Exit code {exit_code}",
                 )
                 manifest_mgr.save(manifest)
+            # Send webhook notification on failure
+            from llenergymeasure.notifications import send_webhook_notification
+
+            send_webhook_notification(
+                event_type="failure",
+                experiment_id=experiment_id,
+                campaign_id=campaign.campaign_id,
+                payload={"config_name": experiment.config_name, "exit_code": exit_code},
+            )
 
         # Cycle gap
         if runner.is_cycle_complete(idx) and idx < len(execution_order) - 1:
@@ -924,8 +1043,8 @@ def _run_single_experiment(
         env["LLM_ENERGY_VERBOSITY"] = os.environ.get("LLM_ENERGY_VERBOSITY", "normal")
         # Add campaign context to subprocess environment (for local execution)
         env.update(campaign_context)
-        result = subprocess.run(cmd, env=env, check=False)
-        return experiment_id, result.returncode
+        proc = subprocess.run(cmd, env=env, check=False)
+        return experiment_id, proc.returncode
 
     finally:
         tmp_config_path.unlink(missing_ok=True)
@@ -978,8 +1097,8 @@ def _should_use_docker(backends: list[str] | None = None) -> bool:
     return should_use_docker_for_campaign(backends)
 
 
-def _check_docker_images(backends: list[str]) -> list[str]:
-    """Check which backend Docker images are missing.
+def _check_docker_images(backends: list[str]) -> tuple[list[str], list[str]]:
+    """Check which backend Docker images exist and which are missing.
 
     Uses `docker image inspect` on the expected image name (llenergymeasure:<backend>)
     to check if the image has been built.
@@ -988,8 +1107,9 @@ def _check_docker_images(backends: list[str]) -> list[str]:
         backends: List of backend service names to check.
 
     Returns:
-        List of backend names whose images are not built.
+        Tuple of (existing_images, missing_images).
     """
+    existing = []
     missing = []
     for backend in backends:
         image_name = f"llenergymeasure:{backend}"
@@ -998,9 +1118,76 @@ def _check_docker_images(backends: list[str]) -> list[str]:
             capture_output=True,
             check=False,
         )
-        if result.returncode != 0:
+        if result.returncode == 0:
+            existing.append(backend)
+        else:
             missing.append(backend)
-    return missing
+    return existing, missing
+
+
+def _display_image_status(existing: list[str], missing: list[str]) -> None:
+    """Display Docker image status.
+
+    Args:
+        existing: List of backends with existing images.
+        missing: List of backends with missing images.
+    """
+    if existing:
+        console.print(f"[green]Docker images ready:[/green] {', '.join(existing)}")
+    if missing:
+        console.print(f"[yellow]Docker images missing:[/yellow] {', '.join(missing)}")
+
+
+def _handle_missing_images(missing: list[str], yes: bool = False) -> bool:
+    """Handle missing Docker images - prompt to build or exit.
+
+    Args:
+        missing: List of backend names with missing images.
+        yes: Skip confirmation prompts.
+
+    Returns:
+        True if should proceed (images built), False to abort.
+
+    Raises:
+        typer.Exit: If user declines to build or build fails.
+    """
+    if not missing:
+        return True
+
+    console.print(f"\n[yellow]Missing Docker images:[/yellow] {', '.join(missing)}")
+    console.print("These need to be built before running experiments.\n")
+
+    if not yes:
+        from rich.prompt import Confirm
+
+        build_now = Confirm.ask(
+            f"Build images now? (docker compose build {' '.join(missing)})",
+            default=True,
+        )
+        if not build_now:
+            console.print("\n[dim]Run manually:[/dim]")
+            console.print(f"  docker compose build {' '.join(missing)}")
+            raise typer.Exit(1)
+
+    # Build images with progress display
+    console.print("\n[bold]Building Docker images...[/bold]")
+    for backend in missing:
+        console.print(f"  [cyan]◆[/cyan] Building {backend}...")
+
+        result = subprocess.run(
+            ["docker", "compose", "build", backend],
+            capture_output=False,  # Show build output
+            check=False,
+        )
+
+        if result.returncode != 0:
+            console.print(f"  [red]✗[/red] Failed to build {backend}")
+            raise typer.Exit(1)
+
+        console.print(f"  [green]✓[/green] {backend} built successfully")
+
+    console.print()
+    return True
 
 
 def _prompt_docker_build(missing: list[str]) -> None:
@@ -1010,7 +1197,10 @@ def _prompt_docker_build(missing: list[str]) -> None:
         missing: List of backend names with missing images.
 
     Raises:
-        typer.Exit: If user declines to build.
+        typer.Exit: Always exits - kept for backwards compatibility.
+
+    Note:
+        This function is deprecated. Use _handle_missing_images instead.
     """
     services = " ".join(missing)
     console.print(f"\n[yellow]Missing Docker images:[/yellow] {', '.join(missing)}")
@@ -1279,17 +1469,26 @@ def _display_validation_summary(result: GridExpansionResult) -> None:
 def _display_campaign_ci_summary(
     manifest: CampaignManifest,
     campaign: CampaignConfig,
+    group_by: list[str] | None = None,
 ) -> None:
     """Display bootstrap CI summary for multi-cycle campaign results.
 
-    Groups completed experiment results by config_name and computes
-    bootstrap confidence intervals for key metrics.
+    Groups completed experiment results by config_name (default) or by
+    specified fields and computes bootstrap confidence intervals for key metrics.
+
+    Args:
+        manifest: Campaign manifest with experiment entries.
+        campaign: Campaign configuration.
+        group_by: Optional list of field paths to group by (e.g., ["backend"]).
     """
 
     from loguru import logger as _logger
     from rich.table import Table
 
-    from llenergymeasure.results.aggregation import aggregate_campaign_results
+    from llenergymeasure.results.aggregation import (
+        aggregate_campaign_results,
+        aggregate_campaign_with_grouping,
+    )
 
     # Build results_by_config from manifest
     results_by_config: dict[str, list[Any]] = {}
@@ -1310,34 +1509,75 @@ def _display_campaign_ci_summary(
         console.print("\n[dim]No completed results to aggregate for CIs[/dim]")
         return
 
-    try:
-        aggregated = aggregate_campaign_results(results_by_config)
-    except Exception as e:
-        _logger.warning("CI aggregation failed: {}", e)
-        console.print(f"\n[yellow]Warning: CI computation failed: {e}[/yellow]")
-        return
+    # Use grouping function if group_by specified, else default config_name grouping
+    if group_by:
+        try:
+            grouped = aggregate_campaign_with_grouping(results_by_config, group_by)
+        except Exception as e:
+            _logger.warning("Grouped CI aggregation failed: {}", e)
+            console.print(f"\n[yellow]Warning: Grouped CI computation failed: {e}[/yellow]")
+            return
 
-    table = Table(title="Bootstrap Confidence Intervals (95%)")
-    table.add_column("Config", style="cyan")
-    table.add_column("Cycles", justify="right")
-    table.add_column("Energy (J)", justify="right")
-    table.add_column("Throughput (tok/s)", justify="right")
-    table.add_column("TTFT (ms)", justify="right")
-    table.add_column("ITL (ms)", justify="right")
+        # Build table with dynamic group columns
+        group_title = ", ".join(group_by)
+        table = Table(title=f"Bootstrap CIs (95%) grouped by {group_title}")
 
-    for config_name, metrics in aggregated.items():
-        n = metrics.get("n_cycles", "?")
-        energy = metrics.get("energy_j", {})
-        tps = metrics.get("throughput_tps", {})
-        ttft = metrics.get("ttft_mean_ms")
-        itl = metrics.get("itl_mean_ms")
+        # Add group column(s)
+        for field in group_by:
+            table.add_column(field.split(".")[-1].title(), style="cyan")
 
-        energy_str = _format_ci_cell(energy)
-        tps_str = _format_ci_cell(tps)
-        ttft_str = _format_ci_cell(ttft) if ttft else "-"
-        itl_str = _format_ci_cell(itl) if itl else "-"
+        table.add_column("N", justify="right")
+        table.add_column("Energy (J)", justify="right")
+        table.add_column("Throughput (tok/s)", justify="right")
+        table.add_column("TTFT (ms)", justify="right")
+        table.add_column("ITL (ms)", justify="right")
 
-        table.add_row(config_name, str(n), energy_str, tps_str, ttft_str, itl_str)
+        for group_key, metrics in sorted(grouped.items()):
+            n = metrics.get("n_cycles", "?")
+            energy = metrics.get("energy_j", {})
+            tps = metrics.get("throughput_tps", {})
+            ttft = metrics.get("ttft_mean_ms")
+            itl = metrics.get("itl_mean_ms")
+
+            energy_str = _format_ci_cell(energy)
+            tps_str = _format_ci_cell(tps)
+            ttft_str = _format_ci_cell(ttft) if ttft else "-"
+            itl_str = _format_ci_cell(itl) if itl else "-"
+
+            # Build row with group values + metrics
+            row = [*group_key, str(n), energy_str, tps_str, ttft_str, itl_str]
+            table.add_row(*row)
+
+    else:
+        # Default: group by config_name
+        try:
+            aggregated = aggregate_campaign_results(results_by_config)
+        except Exception as e:
+            _logger.warning("CI aggregation failed: {}", e)
+            console.print(f"\n[yellow]Warning: CI computation failed: {e}[/yellow]")
+            return
+
+        table = Table(title="Bootstrap Confidence Intervals (95%)")
+        table.add_column("Config", style="cyan")
+        table.add_column("Cycles", justify="right")
+        table.add_column("Energy (J)", justify="right")
+        table.add_column("Throughput (tok/s)", justify="right")
+        table.add_column("TTFT (ms)", justify="right")
+        table.add_column("ITL (ms)", justify="right")
+
+        for config_name, metrics in aggregated.items():
+            n = metrics.get("n_cycles", "?")
+            energy = metrics.get("energy_j", {})
+            tps = metrics.get("throughput_tps", {})
+            ttft = metrics.get("ttft_mean_ms")
+            itl = metrics.get("itl_mean_ms")
+
+            energy_str = _format_ci_cell(energy)
+            tps_str = _format_ci_cell(tps)
+            ttft_str = _format_ci_cell(ttft) if ttft else "-"
+            itl_str = _format_ci_cell(itl) if itl else "-"
+
+            table.add_row(config_name, str(n), energy_str, tps_str, ttft_str, itl_str)
 
     console.print()
     console.print(table)
@@ -1370,6 +1610,108 @@ def _estimate_total_time(campaign: CampaignConfig, runner: CampaignRunner) -> fl
     cycle_gap_time = (num_cycles - 1) * campaign.execution.cycle_gap_seconds
 
     return config_gap_time + cycle_gap_time
+
+
+def _display_docker_strategy(
+    strategy: Literal["ephemeral", "persistent"],
+    backends: list[str],
+    use_docker: bool,
+) -> None:
+    """Display Docker container strategy information."""
+    if not use_docker:
+        console.print("[green]Execution:[/green] Local (no Docker)")
+        return
+
+    strategy_desc = {
+        "ephemeral": "Fresh container per experiment (docker compose run --rm)",
+        "persistent": "Long-running containers (docker compose up + exec)",
+    }
+
+    console.print("\n[bold]Docker Container Strategy[/bold]")
+    console.print(f"  Strategy: [cyan]{strategy}[/cyan]")
+    console.print(f"  {strategy_desc[strategy]}")
+    console.print(f"  Backends: {', '.join(backends)}")
+
+    if strategy == "ephemeral":
+        console.print("  [dim]Each experiment gets isolated container, auto-cleaned after[/dim]")
+    else:
+        console.print("  [dim]Containers stay running, faster but may have state carryover[/dim]")
+    console.print()
+
+
+def _container_status_callback(service: str, status: str) -> None:
+    """Display container lifecycle status updates.
+
+    Args:
+        service: Container service name.
+        status: Status string (starting, ready, failed, stopping, stopped).
+    """
+    icons = {
+        "starting": "◆",
+        "ready": "✓",
+        "failed": "✗",
+        "stopping": "◆",
+        "stopped": "✓",
+    }
+    colors = {
+        "starting": "cyan",
+        "ready": "green",
+        "failed": "red",
+        "stopping": "cyan",
+        "stopped": "green",
+    }
+
+    icon = icons.get(status, "○")
+    color = colors.get(status, "white")
+
+    console.print(f"  [{color}]{icon}[/{color}] {service}: {status}")
+
+
+def _display_experiment_dispatch(
+    config_name: str,
+    index: int,
+    total: int,
+    backend: str,
+    use_docker: bool,
+    strategy: Literal["ephemeral", "persistent"],
+) -> None:
+    """Display experiment dispatch status showing container routing.
+
+    Args:
+        config_name: Experiment config name.
+        index: Current experiment index (1-based).
+        total: Total experiment count.
+        backend: Backend name for this experiment.
+        use_docker: Whether using Docker dispatch.
+        strategy: Container strategy (ephemeral or persistent).
+    """
+    if not use_docker:
+        console.print("  [dim]→ local process[/dim]")
+        return
+
+    dispatch_type = "run --rm" if strategy == "ephemeral" else "exec"
+    console.print(f"  [dim]→ docker compose {dispatch_type} {backend}[/dim]")
+
+
+def _display_experiment_result(
+    success: bool,
+    experiment_id: str,
+    elapsed: float | None = None,
+    exit_code: int | None = None,
+) -> None:
+    """Display experiment completion status.
+
+    Args:
+        success: Whether experiment succeeded.
+        experiment_id: Experiment ID.
+        elapsed: Elapsed time in seconds (optional).
+        exit_code: Exit code if failed (optional).
+    """
+    if success:
+        time_str = f" in {elapsed:.1f}s" if elapsed else ""
+        console.print(f"  [green]✓[/green] Completed{time_str} (id: {experiment_id})")
+    else:
+        console.print(f"  [red]✗[/red] Failed (exit code: {exit_code})")
 
 
 __all__ = ["campaign_cmd"]

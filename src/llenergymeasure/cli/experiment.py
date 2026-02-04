@@ -11,7 +11,6 @@ import os
 import signal
 import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -25,7 +24,7 @@ from llenergymeasure.cli.display import (
     display_incomplete_experiment,
 )
 from llenergymeasure.cli.results import aggregate_one
-from llenergymeasure.config.loader import has_blocking_warnings, load_config, validate_config
+from llenergymeasure.config.loader import has_blocking_warnings, validate_config
 from llenergymeasure.config.models import (
     DEFAULT_DATASET,
     ExperimentConfig,
@@ -36,7 +35,6 @@ from llenergymeasure.core.dataset_loader import (
     load_prompts_from_file,
     load_prompts_from_source,
 )
-from llenergymeasure.domain.experiment import AggregatedResult
 from llenergymeasure.exceptions import ConfigurationError
 from llenergymeasure.results.repository import FileSystemRepository
 from llenergymeasure.state.experiment_state import (
@@ -47,30 +45,57 @@ from llenergymeasure.state.experiment_state import (
 )
 
 
+def _is_json_output_mode() -> bool:
+    """Check if JSON output mode is enabled."""
+    return os.environ.get("LLM_ENERGY_JSON_OUTPUT") == "true"
+
+
+def _output_result_json(
+    repo: FileSystemRepository,
+    experiment_id: str,
+) -> None:
+    """Output experiment result as JSON.
+
+    Args:
+        repo: Results repository to load aggregated result from.
+        experiment_id: Experiment ID.
+    """
+    import json
+
+    result = repo.load_aggregated(experiment_id)
+
+    if result is None:
+        output = {"experiment_id": experiment_id, "status": "no_aggregated_result"}
+    else:
+        output = result.model_dump(mode="json")
+        output["experiment_id"] = experiment_id
+
+    print(json.dumps(output, indent=2, default=str))
+
+
 def _display_measurement_summary(
     repo: FileSystemRepository,
     experiment_id: str,
-    effective_cycles: int,
-    cycle_results: list[AggregatedResult],
 ) -> None:
-    """Display Phase 1 measurement summary after experiment.
+    """Display measurement summary after experiment.
 
     Shows environment metadata, thermal throttle warnings, energy breakdown,
     and warmup convergence status from the aggregated result.
 
+    In JSON mode, outputs the full result as JSON instead.
+
     Args:
         repo: Results repository to load aggregated result from.
-        experiment_id: Base experiment ID (or cycle-specific for single-cycle).
-        effective_cycles: Number of cycles executed.
-        cycle_results: Already-loaded cycle results (for multi-cycle mode).
+        experiment_id: Experiment ID.
     """
+    # JSON output mode: output full result as JSON
+    if _is_json_output_mode():
+        _output_result_json(repo, experiment_id)
+        return
+
+    # Human-readable output mode
     try:
-        # Load the aggregated result
-        result: AggregatedResult | None
-        if effective_cycles > 1 and cycle_results:
-            result = cycle_results[0]  # Use first cycle for environment info
-        else:
-            result = repo.load_aggregated(experiment_id)
+        result = repo.load_aggregated(experiment_id)
 
         if result is None:
             return
@@ -161,90 +186,6 @@ def resolve_prompts(
         sample_size=sample_size,
     )
     return load_prompts_from_source(source)
-
-
-def run_cmd(
-    config_path: Annotated[Path, typer.Argument(help="Path to experiment config file")],
-    prompts_file: Annotated[
-        Path | None, typer.Option("--prompts", "-p", help="Path to prompts file (one per line)")
-    ] = None,
-    dataset: Annotated[
-        str | None,
-        typer.Option("--dataset", "-d", help="HuggingFace dataset (default: ai-energy-score)"),
-    ] = None,
-    dataset_split: Annotated[str, typer.Option("--split", help="Dataset split")] = "train",
-    dataset_column: Annotated[
-        str | None, typer.Option("--column", help="Dataset column for prompts")
-    ] = None,
-    sample_size: Annotated[
-        int | None, typer.Option("--sample-size", "-n", help="Limit number of prompts")
-    ] = None,
-    results_dir: Annotated[
-        Path | None, typer.Option("--results-dir", "-o", help="Results output directory")
-    ] = None,
-    dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Validate config without running experiment")
-    ] = False,
-) -> None:
-    """Run an LLM efficiency experiment.
-
-    Loads the configuration, runs inference, measures energy consumption,
-    and saves raw per-process results. Use 'aggregate' command to combine
-    results from multi-GPU experiments.
-
-    Prompts can be specified via:
-    - --prompts <file.txt>: One prompt per line
-    - --dataset <name>: HuggingFace dataset or alias (default: ai-energy-score)
-    - prompt_source in config file
-    """
-    try:
-        # Load and validate config
-        config = load_config(config_path)
-        warnings = validate_config(config)
-
-        for warning in warnings:
-            console.print(f"[yellow]Warning:[/yellow] {warning}")
-
-        console.print(f"[green]✓[/green] Config loaded: {config.config_name}")
-        console.print(f"  Model: {config.model_name}")
-        console.print(f"  Backend: {config.backend}")
-        console.print(f"  GPUs: {config.gpus}")
-
-        if dry_run:
-            console.print("[blue]Dry run - skipping experiment execution[/blue]")
-            raise typer.Exit()
-
-        # Resolve prompts (CLI > config > default)
-        prompts = resolve_prompts(
-            config=config,
-            prompts_file=prompts_file,
-            dataset=dataset,
-            dataset_split=dataset_split,
-            dataset_column=dataset_column,
-            sample_size=sample_size,
-        )
-        console.print(f"  Prompts: {len(prompts)}")
-
-        # Initialize repository (will be used when full experiment wiring is complete)
-        _ = FileSystemRepository(results_dir)
-
-        # For now, this requires the full experiment infrastructure to be wired up
-        # The actual run would use:
-        # - ExperimentOrchestrator with DI components
-        # - accelerate launch for multi-GPU
-        # This is a placeholder that shows the intended interface
-        console.print("\n[bold]Experiment execution requires accelerate launch.[/bold]")
-        console.print("Use: accelerate launch --num_processes N <script> --config <config>")
-        console.print("\nFor programmatic execution, see orchestration/launcher.py")
-
-    except typer.Exit:
-        raise  # Re-raise typer exits (including dry run)
-    except ConfigurationError as e:
-        console.print(f"[red]Configuration error:[/red] {e}")
-        raise typer.Exit(1) from None
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
 
 
 def experiment_cmd(
@@ -655,27 +596,13 @@ def experiment_cmd(
         }
         in_campaign = campaign_context["campaign_id"] is not None
 
-        # Experiments are atomic - use config.num_cycles (defaults to 1)
-        # Multi-cycle experiments should use campaigns
-        effective_cycles = config.num_cycles
-        if effective_cycles < 1 or effective_cycles > 10:
-            console.print("[red]Error:[/red] num_cycles must be between 1 and 10")
-            raise typer.Exit(1)
-        if effective_cycles > 1:
-            console.print(f"  [cyan]Multi-cycle mode:[/cyan] {effective_cycles} cycles (config)")
-        elif in_campaign:
-            # Running as part of campaign - don't show single cycle warning
-            # Campaign orchestrates cycles, not individual experiments
+        # Experiments are atomic - campaigns handle scheduling and cycles
+        if in_campaign:
             cycle = campaign_context["cycle"]
             total = campaign_context["total_cycles"]
             console.print(
                 f"  [cyan]Part of campaign:[/cyan] {campaign_context['campaign_name']} "
                 f"(cycle {cycle}/{total})"
-            )
-        else:
-            console.print(
-                "  [dim]Single cycle:[/dim] confidence intervals require campaigns "
-                "(lem campaign --cycles 3+)"
             )
 
         # Check for MIG instances and warn about energy measurement (Phase: MIG support)
@@ -759,6 +686,17 @@ def experiment_cmd(
 
             experiment_id = get_persistent_unique_id()
 
+        # Set up log file capture to results directory
+        # Captures full logs (DEBUG level) regardless of console verbosity
+        from llenergymeasure.logging import add_experiment_log_file
+
+        logs_dir = actual_results_dir / experiment_id / "logs"
+        log_file_path = add_experiment_log_file(logs_dir, experiment_id)
+        console.print(f"[dim]Logs: {log_file_path}[/dim]")
+
+        # Pass log file path to subprocess via environment variable
+        subprocess_env["LLM_ENERGY_LOG_FILE"] = log_file_path
+
         # Generate temp config file with _metadata (Phase 0)
         # Always generate temp file to include _metadata for effective_config/cli_overrides tracking
         effective_config = config.model_dump()
@@ -768,7 +706,6 @@ def experiment_cmd(
                 "effective_config": effective_config,
                 "cli_overrides": tracked_overrides,
                 "original_config_path": str(config_path) if config_path else None,
-                "cycle_id": None,  # Set for multi-cycle experiments
                 "config_warnings": warning_strings,  # Embed in results for traceability
                 "results_dir": str(actual_results_dir),  # Pass custom results dir to subprocess
                 "parameter_provenance": parameter_provenance,  # Full provenance tracking
@@ -790,9 +727,6 @@ def experiment_cmd(
         if sample_size:
             cmd.extend(["--sample-size", str(sample_size)])
 
-        # Store base command before adding config (config is per-cycle)
-        base_cmd = list(cmd)
-
         if backend_name == "vllm":
             console.print("\n[dim]$ python -m llenergymeasure.orchestration.launcher ...[/dim]\n")
         else:
@@ -800,147 +734,75 @@ def experiment_cmd(
                 f"\n[dim]$ accelerate launch --num_processes {final_num_processes} ...[/dim]\n"
             )
 
-        # Multi-cycle support: run experiment multiple times for statistical robustness
-        from llenergymeasure.progress import CycleProgress
+        # Experiments are atomic single executions
+        # Campaigns handle repetition, cycles, shuffling, and aggregation
 
-        cycle_results: list[AggregatedResult] = []
-        cycle_metadata_list: list[Any] = []
-        base_experiment_id = experiment_id
+        # Write config with metadata to temp file
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, prefix="llm_energy_"
+        ) as tmp:
+            yaml.dump(config_with_metadata, tmp, default_flow_style=False)
+            tmp_config_path = tmp.name
+            cmd.extend(["--config", tmp_config_path])
+            console.print(f"[dim]Generated config with metadata: {tmp_config_path}[/dim]")
 
-        # Use cycle progress for multi-cycle runs
-        cycle_progress = CycleProgress(effective_cycles)
+        # Create experiment state
+        current_state = ExperimentState(
+            experiment_id=experiment_id,
+            status=ExperimentStatus.RUNNING,
+            num_processes=final_num_processes,
+            config_hash=config_hash,
+            config_path=str(config_path) if config_path else None,
+            model_name=config.model_name,
+            prompt_args={
+                "dataset": dataset,
+                "sample_size": sample_size,
+            },
+        )
+        state_manager.save(current_state)
 
-        with cycle_progress:
-            for cycle_idx in range(effective_cycles):
-                # Generate cycle-specific experiment ID
-                if effective_cycles > 1:
-                    cycle_experiment_id = f"{base_experiment_id}_c{cycle_idx}"
-                    cycle_progress.info(f"\n━━━ Cycle {cycle_idx + 1}/{effective_cycles} ━━━")
-                else:
-                    cycle_experiment_id = experiment_id
+        # Register signal handlers
+        signal.signal(signal.SIGINT, _handle_interrupt)
+        signal.signal(signal.SIGTERM, _handle_interrupt)
 
-                # Collect cycle metadata (temperature, load) before each cycle
-                from llenergymeasure.results.cycle_statistics import (
-                    create_cycle_metadata,
-                    try_get_gpu_temperature,
-                    try_get_system_load,
-                )
+        # Run subprocess with its own process group for clean signal handling
+        subprocess_handle = subprocess.Popen(
+            cmd,
+            env=subprocess_env,
+            start_new_session=True,  # Creates new process group
+        )
 
-                cycle_meta = create_cycle_metadata(
-                    cycle_id=cycle_idx,
-                    timestamp=datetime.now(),
-                    gpu_temperature_c=try_get_gpu_temperature(),
-                    system_load=try_get_system_load(),
-                )
-                cycle_metadata_list.append(cycle_meta)
+        # Wait for subprocess
+        exit_code = subprocess_handle.wait()
 
-                # Update temp config with cycle-specific experiment ID
-                metadata["_metadata"]["experiment_id"] = cycle_experiment_id
-                if effective_cycles > 1:
-                    metadata["_metadata"]["cycle_id"] = cycle_idx
-                config_with_metadata = {**effective_config, **metadata}
-
-                with tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".yaml", delete=False, prefix="llm_energy_"
-                ) as tmp:
-                    yaml.dump(config_with_metadata, tmp, default_flow_style=False)
-                    tmp_config_path = tmp.name
-                    cmd_cycle = [*base_cmd, "--config", tmp_config_path]
-                    console.print(f"[dim]Generated config with metadata: {tmp_config_path}[/dim]")
-
-                # Create state for this cycle
-                current_state = ExperimentState(
-                    experiment_id=cycle_experiment_id,
-                    status=ExperimentStatus.RUNNING,
-                    num_processes=final_num_processes,
-                    config_hash=config_hash,
-                    config_path=str(config_path) if config_path else None,
-                    model_name=config.model_name,
-                    prompt_args={
-                        "dataset": dataset,
-                        "sample_size": sample_size,
-                    },
-                )
-                state_manager.save(current_state)
-
-                # Register signal handlers
-                signal.signal(signal.SIGINT, _handle_interrupt)
-                signal.signal(signal.SIGTERM, _handle_interrupt)
-
-                # Run subprocess with its own process group for clean signal handling
-                subprocess_handle = subprocess.Popen(
-                    cmd_cycle,
-                    env=subprocess_env,
-                    start_new_session=True,  # Creates new process group
-                )
-
-                # Wait for subprocess
-                exit_code = subprocess_handle.wait()
-
-                if exit_code != 0:
-                    current_state.transition_to(
-                        ExperimentStatus.FAILED,
-                        error_message=f"Subprocess exited with code {exit_code}",
-                    )
-                    state_manager.save(current_state)
-                    console.print(f"[red]Experiment failed[/red] (exit code {exit_code})")
-                    raise typer.Exit(exit_code)
-
-                # Mark cycle as completed
-                current_state.transition_to(ExperimentStatus.COMPLETED)
-                state_manager.save(current_state)
-
-                # Auto-aggregate unless --no-aggregate
-                if not no_aggregate:
-                    console.print("\n[dim]Auto-aggregating results...[/dim]")
-                    aggregate_one(repo, cycle_experiment_id, force=False, strict=False)
-
-                    # Load aggregated result for multi-cycle statistics
-                    if effective_cycles > 1:
-                        agg = repo.load_aggregated(cycle_experiment_id)
-                        if agg:
-                            cycle_results.append(agg)
-
-                    # Update state to AGGREGATED
-                    current_state.transition_to(ExperimentStatus.AGGREGATED)
-                    state_manager.save(current_state)
-
-                cycle_progress.advance()
-
-        # Multi-cycle statistics
-        if effective_cycles > 1 and cycle_results:
-            from llenergymeasure.results.cycle_statistics import (
-                create_cycle_statistics,
-                create_multi_cycle_result,
+        if exit_code != 0:
+            current_state.transition_to(
+                ExperimentStatus.FAILED,
+                error_message=f"Subprocess exited with code {exit_code}",
             )
+            state_manager.save(current_state)
+            console.print(f"[red]Experiment failed[/red] (exit code {exit_code})")
+            raise typer.Exit(exit_code)
 
-            console.print("\n[bold cyan]━━━ Multi-Cycle Statistics ━━━[/bold cyan]")
-            stats = create_cycle_statistics(cycle_results)
+        # Mark experiment as completed
+        current_state.transition_to(ExperimentStatus.COMPLETED)
+        state_manager.save(current_state)
 
-            console.print(
-                f"  Throughput: {stats.throughput_mean_tps:.2f} ± {stats.throughput_std_tps:.2f} tok/s"
-            )
-            console.print(f"  Energy: {stats.energy_mean_j:.2f} ± {stats.energy_std_j:.2f} J")
-            console.print(
-                f"  Efficiency: {stats.efficiency_mean_tpj:.2f} ± {stats.efficiency_std_tpj:.2f} tok/J"
-            )
-            console.print(f"  CoV (throughput): {stats.throughput_cv:.1%}")
+        # Auto-aggregate unless --no-aggregate
+        if not no_aggregate:
+            if not _is_json_output_mode():
+                console.print("\n[dim]Auto-aggregating results...[/dim]")
+            aggregate_one(repo, experiment_id, force=False, strict=False)
 
-            # Create and save multi-cycle result
-            multi_cycle_result = create_multi_cycle_result(
-                base_experiment_id,
-                cycle_results,
-                cycle_metadata_list,
-                effective_config,
-            )
-            stats_path = actual_results_dir / f"{base_experiment_id}_multi_cycle.json"
-            stats_path.write_text(multi_cycle_result.model_dump_json(indent=2))
-            console.print(f"\n[dim]Statistics saved: {stats_path}[/dim]")
+            # Update state to AGGREGATED
+            current_state.transition_to(ExperimentStatus.AGGREGATED)
+            state_manager.save(current_state)
 
-        # --- Phase 1: Display environment/measurement summary ---
-        _display_measurement_summary(repo, base_experiment_id, effective_cycles, cycle_results)
+        # --- Display environment/measurement summary ---
+        _display_measurement_summary(repo, experiment_id)
 
-        console.print("\n[green]✓ Experiment completed successfully[/green]")
+        if not _is_json_output_mode():
+            console.print("\n[green]✓ Experiment completed successfully[/green]")
 
     except typer.Exit:
         raise  # Re-raise typer exits
@@ -1010,5 +872,4 @@ __all__ = [
     "aggregate_cmd",
     "experiment_cmd",
     "resolve_prompts",
-    "run_cmd",
 ]

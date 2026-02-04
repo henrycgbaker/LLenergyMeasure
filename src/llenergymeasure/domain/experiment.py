@@ -19,104 +19,6 @@ from llenergymeasure.domain.metrics import (
 )
 
 
-class CycleStatistics(BaseModel):
-    """Statistical aggregation across multiple cycles.
-
-    Follows academic benchmarking standards (TokenPowerBench, MLPerf):
-    - Typically 3-10 repetitions for statistical robustness
-    - Reports mean ± standard deviation
-    - 95% confidence intervals for key metrics
-    """
-
-    num_cycles: int = Field(..., description="Number of cycles executed")
-
-    # Energy statistics
-    energy_mean_j: float = Field(..., description="Mean total energy (Joules)")
-    energy_std_j: float = Field(..., description="Standard deviation of energy")
-    energy_ci_95_lower: float = Field(..., description="95% CI lower bound")
-    energy_ci_95_upper: float = Field(..., description="95% CI upper bound")
-
-    # Throughput statistics
-    throughput_mean_tps: float = Field(..., description="Mean throughput (tokens/second)")
-    throughput_std_tps: float = Field(..., description="Standard deviation of throughput")
-    throughput_ci_95_lower: float = Field(..., description="95% CI lower bound")
-    throughput_ci_95_upper: float = Field(..., description="95% CI upper bound")
-
-    # Efficiency statistics (tokens per joule)
-    efficiency_mean_tpj: float = Field(..., description="Mean efficiency (tokens/joule)")
-    efficiency_std_tpj: float = Field(..., description="Standard deviation of efficiency")
-
-    # Latency statistics
-    latency_mean_ms: float = Field(..., description="Mean latency per token (ms)")
-    latency_std_ms: float = Field(..., description="Standard deviation of latency")
-
-    # Coefficient of variation (useful for benchmarking)
-    energy_cv: float = Field(
-        default=0.0,
-        description="Coefficient of variation for energy (std/mean), lower is more stable",
-    )
-    throughput_cv: float = Field(
-        default=0.0,
-        description="Coefficient of variation for throughput (std/mean), lower is more stable",
-    )
-
-
-class CycleMetadata(BaseModel):
-    """Per-cycle metadata for tracking experimental conditions."""
-
-    cycle_id: int = Field(..., description="Cycle index (0-based)")
-    timestamp: datetime = Field(..., description="Cycle start timestamp")
-    gpu_temperature_c: float | None = Field(
-        default=None, description="GPU temperature at cycle start (if available)"
-    )
-    system_load: float | None = Field(
-        default=None, description="System CPU load at cycle start (if available)"
-    )
-
-
-class MultiCycleResult(BaseModel):
-    """Aggregated results from multi-cycle experiments.
-
-    Multi-cycle experiments run the same configuration multiple times to
-    establish statistical robustness, following academic benchmarking practices.
-    """
-
-    schema_version: str = Field(default=SCHEMA_VERSION, description="Result schema version")
-    experiment_id: str = Field(..., description="Unique experiment identifier")
-    backend: str = Field(default="pytorch", description="Inference backend used")
-    backend_version: str | None = Field(
-        default=None, description="Backend version string for reproducibility"
-    )
-    num_cycles: int = Field(..., description="Total cycles executed")
-
-    # Statistical summary
-    statistics: CycleStatistics = Field(..., description="Statistical aggregation")
-
-    # Per-cycle results (for detailed analysis)
-    cycle_results: list["AggregatedResult"] = Field(
-        default_factory=list, description="Individual cycle results"
-    )
-    cycle_metadata: list[CycleMetadata] = Field(
-        default_factory=list, description="Per-cycle metadata"
-    )
-
-    # Overall timestamps
-    start_time: datetime = Field(..., description="First cycle start")
-    end_time: datetime = Field(..., description="Last cycle end")
-    total_duration_sec: float = Field(..., description="Total wall-clock time")
-
-    # Configuration (for reproducibility)
-    effective_config: dict[str, Any] = Field(
-        default_factory=dict, description="Experiment configuration"
-    )
-    config_warnings: list[str] = Field(
-        default_factory=list,
-        description="Config validation warnings that were present at runtime",
-    )
-
-    model_config = {"frozen": True}
-
-
 class Timestamps(BaseModel):
     """Timing information for an experiment run."""
 
@@ -186,10 +88,6 @@ class RawProcessResult(BaseModel):
     preset_chain: list[str] = Field(
         default_factory=list,
         description="Presets applied in order (for preset inheritance tracking)",
-    )
-    cycle_run_info: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Cycle metadata (cycle_id, cycle_count, total_cycles)",
     )
 
     # Extended efficiency metrics (always present, fields null when not computable)

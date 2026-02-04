@@ -53,7 +53,6 @@ These define the experiment configuration that affects measurements:
 | `fp_precision` | float32/float16/bfloat16 |
 | `num_processes` | Distributed workers |
 | `gpus` | GPU allocation |
-| `num_cycles` | Statistical repetition (YAML alternative to --cycles) |
 | `decoder.temperature` | Sampling temperature |
 | `quantization.*` | 4-bit/8-bit quantisation |
 | `traffic_simulation.*` | Traffic patterns (Poisson/constant) |
@@ -102,9 +101,8 @@ for batch in 1 2 4 8; do
   lem experiment config.yaml --batch-size $batch
 done
 
-# 4. Statistical robustness (CLI or YAML)
-lem experiment config.yaml --cycles 5
-# Or set num_cycles: 5 in YAML
+# 4. Statistical robustness (use campaigns)
+lem campaign campaign.yaml --cycles 5
 ```
 
 ## Key Files

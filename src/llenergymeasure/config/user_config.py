@@ -47,6 +47,23 @@ class DockerConfig(BaseModel):
     )
 
 
+class NotificationsConfig(BaseModel):
+    """Webhook notification configuration."""
+
+    webhook_url: str | None = Field(
+        default=None,
+        description="URL for webhook POST notifications",
+    )
+    on_complete: bool = Field(
+        default=True,
+        description="Send notification on experiment completion",
+    )
+    on_failure: bool = Field(
+        default=True,
+        description="Send notification on experiment failure",
+    )
+
+
 class UserConfig(BaseModel):
     """User preferences loaded from .lem-config.yaml.
 
@@ -62,9 +79,9 @@ class UserConfig(BaseModel):
         default_factory=DockerConfig,
         description="Docker execution settings",
     )
-    default_backend: str = Field(
-        default="pytorch",
-        description="Default backend for single-backend campaigns",
+    notifications: NotificationsConfig = Field(
+        default_factory=NotificationsConfig,
+        description="Webhook notification settings",
     )
     results_dir: str = Field(
         default="results",
@@ -92,13 +109,17 @@ def load_user_config(config_path: Path | None = None) -> UserConfig:
         with open(config_path) as f:
             data = yaml.safe_load(f) or {}
         return UserConfig.model_validate(data)
-    except Exception:
-        # Invalid config - return defaults (don't crash)
-        return UserConfig()
+    except yaml.YAMLError as e:
+        msg = f"Invalid YAML in {config_path}: {e}"
+        raise ValueError(msg) from e
+    except Exception as e:
+        msg = f"Invalid config in {config_path}: {e}"
+        raise ValueError(msg) from e
 
 
 __all__ = [
     "DockerConfig",
+    "NotificationsConfig",
     "ThermalGapConfig",
     "UserConfig",
     "load_user_config",

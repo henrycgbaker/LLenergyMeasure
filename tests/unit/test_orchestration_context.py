@@ -21,8 +21,8 @@ def sample_config():
         config_name="test_config",
         model_name="test/model",
         gpus=[0],
-        # num_processes now derived from backend parallelism config
-        pytorch=PyTorchConfig(parallelism_strategy="none", parallelism_degree=1),
+        # num_processes derived from pytorch.num_processes (data parallelism)
+        pytorch=PyTorchConfig(num_processes=1),
     )
 
 
@@ -252,18 +252,15 @@ class TestExperimentContextMultiProcess:
     def test_multi_process_config(self, mock_get_accel, mock_get_id):
         """Test context creation with multi-process config.
 
-        In backend-native architecture, num_processes is derived from the
-        backend's parallelism config (e.g., pytorch.parallelism_degree).
+        In backend-native architecture, num_processes is derived from
+        pytorch.num_processes (data parallelism via Accelerate).
         """
         config = ExperimentConfig(
             config_name="multi_gpu",
             model_name="test/model",
             gpus=[0, 1, 2, 3],
-            # Parallelism degree now from backend config
-            pytorch=PyTorchConfig(
-                parallelism_strategy="tensor_parallel",
-                parallelism_degree=4,
-            ),
+            # Data parallelism: model replicated on 4 GPUs
+            pytorch=PyTorchConfig(num_processes=4),
         )
         mock_accelerator = MagicMock()
         mock_accelerator.device = torch.device("cuda:2")
@@ -275,7 +272,7 @@ class TestExperimentContextMultiProcess:
 
         ctx = ExperimentContext.create(config)
 
-        # num_processes derived from pytorch.parallelism_degree
+        # num_processes derived from pytorch.num_processes
         mock_get_accel.assert_called_once_with(
             gpus=[0, 1, 2, 3],
             num_processes=4,

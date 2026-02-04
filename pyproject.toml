@@ -23,6 +23,8 @@ transformers = "^4.49.0"
 pyyaml = ">=6.0"  # Config file parsing (used directly, not just transitively)
 numpy = ">=1.24"  # Statistics, metrics, bootstrap CI
 python-on-whales = ">=0.70"  # Docker container orchestration (default host workflow)
+questionary = ">=2.0"  # Interactive prompts for CLI (resume, init)
+httpx = ">=0.23.0"  # HTTP client for webhooks and API calls
 accelerate = "^1.4.0"  # PyTorch backend (default)
 bitsandbytes = "^0.45.0"  # PyTorch backend (default)
 calflops = "^0.2.0"  # PyTorch backend (default)
@@ -50,7 +52,7 @@ asyncpg = {version = "^0.30.0", optional = true}
 alembic = {version = "^1.14.0", optional = true}
 pydantic-settings = {version = "^2.0", optional = true}
 python-jose = {version = "^3.3.0", extras = ["cryptography"], optional = true}
-httpx = {version = ">=0.23.0", optional = true}
+# httpx moved to main dependencies for webhook support
 
 # Optional: dev dependencies
 pytest = {version = ">=8.0", optional = true}
@@ -84,7 +86,7 @@ tensorrt = ["tensorrt-llm"]
 
 # Web API backend (leaderboard server)
 # Usage: pip install llenergymeasure[api]
-api = ["fastapi", "uvicorn", "sqlalchemy", "asyncpg", "alembic", "pydantic-settings", "python-jose", "httpx"]
+api = ["fastapi", "uvicorn", "sqlalchemy", "asyncpg", "alembic", "pydantic-settings", "python-jose"]
 
 # Development tools
 # Usage: pip install llenergymeasure[dev]

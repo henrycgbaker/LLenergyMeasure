@@ -245,7 +245,7 @@ These parameters have different semantics per backend and use native API naming:
 | Capability | PyTorch Location | vLLM Location | TensorRT Location |
 |------------|------------------|---------------|-------------------|
 | **Batching** | `pytorch.batch_size`, `pytorch.batching_strategy` | `vllm.max_num_seqs` (continuous) | `tensorrt.max_batch_size` (compile-time) |
-| **Parallelism** | `pytorch.parallelism_strategy/degree` | `vllm.tensor_parallel_size/pipeline_parallel_size` | `tensorrt.tp_size/pp_size` |
+| **Parallelism** | `pytorch.num_processes` (data parallel) | `vllm.tensor_parallel_size/pipeline_parallel_size` | `tensorrt.tp_size/pp_size` |
 | **Quantisation** | `pytorch.load_in_4bit/8bit` (BitsAndBytes) | `vllm.quantization` (awq, gptq, fp8) | `tensorrt.quantization` (fp8, int8_sq) |
 | **Top-k sampling** | `decoder.top_k` (0=off) | `decoder.top_k` (0=off, converted to -1) | `decoder.top_k` (0=off) |
 | **Min-p sampling** | `pytorch.min_p` | `vllm.min_p` | Not supported |
@@ -388,9 +388,8 @@ pytorch:
   batching_strategy: static      # static | dynamic | sorted_static | sorted_dynamic
   max_tokens_per_batch: null     # For dynamic strategies
 
-  # Parallelism
-  parallelism_strategy: none     # none | tensor_parallel | data_parallel
-  parallelism_degree: 1
+  # Parallelism (Data Parallel via Accelerate)
+  num_processes: 1  # 1 = single GPU, >1 = data parallel across N GPUs
 
   # Quantization (BitsAndBytes)
   load_in_4bit: false

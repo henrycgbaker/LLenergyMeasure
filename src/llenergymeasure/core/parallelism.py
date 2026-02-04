@@ -4,18 +4,22 @@ This module provides parallelism strategies that integrate with the model loadin
 and inference pipeline. Strategies modify how models are loaded and executed
 across multiple GPUs.
 
-Note: In the backend-native configuration architecture, parallelism settings are
-typically specified in the backend-specific config sections:
-- PyTorch: pytorch.parallelism_strategy, pytorch.parallelism_degree
-- vLLM: vllm.tensor_parallel_size, vllm.pipeline_parallel_size
-- TensorRT: tensorrt.tp_size, tensorrt.pp_size
+Backend parallelism architecture:
+- PyTorch: Data parallelism via Accelerate (pytorch.num_processes)
+  - Model is replicated on each GPU, batches split across GPUs
+  - Does NOT support tensor/pipeline parallelism for HuggingFace models
+- vLLM: Tensor + pipeline parallelism (vllm.tensor_parallel_size, pipeline_parallel_size)
+  - Model sharded across GPUs, managed internally by vLLM
+- TensorRT: Tensor + pipeline parallelism (tensorrt.tp_size, pp_size)
+  - Model sharded across GPUs, managed internally by TensorRT-LLM
 
-This module provides the underlying strategy implementations for PyTorch backend.
+This module provides underlying strategy implementations. For PyTorch backend,
+only NoParallelism is used (Accelerate handles data parallelism externally).
 
-Supported strategies:
+Internal strategies (not exposed in config):
 - NoParallelism: Default device_map="auto" behaviour
-- TensorParallelStrategy: HuggingFace native tensor parallelism (tp_plan="auto")
-- PipelineParallelStrategy: PyTorch native pipeline parallelism
+- TensorParallelStrategy: Reserved for future HuggingFace native TP support
+- PipelineParallelStrategy: Reserved for future PP support
 """
 
 from __future__ import annotations
@@ -36,9 +40,9 @@ if TYPE_CHECKING:
 class ParallelismConfig:
     """Configuration for parallelism strategies.
 
-    This is a simplified config used internally by the parallelism module.
-    In the backend-native architecture, these values are derived from
-    the pytorch config section (pytorch.parallelism_strategy, etc.).
+    This is a simplified internal config used by the parallelism module.
+    For PyTorch backend, only 'none' is used (Accelerate handles data parallelism).
+    Tensor/pipeline parallelism are handled internally by vLLM and TensorRT backends.
     """
 
     strategy: Literal["none", "tensor_parallel", "pipeline_parallel"] = "none"

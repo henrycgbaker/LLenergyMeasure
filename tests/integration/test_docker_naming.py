@@ -172,23 +172,8 @@ class TestDockerfileNaming:
                 assert not matches, f"Found old naming '{pattern}' in {dockerfile.name}"
 
 
-class TestSetupScript:
-    """Tests for setup.sh naming conventions."""
-
-    def test_setup_script_exists(self, project_root: Path) -> None:
-        """Verify setup.sh exists."""
-        setup_path = project_root / "setup.sh"
-        assert setup_path.exists(), "setup.sh not found"
-
-    def test_setup_uses_correct_image_names(self, project_root: Path) -> None:
-        """Verify setup.sh references correct image names."""
-        setup_path = project_root / "setup.sh"
-        content = setup_path.read_text()
-
-        # Should reference new naming
-        assert (
-            "llenergymeasure" in content.lower() or "lem" in content
-        ), "setup.sh should reference 'llenergymeasure' or 'lem'"
+class TestLemWrapper:
+    """Tests for lem wrapper script naming conventions."""
 
     def test_lem_wrapper_references(self, project_root: Path) -> None:
         """Verify the lem wrapper script references correct names."""

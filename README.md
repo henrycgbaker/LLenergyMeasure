@@ -59,6 +59,7 @@ All parameters below are fully wired and functional.
 
 ```bash
 pip install -e .
+lem init                       # Guided setup wizard
 lem experiment configs/examples/pytorch_example.yaml -n 10
 ```
 
@@ -68,6 +69,7 @@ Base install includes PyTorch backend — no extras needed.
 
 ```bash
 pip install -e .
+lem init                       # Detects Docker, shows multi-backend setup
 docker compose build pytorch vllm
 lem campaign multi-backend-campaign.yaml
 ```
@@ -189,6 +191,29 @@ lem experiment configs/my_experiment.yaml --dataset alpaca -n 100
 ```bash
 lem results list
 lem results show <exp_id>
+```
+
+### Campaigns & Resume
+
+```bash
+# Run multi-config campaign
+lem campaign configs/campaign.yaml --cycles 3
+
+# Resume interrupted campaign
+lem resume                     # Interactive menu to select campaign
+lem resume --dry-run           # See what would be resumed
+lem resume --wipe              # Clear all state files
+```
+
+### Notifications
+
+Configure webhook notifications in `.lem-config.yaml`:
+
+```yaml
+notifications:
+  webhook_url: https://hooks.slack.com/services/...
+  on_complete: true
+  on_failure: true
 ```
 
 For a full tutorial, see the [Getting Started Guide](docs/quickstart.md).

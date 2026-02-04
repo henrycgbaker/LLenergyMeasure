@@ -155,8 +155,8 @@
 - Responsibilities: Parse args, load config, validate, call experiment command
 
 **Experiment Command:**
-- Location: `src/llenergymeasure/cli/experiment.py` (`experiment_cmd`, `run_cmd`, `aggregate_cmd`)
-- Triggers: `lem experiment` or `lem run` CLI invocation
+- Location: `src/llenergymeasure/cli/experiment.py` (`experiment_cmd`, `aggregate_cmd`)
+- Triggers: `lem experiment` CLI invocation
 - Responsibilities: Resolve prompts, validate config, spawn subprocess via `accelerate launch`, track state, trigger aggregation
 
 **Launcher Entry Point:**

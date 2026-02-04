@@ -1,0 +1,46 @@
+# Known Issues Tracking
+#
+# This file tracks known warnings/errors that are work-in-progress.
+# Issues listed here will NOT cause smoke tests to fail.
+#
+# Format:
+#   known_issues:
+#     ISSUE_ID:
+#       pattern: "regex pattern to match"
+#       description: "What this issue is"
+#       status: "wip" | "wontfix" | "external"
+#       created: "YYYY-MM-DD"
+#       ticket: "optional link to issue tracker"
+#       notes: "optional additional context"
+#
+# When an issue is fixed, remove it from this file.
+
+known_issues:
+  # Example entry (uncomment when needed)
+  # FLASH_ATTN_FALLBACK:
+  #   pattern: "flash.?attention.*not.*available"
+  #   description: "Flash Attention 2 falls back to SDPA when flash-attn not installed"
+  #   status: wip
+  #   created: "2026-02-04"
+  #   notes: "Expected in environments without flash-attn package"
+
+  # vLLM Ray initialization warnings
+  # RAY_INIT_WARNING:
+  #   pattern: "ray.*already.*initialized"
+  #   description: "Ray shows warning when already initialized"
+  #   status: external
+  #   created: "2026-02-04"
+  #   notes: "Upstream vLLM issue, harmless warning"
+
+  # Transformers deprecation warnings (common in HF ecosystem)
+  # HF_DEPRECATION:
+  #   pattern: "transformers.*deprecated"
+  #   description: "Transformers library deprecation warnings"
+  #   status: external
+  #   created: "2026-02-04"
+  #   notes: "Upstream HuggingFace warnings, track for updates"
+
+# Status values:
+#   wip      - We're working on a fix
+#   wontfix  - Known issue we can't/won't fix
+#   external - Issue in upstream dependency, not our code

@@ -507,8 +507,7 @@ def get_param_skip_conditions() -> dict[str, str]:
     """
     return {
         # Multi-GPU params - skip if single GPU
-        "pytorch.parallelism_strategy=tensor_parallel": "Requires 2+ GPUs",
-        "pytorch.parallelism_strategy=data_parallel": "Requires 2+ GPUs",
+        "pytorch.num_processes>1": "Requires 2+ GPUs (data parallelism)",
         "vllm.tensor_parallel_size>1": "Requires 2+ GPUs",
         "vllm.pipeline_parallel_size>1": "Requires 2+ GPUs",
         "tensorrt.tp_size>1": "Requires 2+ GPUs",
@@ -624,7 +623,9 @@ def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
 
     return {
         "tensor_parallel": {
-            "pytorch": "parallelism_strategy" in pytorch_fields,  # has tensor_parallel option
+            # PyTorch does NOT support tensor parallelism for HuggingFace models
+            # (device_map="auto" is layer placement, not tensor parallelism)
+            "pytorch": False,
             "vllm": "tensor_parallel_size" in vllm_fields,
             "tensorrt": "tp_size" in tensorrt_fields,
         },
@@ -635,10 +636,11 @@ def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
             "tensorrt": "pp_size" in tensorrt_fields,
         },
         "data_parallel": {
-            "pytorch": "parallelism_strategy" in pytorch_fields,  # has data_parallel option
-            # vLLM manages multi-GPU internally via tensor parallel
+            # PyTorch uses data parallelism via Accelerate (num_processes)
+            "pytorch": "num_processes" in pytorch_fields,
+            # vLLM/TensorRT manage parallelism internally
             "vllm": False,
-            "tensorrt": True,  # Can use multiple TRT instances in DP mode
+            "tensorrt": False,
         },
         "bitsandbytes_4bit": {
             "pytorch": "load_in_4bit" in pytorch_fields,

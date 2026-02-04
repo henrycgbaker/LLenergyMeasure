@@ -56,6 +56,9 @@ def main(
     quiet: Annotated[
         bool, typer.Option("--quiet", "-q", help="Minimal output (warnings only)")
     ] = False,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Output results as JSON (machine-readable)")
+    ] = False,
 ) -> None:
     """LLM inference efficiency measurement framework."""
     from llenergymeasure.logging import VerbosityType
@@ -71,6 +74,8 @@ def main(
 
     # Set environment variable for subprocesses and progress module
     os.environ["LLM_ENERGY_VERBOSITY"] = verbosity
+    # Set JSON output mode flag for subcommands to check
+    os.environ["LLM_ENERGY_JSON_OUTPUT"] = "true" if json_output else "false"
     setup_logging(verbosity=verbosity)
 
 
@@ -85,10 +90,18 @@ def _register_commands() -> None:
     Commands are imported directly from their defining modules to avoid
     unnecessary re-exports and keep module responsibilities clear.
     """
-    from llenergymeasure.cli import batch, campaign, doctor, experiment, listing, schedule
+    from llenergymeasure.cli import (
+        batch,
+        campaign,
+        doctor,
+        experiment,
+        init_cmd,
+        listing,
+        resume,
+        schedule,
+    )
 
     # Core experiment commands
-    app.command("run")(experiment.run_cmd)  # Legacy command
     app.command("experiment")(experiment.experiment_cmd)
     app.command("aggregate")(experiment.aggregate_cmd)
 
@@ -102,6 +115,10 @@ def _register_commands() -> None:
     app.command("batch")(batch.batch_run_cmd)
     app.command("schedule")(schedule.schedule_experiment_cmd)
     app.command("campaign")(campaign.campaign_cmd)
+
+    # Setup / configuration commands
+    app.command("init")(init_cmd.init_cmd)
+    app.command("resume")(resume.resume_cmd)
 
 
 # Register commands

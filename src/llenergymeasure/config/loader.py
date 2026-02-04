@@ -162,7 +162,33 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
     Returns:
         List of ConfigWarning objects (empty if no warnings).
     """
+    from llenergymeasure.config.models import CURRENT_SCHEMA_VERSION
+
     warnings: list[ConfigWarning] = []
+
+    # =========================================================================
+    # SCHEMA VERSION CHECK
+    # =========================================================================
+
+    if config.schema_version is None:
+        warnings.append(
+            ConfigWarning(
+                field="schema_version",
+                message=f"No schema_version specified. Current schema is {CURRENT_SCHEMA_VERSION}.",
+                severity="info",
+            )
+        )
+    elif config.schema_version != CURRENT_SCHEMA_VERSION:
+        warnings.append(
+            ConfigWarning(
+                field="schema_version",
+                message=(
+                    f"Config schema_version '{config.schema_version}' differs from "
+                    f"current '{CURRENT_SCHEMA_VERSION}'. Some fields may be deprecated or renamed."
+                ),
+                severity="warning",
+            )
+        )
 
     # =========================================================================
     # TOKEN CONFIG
