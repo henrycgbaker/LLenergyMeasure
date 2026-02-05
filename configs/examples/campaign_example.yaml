@@ -9,11 +9,12 @@ dataset: ai_energy_score
 num_samples: 100
 
 # Grid expansion - generates configs for each combination
+# Note: TensorRT requires Ampere+ GPU (A100, RTX 30xx/40xx, etc.)
 grid:
-  backends: [pytorch, vllm]
+  backends: [pytorch, vllm, tensorrt]
   axes:
-    batch_size: [1, 4, 8]
-    fp_precision: [float16, bfloat16]
+    batch_size: [1, 4]
+    fp_precision: [float16]
 
 # Execution settings
 execution:
@@ -34,7 +35,18 @@ cold_start:
 #   at: "02:00"  # Run at 2 AM
 #   interval: "24h"
 
-# Results grouping (for summary output)
-# Use with: lem campaign campaign.yaml --group-by backend,batch_size
+# Results grouping for summary output (display-only, doesn't affect stored results)
+# At campaign completion, groups results by specified fields and computes
+# bootstrap confidence intervals per group for comparison.
+# Individual experiment results are stored unchanged - grouping is post-hoc analysis.
+group_by:
+  - backend  # Compare pytorch vs vllm vs tensorrt
+
+# Other useful groupings:
+# group_by: [backend, batch_size]  # Cross-comparison matrix
+# group_by: [fp_precision]         # Precision impact analysis
+# group_by: [model]                # Model comparison (if grid.models set)
+
+# CLI override: lem campaign campaign.yaml --group-by backend,batch_size
 
 # See docs/cli.md for campaign configuration reference

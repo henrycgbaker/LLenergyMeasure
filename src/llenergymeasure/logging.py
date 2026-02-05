@@ -165,6 +165,11 @@ def configure_backend_log_filtering(verbosity: VerbosityType) -> None:
     In quiet/normal mode: Suppress backend initialization logs (set to WARNING+)
     In verbose mode: Show all backend logs (set to DEBUG)
 
+    This sets both:
+    1. Python stdlib logging levels for libraries that use logging
+    2. Environment variables for backends that print directly to stdout
+       (vLLM uses VLLM_LOGGING_LEVEL, TensorRT uses TLLM_LOG_LEVEL)
+
     Args:
         verbosity: Current verbosity level.
     """
@@ -175,6 +180,21 @@ def configure_backend_log_filtering(verbosity: VerbosityType) -> None:
 
     for logger_name in BACKEND_NOISY_LOGGERS:
         stdlib_logging.getLogger(logger_name).setLevel(level)
+
+    # Set backend-specific environment variables for libraries that bypass Python logging
+    # These must be set BEFORE the backend is imported
+    if verbosity == "verbose":
+        # Show all logs in verbose mode
+        os.environ["VLLM_LOGGING_LEVEL"] = "DEBUG"
+        os.environ["TLLM_LOG_LEVEL"] = "DEBUG"
+        # Let vLLM configure its own logging
+        os.environ.pop("VLLM_CONFIGURE_LOGGING", None)
+    else:
+        # Suppress backend noise in normal/quiet mode
+        os.environ["VLLM_LOGGING_LEVEL"] = "WARNING"
+        os.environ["TLLM_LOG_LEVEL"] = "WARNING"
+        # Disable vLLM's automatic logging configuration
+        os.environ["VLLM_CONFIGURE_LOGGING"] = "0"
 
 
 def is_backend_filtering_active() -> bool:

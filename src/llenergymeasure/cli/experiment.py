@@ -290,6 +290,13 @@ def experiment_cmd(
     force: Annotated[
         bool, typer.Option("--force", help="Run despite blocking config errors")
     ] = False,
+    docker: Annotated[
+        bool | None,
+        typer.Option(
+            "--docker/--no-docker",
+            help="Run in Docker container (auto-detected if backend unavailable locally)",
+        ),
+    ] = None,
 ) -> None:
     """Run experiment with automatic accelerate handling and auto-aggregation.
 
@@ -537,6 +544,9 @@ def experiment_cmd(
                 severity_styles = {"error": "red", "warning": "yellow", "info": "dim"}
                 style = severity_styles.get(warning.severity, "yellow")
                 console.print(f"  [{style}]{rich_escape(str(warning))}[/{style}]")
+                # Display remediation hint if available
+                if warning.suggestion:
+                    console.print(f"    [dim]Hint: {rich_escape(warning.suggestion)}[/dim]")
 
             # Check for blocking errors (error severity)
             if has_blocking_warnings(config_warnings):
@@ -588,22 +598,12 @@ def experiment_cmd(
         display_config_summary(config, tracked_overrides, preset)
 
         # Detect if running as part of a campaign (via environment variables)
-        campaign_context = {
-            "campaign_id": os.environ.get("LEM_CAMPAIGN_ID"),
-            "campaign_name": os.environ.get("LEM_CAMPAIGN_NAME"),
-            "cycle": os.environ.get("LEM_CYCLE"),
-            "total_cycles": os.environ.get("LEM_TOTAL_CYCLES"),
-        }
-        in_campaign = campaign_context["campaign_id"] is not None
-
-        # Experiments are atomic - campaigns handle scheduling and cycles
-        if in_campaign:
-            cycle = campaign_context["cycle"]
-            total = campaign_context["total_cycles"]
-            console.print(
-                f"  [cyan]Part of campaign:[/cyan] {campaign_context['campaign_name']} "
-                f"(cycle {cycle}/{total})"
-            )
+        # Experiments are atomic - campaigns handle scheduling, cycles, and aggregation
+        # We only need campaign_id for identification, not cycle info
+        campaign_id = os.environ.get("LEM_CAMPAIGN_ID")
+        campaign_name = os.environ.get("LEM_CAMPAIGN_NAME")
+        if campaign_id:
+            console.print(f"  [cyan]Part of campaign:[/cyan] {campaign_name}")
 
         # Check for MIG instances and warn about energy measurement (Phase: MIG support)
         from llenergymeasure.core.gpu_info import detect_gpu_topology, validate_gpu_selection
@@ -618,9 +618,47 @@ def experiment_cmd(
             console.print("\n[cyan]--dry-run: Exiting without running experiment[/cyan]")
             raise typer.Exit(0)
 
+        # Determine if Docker dispatch is needed
+        # Auto-detect: dispatch to Docker if backend not available locally
+        backend_name = config.backend if hasattr(config, "backend") else "pytorch"
+        use_docker = docker  # User-specified flag takes precedence
+
+        if use_docker is None:
+            # Auto-detect based on environment and GPU requirements
+            from llenergymeasure.config.docker_detection import is_inside_docker
+
+            if is_inside_docker():
+                # Already in container - run directly (has proper CUDA access)
+                use_docker = False
+            elif config.gpus:
+                # GPU workload on host - MUST dispatch to Docker
+                # On shared servers, host may not have CUDA access even if torch is installed
+                # Containers get proper GPU access via nvidia-container-toolkit
+                use_docker = True
+            else:
+                # No GPUs specified - check if backend is available for CPU-only run
+                from llenergymeasure.config.backend_detection import is_backend_available
+
+                use_docker = not is_backend_available(backend_name)
+
+        if use_docker:
+            # Dispatch to Docker container
+            console.print(f"\n[cyan]Dispatching to Docker ({backend_name})...[/cyan]")
+            exit_code = _run_experiment_in_docker(
+                config_path=config_path,
+                backend=backend_name,
+                dataset=dataset,
+                sample_size=sample_size,
+                results_dir=results_dir,
+                yes=yes,
+                fresh=fresh,
+                gpus=config.gpus,
+            )
+            raise typer.Exit(exit_code)
+
         # Build launch command based on backend
         # vLLM manages its own multiprocessing (spawn), incompatible with accelerate (fork)
-        backend_name = config.backend if hasattr(config, "backend") else "pytorch"
+        # (backend_name already set above during Docker dispatch check)
 
         # Always set subprocess environment to pass verbosity and HF credentials
         subprocess_env = os.environ.copy()
@@ -633,6 +671,10 @@ def experiment_cmd(
             subprocess_env["HF_TOKEN"] = hf_token
             # Also set legacy env var for older transformers versions
             subprocess_env["HUGGING_FACE_HUB_TOKEN"] = hf_token
+
+        # Set CUDA_VISIBLE_DEVICES for ALL backends to ensure correct GPU targeting
+        # This is critical for multi-GPU experiments and shared server setups
+        subprocess_env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in config.gpus)
 
         if backend_name == "vllm":
             # Direct launch for vLLM - it handles its own distribution
@@ -647,9 +689,6 @@ def experiment_cmd(
             subprocess_env["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
             # Disable torch.compile - requires C compiler not present in minimal Docker images
             subprocess_env["TORCH_COMPILE_DISABLE"] = "1"
-            # Set CUDA_VISIBLE_DEVICES to the configured GPU list
-            # This ensures vLLM only sees the intended GPUs
-            subprocess_env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in config.gpus)
         else:
             # Accelerate launch for PyTorch backend
             # Map fp_precision to accelerate's mixed_precision values
@@ -814,6 +853,93 @@ def experiment_cmd(
             "[red]Error:[/red] accelerate not found. Install with: pip install accelerate"
         )
         raise typer.Exit(1) from None
+
+
+def _run_experiment_in_docker(
+    config_path: Path | None,
+    backend: str,
+    dataset: str | None,
+    sample_size: int | None,
+    results_dir: Path | None,
+    yes: bool = False,
+    fresh: bool = False,
+    gpus: list[int] | None = None,
+) -> int:
+    """Run experiment in Docker container.
+
+    Args:
+        config_path: Path to config file.
+        backend: Backend name (pytorch, vllm, tensorrt).
+        dataset: Dataset override.
+        sample_size: Sample size override.
+        results_dir: Results directory override.
+        yes: Skip confirmation prompts.
+        fresh: Start fresh experiment.
+        gpus: List of GPU indices to use (passed to CUDA_VISIBLE_DEVICES).
+
+    Returns:
+        Exit code from Docker subprocess.
+    """
+    import subprocess
+
+    from llenergymeasure.config.env_setup import ensure_env_file
+
+    # Ensure .env file exists for Docker compose
+    ensure_env_file()
+
+    # Build docker compose run command
+    cmd = ["docker", "compose", "run", "--rm"]
+
+    # Pass environment variables
+    verbosity = os.environ.get("LLM_ENERGY_VERBOSITY", "normal")
+    backend_log_level = "DEBUG" if verbosity == "verbose" else "WARNING"
+
+    env_vars = {
+        "LLM_ENERGY_VERBOSITY": verbosity,
+        "VLLM_LOGGING_LEVEL": backend_log_level,
+        "VLLM_CONFIGURE_LOGGING": "1" if verbosity == "verbose" else "0",
+        "TLLM_LOG_LEVEL": backend_log_level,
+    }
+
+    # Pass HF token if available
+    if hf_token := os.environ.get("HF_TOKEN"):
+        env_vars["HF_TOKEN"] = hf_token
+
+    # Pass GPU selection to container
+    # This ensures container uses the correct GPUs from config
+    if gpus:
+        env_vars["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpus)
+
+    for key, value in env_vars.items():
+        cmd.extend(["-e", f"{key}={value}"])
+
+    # Container service name matches backend
+    cmd.append(backend)
+
+    # lem experiment command inside container
+    # Config path needs to be relative to /app in container
+    if config_path:
+        # Convert to container path
+        container_config = f"/app/{config_path}"
+        cmd.extend(["lem", "experiment", container_config])
+    else:
+        cmd.extend(["lem", "experiment"])
+
+    if yes:
+        cmd.append("--yes")
+    if fresh:
+        cmd.append("--fresh")
+    if dataset:
+        cmd.extend(["--dataset", dataset])
+    if sample_size:
+        cmd.extend(["--sample-size", str(sample_size)])
+    if results_dir:
+        cmd.extend(["--results-dir", "/app/results"])
+
+    # Run Docker command
+    console.print(f"[dim]$ {' '.join(cmd[:6])}...[/dim]")
+    result = subprocess.run(cmd, check=False)
+    return result.returncode
 
 
 def aggregate_cmd(

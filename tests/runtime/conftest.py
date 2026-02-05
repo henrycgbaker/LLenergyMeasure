@@ -73,7 +73,8 @@ def _check_tensorrt_available() -> bool:
         import tensorrt_llm  # noqa: F401
 
         return True
-    except ImportError:
+    except (ImportError, OSError):
+        # OSError can occur if TensorRT shared libraries are missing
         return False
 
 

@@ -8,7 +8,7 @@ This module provides:
 - Auto-discovery from Pydantic models (--discover flag)
 - Manual parameter definitions (fallback/overrides)
 - Test helper functions (verify_inference_results, run_experiment, etc.)
-- Data classes (TestResult, ValidationResult, TestReport)
+- Data classes (ParamTestResult, ValidationResult, ParamTestReport)
 
 Usage:
     # Run from project root
@@ -90,7 +90,7 @@ class ValidationResult:
 
 
 @dataclass
-class TestResult:
+class ParamTestResult:
     """Result of a single parameter test."""
 
     config_name: str
@@ -110,14 +110,14 @@ class TestResult:
 
 
 @dataclass
-class TestReport:
+class ParamTestReport:
     """Complete test report."""
 
     run_id: str
     timestamp: str
     backend: str | None
     summary: dict[str, int]
-    results: list[TestResult]
+    results: list[ParamTestResult]
     failed_tests: list[dict[str, Any]]
     warnings_by_type: dict[str, int]
     baseline_metrics: dict[str, float] | None = None
@@ -867,7 +867,7 @@ def verify_inference_results(config_name: str) -> tuple[bool, str | None, dict[s
     return True, None, metrics
 
 
-def run_experiment(config_path: Path, smoke_mode: bool = False) -> TestResult:
+def run_experiment(config_path: Path, smoke_mode: bool = False) -> ParamTestResult:
     """Run an experiment and capture all output.
 
     Args:
@@ -941,7 +941,7 @@ def run_experiment(config_path: Path, smoke_mode: bool = False) -> TestResult:
                 status = "failed"
                 error_summary = f"Smoke test: {len(unknown_issues)} unknown issues detected"
 
-        return TestResult(
+        return ParamTestResult(
             config_name=config_name,
             config_path=str(config_path),
             parameter_varied="",  # Will be filled in by caller
@@ -959,7 +959,7 @@ def run_experiment(config_path: Path, smoke_mode: bool = False) -> TestResult:
 
     except subprocess.TimeoutExpired:
         elapsed = time.time() - start_time
-        return TestResult(
+        return ParamTestResult(
             config_name=config_name,
             config_path=str(config_path),
             parameter_varied="",
@@ -1049,7 +1049,7 @@ def extract_traceback(text: str) -> str | None:
 
 
 def validate_param_application(
-    result: TestResult,
+    result: ParamTestResult,
     param: str,
     value: Any,
     baseline_metrics: dict[str, float] | None,
@@ -1140,10 +1140,10 @@ def extract_metrics_from_output(text: str) -> dict[str, float]:
 
 
 def generate_report(
-    results: list[TestResult],
+    results: list[ParamTestResult],
     backend: str | None,
     baseline_metrics: dict[str, float] | None,
-) -> TestReport:
+) -> ParamTestReport:
     """Generate comprehensive test report."""
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     timestamp = datetime.now().isoformat()
@@ -1191,7 +1191,7 @@ def generate_report(
         for issue in result.captured_issues:
             issues_by_source[issue.source] = issues_by_source.get(issue.source, 0) + 1
 
-    return TestReport(
+    return ParamTestReport(
         run_id=run_id,
         timestamp=timestamp,
         backend=backend,
@@ -1209,7 +1209,7 @@ def generate_report(
     )
 
 
-def save_report(report: TestReport, output_path: Path) -> None:
+def save_report(report: ParamTestReport, output_path: Path) -> None:
     """Save report as JSON."""
 
     def serialize(obj: Any) -> Any:
@@ -1245,14 +1245,16 @@ def run_baseline(base_config: Path) -> dict[str, float] | None:
     return metrics
 
 
-def test_backend(
+def run_backend_tests(
     backend: str,
     quick_mode: bool,
     output_dir: Path,
     discover_mode: bool = False,
     smoke_mode: bool = False,
-) -> list[TestResult]:
-    """Test all parameters for a specific backend.
+) -> list[ParamTestResult]:
+    """Run all parameter tests for a specific backend.
+
+    Note: Named run_backend_tests (not test_backend) to prevent pytest collection.
 
     Args:
         backend: Backend to test (pytorch, vllm, tensorrt)
@@ -1261,7 +1263,7 @@ def test_backend(
         discover_mode: Auto-discover params from Pydantic models
         smoke_mode: If True, fail on ANY warning or error detected
     """
-    results: list[TestResult] = []
+    results: list[ParamTestResult] = []
 
     print(f"\n{'=' * 60}")
     print(f"Testing backend: {backend}")
@@ -1325,7 +1327,7 @@ def test_backend(
             if should_skip:
                 print(f"    Testing {param}={value}... {skip_reason}")
                 # Record skipped test in results
-                skipped_result = TestResult(
+                skipped_result = ParamTestResult(
                     config_name=f"{backend}_base_{param.replace('.', '_')}_{value}",
                     config_path="",  # No config file for skipped tests
                     status="skipped",
@@ -1412,7 +1414,7 @@ def test_backend(
     return results
 
 
-def print_summary(report: TestReport) -> None:
+def print_summary(report: ParamTestReport) -> None:
     """Print summary of test results."""
     print("\n" + "=" * 60)
     print("TEST SUMMARY")
@@ -1556,9 +1558,9 @@ def main() -> None:
     backends = [args.backend] if args.backend else ["pytorch", "vllm", "tensorrt"]
 
     # Run tests
-    all_results: list[TestResult] = []
+    all_results: list[ParamTestResult] = []
     for backend in backends:
-        results = test_backend(
+        results = run_backend_tests(
             backend,
             args.quick,
             output_dir / backend,

@@ -1,4 +1,6 @@
 .PHONY: format lint typecheck check test test-integration test-all install dev clean
+.PHONY: test-runtime test-runtime-vllm test-runtime-tensorrt test-runtime-all
+.PHONY: test-runtime-quick test-runtime-local test-runtime-docker
 .PHONY: docker-build docker-build-all docker-build-vllm docker-build-tensorrt
 .PHONY: docker-build-dev docker-check experiment datasets validate docker-shell docker-dev
 .PHONY: setup docker-setup lem-clean lem-clean-all generate-docs check-docs
@@ -47,11 +49,37 @@ test-integration:
 test-all:
 	poetry run pytest tests/ -v --ignore=tests/runtime/
 
+# Runtime tests with Docker container dispatch
+# These tests use SSOT introspection to discover ALL params, then dispatch
+# each test to the correct backend container (pytorch, vllm, tensorrt).
+# Uses the same dispatch pattern as `lem campaign`.
+
 test-runtime:
-	poetry run pytest tests/runtime/ -v
+	python scripts/runtime-test-orchestrator.py --backend pytorch
+
+test-runtime-vllm:
+	python scripts/runtime-test-orchestrator.py --backend vllm
+
+test-runtime-tensorrt:
+	python scripts/runtime-test-orchestrator.py --backend tensorrt
+
+# Run all backends - discovers params via SSOT, dispatches to correct containers
+test-runtime-all:
+	python scripts/runtime-test-orchestrator.py --backend all
 
 test-runtime-quick:
-	poetry run pytest tests/runtime/ -v --quick
+	python scripts/runtime-test-orchestrator.py --backend pytorch --quick
+
+# Check Docker setup and list params without running
+test-runtime-check:
+	python scripts/runtime-test-orchestrator.py --check-docker
+
+test-runtime-list:
+	python scripts/runtime-test-orchestrator.py --list-params
+
+# Build missing images automatically before running
+test-runtime-docker:
+	python scripts/runtime-test-orchestrator.py --backend pytorch --build
 
 install:
 	poetry install

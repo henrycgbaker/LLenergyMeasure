@@ -191,6 +191,7 @@ def init_cmd(
     if non_interactive:
         # Non-interactive mode: use CLI args or existing values or defaults
         config = UserConfig(
+            verbosity=existing.verbosity if existing else "normal",
             results_dir=results_dir or (existing.results_dir if existing else "results"),
             thermal_gaps=existing.thermal_gaps if existing else ThermalGapConfig(),
             docker=existing.docker if existing else DockerConfig(),
@@ -206,7 +207,44 @@ def init_cmd(
         # Get defaults from existing config or use model defaults
         defaults = existing or UserConfig()
 
-        # Question 1: Results directory
+        # Question 1: Verbosity level
+        console.print(
+            "[dim]Controls how much output you see during experiments and campaigns.[/dim]"
+        )
+        verbosity_choices = [
+            questionary.Choice(
+                title="normal (recommended) — Standard info messages with progress",
+                value="normal",
+            ),
+            questionary.Choice(
+                title="quiet — Warnings only, minimal output",
+                value="quiet",
+            ),
+            questionary.Choice(
+                title="verbose — Debug output, all backend logs",
+                value="verbose",
+            ),
+        ]
+        # Reorder choices to put default first
+        default_idx = next(
+            (i for i, c in enumerate(verbosity_choices) if c.value == defaults.verbosity),
+            0,
+        )
+        verbosity_choices = (
+            [verbosity_choices[default_idx]]
+            + verbosity_choices[:default_idx]
+            + verbosity_choices[default_idx + 1 :]
+        )
+        verbosity_answer = questionary.select(
+            "Verbosity level:",
+            choices=verbosity_choices,
+            default=defaults.verbosity,
+        ).ask()
+        if verbosity_answer is None:
+            raise typer.Abort()
+        console.print()
+
+        # Question 2: Results directory
         console.print(
             "[dim]Path relative to project root where experiment results are saved.[/dim]"
         )
@@ -305,6 +343,7 @@ def init_cmd(
 
         # Build config
         config = UserConfig(
+            verbosity=verbosity_answer,
             results_dir=results_answer,
             thermal_gaps=ThermalGapConfig(
                 between_experiments=thermal_gap,
