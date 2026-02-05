@@ -61,16 +61,23 @@ def main(
     ] = False,
 ) -> None:
     """LLM inference efficiency measurement framework."""
+    from llenergymeasure.config.user_config import load_user_config
     from llenergymeasure.logging import VerbosityType
 
     # Determine verbosity level
+    # Precedence: CLI flags > user config > default
     verbosity: VerbosityType
     if quiet:
         verbosity = "quiet"
     elif verbose:
         verbosity = "verbose"
     else:
-        verbosity = "normal"
+        # Check user config for default verbosity
+        try:
+            user_config = load_user_config()
+            verbosity = user_config.verbosity
+        except Exception:
+            verbosity = "normal"
 
     # Set environment variable for subprocesses and progress module
     os.environ["LLM_ENERGY_VERBOSITY"] = verbosity

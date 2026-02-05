@@ -1,14 +1,11 @@
-"""Runtime parameter tests using pytest.
+"""Runtime parameter tests using pytest with SSOT introspection.
 
 These tests verify that configuration parameters are actually applied at inference time.
 They require CUDA GPU access and run real inference with a small model.
 
-The test_all_params.py script in scripts/ provides a standalone CLI interface to the same
-functionality. This module provides pytest integration for CI and development workflows.
-
-Test Strategy:
-- For params with defined option sets (Literal types): test ALL values
-- For numeric params: test min/max/sensible values
+**SSOT Architecture**: Test parameters are dynamically discovered from Pydantic models
+via `llenergymeasure.config.introspection`. This eliminates hardcoded param paths that
+can drift from the actual configuration schema.
 
 Run with:
     pytest tests/runtime/ -v                          # All tests
@@ -22,9 +19,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-
-# Import from local test_all_params module (canonical location in tests/runtime/)
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -32,59 +26,93 @@ import pytest
 import yaml
 
 from .test_all_params import (
-    PYTORCH_PARAMS,
-    QUICK_PYTORCH_PARAMS,
-    QUICK_SHARED_PARAMS,
-    QUICK_TENSORRT_PARAMS,
-    QUICK_VLLM_PARAMS,
-    SHARED_PARAMS,
-    TENSORRT_PARAMS,
     TEST_MAX_OUTPUT,
     TEST_MODEL,
     TEST_SAMPLE_SIZE,
     TEST_TIMEOUT_SECONDS,
-    VLLM_PARAMS,
+    should_skip_param,
     verify_inference_results,
 )
 
 # =============================================================================
-# Parameter Value Extraction Helpers
+# SSOT Parameter Discovery
 # =============================================================================
 
 
-def get_param_values(param_dict: dict[str, list[Any]], param_key: str) -> list[Any]:
-    """Get test values for a parameter from param dict.
+def get_ssot_backend_params(backend: str) -> dict[str, list[Any]]:
+    """Get parameters for a backend from SSOT introspection.
 
-    Falls back to reasonable defaults if param not defined.
+    Uses llenergymeasure.config.introspection as the Single Source of Truth.
+    Falls back to test_all_params manual definitions only if import fails.
     """
-    return param_dict.get(param_key, [])
+    try:
+        from llenergymeasure.config.introspection import get_backend_params
 
+        introspected = get_backend_params(backend)
+        params: dict[str, list[Any]] = {}
+        for param_path, meta in introspected.items():
+            test_values = meta.get("test_values", [])
+            if test_values:
+                params[param_path] = test_values
+        return params
+    except ImportError:
+        # Fallback to manual definitions
+        from .test_all_params import PYTORCH_PARAMS, TENSORRT_PARAMS, VLLM_PARAMS
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-
-# =============================================================================
-# Test Configuration
-# =============================================================================
-
-
-def get_backend_params(backend: str, quick: bool) -> dict[str, list[Any]]:
-    """Get parameters to test for a backend."""
-    if quick:
-        shared = QUICK_SHARED_PARAMS
-        backend_specific = {
-            "pytorch": QUICK_PYTORCH_PARAMS,
-            "vllm": QUICK_VLLM_PARAMS,
-            "tensorrt": QUICK_TENSORRT_PARAMS,
-        }.get(backend, {})
-    else:
-        shared = SHARED_PARAMS
-        backend_specific = {
+        return {
             "pytorch": PYTORCH_PARAMS,
             "vllm": VLLM_PARAMS,
             "tensorrt": TENSORRT_PARAMS,
         }.get(backend, {})
 
-    return {**shared, **backend_specific}
+
+def get_ssot_shared_params() -> dict[str, list[Any]]:
+    """Get shared/universal parameters from SSOT introspection."""
+    try:
+        from llenergymeasure.config.introspection import get_shared_params
+
+        introspected = get_shared_params()
+        params: dict[str, list[Any]] = {}
+        for param_path, meta in introspected.items():
+            test_values = meta.get("test_values", [])
+            if test_values:
+                params[param_path] = test_values
+        return params
+    except ImportError:
+        from .test_all_params import SHARED_PARAMS
+
+        return SHARED_PARAMS
+
+
+def get_quick_params(backend: str) -> dict[str, list[Any]]:
+    """Get reduced param set for quick mode testing.
+
+    Takes first 2 values from each param for faster execution.
+    """
+    all_params = {**get_ssot_shared_params(), **get_ssot_backend_params(backend)}
+    return {param: values[:2] for param, values in all_params.items() if values}
+
+
+def get_all_test_params(backend: str, quick: bool = False) -> dict[str, list[Any]]:
+    """Get all test parameters for a backend.
+
+    Args:
+        backend: One of "pytorch", "vllm", "tensorrt"
+        quick: If True, return reduced param set
+
+    Returns:
+        Dict mapping param paths to test values
+    """
+    if quick:
+        return get_quick_params(backend)
+    return {**get_ssot_shared_params(), **get_ssot_backend_params(backend)}
+
+
+# =============================================================================
+# Test Configuration
+# =============================================================================
+
+PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 
 def create_test_config(
@@ -175,16 +203,165 @@ def run_experiment_subprocess(config_path: Path) -> tuple[int, str, str]:
 
 
 # =============================================================================
-# PyTorch Tests
+# Dynamic Test Generation via pytest_generate_tests
+# =============================================================================
+
+
+def generate_param_test_cases(
+    backend: str, quick: bool = False
+) -> list[tuple[str, Any, str | None]]:
+    """Generate (param_path, value, skip_reason) tuples for a backend.
+
+    Returns:
+        List of (param_path, test_value, skip_reason_or_none) tuples
+    """
+    params = get_all_test_params(backend, quick=quick)
+    test_cases: list[tuple[str, Any, str | None]] = []
+
+    for param_path, values in params.items():
+        for value in values:
+            skip, reason = should_skip_param(param_path, value)
+            test_cases.append((param_path, value, reason if skip else None))
+
+    return test_cases
+
+
+def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
+    """Dynamically generate test cases from SSOT introspection.
+
+    This hook is called by pytest to generate parametrized test cases.
+    It reads params from Pydantic models via introspection.
+    """
+    # Only parametrize tests that have the right fixtures
+    if "param_path" not in metafunc.fixturenames:
+        return
+    if "param_value" not in metafunc.fixturenames:
+        return
+    if "backend" not in metafunc.fixturenames:
+        return
+
+    # Get backend from markers or config
+    backend_marker = metafunc.definition.get_closest_marker("backend")
+    if backend_marker:
+        backends = [backend_marker.args[0]]
+    else:
+        # Check command line option
+        backend_opt = metafunc.config.getoption("--backend", default=None)
+        if backend_opt:
+            backends = [backend_opt]
+        else:
+            # Infer from test class name
+            cls_name = metafunc.cls.__name__ if metafunc.cls else ""
+            if "PyTorch" in cls_name:
+                backends = ["pytorch"]
+            elif "VLLM" in cls_name:
+                backends = ["vllm"]
+            elif "TensorRT" in cls_name:
+                backends = ["tensorrt"]
+            else:
+                backends = ["pytorch", "vllm", "tensorrt"]
+
+    quick = metafunc.config.getoption("--quick", default=False)
+
+    # Generate test cases
+    all_cases: list[tuple[str, str, Any]] = []
+    ids: list[str] = []
+
+    for backend in backends:
+        test_cases = generate_param_test_cases(backend, quick=quick)
+        for param_path, value, _skip_reason in test_cases:
+            all_cases.append((backend, param_path, value))
+            ids.append(f"{backend}-{param_path}={value}")
+
+    metafunc.parametrize(
+        "backend,param_path,param_value",
+        all_cases,
+        ids=ids,
+    )
+
+
+# =============================================================================
+# Generic Parameter Test
+# =============================================================================
+
+
+class TestRuntimeParams:
+    """Dynamic runtime tests for all backends using SSOT introspection.
+
+    Test parameters are discovered from Pydantic models, eliminating
+    hardcoded param paths that can drift from the actual schema.
+    """
+
+    @pytest.mark.requires_gpu
+    @pytest.mark.slow
+    def test_param_application(
+        self,
+        backend: str,
+        param_path: str,
+        param_value: Any,
+        clean_results: None,
+        temp_config_dir: Path,
+        request: pytest.FixtureRequest,
+    ) -> None:
+        """Test that a parameter is correctly applied at inference time.
+
+        This is the core SSOT test - it dynamically tests any param discovered
+        from introspection.
+
+        Args:
+            backend: Backend to test (pytorch, vllm, tensorrt)
+            param_path: Full parameter path (e.g., "pytorch.batch_size")
+            param_value: Value to test
+            clean_results: Fixture to clean results directory
+            temp_config_dir: Fixture providing temp directory for configs
+            request: pytest request fixture for markers
+        """
+        # Check skip conditions
+        skip, reason = should_skip_param(param_path, param_value)
+        if skip:
+            pytest.skip(reason)
+
+        # Check backend requirements
+        if backend == "vllm":
+            pytest.importorskip("vllm", reason="vLLM not installed")
+        elif backend == "tensorrt":
+            pytest.importorskip("tensorrt_llm", reason="TensorRT-LLM not installed")
+
+        # Create config with the parameter variation
+        config_path = create_test_config(
+            backend=backend,
+            param=param_path,
+            value=param_value,
+            output_dir=temp_config_dir,
+        )
+
+        # Run experiment
+        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
+
+        # Assert success
+        assert exit_code == 0, f"{param_path}={param_value} failed: {stderr}"
+
+        # Verify actual inference happened
+        config_name = config_path.stem
+        success, error, metrics = verify_inference_results(config_name)
+        assert success, f"Inference validation failed for {param_path}={param_value}: {error}"
+
+
+# =============================================================================
+# Backend-Specific Test Classes (for better pytest organisation)
 # =============================================================================
 
 
 class TestPyTorchRuntime:
     """Runtime tests for PyTorch backend.
 
-    Tests ALL values for params with defined option sets (Literal types).
-    Tests min/max/sensible values for numeric params.
+    Uses SSOT introspection for parameter discovery.
     """
+
+    @pytest.fixture(autouse=True)
+    def _setup_backend(self) -> None:
+        """Set backend for this test class."""
+        self.backend = "pytorch"
 
     @pytest.mark.requires_gpu
     @pytest.mark.slow
@@ -202,291 +379,68 @@ class TestPyTorchRuntime:
         )
 
         exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-
         assert exit_code == 0, f"Baseline failed: {stderr}"
 
-        # Verify actual inference happened
         config_name = config_path.stem
         success, error, metrics = verify_inference_results(config_name)
         assert success, f"Inference validation failed: {error}"
         assert metrics.get("throughput_tokens_per_second", 0) > 0
 
-    # -------------------------------------------------------------------------
-    # Precision (Literal - test ALL values)
-    # -------------------------------------------------------------------------
+
+def _make_pytorch_param_test(param_path: str, test_values: list[Any]) -> type:
+    """Factory to create a parametrized test method for a PyTorch param."""
+
     @pytest.mark.requires_gpu
     @pytest.mark.slow
-    @pytest.mark.parametrize("precision", SHARED_PARAMS["fp_precision"])
-    def test_pytorch_precision(
-        self,
-        precision: str,
+    @pytest.mark.parametrize("value", test_values, ids=[str(v) for v in test_values])
+    def test_method(
+        self: TestPyTorchRuntime,
+        value: Any,
         clean_results: None,
         temp_config_dir: Path,
     ) -> None:
-        """Test PyTorch with ALL precision settings."""
+        skip, reason = should_skip_param(param_path, value)
+        if skip:
+            pytest.skip(reason)
+
         config_path = create_test_config(
             backend="pytorch",
-            param="fp_precision",
-            value=precision,
+            param=param_path,
+            value=value,
             output_dir=temp_config_dir,
         )
 
         exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"Precision {precision} failed: {stderr}"
+        assert exit_code == 0, f"{param_path}={value} failed: {stderr}"
 
         config_name = config_path.stem
         success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed for {precision}: {error}"
+        assert success, f"Inference validation failed for {param_path}={value}: {error}"
 
-    # -------------------------------------------------------------------------
-    # Batch Size (Numeric - test min/max/mid)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.slow
-    @pytest.mark.parametrize("batch_size", PYTORCH_PARAMS["pytorch.batch_size"])
-    def test_pytorch_batch_size(
-        self,
-        batch_size: int,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test PyTorch with different batch sizes (backend-native: pytorch.batch_size)."""
-        config_path = create_test_config(
-            backend="pytorch",
-            param="pytorch.batch_size",
-            value=batch_size,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"Batch size {batch_size} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed for batch_size={batch_size}: {error}"
-
-    # -------------------------------------------------------------------------
-    # Batching Strategy (Literal - test ALL values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.slow
-    @pytest.mark.parametrize("strategy", PYTORCH_PARAMS["pytorch.batching_strategy"])
-    def test_pytorch_batching_strategy(
-        self,
-        strategy: str,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test PyTorch with ALL batching strategies."""
-        config_path = create_test_config(
-            backend="pytorch",
-            param="pytorch.batching_strategy",
-            value=strategy,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"Batching strategy {strategy} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed for {strategy}: {error}"
-
-    # -------------------------------------------------------------------------
-    # Attention Implementation (Literal - test ALL values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.slow
-    @pytest.mark.parametrize("attn_impl", PYTORCH_PARAMS["pytorch.attn_implementation"])
-    def test_pytorch_attention(
-        self,
-        attn_impl: str,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test PyTorch with ALL attention implementations."""
-        config_path = create_test_config(
-            backend="pytorch",
-            param="pytorch.attn_implementation",
-            value=attn_impl,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"Attention {attn_impl} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed for {attn_impl}: {error}"
-
-    # -------------------------------------------------------------------------
-    # Torch Compile Mode (Literal - test ALL values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.slow
-    @pytest.mark.parametrize("compile_mode", PYTORCH_PARAMS["pytorch.torch_compile"])
-    def test_pytorch_torch_compile(
-        self,
-        compile_mode: bool | str,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test PyTorch with ALL torch.compile modes."""
-        config_path = create_test_config(
-            backend="pytorch",
-            param="pytorch.torch_compile",
-            value=compile_mode,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"torch_compile={compile_mode} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed for torch_compile={compile_mode}: {error}"
-
-    # -------------------------------------------------------------------------
-    # Cache Implementation (Literal - test ALL values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.slow
-    @pytest.mark.parametrize("cache_impl", PYTORCH_PARAMS["pytorch.cache_implementation"])
-    def test_pytorch_cache_implementation(
-        self,
-        cache_impl: str,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test PyTorch with ALL cache implementations."""
-        config_path = create_test_config(
-            backend="pytorch",
-            param="pytorch.cache_implementation",
-            value=cache_impl,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"cache_implementation={cache_impl} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert (
-            success
-        ), f"Inference validation failed for cache_implementation={cache_impl}: {error}"
-
-    # -------------------------------------------------------------------------
-    # Quantization (Boolean - test both values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.slow
-    @pytest.mark.parametrize("load_4bit", PYTORCH_PARAMS["pytorch.load_in_4bit"])
-    def test_pytorch_4bit_quantization(
-        self,
-        load_4bit: bool,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test PyTorch with 4-bit quantization."""
-        config_path = create_test_config(
-            backend="pytorch",
-            param="pytorch.load_in_4bit",
-            value=load_4bit,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"load_in_4bit={load_4bit} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed for load_in_4bit={load_4bit}: {error}"
-
-    # -------------------------------------------------------------------------
-    # BnB 4-bit Quant Type (Literal - test ALL values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.slow
-    @pytest.mark.parametrize("quant_type", PYTORCH_PARAMS["pytorch.bnb_4bit_quant_type"])
-    def test_pytorch_bnb_4bit_quant_type(
-        self,
-        quant_type: str,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test PyTorch with ALL BnB 4-bit quant types (requires load_in_4bit=True)."""
-        # Create config with both load_in_4bit and the quant type
-        config = {
-            "config_name": f"pytorch-test-bnb_4bit_quant_type-{quant_type}",
-            "model_name": TEST_MODEL,
-            "backend": "pytorch",
-            "gpus": [0],
-            "max_input_tokens": 64,
-            "max_output_tokens": TEST_MAX_OUTPUT,
-            "num_input_prompts": TEST_SAMPLE_SIZE,
-            "fp_precision": "float16",
-            "decoder": {"preset": "deterministic"},
-            "dataset": {"name": "ai_energy_score", "sample_size": TEST_SAMPLE_SIZE},
-            "pytorch": {
-                "batch_size": 1,
-                "batching_strategy": "static",
-                "attn_implementation": "sdpa",
-                "load_in_4bit": True,
-                "bnb_4bit_quant_type": quant_type,
-            },
-        }
-
-        temp_config_dir.mkdir(parents=True, exist_ok=True)
-        config_path = temp_config_dir / f"pytorch_bnb_4bit_quant_type_{quant_type}.yaml"
-        with open(config_path, "w") as f:
-            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"bnb_4bit_quant_type={quant_type} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed for bnb_4bit_quant_type={quant_type}: {error}"
-
-    # -------------------------------------------------------------------------
-    # Decoder Preset (Literal - test ALL values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.slow
-    @pytest.mark.parametrize("preset", SHARED_PARAMS["decoder.preset"])
-    def test_pytorch_decoder_preset(
-        self,
-        preset: str,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test PyTorch with ALL decoder presets."""
-        config_path = create_test_config(
-            backend="pytorch",
-            param="decoder.preset",
-            value=preset,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"decoder.preset={preset} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed for preset={preset}: {error}"
+    return test_method
 
 
-# =============================================================================
-# vLLM Tests
-# =============================================================================
+# Dynamically add PyTorch param tests to TestPyTorchRuntime
+_pytorch_params = get_ssot_backend_params("pytorch")
+_shared_params = get_ssot_shared_params()
+_all_pytorch_params = {**_shared_params, **_pytorch_params}
+
+for _param_path, _values in _all_pytorch_params.items():
+    if _values:
+        _method_name = f"test_pytorch_{_param_path.replace('.', '_')}"
+        setattr(TestPyTorchRuntime, _method_name, _make_pytorch_param_test(_param_path, _values))
 
 
 class TestVLLMRuntime:
     """Runtime tests for vLLM backend.
 
-    Tests ALL values for params with defined option sets (Literal types).
-    Tests min/max/sensible values for numeric params.
+    Uses SSOT introspection for parameter discovery.
     """
+
+    @pytest.fixture(autouse=True)
+    def _setup_backend(self) -> None:
+        """Set backend for this test class."""
+        self.backend = "vllm"
 
     @pytest.mark.requires_gpu
     @pytest.mark.requires_vllm
@@ -511,272 +465,61 @@ class TestVLLMRuntime:
         success, error, metrics = verify_inference_results(config_name)
         assert success, f"Inference validation failed: {error}"
 
-    # -------------------------------------------------------------------------
-    # Max Num Seqs (Numeric - test range)
-    # -------------------------------------------------------------------------
+
+def _make_vllm_param_test(param_path: str, test_values: list[Any]) -> type:
+    """Factory to create a parametrized test method for a vLLM param."""
+
     @pytest.mark.requires_gpu
     @pytest.mark.requires_vllm
     @pytest.mark.slow
-    @pytest.mark.parametrize("max_num_seqs", VLLM_PARAMS["vllm.max_num_seqs"])
-    def test_vllm_max_seqs(
-        self,
-        max_num_seqs: int,
+    @pytest.mark.parametrize("value", test_values, ids=[str(v) for v in test_values])
+    def test_method(
+        self: TestVLLMRuntime,
+        value: Any,
         clean_results: None,
         temp_config_dir: Path,
     ) -> None:
-        """Test vLLM with different max_num_seqs settings."""
+        skip, reason = should_skip_param(param_path, value)
+        if skip:
+            pytest.skip(reason)
+
         config_path = create_test_config(
             backend="vllm",
-            param="vllm.max_num_seqs",
-            value=max_num_seqs,
+            param=param_path,
+            value=value,
             output_dir=temp_config_dir,
         )
 
         exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"max_num_seqs={max_num_seqs} failed: {stderr}"
+        assert exit_code == 0, f"{param_path}={value} failed: {stderr}"
 
         config_name = config_path.stem
         success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed: {error}"
+        assert success, f"Inference validation failed for {param_path}={value}: {error}"
 
-    # -------------------------------------------------------------------------
-    # Enforce Eager (Boolean - test both values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.requires_vllm
-    @pytest.mark.slow
-    @pytest.mark.parametrize("enforce_eager", VLLM_PARAMS["vllm.enforce_eager"])
-    def test_vllm_enforce_eager(
-        self,
-        enforce_eager: bool,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test vLLM eager mode."""
-        config_path = create_test_config(
-            backend="vllm",
-            param="vllm.enforce_eager",
-            value=enforce_eager,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"enforce_eager={enforce_eager} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed: {error}"
-
-    # -------------------------------------------------------------------------
-    # KV Cache Dtype (Literal - test ALL values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.requires_vllm
-    @pytest.mark.slow
-    @pytest.mark.parametrize("kv_cache_dtype", VLLM_PARAMS["vllm.kv_cache_dtype"])
-    def test_vllm_kv_cache_dtype(
-        self,
-        kv_cache_dtype: str,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test vLLM with ALL KV cache dtypes."""
-        config_path = create_test_config(
-            backend="vllm",
-            param="vllm.kv_cache_dtype",
-            value=kv_cache_dtype,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"kv_cache_dtype={kv_cache_dtype} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed for kv_cache_dtype={kv_cache_dtype}: {error}"
-
-    # -------------------------------------------------------------------------
-    # Block Size (Literal - test ALL values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.requires_vllm
-    @pytest.mark.slow
-    @pytest.mark.parametrize("block_size", VLLM_PARAMS["vllm.block_size"])
-    def test_vllm_block_size(
-        self,
-        block_size: int,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test vLLM with ALL block sizes."""
-        config_path = create_test_config(
-            backend="vllm",
-            param="vllm.block_size",
-            value=block_size,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"block_size={block_size} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed for block_size={block_size}: {error}"
-
-    # -------------------------------------------------------------------------
-    # Attention Backend (Literal - test ALL values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.requires_vllm
-    @pytest.mark.slow
-    @pytest.mark.parametrize("attention_backend", VLLM_PARAMS["vllm.attention_backend"])
-    def test_vllm_attention_backend(
-        self,
-        attention_backend: str,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test vLLM with ALL attention backends."""
-        config_path = create_test_config(
-            backend="vllm",
-            param="vllm.attention_backend",
-            value=attention_backend,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"attention_backend={attention_backend} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert (
-            success
-        ), f"Inference validation failed for attention_backend={attention_backend}: {error}"
-
-    # -------------------------------------------------------------------------
-    # Distributed Backend (Literal - test ALL values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.requires_vllm
-    @pytest.mark.slow
-    @pytest.mark.parametrize("distributed_backend", VLLM_PARAMS["vllm.distributed_backend"])
-    def test_vllm_distributed_backend(
-        self,
-        distributed_backend: str,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test vLLM with ALL distributed backends."""
-        config_path = create_test_config(
-            backend="vllm",
-            param="vllm.distributed_backend",
-            value=distributed_backend,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"distributed_backend={distributed_backend} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert (
-            success
-        ), f"Inference validation failed for distributed_backend={distributed_backend}: {error}"
-
-    # -------------------------------------------------------------------------
-    # Load Format (Literal - test ALL values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.requires_vllm
-    @pytest.mark.slow
-    @pytest.mark.parametrize("load_format", VLLM_PARAMS["vllm.load_format"])
-    def test_vllm_load_format(
-        self,
-        load_format: str,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test vLLM with ALL load formats."""
-        config_path = create_test_config(
-            backend="vllm",
-            param="vllm.load_format",
-            value=load_format,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"load_format={load_format} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed for load_format={load_format}: {error}"
-
-    # -------------------------------------------------------------------------
-    # Prefix Caching (Boolean - test both values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.requires_vllm
-    @pytest.mark.slow
-    @pytest.mark.parametrize("enable_prefix_caching", VLLM_PARAMS["vllm.enable_prefix_caching"])
-    def test_vllm_prefix_caching(
-        self,
-        enable_prefix_caching: bool,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test vLLM with prefix caching enabled/disabled."""
-        config_path = create_test_config(
-            backend="vllm",
-            param="vllm.enable_prefix_caching",
-            value=enable_prefix_caching,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"enable_prefix_caching={enable_prefix_caching} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert (
-            success
-        ), f"Inference validation failed for enable_prefix_caching={enable_prefix_caching}: {error}"
-
-    # -------------------------------------------------------------------------
-    # Chunked Prefill (Boolean - test both values)
-    # -------------------------------------------------------------------------
-    @pytest.mark.requires_gpu
-    @pytest.mark.requires_vllm
-    @pytest.mark.slow
-    @pytest.mark.parametrize("enable_chunked_prefill", VLLM_PARAMS["vllm.enable_chunked_prefill"])
-    def test_vllm_chunked_prefill(
-        self,
-        enable_chunked_prefill: bool,
-        clean_results: None,
-        temp_config_dir: Path,
-    ) -> None:
-        """Test vLLM with chunked prefill enabled/disabled."""
-        config_path = create_test_config(
-            backend="vllm",
-            param="vllm.enable_chunked_prefill",
-            value=enable_chunked_prefill,
-            output_dir=temp_config_dir,
-        )
-
-        exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"enable_chunked_prefill={enable_chunked_prefill} failed: {stderr}"
-
-        config_name = config_path.stem
-        success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed for enable_chunked_prefill={enable_chunked_prefill}: {error}"
+    return test_method
 
 
-# =============================================================================
-# TensorRT Tests
-# =============================================================================
+# Dynamically add vLLM param tests to TestVLLMRuntime
+_vllm_params = get_ssot_backend_params("vllm")
+_all_vllm_params = {**_shared_params, **_vllm_params}
+
+for _param_path, _values in _all_vllm_params.items():
+    if _values:
+        _method_name = f"test_vllm_{_param_path.replace('.', '_')}"
+        setattr(TestVLLMRuntime, _method_name, _make_vllm_param_test(_param_path, _values))
 
 
 class TestTensorRTRuntime:
-    """Runtime tests for TensorRT-LLM backend."""
+    """Runtime tests for TensorRT-LLM backend.
+
+    Uses SSOT introspection for parameter discovery.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _setup_backend(self) -> None:
+        """Set backend for this test class."""
+        self.backend = "tensorrt"
 
     @pytest.mark.requires_gpu
     @pytest.mark.requires_tensorrt
@@ -801,30 +544,49 @@ class TestTensorRTRuntime:
         success, error, metrics = verify_inference_results(config_name)
         assert success, f"Inference validation failed: {error}"
 
+
+def _make_tensorrt_param_test(param_path: str, test_values: list[Any]) -> type:
+    """Factory to create a parametrized test method for a TensorRT param."""
+
     @pytest.mark.requires_gpu
     @pytest.mark.requires_tensorrt
     @pytest.mark.slow
-    @pytest.mark.parametrize("max_batch_size", [1, 4, 8])
-    def test_tensorrt_max_batch_size(
-        self,
-        max_batch_size: int,
+    @pytest.mark.parametrize("value", test_values, ids=[str(v) for v in test_values])
+    def test_method(
+        self: TestTensorRTRuntime,
+        value: Any,
         clean_results: None,
         temp_config_dir: Path,
     ) -> None:
-        """Test TensorRT with different max_batch_size settings."""
+        skip, reason = should_skip_param(param_path, value)
+        if skip:
+            pytest.skip(reason)
+
         config_path = create_test_config(
             backend="tensorrt",
-            param="tensorrt.max_batch_size",
-            value=max_batch_size,
+            param=param_path,
+            value=value,
             output_dir=temp_config_dir,
         )
 
         exit_code, stdout, stderr = run_experiment_subprocess(config_path)
-        assert exit_code == 0, f"max_batch_size={max_batch_size} failed: {stderr}"
+        assert exit_code == 0, f"{param_path}={value} failed: {stderr}"
 
         config_name = config_path.stem
         success, error, _ = verify_inference_results(config_name)
-        assert success, f"Inference validation failed: {error}"
+        assert success, f"Inference validation failed for {param_path}={value}: {error}"
+
+    return test_method
+
+
+# Dynamically add TensorRT param tests to TestTensorRTRuntime
+_tensorrt_params = get_ssot_backend_params("tensorrt")
+_all_tensorrt_params = {**_shared_params, **_tensorrt_params}
+
+for _param_path, _values in _all_tensorrt_params.items():
+    if _values:
+        _method_name = f"test_tensorrt_{_param_path.replace('.', '_')}"
+        setattr(TestTensorRTRuntime, _method_name, _make_tensorrt_param_test(_param_path, _values))
 
 
 # =============================================================================
@@ -843,6 +605,8 @@ class TestFullParameterSweep:
     @pytest.mark.slow
     def test_pytorch_full_sweep(self, request: pytest.FixtureRequest) -> None:
         """Run full PyTorch parameter sweep."""
+        import sys
+
         quick = request.config.getoption("--quick")
         cmd = [
             sys.executable,
@@ -879,6 +643,8 @@ class TestFullParameterSweep:
     @pytest.mark.slow
     def test_vllm_full_sweep(self, request: pytest.FixtureRequest) -> None:
         """Run full vLLM parameter sweep."""
+        import sys
+
         quick = request.config.getoption("--quick")
         cmd = [
             sys.executable,
@@ -914,6 +680,8 @@ class TestFullParameterSweep:
     @pytest.mark.slow
     def test_tensorrt_full_sweep(self, request: pytest.FixtureRequest) -> None:
         """Run full TensorRT parameter sweep."""
+        import sys
+
         quick = request.config.getoption("--quick")
         cmd = [
             sys.executable,

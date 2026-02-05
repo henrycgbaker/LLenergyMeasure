@@ -440,6 +440,15 @@ class CampaignConfig(BaseModel):
         description="IO path configuration for campaign directories",
     )
 
+    # Results grouping for summary output
+    group_by: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Fields to group results by for summary output (e.g., ['backend', 'batch_size']). "
+            "Groups results and computes confidence intervals per group."
+        ),
+    )
+
     @field_validator("configs")
     @classmethod
     def validate_config_paths(cls, v: list[str]) -> list[str]:

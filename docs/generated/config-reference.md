@@ -1,7 +1,7 @@
 # Configuration Reference
 
 > This file is auto-generated from Pydantic models. Do not edit manually.
-> Generated: 2026-02-04
+> Generated: 2026-02-05
 
 ## Table of Contents
 

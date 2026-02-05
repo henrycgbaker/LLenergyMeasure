@@ -20,6 +20,7 @@ class TestUserConfig:
         """UserConfig has sensible defaults."""
         config = UserConfig()
 
+        assert config.verbosity == "normal"
         assert config.thermal_gaps.between_experiments == 60.0
         assert config.thermal_gaps.between_cycles == 300.0
         assert config.docker.strategy == "ephemeral"
@@ -30,6 +31,18 @@ class TestUserConfig:
         assert config.notifications.on_complete is True
         assert config.notifications.on_failure is True
         assert config.notifications.webhook_url is None
+
+    def test_verbosity_values(self) -> None:
+        """UserConfig validates verbosity values."""
+        # Valid values
+        for level in ["quiet", "normal", "verbose"]:
+            config = UserConfig(verbosity=level)
+            assert config.verbosity == level
+
+    def test_verbosity_invalid_value(self) -> None:
+        """UserConfig rejects invalid verbosity."""
+        with pytest.raises(ValueError, match="Input should be 'quiet', 'normal' or 'verbose'"):
+            UserConfig(verbosity="invalid")
 
     def test_user_config_no_default_backend(self) -> None:
         """Verify default_backend not in UserConfig.model_fields (removed in 2.3-01)."""

@@ -741,8 +741,13 @@ def campaign_cmd(
             console.print(f"    IDs: {', '.join(experiment_ids)}")
 
         # Bootstrap CI display for multi-cycle campaigns
-        # Parse group_by fields
-        group_by_fields = group_by.split(",") if group_by else None
+        # Parse group_by fields (CLI takes precedence over config)
+        if group_by:
+            group_by_fields = group_by.split(",")
+        elif campaign.group_by:
+            group_by_fields = campaign.group_by
+        else:
+            group_by_fields = None
 
         if runner.num_cycles > 1:
             _display_campaign_ci_summary(manifest, campaign, group_by_fields)
@@ -1009,23 +1014,44 @@ def _run_single_experiment(
                 if sample_size or campaign.num_samples:
                     cmd.extend(["--sample-size", str(sample_size or campaign.num_samples)])
 
-                # Add verbosity env var to context
+                # Add verbosity and backend logging env vars to context
+                verbosity = os.environ.get("LLM_ENERGY_VERBOSITY", "normal")
+                backend_log_level = "DEBUG" if verbosity == "verbose" else "WARNING"
                 env_vars = {
                     **campaign_context,
-                    "LLM_ENERGY_VERBOSITY": os.environ.get("LLM_ENERGY_VERBOSITY", "normal"),
+                    "LLM_ENERGY_VERBOSITY": verbosity,
+                    "VLLM_LOGGING_LEVEL": backend_log_level,
+                    "VLLM_CONFIGURE_LOGGING": "1" if verbosity == "verbose" else "0",
+                    "TLLM_LOG_LEVEL": backend_log_level,
                 }
 
                 result = container_manager.exec(backend, cmd, env=env_vars)
                 return experiment_id, result.returncode
             else:
                 # Ephemeral mode: docker compose run --rm
+                # Include verbosity and backend logging env vars for Docker
+                verbosity = os.environ.get("LLM_ENERGY_VERBOSITY", "normal")
+                backend_log_level = "DEBUG" if verbosity == "verbose" else "WARNING"
+                docker_context = {
+                    **campaign_context,
+                    "LLM_ENERGY_VERBOSITY": verbosity,
+                    # Backend-specific logging env vars (set before backend import)
+                    "VLLM_LOGGING_LEVEL": backend_log_level,
+                    "VLLM_CONFIGURE_LOGGING": "1" if verbosity == "verbose" else "0",
+                    "TLLM_LOG_LEVEL": backend_log_level,
+                }
+                # Extract GPUs from config for container routing
+                gpus = config_data.get("gpus", [0])
+                if not isinstance(gpus, list):
+                    gpus = [gpus] if gpus else [0]
                 cmd = _build_docker_command(
                     backend=backend,
                     config_path=container_config_path,
                     dataset=dataset or campaign.dataset,
                     sample_size=sample_size or campaign.num_samples,
                     results_dir=results_dir,
-                    campaign_context=campaign_context,
+                    campaign_context=docker_context,
+                    gpus=gpus,
                 )
         else:
             # Direct execution (inside container or local install)
@@ -1218,6 +1244,7 @@ def _build_docker_command(
     sample_size: int | None,
     results_dir: Path | None,
     campaign_context: dict[str, str] | None = None,
+    gpus: list[int] | None = None,
 ) -> list[str]:
     """Build docker compose command for running experiment.
 
@@ -1228,6 +1255,7 @@ def _build_docker_command(
         sample_size: Sample size override.
         results_dir: Results directory override.
         campaign_context: Campaign context environment variables to pass.
+        gpus: List of host GPU indices to expose to container.
 
     Returns:
         Command list for subprocess.run().
@@ -1238,6 +1266,15 @@ def _build_docker_command(
         "run",
         "--rm",
     ]
+
+    # GPU environment variables (BEFORE campaign context for precedence)
+    # NVIDIA_VISIBLE_DEVICES controls which GPUs are mounted by container runtime
+    # CUDA_VISIBLE_DEVICES inside container uses remapped indices (0,1,2,...)
+    if gpus:
+        nvidia_visible = ",".join(str(g) for g in gpus)
+        cuda_visible = ",".join(str(i) for i in range(len(gpus)))
+        cmd.extend(["-e", f"NVIDIA_VISIBLE_DEVICES={nvidia_visible}"])
+        cmd.extend(["-e", f"CUDA_VISIBLE_DEVICES={cuda_visible}"])
 
     # Pass campaign context as environment variables
     if campaign_context:

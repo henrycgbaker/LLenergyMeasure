@@ -71,6 +71,10 @@ class UserConfig(BaseModel):
     or fields gracefully fall back to defaults.
     """
 
+    verbosity: Literal["quiet", "normal", "verbose"] = Field(
+        default="normal",
+        description="Default output verbosity: quiet (warnings only), normal (info), verbose (debug)",
+    )
     thermal_gaps: ThermalGapConfig = Field(
         default_factory=ThermalGapConfig,
         description="Thermal gap settings",
