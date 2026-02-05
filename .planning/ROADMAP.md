@@ -7,15 +7,16 @@ The v2.0.0 milestone transforms LLenergyMeasure from a functional research tool 
 ## Milestones
 
 - **v1.19.0 Measurement Foundations** - Phase 1 (complete)
-- **v1.20.0 Campaign Orchestrator** - Phase 2 (planned)
-- **v1.21.0 Parameter Completeness** - Phase 3 (planned)
-- **v1.22.0 Polish + UAT** - Phase 4 (planned)
+- **v1.20.0 Campaign Orchestrator** - Phase 2 (complete)
+- **v1.21.0 GPU Routing + Audit + Refactor** - Phases 3-5 (planned)
+- **v1.22.0 Parameter Completeness** - Phase 6 (planned)
+- **v1.23.0 Polish + UAT** - Phase 7 (planned)
 - **v2.0.0 Release** - Fully Working CLI milestone
 
 ## Phases
 
 **Phase Numbering:**
-- Integer phases (1, 2, 3, 4): Planned milestone work
+- Integer phases (1, 2, 3, 4, ...): Planned milestone work
 - Decimal phases (e.g., 2.1): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Measurement Foundations** - Fix systematic energy errors, capture environment metadata, enable warmup convergence
@@ -23,9 +24,12 @@ The v2.0.0 milestone transforms LLenergyMeasure from a functional research tool 
 - [x] **Phase 2.1: Zero-Config Install Experience** - Auto-detect Docker, auto-generate .env, PyPI-ready packaging (INSERTED)
 - [x] **Phase 2.2: Campaign Execution Model** - Fix container routing, cycle context, dual container strategy (INSERTED)
 - [x] **Phase 2.3: Campaign State & Resume** - State persistence, `lem resume`, user preferences (INSERTED)
-- [ ] **Phase 2.4: CLI Polish & Testing Infrastructure** - Aggregation group_by, CLI UX, example configs, smoke tests (INSERTED)
-- [ ] **Phase 3: Parameter Completeness** - 90%+ backend coverage, version pinning, SSOT introspection updates
-- [ ] **Phase 4: Polish + UAT** - Cleanup, architectural refactor, documentation refresh, full workflow validation
+- [x] **Phase 2.4: CLI Polish & Testing Infrastructure** - Aggregation group_by, CLI UX, example configs, smoke tests (INSERTED)
+- [ ] **Phase 3: GPU Routing Fix** - Fix CUDA_VISIBLE_DEVICES propagation, fail-fast config validation
+- [ ] **Phase 4: Codebase Audit** - Identify stubs, dead code, unimplemented features, verify plans vs implementation
+- [ ] **Phase 5: Refactor & Simplify** - Remove dead code, simplify workflows, rename lem->llem
+- [ ] **Phase 6: Parameter Completeness** - 90%+ backend coverage, version pinning, SSOT introspection updates
+- [ ] **Phase 7: Polish + UAT** - Cleanup, architectural refactor, documentation refresh, full workflow validation
 
 ## Phase Details
 
@@ -82,7 +86,7 @@ Experiments are atomic. Cycles repeat the full experiment set. Campaigns orchest
 **Success Criteria** (what must be TRUE):
 1. User starts campaign and each experiment runs in an ephemeral container via `docker compose run --rm` — simple lifecycle, no health-check complexity, correct for workloads without cross-experiment model persistence
 2. User defines campaign with backend-aware grid generation (cartesian product respects per-backend param validity — no invalid backend × param combinations)
-3. User inspects campaign manifest and sees exp_id → config → backend → container → status → result_path tracking for all experiments
+3. User inspects campaign manifest and sees exp_id -> config -> backend -> container -> status -> result_path tracking for all experiments
 4. User configures daemon mode and experiments run at scheduled times (not just sequential with thermal gaps)
 5. User sets `force_cold_start: true` and model unloads between experiments for cold-start benchmarking (warmup fairness is default)
 6. Campaign dispatches to correct backend containers, checks images are built before execution, ephemeral containers auto-clean up via `--rm`
@@ -216,20 +220,108 @@ Plans:
 **Plans**: 6 plans in 2 waves
 
 Plans:
-- [ ] 02.4-01-PLAN.md — `lem config list` command + campaign `--group-by` flag (Wave 1)
-- [ ] 02.4-02-PLAN.md — Example configs schema v3.0.0 + schema_version validation (Wave 1)
-- [ ] 02.4-03-PLAN.md — Smoke test suite with strict warning capture (Wave 1)
-- [ ] 02.4-05-PLAN.md — Backend noise filtering + log capture + --json output (Wave 1)
-- [ ] 02.4-06-PLAN.md — Docker lifecycle output (strategy display, build progress, dispatch status) (Wave 1)
-- [ ] 02.4-04-PLAN.md — Unit tests + verification checkpoint (Wave 2)
+- [x] 02.4-01-PLAN.md — `lem config list` command + campaign `--group-by` flag (Wave 1)
+- [x] 02.4-02-PLAN.md — Example configs schema v3.0.0 + schema_version validation (Wave 1)
+- [x] 02.4-03-PLAN.md — Smoke test suite with strict warning capture (Wave 1)
+- [x] 02.4-05-PLAN.md — Backend noise filtering + log capture + --json output (Wave 1)
+- [x] 02.4-06-PLAN.md — Docker lifecycle output (strategy display, build progress, dispatch status) (Wave 1)
+- [x] 02.4-04-PLAN.md — Unit tests + verification checkpoint (Wave 2)
 
 ---
 
-### Phase 3: Parameter Completeness (v1.21.0)
+### Phase 3: GPU Routing Fix
 
-**Goal**: Users configure 90%+ of energy/throughput-impactful parameters for each backend with version pinning, SSOT auto-discovery, and escape hatch for niche cases
+**Goal**: Fix the critical bug where CUDA_VISIBLE_DEVICES is not properly propagated to Docker containers, causing GPU initialization failures. Add fail-fast config validation for parallelism constraints.
 
-**Depends on**: Phase 2 (uses campaign orchestrator for cross-backend parameter audit validation)
+**Depends on**: Phase 2.4 (builds on complete Docker dispatch infrastructure)
+
+**Requirements**: Derived from UAT failures — vLLM/TensorRT tensor parallelism fails due to CUDA not being visible in containers
+
+**Success Criteria** (what must be TRUE):
+1. User-provided `gpus` field from config becomes SSOT for available devices — propagated to containers via NVIDIA_VISIBLE_DEVICES/CUDA_VISIBLE_DEVICES
+2. Docker containers receive GPU access correctly — vLLM tensor_parallel_size=2 with gpus=[0,1,2,3] initializes successfully
+3. TensorRT experiments route to `tensorrt` container (not `base`) and have GPU access
+4. Config validation fails fast for invalid parallelism configs (e.g., tensor_parallel_size > available GPUs, attention heads not divisible by TP size)
+5. Runtime GPU detection removed from experiment path — config.gpus is authoritative
+6. Clear error messages when parallelism constraints violated (before container launch, not deep in backend initialization)
+
+**Context**: Discovered during vLLM/TensorRT UAT — "CUDA driver initialization failed" errors from worker processes, incorrect container routing for tensorrt backend.
+
+**Research**: See `phases/03-gpu-routing-fix/03-RESEARCH.md` for NVIDIA Container Toolkit details and GPU routing patterns.
+
+**Plans**: 3 plans in 2 waves
+
+Plans:
+- [ ] 03-01-PLAN.md — GPU env propagation to Docker (NVIDIA_VISIBLE_DEVICES, CUDA_VISIBLE_DEVICES remapping) (Wave 1)
+- [ ] 03-02-PLAN.md — Fail-fast parallelism validation (tensor_parallel_size vs gpus) (Wave 1)
+- [ ] 03-03-PLAN.md — Unit tests + manual verification checkpoint (Wave 2)
+
+---
+
+### Phase 4: Codebase Audit
+
+**Goal**: Thoroughly audit the codebase to identify stubs, dead code, unimplemented features, over-engineering, and gaps between planning documents and actual implementation.
+
+**Depends on**: Phase 3 (GPU routing must work before comprehensive audit)
+
+**Requirements**: Derived from accumulated technical debt and UAT observations
+
+**Success Criteria** (what must be TRUE):
+1. Audit report identifies all stubs (code that exists but doesn't function)
+2. Audit report identifies all dead code (unused modules, functions, config fields)
+3. Audit report identifies all unimplemented features from Phase 1-2 planning docs
+4. Audit report identifies over-engineered patterns that can be simplified
+5. Audit report identifies config fields that exist in schema but aren't wired up (e.g., `timeseries`)
+6. Audit report identifies duplicated functionality/code paths
+7. Audit report identifies misleading output (e.g., parallelism "appeared" to work but wasn't)
+8. All findings documented with specific file:line references and recommended actions
+
+**Context**: User feedback indicates codebase has accumulated complexity beyond what the core tool requires. Need systematic review before refactoring.
+
+**Plans**: 6 plans in 2 waves
+
+Plans:
+- [ ] 04-01-PLAN.md — Automated analysis (vulture, deadcode, ruff) + industry CLI comparison (Wave 1)
+- [ ] 04-02-PLAN.md — CLI surface and configuration system audit (Wave 1)
+- [ ] 04-03-PLAN.md — Core engine audit (backends, metrics, measurement) (Wave 1)
+- [ ] 04-04-PLAN.md — Orchestration, campaign, results, state, and domain audit (Wave 1)
+- [ ] 04-05-PLAN.md — Docker infrastructure, detection systems, tests, and planning cross-reference (Wave 1)
+- [ ] 04-06-PLAN.md — Report assembly + user review checkpoint (Wave 2)
+
+---
+
+### Phase 5: Refactor & Simplify
+
+**Goal**: Act on audit findings to simplify the codebase, remove dead code, fix identified issues, and rename the CLI from `lem` to `llem`.
+
+**Depends on**: Phase 4 (needs audit findings before refactoring)
+
+**Requirements**: Derived from Phase 4 audit results
+
+**Success Criteria** (what must be TRUE):
+1. All dead code identified in audit removed
+2. All stubs either implemented or removed (with documentation if deferred)
+3. Over-engineered patterns simplified per Occam's razor
+4. Config fields wired up end-to-end or removed from schema
+5. CLI renamed from `lem` to `llem` (all references updated: pyproject.toml, docs, examples, tests)
+6. Backend configs pass directly to inference backends without unnecessary parsing/transformation
+7. Test suite updated to catch "silent failures" (things that appear to work but don't)
+8. SSOT principles enforced throughout codebase
+
+**Context**: Simplification pass to reduce maintenance burden and improve reliability before adding more features.
+
+**Plans**: TBD (run /gsd:plan-phase 5 to break down)
+
+Plans:
+- [ ] TBD
+
+---
+
+### Phase 6: Parameter Completeness (v1.22.0)
+
+**Goal**: Users configure 90%+ of energy/throughput-impactful parameters for each backend with SSOT auto-discovery and escape hatch for niche cases
+
+**Depends on**: Phase 5 (needs clean codebase before adding parameters)
 
 **Requirements**: PARAM-01, PARAM-02, PARAM-03, PARAM-04, PARAM-05
 
@@ -241,22 +333,25 @@ Plans:
 5. Cross-backend parameter audit campaign runs successfully via orchestrator (UAT round 3), results verify parameter coverage
 6. All config extensions added in this phase threaded through SSOT introspection — appear in CLI outputs, results JSON/CSV, runtime validation tests, and generated docs (introspection.py auto-discovers new Pydantic fields)
 
-**Discussion points** (to address during planning):
-- Audit `parameter-support-matrix.md` vs `config-reference.md` divergence: matrix is generated from runtime test results (GPU-tested params only), while config-reference covers all Pydantic fields. Verify `test_all_params.py --discover` mode correctly picks up all params from SSOT (including Phase 1 baseline/warmup/timeseries). Consider making `--discover` the default mode for robustness. Regenerate matrix with full SSOT coverage.
+**Context**: See `phases/06-parameter-completeness/` for implementation decisions and research findings
 
-**Plans**: TBD
+**Plans**: 6 plans in 4 waves
 
 Plans:
-- [ ] 03-01: TBD during planning
-- [ ] 03-02: TBD during planning
+- [ ] 06-01-PLAN.md — PyTorch parameter expansion (8 new generation params) (Wave 1)
+- [ ] 06-02-PLAN.md — vLLM parameter expansion (9 new engine params) (Wave 1)
+- [ ] 06-03-PLAN.md — TensorRT parameter expansion (10 new build/runtime params) (Wave 1)
+- [ ] 06-04-PLAN.md — SSOT introspection updates + documentation regeneration (Wave 2)
+- [ ] 06-05-PLAN.md — Comprehensive example configs for all backends (Wave 3)
+- [ ] 06-06-PLAN.md — Unit tests + UAT verification (Wave 4)
 
 ---
 
-### Phase 4: Polish + UAT (v1.22.0)
+### Phase 7: Polish + UAT (v1.23.0)
 
 **Goal**: v2.0.0 release-ready — codebase cleaned via Occam's razor, architecture refactored if pain points found, documentation refreshed, Docker images validated, full workflow UAT passed
 
-**Depends on**: Phase 3 (needs all features complete before final validation)
+**Depends on**: Phase 6 (needs all features complete before final validation)
 
 **Requirements**: UAT-01, UAT-02, UAT-03, UAT-04, UAT-05
 
@@ -271,15 +366,15 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 04-01: TBD during planning
-- [ ] 04-02: TBD during planning
+- [ ] 07-01: TBD during planning
+- [ ] 07-02: TBD during planning
 
 ---
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 2.1 -> 2.2 -> 2.3 -> 2.4 -> 3 -> 4
+Phases execute in numeric order: 1 -> 2 -> 2.1 -> 2.2 -> 2.3 -> 2.4 -> 3 -> 4 -> 5 -> 6 -> 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -288,13 +383,16 @@ Phases execute in numeric order: 1 -> 2 -> 2.1 -> 2.2 -> 2.3 -> 2.4 -> 3 -> 4
 | 2.1 Zero-Config Install (INSERTED) | 6/6 | Complete | 2026-01-31 |
 | 2.2 Campaign Execution Model (INSERTED) | 4/4 | Complete | 2026-02-03 |
 | 2.3 Campaign State & Resume (INSERTED) | 4/4 | Complete | 2026-02-04 |
-| 2.4 CLI Polish & Testing Infrastructure (INSERTED) | 0/6 | Planned | - |
-| 3. Parameter Completeness | 0/? | Not started | - |
-| 4. Polish + UAT | 0/? | Not started | - |
+| 2.4 CLI Polish & Testing Infrastructure (INSERTED) | 6/6 | Complete | 2026-02-04 |
+| 3. GPU Routing Fix | 3/3 | Complete | 2026-02-04 |
+| 4. Codebase Audit | 0/6 | Planned | - |
+| 5. Refactor & Simplify | 0/? | Planned | - |
+| 6. Parameter Completeness | 0/6 | Planned | - |
+| 7. Polish + UAT | 0/? | Not started | - |
 
 ---
 
-**Total Requirements:** 27 v1 requirements mapped across 4 phases + 3 inserted phases for architecture fixes
+**Total Requirements:** 27 v1 requirements mapped across 7 phases + 4 inserted phases for architecture fixes
 **Coverage:** 27/27 (100%) + additional UAT-derived requirements
 
-**Next:** Execute Phase 2.4 with `/gsd:execute-phase 02.4`
+**Next:** Plan Phase 4 with `/gsd:plan-phase 4`

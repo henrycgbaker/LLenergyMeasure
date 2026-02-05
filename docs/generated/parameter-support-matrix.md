@@ -1,7 +1,7 @@
 # Parameter Support Matrix
 
 > Auto-generated from test results. Run `python scripts/generate_param_matrix.py` to update.
-> Last updated: 2026-02-05 01:57
+> Last updated: 2026-02-05 02:00
 
 ## Summary
 

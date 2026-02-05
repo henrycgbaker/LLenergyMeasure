@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.config.validation import ConfigWarning
+from llenergymeasure.config.validation import (
+    ConfigWarning,
+)
 from llenergymeasure.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
@@ -273,6 +275,16 @@ def validate_config(config: ExperimentConfig) -> list[ConfigWarning]:
                 severity="warning",
             )
         )
+
+    # =========================================================================
+    # PARALLELISM CONSTRAINTS (Fail-fast validation)
+    # =========================================================================
+    # Check parallelism settings against available GPUs BEFORE backend validation
+    # This prevents cryptic backend initialisation errors
+    from llenergymeasure.config.validation import validate_parallelism_constraints
+
+    parallelism_warnings = validate_parallelism_constraints(config)
+    warnings.extend(parallelism_warnings)
 
     # =========================================================================
     # BACKEND-SPECIFIC CONFIG VALIDATION

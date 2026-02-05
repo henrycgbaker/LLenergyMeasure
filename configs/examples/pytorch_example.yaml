@@ -3,7 +3,7 @@ config_name: pytorch-comprehensive
 
 model_name: Qwen/Qwen2.5-0.5B
 backend: pytorch
-gpus: [0]
+gpus: [0, 1, 2, 3]
 
 # Token configuration
 max_input_tokens: 512
@@ -25,6 +25,7 @@ decoder:
 
 # PyTorch-specific optimizations
 pytorch:
+  num_processes: 4  # Data parallelism across 4 GPUs
   batch_size: 8
   batching_strategy: dynamic
   attn_implementation: sdpa  # Use flash_attention_2 if installed

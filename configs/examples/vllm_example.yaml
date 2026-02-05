@@ -3,7 +3,7 @@ config_name: vllm-comprehensive
 
 model_name: Qwen/Qwen2.5-0.5B
 backend: vllm
-gpus: [0]
+gpus: [0, 1, 2, 3]
 
 max_input_tokens: 512
 max_output_tokens: 128
@@ -24,10 +24,10 @@ vllm:
   max_num_seqs: 256
   max_model_len: 1024
   gpu_memory_utilization: 0.9
-  tensor_parallel_size: 1
+  tensor_parallel_size: 2
   enable_prefix_caching: true
   enable_chunked_prefill: true
-  enforce_eager: false  # Allow CUDA graphs
+  enforce_eager: true  # Required for tensor parallel
   kv_cache_dtype: auto
   block_size: 16
 

@@ -1,3 +1,4 @@
+verbosity: verbose
 thermal_gaps:
   between_experiments: 5.0
   between_cycles: 60.0

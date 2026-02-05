@@ -3,7 +3,7 @@ config_name: tensorrt-comprehensive
 
 model_name: Qwen/Qwen2.5-0.5B
 backend: tensorrt
-gpus: [0]
+gpus: [0, 1, 2, 3]
 
 max_input_tokens: 512
 max_output_tokens: 128
@@ -23,12 +23,12 @@ decoder:
 tensorrt:
   max_batch_size: 8
   builder_opt_level: 3
-  tp_size: 1
+  tp_size: 2
   quantization: none  # Options: none, fp8, int8_sq
   kv_cache_type: paged
   enable_chunked_context: true
   gpu_memory_utilization: 0.9
-  force_rebuild: false  # Set true to regenerate engine
+  force_rebuild: true  # Rebuild for tp=4
 
 # Measurement settings
 warmup:

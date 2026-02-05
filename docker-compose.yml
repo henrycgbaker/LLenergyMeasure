@@ -40,7 +40,7 @@ x-common: &common
         devices:
           - driver: nvidia
             count: all
-            capabilities: [gpu, utility]
+            capabilities: [compute, utility]
 
   # Environment variables
   environment:
@@ -50,7 +50,12 @@ x-common: &common
     - PGID=${PGID:?Run 'lem doctor' to auto-generate .env, or set PGID manually}
     # Standard config
     - HF_TOKEN
-    - CUDA_VISIBLE_DEVICES
+    # Default to GPU 0 if host has empty CUDA_VISIBLE_DEVICES (shared server setup)
+    # Campaign/experiment CLI overrides this when targeting specific GPUs
+    - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+    # NVIDIA Container Toolkit: ensure compute capability for CUDA
+    - NVIDIA_VISIBLE_DEVICES=all
+    - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     - HF_HOME=/app/.cache/huggingface
     - PIP_NO_CACHE_DIR=1
     - CODECARBON_LOG_LEVEL=warning
@@ -84,13 +89,13 @@ services:
   pytorch:
     <<: *common
     volumes:
-      # Bind mounts: user-accessible data
+      # Bind mounts: user-accessible data (resume workflow requires host access)
       - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
+      - ${LLM_ENERGY_STATE_DIR:-./.state}:/app/.state
       - ./scripts:/app/scripts:ro
       # Named volumes: container-managed (no permission issues)
       - hf-cache:/app/.cache/huggingface
-      - experiment-state:/app/.state
     build:
       context: .
       dockerfile: docker/Dockerfile.pytorch
@@ -107,7 +112,6 @@ services:
     volumes:
       - .:/app
       - hf-cache:/app/.cache/huggingface
-      - experiment-state:/app/.state
     profiles: ["dev"]
     build:
       context: .
@@ -130,13 +134,13 @@ services:
     # vLLM requires shared memory for multiprocessing
     ipc: host
     volumes:
-      # Bind mounts: user-accessible data
+      # Bind mounts: user-accessible data (resume workflow requires host access)
       - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
+      - ${LLM_ENERGY_STATE_DIR:-./.state}:/app/.state
       - ./scripts:/app/scripts:ro
       # Named volumes: container-managed (no permission issues)
       - hf-cache:/app/.cache/huggingface
-      - experiment-state:/app/.state
     build:
       context: .
       dockerfile: docker/Dockerfile.vllm
@@ -155,7 +159,6 @@ services:
     volumes:
       - .:/app
       - hf-cache:/app/.cache/huggingface
-      - experiment-state:/app/.state
     profiles: ["dev"]
     build:
       context: .
@@ -178,14 +181,14 @@ services:
     # TensorRT-LLM requires shared memory for multiprocessing
     ipc: host
     volumes:
-      # Bind mounts: user-accessible data
+      # Bind mounts: user-accessible data (resume workflow requires host access)
       - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
       - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
+      - ${LLM_ENERGY_STATE_DIR:-./.state}:/app/.state
       - ./scripts:/app/scripts:ro
       # Named volumes: container-managed (no permission issues)
       - hf-cache:/app/.cache/huggingface
       - trt-engine-cache:/app/.cache/tensorrt-engines
-      - experiment-state:/app/.state
     build:
       context: .
       dockerfile: docker/Dockerfile.tensorrt
@@ -205,7 +208,6 @@ services:
       - .:/app
       - hf-cache:/app/.cache/huggingface
       - trt-engine-cache:/app/.cache/tensorrt-engines
-      - experiment-state:/app/.state
     profiles: ["dev"]
     build:
       context: .
@@ -235,12 +237,14 @@ services:
 # =============================================================================
 # Named Volumes (Docker-managed, persist across container restarts)
 # =============================================================================
-# These volumes store large caches and internal state.
+# These volumes store large caches.
 # They persist unless you explicitly run: docker compose down -v
 #
 # To clear specific volumes:
-#   docker volume rm llenergymeasure_hf-cache
-#   docker volume rm llenergymeasure_experiment-state
+#   docker volume rm lem-hf-cache
+#   docker volume rm lem-trt-engine-cache
+#
+# Note: Experiment state (.state/) is now a bind mount for resume workflow.
 #
 volumes:
   # HuggingFace model cache (10-100+ GB)
@@ -250,7 +254,3 @@ volumes:
   # TensorRT compiled engine cache (1-10+ GB)
   trt-engine-cache:
     name: lem-trt-engine-cache
-
-  # Experiment state and progress tracking
-  experiment-state:
-    name: lem-experiment-state
