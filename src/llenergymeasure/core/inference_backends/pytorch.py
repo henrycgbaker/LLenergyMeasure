@@ -313,12 +313,14 @@ class PyTorchBackend:
 
         from transformers import AutoModelForCausalLM
 
+        from llenergymeasure.core.model_loader import get_torch_dtype
+
         logger.info(f"Loading assistant model for speculative decoding: {assisted_cfg.model}")
 
         try:
             self._assistant_model = AutoModelForCausalLM.from_pretrained(
                 assisted_cfg.model,
-                torch_dtype=getattr(torch, config.fp_precision),
+                torch_dtype=get_torch_dtype(config.fp_precision),
                 device_map="auto",
                 trust_remote_code=True,
             )

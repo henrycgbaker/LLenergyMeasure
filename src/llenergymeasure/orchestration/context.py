@@ -161,12 +161,11 @@ class ExperimentContext:
             )
 
         # Standard path: orchestrator manages CUDA via Accelerator
-        # gpus = available device IDs, parallelism degree from backend config = process count
-        # Import inside function to avoid circular import with launcher
-        from llenergymeasure.orchestration.launcher import get_backend_parallelism
+        # gpus = available device IDs, num_processes from backend-native config
+        from llenergymeasure.orchestration.launcher import get_launcher_process_count
 
-        _, parallelism_degree = get_backend_parallelism(config)
-        accelerator = get_accelerator(gpus=config.gpus, num_processes=parallelism_degree)
+        num_processes = get_launcher_process_count(config)
+        accelerator = get_accelerator(gpus=config.gpus, num_processes=num_processes)
 
         # Use provided experiment_id if available, otherwise generate one
         if experiment_id is None:

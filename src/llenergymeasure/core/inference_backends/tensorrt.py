@@ -1146,23 +1146,26 @@ class TensorRTBackend:
                 )
 
         # Check tensor parallel configuration against available GPUs
+        # Use config.gpus as source of truth (supports shared servers where host can't detect GPUs)
         if trt_cfg.tp_size > 1:
-            try:
-                import torch
+            # Trust config.gpus if specified, otherwise try runtime detection
+            if config.gpus:
+                gpu_count = len(config.gpus)
+            else:
+                try:
+                    import torch
 
-                if torch.cuda.is_available():
-                    gpu_count = torch.cuda.device_count()
-                    if trt_cfg.tp_size > gpu_count:
-                        warnings.append(
-                            ConfigWarning(
-                                field="tensorrt.tp_size",
-                                message=(
-                                    f"tp_size={trt_cfg.tp_size} exceeds available GPUs ({gpu_count})"
-                                ),
-                                severity="error",
-                            )
-                        )
-            except ImportError:
-                pass
+                    gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
+                except ImportError:
+                    gpu_count = 0
+
+            if gpu_count > 0 and trt_cfg.tp_size > gpu_count:
+                warnings.append(
+                    ConfigWarning(
+                        field="tensorrt.tp_size",
+                        message=(f"tp_size={trt_cfg.tp_size} exceeds available GPUs ({gpu_count})"),
+                        severity="error",
+                    )
+                )
 
         return warnings

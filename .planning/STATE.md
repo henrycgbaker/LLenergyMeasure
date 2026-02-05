@@ -5,28 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-01-29)
 
 **Core value:** Accurate, comprehensive measurement of the true cost of LLM inference — energy, compute, and quality tradeoffs — with research-grade rigour.
-**Current focus:** Phase 3 planning (Parameter Completeness)
+**Current focus:** Phase 4 (Codebase Audit)
 
 ## Current Position
 
-Phase: 2.4 of 7 (CLI Polish & Testing)
-Plan: 5 of 6 (remaining: 04)
-Status: In progress
-Last activity: 2026-02-04 — Completed 02.4-06-PLAN.md (Docker Lifecycle Output)
+Phase: 4 of 7 (Codebase Audit) — NOT STARTED
+Plan: 0 of ?
+Status: Ready to plan
+Last activity: 2026-02-04 — Completed Phase 3 (GPU Routing Fix)
 
-Progress: [██████████] 100% Phase 1 (6/6)
-          [██████████] 100% Phase 2 (8/8)
-          [██████████] 100% Phase 2.1 (6/6)
+Progress: [██████████] 100% Phase 1 (6/6) ✓
+          [██████████] 100% Phase 2 (8/8) ✓
+          [██████████] 100% Phase 2.1 (6/6) ✓
           [██████████] 100% Phase 2.2 (4/4) ✓
           [██████████] 100% Phase 2.3 (4/4) ✓
-          [████████░░] 83% Phase 2.4 (5/6)
+          [██████████] 100% Phase 2.4 (6/6) ✓
+          [██████████] 100% Phase 3 (3/3) ✓
+          [░░░░░░░░░░] 0% Phase 4 (0/?)
+          [░░░░░░░░░░] 0% Phase 5 (0/?)
+          [░░░░░░░░░░] 0% Phase 6 (0/6)
+          [░░░░░░░░░░] 0% Phase 7 (0/?)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 29
-- Average duration: 5.2 min
-- Total execution time: 150 min
+- Total plans completed: 35
+- Average duration: 5.7 min
+- Total execution time: 201 min
 
 **By Phase:**
 
@@ -37,6 +42,8 @@ Progress: [██████████] 100% Phase 1 (6/6)
 | 02.1-zero-config-install | 6/6 | 27 min | 4.5 min |
 | 02.2-campaign-execution-model | 4/4 | 18 min | 4.5 min |
 | 02.3-campaign-state-resume | 4/4 | 26 min | 6.5 min |
+| 02.4-cli-polish-testing | 6/6 | 46 min | 7.7 min |
+| 03-gpu-routing-fix | 3/3 | 17 min | 5.7 min |
 
 **Recent Trend:**
 - 01-01: 7 min (2 tasks, domain models + config extensions)
@@ -70,7 +77,11 @@ Progress: [██████████] 100% Phase 1 (6/6)
 - 02.4-05: 4 min (3 tasks, backend noise filtering + JSON output)
 - 02.4-03: 5 min (2 tasks, smoke test warning capture + issues.yaml)
 - 02.4-06: 5 min (4 tasks, Docker lifecycle output)
-- Trend: Consistent ~4-7 min; Phase 2.4 5/6 complete (remaining: 04)
+- 02.4-04: 25 min (4 tasks, unit tests + verification checkpoint)
+- 03-01: 4 min (3 tasks, GPU env var propagation to Docker)
+- 03-02: 5 min (3 tasks, fail-fast parallelism validation)
+- 03-03: 8 min (3 tasks, unit tests + manual verification)
+- Trend: Consistent ~4-7 min; Phase 3 complete
 
 *Updated after each plan completion*
 
@@ -151,10 +162,23 @@ Recent decisions affecting current work:
 - [02.4-06] _check_docker_images() returns tuple (existing, missing) for better status display
 - [02.4-06] ContainerManager uses StatusCallback type alias for status_callback parameter
 - [02.4-06] _handle_missing_images() offers interactive build prompt with progress
+- [03-01] NVIDIA_VISIBLE_DEVICES controls which GPUs are mounted by container runtime
+- [03-01] CUDA_VISIBLE_DEVICES inside container uses remapped indices (0,1,2,...)
+- [03-01] Container context detected via NVIDIA_VISIBLE_DEVICES presence (not empty and not "all")
+- [03-02] Parallelism validation runs before backend-specific validation for fail-fast behaviour
+- [03-02] Validation returns severity='error' warnings that block execution unless --force
+- [03-02] Suggestion hints displayed below each config warning for immediate remediation guidance
+- [03-03] config.gpus is declarative (specifies expected GPU count, not hardware probe)
+- [03-03] Validation is arithmetic (checks tp_size <= len(config.gpus))
+- [03-03] Container-side adapts to actual NVIDIA_VISIBLE_DEVICES from SLURM/runtime
 
 ### Pending Todos
 
-- **[CRITICAL] Context vs Plan Alignment Audit** — CONTEXT.md files for Phases 01, 02, 02.2, 02.3 were misplaced (in `.planning/phases/` instead of phase subdirectories). Plans may not reflect user decisions. Audit ALL completed phases for discrepancies between CONTEXT.md decisions and implemented plans. If gaps found, will require re-planning and re-implementation. Phases to audit: 01-measurement-foundations, 02-campaign-orchestrator, 02.2-campaign-execution-model, 02.3-campaign-state-resume.
+None.
+
+### Resolved Todos
+
+- **[RESOLVED 2026-02-04] Context vs Plan Alignment Audit** — Audit completed via `/gsd:audit-milestone`. Result: 95% alignment. The `lem docker setup/build/status` commands were intentionally deferred (not a gap) — industry research showed ML tools use standard `docker compose` commands. CONTEXT.md files updated to document this decision. See `.planning/v2.0.0-MILESTONE-AUDIT.md`.
 
 **Completed todos (moved to Phase 2.4 plans):**
 - ~~[Phase 2.1-06] Docker lifecycle CLI output~~ → Phase 2.4 plans
@@ -173,14 +197,23 @@ Recent decisions affecting current work:
 - Phase 2.1 inserted after Phase 2: Zero-Config Install Experience (URGENT) — pip install must work out-of-box with auto Docker detection, auto .env generation, PyPI-ready packaging. Discovered during Phase 2 UAT: _should_use_docker() misidentified conda installs, .env required manual setup.sh.
 - Phase 2.1 REVISED after ecosystem research: Dropped `lem docker setup/build` wizard (no ML tool does this), merged `lem docker status` + `lem backend list` into `lem doctor`, simplified from 3 install paths to 2. Docker setup uses standard `docker compose` commands.
 - [2026-02-03] Phase 2.2 + 2.3 inserted after Phase 2.1: Architecture fixes and campaign resume discovered during UAT. Phase 2.2 = Campaign Execution Model (container routing, cycle context, dual strategy). Phase 2.3 = Campaign State & Resume (state persistence, `lem resume`, user preferences). See `.planning/ARCHITECTURE-DISCUSSION.md` for full decisions.
+- [2026-02-04] Phases 3-5 added, existing phases renumbered:
+  - Phase 3: GPU Routing Fix — Fix CUDA_VISIBLE_DEVICES propagation to containers, fail-fast config validation
+  - Phase 4: Codebase Audit — Identify stubs, dead code, unimplemented features, verify plans vs implementation
+  - Phase 5: Refactor & Simplify — Remove dead code, simplify workflows, rename lem→llem
+  - Old Phase 3 (Parameter Completeness) → Phase 6
+  - Old Phase 4 (Polish + UAT) → Phase 7
 
 ### Blockers/Concerns
 
-None. Phase 1 validated end-to-end on A100 GPU. Phase 2 local UAT passed.
+**Resolved:** GPU routing bug fully fixed. All three plans complete:
+- 03-01: GPU env var propagation to Docker containers
+- 03-02: Fail-fast parallelism validation
+- 03-03: Unit tests (34 tests) + manual verification confirmed HPC compatibility
 
 ## Session Continuity
 
 Last session: 2026-02-04
-Stopped at: Completed 02.4-06-PLAN.md (Docker Lifecycle Output)
+Stopped at: Completed 03-03-PLAN.md (Phase 3 complete)
 Resume file: None
-Next action: Continue Phase 2.4 (02.4-04-PLAN.md remaining)
+Next action: Plan Phase 4 with `/gsd:plan-phase 4`

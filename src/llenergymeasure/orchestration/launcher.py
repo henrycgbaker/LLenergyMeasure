@@ -30,46 +30,20 @@ from llenergymeasure.exceptions import ConfigurationError
 # =============================================================================
 
 
-def get_backend_parallelism(config: ExperimentConfig) -> tuple[str, int]:
-    """Extract parallelism strategy and degree from backend-specific config.
+def get_launcher_process_count(config: ExperimentConfig) -> int:
+    """Get number of launcher processes needed for this backend.
 
-    Each backend stores parallelism differently:
-    - PyTorch: num_processes (data parallelism via Accelerate)
-    - vLLM: tensor_parallel_size + pipeline_parallel_size (internal)
-    - TensorRT: tp_size + pp_size (internal)
+    - PyTorch: config.pytorch.num_processes (Accelerate manages data parallelism)
+    - vLLM: 1 (manages tensor/pipeline parallelism internally)
+    - TensorRT: 1 (manages tensor/pipeline parallelism internally)
 
     Returns:
-        Tuple of (strategy, degree) where strategy is 'none', 'tensor_parallel',
-        'pipeline_parallel', or 'data_parallel'.
+        Number of launcher processes to spawn.
     """
-    if config.backend == "pytorch" and config.pytorch:
-        # PyTorch only supports data parallelism (model replication)
-        # num_processes > 1 means data parallel, otherwise single GPU
-        num_procs = config.pytorch.num_processes
-        if num_procs > 1:
-            return ("data_parallel", num_procs)
-        return ("none", 1)
-
-    elif config.backend == "vllm" and config.vllm:
-        tp = config.vllm.tensor_parallel_size
-        pp = config.vllm.pipeline_parallel_size
-        if pp > 1:
-            return ("pipeline_parallel", pp)
-        elif tp > 1:
-            return ("tensor_parallel", tp)
-        return ("none", 1)
-
-    elif config.backend == "tensorrt" and config.tensorrt:
-        tp = config.tensorrt.tp_size
-        pp = config.tensorrt.pp_size
-        if pp > 1:
-            return ("pipeline_parallel", pp)
-        elif tp > 1:
-            return ("tensor_parallel", tp)
-        return ("none", 1)
-
-    # Default: no parallelism
-    return ("none", 1)
+    if config.backend == "pytorch":
+        return config.pytorch.num_processes if config.pytorch else 1
+    # vLLM and TensorRT manage parallelism internally
+    return 1
 
 
 def get_backend_batching(config: ExperimentConfig) -> tuple[int, str]:
@@ -231,17 +205,10 @@ def _requires_direct_launch(config_data: dict[str, Any]) -> bool:
 
 
 def get_effective_launcher_processes(config: ExperimentConfig) -> int:
-    """Determine actual launcher process count based on backend capabilities.
+    """Determine actual launcher process count based on backend.
 
-    For backends with internal parallelism (vLLM, TensorRT-LLM):
-    - tensor_parallel/pipeline_parallel: Returns 1 (backend manages internally)
-    - data_parallel: Returns parallelism degree (separate processes needed)
-
-    For PyTorch with Accelerate, uses parallelism degree explicitly.
-
-    This function is critical for:
-    - ExperimentState: determines how many result files to expect
-    - Aggregation: knows when all processes have completed
+    This is critical for ExperimentState and aggregation to know
+    how many result files to expect.
 
     Args:
         config: Experiment configuration.
@@ -249,35 +216,7 @@ def get_effective_launcher_processes(config: ExperimentConfig) -> int:
     Returns:
         Number of launcher processes (and expected result files).
     """
-    from llenergymeasure.core.inference_backends import get_backend
-    from llenergymeasure.core.inference_backends.protocols import LaunchMode
-
-    strategy, degree = get_backend_parallelism(config)
-
-    try:
-        backend = get_backend(config.backend)
-        capabilities = backend.get_runtime_capabilities()
-
-        if capabilities.launch_mode == LaunchMode.DIRECT:
-            # Backend manages tensor/pipeline parallelism internally
-            # But data parallelism requires multiple separate processes
-            if strategy == "data_parallel":
-                return degree
-            # tensor_parallel/pipeline_parallel: single process, backend spawns workers
-            return 1
-        else:
-            # External parallelism via Accelerate/torchrun
-            # Use explicit parallelism degree from config
-            return degree
-
-    except Exception as e:
-        # Fall back to safe defaults if backend can't be loaded
-        logger.warning(f"Could not get backend capabilities for {config.backend}: {e}")
-        if config.backend in ("vllm", "tensorrt"):
-            if strategy == "data_parallel":
-                return degree
-            return 1
-        return degree
+    return get_launcher_process_count(config)
 
 
 def _build_launch_command(
@@ -435,7 +374,12 @@ def launch_experiment_accelerate(
                         f"has {uuid_count} UUIDs. Using CUDA_VISIBLE_DEVICES."
                     )
             else:
-                env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpus)
+                gpu_str = ",".join(str(g) for g in gpus)
+                env["CUDA_VISIBLE_DEVICES"] = gpu_str
+                # For local execution (not in container), propagate NVIDIA_VISIBLE_DEVICES
+                # for subprocess workers that may spawn further processes
+                if "NVIDIA_VISIBLE_DEVICES" not in env:
+                    env["NVIDIA_VISIBLE_DEVICES"] = gpu_str
 
             # Set environment based on launcher type
             if _requires_direct_launch(config_data):
@@ -744,6 +688,77 @@ if __name__ == "__main__":
     _early_nccl_fix()
     # ==========================================================================
 
+    # ==========================================================================
+    # EARLY CUDA_VISIBLE_DEVICES: Must be set BEFORE any torch/CUDA imports
+    # ==========================================================================
+    # On shared servers where host has CUDA_VISIBLE_DEVICES="", we must set
+    # CUDA_VISIBLE_DEVICES from config.gpus BEFORE any CUDA initialization.
+    # This ensures subprocess workers can see the correct GPUs.
+    def _early_cuda_visible_devices_setup() -> None:
+        """Set CUDA_VISIBLE_DEVICES from config.gpus before any CUDA init.
+
+        Handles two contexts:
+        1. Container context: NVIDIA_VISIBLE_DEVICES set by runtime, GPUs are remapped
+           to 0,1,2,... inside container. Use remapped indices.
+        2. Local context: No NVIDIA_VISIBLE_DEVICES, use config.gpus directly.
+        """
+        # Quick parse of config to get GPU list
+        config_arg = None
+        for i, arg in enumerate(sys.argv):
+            if arg == "--config" and i + 1 < len(sys.argv):
+                config_arg = sys.argv[i + 1]
+                break
+
+        if not config_arg:
+            return
+
+        try:
+            import yaml
+
+            with open(config_arg) as f:
+                config_data = yaml.safe_load(f)
+
+            gpus = config_data.get("gpus", [])
+            if not gpus:
+                return  # No GPUs specified, skip
+
+            # Only set if not already set to MIG/GPU UUIDs
+            existing = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+            if "MIG-" in existing or "GPU-" in existing:
+                return  # Respect existing MIG/UUID configuration
+
+            # Check if we're inside a container (NVIDIA_VISIBLE_DEVICES was set by runtime)
+            nvidia_visible = os.environ.get("NVIDIA_VISIBLE_DEVICES", "")
+
+            # If NVIDIA_VISIBLE_DEVICES is set and not "all", we're in a container
+            # with specific GPUs mounted - use remapped indices (0,1,2,...)
+            if nvidia_visible and nvidia_visible != "all":
+                # Container has specific GPUs mounted, use 0-based remapped indices
+                gpu_count = len(nvidia_visible.split(","))
+                cuda_devices = ",".join(str(i) for i in range(gpu_count))
+                in_container = True
+            else:
+                # Local execution or "all" GPUs - use config.gpus directly
+                cuda_devices = ",".join(str(g) for g in gpus)
+                in_container = False
+
+            os.environ["CUDA_VISIBLE_DEVICES"] = cuda_devices
+            # Can't use logger yet, print directly
+            print(
+                f"[launcher] Set CUDA_VISIBLE_DEVICES={cuda_devices} "
+                f"(container={in_container})",
+                file=sys.stderr,
+            )
+        except Exception as e:
+            # Silently continue - config will be validated later anyway
+            print(
+                f"[launcher] Warning: Could not set CUDA_VISIBLE_DEVICES early: {e}",
+                file=sys.stderr,
+            )
+
+    _early_cuda_visible_devices_setup()
+    # ==========================================================================
+
     from pathlib import Path as PathLib
 
     from llenergymeasure.config.loader import load_config
@@ -769,12 +784,11 @@ if __name__ == "__main__":
         )
 
     # Log campaign context if running as part of a campaign
+    # Note: Experiments are atomic - cycles are campaign-level only
     campaign_id = os.environ.get("LEM_CAMPAIGN_ID")
     if campaign_id:
         campaign_name = os.environ.get("LEM_CAMPAIGN_NAME", "unknown")
-        cycle = os.environ.get("LEM_CYCLE", "?")
-        total_cycles = os.environ.get("LEM_TOTAL_CYCLES", "?")
-        logger.info(f"Running as part of campaign '{campaign_name}' (cycle {cycle}/{total_cycles})")
+        logger.info(f"Running as part of campaign '{campaign_name}'")
 
     (
         config_path,
@@ -802,9 +816,16 @@ if __name__ == "__main__":
         f"Strategy: {batch_strategy} | "
         f"Streaming: {config.streaming}"
     )
-    parallel_strategy, parallel_degree = get_backend_parallelism(config)
-    if parallel_strategy != "none":
-        logger.info(f"  Parallelism: {parallel_strategy} (degree={parallel_degree})")
+    # Log backend-native parallelism if configured
+    if config.backend == "pytorch" and config.pytorch and config.pytorch.num_processes > 1:
+        logger.info(f"  Parallelism: data_parallel (degree={config.pytorch.num_processes})")
+    elif config.backend == "vllm" and config.vllm:
+        if config.vllm.tensor_parallel_size > 1:
+            logger.info(
+                f"  Parallelism: tensor_parallel (degree={config.vllm.tensor_parallel_size})"
+            )
+    elif config.backend == "tensorrt" and config.tensorrt and config.tensorrt.tp_size > 1:
+        logger.info(f"  Parallelism: tensor_parallel (degree={config.tensorrt.tp_size})")
     logger.info(f"  Prompts: {len(prompts)} | Max output tokens: {config.max_output_tokens}")
     if results_dir:
         logger.info(f"  Results dir: {results_dir}")
