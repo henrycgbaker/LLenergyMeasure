@@ -1,633 +1,476 @@
-# Architecture Patterns: Host-Container Orchestration
+# Architecture Audit: LLenergyMeasure v2.0 Decisions vs Peer Evidence
 
-**Domain:** Python orchestrator coordinating LLM experiments across Docker containers
-**Researched:** 2026-01-29
-**Confidence:** HIGH
+**Audited:** 2026-02-25
+**Scope:** Decisions A through J in `.product/decisions/architecture.md`, plus config-architecture.md, experiment-study-architecture.md, experiment-isolation.md, error-handling.md, backward-compatibility.md
+**Method:** Fresh research against peer tools (optimum-benchmark, lm-eval-harness, Zeus, MLflow, vLLM, Hydra/OmegaConf), cross-referenced with existing `.product/research/` evidence
 
-## Recommended Architecture
+---
+
+## Audit Summary
+
+| Decision | Verdict | Confidence | One-Liner |
+|----------|---------|------------|-----------|
+| **A. Library-first** | ALIGNED | HIGH | Industry standard; lm-eval, optimum-benchmark, Zeus all do this |
+| **B. Module structure** | ALIGNED | HIGH | Single package with internal modules is universal |
+| **C. Three-layer config** | QUESTIONABLE | MEDIUM | Over-engineered vs peers; no peer tool uses three explicit layers |
+| **D. Field placement** | OVER-ENGINEERED | MEDIUM | The "three questions" framework adds complexity without peer precedent |
+| **E. Runner resolution** | ALIGNED | MEDIUM | Keeping runner out of experiment YAML is correct; precedence chain is fine |
+| **F. Infrastructure metadata** | ALIGNED | HIGH | Auto-detect + store is exactly what Zeus and CodeCarbon do |
+| **G. Energy vs CO2** | ALIGNED | HIGH | Independent concerns; matches Zeus/CodeCarbon split exactly |
+| **H. Library API surface** | QUESTIONABLE | HIGH | Union return type from `run()` contradicts peer practice and typing guidance |
+| **I. Subprocess isolation** | ALIGNED | HIGH | `multiprocessing.Process` per experiment matches optimum-benchmark exactly |
+| **J. Study ships at v2.0** | ALIGNED | MEDIUM | Reasonable scope; sweeps are the differentiator |
+
+**Config architecture (C1/C2):** ALIGNED for composition; ALIGNED for dotted sweep notation
+**Experiment-study architecture (Option C):** QUESTIONABLE on unified `run()` return type
+**Error handling:** ALIGNED; exception hierarchy is standard
+**Backward compatibility:** ALIGNED; `__init__.py` exports is industry standard
+
+---
+
+## Decision-by-Decision Analysis
+
+### A. Architecture Pattern: Library-First at v2.0
+
+**Verdict: ALIGNED**
+**Confidence: HIGH**
+
+Every credible peer tool in this space is library-first:
+
+| Tool | Library API | CLI relationship |
+|------|------------|-----------------|
+| lm-eval-harness | `simple_evaluate()`, `evaluate()` | CLI wraps these via `__main__.py` |
+| optimum-benchmark | `Benchmark.launch(BenchmarkConfig)` | CLI is Hydra `@hydra.main` wrapping `Benchmark.launch()` |
+| Zeus | `ZeusMonitor()`, `begin_window()`/`end_window()` | CLI (`zeus monitor`) wraps the library |
+| MLflow | `mlflow.log_metric()`, `MlflowClient()` | CLI wraps the client |
+| CodeCarbon | `EmissionsTracker()`, `tracker.stop()` | No separate CLI (pure library) |
+
+lm-eval exports exactly three items from `__init__.py`: `evaluate`, `simple_evaluate`, `__version__`. This is the narrowest public surface in the ecosystem and matches the llem decision precisely.
+
+optimum-benchmark's `Benchmark.launch(config)` is a static method that spawns a `multiprocessing.Process` internally. The API is: construct config objects, call one function, get a report back. This is the exact same pattern as llem's `run()`.
+
+**No challenge to this decision.** Library-first is unambiguously correct.
+
+**Sources:** [lm-eval-harness GitHub](https://github.com/EleutherAI/lm-evaluation-harness), [optimum-benchmark GitHub](https://github.com/huggingface/optimum-benchmark), [Zeus GitHub](https://github.com/ml-energy/zeus)
+
+---
+
+### B. Module Structure: Single Package
+
+**Verdict: ALIGNED**
+**Confidence: HIGH**
+
+All peer tools use a single package:
+
+- `lm_eval/` with `evaluator.py`, `models/`, `tasks/`, `api/`
+- `optimum_benchmark/` with `benchmark/`, `backends/`, `launchers/`, `scenarios/`, `trackers/`
+- `zeus/` with `monitor/`, `optimizer/`, `device/`, `utils/`
+
+No peer tool splits CLI, study/sweep, or backend modules into separate installable packages. The `src/llenergymeasure/` layout with `cli/`, `study/`, `core/`, `config/` inside is standard.
+
+optimum-benchmark's structure is the closest analogue:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Host: Python Campaign Orchestrator                             │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │  CampaignOrchestrator                                     │  │
-│  │  - Campaign manifest (experiment queue)                   │  │
-│  │  - Container lifecycle manager                            │  │
-│  │  - Health monitor daemon                                  │  │
-│  │  - Time-series power sampler                              │  │
-│  │  - Results aggregator                                     │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                           │                                      │
-│                    docker-py SDK                                 │
-│                           │                                      │
-└───────────────────────────┼──────────────────────────────────────┘
-                            │
-        ┌───────────────────┼───────────────────┐
-        │                   │                   │
-        ▼                   ▼                   ▼
-┌────────────────┐  ┌────────────────┐  ┌────────────────┐
-│  pytorch       │  │  vllm          │  │  tensorrt      │
-│  container     │  │  container     │  │  container     │
-│  (long-running)│  │  (long-running)│  │  (long-running)│
-│                │  │                │  │                │
-│  Receives:     │  │  Receives:     │  │  Receives:     │
-│  docker exec   │  │  docker exec   │  │  docker exec   │
-│  lem exp ...   │  │  lem exp ...   │  │  lem exp ...   │
-└────────────────┘  └────────────────┘  └────────────────┘
-        │                   │                   │
-        └───────────────────┴───────────────────┘
-                            │
-                    Shared Volumes
-                            │
-        ┌───────────────────┼───────────────────┐
-        ▼                   ▼                   ▼
-   /app/results       /app/configs      /app/.state
-   (bind mount)       (bind mount)    (named volume)
+optimum_benchmark/
+    backends/        # inference backends (PyTorch, vLLM, TRT-LLM, etc.)
+    benchmark/       # BenchmarkConfig, Benchmark.launch()
+    launchers/       # process, inline, torchrun
+    scenarios/       # inference, training
+    trackers/        # energy, memory, latency
+    cli.py           # Hydra CLI entry point
 ```
 
-### Component Boundaries
+This maps well to llem's planned structure. The key architectural parallel: backends, launchers (isolation), scenarios (what to measure), and trackers (how to measure) are all separate modules within one package.
 
-| Component | Responsibility | Communicates With |
-|-----------|---------------|-------------------|
-| **CampaignOrchestrator** | Campaign manifest execution, container dispatch, cycle coordination | ContainerManager, HealthMonitor, PowerSampler, ResultsAggregator |
-| **ContainerManager** | Container lifecycle (start/stop/health), exec dispatch | Docker daemon via docker-py SDK |
-| **HealthMonitor** | Periodic health checks, auto-recovery on failure | ContainerManager |
-| **PowerSampler** | Time-series GPU power sampling during experiments | NVML via container exec, TimescaleDB/InfluxDB (optional) |
-| **CampaignManifest** | Experiment queue with backend routing, cycle tracking | StateManager (persistent manifest) |
-| **BackendRouter** | Route experiments to appropriate container based on backend | CampaignManifest, ContainerManager |
-| **StateManager** | Persistent experiment/campaign state, atomic writes | Filesystem (shared volumes) |
-| **ResultsAggregator** | Multi-cycle aggregation, statistical analysis | Filesystem (results volume) |
+**No challenge to this decision.**
 
-### Data Flow
+---
 
-```
-1. Campaign Definition
-   User → YAML campaign config → CampaignManifest
+### C. Three-Layer Config Model
 
-2. Container Startup (one-time)
-   CampaignOrchestrator → docker compose up -d [pytorch|vllm|tensorrt]
+**Verdict: QUESTIONABLE**
+**Confidence: MEDIUM**
 
-3. Experiment Dispatch
-   CampaignManifest → BackendRouter → ContainerManager.exec_run(container, cmd)
+This is the most over-engineered decision relative to peer practice. No peer tool uses an explicit "three-layer" config model with named layers.
 
-4. Power Sampling (parallel)
-   PowerSampler → docker exec pytorch nvidia-smi --query-gpu=power.draw
+**What peers actually do:**
 
-5. Health Monitoring (parallel)
-   HealthMonitor → docker exec pytorch python -c "import torch; assert torch.cuda.is_available()"
+| Tool | Config layers | Notes |
+|------|-------------|-------|
+| **optimum-benchmark** | 1 layer: `BenchmarkConfig` (launcher + scenario + backend composed) | Environment auto-captured separately |
+| **lm-eval** | 1 layer: `simple_evaluate()` kwargs or YAML task config | No user config file; model_args is a flat string |
+| **Zeus** | 0 layers: constructor args to `ZeusMonitor(gpu_indices=[0,1])` | No config file at all |
+| **vLLM bench sweep** | 2 JSON files: serve_params.json + bench_params.json | No user config; environment is implicit |
+| **Hydra** | N layers: config groups composed at runtime | Most complex; also the most complained-about |
+| **MLflow** | 1 config + tracking server | Environment/artifact store config is server-side |
 
-6. Result Collection
-   Container → Shared volume (/app/results/exp_id/process_N.json)
-   ResultsAggregator → Load from shared volume → Aggregate
+**The core issue:** Layer 1 (user config), Layer 2 (experiment YAML), and Layer 3 (infrastructure context) are presented as a fundamental architectural concept requiring a "three questions" decision framework. In practice:
 
-7. Campaign Completion
-   All experiments done → Multi-cycle aggregation → Final report
-```
+- **Layer 1** is just a user preferences file (`~/.config/...`). Every tool that has user preferences has this. It does not need a special "layer" name.
+- **Layer 2** is the experiment definition. This IS the config. Calling it "Layer 2" adds jargon without adding clarity.
+- **Layer 3** is auto-captured runtime metadata stored with results. This is not config at all -- it is output. Zeus stores GPU info with measurements. CodeCarbon stores hardware info with emissions. Neither calls this a "config layer".
 
-## Patterns to Follow
+**The valid separation underneath the jargon is sound:**
+1. Machine-local preferences (results_dir, runner mappings) -- user config file
+2. Experiment definition (model, backend, params) -- experiment YAML, shareable
+3. Runtime environment snapshot (GPU model, CUDA version) -- auto-captured, stored with results
 
-### Pattern 1: Long-Running Containers with Exec Dispatch
+This is a two-config-source + auto-capture pattern, not a three-layer config model. The distinction matters because "three layers" implies three things the user must understand and configure. In reality, Layer 3 is invisible to the user (auto-captured) and Layer 1 has sensible defaults that most users never touch.
 
-**What:** Start containers once at campaign start, use `docker exec` for each experiment, stop containers at campaign end.
+**Recommendation:** Keep the separation (it is correct). Drop the "three-layer" naming and framework. Call them what they are: user config, experiment config, and environment snapshot. The "three questions" in Decision D add cognitive overhead for implementors without preventing any real mistakes.
 
-**When:** Campaign runs multiple experiments (grid search, multi-cycle), container startup overhead is significant (10-30s for GPU allocation, model cache warming).
+**Risk if unchanged:** Implementors treat Layer 3 as something that needs config-level validation, precedence resolution, and user-facing documentation. It does not. It is auto-captured metadata.
 
-**Why better than run-per-experiment:**
-- Avoids container recreation overhead (startup time, GPU re-initialization)
-- Keeps GPU memory allocated across experiments (vLLM KV cache benefits)
-- Simplifies health monitoring (one container per backend vs N ephemeral containers)
-- Enables warmup convergence detection (container stays warm between experiments)
+---
 
-**Example:**
+### D. Field Placement (Three Questions Framework)
+
+**Verdict: OVER-ENGINEERED**
+**Confidence: MEDIUM**
+
+The "three questions" framework ("Does this vary between machines?", "Does this define what I'm measuring?", "Does this describe the physical environment?") is a decision heuristic that is more complex than needed. In practice, the field placement table in architecture.md already resolves every field -- the questions are a retroactive justification, not a discovery tool.
+
+**What peers do instead:** Fields belong in the experiment config if the user specifies them. Everything else is either auto-detected or has a sensible default. There is no formal placement framework.
+
+optimum-benchmark example: `BenchmarkConfig` takes `launcher`, `scenario`, and `backend` configs. The `environment` field is auto-populated from `get_system_info()` at construction time. No placement decision framework needed.
+
+**The field placement table itself is useful** (it documents where every field lives). The "three questions" heuristic adds no value on top of the table.
+
+**Recommendation:** Keep the field placement table. Remove the "three questions" framework. It is solving a problem that does not recur -- once the table is written, it is the SSOT.
+
+---
+
+### E. Runner Resolution
+
+**Verdict: ALIGNED**
+**Confidence: MEDIUM**
+
+Keeping `runner:` out of experiment YAML is correct. The precedence chain (env var > user config > CLI flag > default) is standard.
+
+**Peer evidence:**
+- optimum-benchmark: launcher type is specified in the Hydra config but is conceptually separate from the experiment definition. The backend config (what to measure) is independent of the launcher config (how to run).
+- vLLM bench sweep: `--serve-cmd` is a CLI argument, not in the sweep params JSON.
+- lm-eval: No runner concept -- runs in-process always.
+
+The only concern: the precedence chain has four levels (`LLEM_RUNNER_<BACKEND>` env var > user config > `--runner` CLI flag > default). Four levels is one more than most tools. Env var override of user config is standard. CLI flag overriding user config is standard. Both overriding each other introduces a question: which wins, env var or CLI flag?
+
+The current precedence puts env var above CLI flag. This is unconventional -- most tools put CLI flags above env vars (CLI is more explicit). However, for runner selection in CI/Docker environments, env var taking precedence is defensible because the environment determines what runners are available.
+
+**Minor concern only.** The decision is sound.
+
+---
+
+### F. Infrastructure Metadata as Scientific Record
+
+**Verdict: ALIGNED**
+**Confidence: HIGH**
+
+Auto-detect + store with results is exactly what peers do:
+
+- **Zeus**: `ZeusMonitor` auto-detects GPU count, model, NVML capabilities. Energy results include GPU indices and device info.
+- **CodeCarbon**: Auto-detects CPU, GPU, cloud provider, region. Stores in `emissions.csv` alongside energy data.
+- **optimum-benchmark**: `environment` field on `BenchmarkConfig` auto-populates from `get_system_info()` + `get_hf_libs_info()` at instantiation.
+- **lm-eval**: Captures `model_info`, `versions` dict, git hash, and full config in result output.
+
+Calling this "Layer 3" is the jargon issue (see Decision C). The practice itself is industry-standard.
+
+**No challenge to this decision.**
+
+---
+
+### G. Energy vs CO2 as Independent Concerns
+
+**Verdict: ALIGNED**
+**Confidence: HIGH**
+
+This maps perfectly to the Zeus/CodeCarbon split:
+
+- **Zeus**: Measures energy (Joules, Watts). No CO2 estimation.
+- **CodeCarbon**: Estimates CO2 emissions. Uses its own energy measurement internally (NVML polling or RAPL).
+- **ML.ENERGY leaderboard**: Reports energy in Joules. CO2 is a separate calculation using regional carbon intensity.
+
+The decision to make base package = NVML polling, `[zeus]` = accurate energy, `[codecarbon]` = CO2 matches the ecosystem perfectly. The NVML single-session owner constraint (only one of base NVML poller or Zeus can be active) is a genuine technical constraint documented in Zeus.
+
+**No challenge to this decision.**
+
+---
+
+### H. Library API Surface: Unified `run()` with Union Return Type
+
+**Verdict: QUESTIONABLE**
+**Confidence: HIGH**
+
+This is the second most concerning decision. The unified `run()` function returns `ExperimentResult | StudyResult` based on input type. This creates a union return type that callers must narrow.
+
+**The typing problem is well-documented.** From python/mypy#1693: "Having a union return type is often a problem... any attempt to use operations specific to one return type will fail a type check." Python's `@overload` can help if the input type determines the output type, but in llem's case:
+
 ```python
-from docker import DockerClient
-from docker.models.containers import Container
-
-class ContainerManager:
-    def __init__(self):
-        self.client = DockerClient.from_env()
-        self.containers: dict[str, Container] = {}
-
-    def start_backend(self, backend: str) -> Container:
-        """Start long-running container for backend."""
-        container = self.client.containers.run(
-            image=f"llenergymeasure:{backend}",
-            name=f"lem-{backend}",
-            detach=True,
-            device_requests=[
-                {"driver": "nvidia", "count": -1, "capabilities": [["gpu", "utility"]]}
-            ],
-            volumes={
-                "./results": {"bind": "/app/results", "mode": "rw"},
-                "./configs": {"bind": "/app/configs", "mode": "ro"},
-            },
-            restart_policy={"Name": "unless-stopped"},
-        )
-        self.containers[backend] = container
-        return container
-
-    def dispatch_experiment(self, backend: str, config_path: str) -> ExecResult:
-        """Execute experiment in running container."""
-        container = self.containers[backend]
-        cmd = f"lem experiment /app/configs/{config_path}"
-        exit_code, output = container.exec_run(
-            cmd,
-            stream=False,
-            demux=True,  # Separate stdout/stderr
-        )
-        return ExecResult(exit_code, output)
-
-    def stop_all(self):
-        """Stop all containers at campaign end."""
-        for container in self.containers.values():
-            container.stop(timeout=30)
-            container.remove()
+# These both take str | Path -- overload cannot distinguish them
+result = llem.run("experiment.yaml")   # -> ExperimentResult
+result = llem.run("study.yaml")        # -> StudyResult
 ```
 
-**Confidence:** HIGH - [Docker SDK documentation](https://docker-py.readthedocs.io/en/stable/containers.html) verified, [run vs exec patterns](https://medium.com/analytics-vidhya/how-to-understand-the-difference-between-docker-composes-up-vs-run-vs-exec-commands-a506151967df) confirmed.
-
-### Pattern 2: Health Check Daemon with Auto-Recovery
-
-**What:** Background thread polling container health at intervals, auto-restart on failure.
-
-**When:** Long-running containers executing untrusted experiments, risk of container crash mid-campaign.
-
-**Example:**
-```python
-import threading
-from time import sleep
-from typing import Callable
-
-class HealthMonitor:
-    def __init__(
-        self,
-        container_manager: ContainerManager,
-        check_interval: int = 30,
-        on_unhealthy: Callable[[str], None] | None = None,
-    ):
-        self.container_manager = container_manager
-        self.check_interval = check_interval
-        self.on_unhealthy = on_unhealthy
-        self._daemon_thread: threading.Thread | None = None
-        self._stop_event = threading.Event()
-
-    def start(self):
-        """Start health monitoring daemon."""
-        self._daemon_thread = threading.Thread(target=self._monitor_loop, daemon=True)
-        self._daemon_thread.start()
-
-    def stop(self):
-        """Stop health monitoring daemon."""
-        self._stop_event.set()
-        if self._daemon_thread:
-            self._daemon_thread.join(timeout=5)
-
-    def _monitor_loop(self):
-        """Periodic health check loop."""
-        while not self._stop_event.is_set():
-            for backend, container in self.container_manager.containers.items():
-                if not self._check_health(container):
-                    self._handle_unhealthy(backend, container)
-            sleep(self.check_interval)
-
-    def _check_health(self, container: Container) -> bool:
-        """Execute health check command."""
-        try:
-            exit_code, _ = container.exec_run(
-                'python -c "import torch; assert torch.cuda.is_available()"',
-                timeout=10,
-            )
-            return exit_code == 0
-        except Exception:
-            return False
-
-    def _handle_unhealthy(self, backend: str, container: Container):
-        """Handle unhealthy container - restart and notify."""
-        container.restart(timeout=30)
-        if self.on_unhealthy:
-            self.on_unhealthy(backend)
-```
-
-**Docker Compose Integration:**
-```yaml
-services:
-  pytorch:
-    healthcheck:
-      test: ["CMD", "python", "-c", "import torch; assert torch.cuda.is_available()"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s  # Grace period for startup
-```
-
-**Confidence:** HIGH - [Docker health checks](https://lumigo.io/container-monitoring/docker-health-check-a-practical-guide/) verified, [restart policies](https://www.cloudbees.com/blog/ensuring-containers-are-always-running-dockers-restart-policy) confirmed.
-
-### Pattern 3: Time-Series Power Sampling
-
-**What:** Background thread sampling GPU power draw at high frequency (1-10Hz) during experiment execution.
-
-**When:** Need sub-second power resolution for energy efficiency analysis, CodeCarbon's interval sampling (default 15s) is too coarse.
-
-**Architecture Options:**
-
-#### Option A: Host-Side Sampling (Recommended)
-```python
-import threading
-from time import sleep, time
-from dataclasses import dataclass
-from pathlib import Path
-import json
-
-@dataclass
-class PowerSample:
-    timestamp: float
-    gpu_id: int
-    power_draw_watts: float
-
-class PowerSampler:
-    def __init__(self, sample_rate_hz: float = 10.0):
-        self.sample_rate = sample_rate_hz
-        self.interval = 1.0 / sample_rate_hz
-        self._samples: list[PowerSample] = []
-        self._thread: threading.Thread | None = None
-        self._stop_event = threading.Event()
-
-    def start(self, experiment_id: str):
-        """Start power sampling for experiment."""
-        self._samples.clear()
-        self._stop_event.clear()
-        self._thread = threading.Thread(
-            target=self._sample_loop,
-            args=(experiment_id,),
-            daemon=True,
-        )
-        self._thread.start()
-
-    def stop(self) -> list[PowerSample]:
-        """Stop sampling and return collected samples."""
-        self._stop_event.set()
-        if self._thread:
-            self._thread.join(timeout=2)
-        return self._samples.copy()
-
-    def _sample_loop(self, experiment_id: str):
-        """Sampling loop - uses nvidia-smi on host."""
-        import pynvml
-        pynvml.nvmlInit()
-
-        while not self._stop_event.is_set():
-            timestamp = time()
-            device_count = pynvml.nvmlDeviceGetCount()
-
-            for gpu_id in range(device_count):
-                handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_id)
-                power_mw = pynvml.nvmlDeviceGetPowerUsage(handle)
-                self._samples.append(
-                    PowerSample(
-                        timestamp=timestamp,
-                        gpu_id=gpu_id,
-                        power_draw_watts=power_mw / 1000.0,
-                    )
-                )
-
-            sleep(self.interval)
-
-        pynvml.nvmlShutdown()
-
-    def save_timeseries(self, experiment_id: str, output_path: Path):
-        """Save power timeseries to JSON."""
-        data = {
-            "experiment_id": experiment_id,
-            "sample_rate_hz": self.sample_rate,
-            "samples": [
-                {
-                    "timestamp": s.timestamp,
-                    "gpu_id": s.gpu_id,
-                    "power_watts": s.power_draw_watts,
-                }
-                for s in self._samples
-            ],
-        }
-        output_path.write_text(json.dumps(data, indent=2))
-```
-
-**Why host-side:** Direct NVML access (no exec overhead), accurate timestamps, independent of container lifecycle.
-
-#### Option B: Container-Side Sampling
-- Execute `nvidia-smi` via `docker exec` at intervals
-- Higher latency (~50-100ms per sample vs <1ms NVML)
-- Use for validation/debugging only
-
-**Confidence:** MEDIUM - Host-side NVML pattern is standard practice, but time-series architecture for ML experiments is domain-specific. [Time-series databases for energy monitoring](https://www.mdpi.com/1996-1073/17/21/5478) provides architectural guidance.
-
-### Pattern 4: Campaign Manifest with State Persistence
-
-**What:** Queue of experiments with backend routing, persistent across restarts.
-
-**When:** Running grids of experiments, multi-cycle campaigns, need resumption capability.
-
-**Data Model:**
-```python
-from pydantic import BaseModel, Field
-from enum import Enum
-
-class CampaignStatus(str, Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-class ExperimentManifestEntry(BaseModel):
-    experiment_id: str
-    backend: str  # "pytorch" | "vllm" | "tensorrt"
-    config_path: str
-    cycle_id: int
-    status: CampaignStatus = CampaignStatus.PENDING
-    container_name: str | None = None
-    started_at: float | None = None
-    completed_at: float | None = None
-    error_message: str | None = None
-
-class CampaignManifest(BaseModel):
-    campaign_id: str
-    experiments: list[ExperimentManifestEntry]
-    total_cycles: int = Field(default=1, description="Number of repeat cycles")
-    backend_containers: dict[str, str] = Field(
-        default_factory=dict,
-        description="Map of backend -> container_name",
-    )
-
-    def next_pending(self) -> ExperimentManifestEntry | None:
-        """Get next pending experiment."""
-        for exp in self.experiments:
-            if exp.status == CampaignStatus.PENDING:
-                return exp
-        return None
-
-    def backend_for_experiment(self, experiment_id: str) -> str:
-        """Get backend name for experiment."""
-        for exp in self.experiments:
-            if exp.experiment_id == experiment_id:
-                return exp.backend
-        raise ValueError(f"Unknown experiment: {experiment_id}")
-```
-
-**Persistence with Atomic Writes:**
-```python
-from pathlib import Path
-import json
-
-class CampaignStateManager:
-    def __init__(self, state_dir: Path):
-        self.state_dir = state_dir
-        self.state_dir.mkdir(parents=True, exist_ok=True)
-
-    def save_manifest(self, manifest: CampaignManifest):
-        """Save manifest atomically."""
-        path = self.state_dir / f"{manifest.campaign_id}.json"
-        temp_path = path.with_suffix(".tmp")
-
-        temp_path.write_text(manifest.model_dump_json(indent=2))
-        temp_path.rename(path)  # Atomic on POSIX
-
-    def load_manifest(self, campaign_id: str) -> CampaignManifest | None:
-        """Load manifest from disk."""
-        path = self.state_dir / f"{campaign_id}.json"
-        if not path.exists():
-            return None
-        return CampaignManifest.model_validate_json(path.read_text())
-```
-
-**Confidence:** HIGH - Extends existing `StateManager` pattern, atomic file operations verified via [python-atomicwrites](https://python-atomicwrites.readthedocs.io/).
-
-### Pattern 5: Warmup Convergence Detection
-
-**What:** Detect when model warmup has converged by monitoring per-batch latency stability.
-
-**When:** Accurate throughput measurements require stable inference performance, initial batches have higher latency due to CUDA kernel compilation, GPU frequency scaling.
-
-**Implementation:**
-```python
-from collections import deque
-import numpy as np
-from dataclasses import dataclass
-
-@dataclass
-class WarmupDetector:
-    window_size: int = 10
-    convergence_threshold: float = 0.05  # 5% coefficient of variation
-
-    def __post_init__(self):
-        self._latencies = deque(maxlen=self.window_size)
-
-    def add_batch(self, latency_ms: float) -> bool:
-        """Add batch latency, return True if converged."""
-        self._latencies.append(latency_ms)
-
-        if len(self._latencies) < self.window_size:
-            return False  # Need full window
-
-        # Check coefficient of variation
-        mean = np.mean(self._latencies)
-        std = np.std(self._latencies)
-        cv = std / mean if mean > 0 else float('inf')
-
-        return cv < self.convergence_threshold
-
-    def is_converged(self) -> bool:
-        """Check if currently in converged state."""
-        if len(self._latencies) < self.window_size:
-            return False
-
-        mean = np.mean(self._latencies)
-        std = np.std(self._latencies)
-        cv = std / mean if mean > 0 else float('inf')
-        return cv < self.convergence_threshold
-
-# Integration with inference loop
-def run_with_warmup_detection(model, prompts):
-    detector = WarmupDetector()
-    warmup_complete = False
-
-    for i, prompt in enumerate(prompts):
-        start = time.time()
-        output = model.generate(prompt)
-        latency_ms = (time.time() - start) * 1000
-
-        if not warmup_complete:
-            if detector.add_batch(latency_ms):
-                warmup_complete = True
-                logger.info(f"Warmup converged at batch {i}")
-
-        # Collect metrics only after warmup
-        if warmup_complete:
-            metrics.record_batch(latency_ms, len(output))
-```
-
-**Alternative: Gaussian Process Smoothing** (from [Auto-WU research](https://arxiv.org/abs/2509.07972)):
-- More sophisticated but higher overhead
-- Use for research validation, not production
-
-**Confidence:** MEDIUM - Coefficient of variation method is simple and robust. Recent research (2025) shows [automated warmup detection using GP smoothing](https://www.emergentmind.com/topics/model-warmup-techniques), but simpler statistical methods are more practical for production.
-
-## Anti-Patterns to Avoid
-
-### Anti-Pattern 1: `docker compose run` Per-Experiment
-
-**What:** Running `docker compose run --rm pytorch lem experiment config.yaml` for each experiment in a grid.
-
-**Why bad:**
-- Container creation overhead: 10-30s per experiment (GPU allocation, CUDA initialization)
-- GPU memory fragmentation: Each new container allocates fresh GPU memory
-- vLLM memory leaks: Known issue where containers don't release GPU memory on exit ([Issue #7581](https://github.com/vllm-project/vllm/issues/7581))
-- Health check complexity: N ephemeral containers vs 3 long-running containers
-
-**Instead:** Long-running containers with `docker exec` dispatch (Pattern 1).
-
-**Evidence:** vLLM [memory leak reports](https://github.com/vllm-project/vllm/issues/15294) show critical issues with container lifecycle management in V1 engine (200+ GB RAM leaks). Long-running containers mitigate this by keeping processes alive.
-
-### Anti-Pattern 2: Shared Volume Write Conflicts
-
-**What:** Multiple containers writing to same file without coordination.
-
-**Why bad:**
-- Race conditions: Two containers write `experiment_state.json` simultaneously
-- Partial writes: File contains incomplete JSON from interrupted write
-- Lost updates: Last writer wins, earlier results lost
-
-**Instead:** Atomic writes with process-specific files:
-```python
-# Each process writes its own file
-results/exp_id/process_0.json
-results/exp_id/process_1.json
-
-# Manifest ensures only one container writes at a time
-# OR use atomic rename pattern (write-to-temp-then-rename)
-```
-
-**Evidence:** Docker volumes [support concurrent reads but not atomic writes](https://www.baeldung.com/ops/docker-share-volume-multiple-containers). Application-level coordination required.
-
-### Anti-Pattern 3: No Crash Recovery for Mid-Campaign Failures
-
-**What:** Campaign orchestrator crashes, loses all progress, must restart from beginning.
-
-**Why bad:**
-- Hours of wasted computation for large grids
-- Non-deterministic results if re-running partially completed campaigns
-- GPU hours wasted on redundant work
-
-**Instead:** Persistent campaign manifest (Pattern 4) with experiment-level status tracking. On crash/restart:
-1. Load manifest from disk
-2. Skip experiments marked `COMPLETED`
-3. Resume from next `PENDING` experiment
-
-**Evidence:** This extends the existing `StateManager` pattern already proven in codebase.
-
-### Anti-Pattern 4: Polling Container State via `docker ps`
-
-**What:** Checking if container is healthy by parsing `docker ps` output.
-
-**Why bad:**
-- Racy: Container can crash between poll and check
-- Coarse-grained: Only knows "running" vs "stopped"
-- No application-level health: Container running but CUDA unavailable
-
-**Instead:** Docker health checks (Pattern 2) with application-aware validation:
-```yaml
-healthcheck:
-  test: ["CMD", "python", "-c", "import torch; assert torch.cuda.is_available()"]
-```
-
-**Evidence:** [Docker health check guide](https://last9.io/blog/docker-compose-health-checks/) recommends application-level checks, not process checks.
-
-### Anti-Pattern 5: Synchronous Power Sampling in Inference Loop
-
-**What:** Querying `nvidia-smi` or NVML inside the inference loop.
-
-**Why bad:**
-- Inference latency overhead: 10-50ms per query
-- Inaccurate measurements: Query itself consumes GPU cycles
-- Thread safety: NVML not guaranteed thread-safe in all configurations
-
-**Instead:** Separate power sampling thread (Pattern 3) running in parallel with inference.
-
-## Scalability Considerations
-
-| Concern | Single Backend | 3 Backends (Current) | 10+ Backends (Future) |
-|---------|---------------|---------------------|----------------------|
-| **Container startup** | 1 container, 10-30s | 3 containers, 30-90s total | Pool pattern: pre-start N containers |
-| **GPU memory** | Full GPU for 1 backend | 3 backends share GPUs (MIG or exclusive) | MIG required, 7 slices per A100 |
-| **Campaign duration** | Minutes to hours | Hours to days | Days to weeks |
-| **State complexity** | Single experiment state | Campaign manifest with 3 backends | Distributed queue (Redis/Celery) |
-| **Failure recovery** | Restart experiment | Restart failed experiments | Checkpoint every N experiments |
-| **Power monitoring** | Single GPU, 10Hz sampling | 3 GPUs, 10Hz sampling (30 samples/s) | InfluxDB/TimescaleDB for time-series storage |
-
-### When to Migrate to Distributed Architecture
-
-**Threshold:** >10 concurrent backends OR >1 week campaign duration OR multi-node GPU cluster.
-
-**Migration path:**
-1. **Current (single-node):** Host orchestrator + Docker containers + shared volumes
-2. **Intermediate (multi-node):** Celery task queue + Redis + NFS shared volumes
-3. **Production (enterprise):** Kubernetes + KubeFlow + distributed storage (Ceph/GlusterFS)
-
-**Evidence:** [Container orchestration platforms 2026](https://www.portainer.io/blog/container-orchestration-platforms) shows Docker Compose remains viable for single-node multi-container workloads. Kubernetes overhead not justified until multi-node or >100 containers.
-
-## Build Order Implications
-
-### Phase Dependencies
-
-```
-Phase 1: Container Lifecycle Management
-├── ContainerManager (start/stop/exec)
-├── Docker SDK integration
-└── Health check daemon
-
-Phase 2: Campaign Manifest
-├── CampaignManifest data model
-├── CampaignStateManager (persistence)
-└── Backend routing logic
-
-Phase 3: Time-Series Power Sampling
-├── PowerSampler (host-side NVML)
-├── Time-series storage format
-└── Integration with experiment lifecycle
-
-Phase 4: Warmup Convergence
-├── WarmupDetector (latency monitoring)
-├── Integration with inference loop
-└── Warmup-aware metrics collection
-
-Phase 5: Multi-Cycle Aggregation
-├── Cycle-aware results schema
-├── Statistical aggregation (mean, std, CI)
-└── Campaign summary reports
-```
-
-**Critical Path:** Phase 1 → Phase 2 (orchestration core) → Phase 3, 4, 5 (parallel).
-
-**Rationale:**
-- Phase 1 is prerequisite for all container-based work
-- Phase 2 enables campaign execution (without power/warmup initially)
-- Phases 3, 4, 5 enhance existing campaign execution independently
+The overload only works for `ExperimentConfig` vs `StudyConfig` input. For path-based input (the common case for YAML users), the return type is `ExperimentResult | StudyResult` and every call site needs `isinstance()` or `assert`.
+
+**What peers do:**
+
+| Tool | API shape | Return type |
+|------|----------|-------------|
+| lm-eval | `simple_evaluate(model, tasks)` | Always `EvalResults` (one type) |
+| optimum-benchmark | `Benchmark.launch(config)` | Always `BenchmarkReport` (one type) |
+| Zeus | `monitor.end_window(name)` | Always `Measurement` (one type) |
+| MLflow | `mlflow.start_run()` context | Returns `Run` (one type) |
+
+**Every peer tool returns exactly one type from its entry point.** None uses a union return type.
+
+**The existing designs/library-api.md actually anticipated this.** It originally had `run_experiment()` returning `ExperimentResult` and `run_study()` returning `StudyResult` -- two functions, each with an unambiguous return type. The justification for unification was "Why not `run("config.yaml")`? A single `run()` has an ambiguous return type" -- the doc correctly identified the problem, then the experiment-study-architecture.md decision overrode it.
+
+**Alternatives:**
+
+1. **Revert to two functions** (`run_experiment()` + `run_study()`): Matches peer practice. Unambiguous types. The cost (two functions to learn) is trivial.
+
+2. **Always return `StudyResult`**: Since internally all paths go through `_run(StudyConfig)`, the natural return type is `StudyResult`. Single experiments return a `StudyResult` with `len(experiments) == 1`. Callers always get the same type. This is analogous to how lm-eval always returns `EvalResults` even for a single task.
+
+3. **Keep unified `run()` but accept the typing tax**: Use `@overload` for the `ExperimentConfig`/`StudyConfig` input case and accept that path-based input returns a union.
+
+**Recommendation:** Option 1 (two functions) is the cleanest. It was the original design for good reason. The argument that unified `run()` is "simpler" is undermined by the union return type making every call site more complex.
+
+However: Option 2 (always `StudyResult`) is also viable and has the advantage of truly unifying the internal model. A single experiment becomes `StudyResult(experiments=[result])`. Callers who want the single result do `result.experiments[0]`. This is ugly but honest about the internal architecture.
+
+**The decision to unify `llem run` at the CLI level is separate and correct.** CLI commands do not have return types. The CLI can present single-experiment results differently from study results without API typing concerns. The library API and CLI do not need to mirror each other -- the existing docs already note this ("CLI names differ from library names").
+
+---
+
+### I. Subprocess Isolation via `multiprocessing.Process`
+
+**Verdict: ALIGNED**
+**Confidence: HIGH**
+
+This decision matches optimum-benchmark's core architecture exactly. The research in `13-execution-isolation-patterns.md` already documented this comprehensively.
+
+Key confirmations from fresh research:
+
+1. **`spawn` start method is mandatory for CUDA.** PyTorch documentation (2025) confirms: "spawn is preferred because it avoids copying the CUDA context into child processes." Fork is unsafe with CUDA -- this is not a design choice, it is a correctness requirement.
+
+2. **`multiprocessing.Pipe` for IPC is correct.** optimum-benchmark uses exactly this pattern, including the 1MB file-based fallback threshold.
+
+3. **`daemon=False` is correct.** Allows clean CUDA teardown. optimum-benchmark also uses `daemon=False`.
+
+4. **Timeout via `p.join(timeout=...)` + SIGKILL is correct.** optimum-benchmark uses a polling loop with `p.is_alive()` and `parent_connection.poll()` rather than `p.join(timeout=...)`, but both achieve the same goal. The SIGKILL on timeout is the only reliable mechanism for hung CUDA calls.
+
+**One minor note:** optimum-benchmark uses sync checkpoints (two `sync_with_child()` calls) before starting the benchmark. This ensures the child process is ready before the parent begins waiting for results. The llem design does not include sync checkpoints. This is a robustness improvement worth considering but not a fundamental architectural difference.
+
+**No challenge to this decision.**
+
+---
+
+### J. Study Module Scope: Ships at v2.0
+
+**Verdict: ALIGNED**
+**Confidence: MEDIUM**
+
+Parameter sweeps are the core value proposition of this tool ("how much does implementation choice affect efficiency?"). Deferring sweeps to v2.2 would ship a single-experiment tool that is just a less mature version of existing tools.
+
+**Peer context:**
+- optimum-benchmark includes sweep support from the start (via Hydra `--multirun`).
+- vLLM bench sweep is a first-class feature, not an afterthought.
+- lm-eval runs multiple tasks in a single invocation by default.
+
+Docker multi-backend deferred to v2.2 is reasonable. Local single-backend studies at v2.0 provide immediate research value.
+
+**No challenge to this decision.**
+
+---
+
+## Cross-Cutting Decisions
+
+### Config Architecture: Composition (C1) + Dotted Sweep Notation (C2)
+
+**Verdict: ALIGNED**
+**Confidence: MEDIUM**
+
+**C1 (Composition):** The decision to use a single `ExperimentConfig` with optional backend sections is well-justified. The rejected inheritance approach would propagate a union type through every layer. optimum-benchmark uses inheritance (separate backend config classes) but does not have the same problem because its `BenchmarkConfig` takes `backend: Any` -- the type system does not constrain the backend type. llem's composition approach is more type-safe than optimum-benchmark's `Any` while avoiding the union proliferation of full inheritance.
+
+**C2 (Dotted sweep notation):** The `pytorch.batch_size: [1, 8, 32]` syntax is custom but well-designed. The split-on-first-dot parsing is clean. The per-backend Cartesian product is the correct semantic.
+
+**Peer comparison on sweep grammar:**
+
+| Tool | Sweep syntax | Notes |
+|------|-------------|-------|
+| vLLM bench sweep | Separate JSON files for serve_params and bench_params | Cartesian product of serve x bench |
+| optimum-benchmark | Hydra `--multirun` with comma-separated overrides | `backend.device=cpu,cuda` |
+| W&B Sweeps | YAML with `parameters:` block, flat keys | `batch_size: {values: [1, 8, 32]}` |
+| Optuna | Programmatic `trial.suggest_*()` API | No declarative grammar |
+
+llem's dotted notation is more compact than vLLM's separate files and more structured than Hydra's override syntax. It handles the multi-backend case (where backend-specific params are not interchangeable) better than any peer's approach.
+
+**Concern:** The `extra = "forbid"` with an explicit `extra: dict` escape hatch is clever but could confuse users who encounter the Pydantic error message for typos vs the `extra:` field. This is a documentation challenge, not an architectural one.
+
+---
+
+### Experiment-Study Architecture (Option C)
+
+**Verdict: ALIGNED on internal architecture, QUESTIONABLE on library API**
+
+The Option C architecture is sound:
+- `ExperimentConfig` = pure data type, zero study knowledge. Correct.
+- `StudyConfig` = resolved container (`list[ExperimentConfig]` + `ExecutionConfig`). Correct.
+- Sweep resolution at YAML parse time, before Pydantic. Correct.
+- Single runner `_run(StudyConfig)`. Correct.
+
+This matches the "config file carries the complexity signal" pattern identified in pytest, lm-eval, and `mlflow run`. The internal unification is good architecture.
+
+The concern is the library API surface (see Decision H above).
+
+---
+
+### Error Handling (K1/K2/K3)
+
+**Verdict: ALIGNED**
+**Confidence: HIGH**
+
+**K1 (Exit codes 0/1/2/130):** Correct. No ML benchmarking tool uses granular exit codes. lm-eval uses 0/1.
+
+**K2 (Custom exception hierarchy):** Correct. `LLEMError` root with typed subclasses is standard for library-first tools. httpx, SQLAlchemy, Pydantic all do this.
+
+**K3 (Pydantic ValidationError passthrough):** Correct. Wrapping Pydantic's rich error in a custom exception would lose information. The asymmetry (`ValidationError` is not `LLEMError`) is a known, documented trade-off.
+
+**One note:** The `ExperimentError` class has `config: dict` and `cause: Exception` as class attributes in the design, not `__init__` parameters. These should be instance attributes set in `__init__`. This is a design doc issue, not an architectural issue.
+
+---
+
+### Backward Compatibility
+
+**Verdict: ALIGNED**
+**Confidence: HIGH**
+
+`__init__.py` exports as the sole stable API is industry standard. One minor version deprecation window is aggressive but appropriate for a pre-1.0-adoption tool.
+
+lm-eval `__all__ = ["evaluate", "simple_evaluate", "__version__"]` is the exact precedent.
+
+**Note:** The backward-compatibility.md still lists `run_experiment` and `run_study` as the stable exports, while experiment-study-architecture.md changed this to unified `run()`. These docs are internally inconsistent. Whichever API shape is chosen, the docs must be synchronised.
+
+---
+
+## Over-Engineering Assessment
+
+### What is appropriately complex:
+- **Subprocess isolation** -- correctness requirement, not optional complexity
+- **Backend config composition** -- genuine multi-backend complexity
+- **Dotted sweep notation** -- solves a real problem compactly
+- **Exception hierarchy** -- standard library-first pattern
+- **Infrastructure auto-capture** -- scientific rigour requirement
+
+### What is more complex than needed:
+- **Three-layer config naming** -- two sources (user config + experiment YAML) plus auto-capture. Not three "layers".
+- **Field placement three-questions framework** -- the table is the SSOT; the questions add nothing
+- **Union return type from `run()`** -- solves a problem that does not exist at the CLI level and creates a problem at the library level
+
+### What is missing:
+- **Sync checkpoints between parent and child process** -- optimum-benchmark has this, llem does not. Worth adding for robustness.
+- **Device isolation monitoring** -- optimum-benchmark's `device_isolation: true` detects foreign GPU processes. Useful for measurement integrity.
+- **Progress callback API for library users** -- the design includes Rich progress for CLI but no callback mechanism for library users who want progress events programmatically.
+
+---
+
+## The Hydra Question: Was Rejecting Hydra Correct?
+
+**Verdict: YES, the rejection was correct.**
+
+optimum-benchmark uses Hydra and pays a significant cost:
+- `BenchmarkConfig` fields are typed `Any` (not the specific config types) because Hydra's structured configs use dataclasses, not Pydantic
+- Config composition via file-based groups is powerful but adds operational complexity
+- The `--multirun` sweep is less expressive than llem's dotted notation for multi-backend sweeps
+- Hydra takes over the application entry point (`@hydra.main`) -- not compatible with a library-first design where the CLI is a thin wrapper
+
+**Key evidence:** pytorch/torchtitan opened an issue requesting Hydra/OmegaConf adoption (2025) and the discussion revealed that many teams are moving away from Hydra toward simpler approaches. The Facebook Research stopes project uses Hydra but documents significant configuration complexity.
+
+llem's approach (Pydantic models + YAML + custom sweep resolution) is simpler, more type-safe, and more compatible with library-first architecture. Hydra would force the config system to use dataclasses instead of Pydantic, losing validation, `extra = "forbid"`, and the None-as-sentinel pattern.
+
+**Sources:** [pytorch/torchtitan Hydra issue](https://github.com/pytorch/torchtitan/issues/1415), [facebookresearch/hydra composition bug](https://github.com/facebookresearch/hydra/issues/1592)
+
+---
+
+## Specific Challenges and Recommendations
+
+### Challenge 1: Simplify Config Naming (Decisions C and D)
+
+**Current:** Three-layer model (Layer 1, Layer 2, Layer 3) with a three-questions placement framework.
+
+**Proposed:** Two config sources + auto-capture:
+- **User config** (`~/.config/llenergymeasure/config.yaml`) -- machine-local preferences, runner mappings
+- **Experiment config** (experiment.yaml / study.yaml) -- what to measure, shareable
+- **Environment snapshot** -- auto-captured at runtime, stored with results (not a config layer)
+
+The separation is identical. The naming is simpler and matches what every peer calls these things. "Layer 1/2/3" is project-specific jargon that will confuse new contributors.
+
+### Challenge 2: Resolve the Library API Return Type (Decision H)
+
+**Current:** `run()` returns `ExperimentResult | StudyResult`.
+
+**Options ranked by recommendation:**
+
+1. **Two functions** (`run_experiment()` + `run_study()`): Cleanest types. Original design. Matches lm-eval's `evaluate()` + `simple_evaluate()` pattern (two entry points, no ambiguity).
+
+2. **Always return `StudyResult`**: Consistent with internal architecture. `StudyResult` with `len(experiments) == 1` for single runs. Less ergonomic but type-safe.
+
+3. **Accept the union**: Workable with `@overload` for typed inputs; path-based input returns union. Tax at every call site.
+
+The CLI remains unified `llem run` regardless. This is a library API question only.
+
+### Challenge 3: Add Sync Checkpoints to Subprocess Isolation (Decision I)
+
+**Current:** Parent spawns child, waits on `p.join(timeout=...)`.
+
+**Missing:** No verification that child process initialised successfully before starting the wait. optimum-benchmark uses two sync checkpoints:
+1. After child spawns (verify it is alive)
+2. After device isolation setup (verify GPU is accessible)
+
+Without sync checkpoints, a child that fails during import/setup will cause the parent to wait for the full timeout before detecting failure. Adding sync checkpoints reduces failure-to-detection time from `timeout` seconds to near-instant.
+
+### Challenge 4: Document the Inconsistency Between API Docs
+
+**backward-compatibility.md** lists `run_experiment` and `run_study` as stable exports.
+**experiment-study-architecture.md** specifies unified `run()`.
+**designs/library-api.md** still documents `run_experiment()` and `run_study()` with full overload signatures.
+
+These must be synchronised after resolving Challenge 2.
+
+---
+
+## Peer Architecture Comparison Matrix
+
+| Aspect | optimum-benchmark | lm-eval | Zeus | vLLM bench | **llem (planned)** |
+|--------|-------------------|---------|------|-----------|-------------------|
+| **Entry point** | `Benchmark.launch(config)` | `simple_evaluate(model, tasks)` | `ZeusMonitor()` API | CLI only | `llem.run(config)` |
+| **Config system** | Hydra + dataclasses | Flat kwargs + YAML tasks | Constructor args | JSON param files | Pydantic + YAML |
+| **Return type** | `BenchmarkReport` | `EvalResults` | `Measurement` | N/A (files) | `ExperimentResult \| StudyResult` |
+| **Process isolation** | `multiprocessing.Process` | None (in-process) | None (measurement lib) | `subprocess.Popen` | `multiprocessing.Process` |
+| **Sweep support** | Hydra `--multirun` | Task groups | N/A | JSON Cartesian product | Dotted notation sweep |
+| **Backend selection** | Config group | `--model` string | N/A | `--serve-cmd` | `backend:` field |
+| **User config** | Hydra defaults | None | None | None | `~/.config/.../config.yaml` |
+| **Environment capture** | `get_system_info()` auto | Versions dict | GPU indices auto | N/A | Auto-detect (Layer 3) |
+| **Error handling** | Exceptions (unstructured) | Plain exceptions | Plain exceptions | Exit codes | `LLEMError` hierarchy |
+| **API stability** | No explicit policy | No explicit policy | No explicit policy | No explicit policy | `__init__.py` exports + SemVer |
+
+**Key takeaway:** llem's architecture is more thoroughly designed than any peer. The risk is not under-engineering -- it is over-engineering. The decisions are overwhelmingly sound; the naming and abstraction layers are where complexity creeps in without proportional value.
+
+---
 
 ## Sources
 
-**HIGH Confidence (Official Documentation):**
-- [Docker SDK for Python](https://docker-py.readthedocs.io/en/stable/containers.html) - Container lifecycle methods
-- [Docker Compose: exec vs run](https://medium.com/analytics-vidhya/how-to-understand-the-difference-between-docker-composes-up-vs-run-vs-exec-commands-a506151967df) - Pattern differences
-- [Docker health checks](https://lumigo.io/container-monitoring/docker-health-check-a-practical-guide/) - Health monitoring patterns
-- [Docker restart policies](https://www.cloudbees.com/blog/ensuring-containers-are-always-running-dockers-restart-policy) - Crash recovery
-- [Python atomicwrites](https://python-atomicwrites.readthedocs.io/) - Atomic file operations
-
-**MEDIUM Confidence (Community/Research):**
-- [vLLM memory leaks](https://github.com/vllm-project/vllm/issues/15294) - Known issue in V1 engine
-- [Docker shared volumes](https://www.baeldung.com/ops/docker-share-volume-multiple-containers) - Concurrent access patterns
-- [Time-series databases for energy monitoring](https://www.mdpi.com/1996-1073/17/21/5478) - Architecture patterns
-- [Warmup convergence detection](https://www.emergentmind.com/topics/model-warmup-techniques) - Recent research (2025-2026)
-- [APScheduler](https://github.com/agronholm/apscheduler) - Python scheduling library
-
-**LOW Confidence (Needs Validation):**
-- Multi-node volume sharing with NFS/GlusterFS - Standard pattern but needs performance testing
-- InfluxDB/TimescaleDB for power time-series - Appropriate choice but adds dependency complexity
+- [optimum-benchmark GitHub](https://github.com/huggingface/optimum-benchmark) -- BenchmarkConfig, launcher system, process isolation
+- [optimum-benchmark README](https://github.com/huggingface/optimum-benchmark/blob/main/README.md) -- Python API usage examples
+- [lm-eval-harness GitHub](https://github.com/EleutherAI/lm-evaluation-harness) -- `__init__.py` exports, `simple_evaluate()` signature
+- [lm-eval architecture blog](https://slyracoon23.github.io/blog/posts/2025-03-21_eleutherai-evaluation-methods.html) -- Architecture overview
+- [Zeus project](https://ml.energy/zeus/) -- Monitor API, measurement architecture
+- [Zeus GitHub](https://github.com/ml-energy/zeus) -- Multi-platform energy measurement
+- [vLLM parameter sweeps](https://docs.vllm.ai/en/latest/benchmarking/sweeps/) -- Sweep config format
+- [vLLM benchmark CLI](https://docs.vllm.ai/en/latest/benchmarking/cli/) -- Benchmark architecture
+- [MLflow Tracking](https://mlflow.org/docs/latest/tracking/) -- Run/experiment hierarchy
+- [PyTorch multiprocessing docs](https://docs.pytorch.org/docs/stable/notes/multiprocessing.html) -- Spawn method for CUDA
+- [python/mypy#1693](https://github.com/python/mypy/issues/1693) -- Union return types as anti-pattern
+- [python/typing overload spec](https://typing.python.org/en/latest/spec/overload.html) -- @overload limitations
+- [pytorch/torchtitan Hydra issue](https://github.com/pytorch/torchtitan/issues/1415) -- Hydra adoption challenges
+- `.product/research/13-execution-isolation-patterns.md` -- Existing peer isolation research (HIGH confidence)
+- `.product/research/15-config-architecture-patterns.md` -- Existing peer config research

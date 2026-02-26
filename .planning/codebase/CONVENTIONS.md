@@ -1,158 +1,136 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-01-26
+**Analysis Date:** 2026-02-05
 
 ## Naming Patterns
 
 **Files:**
-- Module files: `snake_case` (e.g., `config_loader.py`, `inference_backends.py`)
-- Test files: `test_<module>.py` (e.g., `test_core_inference.py`, `test_config_models.py`)
-- Special files: `__init__.py`, `conftest.py` for pytest fixtures
+- Snake_case for Python modules: `model_loader.py`, `experiment_state.py`, `backend_configs.py`
+- Prefix `test_` for all test files: `test_core_inference.py`, `test_config_models.py`
+- Backend implementations: `pytorch.py`, `vllm.py`, `tensorrt.py` (in `core/inference_backends/`)
+- Protocol/interface files: `protocols.py` (contains Protocol classes)
+- Private modules: No leading underscore pattern (use subdirectories for organization)
 
 **Functions:**
-- Function names: `snake_case` (e.g., `calculate_inference_metrics()`, `setup_logging()`)
-- Private/internal functions: `_leading_underscore()` (e.g., `_get_verbosity_from_env()`)
-- Test functions: `test_<descriptor>()` (e.g., `test_basic_metrics()`, `test_empty_latencies()`)
-
-**Classes:**
-- Class names: `PascalCase` (e.g., `ExperimentConfig`, `InferenceMetrics`, `ModelLoader`)
-- Abstract/Protocol classes: `PascalCase` with naming convention (e.g., `BackendProtocol`, `EnergyBackendProtocol`)
-- Pydantic models: `PascalCase` (e.g., `TrafficSimulation`, `PyTorchConfig`, `RawProcessResult`)
+- Snake_case: `calculate_inference_metrics()`, `load_prompts_from_source()`, `setup_logging()`
+- Private functions with leading underscore: `_get_verbosity_from_env()`, `_is_json_output_mode()`
+- Test methods: `test_*` pattern (pytest requirement): `test_basic_metrics()`, `test_defaults()`
+- Validators: `@field_validator`, `@model_validator` for Pydantic models
 
 **Variables:**
-- Constants: `UPPER_SNAKE_CASE` (e.g., `DEFAULT_MAX_NEW_TOKENS`, `SCHEMA_VERSION`, `PRESETS`)
-- Instance variables: `snake_case` (e.g., `experiment_id`, `total_energy_j`, `model_name`)
-- Private instance variables: `_leading_underscore` (e.g., `_latency_ms`, `_output_tokens`, `_config`)
+- Snake_case: `experiment_id`, `total_tokens`, `backend_metadata`, `inference_time_sec`
+- Constants: UPPERCASE_WITH_UNDERSCORES: `TEST_MODEL = "Qwen/Qwen2.5-0.5B"`, `DEFAULT_DATASET = "ai-energy-score"`, `CURRENT_SCHEMA_VERSION = "3.0.0"`
+- Private variables: leading underscore: `_latency_ms`, `_initialized`, `_config`
+- Environment variables: UPPERCASE: `LLM_ENERGY_VERBOSITY`, `VLLM_LOGGING_LEVEL`
+
+**Classes:**
+- PascalCase: `ExperimentConfig`, `ModelInfo`, `InferenceMetrics`, `ExperimentOrchestrator`
+- Protocol classes: Suffix or name contains `Protocol`: `EnergyBackendProtocol`, `InferenceBackend` (interface)
+- Test classes: Prefix with `Test`: `class TestCalculateInferenceMetrics:`, `class TestTrafficSimulation:`
+- Exception classes: Suffix with `Error`: `ConfigurationError`, `RetryableError`, `BackendConfigError`
+- Pydantic models: Descriptive names: `TrafficSimulation`, `PyTorchConfig`, `RawProcessResult`
 
 **Types:**
-- Type hints: Python 3.10+ syntax (e.g., `list[str]`, `dict[str, float]`, `X | None` not `Optional[X]`)
-- Union types: `X | Y` syntax (e.g., `str | None`, `int | float`)
-- Generic containers: `list[T]`, `dict[K, V]` not `List[T]`, `Dict[K, V]`
+- Type aliases: PascalCase or descriptive: `VerbosityType = Literal["quiet", "normal", "verbose"]`
+- Generic type vars: Single uppercase letter: `T = TypeVar("T")`
 
 ## Code Style
 
 **Formatting:**
-- Formatter: Ruff (`poetry run ruff format`)
-- Line length: 100 characters
+- Tool: Ruff (replaces Black + isort)
+- Line length: 100 characters (configured in `pyproject.toml`)
 - Quote style: Double quotes (`"..."`)
 - Indent style: 4 spaces
 
 **Linting:**
-- Linter: Ruff (`poetry run ruff check`)
-- Rules enabled: `["E", "F", "I", "UP", "B", "SIM", "RUF"]`
-- Line length rule ignored: `E501` (handled by formatter)
+- Tool: Ruff (`ruff check`)
+- Selected rules: `["E", "F", "I", "UP", "B", "SIM", "RUF"]`
+  - E: pycodestyle errors
+  - F: pyflakes
+  - I: isort (import sorting)
+  - UP: pyupgrade (modern Python syntax)
+  - B: flake8-bugbear (likely bugs)
+  - SIM: flake8-simplify
+  - RUF: ruff-specific rules
+- Ignored: `E501` (line length, handled by formatter)
 
-**Enforcement:**
-- Pre-commit hook: Ruff formatting and linting
-- CI: `make check` runs format, lint, typecheck
-- Type checking: MyPy with strict mode enabled
+**Type Checking:**
+- Tool: mypy
+- Mode: Strict (`strict = true` in `pyproject.toml`)
+- Python version: 3.10+
+- Relaxed checks:
+  - `disallow_untyped_calls = false` (for torch, transformers)
+  - `warn_unused_ignores = false` (cross-environment compatibility)
+- Excludes: `experiment_core_utils`, `experiment_orchestration_utils`, `configs/`
+
+**Pre-commit Enforcement:**
+- All style/lint/type checks run automatically via `.pre-commit-config.yaml`
+- Hooks:
+  1. Branch protection (main branch)
+  2. trailing-whitespace, end-of-file-fixer
+  3. check-yaml, check-added-large-files, check-merge-conflict
+  4. ruff (lint + fix)
+  5. ruff-format
+  6. mypy (src/ only)
+  7. SSOT doc regeneration (when introspection files change)
+- Manual run: `pre-commit run --all-files`
+- Install: `pre-commit install`
 
 ## Import Organization
 
-**Order:**
-1. Standard library (`os`, `sys`, `pathlib`, `typing`, etc.)
-2. Third-party packages (`pydantic`, `torch`, `loguru`, `typer`, etc.)
-3. Local application imports (relative imports from `llenergymeasure.*`)
+**Order (enforced by ruff):**
+1. Future annotations: `from __future__ import annotations`
+2. Standard library imports (sorted alphabetically)
+3. Third-party imports (sorted alphabetically)
+4. Local application imports (sorted alphabetically)
 
-**Path Aliases:**
-- No path aliases currently configured
-- Use absolute imports from package root (e.g., `from llenergymeasure.config.models import ExperimentConfig`)
-
-**Patterns:**
-- Prefer explicit imports: `from module import ClassName` (not `from module import *`)
-- Use `TYPE_CHECKING` guard for type-only imports: `if TYPE_CHECKING: from ... import ...`
-- Type stubs: `from typing import TYPE_CHECKING`
-
-Example:
+**Example from `src/llenergymeasure/core/model_loader.py`:**
 ```python
-import os
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from __future__ import annotations
 
-from pydantic import BaseModel, Field
+import importlib
+import warnings
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+import torch
 from loguru import logger
-
-from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.domain.metrics import InferenceMetrics
+from packaging import version
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 if TYPE_CHECKING:
-    from llenergymeasure.core.inference import InferenceEngine
+    from transformers import PreTrainedModel, PreTrainedTokenizer
+
+from llenergymeasure.config.backend_configs import PyTorchConfig
+from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.exceptions import ConfigurationError
 ```
 
-## Error Handling
+**Import patterns:**
+- Use `TYPE_CHECKING` guard for circular imports and type-only imports
+- Prefer explicit imports: `from module import Class` over `import module`
+- No wildcard imports: Never `from module import *`
+- Group local imports by logical package
+- Import order within each section: alphabetical
 
-**Exception Hierarchy:**
-- Base exception: `LLMBenchError` in `llenergymeasure/exceptions.py`
-- Domain errors: `ConfigurationError`, `ModelLoadError`, `InferenceError`, `EnergyTrackingError`, `AggregationError`, `DistributedError`
-- Retryable errors: `RetryableError` (transient errors like OOM, GPU communication)
-- Backend errors: `BackendError`, `BackendNotAvailableError`, `BackendInitializationError`, `BackendInferenceError`, `BackendTimeoutError`, `BackendConfigError`
-- State machine errors: `InvalidStateTransitionError`
+**Path Aliases:**
+- None configured
+- All imports use full package paths: `from llenergymeasure.config.models import ExperimentConfig`
 
-**Pattern:**
-```python
-from llenergymeasure.exceptions import ConfigurationError, RetryableError
+## Type Annotations
 
-# Domain error
-if not config.model_name:
-    raise ConfigurationError("model_name is required")
+**Required for:**
+- All public function signatures
+- All class attributes (via dataclass fields or Pydantic Field())
+- Public API methods and callbacks
 
-# Retryable error (for transient failures)
-try:
-    result = inference_engine.run(prompts)
-except torch.cuda.OutOfMemoryError as e:
-    raise RetryableError(f"GPU OOM: {e}", max_retries=3) from e
-```
+**Style:**
+- Python 3.10+ syntax: `list[str]` not `List[str]`, `dict[str, float]` not `Dict[str, float]`
+- Union syntax: `str | None` not `Optional[str]`, `int | float` not `Union[int, float]`
+- Use `Any` sparingly, prefer specific types
+- Future annotations enabled globally: `from __future__ import annotations`
 
-**Guidelines:**
-- Catch specific exceptions, not generic `Exception`
-- Use custom exceptions for domain-specific errors
-- Include context in error messages: parameter name, expected values, actual values
-- Use `from e` for exception chaining to preserve stack traces
-- Backend errors include `backend` and optional `install_hint` for diagnostics
-
-## Logging
-
-**Framework:** Loguru (`loguru.logger`)
-
-**Setup:**
-- Configure via `setup_logging()` in `llenergymeasure/logging.py`
-- Verbosity levels: `quiet` (WARNING+), `normal` (INFO+), `verbose` (DEBUG+)
-- Environment variable: `LLM_ENERGY_VERBOSITY` (default: "normal")
-
-**Patterns:**
-```python
-from llenergymeasure.logging import get_logger
-
-logger = get_logger(__name__)  # Bind module name
-
-# Log at appropriate levels
-logger.debug("Loading model from cache")
-logger.info(f"Starting inference on {len(prompts)} prompts")
-logger.warning(f"GPU memory {used_gb:.1f}GB exceeds warning threshold")
-logger.error(f"Inference failed: {error}")
-```
-
-**Guidelines:**
-- Use `get_logger(__name__)` for module-level loggers (binds module name automatically)
-- Avoid logging secrets, tokens, or PII
-- Use f-strings for message formatting
-- Structured logging: include keys in logs for machine parsing
-- Log at start/end of major operations (model loading, inference, aggregation)
-
-## Comments
-
-**When to Comment:**
-- Complex algorithms or non-obvious logic
-- Workarounds for known limitations or bugs
-- Links to related documentation or issues
-- Explanations of "why", not "what" (code shows what)
-
-**JSDoc/TSDoc:**
-- Use Google-style docstrings for public functions and classes
-- Include Args, Returns, Raises sections
-- Include brief description for simple/obvious functions
-
-**Pattern:**
+**Example from `src/llenergymeasure/core/inference.py`:**
 ```python
 def calculate_inference_metrics(
     num_prompts: int,
@@ -160,132 +138,353 @@ def calculate_inference_metrics(
     total_input_tokens: int,
     total_generated_tokens: int,
 ) -> InferenceMetrics:
-    """Calculate inference performance metrics.
+    """Calculate inference metrics from raw timing data."""
+```
+
+**Protocols for abstraction:**
+```python
+# src/llenergymeasure/protocols.py
+from typing import Protocol
+
+class EnergyBackendProtocol(Protocol):
+    def start(self) -> None: ...
+    def stop(self) -> dict[str, float]: ...
+```
+
+**TYPE_CHECKING imports:**
+```python
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from transformers import PreTrainedModel, PreTrainedTokenizer
+    from llenergymeasure.core.inference import InferenceEngine
+```
+
+## Error Handling
+
+**Exception hierarchy:**
+```python
+# src/llenergymeasure/exceptions.py
+LLMBenchError                    # Base exception
+├── ConfigurationError           # Invalid or missing configuration
+├── ModelLoadError              # Failed to load model/tokenizer
+├── InferenceError              # Error during model inference
+├── EnergyTrackingError         # Error in energy measurement
+├── AggregationError            # Error aggregating results
+├── DistributedError            # Multi-GPU setup errors
+├── RetryableError              # Transient errors (OOM, GPU issues)
+│   └── max_retries attribute
+├── BackendError                # Backend-specific base
+│   ├── BackendNotAvailableError     # Dependencies missing
+│   ├── BackendInitializationError   # Model loading failed
+│   ├── BackendInferenceError        # Inference execution error
+│   ├── BackendTimeoutError          # Exceeded timeout
+│   └── BackendConfigError           # Invalid backend param
+└── InvalidStateTransitionError  # State machine violations
+```
+
+**Patterns:**
+- Raise custom exceptions, not generic `ValueError`/`RuntimeError` in public API
+- Use `RetryableError` for transient failures (OOM, GPU communication errors)
+- Backend errors include context: `BackendConfigError(backend="vllm", param="batch_size", message=...)`
+- State transitions raise `InvalidStateTransitionError(from_status="running", to_status="pending", entity="experiment")`
+- Use exception chaining: `raise ModelLoadError(...) from e`
+
+**Example from `src/llenergymeasure/exceptions.py`:**
+```python
+class BackendNotAvailableError(BackendError):
+    """Backend is not installed or not usable."""
+
+    def __init__(self, backend: str, install_hint: str | None = None):
+        msg = f"Backend '{backend}' is not available"
+        if install_hint:
+            msg += f". Install with: {install_hint}"
+        super().__init__(msg)
+        self.backend = backend
+        self.install_hint = install_hint
+```
+
+**No bare except:**
+- Always catch specific exceptions
+- Use `finally` for cleanup, not `except` without re-raise
+- Warnings via `warnings.warn()` for non-critical issues
+
+## Logging
+
+**Framework:** Loguru (`from loguru import logger`)
+
+**Configuration:**
+- Setup: `setup_logging()` in `src/llenergymeasure/logging.py`
+- Verbosity modes (set via `LLM_ENERGY_VERBOSITY` env var or `--quiet`/`--verbose` flags):
+  - `quiet`: WARNING+ only, no progress bars, simplified format
+  - `normal`: INFO+, progress bars, simplified format (default)
+  - `verbose`: DEBUG+, full format with timestamps and module names
+
+**Log levels:**
+- `DEBUG`: Internal state, function entry/exit (verbose mode only)
+- `INFO`: User-facing status updates, experiment progress
+- `WARNING`: Recoverable issues, deprecated features, config warnings
+- `ERROR`: Errors that prevent operation but don't crash
+- `CRITICAL`: Fatal errors (rarely used)
+
+**Format patterns:**
+```python
+# Structured logging with context
+logger.info("Experiment started: {experiment_id}", experiment_id=exp_id)
+
+# F-string for complex messages
+logger.debug(f"bitsandbytes {bnb_version}: 4bit={supports_4bit}, 8bit={supports_8bit}")
+
+# Context in warnings/errors
+logger.warning(f"GPU cleanup failed: {e}")
+logger.error(f"All {max_retries + 1} attempts failed: {e}")
+```
+
+**Backend filtering:**
+- Noisy backends (vLLM, TensorRT, transformers, ray) suppressed in normal/quiet mode
+- Configured in `BACKEND_NOISY_LOGGERS` list: `["vllm", "tensorrt", "transformers", "ray", "accelerate"]`
+- Verbose mode shows all backend logs at DEBUG level
+- Environment variables set for backends: `VLLM_LOGGING_LEVEL`, `TLLM_LOG_LEVEL`
+
+**Per-experiment log files:**
+- Full DEBUG logs written to `results/<exp_id>/logs/<exp_id>.log` (independent of console verbosity)
+- Rotation: 50 MB, retention: 7 days, thread-safe (`enqueue=True`)
+- Format: Always uses `VERBOSE_FORMAT` (timestamps + module names)
+
+**Example from `src/llenergymeasure/logging.py`:**
+```python
+VERBOSE_FORMAT = (
+    "<green>{time:HH:mm:ss}</green> | "
+    "<level>{level: <8}</level> | "
+    "<cyan>{name}</cyan>:<cyan>{function}</cyan> - "
+    "<level>{message}</level>"
+)
+
+SIMPLE_FORMAT = "<level>{level: <8}</level> | <level>{message}</level>"
+```
+
+## Docstrings
+
+**Format:** Google-style
+
+**Complex function:**
+```python
+def initialize(self, config: ExperimentConfig, runtime: BackendRuntime) -> None:
+    """Initialize the inference backend with model and configuration.
 
     Args:
-        num_prompts: Number of prompts processed.
-        latencies_ms: List of per-batch latencies in milliseconds.
-        total_input_tokens: Total input tokens processed.
-        total_generated_tokens: Total tokens generated.
+        config: Experiment configuration containing model name and parameters.
+        runtime: Runtime context with device info and distributed settings.
 
-    Returns:
-        InferenceMetrics with calculated values.
+    Raises:
+        BackendInitializationError: If model loading fails.
     """
-    ...
 ```
+
+**Simple function:**
+```python
+def strip_ansi(text: str) -> str:
+    """Strip ANSI escape codes from text."""
+```
+
+**Required sections for complex functions:**
+- Brief description (first line)
+- Args: Parameter descriptions with types (if not obvious from signature)
+- Returns: Return value description (if non-trivial)
+- Raises: Exceptions that may be raised (for public API only)
+
+**Module docstrings:**
+- All modules have 1-3 sentence docstring at top
+- Key modules include architecture notes
+
+**Example from `src/llenergymeasure/config/models.py`:**
+```python
+"""Configuration models for LLM Bench experiments.
+
+This module defines the Tier 1 (Universal) configuration that applies identically
+across all backends. Backend-specific parameters live in backend_configs.py.
+"""
+```
+
+**Class docstrings:**
+```python
+class TrafficSimulation(BaseModel):
+    """MLPerf-style traffic simulation for realistic load testing.
+
+    Modes:
+    - constant: Fixed inter-arrival time (1/target_qps seconds)
+    - poisson: Exponential inter-arrival times (MLPerf server scenario)
+    """
+```
+
+## Pydantic Patterns
+
+**Model definition:**
+```python
+class TrafficSimulation(BaseModel):
+    """MLPerf-style traffic simulation for realistic load testing."""
+
+    enabled: bool = Field(default=False, description="Enable traffic simulation")
+    mode: Literal["constant", "poisson"] = Field(
+        default="poisson",
+        description="Traffic arrival pattern (MLPerf terminology)"
+    )
+    target_qps: float = Field(
+        default=1.0,
+        gt=0,
+        description="Target queries per second"
+    )
+    seed: int | None = Field(
+        default=None,
+        description="Random seed for reproducibility"
+    )
+```
+
+**Validation:**
+- Use `Field(..., gt=0)`, `Field(..., ge=0)`, `Field(..., le=100)` for numeric constraints
+- Use `@field_validator` for single-field validation
+- Use `@model_validator` for cross-field validation
+- Literal types for enums: `Literal["constant", "poisson"]`
+- Custom validation in validators (not in model body)
+
+**Example validator:**
+```python
+@field_validator("target_qps")
+@classmethod
+def validate_qps(cls, v: float) -> float:
+    if v <= 0:
+        raise ValueError("target_qps must be positive")
+    return v
+```
+
+**Configuration precedence (enforced in config loader):**
+- CLI flags > Config file > Preset > Pydantic defaults
 
 ## Function Design
 
 **Size:**
-- Keep functions focused and single-responsibility
-- Aim for <50 lines when practical
-- Long functions should be broken into smaller helper functions
+- Keep functions under 100 lines
+- Extract helper functions for complex logic
+- One primary responsibility per function
 
 **Parameters:**
-- Use type hints for all parameters (required)
-- Keep parameter count <= 5 (use objects/dataclasses for many params)
-- Use keyword arguments for optional parameters
-- Use `*` to force keyword-only args when useful
+- Use keyword-only arguments for clarity when >2 params: `def func(required: str, *, optional: int = 0)`
+- Avoid mutable defaults (use `None` + inline assignment: `items = items or []`)
+- Use dataclasses/Pydantic models for >4 related parameters
+- Type hints required for all parameters
 
-**Return Values:**
-- Always include return type hint
-- Return early to reduce nesting
-- Use structured return types (Pydantic models, dataclasses) for multiple values
-- Return `None` explicitly when function has side effects only
+**Return values:**
+- Prefer domain objects (Pydantic models, dataclasses) over dicts/tuples
+- Use `None` for "no result", not empty dict/list (unless collection is semantic)
+- Always include return type hint (even for `-> None`)
 
-**Pattern:**
+**Example from `src/llenergymeasure/core/inference.py`:**
 ```python
-def run_inference(
-    prompts: list[str],
-    config: ExperimentConfig,
-    *,  # Force keyword args
-    timeout_sec: float = 300.0,
+def calculate_inference_metrics(
+    num_prompts: int,
+    latencies_ms: list[float],
+    total_input_tokens: int,
+    total_generated_tokens: int,
 ) -> InferenceMetrics:
-    """Run inference and collect metrics."""
+    """Calculate inference metrics from raw timing data.
 
-    # Early return for validation
-    if not prompts:
-        return InferenceMetrics.empty()
-
-    # Main logic
-    ...
-    return InferenceMetrics(...)
+    Returns domain object, not dict.
+    """
+    return InferenceMetrics(
+        input_tokens=total_input_tokens,
+        output_tokens=total_generated_tokens,
+        total_tokens=total_input_tokens + total_generated_tokens,
+        inference_time_sec=sum(latencies_ms) / 1000.0,
+        tokens_per_second=tps,
+        latency_per_token_ms=latency_per_token,
+    )
 ```
 
 ## Module Design
 
 **Exports:**
-- Use `__init__.py` to expose public API
-- Keep internal modules private (prefixed with `_` or in subdirectories)
-- Document public API in module docstring
+- Use `__all__` to control public API
+- Re-export key items in `__init__.py` for convenience
 
-**Barrel Files:**
-- Use in `llenergymeasure/` and submodules for re-exporting commonly-used classes
-- Pattern: `from module import ClassName` in `__init__.py`
-
-**Example (`llenergymeasure/__init__.py`):**
+**Example from `src/llenergymeasure/orchestration/__init__.py`:**
 ```python
-"""LLenergyMeasure - LLM inference efficiency measurement framework."""
+from llenergymeasure.orchestration.context import (
+    ExperimentContext,
+    experiment_context,
+)
+from llenergymeasure.orchestration.factory import (
+    build_energy_backend,
+    build_inference_engine,
+)
+from llenergymeasure.orchestration.runner import ExperimentOrchestrator
 
-from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.domain.metrics import InferenceMetrics, EnergyMetrics
-
-__all__ = ["ExperimentConfig", "InferenceMetrics", "EnergyMetrics"]
+__all__ = [
+    "ExperimentContext",
+    "experiment_context",
+    "build_energy_backend",
+    "build_inference_engine",
+    "ExperimentOrchestrator",
+]
 ```
 
-## Pydantic Models
+**Barrel files:**
+- Used in `__init__.py` to create package-level API
+- Selective exports only (not re-exporting everything)
+- Flatten deeply nested structures for external API
 
-**Pattern:**
-- All configuration and result objects are Pydantic `BaseModel`
-- Use `Field()` for validation, defaults, and documentation
-- Include `description` for all fields (used in CLI help, docs)
-- Validate at instantiation time (Pydantic v2)
+## SSOT Architecture
 
-**Example from `config/models.py`:**
+**Single Source of Truth:** Pydantic models are the canonical source for all parameter metadata
+
+**Introspection module:** `src/llenergymeasure/config/introspection.py`
+- Auto-discovers parameters from Pydantic models (`backend_configs.py`, `models.py`)
+- Provides: test values, constraints, mutual exclusions, skip conditions
+- Used by: runtime tests (`tests/runtime/`), doc generators (`scripts/generate_*.py`), CLI tools
+
+**Key functions:**
+- `get_backend_params(backend: str)` - All params for a backend (from Pydantic model)
+- `get_param_test_values(param: str)` - Test values derived from Field constraints
+- `get_streaming_constraints()` - Params affected by streaming=True
+- `get_mutual_exclusions()` - Incompatible param combinations
+- `get_param_skip_conditions(param: str)` - Hardware/GPU requirements for testing
+
+**When adding parameters:**
+1. Add to Pydantic model in `backend_configs.py` or `models.py`
+2. Add Field metadata: `Field(default=..., description="...", gt=0, ...)`
+3. Run `make generate-docs` to regenerate docs
+4. Tests auto-discover via introspection (no manual update needed)
+
+**No parallel lists:** Test values, constraints, documentation all derived from Pydantic Field metadata
+
+**Pre-commit integration:** Docs regenerate automatically when introspection sources change
+
+## Comments
+
+**When to Comment:**
+- Complex algorithms: Explain the "why", not the "what"
+- Non-obvious performance optimizations
+- Workarounds for library bugs/limitations
+- Business logic that isn't self-documenting
+- TODOs for future work: `TODO: Add AWQ support when transformers 4.36+ available`
+
+**What NOT to comment:**
+- Self-explanatory code: Don't write `# Increment counter` for `count += 1`
+- Type information (use type hints instead)
+- Function purpose (use docstring)
+- Obvious operations
+
+**Example from `tests/conftest_backends.py`:**
 ```python
-class TrafficSimulation(BaseModel):
-    """Simulated traffic pattern for inference load."""
-
-    enabled: bool = Field(
-        default=False,
-        description="Enable traffic simulation",
-    )
-    mode: Literal["poisson", "constant"] = Field(
-        default="poisson",
-        description="Traffic arrival pattern",
-    )
-    target_qps: float = Field(
-        default=1.0,
-        gt=0,  # Greater than
-        description="Target queries per second",
-    )
+# Sleep 10% of simulated time to avoid blocking tests
+time.sleep(total_latency_sec * 0.1)
 ```
 
-## Dependency Injection
-
-**Pattern:**
-- Components implement protocol interfaces (e.g., `EnergyBackendProtocol`)
-- Components injected via class constructors
-- Factories create instances based on configuration
-
-**Example from `orchestration/runner.py`:**
+**Example from `src/llenergymeasure/core/model_loader.py`:**
 ```python
-class ExperimentOrchestrator:
-    def __init__(
-        self,
-        model_loader: ModelLoaderProtocol,
-        inference_engine: InferenceEngineProtocol,
-        metrics_collector: MetricsCollectorProtocol,
-        energy_backend: EnergyBackendProtocol,
-        repository: RepositoryProtocol,
-    ):
-        self._loader = model_loader
-        self._inference = inference_engine
-        self._metrics = metrics_collector
-        self._energy = energy_backend
-        self._repository = repository
+# bitsandbytes 0.39.0+ supports 4-bit quantization (QLoRA)
+supports_4bit = parsed_version >= version.parse("0.39.0")
 ```
 
 ---
 
-*Convention analysis: 2026-01-26*
+*Convention analysis: 2026-02-05*

@@ -1,18 +1,21 @@
 # Project State
 
+
+TODO: this is now degraded - it needs updating based on new product decisions and desings (see phase 4.5)
+
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-01-29)
+See: .planning/PROJECT.md (updated 2026-02-17)
 
 **Core value:** Accurate, comprehensive measurement of the true cost of LLM inference — energy, compute, and quality tradeoffs — with research-grade rigour.
-**Current focus:** Phase 4 (Codebase Audit)
+**Current focus:** Phase 5 (Clean Foundation — v2.0)
 
 ## Current Position
 
-Phase: 4 of 7 (Codebase Audit) — NOT STARTED
+Phase: 5 of 10 (Clean Foundation — v2.0) — NOT STARTED
 Plan: 0 of ?
 Status: Ready to plan
-Last activity: 2026-02-04 — Completed Phase 3 (GPU Routing Fix)
+Last activity: 2026-02-17 — Completed Phase 4.5 (Strategic Reset) — vision settled, GSD docs updated
 
 Progress: [██████████] 100% Phase 1 (6/6) ✓
           [██████████] 100% Phase 2 (8/8) ✓
@@ -21,17 +24,21 @@ Progress: [██████████] 100% Phase 1 (6/6) ✓
           [██████████] 100% Phase 2.3 (4/4) ✓
           [██████████] 100% Phase 2.4 (6/6) ✓
           [██████████] 100% Phase 3 (3/3) ✓
-          [░░░░░░░░░░] 0% Phase 4 (0/?)
-          [░░░░░░░░░░] 0% Phase 5 (0/?)
-          [░░░░░░░░░░] 0% Phase 6 (0/6)
-          [░░░░░░░░░░] 0% Phase 7 (0/?)
+          [██████████] 100% Phase 4 (6/6) ✓
+          [██████████] 100% Phase 4.5 (strategic reset) ✓
+          [░░░░░░░░░░] 0% Phase 5 (0/?) — Clean Foundation (v2.0)
+          [░░░░░░░░░░] 0% Phase 6 (0/?) — Measurement Depth (v2.1)
+          [░░░░░░░░░░] 0% Phase 7 (0/?) — Scale (v2.2)
+          [░░░░░░░░░░] 0% Phase 8 (0/?) — Parameter Completeness (v2.3)
+          [░░░░░░░░░░] 0% Phase 9 (0/?) — Shareability (v2.4)
+          [░░░░░░░░░░] 0% Phase 10 (0/?) — Quality + Efficiency (v3.0)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 35
-- Average duration: 5.7 min
-- Total execution time: 201 min
+- Total plans completed: 46
+- Average duration: 7.0 min
+- Total execution time: 320 min
 
 **By Phase:**
 
@@ -44,44 +51,16 @@ Progress: [██████████] 100% Phase 1 (6/6) ✓
 | 02.3-campaign-state-resume | 4/4 | 26 min | 6.5 min |
 | 02.4-cli-polish-testing | 6/6 | 46 min | 7.7 min |
 | 03-gpu-routing-fix | 3/3 | 17 min | 5.7 min |
+| 04-codebase-audit | 6/6 | 78 min | 13.0 min ✓
 
 **Recent Trend:**
-- 01-01: 7 min (2 tasks, domain models + config extensions)
-- 01-03: 4 min (1 task, warmup convergence module)
-- 01-04: 4 min (2 tasks, CSV export + timeseries)
-- 01-02: 11 min (2 tasks, NVML measurement primitives)
-- 01-05: 7 min (2 tasks, orchestrator integration)
-- 01-06: 15 min (2 tasks, unit tests + UAT checkpoint)
-- 02-01: 4 min (2 tasks, CampaignConfig models + dependency)
-- 02-02: 6 min (2 tasks, ContainerManager Docker lifecycle)
-- 02-04: 2 min (1 task, campaign manifest persistence)
-- 02-05: 3 min (1 task, grid expansion and validation)
-- 02-07: 2 min (1 task, SSOT campaign config introspection)
-- 02-06: 7 min (4 tasks, campaign orchestrator integration)
-- 02-08: 5 min (2 tasks, unit tests + UAT checkpoint)
-- 02.1-01: 1 min (3 tasks, detection modules)
-- 02.1-02: 4 min (2 tasks, doctor diagnostic command)
-- 02.1-06: 2 min (2 tasks, campaign refactor)
-- 02.1-04: 4 min (2 tasks, documentation refresh)
-- 02.1-03: 12 min (3 tasks, packaging update)
-- 02.2-01: 3 min (3 tasks, campaign context propagation)
-- 02.2-02: 5 min (2 tasks, user config + container routing)
-- 02.2-03: 6 min (2 tasks, ContainerManager + dual container strategy)
-- 02.2-04: 4 min (4 tasks, unit tests + manual verification)
-- 02.3-01: 7 min (2 tasks, webhook notifications + resume command)
-- 02.3-02: 7 min (2 tasks, lem init wizard)
-- 02.3-03: 7 min (3 tasks, unit tests for Phase 2.3)
-- 02.3-04: 5 min (1 task, manual verification checkpoint)
-- 02.4-02: 2 min (2 tasks, schema version + example configs)
-- 02.4-01: 5 min (2 tasks, config list + campaign grouping)
-- 02.4-05: 4 min (3 tasks, backend noise filtering + JSON output)
-- 02.4-03: 5 min (2 tasks, smoke test warning capture + issues.yaml)
-- 02.4-06: 5 min (4 tasks, Docker lifecycle output)
-- 02.4-04: 25 min (4 tasks, unit tests + verification checkpoint)
-- 03-01: 4 min (3 tasks, GPU env var propagation to Docker)
-- 03-02: 5 min (3 tasks, fail-fast parallelism validation)
-- 03-03: 8 min (3 tasks, unit tests + manual verification)
-- Trend: Consistent ~4-7 min; Phase 3 complete
+- 04-01: 7 min (automated analysis — vulture, deadcode, ruff, industry comparison)
+- 04-02: 6 min (CLI surface + config system audit)
+- 04-03: 6 min (core engine + backend completeness audit)
+- 04-04: 5 min (orchestration, campaign, results, state audit)
+- 04-05: 45 min (infrastructure, tests, planning cross-reference)
+- 04-06: 8 min (report assembly + checkpoint)
+- Trend: Phase 4 complete — audit plans averaged 13 min (longer due to read-heavy analysis)
 
 *Updated after each plan completion*
 
@@ -171,10 +150,33 @@ Recent decisions affecting current work:
 - [03-03] config.gpus is declarative (specifies expected GPU count, not hardware probe)
 - [03-03] Validation is arithmetic (checks tp_size <= len(config.gpus))
 - [03-03] Container-side adapts to actual NVIDIA_VISIBLE_DEVICES from SLURM/runtime
+- [04-04] Campaign system identified as over-engineered: 3150 lines for functionality industry doesn't provide
+- [04-04] Campaign simplification approach: Extract grid to config command, minimal resume-only campaign (3150 → 500 lines, 84% reduction)
+- [04-04] Dead code identified: resilience.py (97), progress.py (250), bootstrap.py (118) — 465 lines total with zero imports
+- [04-04] State machine over-engineering: 6 states for fire-and-forget execution, 3 sufficient (422 → 150 lines, 64% reduction)
+- [04-04] Late aggregation pattern in results pipeline justified: Avoids "average of averages" bias, essential for multi-process accuracy
+- [04-05] Detection modules kept separate: docker_detection, backend_detection, env_setup are orthogonal concerns, no unification needed
+- [04-05] Docker hybrid model maintained: Local-first with Docker fallback serves both casual and serious users, Docker-only increases barrier to entry
+- [04-05] Planning alignment 100%: All 50 success criteria from Phases 1-3 implemented, no features lost in translation
+- [04-05] Test quality strong: 873 tests with 96.3% having assertions, 32 exception tests without assertions are intentional
+- [04.5] Library-first architecture — `import llenergymeasure` as primary interface; CLI is a thin wrapper. Industry norm (lm-eval, MLflow, CodeCarbon). Adopted at v2.0, not deferred.
+- [04.5] llem rename — `lem` → `llem` at v2.0, clean break, no compatibility shim or alias
+- [04.5] No default backend — `pip install llenergymeasure` installs no GPU backend; each is explicit (`[pytorch]`, `[vllm]`, `[tensorrt]`). Matches lm-eval pattern.
+- [04.5] Zeus as v2.1 energy backend — EnergyBackend Protocol extended, `llenergymeasure[zeus]` extra, ~5% accuracy vs CodeCarbon ~10-15%
+- [04.5] lm-eval integration as v3.0 — quality-alongside-efficiency, unique differentiator, deferred until solid CLI foundation
+- [04.5] Campaign as separate module — not cut; 1000+ config parameter sweep runs are genuine use case; extracted from CLI monolith to importable `campaign` module at v2.2
+- [04.5] Positioning: deployment efficiency (Option A primary) — "which deployment config?" not "which model?" — the gap nobody else fills
+- [04.5] Library as secondary offering (Option B) — `import llenergymeasure` as composable tool for other benchmarking infrastructure
+- [04.5] v4.0 web platform: static JSON MVP first, then dynamic API, then live features — three-stage rollout
+- [04.5] Web platform: separate product, separate repo — shares library API but not server; different tech stack, different lifecycle
+- [04.5] Versioning: v2.0 Clean Foundation → v2.1 Measurement Depth → v2.2 Scale → v2.3 Parameter Completeness → v2.4 Shareability → v3.0 Quality → v4.0 Web Platform
 
 ### Pending Todos
 
-None.
+1. **Singularity/Apptainer HPC support** (infrastructure) — Container-runtime abstraction for HPC environments. Post-v2.0.
+2. **Backend parameter completeness audit** (testing) — (1) verify all backend params are in config models, (2) verify all are wired through to backend API calls, (3) write robust integration tests per backend to validate wiring, (4) write full parameter reference doc per backend. Target: Phase 6.
+3. **Revisit peak_memory_mb measurement semantics** (measurement) — Inference-only vs whole-process vs both. Decision deferred to implementation phase.
+4. **Consider study-level cross-config aggregation** (measurement) — Cut from v2.0 (P-02). Revisit post-v2.0 whether built-in grouping/CIs justify scope expansion.
 
 ### Resolved Todos
 
@@ -203,6 +205,14 @@ None.
   - Phase 5: Refactor & Simplify — Remove dead code, simplify workflows, rename lem→llem
   - Old Phase 3 (Parameter Completeness) → Phase 6
   - Old Phase 4 (Polish + UAT) → Phase 7
+- [2026-02-17] Phase 4.5 Strategic Reset complete — full versioning roadmap and architecture confirmed. Major restructuring:
+  - Roadmap replaces old v1.19–v1.22 / Phase 5–7 structure with v2.0–v4.0 milestone series
+  - Phase 5 renamed "Clean Foundation" (was "Refactor & Simplify") — same scope, clearer framing
+  - Phases 6–10 added (Measurement Depth, Scale, Parameter Completeness, Shareability, Quality)
+  - v4.0 Web Platform confirmed as separate product, separate repo
+  - Decision records created in .planning/decisions/ directory
+  - Design specs created in .planning/design/ directory
+  - See ROADMAP.md and PROJECT.md for full updated structure
 
 ### Blockers/Concerns
 
@@ -213,7 +223,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-04
-Stopped at: Completed 03-03-PLAN.md (Phase 3 complete)
-Resume file: None
-Next action: Plan Phase 4 with `/gsd:plan-phase 4`
+Last session: 2026-02-19
+Stopped at: Session resumed, proceeding to plan Phase 5
+Resume file: (none)
+Next action: Plan Phase 5 (Clean Foundation) — `/gsd:plan-phase 5`

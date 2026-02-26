@@ -6,6 +6,8 @@
 
 ---
 
+TODO: this is now degraded - it needs updating based on new product decisions and desings (see phase 4.5)
+
 ## Overview
 
 Three interconnected issues need resolution:

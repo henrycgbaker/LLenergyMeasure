@@ -1,5 +1,7 @@
 # Requirements — v2.0.0 Milestone
 
+TODO: this is now degraded - it needs updating based on new product decisions and desings (see phase 4.5)
+
 27 requirements across 4 releases.
 
 ## v1 Requirements

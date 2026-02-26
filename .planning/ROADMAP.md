@@ -1,17 +1,23 @@
-# Roadmap: LLenergyMeasure v2.0.0
+# Roadmap: LLenergyMeasure
+
+
+TODO: this is now degraded - it needs updating based on new product decisions and desings (see phase 4.5)
 
 ## Overview
 
-The v2.0.0 milestone transforms LLenergyMeasure from a functional research tool into a production-grade CLI with measurement accuracy and campaign orchestration capabilities. Four phased releases address systematic energy measurement errors (15-30% idle power contamination), enable multi-backend campaign workflows via long-running Docker containers, achieve 90%+ backend parameter coverage, and complete comprehensive user acceptance testing. This roadmap delivers on the core value: accurate, comprehensive measurement of the true cost of LLM inference with research-grade rigour.
+LLenergyMeasure is a library-first LLM inference efficiency measurement framework. The v2.x series builds a solid, research-grade CLI and library. v3.0 adds quality-alongside-efficiency via lm-eval integration. v4.0 is a separate web platform product.
+
+**Core value:** The only tool that systematically quantifies how deployment configuration (batch size, quantisation, backend, parallelism) affects LLM energy efficiency — with research-grade rigour.
 
 ## Milestones
 
-- **v1.19.0 Measurement Foundations** - Phase 1 (complete)
-- **v1.20.0 Campaign Orchestrator** - Phase 2 (complete)
-- **v1.21.0 GPU Routing + Audit + Refactor** - Phases 3-5 (planned)
-- **v1.22.0 Parameter Completeness** - Phase 6 (planned)
-- **v1.23.0 Polish + UAT** - Phase 7 (planned)
-- **v2.0.0 Release** - Fully Working CLI milestone
+- **v2.0 — Clean Foundation** — Phase 5 (current milestone)
+- **v2.1 — Measurement Depth** — Phase 6 (planned)
+- **v2.2 — Scale** — Phase 7 (planned)
+- **v2.3 — Parameter Completeness** — Phase 8 (planned)
+- **v2.4 — Shareability** — Phase 9 (planned)
+- **v3.0 — Quality + Efficiency** — Phase 10 (planned)
+- **v4.0 — Web Platform** — Separate product, separate repo
 
 ## Phases
 
@@ -25,15 +31,21 @@ The v2.0.0 milestone transforms LLenergyMeasure from a functional research tool 
 - [x] **Phase 2.2: Campaign Execution Model** - Fix container routing, cycle context, dual container strategy (INSERTED)
 - [x] **Phase 2.3: Campaign State & Resume** - State persistence, `lem resume`, user preferences (INSERTED)
 - [x] **Phase 2.4: CLI Polish & Testing Infrastructure** - Aggregation group_by, CLI UX, example configs, smoke tests (INSERTED)
-- [ ] **Phase 3: GPU Routing Fix** - Fix CUDA_VISIBLE_DEVICES propagation, fail-fast config validation
-- [ ] **Phase 4: Codebase Audit** - Identify stubs, dead code, unimplemented features, verify plans vs implementation
-- [ ] **Phase 5: Refactor & Simplify** - Remove dead code, simplify workflows, rename lem->llem
-- [ ] **Phase 6: Parameter Completeness** - 90%+ backend coverage, version pinning, SSOT introspection updates
-- [ ] **Phase 7: Polish + UAT** - Cleanup, architectural refactor, documentation refresh, full workflow validation
+- [x] **Phase 3: GPU Routing Fix** - Fix CUDA_VISIBLE_DEVICES propagation, fail-fast config validation
+- [x] **Phase 4: Codebase Audit** - Identify stubs, dead code, unimplemented features, verify plans vs implementation
+- [x] **Phase 4.5: Strategic Reset** - Product vision settled, versioning roadmap confirmed, architecture decisions recorded (INSERTED)
+- [ ] **Phase 5: Clean Foundation (v2.0)** - Library-first restructure, `llem` rename, P0 bug fixes, dead code removal, CLI 15→9, state machine 6→3
+- [ ] **Phase 6: Measurement Depth (v2.1)** - Zeus energy backend, baseline power, thermal time-series, warmup convergence, env metadata, schema v3
+- [ ] **Phase 7: Scale (v2.2)** - Campaign as separate module, Docker multi-backend, grid generation
+- [ ] **Phase 8: Parameter Completeness (v2.3)** - PyTorch/vLLM/TRT to 90%+, prefill/decode phase split
+- [ ] **Phase 9: Shareability (v2.4)** - `llem results push`, opt-in central DB, HuggingFace Datasets export
+- [ ] **Phase 10: Quality + Efficiency (v3.0)** - lm-eval integration, accuracy vs efficiency tradeoff metrics
+
+---
 
 ## Phase Details
 
-### Phase 1: Measurement Foundations (v1.19.0)
+### Phase 1: Measurement Foundations (complete)
 
 **Goal**: Users measure inference energy with research-grade accuracy — baseline power subtracted, thermal throttling detected, environment fully documented, warmup convergence automatic
 
@@ -65,37 +77,13 @@ Plans:
 
 ---
 
-### Phase 2: Campaign Orchestrator (v1.20.0)
+### Phase 2: Campaign Orchestrator (complete)
 
 **Goal**: Users orchestrate multi-backend campaigns with long-running containers, backend-aware grid generation, and persistent manifest tracking — no per-experiment container startup overhead. Campaigns own cycles (repetitions of the full experiment set for statistical robustness).
 
 **Depends on**: Phase 1 (needs accurate measurements for campaign validation)
 
 **Requirements**: CAMP-01, CAMP-02, CAMP-03, CAMP-04, CAMP-05, CAMP-06, CAMP-07, CAMP-08, MEAS-08
-
-**Architectural model** (campaign-cycle hierarchy):
-```
-Campaign (user interaction level)
-  └── Cycle N (repetition of entire campaign for statistical robustness)
-        ├── Experiment A (atomic unit — one config, one run)
-        ├── Experiment B
-        └── Experiment C
-```
-Experiments are atomic. Cycles repeat the full experiment set. Campaigns orchestrate everything.
-
-**Success Criteria** (what must be TRUE):
-1. User starts campaign and each experiment runs in an ephemeral container via `docker compose run --rm` — simple lifecycle, no health-check complexity, correct for workloads without cross-experiment model persistence
-2. User defines campaign with backend-aware grid generation (cartesian product respects per-backend param validity — no invalid backend × param combinations)
-3. User inspects campaign manifest and sees exp_id -> config -> backend -> container -> status -> result_path tracking for all experiments
-4. User configures daemon mode and experiments run at scheduled times (not just sequential with thermal gaps)
-5. User sets `force_cold_start: true` and model unloads between experiments for cold-start benchmarking (warmup fairness is default)
-6. Campaign dispatches to correct backend containers, checks images are built before execution, ephemeral containers auto-clean up via `--rm`
-7. Existing campaign features retained: randomisation within cycles, interleaved/shuffled/grouped structures, thermal gaps, cycle-as-highest-organisational-principle
-8. Cross-backend campaign runs successfully (PyTorch + vLLM + TensorRT experiments dispatched correctly), UAT validates orchestrator behaviour
-9. User runs multi-cycle campaign and receives 95% confidence intervals via bootstrap resampling (moved from Phase 1 — requires cycle-level data)
-10. All config extensions added in this phase threaded through SSOT introspection — appear in CLI outputs, results JSON/CSV, runtime validation tests, and generated docs (introspection.py auto-discovers new Pydantic fields)
-
-**Context**: See `phases/02-CONTEXT.md` for detailed implementation decisions
 
 **Plans**: 8 plans in 4 waves
 
@@ -111,270 +99,197 @@ Plans:
 
 ---
 
-### Phase 2.1: Zero-Config Install Experience (INSERTED)
+### Phase 2.1: Zero-Config Install Experience (INSERTED, complete)
 
-**Goal**: Users install via `pip install llenergymeasure` (or `pip install -e .`) and everything works out of the box — local-first with PyTorch default, Docker auto-detected for multi-backend campaigns, `.env` auto-generated on first Docker use. No manual `setup.sh` required.
+**Goal**: Users install via `pip install llenergymeasure` (or `pip install -e .`) and everything works out of the box.
 
-**Depends on**: Phase 2 (campaign orchestrator must exist before install experience can be validated end-to-end)
-
-**Requirements**: Derived from UAT pain points discovered during Phase 2 execution
-
-**Success Criteria** (what must be TRUE):
-1. User runs `pip install -e .` followed by `lem campaign config.yaml` and it works — no manual setup.sh, no missing .env errors
-2. Docker auto-detection: if Docker is available, .env is auto-generated with PUID/PGID; if not, falls back to local execution seamlessly
-3. Post-install hooks or first-run detection handles all configuration that setup.sh currently does manually
-4. Package is PyPI-publishable: `pip install llenergymeasure` from PyPI network works out of the box
-5. Both install paths (pip install + setup.sh Docker-first) produce identical working setups
-6. Local execution (conda, venv, poetry) correctly detected — no false Docker routing
-
-**Context**: Discovered during Phase 2 UAT — `_should_use_docker()` misidentified conda installs as needing Docker, `.env` with PUID/PGID required manual generation, `setup.sh` not triggered by pip install.
-
-**Plans**: 6 plans in 4 waves
-
-Plans:
-- [x] 02.1-01-PLAN.md — Detection modules: docker_detection, backend_detection, env_setup (Wave 1)
-- [x] 02.1-02-PLAN.md — CLI wiring: `lem doctor` unified diagnostic command (Wave 2)
-- [x] 02.1-06-PLAN.md — Campaign refactor: _should_use_docker + ensure_env_file wiring (Wave 2)
-- [x] 02.1-03-PLAN.md — Packaging: PyTorch default + Makefile + delete setup.sh + PyPI validation (Wave 3)
-- [x] 02.1-04-PLAN.md — Documentation refresh: README, quickstart, backends, deployment (Wave 3)
-- [x] 02.1-05-PLAN.md — Unit tests + UAT verification checkpoint (Wave 4)
+**Plans**: 6 plans in 4 waves — all complete.
 
 ---
 
-### Phase 2.2: Campaign Execution Model (INSERTED)
+### Phase 2.2: Campaign Execution Model (INSERTED, complete)
 
-**Goal**: Fix container routing bugs, propagate campaign context to experiments, implement dual container strategy (ephemeral vs persistent), ensure CI computed at campaign level only.
+**Goal**: Fix container routing bugs, propagate campaign context to experiments, implement dual container strategy.
 
-**Depends on**: Phase 2.1 (needs working Docker detection and dispatch)
-
-**Requirements**: Derived from UAT bugs discovered during Phase 2/2.1 testing
-
-**Success Criteria** (what must be TRUE):
-1. TensorRT experiments route to `tensorrt` container (not `base`)
-2. Experiments running as part of campaign display "Part of campaign X, cycle Y/Z" instead of "single cycle" warning
-3. User can configure `docker.strategy: persistent` in `.lem-config.yaml` to use `up + exec` pattern
-4. Campaign CLI flag `--container-strategy [ephemeral|persistent]` overrides config
-5. CI warning suppressed for experiments within multi-cycle campaigns
-6. Thermal gap defaults configurable via user preferences
-
-**Context**: See `.planning/ARCHITECTURE-DISCUSSION.md` for decisions
-
-**Plans**: 4 plans in 3 waves
-
-Plans:
-- [x] 02.2-01-PLAN.md — Campaign context propagation + CI warning suppression + remove --cycles from experiment (Wave 1)
-- [x] 02.2-02-PLAN.md — Container routing fix + minimal user config loading for thermal gaps (Wave 1)
-- [x] 02.2-03-PLAN.md — Dual container strategy (ephemeral default + persistent option) (Wave 2)
-- [x] 02.2-04-PLAN.md — Unit tests + UAT verification checkpoint (Wave 3)
+**Plans**: 4 plans in 3 waves — all complete.
 
 ---
 
-### Phase 2.3: Campaign State & Resume (INSERTED)
+### Phase 2.3: Campaign State & Resume (INSERTED, complete)
 
-**Goal**: Interactive campaign resume via `lem resume`, guided project setup via `lem init`, and webhook notification system for experiment completion/failure.
+**Goal**: Interactive campaign resume via `lem resume`, guided project setup via `lem init`, and webhook notification system.
 
-**Depends on**: Phase 2.2 (needs correct execution model before adding state management)
-
-**Requirements**: Derived from feature requests and UAT feedback
-
-**Success Criteria** (what must be TRUE):
-1. `lem resume` discovers interrupted campaigns in `.state/` and presents interactive menu
-2. `lem resume --dry-run` shows what would be resumed without executing
-3. `lem resume --wipe` clears all state after confirmation
-4. `lem init` walks user through guided setup wizard with environment detection
-5. `lem init --non-interactive` creates config with defaults or CLI-provided values
-6. User preferences file `.lem-config.yaml` supports: results_dir, thermal_gaps, docker preferences, notification webhooks (default_backend removed — must be explicit in config)
-7. Webhook notifications POST to configured URL on experiment completion/failure
-
-**Context**: See `phases/02.3-CONTEXT.md` for detailed implementation decisions
-
-**Plans**: 4 plans in 2 waves
-
-Plans:
-- [x] 02.3-01-PLAN.md — `lem resume` command + UserConfig notifications + webhook sender (Wave 1)
-- [x] 02.3-02-PLAN.md — `lem init` interactive wizard (Wave 1)
-- [x] 02.3-03-PLAN.md — Unit tests for resume and init commands (Wave 2)
-- [x] 02.3-04-PLAN.md — Verification checkpoint (Wave 2)
+**Plans**: 4 plans in 2 waves — all complete.
 
 ---
 
-### Phase 2.4: CLI Polish & Testing Infrastructure (INSERTED)
+### Phase 2.4: CLI Polish & Testing Infrastructure (INSERTED, complete)
 
-**Goal**: Clean up CLI UX issues, improve developer experience with systematic smoke tests, and ensure all configurations and examples are up-to-date with schema v3.0.0.
+**Goal**: Clean up CLI UX issues, improve developer experience with systematic smoke tests, update all example configs to schema v3.0.0.
 
-**Depends on**: Phase 2.3 (builds on complete campaign/resume functionality)
-
-**Requirements**: Derived from accumulated todos and UAT observations
-
-**Success Criteria** (what must be TRUE):
-1. Campaign aggregation supports configurable `group_by` — users specify how to group experiments for summary statistics (by model, by backend, by batch_size, etc.) with results printed in CLI and recorded in campaign metadata
-2. CLI commands follow Typer best practices — required inputs are positional arguments, optional modifiers are flags
-3. CLI output has three-tier verbosity (quiet/standard/verbose) with backend-specific noise filtered appropriately
-4. All example configs use schema v3.0.0, maximize each backend's functionality, and test_configs directory is complete
-5. `lem config list` command exists for discoverability of available configurations
-6. pyproject.toml and Docker dependencies follow consistent SSOT pattern
-7. Systematic inference smoke tests run actual inference across parameter combinations, capturing and reporting warnings/errors (e.g., flash_attention_2 fallback)
-
-**Context**: See `phases/02.4-CONTEXT.md` for implementation decisions, `phases/02.4-RESEARCH.md` for research findings
-
-**Plans**: 6 plans in 2 waves
-
-Plans:
-- [x] 02.4-01-PLAN.md — `lem config list` command + campaign `--group-by` flag (Wave 1)
-- [x] 02.4-02-PLAN.md — Example configs schema v3.0.0 + schema_version validation (Wave 1)
-- [x] 02.4-03-PLAN.md — Smoke test suite with strict warning capture (Wave 1)
-- [x] 02.4-05-PLAN.md — Backend noise filtering + log capture + --json output (Wave 1)
-- [x] 02.4-06-PLAN.md — Docker lifecycle output (strategy display, build progress, dispatch status) (Wave 1)
-- [x] 02.4-04-PLAN.md — Unit tests + verification checkpoint (Wave 2)
+**Plans**: 6 plans in 2 waves — all complete.
 
 ---
 
-### Phase 3: GPU Routing Fix
+### Phase 3: GPU Routing Fix (complete)
 
-**Goal**: Fix the critical bug where CUDA_VISIBLE_DEVICES is not properly propagated to Docker containers, causing GPU initialization failures. Add fail-fast config validation for parallelism constraints.
+**Goal**: Fix CUDA_VISIBLE_DEVICES propagation to Docker containers, add fail-fast parallelism validation.
 
-**Depends on**: Phase 2.4 (builds on complete Docker dispatch infrastructure)
-
-**Requirements**: Derived from UAT failures — vLLM/TensorRT tensor parallelism fails due to CUDA not being visible in containers
-
-**Success Criteria** (what must be TRUE):
-1. User-provided `gpus` field from config becomes SSOT for available devices — propagated to containers via NVIDIA_VISIBLE_DEVICES/CUDA_VISIBLE_DEVICES
-2. Docker containers receive GPU access correctly — vLLM tensor_parallel_size=2 with gpus=[0,1,2,3] initializes successfully
-3. TensorRT experiments route to `tensorrt` container (not `base`) and have GPU access
-4. Config validation fails fast for invalid parallelism configs (e.g., tensor_parallel_size > available GPUs, attention heads not divisible by TP size)
-5. Runtime GPU detection removed from experiment path — config.gpus is authoritative
-6. Clear error messages when parallelism constraints violated (before container launch, not deep in backend initialization)
-
-**Context**: Discovered during vLLM/TensorRT UAT — "CUDA driver initialization failed" errors from worker processes, incorrect container routing for tensorrt backend.
-
-**Research**: See `phases/03-gpu-routing-fix/03-RESEARCH.md` for NVIDIA Container Toolkit details and GPU routing patterns.
-
-**Plans**: 3 plans in 2 waves
-
-Plans:
-- [ ] 03-01-PLAN.md — GPU env propagation to Docker (NVIDIA_VISIBLE_DEVICES, CUDA_VISIBLE_DEVICES remapping) (Wave 1)
-- [ ] 03-02-PLAN.md — Fail-fast parallelism validation (tensor_parallel_size vs gpus) (Wave 1)
-- [ ] 03-03-PLAN.md — Unit tests + manual verification checkpoint (Wave 2)
+**Plans**: 3 plans in 2 waves — all complete.
 
 ---
 
-### Phase 4: Codebase Audit
+### Phase 4: Codebase Audit (complete)
 
-**Goal**: Thoroughly audit the codebase to identify stubs, dead code, unimplemented features, over-engineering, and gaps between planning documents and actual implementation.
+**Goal**: Thoroughly audit the codebase — stubs, dead code, unimplemented features, over-engineering, planning vs implementation gaps.
 
-**Depends on**: Phase 3 (GPU routing must work before comprehensive audit)
-
-**Requirements**: Derived from accumulated technical debt and UAT observations
-
-**Success Criteria** (what must be TRUE):
-1. Audit report identifies all stubs (code that exists but doesn't function)
-2. Audit report identifies all dead code (unused modules, functions, config fields)
-3. Audit report identifies all unimplemented features from Phase 1-2 planning docs
-4. Audit report identifies over-engineered patterns that can be simplified
-5. Audit report identifies config fields that exist in schema but aren't wired up (e.g., `timeseries`)
-6. Audit report identifies duplicated functionality/code paths
-7. Audit report identifies misleading output (e.g., parallelism "appeared" to work but wasn't)
-8. All findings documented with specific file:line references and recommended actions
-
-**Context**: User feedback indicates codebase has accumulated complexity beyond what the core tool requires. Need systematic review before refactoring.
-
-**Plans**: 6 plans in 2 waves
-
-Plans:
-- [ ] 04-01-PLAN.md — Automated analysis (vulture, deadcode, ruff) + industry CLI comparison (Wave 1)
-- [ ] 04-02-PLAN.md — CLI surface and configuration system audit (Wave 1)
-- [ ] 04-03-PLAN.md — Core engine audit (backends, metrics, measurement) (Wave 1)
-- [ ] 04-04-PLAN.md — Orchestration, campaign, results, state, and domain audit (Wave 1)
-- [ ] 04-05-PLAN.md — Docker infrastructure, detection systems, tests, and planning cross-reference (Wave 1)
-- [ ] 04-06-PLAN.md — Report assembly + user review checkpoint (Wave 2)
+**Plans**: 6 plans in 2 waves — all complete.
 
 ---
 
-### Phase 5: Refactor & Simplify
+### Phase 4.5: Strategic Reset (INSERTED, complete)
 
-**Goal**: Act on audit findings to simplify the codebase, remove dead code, fix identified issues, and rename the CLI from `lem` to `llem`.
+**Goal**: Settle product vision, confirm versioning roadmap, record all architecture decisions before beginning Phase 5 work.
 
-**Depends on**: Phase 4 (needs audit findings before refactoring)
+**Key outputs**:
+- Product vision: Dual-product (CLI + web platform), deployment efficiency positioning (Option A primary)
+- Versioning: v2.0 Clean Foundation → v2.x series → v3.0 Quality → v4.0 Web Platform
+- Architecture: Library-first restructure at v2.0; study as separate module (v2.2); Zeus as energy backend (v2.1); lm-eval at v3.0
+- Installation: `llem` rename at v2.0, no default backend, explicit extras per backend
+- Decision records: `decisions/` directory with versioning-roadmap.md, product-vision.md, architecture.md, installation.md
+- Design specs: `design/` directory with package-structure.md, cli-commands.md
 
-**Requirements**: Derived from Phase 4 audit results
+**Plans**: Research and discussion — no GSD plan files (discussion-format phase)
+
+---
+
+### Phase 5: Clean Foundation (v2.0) — CURRENT MILESTONE
+
+**Goal**: Library-first restructure, `llem` rename, P0 bug fixes, dead code removal, CLI 15→3, state machine 6→3.
+
+**Depends on**: Phase 4.5 (vision and architecture decisions confirmed)
 
 **Success Criteria** (what must be TRUE):
-1. All dead code identified in audit removed
-2. All stubs either implemented or removed (with documentation if deferred)
-3. Over-engineered patterns simplified per Occam's razor
-4. Config fields wired up end-to-end or removed from schema
-5. CLI renamed from `lem` to `llem` (all references updated: pyproject.toml, docs, examples, tests)
-6. Backend configs pass directly to inference backends without unnecessary parsing/transformation
-7. Test suite updated to catch "silent failures" (things that appear to work but don't)
-8. SSOT principles enforced throughout codebase
+1. `import llenergymeasure` works as a library — `__init__.py` exports Tier 1 + Tier 2 public API
+2. CLI renamed `lem` → `llem` throughout (pyproject.toml, docs, examples, tests)
+3. All 4 P0 bugs fixed (PyTorch model_kwargs L375, vLLM no native streaming, Docker broken, vLLM shm-size missing)
+4. 1,524 lines of confirmed dead code removed
+5. CLI reduced from 15 to 3 commands (experiment, study, status)
+6. State machine reduced from 6 to 3 states
+7. No default backend at base install — `pip install llenergymeasure` installs no GPU backend
+8. All tests passing at v2.0 library boundary
 
-**Context**: Simplification pass to reduce maintenance burden and improve reliability before adding more features.
-
-**Plans**: TBD (run /gsd:plan-phase 5 to break down)
+**Plans**: TBD (run `/gsd:plan-phase 5` to break down)
 
 Plans:
 - [ ] TBD
 
 ---
 
-### Phase 6: Parameter Completeness (v1.22.0)
+### Phase 6: Measurement Depth (v2.1) — planned
 
-**Goal**: Users configure 90%+ of energy/throughput-impactful parameters for each backend with SSOT auto-discovery and escape hatch for niche cases
+**Goal**: Zeus energy backend, baseline power, thermal time-series, warmup convergence, environment metadata, bootstrap CI, schema v3.
 
-**Depends on**: Phase 5 (needs clean codebase before adding parameters)
+**Depends on**: Phase 5 (clean foundation required before extending measurement system)
 
-**Requirements**: PARAM-01, PARAM-02, PARAM-03, PARAM-04, PARAM-05
-
-**Success Criteria** (what must be TRUE):
-1. PyTorch backend supports 95%+ of energy-impactful parameters (up from 93.8%), vLLM 90%+ (up from 81.9%), TensorRT 95%+ (up from 93.8%)
-2. User reviews systematic parameter audit results showing which kwargs affect energy/throughput for each backend
-3. User passes undocumented/niche parameter via `extra:` escape hatch and it reaches backend successfully
-4. SSOT introspection auto-discovers new parameters added to Pydantic models (no manual parameter list maintenance)
-5. Cross-backend parameter audit campaign runs successfully via orchestrator (UAT round 3), results verify parameter coverage
-6. All config extensions added in this phase threaded through SSOT introspection — appear in CLI outputs, results JSON/CSV, runtime validation tests, and generated docs (introspection.py auto-discovers new Pydantic fields)
-
-**Context**: See `phases/06-parameter-completeness/` for implementation decisions and research findings
-
-**Plans**: 6 plans in 4 waves
-
-Plans:
-- [ ] 06-01-PLAN.md — PyTorch parameter expansion (8 new generation params) (Wave 1)
-- [ ] 06-02-PLAN.md — vLLM parameter expansion (9 new engine params) (Wave 1)
-- [ ] 06-03-PLAN.md — TensorRT parameter expansion (10 new build/runtime params) (Wave 1)
-- [ ] 06-04-PLAN.md — SSOT introspection updates + documentation regeneration (Wave 2)
-- [ ] 06-05-PLAN.md — Comprehensive example configs for all backends (Wave 3)
-- [ ] 06-06-PLAN.md — Unit tests + UAT verification (Wave 4)
-
----
-
-### Phase 7: Polish + UAT (v1.23.0)
-
-**Goal**: v2.0.0 release-ready — codebase cleaned via Occam's razor, architecture refactored if pain points found, documentation refreshed, Docker images validated, full workflow UAT passed
-
-**Depends on**: Phase 6 (needs all features complete before final validation)
-
-**Requirements**: UAT-01, UAT-02, UAT-03, UAT-04, UAT-05
-
-**Success Criteria** (what must be TRUE):
-1. Codebase cleanup pass complete: dead code removed, naming consistency improved, over-engineered areas simplified per Occam's razor
-2. Architectural refactor implemented if cleanup revealed structural pain points (or skipped if architecture sound)
-3. Full campaign workflow UAT passed: fresh VM, multi-backend grid, cycle execution, result export — all backends, end-to-end
-4. Documentation refreshed: README accurate, quickstart validated, deployment guides current, troubleshooting updated
-5. Docker images rebuilt from v2.0.0 tag and validated: PyTorch, vLLM, TensorRT services start cleanly, run experiments successfully
-6. All config extensions from all phases verified end-to-end through SSOT introspection — CLI outputs, results JSON/CSV, runtime validation tests, and generated docs all reflect the complete parameter surface
+**Key items**:
+- Zeus as optional energy backend (`llenergymeasure[zeus]`) — NVML-direct, ~5% accuracy vs CodeCarbon ~10-15%
+- Baseline power measurement before experiments
+- Thermal time-series at configurable intervals
+- Warmup convergence detection (CV-based, not fixed count)
+- Environment metadata per experiment
+- Bootstrap resampling for 95% confidence intervals
+- Schema v3 with migration path from v2
 
 **Plans**: TBD
 
-Plans:
-- [ ] 07-01: TBD during planning
-- [ ] 07-02: TBD during planning
+---
+
+### Phase 7: Scale (v2.2) — planned
+
+**Goal**: Campaign as separate importable module, Docker multi-backend orchestration, programmatic grid generation.
+
+**Depends on**: Phase 6 (measurement depth complete before scale work)
+
+**Key items**:
+- `study` module extracted from CLI — importable, not CLI-only
+- `study.runner` + `study.grid` as separate package
+- Docker multi-backend dispatch
+- Backend-aware grid generation retained
+
+**Plans**: TBD
+
+---
+
+### Phase 8: Parameter Completeness (v2.3) — planned
+
+**Goal**: 90%+ energy/throughput-impactful parameter coverage for each backend. Prefill/decode phase split.
+
+**Depends on**: Phase 7
+
+**Key items**:
+- PyTorch 93.8% → 95%+, vLLM 81.9% → 90%+, TensorRT 93.8% → 95%+
+- Prefill/decode phase split (separate timing, energy, throughput per phase)
+- SSOT introspection auto-discovers new parameters
+- `extra:` escape hatch validated end-to-end
+
+**Plans**: TBD
+
+---
+
+### Phase 9: Shareability (v2.4) — planned
+
+**Goal**: Results sharing infrastructure. `llem results push`, opt-in central database, HuggingFace Datasets export.
+
+**Depends on**: Phase 8
+
+**Key items**:
+- `llem results push <id>` — upload result to central DB
+- Opt-in central archive (growing evidence base for policy advocacy)
+- HuggingFace Datasets export format
+- Privacy: opt-in only, no automatic uploads
+
+**Plans**: TBD
+
+---
+
+### Phase 10: Quality + Efficiency (v3.0) — planned
+
+**Goal**: lm-eval integration — quality-alongside-efficiency, the unique differentiator no other tool provides.
+
+**Depends on**: v2.x complete (solid CLI foundation required)
+
+**Key items**:
+- `llenergymeasure[lm-eval]` optional extra
+- Run accuracy benchmarks alongside efficiency measurement
+- Quality vs efficiency tradeoff metrics and Pareto frontier analysis
+- Unique positioning: the only tool combining inference efficiency + accuracy benchmarking
+
+**Plans**: TBD
+
+---
+
+### v4.0: Web Platform — separate product
+
+**Goal**: Browser-based results explorer, live dashboard, public leaderboard for policy advocacy.
+
+**Scope**: Separate repo, own lifecycle, shares library API but not server.
+
+**Key items**:
+- Static JSON MVP first (no backend required)
+- Dynamic API second (FastAPI)
+- Live features third (real-time dashboard, leaderboard)
+- Deployment: self-hosted GPU workers + lightweight central server (no GPUs)
+- Users: policy makers, decision makers, public — no GPU required
+
+**Plans**: TBD (separate product planning)
 
 ---
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 2.1 -> 2.2 -> 2.3 -> 2.4 -> 3 -> 4 -> 5 -> 6 -> 7
+Phases execute in numeric order: 1 → 2 → 2.1 → 2.2 → 2.3 → 2.4 → 3 → 4 → 4.5 → 5 → 6 → 7 → 8 → 9 → 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -385,14 +300,15 @@ Phases execute in numeric order: 1 -> 2 -> 2.1 -> 2.2 -> 2.3 -> 2.4 -> 3 -> 4 ->
 | 2.3 Campaign State & Resume (INSERTED) | 4/4 | Complete | 2026-02-04 |
 | 2.4 CLI Polish & Testing Infrastructure (INSERTED) | 6/6 | Complete | 2026-02-04 |
 | 3. GPU Routing Fix | 3/3 | Complete | 2026-02-04 |
-| 4. Codebase Audit | 0/6 | Planned | - |
-| 5. Refactor & Simplify | 0/? | Planned | - |
-| 6. Parameter Completeness | 0/6 | Planned | - |
-| 7. Polish + UAT | 0/? | Not started | - |
+| 4. Codebase Audit | 6/6 | Complete | 2026-02-05 |
+| 4.5 Strategic Reset (INSERTED) | — | Complete | 2026-02-17 |
+| 5. Clean Foundation (v2.0) | 0/? | Planned | - |
+| 6. Measurement Depth (v2.1) | 0/? | Planned | - |
+| 7. Scale (v2.2) | 0/? | Planned | - |
+| 8. Parameter Completeness (v2.3) | 0/? | Planned | - |
+| 9. Shareability (v2.4) | 0/? | Planned | - |
+| 10. Quality + Efficiency (v3.0) | 0/? | Planned | - |
 
 ---
 
-**Total Requirements:** 27 v1 requirements mapped across 7 phases + 4 inserted phases for architecture fixes
-**Coverage:** 27/27 (100%) + additional UAT-derived requirements
-
-**Next:** Plan Phase 4 with `/gsd:plan-phase 4`
+**Next:** Plan Phase 5 with `/gsd:plan-phase 5`

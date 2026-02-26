@@ -1,114 +1,32 @@
-# =============================================================================
-# LLM Energy Measure - .gitignore
-# =============================================================================
+# OS
+.DS_Store
+Thumbs.db
 
-# -----------------------------------------------------------------------------
-# Experiment artefacts (keep tool generic for all users)
-# -----------------------------------------------------------------------------
-results/
-
-# User configs (example configs are tracked in configs/examples/)
-configs/*
-!configs/examples/
-var/
-persistent_progress_trackers/
-emissions*.csv
-*.log
-*.logs
-
-# CodeCarbon tracking files
-.codecarbon.lock
-codecarbon.lock
-
-# Model/cache artifacts (leaked from containers)
-model.cache
-*.cache
-
-# Test output files
-test_results*.json
-
-# Downloaded installers
-Miniforge*.sh
-Miniconda*.sh
-
-# -----------------------------------------------------------------------------
-# Legacy/thesis files
-# -----------------------------------------------------------------------------
-thesis/
-to_do.ipynb
-refactor/
-
-# -----------------------------------------------------------------------------
-# Python
-# -----------------------------------------------------------------------------
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.egg-info/
-.eggs/
-*.egg
-.venv/
-venv/
-site-packages/
-
-# Build artifacts
-dist/
-build/
-*.whl
-
-# -----------------------------------------------------------------------------
-# Tool caches
-# -----------------------------------------------------------------------------
-.ruff_cache/
-.mypy_cache/
-.pytest_cache/
-.hypothesis/
-
-# Coverage
-htmlcov/
-.coverage
-.coverage.*
-coverage.xml
-*.cover
-
-# -----------------------------------------------------------------------------
-# IDE / Editor
-# -----------------------------------------------------------------------------
-.vscode/
-.idea/
+# Editor
 *.swp
 *.swo
 *~
 
-# -----------------------------------------------------------------------------
-# Environment / Secrets
-# -----------------------------------------------------------------------------
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Environment
 .env
 .env.*
 !.env.example
 
-# -----------------------------------------------------------------------------
-# Claude Code
-# -----------------------------------------------------------------------------
-CLAUDE.md
-**/CLAUDE.md
-.state/
-.mcp.json
-
-# -----------------------------------------------------------------------------
-# Personal / Shell configs (leaked from home directory)
-# -----------------------------------------------------------------------------
-.bash_profile
-.bashrc
-.zshrc
-.zprofile
-.profile
-.gitconfig
-.gitmodules
-.ripgreprc
-
-# -----------------------------------------------------------------------------
-# Pytest temp directories
-# -----------------------------------------------------------------------------
-pytest-of-*/
+emissions.csv
+.state
+results

@@ -1,361 +1,405 @@
 # Project Research Summary
 
-**Project:** LLenergyMeasure Milestone — Precision Enhancement
+**Project:** LLenergyMeasure v2.0
 **Domain:** LLM inference efficiency measurement and benchmarking
-**Researched:** 2026-01-29
-**Confidence:** HIGH
+**Researched:** 2026-02-25
+**Confidence:** MEDIUM-HIGH
 
 ## Executive Summary
 
-LLenergyMeasure's v2.0 CLI milestone focuses on precision enhancement through three core areas: energy measurement accuracy, comprehensive system metadata capture, and backend parameter completeness. Research reveals that whilst energy measurement is a strong differentiator (only 4 tools in the market measure energy), LLenergyMeasure has critical table stakes gaps that undermine credibility: missing baseline power subtraction leads to 15-30% systematic energy overestimation, inadequate environment metadata prevents reproducibility, and backend parameter coverage is incomplete.
+LLenergyMeasure's `.product/` decision set is broadly well-designed. Across six research files auditing stack, features, architecture, pitfalls, decision consistency, and the API return-type question, the majority of decisions hold up against peer evidence from 8+ tools (lm-eval, optimum-benchmark, Zeus, vLLM, MLflow, TokenPowerBench, ML.ENERGY, AIEnergyScore). The core architecture -- library-first, composition-based config, subprocess isolation, Option C experiment-study separation, unified `llem run` CLI -- is sound and in several areas ahead of peer practice. However, the research surfaces **three blocking issues**, **several stale dependency pins**, **a fundamental cross-document inconsistency**, and **three missing table-stakes features** that must be resolved before the harmonisation phase produces a consistent document set for implementation.
 
-The recommended approach involves foundational measurement improvements first (baseline power, time-series sampling, thermal monitoring), followed by systematic parameter auditing with version pinning, then campaign orchestration redesign using long-running Docker containers. The architecture should favour host-side Python orchestration with Docker SDK (python-on-whales) managing backend containers via `docker exec` dispatch, avoiding container recreation overhead whilst maintaining clean experiment isolation.
+The three most consequential findings are: (1) the unified `run()` library API with union return type `ExperimentResult | StudyResult` contradicts all peer practice (0/10 tools use this pattern) and official Python typing guidance -- the original split API (`run_experiment()` / `run_study()`) was the correct design; (2) FLOPs as a "primary metric" is misleading for this tool's stated purpose because FLOPs are deterministic for a given model+input and do not vary between deployment configurations, backends, or batch sizes -- the actual primary metrics are `energy_per_output_token` and `tokens_per_second`; (3) three features that every energy-focused peer tool treats as table-stakes are currently deferred past v2.0: environment metadata capture, prefill/decode phase-split energy, and power time-series capture. Additionally, the `zeus-ml` PyPI package has been renamed to `zeus`, making the current `pyproject.toml` install stale code.
 
-Critical risks include: idle power contamination invalidating energy comparisons, NVML sampling blind spots causing high variance on short experiments, thermal throttling masking true performance, vLLM/TensorRT API instability breaking parameter configs, and container state leakage accumulating memory across campaigns. These are mitigated through baseline subtraction, multi-cycle statistical aggregation, thermal state monitoring, exact version pinning, and health-checked long-running containers with explicit cleanup.
+Key risks are concentrated in measurement methodology: the 30-second thermal floor is under-calibrated (MLPerf requires 60 seconds under load), NVML accuracy is +/-5 watts (not +/-5 percent as documented), and baseline power subtraction is under-specified. These are addressable through well-defined calibration work. The cross-document inconsistency (15+ files still reference `llem study` and `run_experiment()`/`run_study()` after the 2026-02-25 unification decision) is a documentation debt that must be resolved during harmonisation to prevent implementers from building the wrong API.
 
-## Key Findings
+---
 
-### Recommended Stack
+## 1. Critical Issues Requiring Immediate Resolution
 
-The technology stack prioritises official, actively maintained libraries with proven stability. Core monitoring uses nvidia-ml-py (v13.590.48) for NVML GPU monitoring — the official NVIDIA bindings that supersede deprecated pynvml. Campaign orchestration uses python-on-whales (0.70+) over docker-py due to superior Docker Compose exec support, CLI feature parity, and thread-safe stateless design endorsed by Docker's official blog.
+These block the harmonisation phase. They must be resolved before writing implementation specs.
 
-**Core technologies:**
-- **nvidia-ml-py (13.590.48)** — GPU power, thermal, memory monitoring via NVML — Official NVIDIA bindings, actively maintained, Jan 2026 release
-- **python-on-whales (0.70+)** — Docker Compose orchestration — CLI parity, native `docker compose exec`, thread-safe, Docker-endorsed
-- **transformers (5.0+)** — PyTorch `generate()` parameter introspection — Official HuggingFace library, ~50+ parameters
-- **vllm (0.8.1+)** — vLLM backend parameters — Official vLLM library, 25+ constructor parameters
-- **tensorrt-llm (0.12.0+)** — TensorRT backend parameters — Official NVIDIA library, 60+ constructor parameters
+### 1.1 Library API: Union Return Type Must Be Reverted to Split Functions
 
-**Version compatibility:** Exact version pinning required for vLLM/TensorRT (pre-1.0 API stability). nvidia-ml-py ≥13.590.48 for latest NVML functions. Python 3.10+, CUDA 12.x, Docker 20.10+ with Compose V2.
+**Source:** `UNIFIED-API-RESEARCH.md`, `ARCHITECTURE.md` (Decision H), `DECISION-AUDIT.md` (section 2.5, CI-1)
 
-### Expected Features
+The `experiment-study-architecture.md` decision (2026-02-25) mandated `llem.run(config) -> ExperimentResult | StudyResult`. This directly contradicts:
+- **0/10 peer tools** use a union return type based on input count (pytest, Optuna, Ray Tune, lm-eval, MLflow, optimum-benchmark, W&B, scikit-learn, Hydra, Zeus)
+- **Official Python typing guidance** (typing.python.org): "Avoid union return types, since they require isinstance() checks"
+- **Guido van Rossum** (mypy issue #1693): explicitly advises against union return types
+- **The project's own `designs/library-api.md`**, which argued against union returns and designed `run_experiment()` + `run_study()` for exactly this reason
 
-The LLM benchmarking landscape has matured into three tiers: industry standards (MLPerf), platform benchmarking (Optimum-Benchmark, vLLM tools), and research tools (LLMPerf, LLenergyMeasure). Energy measurement remains rare (only MLPerf Power, TokenPowerBench, ML.ENERGY, LLenergyMeasure), making it a core differentiator. However, competitive positioning requires addressing table stakes gaps.
+The `@overload` escape hatch does not work for the common case: `llem.run("config.yaml")` takes `str | Path`, so the type checker cannot resolve whether the return is `ExperimentResult` or `StudyResult`.
 
-**Must have (table stakes):**
-- Performance metrics (TTFT, ITL, throughput) — ✅ Has
-- Configuration control (batch size, sampling, quantization) — ✅ Has
-- Result persistence and export — ✅ Has
-- Reproducibility controls (seed, warmup, deterministic mode) — ✅ Has
-- Dataset support (standard + custom) — ✅ Has
-- **System metadata capture** — ⚠️ **CRITICAL GAP**: Missing hardware details (GPU model, VRAM, compute capability), software versions (CUDA, driver), system state (temperature, power limits), dataset characteristics (ISL/OSL distribution)
-- **Dataset characteristics reporting** — ⚠️ **GAP**: Actual input/output length distributions should be reported in results
+**Recommendation:** Revert to the `library-api.md` design: two public functions with unambiguous return types, backed by an internal `_run(StudyConfig) -> StudyResult` runner. This matches the Option C internal architecture perfectly while giving callers type-safe return types.
 
-**Should have (competitive differentiators):**
-- **Energy measurement** — ✅ Core differentiator, but needs enhancement
-- **Baseline power subtraction** — ❌ **CRITICAL GAP**: Idle power contamination causes 15-30% overestimation
-- **Time-series power data** — ❌ **OPPORTUNITY**: TokenPowerBench sets standard with prefill/decode phase analysis
-- **Statistical rigor (confidence intervals)** — ❌ **OPPORTUNITY**: Multi-cycle exists, but missing 95% CI (would significantly increase research credibility)
-- Campaign orchestration — ✅ Has (grid generation + execution), needs enhancement for multi-backend dispatch
-
-**Defer (v2+):**
-- Perfect reproducibility guarantees (impossible with BF16, document limitations instead)
-- LLM-as-judge quality scoring (scope creep, orthogonal to efficiency)
-- Web UI/dashboard (CLI-first milestone, web platform is separate)
-- Closed-loop optimisation (too complex, grid search sufficient)
-- Training benchmarks (inference focus only)
-
-### Architecture Approach
-
-Host-based Python orchestrator managing long-running Docker containers via `docker exec` dispatch, not `docker compose run` per experiment. This avoids 10-30 second container startup overhead, prevents GPU memory fragmentation, and enables warmup state persistence across experiments. Backend containers (PyTorch, vLLM, TensorRT) run in detached mode with health checks, receiving experiment commands via exec calls.
-
-**Major components:**
-1. **CampaignOrchestrator** — Campaign manifest execution, container dispatch, cycle coordination, integrates HealthMonitor, PowerSampler, ResultsAggregator
-2. **ContainerManager** — Container lifecycle (start/stop/health), exec dispatch via python-on-whales SDK
-3. **HealthMonitor** — Periodic health checks (application-level: CUDA availability), auto-recovery on failure
-4. **PowerSampler** — Host-side NVML time-series sampling (10Hz) parallel to inference, saves per-experiment timeseries
-5. **CampaignManifest** — Persistent experiment queue with backend routing, cycle tracking, atomic state updates
-6. **StateManager** — Experiment/campaign state persistence with atomic writes, crash recovery
-
-**Data flow:** Campaign manifest → Backend router → ContainerManager.exec(container, cmd) → Shared volume results → Multi-cycle aggregation. Power sampling and health monitoring run as parallel daemon threads.
-
-**Key patterns:**
-- Long-running containers with exec dispatch (Pattern 1) — Avoids startup overhead, preserves warmup
-- Health check daemon with auto-recovery (Pattern 2) — Application-aware validation, auto-restart on failure
-- Time-series power sampling (Pattern 3) — Host-side NVML for accuracy, configurable 1-10Hz
-- Campaign manifest with state persistence (Pattern 4) — Atomic writes, crash recovery, resume capability
-- Warmup convergence detection (Pattern 5) — Coefficient of variation <5% across rolling window
-
-### Critical Pitfalls
-
-1. **Idle Power Contamination (CRITICAL)** — Energy measurements include baseline GPU power (idle state), causing 15-30% systematic overestimation. Longer experiments penalised disproportionately, invalidating cross-configuration comparisons. **Mitigation:** Measure idle baseline before experiments, subtract: `inference_energy = total - (baseline_watts × duration)`. Record both raw and corrected values.
-
-2. **NVML Sampling Blind Spots (CRITICAL)** — NVML samples at max 66.7Hz but only 25% of runtime sampled on A100/H100. Short experiments (<1 min) show high variance, up to 73% average error, 300% maximum. **Mitigation:** Increase sampling frequency (100ms for <5min experiments), multi-cycle execution, report CV to flag high-variance measurements.
-
-3. **Docker Container State Leakage (CRITICAL)** — Using `docker run --rm` per experiment wastes 30-60s startup time; long-running containers without cleanup accumulate GPU memory leaks. vLLM/TensorRT with `ipc: host` can conflict. **Mitigation:** Long-running containers with `docker exec`, explicit model unload when `force_cold_start=true`, health checks monitor GPU memory, graceful teardown between experiments.
-
-4. **Backend API Instability (CRITICAL)** — vLLM/TensorRT undergo frequent breaking changes (pre-1.0 API stability). Parameter names change, defaults flip, TensorRT switched default backend C++ → PyTorch. Parameter audit becomes stale within 3 months. **Mitigation:** Pin exact versions in Docker (e.g., `vllm==0.6.3.post1`), runtime version detection warns on mismatch, quarterly parameter audit cycle, defensive kwargs filtering.
-
-5. **Thermal Throttling Blind Spots (CRITICAL)** — GPU throttling silently degrades performance and inflates energy during long campaigns. Sequential runs show degrading performance (thermal accumulation). First run fast, tenth run slow. **Mitigation:** Monitor NVML performance state and clock speeds, record thermal state in metadata, flag results when throttling detected, enforce thermal gaps between experiments.
-
-## Implications for Roadmap
-
-Based on research, suggested phase structure follows dependency order: measurement foundations → parameter completeness → orchestration → validation.
-
-### Phase 1: Measurement Foundations (v1.19.0)
-**Rationale:** Foundational for all subsequent work. Baseline power subtraction and thermal monitoring address critical measurement accuracy gaps. Environment metadata enables reproducibility. Must come first as later phases depend on accurate measurements.
-
-**Delivers:**
-- Baseline power measurement and subtraction (idle vs active)
-- Time-series power sampling (host-side NVML, configurable 1-10Hz)
-- Thermal throttling detection and flagging
-- Comprehensive environment metadata capture (GPU, CUDA, driver, CPU, container detection)
-- Dataset characteristics reporting (ISL/OSL distributions)
-- Warmup convergence detection (CV-based)
-- Results schema v3 with metadata fields
-
-**Addresses features:**
-- System metadata capture (table stakes gap)
-- Baseline power subtraction (critical differentiator gap)
-- Time-series power data (competitive opportunity)
-
-**Avoids pitfalls:**
-- Pitfall #1: Idle power contamination
-- Pitfall #3: NVML sampling blind spots
-- Pitfall #7: Thermal throttling blind spots
-- Pitfall #8: Environment metadata omission
-
-**Implementation notes:**
-- Extend existing `GPUUtilisationSampler` pattern for power sampling
-- Use nvidia-ml-py ≥13.590.48 (already dependency, just bump version)
-- Additive schema changes for backwards compatibility
-- Conservative baseline subtraction to avoid negative energy readings
-
-### Phase 2: Parameter Completeness (v1.20.0)
-**Rationale:** Systematic parameter audit ensures backend coverage is comprehensive, addressing user confusion and incomplete configurations. SSOT introspection already exists, making this extension rather than new architecture. Must follow measurement foundations to validate parameters with accurate energy data.
-
-**Delivers:**
-- 90%+ coverage of energy/throughput-impactful parameters across all backends
-- Backend-specific parameter introspection (PyTorch/HF, vLLM, TensorRT)
-- Version pinning and compatibility matrix
-- Mutual exclusion constraints (e.g., `load_in_4bit` × `load_in_8bit`)
-- Streaming constraints documentation
-- Parameter test value derivation from Pydantic models
-- Runtime version detection with mismatch warnings
-
-**Uses stack:**
-- transformers 5.0+ for `generate()` introspection
-- vllm 0.8.1+ for `LLM()` introspection
-- tensorrt-llm 0.12.0+ for `LLM()` introspection
-- Existing SSOT introspection module
-
-**Implements architecture:**
-- Extends existing `introspection.py` SSOT module
-- Adds version detection layer
-- Quarterly audit maintenance process
-
-**Avoids pitfalls:**
-- Pitfall #5: Backend API instability (via version pinning)
-- Pitfall #6: Parameter audit scope creep (90% target, not 100%)
-
-**Implementation notes:**
-- Hard limit: 90%+ of energy-impactful params, document exclusions
-- Pin exact versions in Docker images
-- Use `get_backend_params()` from SSOT introspection
-- Defensive kwargs filtering for unknown parameters
-
-### Phase 3: Campaign Orchestration Redesign (v1.21.0)
-**Rationale:** Campaign execution is key workflow bottleneck. Current manual/sequential approach doesn't scale to multi-backend grids. Long-running container pattern eliminates startup overhead whilst health monitoring provides robustness. Depends on measurement foundations (Phase 1) for accurate campaign results and parameter completeness (Phase 2) for backend-aware grid generation.
-
-**Delivers:**
-- CampaignOrchestrator with manifest-based execution
-- Long-running container lifecycle management (start once, exec many)
-- Health check daemon with auto-recovery
-- Backend-aware grid generation (avoid invalid backend × param combinations)
-- Campaign manifest with persistent state (crash recovery)
-- Multi-backend dispatch routing
-- Thermal gap enforcement between experiments
-
-**Uses stack:**
-- python-on-whales 0.70+ for Docker orchestration
-- Existing StateManager pattern for persistence
-- Docker Compose health checks
-
-**Implements architecture:**
-- CampaignOrchestrator component
-- ContainerManager component
-- HealthMonitor component
-- CampaignManifest with StateManager
-- BackendRouter for dispatch
-
-**Avoids pitfalls:**
-- Pitfall #4: Docker container state leakage (via long-running + cleanup)
-- Pitfall #11: Grid generation cartesian explosion (backend-aware filtering)
-- Pitfall #12: Configuration drift without detection (manifest persistence)
-
-**Implementation notes:**
-- Start simple: sequential dispatch, no parallelism initially
-- Explicit model unload when `force_cold_start=true`
-- Health checks: `python -c "import torch; assert torch.cuda.is_available()"`
-- Atomic state writes with temp-then-rename pattern
-
-### Phase 4: Statistical Rigor Enhancement (v2.1.0)
-**Rationale:** Multi-cycle execution already exists, confidence intervals are natural extension. Adds research credibility without architectural complexity. Can be developed independently after core measurement/orchestration solid.
-
-**Delivers:**
-- 95% confidence intervals for multi-cycle results
-- Bootstrap resampling (percentile method, 1000 iterations)
-- Enhanced aggregation statistics (mean, median, std dev, P50/P95/P99, CI)
-- Outlier detection and flagging
-- Statistical comparison utilities
-
-**Addresses features:**
-- Statistical rigor (competitive differentiator)
-
-**Implementation notes:**
-- Use scipy.stats or numpy percentile bootstrapping
-- Follow Benchmark2 pattern (FAQ paper 2026)
-- Frequentist coverage guarantees
-
-### Phase 5: User Acceptance Testing & Refinement (v1.22.0)
-**Rationale:** Final validation before release. Surfaces "works on my machine" issues, error message clarity, documentation gaps. Structured UAT prevents rushed testing that skips critical scenarios.
-
-**Delivers:**
-- UAT round 1: Fresh VM, follow quickstart from scratch (1 hour session)
-- UAT round 2: Full campaign with multi-backend grid (2 hours session)
-- Error message improvements based on feedback
-- Documentation refresh (quickstart, troubleshooting, prerequisites)
-- Validation script (`make check-prereqs`)
-- UAT acceptance criteria with automated validation
-- Cleanup pass (remove dead code, consolidate docs)
-
-**Addresses features:**
-- Documentation completeness (table stakes)
-- User onboarding experience
-
-**Avoids pitfalls:**
-- Pitfall #16: "Works on my machine" trap
-- Pitfall #17: Error message archaeology
-- Pitfall #18: Incomplete quickstart assumptions
-- Pitfall #19: Pass/fail criteria ambiguity
-- Pitfall #20: Time pressure skipping testing
-
-**Implementation notes:**
-- External tester or fresh VM (avoid confirmation bias)
-- Time-box sessions: 1hr round 1, 2hr round 2
-- Asynchronous UAT option for busy users
-- Provide pre-configured test scenarios
-
-### Phase Ordering Rationale
-
-**Critical path:** Phase 1 (Measurement) → Phase 2 (Parameters) → Phase 3 (Orchestration) → Phase 4 (Statistics, parallel) → Phase 5 (UAT)
-
-- **Phase 1 first:** Measurement accuracy is foundational. All later work depends on accurate energy/performance data. Baseline power subtraction affects every experiment. Environmental metadata enables reproducibility.
-- **Phase 2 after Phase 1:** Parameter validation requires accurate measurements to test parameter impacts. Version pinning prevents API instability issues during orchestration development.
-- **Phase 3 after Phase 1+2:** Campaign orchestration needs accurate measurements and complete parameters. Long-running containers benefit from convergence detection (Phase 1). Backend routing uses parameter introspection (Phase 2).
-- **Phase 4 independent:** Statistical enhancements can run parallel to Phase 5 or after orchestration solid. Extends existing multi-cycle without architectural changes.
-- **Phase 5 last:** UAT validates complete v2.0 CLI system. All features must be implemented before user testing.
-
-**Dependency arrows:**
 ```
-Phase 1 (Measurement) ────┬──→ Phase 3 (Orchestration) ──→ Phase 5 (UAT)
-                          │
-Phase 2 (Parameters) ─────┘
-
-Phase 4 (Statistics) ────────────────────────────────────→ Phase 5 (UAT)
+Public:  run_experiment(config) -> ExperimentResult
+         run_study(config) -> StudyResult
+Internal: _run(StudyConfig) -> StudyResult  (Option C architecture unchanged)
 ```
 
-**Groupings based on architecture:**
-- Phases 1+2: SSOT enhancement (measurement + parameter metadata)
-- Phase 3: Orchestration layer (new component)
-- Phase 4: Results enhancement (statistical layer)
-- Phase 5: Validation (QA layer)
+The CLI remains unified `llem run` regardless -- this is a library API question only.
 
-**Avoids pitfalls:**
-- Early measurement accuracy prevents contaminated data throughout development
-- Parameter pinning before orchestration prevents API breakage mid-campaign development
-- Structured UAT prevents rushed testing that misses critical bugs
+### 1.2 Cross-Document Inconsistency: 15+ Files Reference Superseded API
+
+**Source:** `DECISION-AUDIT.md` (sections CI-1 through CI-7)
+
+The 2026-02-25 unification decision changed the CLI from 3 commands to 2 and the library API from split to unified, but the change was NOT propagated. The following still reference `llem study`, `run_experiment()`, and/or `run_study()`:
+
+- `.product/CLAUDE.md` (the instructions file for future Claude sessions -- highest-risk staleness)
+- `designs/library-api.md`, `backward-compatibility.md`, `experiment-isolation.md`
+- `study-execution-model.md`, `live-observability.md`, `study-resume.md`
+- `output-storage.md`, `documentation-strategy.md`, `progressive-disclosure.md`
+- `versioning-roadmap.md`, `installation.md`, `architecture.md` (sub-decision J)
+
+**Resolution:** During harmonisation, all files must be updated to reflect whichever API shape is chosen (the research recommends reverting to the split API, which means updating `experiment-study-architecture.md` Q3 instead of updating the other 15 files).
+
+### 1.3 zeus-ml Package Renamed to zeus
+
+**Source:** `STACK.md` (section 1)
+
+The PyPI package `zeus-ml` stopped at v0.11.0. The project moved to `zeus` (currently v0.13.1). Installing `zeus-ml` installs stale code. The `pyproject.toml` extras must be updated from `zeus-ml` to `zeus` immediately.
+
+### 1.4 FLOPs Framing as "Primary Metric" Must Change
+
+**Source:** `PITFALLS.md` (CP-3), `DECISION-AUDIT.md` (section 2.14)
+
+FLOPs = `2 * N_params * tokens`. This is deterministic for a given model and input. It does not change between PyTorch/vLLM/TensorRT-LLM, between batch sizes, between precision settings, or between any deployment parameter this tool measures. Positioning FLOPs as a "primary cross-run comparison metric" is scientifically misleading for a tool whose purpose is measuring implementation choice effects.
+
+**Recommendation:** Demote FLOPs to reference metadata. Promote `energy_per_output_token` (J/token) and `tokens_per_second` as primary metrics. Keep FLOPs in the result schema for cross-model normalisation. Defer MFU (which IS diagnostic) to v2.1 as planned.
+
+---
+
+## 2. Decisions Confirmed by Research
+
+These hold up under peer evidence and should proceed as-is.
+
+| Decision | Source | Evidence |
+|----------|--------|----------|
+| Library-first architecture | `ARCHITECTURE.md` (A) | lm-eval, optimum-benchmark, Zeus, CodeCarbon all library-first |
+| Module structure (`src/llenergymeasure/`) | `ARCHITECTURE.md` (B) | All peers use single package |
+| Unified `llem run` CLI (YAML determines scope) | `FEATURES.md`, `DECISION-AUDIT.md` (2.7) | lm-eval, pytest, MLflow all use single unified command |
+| 2 commands + 1 flag | `FEATURES.md` | Minimum viable surface; no peer has `init`, `check`, or `results` commands |
+| Composition config (not inheritance) | `ARCHITECTURE.md` (C1) | Inheritance creates union type pollution; composition is cleaner |
+| Dotted sweep notation | `ARCHITECTURE.md` (C2), `FEATURES.md` | Novel but closest to Hydra's dotted override syntax; well-designed |
+| Execution profiles as CLI shorthand only | `DECISION-AUDIT.md` (2.10) | No peer uses named profiles for statistical rigour presets |
+| Option C: ExperimentConfig pure, StudyConfig resolved | `ARCHITECTURE.md` | Cleanest architecture; sweep at parse time is correct |
+| Subprocess isolation via `multiprocessing.Process` + `spawn` | `ARCHITECTURE.md` (I) | Matches optimum-benchmark exactly; CUDA correctness requirement |
+| Energy vs CO2 separation | `STACK.md` (section 1), `ARCHITECTURE.md` (G) | Zeus = energy only, CodeCarbon = CO2 only; peers confirm |
+| Pydantic v2 (reject Hydra) | `STACK.md` (section 3) | Hydra conflicts with parse-time resolution architecture |
+| Typer for v2.0 CLI | `STACK.md` (section 4) | Adequate for 2-command surface; cyclopts evaluation at v3.0 |
+| `extra = "forbid"` on configs | `FEATURES.md` | Correct for scientific integrity; no peer is this strict |
+| Error handling: `LLEMError` hierarchy + exit codes 0/1/2/130 | `ARCHITECTURE.md`, `DECISION-AUDIT.md` (2.18) | Matches httpx/SQLAlchemy pattern; standard |
+| `__init__.py` exports as sole stable API | `ARCHITECTURE.md` | Matches lm-eval, httpx, Pydantic |
+| Zero backend deps at base; pip extras | `DECISION-AUDIT.md` (2.12) | Exact pattern used by lm-eval, optimum-benchmark, Transformers |
+| Fixed-count warmup (reject CV convergence) | `DECISION-AUDIT.md` (2.13) | No peer implements CV convergence; adds unbounded runtime |
+| Study ships at v2.0 | `ARCHITECTURE.md` (J) | Sweeps are the differentiator; deferring would ship an inferior single-experiment tool |
+| Dataset: AIEnergyScore default, BYOJSONL, synthetic | `DECISION-AUDIT.md` (2.22) | Externally validated standard; enables cross-tool comparison |
+| Result schema migration via `schema_version` | `DECISION-AUDIT.md` (2.23) | Better than lm-eval (which has no versioning) |
+| HPC/SLURM deferred to v3.x | `DECISION-AUDIT.md` (2.28) | lm-eval also has no SLURM integration; correct for v2.0 audience |
+| Rejecting Hydra | `ARCHITECTURE.md` | Hydra takes over entry point; incompatible with library-first; team moving away |
+| SGLang accelerated to v2.2 candidate | `STACK.md` (section 2) | PyTorch ecosystem member; RadixAttention creates genuinely different energy profiles |
+| llama.cpp deferred to v3.x | `STACK.md` (section 2) | CPU vs GPU energy comparability concern requires design work |
+
+---
+
+## 3. Decisions Challenged by Research
+
+These need updating during harmonisation, with evidence citations.
+
+### 3.1 Three-Layer Config Model -- Simplify to Two Sources + Auto-Capture
+
+**Source:** `ARCHITECTURE.md` (C), `DECISION-AUDIT.md` (2.3)
+
+No peer tool uses a named three-layer config model. The valid separation is:
+1. **User config** (`~/.config/llenergymeasure/config.yaml`) -- machine-local preferences
+2. **Experiment config** (YAML) -- what to measure, shareable
+3. **Environment snapshot** -- auto-captured, stored in results (not a config layer)
+
+"Layer 3" is output metadata, not configuration. Calling it a config layer confuses implementers. Drop the "three-layer" naming; keep the separation.
+
+### 3.2 NVML Accuracy Claims -- Wrong Units
+
+**Source:** `PITFALLS.md` (CP-1)
+
+The `.product/` docs claim Zeus/NVML is "~5% accurate" and CodeCarbon is "~15% accurate". NVML accuracy is actually +/-5 **watts** (not percent). At 300W (A100 under load) that is 1.7%. At 40W (idle) that is 12.5%. Replace fixed-percentage accuracy table with conditional formula: `accuracy_pct = 5W / mean_power_W * 100`.
+
+### 3.3 30-Second Thermal Floor -- Under-Calibrated
+
+**Source:** `PITFALLS.md` (CP-2)
+
+The 30-second figure has no cited source. MLPerf Power requires a minimum 60-second measurement window. Thermal stabilisation under load takes 45-90 seconds on A100/H100. The current 5 warmup runs at 2 tokens each provide ~2-3 seconds of actual GPU compute -- insufficient for thermal conditioning.
+
+**Recommendation:** Increase warmup to 10 full-length runs (matching optimum-benchmark), OR add a separate 60-second thermal conditioning phase running the actual workload before measurement.
+
+### 3.4 Warmup Reduced-Output Strategy -- Insufficient for Energy Benchmarks
+
+**Source:** `PITFALLS.md` (MP-3)
+
+2-token warmup runs do not warm the KV cache at operational size, do not trigger vLLM's continuous batching scheduler, and do not load the GPU thermally. For energy benchmarks, full-length warmup runs are necessary. Make configurable: `warmup_mode: "fast" | "full"` with `full` as default.
+
+### 3.5 Baseline Power Subtraction -- Over-Simplified
+
+**Source:** `PITFALLS.md` (CP-4)
+
+The linear correction `energy_adjusted = total - (idle_power * duration)` assumes constant idle power, but idle power increases as the GPU heats up. More importantly, no peer tool publishes baseline-corrected energy. Raw energy is sufficient for relative comparisons (A vs B on same hardware). Keep `baseline_power_w` as optional metadata; do NOT make `energy_adjusted_j` a primary metric.
+
+### 3.6 Bootstrap CI -- Use BCa, Not Percentile
+
+**Source:** `PITFALLS.md` (CP-5), `STACK.md` (section 8)
+
+Percentile bootstrap has poor coverage for skewed distributions (energy data is typically right-skewed). Use BCa method via `scipy.stats.bootstrap(method='BCa')`. Increase default resamples from 1,000 to 2,000. For energy CIs, require multi-cycle studies and bootstrap over per-cycle totals (not per-request, since Zeus measures total energy per window).
+
+### 3.7 Access Control (.env Pattern) -- Over-Engineered
+
+**Source:** `DECISION-AUDIT.md` (2.26)
+
+ML researchers already use `huggingface-cli login` and `HF_TOKEN` env vars. The `.env` file pattern is unfamiliar to this audience. Rely on `huggingface_hub`'s existing auth chain instead.
+
+### 3.8 Output Contract Divergence
+
+**Source:** `DECISION-AUDIT.md` (2.16)
+
+Unified `llem run` produces either a flat JSON file OR a subdirectory depending on YAML content. Users cannot predict output location without parsing their YAML. Consider always producing a directory (even for single experiments), matching Hydra's approach.
+
+---
+
+## 4. Feature Gaps Identified
+
+Peer evidence shows these features are expected by the research community but missing or deferred in `.product/`.
+
+### Table Stakes (must add to v2.0)
+
+| Gap | Peer Evidence | Current Status | Source |
+|-----|---------------|----------------|--------|
+| **Environment metadata capture** | TokenPowerBench, optimum-benchmark, vLLM bench, AIEnergyScore -- all capture GPU model, VRAM, driver, CUDA version | No `.product/` decision exists; deferred to v2.1 | `FEATURES.md` (Gap 4) |
+| **Prefill/decode phase-split energy** | TokenPowerBench, ML.ENERGY, AIEnergyScore -- core feature in all three | Deferred to v2.3 | `FEATURES.md` (Gap 1) |
+| **Power time-series capture** | Zeus PowerMonitor, TokenPowerBench, ML.ENERGY v3 | Deferred to v2.1 | `FEATURES.md` (Gap 2) |
+| **`--dry-run` grid preview for studies** | No peer does this well, but logically necessary for expensive sweeps | Mentioned but not designed | `FEATURES.md` (Gap 6) |
+
+### Should-Add (strong evidence, moderate effort)
+
+| Gap | Peer Evidence | Source |
+|-----|---------------|--------|
+| **Pareto frontier extraction from StudyResult** | ML.ENERGY v3 headline feature; vLLM bench sweep `plot_pareto` | `FEATURES.md` (Gap 3) |
+| **VRAM pre-flight estimation** | vLLM internal profile_run; HF Accelerate `estimate-memory` | `FEATURES.md` (Gap 7) |
+| **Minimum measurement duration** (10s or loop until 10s) | MLPerf Power 60s minimum; NVML 100ms update period with 25% sampling | `PITFALLS.md` (MP-5) |
+| **GPU persistence mode check** | All serious benchmarking assumes persistence mode | `PITFALLS.md` (UA-1) |
+| **CPU-GPU synchronisation requirement** | Zeus `sync_execution_with`; ML.ENERGY blog explicitly requires it | `PITFALLS.md` (mP-1) |
+
+### Keep Deferred (peer evidence supports deferral)
+
+| Feature | Rationale | Source |
+|---------|-----------|--------|
+| Confidence intervals / bootstrap CI | No peer does this for energy/perf; mean + std dev sufficient for v2.0 | `FEATURES.md` (Gap 5) |
+| HF Hub results sharing | Convenience, not credibility; v2.4+ fine | `FEATURES.md` (Gap 8) |
+| Live power display (TUI) | UI feature; capture the data in v2.0, display later | `FEATURES.md` |
+| SGLang, llama.cpp backends | Desirable but three backends is defensible for v2.0 | `STACK.md` |
+| Visualisation library | No peer bundles one; JSON/CSV output is standard | `STACK.md` (section 6) |
+
+---
+
+## 5. Stack Updates Required
+
+**Source:** `STACK.md` (full audit)
+
+| Item | Current Pin | Required Pin | Severity | Reason |
+|------|------------|-------------|----------|--------|
+| `zeus-ml` (PyPI) | `zeus-ml` | `zeus>=0.13.1` | **CRITICAL** | Package renamed; old name installs stale v0.11.0 |
+| CodeCarbon | `>=2.8.0` | `>=3.2.2` | HIGH | Major version jump; private API may have changed |
+| Transformers | `>=4.49.0` | `>=5.0.0` | HIGH | v5 is a major version; v4 is behind |
+| vLLM | `>=0.6.0` | `>=0.15.0` | HIGH | 9 minor versions ahead; test Transformers compat |
+| TensorRT-LLM | `>=0.12.0` | `>=1.0.0` | HIGH | Approaching 1.0 stable; breaking from 0.12 |
+| nvidia-ml-py | `>=12.0.0` | `>=13.590.48` | MEDIUM | Updated per STACK.md audit |
+| scipy | not explicit | `>=1.12` | MEDIUM | Required for `scipy.stats.bootstrap` BCa |
+| pytest-mock | not present | `>=3.12` | MEDIUM | GPU/backend mocking for unit tests |
+| pytest-xdist | not present | `>=3.5` | MEDIUM | Parallel test execution in CI |
+| Poetry | current manager | Consider uv migration | MEDIUM | uv now exceeds Poetry in downloads; 10-100x faster |
+
+---
+
+## 6. Recommended Priority Ordering for Harmonisation
+
+Based on the dependency structure across all research, harmonisation should proceed in this order.
+
+### Priority 0: Resolve API Shape (blocks everything)
+
+Decide between:
+- (a) Unified `run()` with union return (current `experiment-study-architecture.md`)
+- (b) Split `run_experiment()` / `run_study()` (original `library-api.md`, supported by all research)
+
+**Research recommendation:** Option (b). Then update only `experiment-study-architecture.md` Q3 and `architecture.md` H instead of updating 15+ other files.
+
+### Priority 1: Propagate API Decision Through Document Set
+
+Update all stale references per `DECISION-AUDIT.md` CI-1 through CI-7. Most critically: `.product/CLAUDE.md` (the instructions file read at session start by future Claude instances).
+
+### Priority 2: Add Missing Table-Stakes Decisions
+
+Write new decision files for:
+- `environment-metadata.md` -- EnvironmentSnapshot schema
+- `dry-run-design.md` -- what `--dry-run` shows for experiments vs studies
+- Update `versioning-roadmap.md` -- pull phase-split energy and power time-series into v2.0
+
+### Priority 3: Fix Challenged Decisions
+
+Update in-place (with supersession annotations per `.product/CLAUDE.md` rules):
+- `flops-estimation.md` -- demote from primary to reference metadata
+- `warmup-strategy.md` -- increase thermal floor, add full-length warmup option
+- `architecture.md` C/D/E -- simplify three-layer naming to two sources + auto-capture
+- `designs/energy-backends.md` -- replace fixed-percentage accuracy with conditional formula
+- `access-control.md` -- simplify to `huggingface_hub` auth chain
+
+### Priority 4: Update Stack Pins
+
+Update `pyproject.toml` and test compatibility:
+- `zeus-ml` -> `zeus` (critical)
+- Version pins for CodeCarbon, Transformers, vLLM, TRT-LLM
+- Add `scipy`, `pytest-mock`, `pytest-xdist`
+
+### Priority 5: Feature Gap Design Work
+
+Write designs for:
+- EnvironmentSnapshot schema (fields, capture mechanism)
+- Power time-series capture + storage format (Parquet alongside JSON)
+- Prefill/decode phase attribution (timestamp alignment with TTFT)
+- Pareto frontier extraction on StudyResult
+- `--dry-run` grid preview behaviour
+
+---
+
+## 7. Implications for Roadmap
+
+### Suggested Phase Structure
+
+Based on dependency chains identified across the research:
+
+```
+Environment Metadata (no dependencies)
+    |
+    v
+Power Time-Series Capture (depends on Zeus integration)
+    |
+    v
+Phase-Aligned Energy Attribution (depends on TTFT + power time-series)
+
+Pareto Frontier Extraction (independent, parallel)
+--dry-run Grid Preview (independent, parallel)
+```
+
+### Phase 1: Document Harmonisation + Stack Update
+
+**Rationale:** Cannot implement with contradictory decision documents and stale dependency pins.
+**Delivers:** Consistent `.product/` decisions; updated `pyproject.toml`; resolved API shape.
+**Addresses:** All cross-document inconsistencies (CI-1 through CI-7); all critical stack pins.
+**Avoids:** Implementers building the wrong API; installing stale Zeus package.
+
+### Phase 2: Core Measurement Foundations
+
+**Rationale:** Measurement accuracy is foundational. Phase-split energy, power time-series, and environment metadata are table stakes that peers already have.
+**Delivers:** EnvironmentSnapshot in every ExperimentResult; power time-series capture via Zeus PowerMonitor; prefill/decode phase attribution; corrected NVML accuracy documentation; thermal conditioning; CPU-GPU sync requirement; minimum measurement duration.
+**Addresses:** FEATURES.md gaps 1, 2, 4; PITFALLS.md CP-1, CP-2, CP-3, MP-3, MP-5, mP-1.
+**Uses:** `zeus>=0.13.1`, `nvidia-ml-py>=13.590.48`, `scipy>=1.12`.
+
+### Phase 3: Library + CLI Implementation
+
+**Rationale:** With measurement methodology settled and stack updated, implement the library API and CLI.
+**Delivers:** `run_experiment()`, `run_study()` public API; `llem run`, `llem config` CLI; config validation with `extra="forbid"`; subprocess isolation; sweep resolution at YAML parse time.
+**Implements:** Option C architecture; composition config; dotted sweep notation.
+**Avoids:** PITFALLS.md Docker overhead (not yet -- Docker is v2.2).
+
+### Phase 4: Study Execution + Results
+
+**Rationale:** Studies depend on the library layer. Pareto extraction and `--dry-run` preview are study-level features.
+**Delivers:** StudyConfig resolution; multi-experiment execution; `--dry-run` grid preview; VRAM pre-flight estimation; Pareto frontier extraction on StudyResult; result output (JSON per experiment, study directory structure).
+**Addresses:** FEATURES.md gaps 3, 6, 7.
+
+### Phase 5: Docker Multi-Backend (v2.2)
+
+**Rationale:** Docker is opt-in for multi-backend studies. Three backends can run locally as single-backend studies in v2.0.
+**Delivers:** Docker container per backend; `python-on-whales` orchestration; TRT engine caching.
+**Avoids:** PITFALLS.md MP-1 (Docker energy overhead -- document, don't correct).
+
+### Phase 6: Statistical Enhancements + Polish
+
+**Rationale:** Bootstrap CI, baseline power correction, and statistical tools are enhancements over the core.
+**Delivers:** BCa bootstrap CI via `scipy.stats.bootstrap`; baseline power measurement (P0 state); outlier detection; MFU calculation.
+**Addresses:** PITFALLS.md CP-4, CP-5.
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
+**Needs deeper research during planning:**
+- **Phase 2** (measurement foundations): Thermal conditioning protocol needs empirical calibration per GPU model. Power time-series storage format (Parquet schema) needs design. NVML energy counter accuracy on consumer GPUs (RTX series) is under-documented.
+- **Phase 4** (study execution): `--dry-run` runtime estimation is novel (no peer does it well). VRAM estimation formula needs validation.
+- **Phase 5** (Docker): TRT engine cache invalidation on version change needs design. NVML single-session owner enforcement mechanism needs specification.
 
-- **Phase 3 (Campaign Orchestration):** Complex integration between Docker SDK, NVML monitoring, and state persistence. Container lifecycle edge cases need validation. Health check recovery strategies need testing with actual GPU failures.
-- **Phase 4 (Statistical Rigor):** Bootstrap method selection (percentile vs BCa). Appropriate significance levels for energy measurements (frequentist coverage guarantees).
+**Standard patterns (skip research):**
+- **Phase 1** (harmonisation): Straightforward document updates.
+- **Phase 3** (library + CLI): Well-documented patterns; Option C architecture is clear; Pydantic + Typer are well-understood.
+- **Phase 6** (statistics): `scipy.stats.bootstrap` is well-documented; BCa is a standard method.
 
-Phases with standard patterns (skip research-phase):
-
-- **Phase 1 (Measurement):** NVML patterns well-documented, existing `GPUUtilisationSampler` provides reference implementation. Baseline power methodology from ML.ENERGY best practices.
-- **Phase 2 (Parameters):** Introspection pattern exists in codebase, official library documentation available. Straightforward extension of SSOT module.
-- **Phase 5 (UAT):** Standard UAT practices, no domain-specific research needed.
+---
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Official NVIDIA packages (nvidia-ml-py), Docker-endorsed python-on-whales, official HF/vLLM/TensorRT libraries. Jan 2026 versions verified. |
-| Features | HIGH | Verified against 6 major tools (MLPerf, TokenPowerBench, Optimum-Benchmark, LLMPerf, vLLM, TensorRT) and 10+ recent papers (2025-2026). Clear table stakes vs differentiator classification. |
-| Architecture | HIGH | Docker orchestration patterns from official documentation, health check/exec dispatch verified. Host-side NVML sampling from research literature. Manifest persistence extends existing StateManager. |
-| Pitfalls | HIGH | Energy measurement pitfalls from 6 research papers + NVML docs. Docker gotchas from NVIDIA forums + GitHub issues. Backend API instability from release notes. Prefill/decode from recent papers. UAT from general best practices. |
+| Stack | HIGH | Version numbers verified against PyPI; package rename confirmed; peer version matrices checked |
+| Features (audit) | MEDIUM-HIGH | 8 peer tools surveyed; some via official docs, some via web search; feature matrix is comprehensive |
+| Architecture | HIGH | Source code of 10 tools inspected; typing guidance from official Python docs and Guido directly |
+| Pitfalls (measurement) | MEDIUM-HIGH | NVML +/-5W from API docs; thermal ramp from MLPerf paper; FLOPs argument is mathematical; energy counter accuracy under-documented by NVIDIA |
+| Decision audit | HIGH | Every assessment cites specific peer tool implementations; cross-referenced against `.product/research/` files 01-16 |
+| API return type | HIGH | 10 tools verified; official typing guidance; Guido van Rossum quote; `@overload` limitation demonstrated |
 
-**Overall confidence:** HIGH
+**Overall confidence:** MEDIUM-HIGH
 
-Research based on:
-- Official documentation (NVIDIA NVML API, Docker SDK, HuggingFace/vLLM/TensorRT APIs)
-- Recent research papers (2025-2026: TokenPowerBench, ML.ENERGY, MLPerf Power, FAQ evaluation, DABench-LLM)
-- Community knowledge (NVIDIA forums, GitHub issues, Docker blogs)
-- Existing codebase analysis (SSOT introspection, StateManager, GPUUtilisationSampler patterns)
+### Gaps Remaining
 
-### Gaps to Address
+| Gap | How to Handle |
+|-----|---------------|
+| NVML energy counter accuracy on consumer GPUs | Empirical testing during Phase 2; RTX 6000 Ada discrepancy reported but unresolved |
+| CodeCarbon 3.x Pydantic v2 compatibility | Must verify before shipping `[codecarbon]` extra; may need isolation boundary |
+| vLLM + Transformers v5 compatibility matrix | Must test specific version combinations; known pain point |
+| Thermal conditioning duration per GPU model | Empirical calibration needed; 60s is MLPerf minimum but may need per-model tuning |
+| TRT-LLM 1.0 stable API surface | 1.3.0rc4 is pre-release; API may change before stable |
+| Power time-series storage format | Parquet per experiment is the recommendation; schema needs design |
+| Docker energy overhead quantification | ~1-3% estimated from reasoning; no direct energy measurement study exists |
+| NVLink interconnect power gap in multi-GPU | 3-10% understatement estimated; no per-measured correction; document limitation |
 
-**Baseline power methodology:** Community best practices converge on conservative subtraction (idle_watts × duration), but no official NVIDIA specification found. Confidence MEDIUM. **Mitigation:** Implement conservative approach, document methodology, validate against external power meters during UAT.
-
-**vLLM ITL measurement:** Non-streaming vLLM doesn't provide per-token timestamps. Tool estimates ITL via total_decode_time / token_count, masking variance. **Mitigation:** Recommend streaming mode for latency benchmarks, flag estimated vs measured ITL in results schema.
-
-**MIG energy isolation:** NVML reports parent GPU power, cannot isolate per-MIG-instance energy. **Mitigation:** Document limitation clearly, flag in results metadata when MIG detected, accept parent GPU power as best available measurement.
-
-**Warmup convergence thresholds:** Coefficient of variation <5% is domain inference, not research-validated threshold. **Mitigation:** Make configurable, document default rationale, allow user override.
-
-**Time-series database selection:** InfluxDB/TimescaleDB appropriate for power timeseries but adds dependency complexity. **Mitigation:** Start with JSON file storage (Phase 1), defer time-series DB to post-v2.0 if needed.
+---
 
 ## Sources
 
-### Primary (HIGH confidence)
+Aggregated from all six research files. Full citation lists in each file.
 
-**Technology stack:**
-- [nvidia-ml-py PyPI](https://pypi.org/project/nvidia-ml-py/) — Official NVIDIA package, v13.590.48 verified Jan 2026
-- [NVML API Reference](https://docs.nvidia.com/deploy/pdf/NVML_API_Reference_Guide.pdf) — Power/thermal monitoring functions
-- [python-on-whales GitHub](https://github.com/gabrieldemarmiesse/python-on-whales) — Docker orchestration, 696 stars, MIT license
-- [Docker Blog: Python-on-whales](https://www.docker.com/blog/guest-post-calling-the-docker-cli-from-python-with-python-on-whales/) — Official endorsement
-- [HuggingFace Transformers: Text Generation](https://huggingface.co/docs/transformers/en/main_classes/text_generation) — `generate()` parameters
-- [vLLM LLM Class API](https://docs.vllm.ai/en/v0.8.1/api/offline_inference/llm.html) — Constructor parameters
-- [TensorRT-LLM API Reference](https://nvidia.github.io/TensorRT-LLM/llm-api/reference.html) — LLM class parameters
+### Peer-Reviewed Papers (HIGH confidence)
+- [Part-time Power Measurements (Burtscher et al., arXiv:2312.02741)](https://arxiv.org/html/2312.02741v2) -- NVML accuracy
+- [ML.ENERGY Benchmark (NeurIPS D&B 2025)](https://arxiv.org/html/2505.06371v1) -- steady-state methodology, Pareto frontiers
+- [MLPerf Power Benchmark (IEEE HPCA 2025)](https://arxiv.org/html/2410.12032v2) -- 60s minimum, full-system measurement
+- [TokenPowerBench (Dec 2025)](https://arxiv.org/html/2512.03024v1) -- phase-aligned energy attribution
+- [Mind the Memory Gap (arXiv:2503.08311)](https://arxiv.org/html/2503.08311v2) -- FLOPs vs memory bandwidth
 
-**Feature landscape:**
-- [MLPerf Inference](https://mlcommons.org/benchmarks/inference-datacenter/) — Industry standard benchmarks
-- [TokenPowerBench (Dec 2025)](https://arxiv.org/html/2512.03024v1) — LLM power benchmarking state-of-art
-- [ML.ENERGY Benchmark](https://arxiv.org/html/2505.06371v1) — Automated energy measurement
-- [Optimum-Benchmark GitHub](https://github.com/huggingface/optimum-benchmark) — Multi-backend benchmarking
-- [LLMPerf GitHub](https://github.com/ray-project/llmperf) — API benchmarking
-- [NVIDIA LLM Benchmarking Fundamentals](https://developer.nvidia.com/blog/llm-benchmarking-fundamental-concepts/) — Best practices
-- [FAQ: Efficient LLM Evaluation (Jan 2026)](https://arxiv.org/abs/2601.20251) — Statistical guarantees
+### Official Documentation (HIGH confidence)
+- [NVIDIA NVML API Reference](https://docs.nvidia.com/deploy/nvml-api/group__nvmlDeviceQueries.html) -- +/-5W accuracy spec
+- [Python typing best practices](https://typing.python.org/en/latest/reference/best_practices.html) -- avoid union returns
+- [ML.ENERGY: Measuring GPU Energy Best Practices](https://ml.energy/blog/energy/measurement/measuring-gpu-energy-best-practices/)
+- [Zeus v0.13.1](https://github.com/ml-energy/zeus) -- energy measurement; package renamed from zeus-ml
+- [scipy.stats.bootstrap](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html) -- BCa method
 
-**Architecture:**
-- [Docker SDK for Python](https://docker-py.readthedocs.io/en/stable/containers.html) — Container lifecycle
-- [Docker Health Checks](https://lumigo.io/container-monitoring/docker-health-check-a-practical-guide/) — Health monitoring patterns
-- [Docker Restart Policies](https://www.cloudbees.com/blog/ensuring-containers-are-always-running-dockers-restart-policy) — Crash recovery
+### Peer Tool Source Code (HIGH confidence)
+- [lm-eval-harness](https://github.com/EleutherAI/lm-evaluation-harness) -- `simple_evaluate()` return type; `__init__.py` exports
+- [optimum-benchmark](https://github.com/huggingface/optimum-benchmark) -- `Benchmark.launch()` return type; process isolation
+- [vLLM benchmark CLI + sweeps](https://docs.vllm.ai/en/latest/benchmarking/) -- Pareto analysis; parameter sweeps
+- [Ray Tune ResultGrid](https://docs.ray.io/en/latest/tune/api/doc/ray.tune.Tuner.fit.html) -- always returns collection type
+- [AIEnergyScore](https://huggingface.github.io/AIEnergyScore/) -- phase-split energy; environment metadata
 
-**Pitfalls:**
-- [Part-time Power Measurements (arXiv)](https://arxiv.org/html/2312.02741v2) — NVML sampling issues, 73% error rates
-- [ML.ENERGY: Measuring GPU Energy Best Practices](https://ml.energy/blog/energy/measurement/measuring-gpu-energy-best-practices/) — Baseline power methodology
-- [Per-query energy consumption (2026)](https://muxup.com/2026q1/per-query-energy-consumption-of-llms) — Energy measurement analysis
-- [vLLM memory leaks](https://github.com/vllm-project/vllm/issues/15294) — V1 engine 200GB RAM leaks
-- [TensorRT-LLM Release Notes](https://nvidia.github.io/TensorRT-LLM/release-notes.html) — Breaking changes documented
-
-### Secondary (MEDIUM confidence)
-
-- [GPU Idle Power Benchmark Guide](https://www.ywian.com/blog/gpu-idle-power-benchmark-fix-it-guide) — Idle power ranges (30-50W high-end)
-- [Warmup convergence detection](https://www.emergentmind.com/topics/model-warmup-techniques) — Recent research (2025-2026)
-- [Docker shared volumes](https://www.baeldung.com/ops/docker-share-volume-multiple-containers) — Concurrent access patterns
-- [Time-series databases for energy monitoring](https://www.mdpi.com/1996-1073/17/21/5478) — Architecture patterns
-- [User Acceptance Testing Best Practices](https://research.aimultiple.com/user-acceptance-testing-best-practices/) — UAT methodology
-
-### Tertiary (LOW confidence, needs validation)
-
-- GPU idle power subtraction methodology — Community convergence, no official NVIDIA spec
-- Warmup convergence CV threshold <5% — Domain inference, not research-validated
-- InfluxDB/TimescaleDB for power timeseries — Appropriate but needs performance testing
+### Community + Industry (MEDIUM confidence)
+- [pytorch/torchtitan Hydra issue](https://github.com/pytorch/torchtitan/issues/1415) -- teams moving away from Hydra
+- [mypy issue #1693](https://github.com/python/mypy/issues/1693) -- Guido on union return types
+- [Databricks LLM inference best practices](https://www.databricks.com/blog/llm-inference-performance-engineering-best-practices) -- memory bandwidth, not FLOPs
+- [uv vs Poetry 2026](https://cuttlesoft.com/blog/2026/01/27/python-dependency-management-in-2026/)
 
 ---
-*Research completed: 2026-01-29*
-*Ready for roadmap: yes*
+*Research completed: 2026-02-25*
+*Ready for harmonisation: yes -- resolve API shape first, then propagate*

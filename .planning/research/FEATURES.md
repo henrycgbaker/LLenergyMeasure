@@ -1,379 +1,674 @@
-# Feature Landscape: LLM Inference Benchmarking Tools
+# Feature Audit: LLenergyMeasure v2.0 Decisions vs Peer Tool Evidence
 
-**Domain:** LLM inference efficiency measurement and benchmarking
-**Researched:** 2026-01-29
-**Confidence:** HIGH (verified against 6 major tools and recent research)
+**Domain:** LLM inference efficiency measurement
+**Researched:** 2026-02-25
+**Mode:** Ecosystem audit of existing `.product/` decisions
+**Overall confidence:** MEDIUM-HIGH (8 peer tools surveyed; some via official docs, some via web search)
+
+---
 
 ## Executive Summary
 
-The LLM inference benchmarking landscape in 2026 has matured into three distinct tiers:
+The existing `.product/` decisions are largely well-founded. The unified `llem run` design,
+composition-based config, sweep grammar, and library-first architecture all align with peer
+tool patterns. However, the audit surfaces **three significant gaps** in the existing feature
+set that peer tools address and the `.product/` decisions do not:
 
-1. **Industry Standards** (MLPerf, TokenPowerBench) - Formal, reproducible benchmarks with standardized protocols
-2. **Platform Benchmarking** (Optimum-Benchmark, vLLM/TensorRT tools) - Backend-specific performance validation
-3. **Research Tools** (LLMPerf, LLenergyMeasure) - Specialized domain exploration (API leaderboards, energy efficiency)
+1. **Phase-aligned energy attribution** (prefill vs decode) -- TokenPowerBench and ML.ENERGY
+   both treat this as fundamental; our decisions defer it vaguely to "v2.1"
+2. **Power time-series capture** -- Zeus PowerMonitor, TokenPowerBench, and ML.ENERGY v3 all
+   capture power traces during inference; our decisions acknowledge this as an "opportunity"
+   but do not commit
+3. **Pareto analysis / batch-size-energy tradeoff curves** -- ML.ENERGY v3's headline feature
+   is the time-energy Pareto frontier; no `.product/` decision addresses post-study analysis
 
-**Key Differentiators in 2026:**
-- Energy measurement is still rare (only MLPerf Power, TokenPowerBench, ML.ENERGY, LLenergyMeasure)
-- Statistical rigor (confidence intervals, multi-cycle) is uncommon
-- Traffic simulation has become table stakes for serving benchmarks
-- System metadata capture is increasingly expected
-
-**LLenergyMeasure's Position:** Strong differentiator through energy focus, but missing some table stakes features around metadata capture, baseline power subtraction, and statistical reporting that would increase credibility.
-
----
-
-## Table Stakes Features
-
-Features users expect from a credible LLM inference benchmarking tool. Missing these = product feels incomplete or amateurish.
-
-### Performance Metrics (CRITICAL)
-
-| Feature | Why Expected | Complexity | Status in LLenergyMeasure |
-|---------|--------------|------------|---------------------------|
-| Time to First Token (TTFT) | Industry standard latency metric | Low | ✅ Has (streaming mode) |
-| Inter-Token Latency (ITL) | Critical for streaming quality | Low | ✅ Has (streaming mode) |
-| End-to-end latency | Basic performance measure | Low | ✅ Has |
-| Throughput (tokens/sec) | Core efficiency metric | Low | ✅ Has |
-| Tokens per second per request | Individual request tracking | Medium | ✅ Has |
-
-**Source confidence:** HIGH - [NVIDIA LLM Benchmarking Fundamentals](https://developer.nvidia.com/blog/llm-benchmarking-fundamental-concepts/), [LLMPerf](https://github.com/ray-project/llmperf), verified across all tools
-
-### Configuration Control
-
-| Feature | Why Expected | Complexity | Status in LLenergyMeasure |
-|---------|--------------|------------|---------------------------|
-| Batch size variation | Critical performance variable | Low | ✅ Has |
-| Input/output length control | Workload characterization | Low | ✅ Has (via datasets) |
-| Temperature/sampling control | Affects generation cost | Low | ✅ Has |
-| Quantization support | Standard optimization | Low | ✅ Has (FP16, INT8) |
-| Multiple backend support | Hardware optimization | High | ✅ Has (3 backends) |
-
-**Source confidence:** HIGH - [Optimum-Benchmark](https://github.com/huggingface/optimum-benchmark), [vLLM docs](https://docs.vllm.ai/en/latest/benchmarking/)
-
-### Results Management (CRITICAL GAP)
-
-| Feature | Why Expected | Complexity | Status in LLenergyMeasure |
-|---------|--------------|------------|---------------------------|
-| Result persistence | Users need to review past runs | Low | ✅ Has (JSON + aggregation) |
-| Result comparison | Compare runs side-by-side | Medium | ⚠️ Partial (CLI list, no comparison UI) |
-| CSV/JSON export | Standard data portability | Low | ✅ Has |
-| Summary statistics | Mean, median, percentiles | Low | ✅ Has (P50, P95, P99) |
-| Run metadata capture | Reproduce experiments | Medium | ⚠️ **GAP - Minimal metadata** |
-
-**Source confidence:** HIGH - [GuideLLM](https://developers.redhat.com/articles/2025/06/20/guidellm-evaluate-llm-deployments-real-world-inference), industry practice
-
-**Critical Gap:** Run metadata is minimal. Expected metadata includes:
-- Hardware details (GPU model, VRAM, CPU, compute capability)
-- Software versions (CUDA, driver, backend, Python)
-- System state (temperature, GPU utilization baseline)
-- Dataset characteristics (actual ISL/OSL distribution)
-
-**Recommendation:** Add comprehensive environment metadata capture (see TokenPowerBench, DABench-LLM pattern).
-
-### Reproducibility Controls
-
-| Feature | Why Expected | Complexity | Status in LLenergyMeasure |
-|---------|--------------|------------|---------------------------|
-| Seed control | Basic reproducibility | Low | ✅ Has |
-| Deterministic mode flag | Signal reproducibility intent | Low | ✅ Has |
-| Warmup runs | Remove cold-start noise | Low | ✅ Has |
-| Version pinning | Reproduce exact environment | Low | ✅ Has (via Docker) |
-
-**Source confidence:** MEDIUM - [vLLM reproducibility docs](https://docs.vllm.ai/en/latest/usage/reproducibility/), [Medium article on LLM determinism](https://medium.com/@zljdanceholic/the-illusion-of-determinism-why-fixed-seeds-cant-save-your-llm-inference-2cbbb4a021b5)
-
-**Note:** Perfect reproducibility is nearly impossible with BF16 precision. Focus on "reasonable reproducibility" documentation.
-
-### Dataset Support
-
-| Feature | Why Expected | Complexity | Status in LLenergyMeasure |
-|---------|--------------|------------|---------------------------|
-| Standard datasets | Community comparability | Low | ✅ Has (Alpaca, LongBench, etc.) |
-| Custom dataset loading | User-specific workloads | Low | ✅ Has |
-| Synthetic generation | Quick testing | Low | ✅ Has |
-| ISL/OSL distribution reporting | Understand workload characteristics | Medium | ⚠️ **GAP** |
-
-**Source confidence:** HIGH - [MLPerf Inference](https://mlcommons.org/benchmarks/inference-datacenter/), [TokenPowerBench](https://arxiv.org/html/2512.03024v1)
-
-**Gap:** Dataset characteristics (actual input/output length distributions used) should be reported in results metadata.
+Two decisions are **questionable** when compared to peer evidence. Five are **contradicted** in
+minor ways or have gaps. The remaining decisions are **aligned** with or superior to peer
+practice.
 
 ---
 
-## Differentiators
+## Part 1: Decision Audit
 
-Features that set LLenergyMeasure apart or provide competitive advantage. Not expected, but highly valued.
+### Decision: Unified `llem run` (cli-ux.md Sub-decision A)
 
-### Energy Measurement (CORE DIFFERENTIATOR)
+**Verdict: ALIGNED**
 
-| Feature | Value Proposition | Complexity | Status in LLenergyMeasure |
-|---------|-------------------|------------|---------------------------|
-| Per-request energy | Fine-grained efficiency analysis | Medium | ✅ Has (CodeCarbon) |
-| Energy per token | Normalized efficiency metric | Low | ✅ Has (computed) |
-| Multiple energy backends | Portable across hardware | High | ✅ Has (CodeCarbon) |
-| CO₂ emissions | Sustainability metrics | Low | ✅ Has (CodeCarbon feature) |
-| Time-series power data | Understand power dynamics | Medium | ❌ **OPPORTUNITY** |
-| Baseline power subtraction | Accurate idle vs active power | Medium | ❌ **GAP** |
+| Peer Tool | Pattern | Notes |
+|-----------|---------|-------|
+| lm-eval | `lm-eval run` (single command) | Since Dec 2025 refactor: `run`, `ls`, `validate` |
+| MLflow | `mlflow run` | Single entry point |
+| pytest | `pytest` (single command) | Config file determines scope |
+| vLLM bench | `vllm bench serve`, `vllm bench latency`, `vllm bench throughput`, `vllm bench sweep serve` | Multiple subcommands -- different scope from llem |
+| optimum-benchmark | `optimum-benchmark --config-dir X --config-name Y` | Single command, Hydra determines scope |
 
-**Source confidence:** HIGH - [TokenPowerBench](https://arxiv.org/html/2512.03024v1), [ML.ENERGY Benchmark](https://arxiv.org/html/2505.06371v1), [Per-query energy article](https://muxup.com/2026q1/per-query-energy-consumption-of-llms)
+The unified `llem run` where YAML determines scope matches the dominant pattern (lm-eval,
+MLflow, pytest, optimum-benchmark). vLLM's bench suite is the exception -- it uses separate
+subcommands for different benchmark types -- but vLLM is a backend-specific tool, not a
+cross-backend framework.
 
-**Current landscape:** Only 4 tools measure energy (MLPerf Power, TokenPowerBench, ML.ENERGY Benchmark, LLenergyMeasure). This is LLenergyMeasure's strongest differentiator.
-
-**Opportunity:** TokenPowerBench sets new standard with:
-- Time-series power traces (prefill vs decode phase analysis)
-- Baseline power subtraction (idle vs active)
-- Energy-delay product metrics
-- Joules/token normalized across configurations
-
-**Recommendation:** Add time-series power data and baseline subtraction in v2.0 to match TokenPowerBench capabilities.
-
-### Statistical Rigor (CREDIBILITY DIFFERENTIATOR)
-
-| Feature | Value Proposition | Complexity | Status in LLenergyMeasure |
-|---------|-------------------|------------|---------------------------|
-| Multi-cycle measurement | Statistical robustness | Low | ✅ Has (--cycles flag) |
-| Confidence intervals | Quantify uncertainty | Medium | ❌ **OPPORTUNITY** |
-| Outlier detection/handling | Robust statistics | Medium | ⚠️ Partial (has std dev) |
-| Bootstrap resampling | Non-parametric CI | Medium | ❌ Future consideration |
-| Statistical comparison tests | A/B testing support | High | ❌ Post-v2.0 |
-
-**Source confidence:** HIGH - [FAQ paper on LLM evaluation](https://arxiv.org/abs/2601.20251), [Benchmark2 bootstrap methods](https://arxiv.org/pdf/2601.03986)
-
-**Current landscape:** Most tools report only mean/median. Statistical rigor is rare. Recent research (FAQ, 2026) emphasizes confidence intervals with frequentist coverage.
-
-**Opportunity:** Adding confidence intervals to multi-cycle results would significantly increase research credibility. Complexity is medium (scipy.stats or numpy percentile bootstrapping).
-
-**Recommendation:** Add 95% CI to multi-cycle aggregation results using percentile bootstrap (1000 iterations, following Benchmark2 pattern).
-
-### Campaign Orchestration (RESEARCH WORKFLOW)
-
-| Feature | Value Proposition | Complexity | Status in LLenergyMeasure |
-|---------|-------------------|------------|---------------------------|
-| Parameter grid generation | Systematic exploration | Medium | ✅ Has (generate-grid) |
-| Campaign execution | Batch experiment running | Medium | ✅ Has |
-| Multi-model comparison | Comparative benchmarking | Medium | ⚠️ Partial (manual) |
-| Automated experiment queue | Unattended execution | High | ❌ Post-v2.0 |
-| Result aggregation across campaigns | Cross-experiment analysis | Medium | ⚠️ Partial |
-
-**Source confidence:** MEDIUM - [LLM orchestration overview](https://research.aimultiple.com/llm-orchestration/), inferred from tools like Optimum-Benchmark leaderboard
-
-**Current capability:** Grid generation + campaign execution exists but is somewhat manual. Cross-campaign aggregation is limited.
-
-**Recommendation:** Enhance campaign orchestrator in v2.0 to handle queuing and cross-campaign analysis. Lower priority than energy/metadata features.
-
-### Traffic Simulation (SERVING FOCUS)
-
-| Feature | Value Proposition | Complexity | Status in LLenergyMeasure |
-|---------|-------------------|------------|---------------------------|
-| Request rate patterns | Realistic serving load | Medium | ✅ Has (traffic sim) |
-| Concurrent request simulation | Measure under load | Medium | ✅ Has |
-| Burst traffic patterns | Stress testing | Medium | ⚠️ Partial |
-| Multi-turn conversations | Realistic KV cache usage | High | ❌ Not planned |
-
-**Source confidence:** HIGH - [GuideLLM](https://github.com/vllm-project/guidellm), [Anyscale benchmarking](https://docs.anyscale.com/llm/serving/benchmarking/benchmarking-guide), [LLMServingPerfEvaluator](https://friendli.ai/blog/llm-serving-perf-evaluator)
-
-**Current capability:** Basic traffic simulation exists. Multi-turn conversation simulation is advanced feature (Anthropic, enterprise tools).
-
-**Assessment:** Traffic simulation is important for serving benchmarks but less critical for research-focused efficiency measurement. Current capability is adequate for v2.0.
-
-### FLOPs Estimation (ACADEMIC RIGOR)
-
-| Feature | Value Proposition | Complexity | Status in LLenergyMeasure |
-|---------|-------------------|------------|---------------------------|
-| Theoretical FLOPs calculation | Hardware-independent cost | Medium | ✅ Has |
-| Architecture-aware estimation | Accurate cost modeling | High | ⚠️ Basic (standard transformer) |
-| Attention mechanism breakdown | Understand cost composition | High | ❌ Not planned |
-
-**Source confidence:** MEDIUM - inferred from academic benchmarking practice, not explicitly documented in surveyed tools
-
-**Assessment:** LLenergyMeasure already has FLOPs estimation. This is uncommon in performance tools but valuable for academic research.
+**Confidence:** HIGH (verified via official docs)
 
 ---
 
-## Anti-Features
+### Decision: 2 commands + 1 flag (cli-ux.md)
 
-Features to explicitly NOT build. Common mistakes or misguided directions.
+**Verdict: ALIGNED**
 
-### Anti-Feature 1: Perfect Reproducibility Guarantees
+lm-eval uses 3 subcommands (`run`, `ls`, `validate`). `ls` lists available tasks --
+analogous to nothing in llem's domain (we do not have a task registry). `validate` is a
+config checker -- subsumed by llem's `--dry-run` flag on `run`. Two commands (`run`, `config`)
+plus `--version` is the minimum viable surface for a research tool.
 
-**What:** Claiming bit-exact reproducibility across hardware/versions
-**Why avoid:** Recent research (2026) shows this is impossible with BF16 precision and hardware variations
-**Consequences:**
-- Creates false user expectations
-- Wastes engineering effort on impossible goals
-- Damages credibility when reproducibility fails
+No peer tool has a `check`, `init`, or `results` command. This was already well-documented in
+the existing `11-peer-cli-patterns.md` research and remains correct.
 
-**What to do instead:**
-- Document reproducibility limitations clearly
-- Provide "best effort" reproducibility controls (seed, warmup, deterministic flag)
-- Emphasize statistical methods (multi-cycle, CI) over perfect determinism
-
-**Sources:** [Medium: Illusion of Determinism](https://medium.com/@zljdanceholic/the-illusion-of-determinism-why-fixed-seeds-cant-save-your-llm-inference-2cbbb4a021b5), [vLLM reproducibility docs](https://docs.vllm.ai/en/latest/usage/reproducibility/)
-
-### Anti-Feature 2: LLM-as-Judge Output Quality Scoring
-
-**What:** Automatically scoring output quality using another LLM
-**Why avoid:**
-- Scope creep - energy/performance tool, not quality evaluation tool
-- Requires different infrastructure (API calls, another model)
-- Already well-served by dedicated tools (Confident AI, EvidentlyAI)
-- Orthogonal to efficiency measurement
-
-**What to do instead:**
-- Focus on performance/energy metrics exclusively
-- Document that quality evaluation is user's responsibility
-- Suggest integration points with existing quality tools
-
-**Sources:** [EvidentlyAI LLM guide](https://www.evidentlyai.com/llm-guide/llm-benchmarks), [Confident AI platform](https://www.confident-ai.com/blog/the-current-state-of-benchmarking-llms)
-
-### Anti-Feature 3: Web UI / Dashboard
-
-**What:** Building a web interface for visualizing results
-**Why avoid:**
-- CLI-first tool scope (confirmed in project context)
-- Maintenance burden for research tool
-- Plotting libraries (matplotlib, seaborn) + notebooks are sufficient
-- Web platform is separate milestone
-
-**What to do instead:**
-- Export structured data (JSON, CSV)
-- Provide example Jupyter notebooks for visualization
-- Let users choose their own visualization tools
-
-**Sources:** Project context (v2.0 CLI milestone, web platform separate)
-
-### Anti-Feature 4: Closed-Loop Optimization
-
-**What:** Automatically searching for optimal configurations
-**Why avoid:**
-- Massive complexity (search space explosion)
-- Extremely long runtime for thorough search
-- User usually knows their constraints better
-- Grid search + user analysis is more transparent
-
-**What to do instead:**
-- Provide grid generation for systematic exploration
-- Export results for user-driven optimization
-- Document common optimization patterns
-
-**Sources:** General software engineering principle (YAGNI)
-
-### Anti-Feature 5: Training Benchmarks
-
-**What:** Adding model training or fine-tuning benchmarks
-**Why avoid:**
-- Completely different workload characteristics
-- Different infrastructure requirements
-- Already well-served by MLPerf Training
-- Dilutes focus on inference efficiency
-
-**What to do instead:**
-- Stay focused on inference only
-- Reference MLPerf Training for training benchmarks
-
-**Sources:** [MLPerf Training](https://mlcommons.org/benchmarks/training/)
+**Confidence:** HIGH
 
 ---
 
-## Feature Dependencies
+### Decision: Zero-config `llem run --model X` (cli-ux.md Sub-decision C)
+
+**Verdict: ALIGNED, with one gap**
+
+| Peer Tool | Zero-config story |
+|-----------|-------------------|
+| lm-eval | `lm-eval run --model hf --tasks hellaswag` -- 2 required flags |
+| optimum-benchmark | Requires YAML config or full Hydra overrides -- no zero-config |
+| vLLM bench | Requires `--model` at minimum, many optional flags |
+
+llem's zero-config with just `--model X` is better than most peers. The gap: **no peer tool
+uses interactive prompts for backend selection**. The `llem run --model X` design says
+"interactive prompt selects backend if multiple are installed (matches `gh pr create` pattern)".
+This is novel for ML tooling. Recommendation: keep it, but ensure `--backend` flag can bypass
+the prompt for scripted usage (already implied by the design).
+
+**Confidence:** MEDIUM (interactive prompt pattern is untested in ML CLI space)
+
+---
+
+### Decision: Composition config with optional backend sections (config-architecture.md C1)
+
+**Verdict: ALIGNED**
+
+| Peer Tool | Config pattern |
+|-----------|---------------|
+| optimum-benchmark | Inheritance -- separate `PyTorchConfig`, `VLLMConfig`, etc. |
+| lm-eval | Flat `model_args` string -- no structured config |
+| TokenPowerBench | Declarative YAML with engine/model/hardware sections |
+| vLLM bench | CLI flags only, no config objects |
+
+optimum-benchmark uses inheritance (the rejected option). TokenPowerBench uses a flat
+declarative config. The composition approach is defensible -- the rejection of inheritance
+(type pollution through every layer) is well-reasoned and the `.product/` rationale is strong.
+
+**Confidence:** HIGH
+
+---
+
+### Decision: Dotted sweep notation `pytorch.batch_size: [1, 8, 32]` (config-architecture.md C2)
+
+**Verdict: ALIGNED, no direct peer precedent but closest analogue validates approach**
+
+| Peer Tool | Sweep syntax |
+|-----------|-------------|
+| Hydra | `backend.device=cpu,cuda` -- dotted notation with `-m` flag |
+| W&B Sweeps | Flat `parameters:` dict, no backend scoping |
+| vLLM bench sweep | JSON file with parameter combinations, Cartesian product |
+| Optuna | Programmatic `trial.suggest_*()` |
+
+The dotted notation is closest to Hydra's override syntax (`backend.device=cpu,cuda`).
+vLLM's approach (JSON file with explicit parameter dicts) is the closest alternative for
+a benchmark-specific sweep. The `.product/` decision's per-backend Cartesian product with
+independent grids is novel but logically sound.
+
+**Confidence:** MEDIUM (novel syntax, no exact peer match, but Hydra precedent validates the
+dotted-key concept)
+
+---
+
+### Decision: Execution profiles as CLI shorthand only (cli-ux.md Sub-decision D)
+
+**Verdict: ALIGNED**
+
+No peer tool uses named execution profiles for statistical rigour presets. This was already
+well-researched in `16-execution-profiles-patterns.md`. The decision to separate machine-local
+thermal settings from study rigour settings is correct and unique to llem's energy measurement
+domain.
+
+vLLM bench sweep defaults to 3 runs per configuration -- similar to llem's CLI effective
+default of n_cycles=3. This validates the "3 cycles is reasonable default" decision.
+
+**Confidence:** HIGH
+
+---
+
+### Decision: `ExperimentConfig` = pure, `StudyConfig` = thin resolved container (experiment-study-architecture.md Option C)
+
+**Verdict: ALIGNED**
+
+| Peer Tool | Architecture |
+|-----------|-------------|
+| optimum-benchmark | `BenchmarkConfig` wraps `ScenarioConfig` + `BackendConfig` + `LauncherConfig` |
+| vLLM bench sweep | Separate `serve_params` + `bench_params`, Cartesian product at runtime |
+| TokenPowerBench | Flat declarative config, no study/experiment distinction |
+
+The Option C architecture (sweep resolution at YAML parse time, StudyConfig as resolved list)
+is cleaner than any peer implementation. optimum-benchmark's Hydra-based composition is the
+closest analogue. The decision is well-supported.
+
+**Confidence:** HIGH
+
+---
+
+### Decision: `llem.run()` unified library API (experiment-study-architecture.md Q3)
+
+**Verdict: QUESTIONABLE -- union return type is unusual**
+
+| Peer Tool | Library API |
+|-----------|------------|
+| lm-eval | `simple_evaluate()` -- returns `dict` always |
+| optimum-benchmark | `Benchmark.launch(config)` -- returns `BenchmarkReport` always |
+| Zeus | `ZeusMonitor.end_window()` -- returns `Measurement` always |
+
+No peer tool returns a union type (`ExperimentResult | StudyResult`). They all return a single
+type. The llem design's union return creates downstream issues:
+
+1. Library callers must check the type or know their input type
+2. Type narrowing is required for correct IDE autocomplete
+3. The convenience of unwrapping `StudyResult.experiments[0]` for single experiments adds a
+   semantic discontinuity
+
+**Challenge:** Consider always returning `StudyResult` and providing a convenience accessor
+like `result.experiment` (singular) that returns the first experiment for single-run cases.
+This eliminates the union type while preserving the ergonomic convenience.
+
+**Counter-argument:** The union return was explicitly decided to avoid wrapping single
+experiments in unnecessary study containers. The decision acknowledges this tradeoff. It is
+defensible but worth revisiting -- no peer tool uses this pattern.
+
+**Confidence:** MEDIUM (architectural preference, not a hard error)
+
+---
+
+### Decision: Exit codes 0/1/2/130 (error-handling.md K1)
+
+**Verdict: ALIGNED**
+
+Matches lm-eval, pytest, and standard Unix convention. No issues.
+
+**Confidence:** HIGH
+
+---
+
+### Decision: Rich + tqdm progress display (live-observability.md)
+
+**Verdict: ALIGNED, with one observation**
+
+| Peer Tool | Progress display |
+|-----------|-----------------|
+| vLLM bench | Rich terminal UI with GPU monitoring |
+| AIPerf | Dashboard TUI, simple (progress bars), or none |
+| lm-eval | Minimal progress (tqdm) |
+| GuideLLM | Rich terminal UI with performance metrics |
+
+The decision to use Rich at study level and tqdm at experiment level is pragmatic. However,
+**AIPerf and vLLM bench suite now have real-time TUI dashboards** showing GPU metrics during
+runs. The `.product/` decision defers live power display to v2.1, which is fine, but the TUI
+trend in peer tools suggests this will become expected faster than anticipated.
+
+**Confidence:** HIGH
+
+---
+
+### Decision: v2.x CLI-first, v3.0 lm-eval, v4.0 web (versioning-roadmap.md)
+
+**Verdict: QUESTIONABLE -- the v2.0-v2.4 micro-versioning is too granular**
+
+The task brief says the old v2.0-v2.4 micro-versions have been collapsed into a single v2.0.
+This is the right call. The old roadmap's v2.1 (measurement depth), v2.2 (Docker), v2.3
+(parameter completeness), v2.4 (shareability) granularity assumes a linear single-developer
+path. A single v2.0 that delivers the core research tool, with Docker as a follow-on when
+needed, is more realistic.
+
+However, the v3.0 = lm-eval integration decision deserves scrutiny. **lm-eval has restructured
+its packaging** (Dec 2025): the base package no longer includes transformers/torch, and backends
+are installed separately (`pip install lm_eval[hf]`, `pip install lm_eval[vllm]`). This makes
+lm-eval lighter-weight to integrate as an optional dependency. The integration may be simpler
+than originally estimated.
+
+**Confidence:** MEDIUM (version granularity is a project management call, not a technical one)
+
+---
+
+### Decision: Output as flat JSON per experiment (output-storage.md)
+
+**Verdict: ALIGNED, with gap**
+
+| Peer Tool | Output format |
+|-----------|--------------|
+| lm-eval | JSON per evaluation run |
+| optimum-benchmark | `benchmark_report.json` + `benchmark_report.txt` per run |
+| vLLM bench sweep | Results directory with CSV and JSON per parameter combination |
+| TokenPowerBench | Per-run results with power traces |
+
+Flat JSON per experiment is standard. The gap: **no decision addresses power time-series
+storage**. If/when power traces are captured (Zeus PowerMonitor), they produce high-frequency
+data (1-10 Hz) that does not belong in the main JSON result. A separate Parquet or CSV file
+per experiment is needed. This is not addressed in `output-storage.md`.
+
+**Confidence:** HIGH (JSON is fine; time-series storage is a gap)
+
+---
+
+### Decision: `extra = "forbid"` on configs (config-architecture.md)
+
+**Verdict: ALIGNED**
+
+Hydra does not have this (it allows arbitrary overrides). Pydantic's `extra = "forbid"` is
+stricter -- correct for a measurement tool where a typo in `bachsize: 8` could produce
+scientifically wrong results. No peer tool has this level of config strictness, but the
+rationale (scientific integrity) is specific to llem's domain.
+
+**Confidence:** HIGH
+
+---
+
+## Part 2: Features Peers Have That `.product/` Decisions Do Not Address
+
+### Gap 1: Phase-Aligned Energy Attribution (Prefill vs Decode)
+
+**Priority: HIGH -- this is a credibility gap for an energy measurement tool**
+
+| Peer Tool | Phase attribution |
+|-----------|-----------------|
+| TokenPowerBench | Core feature: "phase-aligned metrics pipeline that attributes energy to prefill and decode stages of every request" |
+| ML.ENERGY v3 | Measures energy during "steady state" of batch-saturated generation; distinguishes phases |
+| AIEnergyScore | Measures "preprocess, prefill, and decode" separately |
+| llem `.product/` | No decision addresses this. `versioning-roadmap.md` mentions "prefill/decode phase split" at v2.3. |
+
+**Assessment:** All three energy-focused peer tools measure prefill and decode energy
+separately. This is not a v2.3 feature -- it is a fundamental aspect of LLM energy
+measurement. A 70B model's prefill phase consumes dramatically different power than its decode
+phase (prefill is compute-bound, decode is memory-bound). Without phase attribution, llem's
+energy numbers are a single aggregate that hides the most interesting information.
+
+**Recommendation:** Move prefill/decode phase-split energy attribution to v2.0 scope. The
+implementation is not complex: it requires timestamping the transition from prefill to decode
+(which llem already tracks via TTFT) and aligning power measurements to those timestamps.
+
+**Confidence:** HIGH (three peer tools, two papers)
+
+---
+
+### Gap 2: Power Time-Series Capture
+
+**Priority: HIGH -- enables phase attribution and is table stakes for energy tools**
+
+| Peer Tool | Power time-series |
+|-----------|-------------------|
+| Zeus | `PowerMonitor` with `get_power_timeline()` -- 1-10 Hz sampling |
+| TokenPowerBench | NVML/DCGM sampling at 1-10 Hz, temporal alignment with inference phases |
+| ML.ENERGY v3 | Power draw trends across configurations |
+| llem `.product/` | `live-observability.md` defers "live power display" to v2.1. No decision on power data capture. |
+
+**Assessment:** The `.product/` decisions conflate "displaying live power" (a UI feature) with
+"capturing power time-series data" (a measurement feature). These are independent. Capturing
+the data is essential for phase attribution and post-hoc analysis. Displaying it live is a
+nice-to-have.
+
+**Recommendation:** Add power time-series capture to v2.0 scope (via Zeus `PowerMonitor` if
+Zeus is the energy backend, or via direct NVML polling otherwise). Store traces as Parquet
+alongside the experiment JSON. Defer live power display to later.
+
+**Confidence:** HIGH
+
+---
+
+### Gap 3: Pareto Analysis / Time-Energy Tradeoff Curves
+
+**Priority: MEDIUM -- differentiator for studies, not single experiments**
+
+| Peer Tool | Pareto analysis |
+|-----------|----------------|
+| ML.ENERGY v3 | "Time-energy Pareto frontier" -- core feature. Recommends minimum-energy config for a given latency constraint. |
+| vLLM bench sweep | `sweep plot_pareto` command for Pareto charts |
+| AIPerf | "Pareto analysis and visualisation" |
+| Zeus | Batch size optimiser finds energy-optimal batch size |
+| llem `.product/` | No decision addresses post-study analysis or visualisation. |
+
+**Assessment:** For a tool that measures "how implementation choice affects efficiency," the
+natural output of a study is a tradeoff curve: "here are the configurations on the Pareto
+frontier of latency vs energy." ML.ENERGY v3's headline is exactly this. llem's study output
+is a set of JSON files with no analysis layer on top.
+
+**Recommendation:** Add a simple Pareto extraction to `StudyResult` -- not a visualisation
+tool, but a data structure that identifies the Pareto-optimal experiments from a study. Users
+can then plot with matplotlib/seaborn. This belongs in v2.0 as a library feature, not a CLI
+command.
+
+**Confidence:** MEDIUM (ML.ENERGY and vLLM bench do this; it is becoming expected for sweep
+tools)
+
+---
+
+### Gap 4: Environment Metadata Capture
+
+**Priority: HIGH -- already identified in old FEATURES.md but no `.product/` decision exists**
+
+| Peer Tool | Metadata captured |
+|-----------|-------------------|
+| TokenPowerBench | Hardware topology, GPU model, driver version, CUDA version |
+| optimum-benchmark | System information in benchmark report |
+| vLLM bench | GPU model, VRAM, driver info in results |
+| AIEnergyScore | Hardware standardised (H100 only), but records full system info |
+| llem `.product/` | No decision in `decisions/`. `versioning-roadmap.md` mentions "env metadata" at v2.1. |
+
+**Assessment:** The old FEATURES.md flagged this as "P0 critical for credibility." It remains
+correct. An energy measurement without recording the GPU model, driver version, CUDA version,
+and system state is not reproducible. This should be in v2.0.
+
+The `designs/result-schema.md` should include an `EnvironmentSnapshot` with:
+- GPU model, VRAM, compute capability, driver version
+- CUDA version, backend library versions
+- Python version, llem version
+- CPU model, total RAM
+- Baseline GPU temperature at start
+
+**Recommendation:** This is a v2.0 table-stakes feature. Add to scope.
+
+**Confidence:** HIGH
+
+---
+
+### Gap 5: Confidence Intervals / Bootstrap CI
+
+**Priority: MEDIUM -- differentiator for multi-cycle studies**
+
+| Peer Tool | Statistical reporting |
+|-----------|---------------------|
+| AIEnergyScore | 10 runs per model, reports average |
+| ML.ENERGY v3 | Reports per-token energy with variance analysis |
+| vLLM bench sweep | 3 runs per configuration by default, reports mean |
+| lm-eval | Reports mean/stderr for accuracy metrics |
+| llem `.product/` | `versioning-roadmap.md` mentions "bootstrap CI" at v2.1. Multi-cycle exists. |
+
+**Assessment:** No peer tool currently reports confidence intervals for performance/energy
+metrics. lm-eval reports stderr for accuracy, but that is a different domain. The opportunity
+is real but not urgent. Deferring to post-v2.0 is defensible.
+
+**Recommendation:** Keep as post-v2.0. Report mean, median, std dev, min, max for multi-cycle
+results in v2.0. Add bootstrap CI when there is user demand.
+
+**Confidence:** MEDIUM
+
+---
+
+### Gap 6: `--dry-run` for Grid Preview
+
+**Priority: MEDIUM -- no peer tool has this, but it is mentioned in `.product/` without a decision**
+
+| Peer Tool | Dry run / grid preview |
+|-----------|----------------------|
+| Hydra | `--cfg job` shows resolved config; no grid preview |
+| vLLM bench sweep | No preview; runs immediately |
+| W&B Sweeps | No preview |
+| llem `.product/` | `cli-ux.md` mentions `--dry-run` for validation. No design for study grid preview. |
+
+**Assessment:** The `.product/` decisions mention `--dry-run` covers "active config validation"
+but do not specify what it shows for studies. For a study with `sweep:` grammar generating 50+
+experiments, users need to preview the grid before committing hours of GPU time.
+
+**Recommendation:** `llem run study.yaml --dry-run` should:
+1. Resolve the sweep grammar
+2. Show the full experiment grid (count, configurations)
+3. Estimate total runtime and VRAM requirements
+4. Validate all configs (pre-flight for each)
+5. Exit without running
+
+This is a v2.0 feature. Add to scope.
+
+**Confidence:** MEDIUM (no peer does this well, but it is logically necessary for expensive
+experiment grids)
+
+---
+
+### Gap 7: VRAM Pre-Flight Estimation
+
+**Priority: MEDIUM -- partially addressed in research but no decision exists**
+
+| Peer Tool | VRAM estimation |
+|-----------|----------------|
+| vLLM | Internal profile_run during engine init (not externally callable) |
+| HF Accelerate | `accelerate estimate-memory` CLI (weight memory only) |
+| llem `.product/` | `10-sweep-validation-patterns.md` research covers this in detail. No decision. |
+
+**Assessment:** The research file `10-sweep-validation-patterns.md` has a thorough analysis of
+VRAM estimation patterns and even proposes an `estimate_vram()` function. But no `.product/`
+decision commits to building this. For expensive sweeps, pre-flight VRAM checking prevents
+wasting GPU time on OOM configurations.
+
+**Recommendation:** Add `estimate_vram()` as a pre-flight check in v2.0. Use the formula from
+the research file. Not a separate command -- part of `--dry-run` and optional pre-flight.
+
+**Confidence:** MEDIUM
+
+---
+
+### Gap 8: HuggingFace Hub Results Sharing
+
+**Priority: LOW for v2.0 -- but worth noting**
+
+| Peer Tool | Results sharing |
+|-----------|---------------|
+| optimum-benchmark | Push results directly to HuggingFace Hub |
+| lm-eval | `--hf_hub_log_args` flag to log results to Hub |
+| llem `.product/` | `versioning-roadmap.md` defers `llem results push` to v2.4 |
+
+**Assessment:** Two major peer tools support HF Hub integration. Deferring to v2.4 is
+defensible for a v2.0 release, but the implementation is lightweight (HF Hub API is simple).
+
+**Recommendation:** Keep deferred. But note that HF Hub integration is simpler than building a
+custom central DB (the v2.4 plan). Consider HF Hub as the first sharing mechanism rather than
+a custom DB.
+
+**Confidence:** MEDIUM
+
+---
+
+## Part 3: Feature Landscape Summary
+
+### Table Stakes (must have for credibility)
+
+| Feature | Status in `.product/` | Peer Evidence | Verdict |
+|---------|----------------------|---------------|---------|
+| TTFT, ITL, throughput, latency | Decided, exists in v1 | Universal | OK |
+| Multi-backend support | Decided (3 backends) | optimum-benchmark has 15+, but 3 is defensible | OK |
+| Batch size / precision / quantisation control | Decided | Universal | OK |
+| Config-driven experiments (YAML) | Decided | optimum-benchmark (Hydra), TokenPowerBench (declarative) | OK |
+| Warmup runs | Decided | Universal | OK |
+| JSON result output | Decided | Universal | OK |
+| Environment metadata capture | **NOT decided** | TokenPowerBench, optimum-benchmark, vLLM bench | **GAP** |
+| Prefill/decode phase-split energy | Deferred to v2.3 | TokenPowerBench, ML.ENERGY, AIEnergyScore | **GAP** |
+| Power time-series capture | Deferred to v2.1 | Zeus, TokenPowerBench | **GAP** |
+| Pre-flight validation | Decided (implicit in run) | No peer does this well | AHEAD |
+| Instructive error messages | Decided | No peer does this well | AHEAD |
+
+### Differentiators (set llem apart)
+
+| Feature | Status in `.product/` | Peer Evidence | Verdict |
+|---------|----------------------|---------------|---------|
+| Energy per token (Joules) | Decided, exists in v1 | Only 4 tools do this | STRONG |
+| Cross-backend energy comparison | Decided | No peer does this | UNIQUE |
+| Sweep grammar with backend scoping | Decided (dotted notation) | Novel; Hydra closest | UNIQUE |
+| Thermal gap management (configurable) | Decided | No peer does this | UNIQUE |
+| Baseline-adjusted energy | Mentioned in research | TokenPowerBench does this | EXPECTED |
+| Config hash for reproducibility | Decided | Novel | STRONG |
+| `--dry-run` with grid preview | Mentioned but not designed | No peer does this well | OPPORTUNITY |
+| Pareto frontier extraction | **NOT decided** | ML.ENERGY v3, vLLM bench sweep | **GAP** |
+| FLOPs estimation | Decided, exists in v1 | Rare; academic value | STRONG |
+
+### Anti-Features (correctly excluded)
+
+| Anti-Feature | `.product/` Status | Peer Evidence | Verdict |
+|--------------|-------------------|---------------|---------|
+| Training benchmarks | Not planned | Correct -- different domain (MLPerf Training) | CORRECT |
+| LLM-as-judge quality scoring | Not planned | Correct -- scope creep (lm-eval does this) | CORRECT |
+| Closed-loop optimisation | Not planned | Zeus has batch size optimiser, but not benchmarking | CORRECT |
+| API endpoint benchmarking | Not planned | Different scope (AIPerf, LLMPerf) | CORRECT |
+| Perfect reproducibility claims | Not planned | Correct -- impossible with BF16 | CORRECT |
+
+---
+
+## Part 4: Peer Tool Feature Matrix
+
+| Feature | llem (decided) | optimum-bench | lm-eval | vLLM bench | TokenPowerBench | ML.ENERGY | AIPerf | Zeus | AIEnergyScore |
+|---------|---------------|---------------|---------|------------|-----------------|-----------|--------|------|---------------|
+| Energy measurement | Yes (CodeCarbon) | Yes (CodeCarbon) | No | No | Yes (NVML/RAPL) | Yes (Zeus) | DCGM telemetry | Yes (NVML/RAPL) | Yes (CodeCarbon) |
+| Prefill/decode energy | **No (v2.3)** | No | No | No | **Yes** | **Yes** | No | No | **Yes** |
+| Power time-series | **No (v2.1)** | No | No | No | **Yes** | **Yes** | Yes | **Yes** | No |
+| Multi-backend | 3 | 15+ | 4+ (HF, vLLM, GGUF, API) | 1 (vLLM) | 4 | 1 (vLLM) | API | N/A | 1 |
+| Sweep/grid | Yes (dotted) | Yes (Hydra) | No | Yes (JSON) | Partial | Yes | No | No | No |
+| Pareto analysis | **No** | No | No | **Yes** | No | **Yes** | **Yes** | **Yes** (batch opt) | No |
+| Library API | `llem.run()` | `Benchmark.launch()` | `simple_evaluate()` | Scripts only | CLI only | Scripts only | CLI only | `ZeusMonitor` | Scripts only |
+| Env metadata | **No** | Yes | Partial | Yes | Yes | Yes | Yes | N/A | Yes |
+| CI/statistics | Multi-cycle | No | Mean/stderr | 3 runs/mean | No | Variance | Percentiles | No | 10 runs/mean |
+| Process isolation | Yes (subprocess) | Yes (process/torchrun) | No | Separate server | No | N/A | N/A | N/A | N/A |
+| Docker images | Planned (v2.2) | Yes (4 images) | No | No | No | No | No | No | No |
+| Config validation | `extra="forbid"` | Hydra | No | No | No | No | No | N/A | No |
+
+---
+
+## Part 5: Feature Dependencies for v2.0
 
 ```
-Energy Measurement
-    ├─→ Baseline Power Subtraction (enables accurate energy)
-    └─→ Time-Series Power Data (enables phase analysis)
-         └─→ Phase Detection (prefill vs decode)
+Environment Metadata (EnvironmentSnapshot)
+    |-- no dependencies, implement first
+    |
+    v
+Power Time-Series Capture (Zeus PowerMonitor or direct NVML polling)
+    |-- depends on: Zeus integration (already planned as energy backend)
+    |
+    v
+Phase-Aligned Energy Attribution (prefill vs decode)
+    |-- depends on: TTFT timestamp (already have) + power time-series
+    |-- depends on: aligning power samples to inference phases
+    |
+    v
+Pareto Frontier Extraction (from StudyResult)
+    |-- depends on: study execution (already designed)
+    |-- depends on: per-experiment energy + latency in results
+    |-- no dependency on power time-series (uses aggregate metrics)
 
-Statistical Rigor
-    └─→ Multi-Cycle Execution (already implemented)
-         └─→ Confidence Intervals (natural extension)
-
-System Metadata
-    ├─→ Hardware Detection (GPU, CPU, VRAM)
-    ├─→ Software Versions (CUDA, driver, Python)
-    └─→ Dataset Characteristics (ISL/OSL distribution)
-         └─→ Results Reproducibility
-
-Campaign Orchestration
-    ├─→ Parameter Grid Generation (already implemented)
-    ├─→ Queue Management (enhancement)
-    └─→ Cross-Campaign Aggregation (new capability)
+--dry-run Grid Preview
+    |-- depends on: sweep resolution (already designed in Option C)
+    |-- depends on: VRAM estimation (research exists, no decision)
+    |-- independent of energy features
 ```
 
-**Critical Path:**
-1. System metadata capture is foundational for reproducibility
-2. Baseline power subtraction depends on hardware metadata
-3. Confidence intervals depend on multi-cycle (already have)
-4. Time-series power is independent enhancement
+**Critical path for v2.0:** Environment metadata --> power time-series capture --> phase
+attribution. These three form a dependency chain. Pareto extraction and dry-run preview are
+independent and can be implemented in parallel.
 
 ---
 
-## MVP Recommendation for v2.0 CLI
+## Part 6: MVP Recommendation for v2.0
 
-Based on competitive analysis and credibility requirements, prioritize:
+Based on the audit, the `.product/` decisions should be updated to include:
 
-### P0 - Critical for Credibility (Table Stakes Gaps)
-1. **System metadata capture** - Hardware/software environment recording
-2. **Baseline power subtraction** - Accurate energy measurement (idle vs active)
-3. **Dataset characteristics reporting** - ISL/OSL distribution in results
+### Must-add to v2.0 scope (peer evidence demands it)
 
-### P1 - Strong Differentiators
-4. **Confidence intervals** - 95% CI for multi-cycle results (statistical rigor)
-5. **Time-series power data** - Prefill vs decode phase analysis (matches TokenPowerBench)
+1. **Environment metadata capture** -- EnvironmentSnapshot in every ExperimentResult. GPU
+   model, VRAM, driver, CUDA, Python, llem version, backend versions, baseline temperature.
+   Every peer tool does this.
 
-### P2 - Enhancements (Post-v2.0)
-6. **Campaign orchestrator redesign** - Queue management, cross-campaign aggregation
-7. **Result comparison UI** - Side-by-side run comparison (CLI or notebook)
+2. **Prefill/decode phase-split energy** -- Pull forward from v2.3. TokenPowerBench,
+   ML.ENERGY, and AIEnergyScore all measure this. Without it, llem's energy numbers are less
+   useful than peers'.
 
-### Defer to Web Platform
-- Interactive visualizations
-- Leaderboards
-- User management
-- API endpoints
+3. **Power time-series capture** -- Pull forward from v2.1. Required for phase attribution.
+   Store as Parquet alongside experiment JSON.
+
+4. **`--dry-run` grid preview for studies** -- Resolve sweep, show grid, estimate runtime,
+   validate all configs. No peer does this well; it is a differentiator for expensive GPU
+   experiments.
+
+### Should-add to v2.0 scope (strong peer evidence, moderate effort)
+
+5. **Pareto frontier extraction in StudyResult** -- Not a CLI command or visualisation tool,
+   but a `pareto_optimal: list[ExperimentResult]` field or method on StudyResult. ML.ENERGY v3
+   and vLLM bench sweep both do this.
+
+6. **VRAM pre-flight estimation** -- The research exists (`10-sweep-validation-patterns.md`).
+   Build the `estimate_vram()` function. Use in `--dry-run` and optionally in pre-flight.
+
+### Keep deferred (peer evidence supports deferral)
+
+7. **Confidence intervals / bootstrap CI** -- No peer tool does this for energy/perf metrics.
+   Mean + median + std dev is sufficient for v2.0.
+
+8. **HF Hub results sharing** -- Two peers support it, but it is a convenience, not a
+   credibility feature. v2.4+ is fine.
+
+9. **Live power display** -- UI feature, not measurement feature. v2.1+ is fine once power
+   capture (the measurement) is in v2.0.
+
+10. **Additional backends (SGLang, llama.cpp)** -- Desirable but not v2.0. Three backends is
+    a defensible starting point.
 
 ---
 
-## Competitive Positioning Matrix
+## Part 7: Recommendations for `.product/` Decision Updates
 
-| Tool | Energy | Statistical Rigor | Metadata | Traffic Sim | Multi-Backend |
-|------|--------|------------------|----------|-------------|---------------|
-| **MLPerf Inference** | ✅ (Power suite) | ⚠️ (Limited) | ✅ | ❌ | ✅ |
-| **TokenPowerBench** | ✅✅ (Time-series) | ⚠️ | ✅ | ❌ | ✅ |
-| **Optimum-Benchmark** | ✅ (Basic) | ❌ | ⚠️ | ❌ | ✅✅ (10+ backends) |
-| **LLMPerf** | ❌ | ⚠️ (Quantiles) | ⚠️ | ✅ | ✅ (API focus) |
-| **vLLM Bench** | ❌ | ❌ | ⚠️ | ✅✅ | ❌ (vLLM only) |
-| **TensorRT Bench** | ❌ | ❌ | ⚠️ | ⚠️ | ❌ (TRT only) |
-| **LLenergyMeasure** | ✅ (CodeCarbon) | ⚠️ (Multi-cycle, no CI) | ❌ **GAP** | ✅ | ✅ (3 backends) |
-| **LLenergyMeasure v2.0** | ✅✅ (+ baseline, time-series) | ✅ (+ CI) | ✅ **FIXED** | ✅ | ✅ |
+### 1. Create new decision: `environment-metadata.md`
+Content: EnvironmentSnapshot schema, what to capture, where to store it, how it affects
+reproducibility claims. Reference TokenPowerBench and optimum-benchmark patterns.
 
-**Legend:** ✅✅ = Best in class, ✅ = Has feature, ⚠️ = Partial/basic, ❌ = Missing
+### 2. Update `versioning-roadmap.md`
+Pull "prefill/decode phase split" from v2.3 to v2.0.
+Pull "power time-series" and "env metadata" from v2.1 to v2.0.
+The rationale: these are table-stakes for an energy measurement tool in 2026. Peers already
+have them.
 
-**v2.0 Positioning:** With proposed features, LLenergyMeasure would be **best-in-class for energy measurement** and **strong on statistical rigor**, filling a clear gap in the market.
+### 3. Update `experiment-study-architecture.md`
+Add Pareto frontier extraction as a method on `StudyResult`. Document the interface.
+
+### 4. Create new decision: `dry-run-design.md`
+Content: what `--dry-run` shows for single experiments vs studies. Grid preview, VRAM
+estimation, runtime estimation.
+
+### 5. Update `output-storage.md`
+Add decision for power time-series storage format (Parquet per experiment, alongside JSON).
+
+### 6. Consider revisiting union return type in `llem.run()`
+The union `ExperimentResult | StudyResult` return has no peer precedent. Consider always
+returning `StudyResult` with a convenience accessor. Low priority -- the current design works,
+it is just unusual.
 
 ---
 
 ## Sources
 
-### Official Documentation
-- [MLCommons MLPerf Inference](https://mlcommons.org/benchmarks/inference-datacenter/) - Industry standard benchmarks
-- [Optimum-Benchmark GitHub](https://github.com/huggingface/optimum-benchmark) - Multi-backend benchmarking
-- [LLMPerf GitHub](https://github.com/ray-project/llmperf) - API benchmarking
-- [vLLM Benchmarking Docs](https://docs.vllm.ai/en/latest/benchmarking/) - vLLM-specific benchmarks
-- [NVIDIA LLM Benchmarking Fundamentals](https://developer.nvidia.com/blog/llm-benchmarking-fundamental-concepts/) - Best practices
+### Official Documentation (HIGH confidence)
+- [vLLM Benchmark CLI](https://docs.vllm.ai/en/latest/benchmarking/cli/)
+- [vLLM Parameter Sweeps](https://docs.vllm.ai/en/latest/benchmarking/sweeps/)
+- [Zeus Measuring Energy](https://ml.energy/zeus/measure/)
+- [lm-eval Python API](https://github.com/EleutherAI/lm-evaluation-harness/blob/main/docs/python-api.md)
+- [AI Energy Score Methodology](https://huggingface.github.io/AIEnergyScore/)
+- [optimum-benchmark README](https://github.com/huggingface/optimum-benchmark/blob/main/README.md)
 
-### Research Papers (2025-2026)
-- [TokenPowerBench (Dec 2025)](https://arxiv.org/html/2512.03024v1) - LLM power consumption benchmarking
-- [ML.ENERGY Benchmark](https://arxiv.org/html/2505.06371v1) - Automated energy measurement
-- [MLPerf Power Paper](https://arxiv.org/html/2410.12032v1) - Energy efficiency benchmarking
-- [FAQ: Efficient LLM Evaluation (Jan 2026)](https://arxiv.org/abs/2601.20251) - Statistical guarantees for benchmarking
-- [DABench-LLM (Jan 2026)](https://arxiv.org/abs/2601.19904) - Hardware profiling framework
+### Research Papers (HIGH confidence)
+- [TokenPowerBench (Dec 2025)](https://arxiv.org/html/2512.03024v1) -- phase-aligned energy
+- [ML.ENERGY Benchmark (May 2025)](https://arxiv.org/html/2505.06371v1) -- Pareto frontiers
+- [ML.ENERGY Leaderboard v3 blog](https://ml.energy/blog/measurement/energy/diagnosing-inference-energy-consumption-with-the-mlenergy-leaderboard-v30/)
 
-### Industry Tools and Guides
-- [GuideLLM](https://developers.redhat.com/articles/2025/06/20/guidellm-evaluate-llm-deployments-real-world-inference) - Red Hat's realistic workload tool
-- [Per-query energy consumption (2026)](https://muxup.com/2026q1/per-query-energy-consumption-of-llms) - Energy measurement analysis
-- [LLM Reproducibility Discussion](https://medium.com/@zljdanceholic/the-illusion-of-determinism-why-fixed-seeds-cant-save-your-llm-inference-2cbbb4a021b5) - Determinism challenges
-- [vLLM Reproducibility](https://docs.vllm.ai/en/latest/usage/reproducibility/) - Practical reproducibility
+### GitHub Repositories (MEDIUM-HIGH confidence)
+- [AIPerf (NVIDIA)](https://github.com/ai-dynamo/aiperf)
+- [Zeus (ml-energy)](https://github.com/ml-energy/zeus)
+- [GuideLLM (vllm-project)](https://github.com/vllm-project/guidellm)
+- [lm-evaluation-harness releases](https://github.com/EleutherAI/lm-evaluation-harness/releases)
 
-### Community Resources
-- [LLM Stats Benchmarks 2026](https://llm-stats.com/benchmarks) - Benchmark collection
-- [BentoML LLM Performance Guide](https://bentoml.com/llm/inference-optimization/llm-performance-benchmarks) - Performance benchmarking
-- [EvidentlyAI LLM Benchmarks Guide](https://www.evidentlyai.com/llm-guide/llm-benchmarks) - Evaluation overview
-
-**Overall Confidence Level:** HIGH - Research verified against 6 major tools (MLPerf, Optimum-Benchmark, LLMPerf, vLLM, TensorRT, TokenPowerBench) and 10+ recent papers/articles from 2025-2026.
+### Web Search (MEDIUM confidence)
+- [NVIDIA LLM Benchmarking Fundamentals](https://developer.nvidia.com/blog/llm-benchmarking-fundamental-concepts/)
+- [AI Energy Score v2 blog](https://huggingface.co/blog/sasha/ai-energy-score-v2)
+- [Red Hat GuideLLM article](https://developers.redhat.com/articles/2025/06/20/guidellm-evaluate-llm-deployments-real-world-inference)

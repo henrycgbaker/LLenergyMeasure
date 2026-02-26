@@ -1,535 +1,692 @@
-# Technology Stack
+# Stack Research — Audit & Challenge
 
-**Project:** LLenergyMeasure Milestone - Precision Enhancement
-**Researched:** 2026-01-29
-**Confidence:** HIGH
-
-## Executive Summary
-
-For the precision enhancement milestone, the stack focuses on three areas: (1) NVML-based GPU monitoring for environment metadata and time-series power sampling, (2) Docker orchestration for campaign execution, and (3) backend parameter introspection for systematic completeness audits. The recommended stack prioritises official, actively maintained libraries with proven stability.
-
-**Key Decision:** Use `nvidia-ml-py` (official NVIDIA bindings) over deprecated `pynvml`, and `python-on-whales` over `docker-py` for campaign orchestration due to superior feature support and CLI parity.
+**Project:** LLenergyMeasure v2.0
+**Mode:** AUDIT — reviewing and challenging existing decisions
+**Researched:** 2026-02-25
+**Confidence:** HIGH (energy/versions) | MEDIUM (backends, CLI) | LOW (visualisation future)
 
 ---
 
-## Core Monitoring Stack
+## Scope
 
-### NVML GPU Monitoring
+This audit reviews every existing stack decision in `.planning/codebase/STACK.md` and
+`.product/decisions/` against current evidence. Where a prior decision holds, this is stated.
+Where it does not, this document says so explicitly.
+
+**Prior stack (from `.planning/codebase/STACK.md`, audited 2026-02-05):**
+Python 3.10+ · Pydantic v2 · Typer · PyTorch + Transformers · vLLM · TensorRT-LLM ·
+CodeCarbon · nvidia-ml-py · Rich · Loguru · Poetry
+
+---
+
+## 1. Energy Measurement: CodeCarbon + Zeus + NVML
+
+### Existing Decision
+
+`.product/decisions/architecture.md` (Sub-decision G):
+> "CO2 decoupled from energy. Base = NVML polling. `[zeus]` = accurate energy. `[codecarbon]` = CO2."
+
+`.product/research/08-energy-plugin-architecture.md` recommends Zeus as P0, CodeCarbon as P0
+fallback, DCGM as P1, direct RAPL/Scaphandre as P2.
+
+### Current Version Landscape
+
+| Tool | Existing Pin | Current Version | Notes |
+|------|-------------|-----------------|-------|
+| CodeCarbon | `>=2.8.0` | **3.2.2** (Feb 2026) | 3.x is a significant version jump |
+| Zeus (zeus-ml → zeus) | `[optional]` | **0.13.1** (Nov 2025) | Package renamed from `zeus-ml` to `zeus` |
+| nvidia-ml-py | `>=12.0.0` | **13.590.48** (Jan 2026) | Per `.planning/codebase/STACK.md` bump |
+
+**CRITICAL — CodeCarbon version gap:** The existing `pyproject.toml` pins `>=2.8.0`.
+Current release is 3.2.2, a major version jump. The `_prepare_emissions_data()` private API call
+identified in `.product/research/08-energy-plugin-architecture.md` as fragile across versions is
+a live risk. Must verify API compatibility with 3.x before shipping.
+
+**CRITICAL — Zeus package rename:** The PyPI package is now `zeus`, not `zeus-ml`.
+The old `zeus-ml` package stopped at v0.11.0. Installing `zeus-ml` gets stale code.
+`pyproject.toml` extras must use `zeus` (the current package).
+
+### Should We Add PowerJoular / Scaphandre / RAPL Direct?
+
+**PowerJoular** (Ada, external process monitoring by PID):
+- Process-level CPU+GPU energy via RAPL + nvidia-smi
+- Language-agnostic — monitors any process externally
+- No Python in measurement path (lower interference)
+- **Gap:** nvidia-smi sampling interval (~1s), not NVML counter accuracy
+- **Assessment:** Useful for system-level cross-validation only. Not a replacement for Zeus.
+
+**Scaphandre** (Rust agent, Prometheus exporter):
+- RAPL-based CPU/DRAM only; no GPU energy
+- Per-process attribution via `/proc`
+- Research (Arxiv 2511.05597) notes "only provides an estimate based on RAPL without quantifying accuracy"
+- Prometheus endpoint approach adds operational complexity (daemon required)
+- **Assessment:** REJECT for primary use. Useful only in CPU-only or cross-validation scenarios.
+  Zeus already reads RAPL directly with better integration.
+
+**RAPL direct** (`/sys/class/powercap/intel-rapl/`):
+- Zeus already wraps RAPL internally for CPU/DRAM measurement
+- Building a separate RAPL backend would duplicate Zeus's CPU code path
+- **Assessment:** REJECT — Zeus already handles this better.
+
+**Intel RAPL via `pyRAPL`:**
+- Library abandoned; last commit 2021.
+- **Assessment:** REJECT — dead project.
+
+**NVIDIA DCGM:**
+- Enterprise GPU monitoring service (`nv-hostengine` daemon required)
+- Very high accuracy for GPU metrics; no CPU/DRAM
+- Relevant for HPC/cluster deployments where DCGM is pre-deployed
+- **Assessment:** RETAIN as P1 (post v2.0). Not needed for researchers' workstations.
+
+### Is the CO2 / Energy Separation Well-Grounded?
+
+**YES — this decision holds and is well-supported.**
+
+Evidence:
+1. Zeus (the reference implementation for ML.ENERGY Leaderboard) explicitly does not compute CO2.
+2. The ML.ENERGY Benchmark uses Zeus for energy + a separate carbon intensity lookup.
+3. PMC comparison paper found up to 400% variation between tools measuring the same workload
+   (different component scoping), confirming that energy and CO2 are genuinely different concerns.
+4. Scaphandre-based tools (MELODI framework, 2025) also separate GPU energy from CO2 estimation.
+
+**One nuance:** The `[codecarbon]` extra is positioned as the CO2 path, but CodeCarbon 3.x
+now pins `pydantic<2` in some internal components — check compatibility with our Pydantic v2
+config models. This must be verified before CodeCarbon is marketed as the CO2 extra.
+
+### Recommendation
+
+| Component | Decision | Version to Pin | Confidence |
+|-----------|----------|----------------|------------|
+| Zeus | KEEP as primary energy backend | `zeus>=0.13.1` (note: package is `zeus`, not `zeus-ml`) | HIGH |
+| CodeCarbon | KEEP for CO2 only; verify 3.x private API compatibility | `codecarbon>=3.2.2` | MEDIUM |
+| nvidia-ml-py | KEEP; bump minimum | `nvidia-ml-py>=13.590.48` | HIGH |
+| PowerJoular | REJECT for primary use | — | HIGH |
+| Scaphandre | REJECT for primary use | — | HIGH |
+| RAPL direct | REJECT (Zeus handles) | — | HIGH |
+| DCGM | P1 future optional | — | MEDIUM |
+
+**Action required:** Update `pyproject.toml` extras from `zeus-ml` to `zeus`. Verify
+`codecarbon>=3.0.0` does not break the private API calls in `codecarbon.py`.
+
+---
+
+## 2. Inference Backends: PyTorch + vLLM + TensorRT-LLM
+
+### Existing Decision
+
+Three backends at v2.0: PyTorch (Transformers), vLLM, TensorRT-LLM.
+Priority ordering for additions: SGLang > llama.cpp > HF TGI (`.product/decisions/additional-backends.md`).
+
+### Current Version Landscape
+
+| Backend | Old Pin | Current Stable | Change |
+|---------|---------|----------------|--------|
+| PyTorch | `>=2.5.0` | **2.10.0** (Jan 2026) | Active; 2.11 planned Feb 2026 |
+| Transformers | `>=4.49.0` | **v5.x** (now weekly minor releases) | **MAJOR VERSION** |
+| vLLM | `>=0.6.0` | **0.15.1** | 15 minor versions ahead of pin |
+| TensorRT-LLM | `>=0.12.0` | **1.3.0rc4** (Feb 2026) | Approaching 1.0 stable |
+
+**CRITICAL — Transformers v5:** HuggingFace released Transformers v5 (first major release in
+5 years). It removes long-due deprecations and refactors APIs. The old `>=4.49.0` pin allows
+v4.x. For v2.0 we should pin `>=5.0.0`. The `.planning/codebase/STACK.md` already shows
+`5.0.0` as the tested version, so this is partially addressed — but the `pyproject.toml`
+`>=4.49.0` pin must be updated.
+
+**CRITICAL — vLLM 0.15.1 vs pinned 0.6.0:** A 9-minor-version gap is substantial. vLLM v0.9.x
+introduced a constraint: `transformers < 4.54.0` for that version range. Version drift between
+vLLM and Transformers is a known pain point. Pinning strategy must be tested against current
+vLLM+Transformers compatibility matrix.
+
+**TensorRT-LLM approaching 1.0:** The `1.3.0rc` series suggests API stabilisation. The old
+`>=0.12.0` pin is far behind. The 1.x API is likely breaking from 0.12 given NVIDIA's
+typical versioning.
+
+### Should We Add SGLang?
+
+**SGLang evidence (2026-02-25):**
+- Joined PyTorch ecosystem (official endorsement)
+- Running on 400,000+ GPUs worldwide; xAI uses it for Grok 3
+- 29% throughput advantage over optimised vLLM on H100 (H100 + Llama 3.1 8B benchmark)
+- RadixAttention (automatic KV cache reuse) produces meaningfully different energy profiles
+  from PagedAttention — this is directly relevant to parameter space measurement
+- 2026 Q1 roadmap issue is open on GitHub, indicating active development trajectory
+
+**Assessment: SGLang should move from "v3.x tentative" to "v2.2 candidate."**
+
+Rationale: If the tool's purpose is measuring the *effect of implementation choices*, SGLang vs
+vLLM is an especially high-value comparison because both run the same models but with
+fundamentally different KV cache strategies. The energy profiles will differ non-trivially. This
+is not just adding another backend — it is adding a backend with a genuinely different
+implementation parameter space. No other energy benchmarking tool offers SGLang + energy.
+
+**Process isolation:** SGLang likely conflicts with TRT-LLM at the CUDA driver level (confirmed
+assumption, not yet empirically tested). Docker isolation required for multi-backend studies.
+
+### Should We Add llama.cpp / GGUF?
+
+**llama.cpp evidence:**
+- 50K+ stars; runs natively as C++ subprocess (natural process isolation)
+- CPU inference enables researchers without A100s — significant audience segment
+- `optimum-benchmark` supports it via `llama-cpp-python`
+- Energy profiles fundamentally different (CPU-dominated vs GPU-dominated)
+
+**Complication:** CPU-inference energy profiles are not directly comparable to GPU-inference
+profiles on a per-token basis. The tool's core claim is measuring the effect of implementation
+choices while holding the model constant — llama.cpp users typically run quantised models
+(GGUF), which also changes the model. This conflates quantisation effects with backend effects.
+
+**Assessment: Keep llama.cpp as priority backend but DEFER to v3.x.**
+Reason: The comparability concern requires a design decision (how to label and present CPU vs GPU
+results) that should not be rushed into v2.0. The audience argument is valid but does not change
+the priority ordering.
+
+### Should We Add ExLlamaV2?
+
+**Existing decision:** Rejected 2026-02-19 — niche GPTQ-focused use case.
+
+**New evidence:** ExLlamaV2 v0.3.2 (mid-2025) added paged attention via Flash Attention 2.5.7+
+and dynamic batching. It has broadened beyond GPTQ to EXL2 (2-8 bit) quantisation. However:
+- Still consumer-GPU / small-batch focused
+- Target audience overlaps with llama.cpp (researchers without data centre GPUs)
+- Adds GPTQ quantisation as a variable, conflating model change with backend change
+
+**Assessment: RETAIN rejection.** ExLlamaV2's use case is subsumed by llama.cpp for our
+purposes. Neither should be added before llama.cpp is properly scoped.
+
+### Should We Consider HF TGI?
+
+**Assessment: RETAIN low priority.** TGI is PagedAttention-based (same as vLLM). Overlap is
+high, differentiation is low. The only use case is measuring TGI-specific overhead (HTTP serving
+layer) vs raw vLLM, which is a valid but niche research question. Defer past v4.0.
+
+### Recommendation
+
+| Backend | Decision | Version to Pin | Confidence |
+|---------|----------|----------------|------------|
+| PyTorch | KEEP | `>=2.9.0` (tested against 2.10.0) | HIGH |
+| Transformers | KEEP; update pin | `>=5.0.0` (breaking from 4.x) | HIGH |
+| vLLM | KEEP; update pin | `>=0.15.0` (verify Transformers compat) | HIGH |
+| TensorRT-LLM | KEEP; update pin | `>=1.0.0` (1.3.0rc4 is pre-release) | MEDIUM |
+| SGLang | ACCELERATE to v2.2 candidate | `>=0.4.0` (check current stable) | MEDIUM |
+| llama.cpp | KEEP at v3.x; resolve comparability design | `llama-cpp-python>=0.3.0` | MEDIUM |
+| ExLlamaV2 | RETAIN rejection | — | HIGH |
+| HF TGI | RETAIN low priority | — | HIGH |
+
+**Action required:** Audit `pyproject.toml` against current Transformers v5 + vLLM 0.15.x
+compatibility. The version matrix must be tested, not assumed.
+
+---
+
+## 3. Configuration: Pydantic v2
+
+### Existing Decision
+
+`.planning/codebase/STACK.md`: Pydantic v2 for config validation and domain models.
+Confirmed across multiple sessions.
+
+### Should We Switch to Hydra?
+
+**Pydantic v2 (current):**
+- Fast Rust-backed validation
+- Rich type support including constrained types, discriminated unions
+- `ValidationError` passes through unchanged (confirmed in memory)
+- Used by vLLM, FastAPI, Zeus, and most of the Python ML ecosystem
+- Version 2.10+ is current (training data says ~2.10; HIGH confidence it's active)
+
+**Hydra:**
+- Dynamic hierarchical config composition
+- CLI override syntax (`+`, `~`, `=`)
+- Config groups for sweep composition
+- Used by Facebook Research ML tools (FAIR), MMDetection, Hydra-based training frameworks
+- **Cons:** Adds a non-trivial dependency with its own config schema system; runtime config
+  assembly at CLI level vs parse-time resolution that the project has already committed to
+  (`.product/decisions/experiment-study-architecture.md` specifies sweep resolution at
+  YAML parse time, before Pydantic)
+
+**Combined Pydantic + Hydra** (pattern seen in some research codebases):
+- Hydra for config assembly and CLI overrides; Pydantic for validation
+- This is a common pattern but adds two config systems
+
+**Assessment: KEEP Pydantic v2. REJECT Hydra.**
+
+Rationale: The project's config architecture (already decided) resolves sweeps at YAML parse
+time and passes a resolved `StudyConfig` to the runner. Hydra's value is dynamic composition at
+CLI invocation time — this is the opposite of the "parse-time resolution" model. Hydra would
+require either (a) re-architecting the config resolution approach or (b) being used only as a
+config loader (wasting most of its value). The existing Pydantic model is already well-designed
+and validated against peer tools (see `.product/research/10-sweep-validation-patterns.md`).
+
+**Note on `[codecarbon]` compatibility:** CodeCarbon has historically had internal Pydantic v1
+dependencies in some versions. With CodeCarbon 3.2.2, this must be verified. If CodeCarbon 3.x
+still conflicts, it must be handled with either an isolation boundary or a version-specific extra.
+
+### Recommendation
+
+| Choice | Decision | Version | Confidence |
+|--------|----------|---------|------------|
+| Pydantic v2 | KEEP | `>=2.9.0` | HIGH |
+| Hydra | REJECT | — | HIGH |
+| pydantic-settings | RETAIN for Layer 1 user config | `>=2.0` | HIGH |
+
+---
+
+## 4. CLI Framework: Typer
+
+### Existing Decision
+
+`.planning/codebase/STACK.md`: Typer `>=0.15.0`. Used across v1.x codebase.
+
+### Should We Switch to cyclopts or Click?
+
+**Typer (current):**
+- Based on Click; type hints as CLI definition
+- FastAPI team maintenance (active)
+- Latest: v0.15.x (active as of Feb 2026)
+- **Known issue:** Since v0.22.0, `typer-slim` no longer exists separately; installs full Typer
+- Does not support Union types in parameter definitions
+- Complex nested command scenarios can be awkward
+- Well-documented; large community
+
+**cyclopts:**
+- Newer (2023+); inspired by Typer but addresses its limitations
+- 38% less code than Typer for equivalent CLIs (per cyclopts docs comparison)
+- Supports Union types, Literal types natively
+- Docstring-driven help generation
+- Migration path documented (`migrating-from-typer.html`)
+- v3.16+ active (Feb 2026)
+- Much smaller community; less ecosystem validation
+
+**Click (direct):**
+- Click is what Typer wraps; using Click directly gives more control
+- More verbose; less type-hint-native
+- lm-eval, MLflow, and most peer tools use Click directly
+- Zero magic: full control over parameter parsing
+
+**Assessment: KEEP Typer for v2.0. EVALUATE cyclopts at v3.0.**
+
+Rationale: The v2.0 CLI is 2 commands + 1 flag (`llem run`, `llem config`, `--version`). This
+is an extremely simple command surface — the existing Typer codebase handles it adequately. The
+Union type limitation is not a blocker for this command set. Migrating CLI frameworks mid-version
+introduces risk with minimal payoff for a 2-command CLI.
+
+At v3.0, when additional commands may be added (lm-eval integration), re-evaluate cyclopts. The
+38% code reduction and Union type support become more relevant with a larger command surface.
+
+**Risk: Typer slow updates.** The Typer repository is maintained by the FastAPI team and has
+historically been slower to adopt Click API changes. Monitor for regressions.
+
+### Recommendation
+
+| Choice | Decision | Version | Confidence |
+|--------|----------|---------|------------|
+| Typer | KEEP for v2.0 | `>=0.15.0` | HIGH |
+| cyclopts | EVALUATE for v3.0+ | — | MEDIUM |
+| Click (direct) | REJECT for v2.0 — too much rewrite | — | MEDIUM |
+
+---
+
+## 5. Testing: GPU-Dependent Code
+
+### Existing Decision
+
+`.planning/codebase/STACK.md`: pytest `>=8.0`, pytest-cov `>=4.0`. No GPU-specific strategy
+documented in existing stack.
+
+### What Do Peer Tools Do?
+
+**HuggingFace Transformers:** `@pytest.mark.gpu` mark for GPU tests; CPU-only in PR CI;
+GPU tests run on separate hardware. GPU availability via `torch.cuda.is_available()` fixture.
+
+**InnerEye / Microsoft ML:** Marks: `@pytest.mark.gpu` and `@pytest.mark.cpu_and_gpu`.
+All unmarked tests run on CPU CI; GPU tests require separate runner.
+
+**vLLM:** Large mock/stub layer for GPU-free unit testing. Integration tests require GPU hardware.
+
+**Zeus:** `pytest-mock`, `pytest-xdist` for parallelism. CPU-only unit tests; GPU tests require
+hardware (flagged in CI).
+
+**Pattern across peer tools:**
+1. Unit tests: mock all NVML/CUDA calls; test on CPU CI
+2. Integration tests: require GPU hardware; run on separate CI runner or nightly
+3. Mark decorators: `@pytest.mark.require_gpu` or `@pytest.mark.slow`
+
+### Recommended Testing Stack
+
+| Tool | Version | Purpose | When |
+|------|---------|---------|------|
+| pytest | `>=8.0` | Test runner | All tests |
+| pytest-cov | `>=4.0` | Coverage | All tests |
+| pytest-mock | `>=3.12` | Mock NVML, backends | Unit tests |
+| pytest-xdist | `>=3.5` | Parallel test execution | CI unit tests |
+| `@pytest.mark.require_gpu` | custom mark | Gate GPU tests | GPU CI runner only |
+| `unittest.mock.patch` | stdlib | Patch nvidia-ml-py, codecarbon | Unit tests |
+
+**What NOT to do:** Do not attempt to test actual energy measurement accuracy in unit tests.
+Energy measurement accuracy requires real hardware and controlled conditions — this belongs in
+integration tests on real hardware, not in mocked unit tests. Unit tests verify code paths
+(protocol compliance, error handling, result schema construction), not measurement accuracy.
+
+**CI structure (recommended):**
+```
+Unit tests (CPU-only, fast):     all PRs, github-actions standard runner
+Integration tests (GPU required): nightly, separate GPU runner
+Hardware benchmarks:              manual trigger only, tagged GPU runner
+```
+
+### Recommendation
+
+| Choice | Decision | Version | Confidence |
+|--------|----------|---------|------------|
+| pytest + pytest-cov | KEEP | `>=8.0`, `>=4.0` | HIGH |
+| pytest-mock | ADD | `>=3.12` | HIGH |
+| pytest-xdist | ADD | `>=3.5` | HIGH |
+| GPU test marking | ADOPT `@pytest.mark.require_gpu` | custom | HIGH |
+| Mocking NVML | ADOPT unittest.mock.patch pattern | stdlib | HIGH |
+
+---
+
+## 6. Visualisation
+
+### Existing Decision
+
+No explicit visualisation decision recorded in `.product/decisions/`. The v1.x codebase uses
+Rich for terminal output. CodeCarbon's Carbonboard (Plotly Dash) was noted in research as a
+local dashboard option.
+
+### What Do Peer Tools Use?
+
+**ML.ENERGY Leaderboard:** Node.js frontend (Vite + TypeScript + Tailwind) for the web
+platform; Python-side results stored as JSON. No Python visualisation library.
+
+**CodeCarbon:** Plotly Dash for Carbonboard (local CSV visualisation).
+
+**optimum-benchmark:** No built-in visualisation; results as JSON/CSV; users bring their own.
+
+**lm-eval:** No built-in visualisation; JSON results; community builds dashboards externally.
+
+**Pattern:** No peer tool bundles a full visualisation framework. Results as JSON/CSV; users
+handle visualisation. The web platform (v4.0) handles the public-facing display.
+
+### Recommendations by Phase
+
+**v2.0 (CLI/library only):**
+- Rich for terminal output (already decided; KEEP)
+- No Python visualisation library — output JSON/CSV; users bring their own
+- Rationale: Adding a visualisation dependency (Plotly, Matplotlib) at v2.0 is premature.
+  It adds weight to the base install and constrains the web platform design.
+
+**v2.x local results navigation** (if `.product/decisions/local-result-navigation.md` requires
+interactive exploration):
+- Plotly (not Dash) for standalone HTML export — zero server required, shareable
+- `plotly>=5.0` as an optional extra `[viz]`
+- Rationale: Plotly's interactive HTML output is self-contained. Streamlit/Panel require a
+  server process — inappropriate for a CLI tool's "local results" feature.
+
+**v4.0 web platform:**
+- Separate technology decision; not Python; likely TypeScript + Plotly.js or Vega-Lite
+
+| Choice | Phase | Decision | Rationale |
+|--------|-------|----------|-----------|
+| Rich | v2.0 | KEEP | Terminal output; already decided |
+| Matplotlib | v2.0 | REJECT | Static only; poor interactivity for parameter sweeps |
+| Plotly | v2.x optional | CONDITIONALLY ADD as `[viz]` | Interactive HTML; zero server dependency |
+| Streamlit | Any | REJECT | Server dependency; not appropriate for CLI tool |
+| Panel | Any | REJECT | Server dependency; complex for parameter exploration |
+| Dash | Any | REJECT | Server dependency; overkill for local results |
+
+**Confidence:** MEDIUM — visualisation roadmap depends on decisions not yet made
+(`.product/decisions/local-result-navigation.md`).
+
+---
+
+## 7. Package Management: Poetry vs uv
+
+### Existing Decision
+
+`.planning/codebase/STACK.md`: Poetry 2.x. `poetry.lock` present.
+
+### Evidence (2026-02-25)
+
+**Poetry:**
+- v2.3.2 released February 2026 — actively maintained
+- ~66 million monthly downloads on PyPI
+- 7+ years production history; battle-tested
+- Handles publishing, dependency groups, lock files
+- Slow vs uv: ~11s lock from cold vs ~3s for uv
+
+**uv:**
+- ~75 million monthly downloads on PyPI — now *exceeds* Poetry in downloads
+- Rust-backed; 10-100x faster than pip/Poetry for most operations
+- Manages Python versions itself
+- Early adopters report frequent API changes and breaking updates
+- Less than 2 years old; rapidly maturing
+- MLOps Community reports successful large-scale migrations from Poetry to uv
+
+**Community signal:** In the data science/MLops community (2025-2026), uv adoption is
+accelerating sharply. The 100x speed improvement is noticeable for a project with complex
+GPU dependency trees (pytorch, vllm, tensorrt).
+
+**The binary dependency problem:** uv handles binary packages (PyTorch, CUDA-compiled wheels)
+through pip's wheel index. This is generally fine for pre-compiled wheels (which PyTorch, vLLM,
+and TRT-LLM publish). The "binary deps" concern is primarily for packages requiring compilation
+from source, which none of our main dependencies require.
+
+### Assessment: MIGRATE from Poetry to uv for v2.0
+
+The migration cost is bounded (well-documented migration path; `uv` is `pyproject.toml`
+compatible). The payoff is significant:
+1. Faster CI install times (GPU CI runners are expensive; faster installs matter)
+2. Python version management built-in (simplifies Docker build setup)
+3. Cleaner multi-extras install UX (`uv pip install "llenergymeasure[pytorch,zeus]"` — same
+   syntax; just faster)
+4. Growing community standard — new researchers will expect `uv` workflows
+
+**Risk:** uv's API has had breaking changes. Pin uv itself: use `uv>=0.5.0` (stable API era).
+
+### Recommendation
+
+| Choice | Decision | Version | Confidence |
+|--------|----------|---------|------------|
+| Poetry | MIGRATE AWAY for v2.0 | — | MEDIUM |
+| uv | ADOPT as primary package manager | `>=0.5.0` | MEDIUM |
+| pip (direct) | RETAIN as fallback for users | — | HIGH |
+
+**Action required:** Migrate `poetry.lock` → `uv.lock`. Update CI scripts. Update
+Docker build from `poetry install` to `uv sync`. Document in README.
+
+**Alternative view:** If migration risk is judged too high for v2.0, keep Poetry for v2.0
+and plan uv migration for v2.2. The performance argument is strongest for CI pipelines,
+not end-user installs (end users run `pip install`, not `poetry install`).
+
+---
+
+## 8. Statistical Libraries: Bootstrap CI, Warmup Detection
+
+### Existing Decision
+
+`.planning/codebase/STACK.md`: numpy for statistics. `.product/decisions/warmup-strategy.md`
+specifies fixed-count warmup (n=5, 2 tokens max); 30s thermal floor.
+
+No peer tool implements CV-convergence warmup (`.product/research/14-flops-warmup-lora-multiGPU.md`
+confirms: "No CV warmup in any peer").
+
+### What Should We Use?
+
+**`scipy.stats.bootstrap` (current as of SciPy 1.17.0):**
+- BCa method (bias-corrected and accelerated) is the gold standard for CI computation
+- Percentile method available but "rarely used in practice" per SciPy docs
+- `scipy.stats.bootstrap(data, statistic_fn, confidence_level=0.95, method='BCa', n_resamples=9999)`
+- Already likely in the transitive dependency tree (numpy → scipy natural)
+
+**`statsmodels`:**
+- Heavier dependency; used for regression, ANOVA, time series models
+- Bootstrap support exists but less ergonomic than scipy.stats for simple CI
+- **Assessment:** REJECT for bootstrap CI — scipy.stats is sufficient and lighter.
+  Consider adding statsmodels only if significance testing across backends is needed (future).
+
+**Custom implementation:**
+- Acceptable only for simple percentile bootstrap
+- For BCa: non-trivial to implement correctly (jackknife bias correction)
+- **Assessment:** REJECT — use scipy.stats.bootstrap
+
+**numpy alone:**
+- Sufficient for percentile bootstrap (simple resampling)
+- Insufficient for BCa without additional code
+- **Assessment:** REJECT for production CI — use scipy.stats.bootstrap
+
+### Warmup Detection Libraries
+
+The `.product/decisions/warmup-strategy.md` uses fixed-count warmup (5 runs). If a CV-based
+approach is ever added (flagged as "no peer does this, but scientifically motivated"):
+- **ruptures** (`pip install ruptures`): Change point detection in time series
+  Gaussian kernel + Pelt algorithm for detecting steady-state onset from power/latency timeline
+- **Assessment:** LOW priority. Fixed-count warmup is simpler and adequate for v2.0.
+  Reserve ruptures evaluation for v2.x statistical enhancement milestone.
+
+### Recommendation
+
+| Choice | Decision | Version | Confidence |
+|--------|----------|---------|------------|
+| numpy | KEEP for basic stats | `>=1.26` | HIGH |
+| `scipy.stats.bootstrap` | ADD for CI | `scipy>=1.12` | HIGH |
+| statsmodels | REJECT for v2.0 | — | HIGH |
+| ruptures | LOW PRIORITY (v2.x) | — | MEDIUM |
+
+**Note:** scipy is likely already a transitive dependency (via sklearn, which Zeus depends on
+for pre-Volta power monitoring). Adding `scipy` explicitly makes the dependency explicit.
+
+---
+
+## 9. Supporting Libraries — Unchanged Decisions
+
+The following stack elements have been reviewed and no change is warranted:
+
+| Library | Decision | Notes |
+|---------|----------|-------|
+| **Loguru** | KEEP | Structured logging; widely used in Python ML tooling; no superior alternative |
+| **Rich** | KEEP | Terminal tables, progress, panels; used by Zeus itself; no superior alternative |
+| **python-dotenv** | KEEP | `.env` loading for HF_TOKEN; standard pattern |
+| **python-on-whales** | KEEP | Docker orchestration; rationale already confirmed in prior STACK.md |
+| **psutil** | KEEP | CPU/memory metadata; stdlib supplement |
+| **datasets (HuggingFace)** | KEEP | AIEnergyScore dataset loading; no alternative |
+| **peft** | KEEP | LoRA adapter support confirmed for v2.0 |
+| **bitsandbytes** | KEEP for `[pytorch]` | 4-bit/8-bit quantisation for PyTorch backend |
+
+**Removed from v2.0 scope** (present in v1.x, not needed in v2.0):
+- `schedule` — scheduled execution deferred
+- `questionary` — no `llem init`; progressive disclosure instead
+- `fastapi`, `uvicorn`, `sqlalchemy`, `asyncpg`, `alembic`, `python-jose` — API backend deferred to v4.0
+
+---
+
+## 10. Summary: What Is Wrong or Questionable
+
+| Item | Severity | Issue | Action |
+|------|----------|-------|--------|
+| `zeus-ml` package name | **CRITICAL** | Package renamed to `zeus`; `zeus-ml` is stale | Update `pyproject.toml` extras immediately |
+| CodeCarbon version pin `>=2.8.0` | **HIGH** | Current is 3.2.2; private API may have changed | Verify `_prepare_emissions_data()` in 3.x |
+| Transformers pin `>=4.49.0` | **HIGH** | Current is v5.x; major version change | Update pin to `>=5.0.0` |
+| vLLM pin `>=0.6.0` | **HIGH** | Current is 0.15.1; 9 minor versions ahead | Update pin; verify Transformers compat |
+| TRT-LLM pin `>=0.12.0` | **HIGH** | Current is 1.3.0rc4; approaching 1.0 with likely breaking changes | Update pin to `>=1.0.0` when stable |
+| No pytest-mock / GPU marking | **MEDIUM** | Testing strategy incomplete for GPU-dependent code | Add `pytest-mock`, `pytest-xdist`, GPU marks |
+| SGLang deferral to v3.x | **MEDIUM** | Accelerate to v2.2 candidate; production-proven; unique energy profile | Update roadmap |
+| Poetry (package manager) | **MEDIUM** | uv now more popular; faster CI builds | Evaluate migration to uv for v2.0 |
+| CodeCarbon CO2 accuracy on v2.0 claim | **MEDIUM** | CodeCarbon is estimation (~±15%); presenting it alongside Zeus (±5%) is misleading without labelling | Add accuracy metadata to output schema |
+| scipy not explicit in deps | **LOW** | scipy.stats.bootstrap should be explicit dep | Add `scipy>=1.12` |
+| No visualisation strategy | **LOW** | Not a blocker; defer until local-result-navigation decision | Address in v2.x planning |
+
+---
+
+## 11. Recommended Stack (v2.0)
+
+### Core Technologies
 
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| **nvidia-ml-py** | 13.590.48 | GPU power, thermal, memory, clock monitoring | Official NVIDIA bindings, actively maintained, released Jan 2026. Exposes nvmlDeviceGetTotalEnergyConsumption (Volta+), thermal state, power limits, clock frequencies, utilisation rates. |
+| Python | `>=3.10` | Application code | TRT-LLM lower bound; 3.10+ type syntax |
+| Pydantic v2 | `>=2.9.0` | Config validation, domain models | Industry standard; Zeus uses it; fast Rust backend |
+| Typer | `>=0.15.0` | CLI framework | Adequate for 2-command surface; defer cyclopts to v3.0 |
+| PyTorch | `>=2.9.0` | Inference backend + tensor ops | Current; tested against 2.10.0 |
+| Transformers | `>=5.0.0` | HuggingFace model loading | v5 is current stable; breaking from 4.x |
+| vLLM | `>=0.15.0` | High-throughput inference | Current; verify Transformers compat |
+| TensorRT-LLM | `>=1.0.0` | Compiled NVIDIA inference | Pin to 1.0 stable when released |
 
-**Confidence:** HIGH - Official NVIDIA package, latest version verified Jan 2026.
-
-**Why nvidia-ml-py:**
-- **Official vs deprecated:** `pynvml` package is deprecated as of 2025. NVIDIA officially recommends `nvidia-ml-py`. PyTorch 25.09 containers emit deprecation warnings for `pynvml`.
-- **API completeness:** As of v11.0.0, the NVML wrappers in `pynvml` converged with `nvidia-ml-py`, making migration straightforward.
-- **Current release:** Version 13.590.48 (Jan 2026) includes all NVML 13.590 functions, including power/thermal monitoring APIs required for this milestone.
-
-**Installation:**
-```bash
-pip install nvidia-ml-py>=13.590.48
-```
-
-**Key NVML Functions for This Milestone:**
-
-| Function | Purpose | Use Case |
-|----------|---------|----------|
-| `nvmlDeviceGetTotalEnergyConsumption()` | Total energy in mJ (Volta+) | Baseline measurement, high precision power tracking |
-| `nvmlDeviceGetPowerUsage()` | Instantaneous power draw (mW) | Time-series sampling for pre-Volta GPUs |
-| `nvmlDeviceGetPowerManagementLimit()` | Power limit (mW) | Environment metadata capture |
-| `nvmlDeviceGetTemperature()` | GPU core temperature (C) | Thermal state monitoring |
-| `nvmlDeviceGetClockInfo()` | Current clock frequencies | Detect thermal throttling |
-| `nvmlDeviceGetUtilizationRates()` | GPU/memory utilisation (%) | Existing usage in `gpu_utilisation.py` |
-| `nvmlDeviceGetDriverVersion()` | Driver version string | Environment metadata |
-| `nvmlDeviceGetCudaComputeCapability()` | Compute capability (major, minor) | Environment metadata (already used in `gpu_info.py`) |
-
-**Existing Integration:**
-The codebase already uses `nvidia-ml-py` (imported as `pynvml`) in:
-- `core/gpu_utilisation.py` - Background sampling via `GPUUtilisationSampler`
-- `core/gpu_info.py` - GPU detection, MIG mode detection, compute capability
-
-**Migration Status:** ✅ Already using `nvidia-ml-py` (pyproject.toml line 17: `nvidia-ml-py = ">=12.0.0"`). Comments reference "pynvml" as import alias for compatibility.
-
----
-
-### Time-Series Power Sampling Architecture
-
-**Pattern:** Background thread sampling with timestamps (already implemented in `gpu_utilisation.py`).
-
-**Recommendation:** Extend existing `GPUUtilisationSampler` to capture power metrics.
-
-```python
-# Existing pattern in gpu_utilisation.py
-class GPUUtilisationSampler:
-    def _sample_loop(self):
-        pynvml.nvmlInit()
-        handle = pynvml.nvmlDeviceGetHandleByIndex(self._device_index)
-        while not self._stop_event.is_set():
-            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
-            self._samples.append((time.time(), util.gpu, util.memory))
-            time.sleep(self._sample_interval)
-
-# Proposed extension for power sampling
-class PowerSampler(GPUUtilisationSampler):
-    def _sample_loop(self):
-        # ... same pattern but capture:
-        # - nvmlDeviceGetPowerUsage() for time-series
-        # - nvmlDeviceGetTemperature() for thermal
-        # - nvmlDeviceGetClockInfo() for throttling detection
-```
-
-**Why extend existing pattern:**
-- Already thread-safe, context manager pattern
-- Graceful NVML unavailability handling
-- Timestamp alignment with inference metrics
-
----
-
-### Baseline Power Subtraction Methodology
-
-**Research Finding:** No authoritative research paper found specifying "baseline idle subtraction" methodology for NVML measurements. However, best practices from ML.ENERGY and GPU profiling communities converge on:
-
-1. **Measurement Method (Volta+):** Use `nvmlDeviceGetTotalEnergyConsumption()` before/after inference, subtract for interval energy. This is more accurate than integrating `nvmlDeviceGetPowerUsage()`.
-
-2. **Baseline Establishment:**
-   - Measure idle power over 30-60 seconds with GPU in idle state
-   - Close all GPU-accelerated applications (browsers, overlays, etc.)
-   - Use median of samples to account for power state transitions
-   - Expected idle ranges: 30-50W (high-end), 10-20W (mid-range)
-
-3. **Subtraction Approach:**
-   - **Conservative:** Subtract per-measurement baseline (idle power × duration)
-   - **Aggressive:** Subtract idle energy from total energy reading
-   - **Recommended:** Conservative approach to avoid negative energy for low-intensity workloads
-
-**Confidence:** MEDIUM - Community best practices, not official NVIDIA methodology.
-
-**Sources:**
-- [ML.ENERGY: Measuring GPU Energy Best Practices](https://ml.energy/blog/energy/measurement/measuring-gpu-energy-best-practices/)
-- [GPU Idle Power Benchmark Guide](https://www.ywian.com/blog/gpu-idle-power-benchmark-fix-it-guide)
-- [Part-time Power Measurements: nvidia-smi's Lack of Attention (arXiv)](https://arxiv.org/html/2312.02741v2)
-
-**Implementation Notes:**
-- nvidia-smi sampling period is 15ms with distortion (arxiv paper 2312.02741v2)
-- Direct NVML calls avoid nvidia-smi sampling issues
-- MIG instances report parent GPU power (cannot isolate per-instance)
-
----
-
-## Docker Orchestration Stack
-
-### Campaign Container Execution
+### Energy Stack
 
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| **python-on-whales** | Latest (0.70+) | Docker Compose exec, container orchestration | CLI parity with docker/docker-compose, supports docker compose exec, simpler API, thread-safe, actively maintained (696 stars, MIT license). |
-
-**Confidence:** HIGH - Official Docker blog endorsement, widespread adoption.
-
-**Why python-on-whales:**
-
-| Criterion | docker-py | python-on-whales | Winner |
-|-----------|-----------|------------------|---------|
-| **Architecture** | Re-implements Docker Engine API in Python | Wraps Docker CLI via subprocess | python-on-whales |
-| **Feature parity** | Lags behind Docker CLI (no native Buildx) | 1-to-1 CLI mapping, immediate feature availability | python-on-whales |
-| **API ergonomics** | Low-level, Engine API-focused | Pythonic, mirrors CLI structure | python-on-whales |
-| **docker compose exec** | Limited support, requires manual container.exec_run() | Native `docker.compose.exec()` | python-on-whales |
-| **Maintenance burden** | High (full API re-implementation) | Low (CLI wrapper) | python-on-whales |
-| **Thread safety** | Stateful client, not guaranteed | Stateless, explicitly thread-safe | python-on-whales |
-| **Dependencies** | Only Docker Engine API | Requires Docker/Podman CLI installed | docker-py |
-
-**Decision Rationale:**
-1. **docker compose exec support:** Campaign orchestrator needs to run commands inside running containers. `python-on-whales` provides `docker.compose.exec(service, command)` matching CLI behaviour.
-2. **Future-proof:** CLI wrapper means new Docker features available immediately without library updates.
-3. **Developer experience:** Code reads like CLI commands: `docker.compose.up(detach=True)` vs docker-py's verbose Engine API calls.
-4. **Docker endorsement:** Featured in official Docker blog (2021), indicating NVIDIA/Docker ecosystem acceptance.
-
-**When to use docker-py:** Headless environments without Docker CLI, pure API access required. NOT applicable for this project (Docker containers available in dev/prod).
-
-**Alternative considered:** Direct `subprocess` calls. **Why not:** Error handling, output parsing, cross-platform compatibility burden. python-on-whales abstracts this.
-
-**Installation:**
-```bash
-pip install python-on-whales>=0.70
-```
-
-**Usage Pattern for Campaign Orchestration:**
-```python
-from python_on_whales import docker
-
-# Start backend container in detached mode
-docker.compose.up(["pytorch"], detach=True)
-
-# Execute experiment inside container
-result = docker.compose.exec(
-    service="pytorch",
-    command=["lem", "experiment", "/app/configs/config.yaml"],
-    tty=False,
-    detach=False
-)
-
-# Collect results from container filesystem
-docker.compose.cp("pytorch:/app/results", "./local_results")
-
-# Stop container
-docker.compose.down()
-```
-
-**Confidence:** HIGH - Matches project requirements, Docker ecosystem standard.
-
-**Sources:**
-- [Docker Official Blog: Python-on-whales](https://www.docker.com/blog/guest-post-calling-the-docker-cli-from-python-with-python-on-whales/)
-- [python-on-whales GitHub](https://github.com/gabrieldemarmiesse/python-on-whales)
-- [docker-py GitHub](https://github.com/docker/docker-py)
-
----
-
-## Backend Parameter Introspection
-
-### PyTorch / HuggingFace Transformers
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| **transformers** | 5.0+ | `generate()` method parameters | Already dependency (pyproject.toml), official HF library, comprehensive parameter set. |
-
-**Confidence:** HIGH - Official HuggingFace library, verified documentation.
-
-**Key `generate()` Parameters (Partial - Full List ~50+ Parameters):**
-
-**Length Control:**
-- `max_length` (int) - Maximum total sequence length
-- `max_new_tokens` (int) - Maximum tokens to generate (recommended over max_length)
-- `min_length` (int) - Minimum total sequence length
-- `min_new_tokens` (int) - Minimum tokens to generate
-
-**Sampling Strategy:**
-- `do_sample` (bool) - Enable sampling vs greedy decoding
-- `temperature` (float) - Sampling temperature
-- `top_k` (int) - Top-k sampling
-- `top_p` (float) - Nucleus sampling
-- `num_beams` (int) - Beam search width
-- `early_stopping` (bool | str) - Beam search stopping condition
-
-**Stopping Conditions:**
-- `eos_token_id` (int | list[int]) - End-of-sequence token(s)
-- `pad_token_id` (int) - Padding token
-- `stop_strings` (str | list[str]) - String-based stopping
-- `max_time` (float) - Maximum generation time (seconds)
-
-**Output Control:**
-- `return_dict_in_generate` (bool) - Return GenerateOutput vs tensor
-- `output_scores` (bool) - Return token scores
-- `output_attentions` (bool) - Return attention weights
-- `output_hidden_states` (bool) - Return hidden states
-
-**Advanced Features:**
-- `assistant_model` (PreTrainedModel) - Speculative decoding
-- `prompt_lookup_num_tokens` (int) - Prompt lookup decoding
-- `streamer` (BaseStreamer) - Token streaming callback
-- `repetition_penalty` (float) - Penalise repetition
-- `no_repeat_ngram_size` (int) - Block n-gram repetition
-- `encoder_repetition_penalty` (float) - Encoder repetition penalty
-
-**Introspection Method:**
-Use `GenerationConfig` class to enumerate all parameters:
-```python
-from transformers import GenerationConfig
-config = GenerationConfig()
-params = {k: v for k, v in config.to_dict().items()}
-```
-
-**Confidence:** HIGH - Official HuggingFace Transformers v5.0 documentation verified.
-
-**Source:** [HuggingFace Transformers: Text Generation](https://huggingface.co/docs/transformers/en/main_classes/text_generation)
-
----
-
-### vLLM Backend
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| **vllm** | 0.8.1+ | `LLM` class constructor parameters | Already dependency (pyproject.toml), official vLLM library. |
-
-**Confidence:** HIGH - Official vLLM documentation verified.
-
-**Key `LLM()` Constructor Parameters (25+ Parameters):**
-
-**Model Loading:**
-- `model` (str) - Model name/path **(required)**
-- `tokenizer` (str | Path) - Tokenizer name/path
-- `tokenizer_mode` (Literal['auto', 'slow']) - Tokenizer selection
-- `trust_remote_code` (bool) - Allow remote code execution
-- `revision` (str) - Model version (branch/tag/commit)
-- `tokenizer_revision` (str) - Tokenizer version
-
-**Parallelism:**
-- `tensor_parallel_size` (int) - Number of GPUs for tensor parallelism
-- `dtype` (str) - Data type (float32, float16, bfloat16, auto)
-- `quantization` (str) - Quantization method (awq, gptq, fp8, etc.)
-
-**Memory Management:**
-- `gpu_memory_utilization` (float) - GPU memory ratio (0-1, default 0.9)
-- `swap_space` (int) - CPU swap space (GiB)
-- `cpu_offload_gb` (int) - CPU memory for weight offloading
-
-**Performance Optimisation:**
-- `enforce_eager` (bool) - Force eager execution (disable CUDA graphs)
-- `max_seq_len_to_capture` (int) - Max sequence length for CUDA graphs
-- `disable_custom_all_reduce` (bool) - Disable custom all-reduce
-- `disable_async_output_proc` (bool) - Disable async output processing
-
-**Generation Control:**
-- `seed` (int) - Random seed for sampling
-- `task` (str) - Task type (auto, generate, embedding, etc.)
-
-**Advanced Configuration:**
-- `compilation_config` (CompilationConfig) - Compilation optimisations
-- `hf_overrides` (dict) - HuggingFace config modifications
-- `mm_processor_kwargs` (dict) - Multimodal processor arguments
-- `override_pooler_config` (PoolerConfig) - Custom pooler config
-- `allowed_local_media_path` (str) - Directory access for local media
-
-**Introspection Method:**
-```python
-from vllm import LLM
-import inspect
-sig = inspect.signature(LLM.__init__)
-params = {k: v for k, v in sig.parameters.items() if k != 'self'}
-```
-
-**Confidence:** HIGH - vLLM v0.8.1 documentation verified.
-
-**Source:** [vLLM LLM Class API](https://docs.vllm.ai/en/v0.8.1/api/offline_inference/llm.html)
-
----
-
-### TensorRT-LLM Backend
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| **tensorrt-llm** | 0.12.0+ | `LLM` class configuration parameters | Already optional dependency (pyproject.toml), official NVIDIA library. |
-
-**Confidence:** HIGH - Official NVIDIA TensorRT-LLM documentation verified.
-
-**Key `LLM()` Constructor Parameters (60+ Parameters):**
-
-**Core Model:**
-- `model` (str | Path) - Model checkpoint path/HuggingFace name **(required)**
-- `tokenizer` (str | Path | TokenizerBase) - Tokenizer
-- `tokenizer_mode` (Literal['auto', 'slow']) - Tokenizer selection
-- `dtype` (str) - Data type (auto, float16, bfloat16, etc.)
-- `trust_remote_code` (bool) - Allow remote code
-- `revision` (str) - Model version
-
-**Parallelism (Comprehensive):**
-- `tensor_parallel_size` (int, default 1) - Tensor parallelism
-- `pipeline_parallel_size` (int, default 1) - Pipeline parallelism
-- `context_parallel_size` (int, default 1) - Context parallelism
-- `gpus_per_node` (int) - GPUs per node
-- `moe_tensor_parallel_size` (int) - MoE tensor parallelism
-- `moe_expert_parallel_size` (int) - MoE expert parallelism
-- `moe_cluster_parallel_size` (int) - MoE cluster parallelism
-
-**Resource Constraints:**
-- `max_batch_size` (int) - Maximum batch size
-- `max_input_len` (int) - Maximum input length
-- `max_seq_len` (int) - Maximum sequence length
-- `max_beam_width` (int) - Maximum beam width
-- `max_num_tokens` (int, default 8192) - Maximum tokens
-
-**Cache & Memory:**
-- `kv_cache_config` (KvCacheConfig) - KV cache configuration
-- `peft_cache_config` (PeftCacheConfig) - PEFT cache configuration
-- `enable_chunked_prefill` (bool) - Chunked prefill for long sequences
-- `garbage_collection_gen0_threshold` (int, default 20000) - GC threshold
-
-**Advanced Features:**
-- `enable_lora` (bool) - Enable LoRA adapters
-- `lora_config` (LoraConfig) - LoRA configuration
-- `guided_decoding_backend` (Literal['xgrammar', 'llguidance']) - Guided decoding
-- `speculative_config` (SpeculativeConfig) - Speculative decoding
-- `sparse_attention_config` (SparseAttentionConfig) - Sparse attention
-
-**Performance & Optimisation:**
-- `cuda_graph_config` (CudaGraphConfig) - CUDA graph optimisation
-- `enable_autotuner` (bool, default True) - Enable autotuning
-- `attn_backend` (str, default 'TRTLLM') - Attention backend
-- `sampler_type` (str | SamplerType, default 'auto') - Sampler type
-- `torch_compile_config` (TorchCompileConfig) - torch.compile settings
-
-**Scheduling & Batching:**
-- `scheduler_config` (SchedulerConfig) - Scheduler configuration
-- `batch_wait_timeout_ms` (float) - Batch wait timeout (ms)
-- `batch_wait_timeout_iters` (int) - Batch wait timeout (iterations)
-- `batch_wait_max_tokens_ratio` (float) - Batch tokens ratio
-- `stream_interval` (int, default 1) - Streaming interval
-
-**Monitoring:**
-- `return_perf_metrics` (bool) - Return performance metrics
-- `enable_iter_perf_stats` (bool) - Iteration perf stats
-- `enable_iter_req_stats` (bool) - Iteration request stats
-- `print_iter_log` (bool) - Print iteration logs
-- `otlp_traces_endpoint` (str) - OpenTelemetry traces endpoint
-
-**Distributed:**
-- `orchestrator_type` (Literal['rpc', 'ray']) - Distributed orchestrator
-- `checkpoint_loader` (BaseCheckpointLoader) - Custom checkpoint loader
-- `checkpoint_format` (str) - Checkpoint format
-- `allreduce_strategy` (str) - AllReduce strategy
-
-**Stability Labels:** Parameters marked as `stable`, `prototype`, `beta`, or `deprecated` in documentation.
-
-**Introspection Method:**
-```python
-from tensorrt_llm import LLM
-import inspect
-sig = inspect.signature(LLM.__init__)
-params = {k: v for k, v in sig.parameters.items()}
-```
-
-**Confidence:** HIGH - TensorRT-LLM documentation verified.
-
-**Source:** [TensorRT-LLM API Reference](https://nvidia.github.io/TensorRT-LLM/llm-api/reference.html)
-
----
-
-## Supporting Libraries
-
-### Environment Metadata Capture
-
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| **psutil** | 6.1+ | CPU, memory stats | Already used in `compute_metrics.py` |
-| **platform** | stdlib | OS, Python version | Environment metadata |
-| **torch.cuda** | via torch | CUDA version, device properties | Environment metadata (already used) |
-
-**Installation:** psutil already dependency. `platform` is stdlib.
-
----
-
-## Alternatives Considered
-
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| **NVML Bindings** | nvidia-ml-py | pynvml | Deprecated, PyTorch emits warnings |
-| **NVML Bindings** | nvidia-ml-py | py3nvml | Unmaintained, last update 2019 |
-| **Docker SDK** | python-on-whales | docker-py | Missing docker compose exec, Buildx support |
-| **Docker SDK** | python-on-whales | subprocess | Error handling burden, cross-platform issues |
-| **Power Sampling** | Extend GPUUtilisationSampler | New thread implementation | Code duplication, inconsistent patterns |
-| **Baseline Method** | Conservative subtraction | Aggressive subtraction | Avoids negative energy readings |
-
----
-
-## Installation Guide
-
-### Core Dependencies (Add to pyproject.toml)
-
-```toml
-[tool.poetry.dependencies]
-# Existing: nvidia-ml-py = ">=12.0.0" → Bump to 13.590.48
-nvidia-ml-py = ">=13.590.48"
-
-# New: Docker orchestration
-python-on-whales = ">=0.70.0"
-
-# Existing: psutil, torch, transformers, vllm, tensorrt-llm already present
-```
-
-### Installation Commands
-
-```bash
-# Development environment
-poetry install --with dev
-
-# Add python-on-whales
-poetry add python-on-whales
-
-# Update nvidia-ml-py
-poetry add nvidia-ml-py@latest
-
-# Verify installation
-python -c "import pynvml; pynvml.nvmlInit(); print(pynvml.nvmlSystemGetDriverVersion())"
-python -c "from python_on_whales import docker; print(docker.version())"
-```
-
----
-
-## Integration Notes
-
-### NVML Thread Safety
-- `nvmlInit()` and `nvmlShutdown()` are NOT thread-safe
-- Device handle queries ARE thread-safe after initialisation
-- **Pattern:** Call `nvmlInit()` once per thread, `nvmlShutdown()` in cleanup
-
-### Docker Container NVML Access
-- Requires `--privileged` or `--gpus all` flag
-- MIG instances report parent GPU power (limitation documented)
-- CodeCarbon already handles NVML permission errors (see `energy_backends/codecarbon.py:102`)
-
-### vLLM/TensorRT CUDA Management
-- Backends with `cuda_management=BACKEND` prohibit `torch.cuda.*` calls before `initialize()`
-- NVML operates independently of CUDA context
-- **Safe:** NVML queries can occur before backend initialisation
-
----
-
-## Version Compatibility Matrix
-
-| Component | Minimum Version | Tested Version | Notes |
-|-----------|----------------|----------------|-------|
-| Python | 3.10 | 3.12 | Project constraint |
-| nvidia-ml-py | 12.0.0 | 13.590.48 | Jan 2026 release |
-| python-on-whales | 0.70.0 | Latest | Active maintenance |
-| CUDA Driver | 12.x | 12.6 | For TensorRT-LLM |
-| Docker | 20.10+ | 27.x | Compose V2 support |
-| transformers | 4.49.0 | 5.0.0 | Already dependency |
-| vllm | 0.6.0 | 0.8.1+ | Already dependency |
-| tensorrt-llm | 0.12.0 | Latest | Already optional dependency |
+| `zeus` | `>=0.13.1` | Accurate energy measurement (±5%) | Hardware counter access; NeurIPS D&B 2025; ML.ENERGY uses it |
+| `codecarbon` | `>=3.2.2` | CO2 estimation only | Decoupled from energy; separate optional extra |
+| `nvidia-ml-py` | `>=13.590.48` | Base NVML polling | Official NVIDIA; deprecated pynvml removed |
+
+### Supporting Libraries
+
+| Library | Version | Purpose | When |
+|---------|---------|---------|------|
+| Loguru | `>=0.7.0` | Structured logging | Always |
+| Rich | `>=13.0` | Terminal output | Always |
+| numpy | `>=1.26` | Numeric operations | Always |
+| scipy | `>=1.12` | `stats.bootstrap` BCa CI | Statistical reporting |
+| psutil | `>=6.1` | CPU/memory metadata | Environment snapshot |
+| datasets | `>=3.0` | AIEnergyScore dataset | Default workload |
+| peft | `>=0.18.1` | LoRA adapters | `[pytorch]` extra |
+| bitsandbytes | `>=0.45.0` | Quantisation | `[pytorch]` extra |
+| python-dotenv | `>=1.0.0` | `.env` credential loading | Always |
+| python-on-whales | `>=0.70.0` | Docker orchestration | `[v2.2]` multi-backend |
+
+### Development Tools
+
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| uv (or Poetry 2.x) | Package management | uv preferred for speed; Poetry if migration risk judged too high |
+| Ruff `>=0.8.0` | Linting + formatting | 100 char line length; pre-commit hook |
+| mypy `>=1.0` | Type checking | Strict mode recommended |
+| pytest `>=8.0` | Test runner | |
+| pytest-cov `>=4.0` | Coverage | |
+| pytest-mock `>=3.12` | GPU/backend mocking | Unit tests without hardware |
+| pytest-xdist `>=3.5` | Parallel tests | CI speed |
+
+### What NOT to Use
+
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| `zeus-ml` (PyPI) | Abandoned; last version 0.11.0; project moved to `zeus` | `zeus>=0.13.1` |
+| `pynvml` | Deprecated by NVIDIA; PyTorch 25.09 containers emit warnings | `nvidia-ml-py>=13.590.48` |
+| `codecarbon<3.0` | Old API; private method usage fragile | `codecarbon>=3.2.2` |
+| `transformers<5.0` | Major version behind; deprecations removed in v5 | `transformers>=5.0.0` |
+| Hydra | Config assembly at CLI time contradicts parse-time resolution architecture | Pydantic v2 |
+| Streamlit/Panel/Dash | Server dependency; CLI tool should not require a web server for local results | Plotly standalone HTML (optional) |
+| PowerJoular/Scaphandre | Lower accuracy than Zeus; RAPL estimation without NVML counter access | Zeus |
+| `statsmodels` | Overkill for bootstrap CI; heavy dep | `scipy.stats.bootstrap` |
+| PyPI `schedule` library | Scheduled execution deferred; adds footgun for v2.0 users | Remove from v2.0 deps |
+| `questionary` | No `llem init`; peer tools don't have it | Remove from v2.0 deps |
 
 ---
 
 ## Sources
 
-**NVML Monitoring:**
-- [nvidia-ml-py PyPI](https://pypi.org/project/nvidia-ml-py/) - HIGH confidence
-- [NVML API Reference (Jan 2026)](https://docs.nvidia.com/deploy/pdf/NVML_API_Reference_Guide.pdf) - HIGH confidence
-- [pynvml deprecation issue](https://github.com/deepbeepmeep/Wan2GP/issues/925) - MEDIUM confidence
-
-**Power Measurement Methodology:**
-- [ML.ENERGY: Measuring GPU Energy Best Practices](https://ml.energy/blog/energy/measurement/measuring-gpu-energy-best-practices/) - MEDIUM confidence
-- [GPU Idle Power Benchmark Guide](https://www.ywian.com/blog/gpu-idle-power-benchmark-fix-it-guide) - LOW confidence
-- [Part-time Power Measurements (arXiv)](https://arxiv.org/html/2312.02741v2) - HIGH confidence
-
-**Docker Orchestration:**
-- [Docker Blog: Python-on-whales](https://www.docker.com/blog/guest-post-calling-the-docker-cli-from-python-with-python-on-whales/) - HIGH confidence
-- [python-on-whales GitHub](https://github.com/gabrieldemarmiesse/python-on-whales) - HIGH confidence
-- [docker-py GitHub](https://github.com/docker/docker-py) - HIGH confidence
-
-**Backend APIs:**
-- [HuggingFace Transformers: Text Generation](https://huggingface.co/docs/transformers/en/main_classes/text_generation) - HIGH confidence
-- [vLLM LLM Class API](https://docs.vllm.ai/en/v0.8.1/api/offline_inference/llm.html) - HIGH confidence
-- [TensorRT-LLM API Reference](https://nvidia.github.io/TensorRT-LLM/llm-api/reference.html) - HIGH confidence
-
----
-
-## Confidence Assessment
-
-| Technology | Confidence | Rationale |
-|------------|------------|-----------|
-| nvidia-ml-py | HIGH | Official NVIDIA package, Jan 2026 release verified |
-| python-on-whales | HIGH | Docker blog endorsement, widespread adoption, active maintenance |
-| Baseline power methodology | MEDIUM | Community best practices, no official NVIDIA spec |
-| vLLM parameter list | HIGH | Official documentation verified |
-| TensorRT-LLM parameter list | HIGH | Official NVIDIA documentation verified |
-| HuggingFace generate() | HIGH | Official documentation verified |
+- Zeus v0.13.1 — [https://github.com/ml-energy/zeus](https://github.com/ml-energy/zeus) — HIGH confidence
+- zeus PyPI — [https://pypi.org/project/zeus/](https://pypi.org/project/zeus/) — HIGH confidence
+- zeus-ml migration note — [https://pypi.org/project/zeus-ml/](https://pypi.org/project/zeus-ml/) — HIGH confidence
+- CodeCarbon 3.2.2 — [https://pypi.org/project/codecarbon/](https://pypi.org/project/codecarbon/) — HIGH confidence
+- vLLM 0.15.1 — [https://pypi.org/project/vllm/](https://pypi.org/project/vllm/) — HIGH confidence
+- TensorRT-LLM 1.3.0rc4 — [https://pypi.org/project/tensorrt-llm/](https://pypi.org/project/tensorrt-llm/) — HIGH confidence
+- PyTorch 2.10.0 — [https://github.com/pytorch/pytorch/releases](https://github.com/pytorch/pytorch/releases) — HIGH confidence
+- Transformers v5 — [https://huggingface.co/blog/transformers-v5](https://huggingface.co/blog/transformers-v5) — HIGH confidence
+- SGLang PyTorch ecosystem — [https://pytorch.org/blog/sglang-joins-pytorch/](https://pytorch.org/blog/sglang-joins-pytorch/) — HIGH confidence
+- SGLang production scale — [https://github.com/sgl-project/sglang](https://github.com/sgl-project/sglang) — HIGH confidence
+- SGLang vs vLLM benchmark — [https://research.aimultiple.com/inference-engines/](https://research.aimultiple.com/inference-engines/) — MEDIUM confidence
+- uv vs Poetry 2026 — [https://cuttlesoft.com/blog/2026/01/27/python-dependency-management-in-2026/](https://cuttlesoft.com/blog/2026/01/27/python-dependency-management-in-2026/) — MEDIUM confidence
+- Poetry vs uv downloads — [https://medium.com/@hitorunajp/poetry-vs-uv-which-python-package-manager-should-you-use-in-2025-4212cb5e0a14](https://medium.com/@hitorunajp/poetry-vs-uv-which-python-package-manager-should-you-use-in-2025-4212cb5e0a14) — MEDIUM confidence
+- MLOps uv migration — [https://mlops.community/poetry-was-good-uv-is-better-an-mlops-migration-story/](https://mlops.community/poetry-was-good-uv-is-better-an-mlops-migration-story/) — MEDIUM confidence
+- scipy.stats.bootstrap — [https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html) — HIGH confidence
+- cyclopts vs Typer — [https://cyclopts.readthedocs.io/en/latest/vs_typer/README.html](https://cyclopts.readthedocs.io/en/latest/vs_typer/README.html) — MEDIUM confidence
+- Scaphandre accuracy concern — [https://arxiv.org/abs/2511.05597](https://arxiv.org/abs/2511.05597) — MEDIUM confidence
+- GPU testing patterns — [https://innereye-deeplearning.readthedocs.io/md/testing.html](https://innereye-deeplearning.readthedocs.io/md/testing.html) — MEDIUM confidence
+- Pydantic + Hydra comparison — [https://towardsdatascience.com/configuration-management-for-model-training-experiments-using-pydantic-and-hydra-d14a6ae84c13/](https://towardsdatascience.com/configuration-management-for-model-training-experiments-using-pydantic-and-hydra-d14a6ae84c13/) — MEDIUM confidence
+- Prior internal research — `.product/research/03-codecarbon-zeus-energy.md`, `05-zeus-deep-dive.md`, `08-energy-plugin-architecture.md` — HIGH confidence (own codebase analysis)
 
 ---
 
-## Open Questions for Implementation
-
-1. **Baseline power measurement:** Should idle measurement be per-experiment or per-session? (Recommendation: per-experiment for reproducibility)
-2. **Power sampling frequency:** What interval balances overhead vs resolution? (Recommendation: 100ms based on existing `gpu_utilisation.py` pattern)
-3. **MIG power isolation:** Accept parent GPU power as limitation or implement estimation heuristic? (Recommendation: document limitation, no estimation)
-4. **Campaign result aggregation:** Store per-experiment results in container filesystem or stream to host? (Recommendation: volume mount for real-time access)
+*Stack audit for: LLenergyMeasure v2.0*
+*Audited: 2026-02-25*

@@ -1,185 +1,128 @@
 # Technology Stack
 
-**Analysis Date:** 2026-01-26
+**Analysis Date:** 2026-02-05
 
 ## Languages
 
 **Primary:**
-- Python 3.10+ - Core application, CLI, inference engines
-- YAML - Configuration files for experiments
-- Bash - Docker entrypoint scripts, utility commands
+- Python 3.10+ - All application code, requires 3.10 minimum for TensorRT-LLM compatibility
 
 **Secondary:**
-- Dockerfile - Multi-stage container builds for backend isolation
+- YAML - Configuration files (experiment configs, campaign configs, user config)
+- Bash - Docker entrypoint scripts, Makefile dev commands
 
 ## Runtime
 
 **Environment:**
-- Python 3.10 (pinned in Docker `nvidia/cuda:12.4.1-runtime-ubuntu22.04`)
-- CUDA 12.4.1 - GPU compute platform
-- cuDNN bundled with CUDA
+- Python 3.10+ (3.10/3.12 supported by TensorRT-LLM)
+- CUDA 12.4.1 (via NVIDIA base Docker image)
+- Virtual environment managed in `/opt/venv` (Docker) or local `.venv`
 
 **Package Manager:**
-- Poetry - Dependency management and publishing
-- Lockfile: `poetry.lock` (present, committed)
-- Alternative: pip installation via `pyproject.toml`
+- Poetry 2.x - Dependency management and packaging
+- Lockfile: `poetry.lock` (present in repository)
+- Alternative: pip with `pyproject.toml` for editable installs
 
 ## Frameworks
 
-**Core CLI:**
-- Typer 0.15.0+ - CLI framework with command groups
-- Click (via Typer) - Command parsing
+**Core:**
+- Pydantic v2 - Configuration validation, domain models
+- Typer >=0.15.0 - CLI framework with command groups
+- PyTorch >=2.5.0 - Default inference backend, tensor operations
+- Transformers >=4.49.0 - HuggingFace model loading and generation
+- Accelerate >=1.4.0 - Distributed multi-GPU launch for PyTorch backend
 
-**Configuration:**
-- Pydantic 2.0+ - Config validation and domain models
-- python-dotenv 1.0.0 - Environment variable loading
+**Optional Backends:**
+- vLLM >=0.6.0 - High-throughput inference with PagedAttention (Linux only)
+- TensorRT-LLM >=0.12.0 - Compiled inference for Ampere+ GPUs (Linux only, CUDA 12.x)
+- ONNX Runtime GPU >=1.17.0 - Optional PyTorch optimization via torch.compile
 
-**Inference Backends (pluggable):**
-- Transformers 4.49.0 - HuggingFace model loading
-- Torch 2.5.0 - Deep learning framework (core dependency)
-- Accelerate 1.4.0 (optional) - Distributed training/inference utilities
-- vLLM 0.6.0+ (optional) - High-throughput LLM serving engine
-- TensorRT-LLM 0.12.0+ (optional) - NVIDIA optimised inference
-- PEFT 0.18.1 (optional) - Parameter-efficient fine-tuning (LoRA adapters)
+**Testing:**
+- pytest >=8.0 - Test runner
+- pytest-cov >=4.0 - Coverage reporting
 
-**Quantization & Optimisation:**
-- bitsandbytes 0.45.0 (optional) - 4-bit/8-bit quantization
-- calflops 0.2.0 (optional) - FLOPs estimation
-- onnxruntime-gpu 1.17.0+ (optional) - ONNX Runtime execution backend
-
-**Data & Datasets:**
-- datasets 3.0.0 - HuggingFace dataset loading
-- Tokenizers (via transformers) - Fast tokenization
-
-**Monitoring & Metrics:**
-- codecarbon 2.8.0 - Energy consumption tracking
-- nvidia-ml-py 12.0.0 - NVIDIA GPU monitoring (pynvml wrapper)
-- loguru 0.7.0 - Structured logging
-
-**Utilities:**
-- tqdm 4.66.0 - Progress bars
-- schedule 1.2.2 - Scheduled task execution
-- python-jose 3.3.0 (optional API backend) - JWT tokens
+**Build/Dev:**
+- Ruff >=0.8.0 - Linter and formatter (100 char line length)
+- mypy >=1.0 - Type checking
+- pre-commit >=3.0 - Git hooks for quality checks
 
 ## Key Dependencies
 
 **Critical:**
-- PyTorch 2.5.0 - Required for all inference, device management
-- Transformers 4.49.0 - Model loading from HuggingFace Hub
-- Pydantic 2.0 - Config validation, domain model definition
-- Typer - CLI command registration and argument parsing
+- `codecarbon >=2.8.0` - Energy consumption tracking (CPU/GPU/RAM power)
+- `nvidia-ml-py >=12.0.0` - GPU monitoring via NVML (replaces deprecated pynvml)
+- `loguru >=0.7.0` - Structured logging throughout application
+- `datasets >=3.0.0` - HuggingFace dataset loading for prompts
+- `peft >=0.18.1` - LoRA adapter loading and merging
+- `calflops >=0.2.0` - FLOPs estimation for PyTorch models
+- `bitsandbytes >=0.45.0` - 4-bit/8-bit quantization for PyTorch
 
-**Energy & GPU:**
-- codecarbon 2.8.0 - Energy tracking via system-level APIs
-- nvidia-ml-py 12.0.0 - GPU stats (power, memory, utilisation)
+**Infrastructure:**
+- `python-on-whales >=0.70` - Docker container orchestration for campaigns
+- `httpx >=0.23.0` - HTTP client for webhook notifications
+- `questionary >=2.0` - Interactive CLI prompts (resume, init)
+- `schedule >=1.2.2` - Scheduled experiment execution
+- `python-dotenv >=1.0.0` - Environment variable loading from `.env`
+- `rich` (via Typer) - Rich terminal output, tables, progress bars
+- `tqdm >=4.66.0` - Progress bars for inference loops
+- `numpy >=1.24` - Statistics, metrics computation, bootstrap CI
 
-**Backend-Specific:**
-- **PyTorch backend**: Accelerate 1.4.0 (distributed utilities)
-- **vLLM backend**: vLLM 0.6.0+ (has dependency conflicts with TensorRT)
-- **TensorRT backend**: tensorrt-llm 0.12.0+ (has dependency conflicts with vLLM)
+**Optional (API backend):**
+- `fastapi >=0.115.0` - Web API framework
+- `uvicorn >=0.32.0` - ASGI server
+- `sqlalchemy >=2.0` - Database ORM
+- `asyncpg >=0.30.0` - Async PostgreSQL driver
+- `alembic >=1.14.0` - Database migrations
+- `pydantic-settings >=2.0` - Settings management
+- `python-jose >=3.3.0` - JWT token handling
 
-**Infrastructure (optional API backend):**
-- FastAPI 0.115.0 - Web framework
-- Uvicorn 0.32.0 - ASGI server
-- SQLAlchemy 2.0 - ORM for results database
-- asyncpg 0.30.0 - PostgreSQL async driver
-- Alembic 1.14.0 - Database migrations
+**Development:**
+- `commitizen >=4.0` - Conventional commit enforcement
+- `types-pyyaml >=6.0.12` - Type stubs for mypy
 
 ## Configuration
 
-**Environment Variables:**
-- `HF_TOKEN` - HuggingFace API token (optional, for gated models)
-- `CUDA_VISIBLE_DEVICES` - GPU selection
-- `HF_HOME` - HuggingFace cache directory (default: `/app/.cache/huggingface`)
-- `LLM_ENERGY_RESULTS_DIR` - Results output directory (default: `results/`)
-- `LLM_ENERGY_STATE_DIR` - Experiment state directory (default: `.state/`)
-- `LLM_ENERGY_CONFIGS_DIR` - Config directory (Docker only, default: `configs/`)
-- `CODECARBON_LOG_LEVEL` - CodeCarbon logging level
-- `NVIDIA_DISABLE_REQUIRE` - Suppress NVIDIA driver requirement warnings
-- `PIP_NO_CACHE_DIR` - Disable pip cache in Docker
+**Environment:**
+- Environment variables loaded from `.env` file via `python-dotenv`
+- User config in `~/.lem-config.yaml` or `.lem-config.yaml` (current dir)
+- Key env vars:
+  - `HF_TOKEN` - HuggingFace API token for private models
+  - `CUDA_VISIBLE_DEVICES` - GPU device selection
+  - `LLM_ENERGY_RESULTS_DIR` - Results output directory (default: `results/`)
+  - `LLM_ENERGY_STATE_DIR` - Experiment state directory (default: `.state/`)
+  - `LLM_ENERGY_CONFIGS_DIR` - Config directory in Docker (default: `configs/`)
+  - `PUID`/`PGID` - Docker user/group ID for file ownership
+  - `LLM_ENERGY_VERBOSITY` - Logging verbosity (normal/verbose/quiet)
+  - `CODECARBON_LOG_LEVEL` - CodeCarbon logging level (default: warning)
 
-**Build Configuration:**
-- `pyproject.toml` - Poetry project metadata, dependencies, extras, version
-- `.env.example` - Template environment variables for Docker
-- `.env` - Actual environment variables (not committed)
-- `Makefile` - Development tasks (format, lint, test, docs generation)
-- `docker-compose.yml` - Multi-backend container orchestration
-
-**Linting & Formatting:**
-- Ruff 0.8.0+ - Code formatter and linter
-  - Config: `pyproject.toml [tool.ruff]`
-  - Line length: 100 characters
-  - Enabled rules: E (errors), F (pyflakes), I (imports), UP (upgrades), B, SIM, RUF
-- MyPy 1.0+ - Static type checker
-  - Config: `pyproject.toml [tool.mypy]`
-  - Mode: strict (with exceptions for untyped third-party libs)
-
-**Testing Configuration:**
-- pytest 8.0+ - Test runner
-- pytest-cov 4.0+ - Coverage reporting
-- Config: `pyproject.toml [tool.pytest.ini_options]`
-- Test paths: `tests/` directory
-- Test discovery: `test_*.py` files, `test_*()` functions
-
-**Pre-commit:**
-- pre-commit 3.0+ - Git hook framework
-- Hooks defined in `.pre-commit-config.yaml`
-- Auto-regenerates config docs when SSOT sources change
+**Build:**
+- `pyproject.toml` - Poetry project config, tool settings (ruff, mypy, pytest)
+- `.pre-commit-config.yaml` - Pre-commit hooks for quality + doc generation
+- `Makefile` - Development shortcuts (format, lint, typecheck, test)
 
 ## Platform Requirements
 
 **Development:**
-- Python 3.10+
-- NVIDIA CUDA 12.x compatible GPU (optional, for GPU testing)
-- Linux recommended (vLLM & TensorRT Linux-only)
-- 4GB+ RAM (8GB+ for TensorRT builds)
+- Linux (required for vLLM and TensorRT-LLM)
+- NVIDIA GPU with CUDA support
+- Docker + Docker Compose (optional but recommended)
+- Python 3.10+ with venv
+- 16GB+ GPU memory for most models
+- Privileged Docker mode for NVML energy metrics
 
 **Production:**
-- **PyTorch backend**: Any NVIDIA GPU (V100+, A100, RTX 30xx/40xx, etc.)
-- **vLLM backend**: NVIDIA GPU + Linux-only
-- **TensorRT backend**: Ampere+ GPU (A100, A10, RTX 30xx/40xx, H100, L40); NOT V100, T4, RTX 20xx, GTX
-  - Requires CUDA 12.x
-  - Requires compute capability >= 8.0
-- Docker: `nvidia/cuda:12.4.1-runtime-ubuntu22.04` base
-- CPU-only mode: Supported but inference will be slow
+- Deployment: Docker Compose multi-backend setup
+- Three backend images: `pytorch`, `vllm`, `tensorrt`
+- Base image: `nvidia/cuda:12.4.1-runtime-ubuntu22.04`
+- GPU requirements vary by backend:
+  - PyTorch: Any NVIDIA GPU with CUDA
+  - vLLM: NVIDIA GPU, Linux only
+  - TensorRT-LLM: Ampere+ GPU (compute capability >=8.0), CUDA 12.x, Linux only
 
-**GPU Memory Requirements:**
-- 8GB minimum (most small models)
-- 16GB recommended (7B-13B models)
-- 40GB+ (70B models)
-- 80GB+ (70B-405B with batching/vLLM)
-
-## Installation
-
-**Local Development:**
-```bash
-# PyTorch backend (all NVIDIA GPUs)
-pip install -e ".[pytorch,dev]"
-
-# vLLM backend (Linux + NVIDIA GPU only)
-pip install -e ".[vllm,dev]"
-
-# TensorRT backend (Ampere+ GPU + Linux only)
-pip install -e ".[tensorrt,dev]"
-```
-
-**Docker (Recommended):**
-```bash
-# Build PyTorch backend
-docker compose build pytorch
-
-# Build vLLM backend
-docker compose build vllm
-
-# Build TensorRT backend
-docker compose build tensorrt
-```
-
-**CLI Entry Points:**
-- `lem` - Preferred short alias
-- `llenergymeasure` - Full command name
-- Both resolve to `llenergymeasure.cli:app` Typer CLI
+**GPU Compute Capabilities:**
+- TensorRT supported: A100, A10, RTX 30xx/40xx, H100, L40
+- TensorRT NOT supported: V100, T4, RTX 20xx, GTX series
 
 ---
 
-*Stack analysis: 2026-01-26*
+*Stack analysis: 2026-02-05*

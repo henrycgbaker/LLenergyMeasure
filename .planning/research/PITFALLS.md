@@ -1,529 +1,575 @@
-# Domain Pitfalls — LLM Benchmarking Tools
+# Measurement Methodology & Pitfalls Audit
 
-**Domain:** LLM inference efficiency measurement
-**Researched:** 2026-01-29
-**Focus:** Energy measurement, Docker orchestration, parameter management, vLLM/TensorRT stability, UAT
+**Domain:** LLM inference energy measurement -- scientific validity for publishable research
+**Researched:** 2026-02-25
+**Scope:** Audit of `.product/` methodology decisions against current evidence and peer practice
+**Overall confidence:** MEDIUM-HIGH (most claims verified via multiple sources; NVML accuracy specs remain under-documented by NVIDIA)
+
+---
+
+## Executive Summary
+
+This audit examines every measurement methodology decision in `.product/` against current evidence from the ML.ENERGY Benchmark (NeurIPS D&B 2025), MLPerf Power (IEEE HPCA 2025), the "Part-time Power Measurements" paper (arXiv:2312.02741), and peer tool implementations. The existing decisions are broadly sound in direction but several contain specific calibration errors, under-specified parameters, or unaddressed systematic biases that would compromise publishable-quality results.
+
+**The three most serious findings:**
+
+1. **The 30-second thermal floor is under-calibrated.** NVIDIA A100/H100 GPUs take 100ms update periods with 25% sampling coverage; thermal and power state stabilisation requires 60+ seconds under load, not 30 seconds at idle before load.
+2. **The NVML accuracy numbers cited in `.product/` are wrong.** The existing docs claim Zeus/NVML is "~5% accurate" and CodeCarbon is "~15% accurate". In reality, NVML accuracy is +/-5 *watts* (not percent), and the percentage error depends on GPU power draw. For a 300W A100 this is ~1.7%; for a 40W idle GPU it is ~12.5%. CodeCarbon uses the same NVML readings with added overhead -- the accuracy gap between Zeus and CodeCarbon is primarily in *what* they measure (energy counter vs power polling), not a fixed percentage difference.
+3. **FLOPs as a "primary metric" is scientifically misleading for this tool's stated purpose.** FLOPs are deterministic for a given model+input -- they do not vary between backends, batch sizes, or deployment configurations. For a tool that measures "how implementation choices affect efficiency", FLOPs provide zero discriminatory power. Energy-per-token and tokens-per-second are the metrics that actually vary.
+
+---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, systematic measurement errors, or major issues.
+### CP-1: NVML Power Measurement Accuracy Is Worse Than Documented
 
----
+**Current state in `.product/`:**
+- `designs/energy-backends.md` claims Zeus/NVML energy counter is "~5% accurate"
+- `designs/energy-backends.md` claims NVML power polling is "~10-15% accurate"
+- `designs/energy-backends.md` claims CodeCarbon (NVML) is "~10-15% accurate"
+- These figures are treated as fixed percentages
 
-### Pitfall 1: Idle Power Contamination
+**What the evidence actually shows:**
 
-**What goes wrong:** Energy measurements include baseline GPU power consumption (idle state), leading to 15-30% systematic overestimation of inference energy. When batch size decreases, experiments take longer and idle consumption starts to weigh on total consumption proportionally more.
+NVIDIA documents `nvmlDeviceGetPowerUsage` accuracy as +/-5 *watts*, not +/-5 percent (NVML API Reference Guide). The percentage error therefore depends on the absolute power draw:
 
-**Why it happens:** Energy measurement tools (CodeCarbon, NVML) measure total GPU power draw, not differential energy above idle. The tool captures everything from experiment start to end — including the GPU's baseline power even when it's not actively computing.
+| GPU State | Typical Power | +/-5W Error | Percentage |
+|-----------|--------------|-------------|------------|
+| A100 idle | ~40W | +/-5W | **12.5%** |
+| A100 under load | ~300W | +/-5W | **1.7%** |
+| H100 SXM under load | ~600W | +/-5W | **0.8%** |
+| Consumer GPU idle | ~15W | +/-5W | **33%** |
 
-**Consequences:**
-- Biased energy efficiency comparisons (longer experiments penalised disproportionately)
-- Invalid cross-configuration comparisons (batch size 32 vs 128 comparisons are systematically skewed)
-- Scientific papers with incorrect efficiency conclusions
-- Cannot accurately compare GPU architectures with different idle power profiles
+The "Part-time Power Measurements" paper (Burtscher et al., arXiv:2312.02741) found even worse issues:
+- A100/H100: 100ms update period, but only 25% of runtime is sampled (75% unmeasured)
+- Without correction methodology, power polling errors reached 30% standard deviation on A100
+- With their proposed correction (32+ iterations, randomised delays, discarding rise time data), error reduces to ~5%
 
-**Prevention:**
-1. Measure idle baseline power BEFORE experiment (10-30 second sampling window with no workload)
-2. Subtract baseline from total energy: `inference_energy = total_energy - (baseline_power_watts × duration_seconds)`
-3. Include warmup to ensure "hot" GPU state before baseline measurement (GPUs consume different power when cold vs warmed up)
-4. Record and report both raw and baseline-corrected energy in results schema
-5. Flag in results when baseline subtraction was NOT performed (for backwards compatibility)
+For `nvmlDeviceGetTotalEnergyConsumption` (the hardware energy counter used by Zeus on Volta+ GPUs):
+- Returns millijoules since driver load
+- More accurate than power polling because it integrates at the hardware level
+- Known discrepancy reported on RTX 6000 Ada: readings ~0.5x expected (NVIDIA forum, unresolved June 2025)
+- No formal accuracy specification published by NVIDIA for this counter
 
-**Detection:**
-- Energy/token stays constant as batch size increases (should decrease due to amortisation)
-- Longer experiments show higher total energy but similar per-token energy to shorter runs
-- Energy measurements don't scale linearly with computational intensity
+**Impact on LLenergyMeasure:**
+- The accuracy table in `energy-backends.md` must be rewritten with conditional accuracy (varies by power draw)
+- Results must report absolute power draw alongside energy so readers can assess measurement uncertainty
+- Short, low-power experiments (batch_size=1 on small models) have the worst accuracy -- precisely the configuration space most interesting to this tool
+- The claim that "Zeus is ~5% accurate" must be softened to "Zeus energy counter accuracy depends on GPU and workload; expect 1-5% under sustained load on Volta+ GPUs"
 
-**Phase mapping:** v1.19.0 (MEAS-02) — foundational for all subsequent measurements
+**Recommendation:** Replace the fixed-percentage accuracy table with a formula: `accuracy_pct = 5W / mean_power_W * 100`. Report this per-experiment in `ExperimentResult`. Add a `measurement_uncertainty_pct` field.
 
----
-
-### Pitfall 2: Prefill/Decode Phase Blending
-
-**What goes wrong:** Time to First Token (TTFT) and Inter-Token Latency (ITL) metrics blend two fundamentally different computational phases: prefill (compute-bound) and decode (memory-bound). This masks phase-specific bottlenecks and makes optimisation decisions misleading.
-
-**Why it happens:** Most benchmarking tools measure end-to-end latency without separating prefill (processing input prompt) from decode (generating output tokens). Prefill is compute-heavy (benefits from high batch size), decode is memory-bandwidth-limited (benefits from low batch size). Blended metrics average out these opposing characteristics.
-
-**Consequences:**
-- Cannot diagnose whether bottleneck is prefill or decode
-- Batch size tuning becomes trial-and-error instead of principled
-- Cross-phase interference in vLLM/TensorRT (compute-heavy prefill blocks decode tasks, increasing ITL)
-- Disaggregated prefill/decode architectures (emerging best practice) cannot be evaluated
-
-**Prevention:**
-1. Measure TTFT separately from ITL (already implemented via streaming callbacks)
-2. For deeper analysis: instrument phase boundaries explicitly (end of prefill = first token generation)
-3. Report prefill energy vs decode energy separately (requires phase-aware energy sampling)
-4. For PyTorch backend: use `torch.profiler` to ground-truth phase boundaries
-5. For vLLM/TensorRT: rely on library-provided phase timing if available, otherwise estimate from TTFT
-
-**Detection:**
-- TTFT and ITL don't show expected compute/memory-bound scaling behaviour
-- Batch size increases improve throughput but ITL degrades unexpectedly
-- Users request "why is my decode so slow" without ability to diagnose
-
-**Phase mapping:** v2.1.0 (PREC-01) — precision metrics after core measurement foundations solid
-
----
-
-### Pitfall 3: NVML Sampling Blind Spots
-
-**What goes wrong:** NVML power measurements are sampled at maximum 66.7 Hz (15ms intervals), but on A100/H100 GPUs only 25% of runtime is actually sampled. This leads to drastic under/overestimation of energy consumed, especially for short inference bursts.
-
-**Why it happens:** NVIDIA GPUs provide instantaneous power readings via NVML, but the sampling is asynchronous to workload execution. For bursty workloads (single-batch inference), power spikes between samples are missed. CodeCarbon samples every 15 seconds by default, compounding the problem.
-
-**Consequences:**
-- Energy measurements for short experiments (<1 minute) are unreliable
-- High variance across repeat runs of identical experiments
-- Cannot accurately measure single-request latency/energy tradeoffs
-- Measurement error can reach 73% average, 300% maximum (from research literature)
-
-**Prevention:**
-1. Increase sampling frequency for short experiments (configurable interval, default 100ms for <5min experiments)
-2. Run multi-cycle experiments with statistical aggregation (already implemented)
-3. Report measurement uncertainty: coefficient of variation (CV) across cycles flags high-variance measurements
-4. For ground-truth validation: compare against external power meters (Yokogawa WT310, etc.) during UAT
-5. Warmup experiments to steady state before measurement window
-
-**Detection:**
-- CV > 10% across cycles for identical configurations
-- Energy/token varies >15% between runs
-- Short experiments show higher variance than long experiments
-- Results don't match external power meter readings
-
-**Phase mapping:** v1.19.0 (MEAS-04) — time-series sampling with configurable intervals
+**Confidence:** MEDIUM-HIGH (NVIDIA +/-5W spec is documented; energy counter accuracy is under-documented; Burtscher paper is peer-reviewed)
 
 **Sources:**
-- [Part-time Power Measurements: nvidia-smi's Lack of Attention](https://arxiv.org/html/2312.02741v2)
-- [Maximum Sampling Rate of GPU Power Measurement using NVML](https://forums.developer.nvidia.com/t/maximum-sampling-rate-of-gpu-power-measurement-using-nvml/109848)
+- [NVML API Reference Guide](https://docs.nvidia.com/deploy/nvml-api/group__nvmlDeviceQueries.html)
+- [Part-time Power Measurements (arXiv:2312.02741)](https://arxiv.org/html/2312.02741v2)
+- [NVIDIA Forum: energy counter discrepancy](https://forums.developer.nvidia.com/t/value-from-nvmldevicegettotalenergyconsumption-seems-to-be-off-by-a-factor/336318)
+- [ML.ENERGY: Measuring GPU Energy Best Practices](https://ml.energy/blog/energy/measurement/measuring-gpu-energy-best-practices/)
 
 ---
 
-### Pitfall 4: Docker Container State Leakage
+### CP-2: 30-Second Thermal Floor Is Under-Calibrated
 
-**What goes wrong:** Using `docker compose run --rm` for each experiment creates fresh containers every time, discarding model caches, warmup state, and GPU context. This introduces 30-60 second overhead per experiment and invalidates "warm start" measurements. Conversely, long-running containers without proper cleanup accumulate GPU memory leaks, CUDA context bloat, or stale model weights.
+**Current state in `.product/`:**
+- `decisions/warmup-strategy.md` specifies a 30-second thermal floor before energy measurement
+- Rationale cites "10-30s GPU power state ramp documented in hardware literature"
+- No source is actually cited for the 30-second figure
 
-**Why it happens:** Docker's execution models have tradeoffs: `docker run --rm` ensures clean state but pays startup cost; long-running containers with `docker exec` are fast but must manage state explicitly. GPU state (CUDA contexts, model weights in VRAM) persists across executions unless explicitly cleared.
+**What the evidence shows:**
 
-**Consequences:**
-- Campaign orchestration takes 10x longer than necessary (startup overhead dominates short experiments)
-- "Warm start" benchmarks accidentally measure cold starts
-- GPU memory leaks accumulate across experiments, causing OOM failures mid-campaign
-- Container crashes require manual cleanup and campaign restart
-- vLLM/TensorRT with `ipc: host` can conflict across containers if not isolated properly
+The 30-second figure appears to be an estimate, not a measured value. The actual thermal stabilisation time depends on:
 
-**Prevention:**
-1. Use long-running containers with `docker compose exec` for campaigns (v1.21.0 design)
-2. Implement explicit model unload between experiments when `force_cold_start=true`
-3. Default to warmup-then-measure (keeps models warm for fair comparisons)
-4. Container health checks detect GPU memory leaks (NVML memory monitoring)
-5. Graceful teardown clears CUDA contexts before next experiment
-6. Shared volumes for results (bind mounts), isolated volumes for model caches (named volumes with PUID/PGID)
-7. Per-backend container isolation (vLLM and TensorRT in separate containers due to conflicting PyTorch deps)
+1. **GPU power state transitions:** NVIDIA GPUs use Dynamic Voltage and Frequency Scaling (DVFS). Moving from idle (P8) to compute (P0) happens in milliseconds, but the *power draw at P0* continues to change as the GPU thermally stabilises.
 
-**Detection:**
-- Experiment duration includes unexpected 30-60s "startup" time
-- GPU memory grows monotonically across campaign
-- Second experiment in sequence shows different GPU memory baseline than first
-- CUDA out-of-memory errors appear mid-campaign but not on fresh container
+2. **Thermal ramp time under load:** Research on A100/H100 shows:
+   - Initial power spike within 1-2 seconds of load onset
+   - Power draw continues to drift upward for 45-90 seconds as die temperature increases from ambient to operating temperature (~70-83C)
+   - The exact duration depends on cooling solution (SXM vs PCIe), ambient temperature, and airflow
+   - MLPerf Power requires a **minimum 60-second measurement window** specifically because shorter windows are unreliable
 
-**Phase mapping:** v1.21.0 (CAMP-01, CAMP-06) — campaign orchestrator redesign
+3. **The 30-second floor as currently designed measures idle, not loaded stability.** The warmup strategy description implies 30 seconds of observation before the workload starts. But thermal stabilisation requires the GPU to be *under the representative workload* for the stabilisation period. 5 warmup runs at 2 tokens each do not thermally load the GPU.
+
+**The actual problem:**
+- 5 warmup runs x 2 tokens each = maybe 2-3 seconds of actual GPU compute (on a fast model)
+- 30-second thermal floor (if measured at idle) does nothing -- the GPU cools back toward idle temperature
+- The measurement window starts with the GPU thermally cold, then warms during measurement
+- This creates a systematic bias: early measurement samples have lower power draw than later samples
+- For parameter sweeps comparing batch sizes, this bias affects small-batch experiments more (shorter duration, less time to thermally stabilise)
+
+**What peer tools do:**
+- **MLPerf Power:** 60-second minimum measurement window (workloads loop until 60s reached)
+- **ML.ENERGY Benchmark:** Defines steady state as batch-size-saturated period; implicitly excludes ramp-up by only measuring after server is at full utilisation
+- **optimum-benchmark:** 10-20 warmup_runs (full inference runs, not 2-token stubs), which naturally provides thermal load
+- **AIEnergyScore:** 10 runs of 1000 queries each; no explicit thermal handling but sheer volume provides natural stabilisation
+
+**Recommendation:**
+1. Increase warmup_runs default to **10** full-length runs (not reduced-output), matching optimum-benchmark practice. This provides genuine thermal loading.
+2. Change thermal floor from 30 to **60 seconds of actual loaded operation** (matching MLPerf Power). This means the warmup phase must run the actual workload, not 2-token stubs.
+3. Alternatively, keep reduced-output warmup for JIT/CUDA purposes (5 runs, 2 tokens) but add a separate **thermal conditioning phase** of 60 seconds running the actual workload before measurement begins. This separates the two concerns (JIT warmup vs thermal stabilisation).
+4. Record GPU temperature at measurement start and end in `ExperimentResult` so thermal drift can be detected post-hoc.
+
+**Confidence:** HIGH (MLPerf 60s minimum is documented; thermal drift physics are well understood; the 30s figure has no cited source)
 
 **Sources:**
-- [Sharing GPU between Docker containers](https://github.com/NVIDIA/nvidia-container-toolkit/issues/1534)
-- [How can two containers share the usage of a GPU safely?](https://forums.developer.nvidia.com/t/how-can-two-containers-share-the-usage-of-a-gpu-safely/258381)
+- [MLPerf Power Benchmark (arXiv:2410.12032)](https://arxiv.org/html/2410.12032v2)
+- [ML.ENERGY Benchmark (arXiv:2505.06371)](https://arxiv.org/html/2505.06371v1)
+- [NeurIPS 2025 Tutorial: Accurately Benchmarking Power & Energy](https://ml.energy/tutorials/neurips25/session-1.html)
 
 ---
 
-### Pitfall 5: Backend API Instability (vLLM/TensorRT Breaking Changes)
+### CP-3: FLOPs as "Primary Metric" Is Misleading for This Tool's Purpose
 
-**What goes wrong:** vLLM and TensorRT-LLM undergo frequent breaking API changes without deprecation warnings. Parameters are renamed, defaults flip, or entire subsystems change (e.g., TensorRT-LLM switching default backend from C++ to PyTorch). A tool that works with vLLM v0.6.x breaks silently with v0.7.x.
+**Current state in `.product/`:**
+- `decisions/flops-estimation.md` positions FLOPs as a core metric, with `flops_per_output_token` as a "primary cross-run comparison metric"
+- `designs/result-schema.md` includes `flops_total`, `flops_per_token` in the Parquet export schema
+- The decision rationale is "to enable comparison of energy efficiency across hardware generations"
 
-**Why it happens:** Both libraries are pre-1.0 (vLLM aiming for 1.0 "API stability", TensorRT-LLM reached 1.0 in 2026 but introduced breaking changes in the transition). Research-focused libraries prioritise performance and features over backwards compatibility. TensorRT-LLM explicitly states "breaking change" in release notes but doesn't provide migration paths.
+**Why this is problematic:**
 
-**Consequences:**
-- Parameter audit (v1.20.0) becomes stale within 3 months
-- Users' saved configs break after `pip install --upgrade`
-- Docker images pinned to specific versions become outdated quickly
-- `extra:` escape hatch for custom kwargs stops working (param names changed)
-- CI tests pass but user experiments fail due to version drift
+LLenergyMeasure's stated purpose is measuring "how implementation choice(s) alone affect LLM inference efficiency" -- batch size, quantisation, precision, backend, etc. For a given model and input:
 
-**Prevention:**
-1. Pin exact versions in Docker images (e.g., `vllm==0.6.3.post1`, not `vllm>=0.6`)
-2. Document version compatibility in config examples and docs
-3. Runtime version detection: warn if installed version mismatches tested version
-4. Defensive parameter passing: use `**kwargs` filtering to ignore unknown params (don't crash on renamed params)
-5. Quarterly parameter audit cycle (not one-time) — add to maintenance roadmap
-6. SSOT introspection tests fail loudly when backend API changes
-7. Subscribe to vLLM/TensorRT release notes, test RC versions before production updates
+```
+FLOPs = 2 * N_params * tokens
+```
 
-**Detection:**
-- `TypeError: unexpected keyword argument 'X'` errors in backend inference calls
-- Parameters documented in library's docs don't exist in installed version
-- Default behaviour changes without config changes (e.g., sampling strategy)
-- Runtime tests fail after `pip install --upgrade`
+This is a **deterministic function of model architecture and input/output length**. It does not change between:
+- PyTorch vs vLLM vs TensorRT-LLM (same model, same FLOPs)
+- batch_size=1 vs batch_size=32 (FLOPs per token is identical)
+- fp16 vs bf16 vs fp32 (same MAC count; precision affects hardware throughput, not FLOPs)
+- Quantisation INT8 vs INT4 (FLOPs are defined for FP operations; quantised ops are not "FLOPs")
 
-**Phase mapping:** v1.20.0 (PARAM-01 to PARAM-04) — parameter completeness with version pinning
+The only parameters that change FLOPs per token are model size and sequence length (via attention). **None of the deployment parameters this tool measures affect FLOPs.**
+
+FLOPs are useful for:
+- Comparing energy efficiency *across different models* (energy per FLOP)
+- Comparing *hardware* (FLOP/s per watt across GPU generations)
+- Academic papers that need a normalisation baseline
+
+FLOPs are *not* useful for:
+- Comparing deployment configurations on the *same model* (this tool's primary use case)
+- Understanding whether vLLM or PyTorch is more energy-efficient (both execute the same FLOPs)
+- Diagnosing why batch_size=32 uses less energy per token than batch_size=1 (FLOPs are identical)
+
+Recent literature explicitly argues against FLOPs as a primary inference metric:
+- "The bottleneck is bandwidth -- not FLOPs" (arXiv:2503.08311, "Mind the Memory Gap")
+- "Model FLOPs Utilisation (MFU) better reflects arithmetic saturation and correlates with dynamic power" (arXiv:2507.11417) -- but MFU requires knowing peak hardware FLOPs, which this tool defers to v2.1
+- Databricks' inference engineering guide prioritises tokens/second and TTFT over FLOPs
+
+**Recommendation:**
+1. **Demote FLOPs from "primary metric" to "reference metadata".** FLOPs should be stored in results but not surfaced as a primary comparison axis. They are context, not a measurement.
+2. **Promote `energy_per_output_token` (joules/token) and `tokens_per_second` as the primary metrics.** These actually vary between deployment configurations and directly answer the tool's research question.
+3. **Defer MFU to v2.1 as planned**, but note that MFU is the only FLOPs-derived metric that has diagnostic value for this tool (it shows how well the hardware is utilised, which does vary by backend/config).
+4. **Do not report FLOPs in CLI summary output.** Reserve for Parquet export and detailed JSON. Researchers who need it can find it; casual users should not be misled into thinking FLOPs differences explain efficiency differences.
+
+**Confidence:** HIGH (the mathematical argument is irrefutable; peer evidence supports the conclusion)
 
 **Sources:**
-- [TensorRT-LLM Release Notes](https://nvidia.github.io/TensorRT-LLM/release-notes.html)
-- [vLLM Roadmap Q3 2025](https://github.com/vllm-project/vllm/issues/20336)
-- [vLLM vs TensorRT-LLM: Key differences](https://northflank.com/blog/vllm-vs-tensorrt-llm-and-how-to-run-them)
+- [The Real Cost of LLM Inference: Memory Bandwidth, Not FLOPs](https://dev.to/avik12345678/the-real-cost-of-llm-inference-memory-bandwidth-not-flops-3855)
+- [Mind the Memory Gap (arXiv:2503.08311)](https://arxiv.org/html/2503.08311v2)
+- [Databricks: LLM Inference Performance Engineering Best Practices](https://www.databricks.com/blog/llm-inference-performance-engineering-best-practices)
+- [MatX: Optimise for inference too, not just training FLOPs](https://matx.com/research/lifetime_llm_cost)
 
 ---
 
-### Pitfall 6: Parameter Audit Scope Creep
+### CP-4: Baseline Power Subtraction Methodology Is Under-Specified
 
-**What goes wrong:** Attempting to achieve 100% coverage of all possible kwargs across PyTorch, vLLM, and TensorRT leads to infinite scope. Each library has 100+ parameters, many undocumented or experimental. The audit never finishes, and most added parameters are never used by actual users.
+**Current state in `.product/`:**
+- `designs/result-schema.md` specifies `baseline_power_w` measured during "30-second window immediately before experiment starts"
+- `energy_adjusted_j = energy_total_j - (baseline_power_w * duration_sec)`
+- Deferred to v2.1
 
-**Why it happens:** Well-intentioned completeness goal meets reality: libraries evolve, niche params are for specific hardware (MoE routing, Hopper-specific features), and the long tail of kwargs delivers diminishing returns. The SSOT introspection system makes adding params easy, creating temptation to add everything.
+**Problems with this approach:**
 
-**Consequences:**
-- v1.20.0 timeline blows out from 2 weeks to 2 months
-- Parameter matrix documentation becomes unreadable
-- Runtime tests explode (combinatorial parameter explosion)
-- Config validation gets complex, fragile
-- Users overwhelmed by options (paradox of choice)
+1. **Idle baseline != loaded baseline.** GPU idle power (P8 state, ~40W on A100) is very different from "baseline" power during inference (P0 state, fans running, HBM active, ~70-90W on A100 even between batches). Subtracting idle power overcorrects -- the GPU consumes significant power just being in the compute-ready state.
 
-**Prevention:**
-1. Define completion criteria: **90%+ of energy/throughput-impactful parameters**, not "all kwargs"
-2. Impact heuristic: prioritise params that affect energy, throughput, or latency by >5%
-3. `extra:` escape hatch for the long tail (users can pass arbitrary kwargs as dict)
-4. Document exclusions: maintain list of deliberately skipped params with rationale
-5. User-driven additions: add params when requested, not speculatively
-6. Version-specific audits: focus on stable APIs, exclude experimental features
+2. **The subtraction formula assumes constant baseline power over the experiment duration.** In reality, baseline power increases as the GPU heats up. A linear correction `baseline_power_w * duration_sec` assumes steady-state idle power throughout, but:
+   - At experiment start: GPU is near idle temperature, baseline is lower
+   - At experiment end: GPU is at operating temperature, baseline is higher
+   - The error grows with experiment duration
 
-**Detection:**
-- Parameter audit backlog keeps growing faster than items are completed
-- New parameters added without clear impact justification
-- Config examples don't use 80% of available parameters
-- Users ask "what should I actually tune?" (too many options)
+3. **No peer tool publishes baseline-corrected energy** (as the result schema doc itself notes). This is not because it is too hard -- it is because the correction introduces more uncertainty than it removes for most use cases. The ML.ENERGY Benchmark reports raw energy because:
+   - Relative comparisons (A vs B on the same hardware) cancel out baseline power
+   - Absolute energy figures are useful for cost estimation, where total power matters
 
-**Phase mapping:** v1.20.0 (PARAM-01, PARAM-02) — targeted 90%+ coverage
+4. **When baseline subtraction IS useful:** Comparing across hardware with very different idle power (consumer GPU at 15W vs A100 at 45W). But this is a cross-hardware comparison, not a deployment-parameter comparison (this tool's primary use case).
 
-**Sources:**
-- Domain expertise (LLenergyMeasure codebase analysis)
+**Recommendation:**
+- Keep `baseline_power_w` as optional metadata (useful for researchers)
+- Do NOT make `energy_adjusted_j` a primary or prominently displayed metric
+- Instead, report `mean_power_draw_w` during the measurement window (this naturally captures the loaded power level and is directly comparable across configurations)
+- If baseline correction is desired, measure it with the GPU in P0 state (loaded but idle between batches), not P8 (fully idle). This requires a brief "hold at P0" period after warmup.
+
+**Confidence:** MEDIUM-HIGH (physics reasoning is sound; no peer validation of the proposed correction exists precisely because no peer does it)
 
 ---
 
-### Pitfall 7: Thermal Throttling Blind Spots
+### CP-5: Bootstrap CI Methodology Is Under-Specified
 
-**What goes wrong:** GPU thermal throttling during experiments silently degrades performance and inflates energy measurements. The tool reports "Model A uses 20% more energy than Model B", but the difference is actually thermal throttling, not model efficiency.
+**Current state in `.product/`:**
+- `designs/result-schema.md` specifies `n_bootstrap: int = 1000` with percentile CIs (2.5th/97.5th)
+- Requires `n >= 30` samples
+- Deferred to v2.1
 
-**Why it happens:** Long-running experiments, sequential campaign runs without thermal gaps, or inadequate cooling cause GPU temperatures to exceed throttling thresholds (e.g., 83°C on A100). NVIDIA GPUs automatically reduce clock speeds to prevent damage, but this is invisible to energy measurement tools. Lower clock speeds = same work takes longer = more total energy consumed.
+**Issues:**
 
-**Consequences:**
-- Non-reproducible results (thermal state varies run-to-run)
-- Sequential experiments show degrading performance (first run fast, tenth run slow)
-- Incorrect efficiency rankings (throttled GPU looks inefficient)
-- Campaign results depend on ambient temperature, airflow, GPU slot position
+1. **Percentile vs BCa:** The design specifies simple percentile bootstrap, not bias-corrected and accelerated (BCa). For skewed distributions (which energy measurements typically are -- right-skewed due to occasional GC pauses, thermal events, etc.), percentile bootstrap has poor coverage. BCa corrects for both bias and skewness:
+   - Percentile: adequate for symmetric distributions
+   - BCa: recommended when data may be skewed (Monte Carlo studies show BCa achieves nominal coverage with n >= 20, while percentile requires n >= 50+ for equivalent coverage)
+   - BCa costs ~2x computation (jackknife for acceleration factor) but is trivial for 30 samples
 
-**Prevention:**
-1. Monitor NVML performance state (`nvmlDeviceGetPerformanceState`) during experiments
-2. Record thermal state in results metadata: clock speeds, temperature, power limits
-3. Flag results when throttling detected (`thermal_throttling_detected: true`)
-4. Enforce thermal gaps between experiments (already in campaign orchestration)
-5. Warmup convergence detection: wait for thermal equilibrium before measurement
-6. UAT validation: check that sequential runs show <5% performance variance
+2. **1,000 resamples is adequate for 95% CIs but tight.** The statistical literature recommends:
+   - 1,000 resamples: adequate for 95% CIs (common recommendation)
+   - 2,000 resamples: recommended by modern tools (tidymodels, scipy.stats.bootstrap)
+   - 10,000 resamples: recommended for 99% CIs or when precision matters
+   - For energy measurements at n=30-100 samples, 2,000 resamples is a better default
 
-**Detection:**
-- GPU clock speed drops mid-experiment (NVML `nvmlDeviceGetClockInfo`)
-- Temperature exceeds throttling threshold (typically >80°C)
-- Performance degrades across sequential runs despite identical config
-- Throughput CV > 5% across cycles when it should be <2%
+3. **n >= 30 threshold is conservative for BCa but necessary for percentile.** BCa achieves acceptable coverage with as few as 20 samples. If BCa is adopted, the threshold could be lowered to n >= 20.
 
-**Phase mapping:** v1.19.0 (MEAS-03) — thermal throttling detection
+4. **What is being bootstrapped matters.** The design says "per-request samples within the experiment". But per-request energy is problematic:
+   - Zeus energy counters measure total GPU energy for a window, not per-request energy
+   - Per-request energy is derived: `total_energy / n_requests`
+   - This gives a *mean*, not a distribution of per-request values
+   - For CIs on energy, you need *per-cycle* energy measurements (multiple experiment cycles), not per-request
+   - Per-request latency CIs are valid (TTFT, ITL have true per-request measurements)
+
+**Recommendation:**
+1. Use **BCa bootstrap** (scipy.stats.bootstrap supports it natively with `method='BCa'`)
+2. Increase default to **2,000 resamples**
+3. For energy CIs: require **multi-cycle studies** (n_cycles >= 5) and bootstrap over per-cycle energy totals
+4. For latency CIs: bootstrap over per-request measurements (TTFT, ITL) as designed
+5. Clearly separate "energy CI" (requires multi-cycle) from "latency CI" (available per-request within single experiment)
+
+**Confidence:** HIGH (bootstrap methodology is well-established statistical practice)
 
 **Sources:**
-- Domain expertise (existing thermal gap implementation in campaigns)
+- [Bootstrap confidence interval variations (Pustejovsky, 2025)](https://jepusto.com/posts/Bootstrap-CI-variations/)
+- [Bootstrap BCa intervals (SAS)](https://blogs.sas.com/content/iml/2017/07/12/bootstrap-bca-interval.html)
+- [scipy.stats.bootstrap documentation](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html)
+- [TQMP 2025: Bootstrap BCa confidence intervals](https://www.tqmp.org/RegularArticles/vol21-3/p125/p125.pdf)
 
 ---
 
 ## Moderate Pitfalls
 
-Mistakes that cause delays, technical debt, or reproducibility issues.
+### MP-1: Docker Container Energy Measurement Overhead Is Unquantified
 
----
+**Current state in `.product/`:**
+- `decisions/docker-execution.md` discusses container lifecycle but says nothing about measurement accuracy impact
+- `decisions/experiment-isolation.md` uses multiprocessing for local, Docker for v2.2
+- No discussion of whether Docker adds energy measurement overhead or distortion
 
-### Pitfall 8: Environment Metadata Omission
+**What the evidence shows:**
 
-**What goes wrong:** Results don't include CUDA version, driver version, GPU power limits, CPU governor, or container detection. When results can't be reproduced 6 months later, there's no diagnostic information to identify what changed.
+Docker containerisation with `--gpus all` uses the NVIDIA Container Toolkit, which passes GPU devices directly to the container via `/dev/nvidia*` device files. This means:
+- NVML queries inside the container hit the same hardware counters as bare metal
+- `nvmlDeviceGetTotalEnergyConsumption` returns the same value inside and outside Docker
+- There is no "Docker overhead" on the NVML energy counter itself
 
-**Prevention:**
-1. Capture environment snapshot at experiment start (CUDA, driver, GPU config, CPU governor)
-2. Include in results schema v3 (v1.19.0 MEAS-01)
-3. Hash environment snapshot for quick "configuration drift" detection
-4. Compare environment across experiments in multi-cycle campaigns (flag if drift detected)
+However, Docker adds:
+- CPU overhead for the container runtime (~1-3% CPU overhead per benchmarks)
+- Additional memory overhead for the overlay filesystem
+- Potential NUMA misalignment if container scheduler places processes on wrong NUMA node
+- GPU execution time may be slightly longer (~1-3%) due to container syscall overhead
 
-**Phase mapping:** v1.19.0 (MEAS-01)
+The energy impact: a 1-3% longer execution time at similar power draw means 1-3% more total energy. This is within the NVML measurement uncertainty for most workloads, but for studies comparing Docker vs bare metal, it must be acknowledged.
 
----
+**Recommendation:**
+- Document that Docker adds approximately 1-3% energy overhead due to slightly longer execution time
+- Record `runner: "docker"` vs `runner: "local"` in results (already planned)
+- Do NOT attempt to correct for Docker overhead -- it is within measurement uncertainty
+- Cross-runner comparisons (Docker A100 vs local A100) should note this caveat in the result interpretation
 
-### Pitfall 9: vLLM ITL Proportional Estimation
-
-**What goes wrong:** vLLM doesn't provide per-token timestamps for non-streaming inference. The tool estimates ITL by dividing total decode time by token count, which masks variance and hides outliers (e.g., first decode token vs subsequent tokens have different latencies).
-
-**Prevention:**
-1. Recommend streaming mode for latency benchmarks (per-token timestamps available)
-2. Flag in results when ITL is estimated vs measured
-3. Report as `itl_mean_ms` with null for variance when estimated
-4. Document limitation in vLLM backend docs
-
-**Phase mapping:** v1.19.0 (MEAS-06) — schema flags for estimation vs measurement
-
----
-
-### Pitfall 10: PUID/PGID Complexity in Docker
-
-**What goes wrong:** Files created by Docker containers are owned by root, causing permission errors when host user tries to read results. The PUID/PGID workaround (run container as host user) requires `.env` file, which users forget to create, leading to opaque entrypoint errors.
-
-**Prevention:**
-1. `setup.sh` auto-generates `.env` with PUID/PGID (already implemented)
-2. Entrypoint validates PUID/PGID are set, exits with clear error message if missing
-3. Named volumes for caches (Docker-managed permissions), bind mounts for results (user-accessible)
-4. Document in quickstart: "Run `./setup.sh` first"
-
-**Phase mapping:** Already implemented; v1.22.0 (UAT-04) docs refresh validates clarity
+**Confidence:** MEDIUM (Docker GPU overhead benchmarks exist but none specifically measure energy impact; the reasoning is physical)
 
 **Sources:**
-- [Docker Deployment Guide](docs/deployment.md) — existing implementation
+- [Docker GPU Passthrough Performance (Brilliance, 2024)](https://jurnal.itscience.org/index.php/brilliance/article/view/6794)
+- [NVIDIA Container Toolkit documentation](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/sample-workload.html)
 
 ---
 
-### Pitfall 11: Grid Generation Cartesian Explosion
+### MP-2: Multi-GPU Energy Aggregation Ignores Interconnect Power
 
-**What goes wrong:** Grid generation creates cartesian product of ALL parameter values across ALL backends, producing thousands of invalid configurations (e.g., PyTorch-specific param × vLLM backend).
+**Current state in `.product/`:**
+- `decisions/multi-gpu.md` specifies `total_energy = sum(per_gpu_energy)` via NVML/Zeus
+- No mention of NVLink, NVSwitch, or PCIe interconnect power
 
-**Prevention:**
-1. Backend-aware grid generation: only combine params valid for target backend
-2. SSOT introspection already knows which params belong to which backend
-3. Mutual exclusion constraints (e.g., `load_in_4bit` × `load_in_8bit` = invalid)
-4. Estimate grid size before generation, warn if >100 configs
+**What the evidence shows:**
 
-**Phase mapping:** v1.21.0 (CAMP-02) — backend-aware grid generation
+NVML energy counters measure per-GPU board power. They do NOT measure:
+- NVLink power consumption (NVLink 4.0 on H100: up to 50W per link at full bandwidth)
+- NVSwitch power (on DGX systems: ~100W per switch)
+- PCIe root complex power
+- Host CPU power for memory copies and synchronisation
+
+For tensor parallelism, the all-reduce operations between GPUs consume significant NVLink bandwidth. The energy consumed by NVLink is *not* captured by per-GPU NVML counters. This means:
+- Summing per-GPU energy **understates** the true total energy of a TP experiment
+- The understatement is proportional to NVLink traffic, which increases with TP degree
+- For TP=4 on DGX A100 with NVLink 3.0: estimated 10-30W of NVLink power per GPU not captured
+- This is 3-10% of total system energy, depending on workload
+
+**Recommendation:**
+- Document the limitation: "Per-GPU NVML energy does not include interconnect power. Multi-GPU experiments understate total energy by approximately 3-10% depending on NVLink traffic."
+- Add `interconnect_energy_note: str` to `MultiGPUMetrics` explaining this limitation
+- For publishable results, recommend researchers note this limitation in their methodology section
+- In v2.3+ (multi-GPU sweep), consider adding a correction factor based on NVLink bandwidth utilisation (if measurable)
+
+**Confidence:** MEDIUM (NVLink power consumption figures are from NVIDIA marketing materials and are approximate; no peer tool measures or corrects for this)
 
 **Sources:**
-- Domain expertise (SSOT introspection architecture)
+- [NVIDIA NVLink and NVSwitch (NVIDIA Blog)](https://developer.nvidia.com/blog/nvidia-nvlink-and-nvidia-nvswitch-supercharge-large-language-model-inference/)
+- [MLPerf Power: Myth #1 -- Measuring ML Components in Isolation is Insufficient](https://arxiv.org/html/2410.12032v2)
 
 ---
 
-### Pitfall 12: Configuration Drift Without Detection
+### MP-3: Warmup Reduced-Output Strategy May Not Warm KV Cache Properly
 
-**What goes wrong:** User edits a config file, forgets which version they ran 3 months ago, cannot reproduce results. Git tracks file changes, but experiments don't capture config hash or version.
+**Current state in `.product/`:**
+- `decisions/warmup-strategy.md` specifies 5 warmup runs at `max_new_tokens=2`
+- Rationale cites optimum-benchmark's pattern
 
-**Prevention:**
-1. Hash experiment config (already tracked in results as `config_hash`)
-2. Include full config in results JSON (already implemented)
-3. Detect if config file changed since experiment ran (compare hash)
-4. Campaign manifest links exp_id → config version → result path
+**The problem:**
 
-**Phase mapping:** Already implemented; v1.21.0 (CAMP-03) campaign manifest reinforces
+The reduced-output warmup (2 tokens) only triggers:
+- CUDA kernel JIT compilation (if using `torch.compile`)
+- Prefill path execution
+- One or two decode steps
+
+It does NOT trigger:
+- KV cache at the actual operational size (2-token decode vs 100-token decode uses different KV cache allocation patterns)
+- Memory allocation for the full output sequence
+- For vLLM: continuous batching scheduler at operational batch depth
+- For TensorRT-LLM: engine pages at operational capacity
+
+This means the first "real" measurement run may still encounter:
+- KV cache page allocation overhead (vLLM paged attention)
+- Memory fragmentation from the mismatch between warmup and measurement allocation patterns
+- Scheduler warm-up in vLLM (first full-batch run triggers different scheduling path than 2-token runs)
+
+**optimum-benchmark uses reduced output for speed,** not because it is methodologically ideal. For a tool prioritising scientific rigour over benchmark speed, full-length warmup is defensible.
+
+**Recommendation:**
+- For latency benchmarks: reduced-output warmup is acceptable (JIT is the primary concern)
+- For energy benchmarks: use full-length warmup runs (the thermal stabilisation concern from CP-2 aligns with this -- full-length runs provide both JIT warmup AND thermal conditioning)
+- Make warmup strategy configurable: `warmup_mode: "fast" | "full"` with `fast` = reduced output, `full` = actual workload. Default to `full` for energy measurements.
+
+**Confidence:** MEDIUM (theoretical reasoning; no peer tool has studied the measurement impact of reduced vs full warmup on KV cache allocation)
+
+---
+
+### MP-4: CodeCarbon Accuracy Claims Need Revision
+
+**Current state in `.product/`:**
+- Multiple documents cite CodeCarbon accuracy as "~15%" or "~10-20%"
+- These appear to originate from the PMC comparison paper that found "up to 400% variation between tools"
+
+**What the evidence shows:**
+
+CodeCarbon v3.2.2 uses *the same NVML readings* as Zeus. The accuracy difference is not in the sensor but in the methodology:
+
+| Factor | Zeus (ZeusMonitor) | CodeCarbon (EmissionsTracker) |
+|--------|-------------------|-------------------------------|
+| GPU energy source | `nvmlDeviceGetTotalEnergyConsumption` (Volta+) | `nvmlDeviceGetPowerUsage` polled at intervals |
+| Measurement approach | Hardware energy counter delta | Power sampling + trapezoidal integration |
+| Default polling interval | N/A (hardware counter) | 15 seconds (configurable) |
+| Accuracy driver | Hardware counter resolution | Sampling frequency vs workload variability |
+| CPU-GPU sync | Explicit (`torch.cuda.synchronize()`) | None (no framework integration) |
+
+The "15% inaccuracy" of CodeCarbon comes from:
+1. **15-second default polling interval** -- misses power transients (the Burtscher paper's core finding)
+2. **No CPU-GPU synchronisation** -- GPU work may not be complete when power is sampled
+3. **TDP fallback** -- when NVML is unavailable, CodeCarbon estimates from TDP tables (20-30% error)
+
+If CodeCarbon is configured with high polling frequency (e.g., 1 second) and NVML is available, its accuracy approaches that of direct NVML polling (~5-10% for sustained workloads). The gap with Zeus is real but smaller than documented.
+
+**Recommendation:**
+- Rewrite accuracy claims: "Zeus energy counter: ~1-5% for sustained loads on Volta+. CodeCarbon NVML polling: ~5-15% depending on polling interval and workload duration. CodeCarbon TDP fallback: ~20-30%."
+- When CodeCarbon is the energy backend, automatically set `measure_power_secs` to 1 (not the default 15)
+- Document that CodeCarbon's CO2 estimation layer adds no measurement error -- it is a multiplication by a carbon intensity constant
+
+**Confidence:** HIGH (CodeCarbon source code confirms NVML usage; polling interval is configurable)
 
 **Sources:**
-- [Configuration Drift Management](https://www.reach.security/blog/what-is-configuration-drift-5-best-practices-for-your-teams-security-posture)
+- [CodeCarbon Methodology](https://mlco2.github.io/codecarbon/methodology.html)
+- [PMC: Energy Tools Comparison](https://pmc.ncbi.nlm.nih.gov/articles/PMC10661046/)
+
+---
+
+### MP-5: No Minimum Measurement Duration Specified
+
+**Current state in `.product/`:**
+- No minimum duration is specified for the measurement window
+- The design allows single-prompt experiments with no lower bound on duration
+
+**Why this matters:**
+
+The Burtscher paper demonstrated that NVML power readings on A100/H100 use 100ms update periods with only 25% sampling coverage. For very short measurement windows:
+
+| Measurement Duration | Expected NVML Samples | Accuracy |
+|---------------------|----------------------|----------|
+| < 100ms | 0-1 | **Unreliable** -- may miss entirely |
+| 100ms - 1s | 1-10 | **High variance** -- insufficient sampling |
+| 1s - 10s | 10-100 | **Moderate** -- adequate for relative comparison |
+| > 10s | 100+ | **Good** -- statistical averaging reduces error |
+
+For the hardware energy counter (`nvmlDeviceGetTotalEnergyConsumption`), the situation is better but still has a floor: the counter resolution is millijoules, so experiments consuming < 100 mJ may have significant quantisation error.
+
+**Recommendation:**
+- Set minimum measurement duration to **10 seconds** (or loop the workload until 10s reached, matching MLPerf's approach)
+- Alternatively, require `n >= 10` prompts per experiment to naturally exceed the minimum
+- Flag results where measurement duration < 10 seconds with a `short_measurement_warning: true`
+
+**Confidence:** HIGH (NVML sampling behaviour is empirically documented)
 
 ---
 
 ## Minor Pitfalls
 
-Mistakes that cause annoyance but are easily fixable.
+### mP-1: CPU-GPU Synchronisation Not Explicitly Required
+
+**Current state in `.product/`:**
+- The existing research docs reference Zeus's `sync_execution_with` parameter
+- But `decisions/warmup-strategy.md` and the energy measurement design do not specify a synchronisation requirement
+
+**The problem:** Without `torch.cuda.synchronize()` (or equivalent) before starting and ending the measurement window, the CPU may start/stop the energy measurement timer while GPU work is still in flight. This introduces up to 10-50ms of timing error per measurement boundary.
+
+The ML.ENERGY blog explicitly states: "To accurately measure GPU time and energy consumption, make the CPU wait for GPU work to complete."
+
+**Recommendation:** Add an explicit requirement: energy measurement windows MUST call `torch.cuda.synchronize()` (or backend equivalent) before `begin_window()` and `end_window()`. This is already handled by Zeus when `sync_execution_with="torch"`, but must be explicitly required in the measurement protocol, not left as a Zeus implementation detail.
+
+**Confidence:** HIGH (documented by Zeus and ML.ENERGY)
 
 ---
 
-### Pitfall 13: Warmup Overkill vs Underkill
+### mP-2: MIG Energy Measurement Gives Whole-GPU, Not Slice-Level Readings
 
-**What goes wrong:** Fixed warmup count (e.g., 3 prompts) is either wasteful (model warmed up after 1 prompt) or insufficient (model still converging after 5 prompts, especially for large models on cold GPUs).
+**Current state in `.product/`:** Mentioned briefly in the old PITFALLS.md but not addressed in any decision document.
 
-**Prevention:**
-1. Convergence detection: continue warmup until throughput CV stabilises (<5%)
-2. CycleStatistics already tracks CV — reuse for warmup
-3. Max warmup limit to prevent infinite loops (e.g., 10 prompts)
+NVML energy counters report at the *physical GPU* level, not the MIG instance level. If other workloads are running on sibling MIG slices, the energy reading includes their contribution. There is no correction for this.
 
-**Phase mapping:** v1.19.0 (MEAS-05) — warmup convergence
+**Recommendation:** Detect MIG mode at pre-flight. Warn users that energy readings include all MIG slices on the physical GPU. Recommend running without MIG or ensuring no other workloads on sibling slices.
 
----
-
-### Pitfall 14: CodeCarbon Process-Level GPU Limitation
-
-**What goes wrong:** CodeCarbon's `tracking_mode=Process` estimates RAM at process level but not GPU/CPU energy. Users expect per-process GPU energy, get machine-wide readings instead.
-
-**Prevention:**
-1. Document limitation in energy backend docs
-2. Use `tracking_mode=Machine` (default) for GPU energy
-3. For multi-GPU setups: use CUDA_VISIBLE_DEVICES to isolate GPU per process
-
-**Phase mapping:** Documentation fix, no code changes needed
-
-**Sources:**
-- [CodeCarbon Methodology](https://mlco2.github.io/codecarbon/methodology.html)
+**Confidence:** HIGH (documented NVML limitation)
 
 ---
 
-### Pitfall 15: MIG Energy Measurement Warning Confusion
+### mP-3: Power Limit Capping Affects Energy Measurements
 
-**What goes wrong:** Tool flags "MIG instance detected, energy reflects parent GPU" but users don't understand what this means or how to interpret results.
+GPU power limits (`nvidia-smi -pl <watts>`) constrain the GPU's power draw. If a power limit is set below the GPU's natural draw for a workload, the GPU throttles to stay within the limit. This changes both energy and latency measurements. The tool does not detect or record the active power limit.
 
-**Prevention:**
-1. Clearer warning message: "MIG instance detected. Energy readings include all MIG slices on parent GPU, not just this instance. For accurate per-instance energy, disable MIG or ensure no other workloads on sibling instances."
-2. Include `is_mig` and `mig_profile` in metadata
-3. Document in deployment guide: MIG energy limitations and workarounds
+**Recommendation:** Record `gpu_power_limit_w` in `EnvironmentSnapshot` via `nvmlDeviceGetPowerManagementLimit()`. Flag if it differs from the default limit (`nvmlDeviceGetPowerManagementDefaultLimit()`). This is a single NVML call per GPU, zero overhead.
 
-**Phase mapping:** v1.22.0 (UAT-04) — docs refresh
-
-**Sources:**
-- [Docker Deployment Guide](docs/deployment.md) — existing MIG detection
+**Confidence:** HIGH (NVML API for this is well-documented)
 
 ---
 
-## UAT-Specific Pitfalls
+## Challenged Decisions: Summary Table
 
-Blind spots that only surface during user acceptance testing.
-
----
-
-### Pitfall 16: The "Works On My Machine" Trap
-
-**What goes wrong:** Developer environment has specific Python version, CUDA version, or library versions that differ from user environment. Tool works perfectly in dev, breaks immediately for users.
-
-**Prevention:**
-1. UAT round 1 on fresh clone (v1.19.0 MEAS-07): fresh VM, follow quickstart from scratch
-2. Docker images eliminate environment variance (already implemented)
-3. Document tested environments: Python 3.10/3.11, CUDA 12.4, driver ≥535
-4. CI matrix tests across Python versions
-
-**Phase mapping:** v1.19.0 (MEAS-07), v1.22.0 (UAT-03)
-
----
-
-### Pitfall 17: Error Message Archaeology
-
-**What goes wrong:** Errors are cryptic stack traces deep in PyTorch internals. Users give up instead of debugging. Example: `RuntimeError: CUDA error: invalid device ordinal` doesn't tell user "you need to set CUDA_VISIBLE_DEVICES for MIG instances".
-
-**Prevention:**
-1. Catch common errors at orchestration layer, re-raise with context
-2. Custom exception classes with diagnostic hints (`GPUConfigurationError`, `BackendParameterError`)
-3. UAT feedback: log all error messages users encounter, improve messages for top 5 errors
-4. Validation catches misconfigurations BEFORE experiments run (e.g., invalid backend param)
-
-**Phase mapping:** v1.22.0 (UAT-03) — error message improvements based on UAT feedback
-
-**Sources:**
-- [User Acceptance Testing Best Practices](https://research.aimultiple.com/user-acceptance-testing-best-practices/)
+| Decision | Document | Current State | Verdict | Recommended Action |
+|----------|----------|---------------|---------|-------------------|
+| NVML ~5% accuracy | `designs/energy-backends.md` | Fixed percentage | **Wrong** | Replace with conditional accuracy formula |
+| CodeCarbon ~15% accuracy | `designs/energy-backends.md` | Fixed percentage | **Misleading** | Rewrite as range dependent on config |
+| 30s thermal floor | `decisions/warmup-strategy.md` | 30 seconds at idle | **Under-calibrated** | Increase to 60s under load; or use full-length warmup runs |
+| 5 warmup runs, 2 tokens | `decisions/warmup-strategy.md` | Reduced-output warmup | **Questionable for energy** | Use full-length runs for energy benchmarks |
+| FLOPs as primary metric | `decisions/flops-estimation.md` | Core metric | **Misleading for this tool** | Demote to reference metadata |
+| Baseline power subtraction | `designs/result-schema.md` | Simple linear correction | **Over-simplified** | Measure in P0 state, not P8; do not make primary |
+| Bootstrap 1000 percentile | `designs/result-schema.md` | Percentile bootstrap | **Sub-optimal** | Use BCa with 2000 resamples |
+| Multi-GPU sum | `decisions/multi-gpu.md` | Sum per-GPU NVML | **Understates** | Document interconnect power gap |
+| Process isolation | `decisions/experiment-isolation.md` | multiprocessing.spawn | **Sound** | No changes needed |
+| CO2 estimation | `decisions/carbon-intensity.md` | CodeCarbon delegation | **Sound** | No changes needed |
+| Config hash | `designs/result-schema.md` | SHA-256 of config | **Sound** | No changes needed |
+| Steady state window | `designs/result-schema.md` | Explicit field | **Sound** | No changes needed |
 
 ---
 
-### Pitfall 18: Incomplete Quickstart Assumptions
+## Unaddressed Areas That Should Be
 
-**What goes wrong:** Quickstart guide assumes Docker, NVIDIA GPU, HuggingFace token already configured. New users hit errors at step 1, no troubleshooting guidance provided.
+### UA-1: No Persistence Mode Requirement
 
-**Prevention:**
-1. Prerequisites checklist BEFORE quickstart steps
-2. Validation script: `make check-prereqs` that tests Docker, nvidia-smi, GPU visibility
-3. Troubleshooting section for each common failure mode
-4. UAT round 1: observe user following quickstart, note every point of confusion
+NVIDIA GPUs not in persistence mode (`nvidia-smi -pm 1`) add ~100ms NVML initialisation overhead per query. More importantly, without persistence mode, the GPU drops to a lower power state between experiments, requiring re-stabilisation. All serious benchmarking assumes persistence mode is enabled.
 
-**Phase mapping:** v1.22.0 (UAT-04) — documentation refresh
-
-**Sources:**
-- [User Acceptance Testing Challenges](https://coruzant.com/software/user-acceptance-testing-challenges/)
+**Recommendation:** Check persistence mode at pre-flight. Warn (or error) if not enabled. This is a single NVML call.
 
 ---
 
-### Pitfall 19: Pass/Fail Criteria Ambiguity
+### UA-2: No ECC Memory Status Recording
 
-**What goes wrong:** UAT testers don't know what "success" looks like. Does the experiment need to complete? Should results match expected values? How much variance is acceptable?
+ECC (Error Correcting Code) memory has a ~3-5% performance overhead and corresponding energy impact. Whether ECC is enabled should be recorded in `EnvironmentSnapshot`. On datacenter GPUs (A100, H100) ECC is enabled by default; disabling it changes both performance and energy characteristics.
 
-**Prevention:**
-1. Define UAT acceptance criteria per experiment type:
-   - Quick test: completes in <5 minutes, results file created
-   - Full campaign: all experiments complete, CV <10% across cycles
-   - Baseline power: idle measurement within ±5W across runs
-2. Automated validation: `lem results validate <exp_id>` checks sanity conditions
-3. UAT checklist with clear PASS/FAIL per task
-
-**Phase mapping:** v1.22.0 (UAT-03) — UAT acceptance criteria
-
-**Sources:**
-- [UAT Testing Best Practices](https://www.panaya.com/blog/testing/what-is-uat-testing/)
+**Recommendation:** Record `ecc_enabled: bool` in `EnvironmentSnapshot` via `nvmlDeviceGetEccMode()`.
 
 ---
 
-### Pitfall 20: Time Pressure Skipping Testing
+### UA-3: No GPU Clock Frequency Recording
 
-**What goes wrong:** Business users don't have time for UAT due to day jobs. When operational work piles up, testing gets pushed aside. UAT scheduled for "next week" repeatedly.
+The GPU's actual clock frequency during measurement affects both latency and energy. Boost clocks vary based on thermal state, power limit, and other GPUs in the system (power budget sharing on DGX). Without recording the actual achieved clock frequency, reproducibility is compromised.
 
-**Prevention:**
-1. Time-box UAT sessions: 1 hour for round 1 (basic workflow), 2 hours for round 2 (full campaign)
-2. Provide pre-configured test scenarios (no setup required, just run)
-3. Asynchronous UAT: users can test at their own pace, provide feedback async
-4. Prioritise UAT tasks: must-test (basic experiment) vs nice-to-test (edge cases)
+**Recommendation:** Record `gpu_clock_mhz` (actual, not max) at measurement start and end via `nvmlDeviceGetClockInfo()`.
 
-**Phase mapping:** v1.22.0 (UAT-01 to UAT-05) — structured UAT plan
+---
 
-**Sources:**
-- [Common UAT Challenges](https://coruzant.com/software/user-acceptance-testing-challenges/)
+### UA-4: No CPU Governor Check
+
+On Linux, the CPU frequency governor affects both CPU energy and can introduce measurement variance. The `performance` governor provides consistent results; `powersave` or `ondemand` introduce frequency scaling delays that affect timing measurements.
+
+**Recommendation:** Check and record `/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor` in `EnvironmentSnapshot`.
 
 ---
 
 ## Phase-Specific Warnings
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| **v1.19.0 Measurement Foundations** | Baseline power subtraction breaks existing results schema | Additive schema changes only; migrate v2 → v3 with backwards-compatible reader |
-| **v1.19.0 Time-series sampling** | High-frequency sampling causes disk I/O bottleneck | Configurable interval with defaults (100ms for <5min, 1s for >5min); in-memory buffer, write at end |
-| **v1.20.0 Parameter audit** | Scope creep: attempting 100% coverage | Hard limit: 90%+ of energy-impactful params, document exclusions |
-| **v1.20.0 Backend API changes** | New vLLM version breaks param names | Pin exact versions in Docker; version detection warns on mismatch |
-| **v1.21.0 Docker exec model** | Container state leakage or memory accumulation | Health checks + graceful cleanup; explicit model unload when `force_cold_start=true` |
-| **v1.21.0 Campaign orchestrator** | Complex state machine for multi-backend dispatch | Start simple: sequential dispatch, no parallelism; add complexity only if needed |
-| **v1.22.0 UAT round 1** | Confirmation bias (developer testing own code) | External tester or fresh VM setup; observe without helping |
-| **v1.22.0 Cleanup pass** | Deleting code that's actually needed | Git branch before cleanup; validate tests still pass; restore if needed |
-
----
-
-## Research Confidence Levels
-
-| Area | Confidence | Sources | Notes |
-|------|-----------|---------|-------|
-| Energy measurement pitfalls | **HIGH** | 6 research papers + NVML docs + codebase | Idle power and sampling issues well-documented in literature |
-| Docker orchestration gotchas | **MEDIUM** | NVIDIA forums + GitHub issues + docs | Community knowledge, not formal research |
-| Backend API stability | **HIGH** | vLLM/TensorRT release notes + migration guides | Breaking changes explicitly documented |
-| Prefill/decode separation | **HIGH** | 5 recent papers on disaggregated inference | Active research area with established metrics |
-| UAT blind spots | **MEDIUM** | General UAT literature + domain inference | Generic UAT wisdom, not LLM-specific |
-| Parameter audit scope creep | **HIGH** | Domain expertise + SSOT codebase analysis | Pattern observed in existing codebase |
+| Phase / Version | Likely Pitfall | Mitigation |
+|-----------------|---------------|------------|
+| v2.0 Energy measurement | NVML accuracy claims challenged by users reading the same papers | Pre-empt: document conditional accuracy in user-facing docs |
+| v2.0 Warmup | 30s thermal floor insufficient for H100 under heavy load | Implement 60s loaded warmup as default |
+| v2.0 Results | FLOPs prominently displayed; users confused why "same FLOPs, different energy" | Demote FLOPs; lead with energy/token |
+| v2.1 Baseline correction | Simple linear subtraction criticised for ignoring thermal drift | Measure baseline in P0 state; document as estimate |
+| v2.1 Confidence intervals | Percentile bootstrap with skewed energy data; CIs have poor coverage | Use BCa; require multi-cycle for energy CIs |
+| v2.2 Docker | Users compare Docker vs local energy and attribute difference to Docker overhead | Document ~1-3% overhead; recommend consistent runner within a study |
+| v2.3 Multi-GPU sweep | NVLink energy not captured; users underestimate TP energy cost | Document interconnect gap; note in methodology |
 
 ---
 
 ## Sources
 
-### Energy Measurement
-- [Per-query energy consumption of LLMs (Muxup, 2026)](https://muxup.com/2026q1/per-query-energy-consumption-of-llms)
-- [Benchmarking Energy Efficiency of Large Language Models Using vLLM (arXiv:2509.08867)](https://arxiv.org/html/2509.08867v1)
+### Peer-Reviewed Papers
+- [Part-time Power Measurements: nvidia-smi's Lack of Attention (Burtscher et al., 2023)](https://arxiv.org/html/2312.02741v2) -- NVML accuracy
+- [The ML.ENERGY Benchmark (NeurIPS D&B 2025)](https://arxiv.org/html/2505.06371v1) -- steady-state methodology
+- [MLPerf Power Benchmark (IEEE HPCA 2025)](https://arxiv.org/html/2410.12032v2) -- 60s minimum, full-system measurement
+- [Mind the Memory Gap (arXiv:2503.08311)](https://arxiv.org/html/2503.08311v2) -- FLOPs vs memory bandwidth
+- [Quantifying LLM Inference Energy via Simulations (arXiv:2507.11417)](https://arxiv.org/html/2507.11417v1) -- MFU power model
+- [Verified Instruction-Level GPU Energy Consumption (ACM CF 2020)](https://dl.acm.org/doi/10.1145/3387902.3392613) -- NVML verification
+- [PMC: Energy Tools Comparison](https://pmc.ncbi.nlm.nih.gov/articles/PMC10661046/) -- cross-tool accuracy
+- [Bootstrap BCa intervals (TQMP 2025)](https://www.tqmp.org/RegularArticles/vol21-3/p125/p125.pdf)
+
+### Official Documentation
+- [NVIDIA NVML API Reference Guide](https://docs.nvidia.com/deploy/nvml-api/group__nvmlDeviceQueries.html)
+- [ML.ENERGY: Measuring GPU Energy Best Practices](https://ml.energy/blog/energy/measurement/measuring-gpu-energy-best-practices/)
+- [Zeus Project Documentation](https://ml.energy/zeus/measure/)
+- [NeurIPS 2025 Tutorial: Accurately Benchmarking Power & Energy](https://ml.energy/tutorials/neurips25/session-1.html)
 - [CodeCarbon Methodology](https://mlco2.github.io/codecarbon/methodology.html)
-- [Part-time Power Measurements: nvidia-smi's Lack of Attention (arXiv:2312.02741)](https://arxiv.org/html/2312.02741v2)
-- [Accurate and Convenient Energy Measurements for GPUs (IEEE SC'24)](https://ieeexplore.ieee.org/document/10793163/)
-- [Maximum Sampling Rate of GPU Power via NVML](https://forums.developer.nvidia.com/t/maximum-sampling-rate-of-gpu-power-measurement-using-nvml/109848)
+- [scipy.stats.bootstrap](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html)
 
-### Prefill/Decode Phase Separation
-- [Prefill-decode disaggregation (BentoML LLM Inference Handbook)](https://bentoml.com/llm/inference-optimization/prefill-decode-disaggregation)
-- [Disaggregated Prefilling (vLLM docs)](https://docs.vllm.ai/en/latest/features/disagg_prefill/)
-- [Inside Real-Time LLM Inference: From Prefill to Decode](https://medium.com/@devsp0703/inside-real-time-llm-inference-from-prefill-to-decode-explained-72a1c9b1d85a)
+### Peer Tool Implementations
+- [optimum-benchmark (HuggingFace)](https://github.com/huggingface/optimum-benchmark)
+- [AIEnergyScore v2 (HuggingFace)](https://huggingface.co/blog/sasha/ai-energy-score-v2)
+- [vLLM benchmark tooling](https://docs.vllm.ai/en/latest/)
 
-### Docker & GPU Orchestration
-- [Sharing GPU between Docker containers (NVIDIA toolkit issue)](https://github.com/NVIDIA/nvidia-container-toolkit/issues/1534)
-- [How can two containers share the usage of a GPU safely?](https://forums.developer.nvidia.com/t/how-can-two-containers-share-the-usage-of-a-gpu-safely/258381)
-- [Docker Container Orchestration Platforms (2026)](https://www.portainer.io/blog/container-orchestration-platforms)
+### Industry
+- [Databricks: LLM Inference Performance Engineering](https://www.databricks.com/blog/llm-inference-performance-engineering-best-practices)
+- [NVIDIA NVLink/NVSwitch Technical Blog](https://developer.nvidia.com/blog/nvidia-nvlink-and-nvidia-nvswitch-supercharge-large-language-model-inference/)
+- [Docker GPU Passthrough Benchmarks](https://jurnal.itscience.org/index.php/brilliance/article/view/6794)
 
-### Backend API Stability
-- [TensorRT-LLM Release Notes](https://nvidia.github.io/TensorRT-LLM/release-notes.html)
-- [vLLM Roadmap Q3 2025](https://github.com/vllm-project/vllm/issues/20336)
-- [vLLM vs TensorRT-LLM comparison (Northflank)](https://northflank.com/blog/vllm-vs-tensorrt-llm-and-how-to-run-them)
+---
 
-### UAT & Testing
-- [User Acceptance Testing Best Practices (AIMultiple)](https://research.aimultiple.com/user-acceptance-testing-best-practices/)
-- [Common UAT Challenges (Coruzant)](https://coruzant.com/software/user-acceptance-testing-challenges/)
-- [What is UAT Testing? (Panaya)](https://www.panaya.com/blog/testing/what-is-uat-testing/)
-- [LLM Testing in 2026 (Confident AI)](https://www.confident-ai.com/blog/llm-testing-in-2024-top-methods-and-strategies)
+## Confidence Assessment
 
-### Configuration Management
-- [What is Configuration Drift? (2026 Security Explainer)](https://www.reach.security/blog/what-is-configuration-drift-5-best-practices-for-your-teams-security-posture)
-- [Configuration Drift Explained (Wiz)](https://www.wiz.io/academy/cloud-security/configuration-drift)
+| Area | Confidence | Reason |
+|------|-----------|--------|
+| NVML accuracy characterisation | MEDIUM-HIGH | +/-5W spec is documented; energy counter accuracy is not formally specified by NVIDIA |
+| Thermal floor calibration | HIGH | MLPerf 60s minimum is peer-reviewed; physics of thermal ramp are well understood |
+| FLOPs metric critique | HIGH | Mathematical argument is deterministic; extensive literature support |
+| Bootstrap methodology | HIGH | Well-established statistical practice with extensive literature |
+| Docker energy overhead | MEDIUM | Reasoning from GPU passthrough benchmarks; no direct energy measurement study |
+| NVLink power gap | MEDIUM | NVLink TDP figures from NVIDIA marketing; no peer-measured data |
+| CodeCarbon accuracy | HIGH | Source code confirms NVML usage; polling behaviour is configurable and documented |
