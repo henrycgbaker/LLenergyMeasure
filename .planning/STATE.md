@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-27T20:56:52.250Z"
+last_updated: "2026-02-27T21:11:18.582Z"
 progress:
   total_phases: 27
   completed_phases: 21
-  total_plans: 84
-  completed_plans: 76
+  total_plans: 86
+  completed_plans: 77
 ---
 
 # Project State
@@ -22,10 +22,10 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 12
-Plan: 12-03 complete (Phase 12 complete)
-Status: Phase 13 next
-Last activity: 2026-02-27 — Phase 12 Plan 03 complete: study-mode CLI flags (--cycles/--order/--no-gaps), YAML study detection, print_study_progress, print_study_summary, 530 tests pass
+Phase: 15
+Plan: 15-02 complete (Phase 15 complete)
+Status: Phase 13 next (Documentation — M1 backfill and M2 updates)
+Last activity: 2026-02-27 — Phase 15 Plan 02 complete: ROADMAP tracking drift fixed (Phase 9/11/12 checkboxes), requirements-completed backfilled into 5 Phase 11/12 SUMMARY files
 
 Progress: [██░░░░░░░░] ~10%
 
@@ -53,6 +53,7 @@ Progress: [██░░░░░░░░] ~10%
 | Phase 12-integration P02 | 8 | 2 tasks | 4 files |
 | Phase 12-integration P03 | 3 | 2 tasks | 3 files |
 | Phase 14 P01 | 13 | 2 tasks | 5 files |
+| Phase 15 P02 | 1 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,7 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 - [Phase 14]: _cycle_counters dict in StudyRunner: per-config_hash cycle numbers, reset per run(), incremented per _run_one() call — correct regardless of cycle_order
 - [Phase 14]: _build_entries deduplication: deduplicate study.experiments by config_hash before looping n_cycles — recovers correct n_unique*n_cycles entry count from the pre-cycled list
 - [Phase 14]: mark_study_completed only reached on success path: SIGINT path calls sys.exit(130) before _run() returns, so no guard needed
+- [Phase 15]: STU-07 credited to 11-02 (original cycle ordering implementation) despite Phase 14 fixing the double-apply bug
 
 ### Pending Todos
 
@@ -114,6 +116,6 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 14-01-PLAN.md — multi-cycle execution fixes: 535 tests pass
+Stopped at: Completed 15-02-PLAN.md — ROADMAP tracking drift and SUMMARY traceability fixes
 Resume file: None
-Next action: Phase 13 — Documentation
+Next action: Phase 13 — Documentation (M1 backfill and M2 updates)
