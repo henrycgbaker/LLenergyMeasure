@@ -12,14 +12,16 @@ The only paths NOT covered here are:
 
 from __future__ import annotations
 
+import inspect
 import queue
 import threading
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
-from llenergymeasure.study.runner import StudyRunner, _calculate_timeout
+from llenergymeasure.study.runner import StudyRunner, _calculate_timeout, _run_experiment_worker
 
 # =============================================================================
 # Fixtures
@@ -131,7 +133,7 @@ def test_spawn_context_used(study_config: StudyConfig) -> None:
     ctx = _make_mock_context(proc, pipe_data=fake_result)
 
     with patch("multiprocessing.get_context", return_value=ctx) as mock_get_context:
-        runner = StudyRunner(study_config, manifest)
+        runner = StudyRunner(study_config, manifest, Path("/tmp/test-study"))
         runner.run()
         mock_get_context.assert_called_once_with("spawn")
 
@@ -146,7 +148,7 @@ def test_daemon_false(study_config: StudyConfig) -> None:
     ctx = _make_mock_context(proc, pipe_data=fake_result)
 
     with patch("multiprocessing.get_context", return_value=ctx):
-        runner = StudyRunner(study_config, manifest)
+        runner = StudyRunner(study_config, manifest, Path("/tmp/test-study"))
         runner.run()
 
     # daemon=False must be explicitly passed
@@ -181,7 +183,7 @@ def test_study_runner_success_path(
     ctx = _make_mock_context(proc, pipe_data=fake_result, pipe_has_data=True)
 
     with patch("multiprocessing.get_context", return_value=ctx):
-        runner = StudyRunner(study_config, manifest)
+        runner = StudyRunner(study_config, manifest, Path("/tmp/test-study"))
         results = runner.run()
 
     assert len(results) == 1
@@ -211,7 +213,7 @@ def test_study_runner_subprocess_exception(study_config: StudyConfig) -> None:
     ctx = _make_mock_context(proc, pipe_data=error_payload, pipe_has_data=True)
 
     with patch("multiprocessing.get_context", return_value=ctx):
-        runner = StudyRunner(study_config, manifest)
+        runner = StudyRunner(study_config, manifest, Path("/tmp/test-study"))
         # Must NOT raise — failures are non-fatal
         results = runner.run()
 
@@ -235,7 +237,7 @@ def test_study_runner_timeout(study_config: StudyConfig) -> None:
     ctx = _make_mock_context(proc, pipe_has_data=False)
 
     with patch("multiprocessing.get_context", return_value=ctx):
-        runner = StudyRunner(study_config, manifest)
+        runner = StudyRunner(study_config, manifest, Path("/tmp/test-study"))
         results = runner.run()
 
     assert len(results) == 1
@@ -264,7 +266,7 @@ def test_study_runner_exitcode_nonzero_no_pipe_data(study_config: StudyConfig) -
     ctx = _make_mock_context(proc, pipe_has_data=False)
 
     with patch("multiprocessing.get_context", return_value=ctx):
-        runner = StudyRunner(study_config, manifest)
+        runner = StudyRunner(study_config, manifest, Path("/tmp/test-study"))
         results = runner.run()
 
     assert len(results) == 1
@@ -338,7 +340,7 @@ def test_interleaved_ordering() -> None:
     ctx.Queue.return_value = queue.SimpleQueue()
 
     with patch("multiprocessing.get_context", return_value=ctx):
-        runner = StudyRunner(study, manifest)
+        runner = StudyRunner(study, manifest, Path("/tmp/test-study"))
         runner.run()
 
     assert call_order == ["model-a", "model-b", "model-a", "model-b"], (
@@ -382,7 +384,7 @@ def test_sequential_ordering() -> None:
     ctx.Queue.return_value = queue.SimpleQueue()
 
     with patch("multiprocessing.get_context", return_value=ctx):
-        runner = StudyRunner(study, manifest)
+        runner = StudyRunner(study, manifest, Path("/tmp/test-study"))
         runner.run()
 
     assert call_order == ["model-a", "model-a", "model-b", "model-b"], (
@@ -414,7 +416,7 @@ def test_sigint_first_ctrl_c_marks_manifest_interrupted() -> None:
     study = _make_sigint_study()
     manifest = MagicMock()
 
-    runner = StudyRunner(study, manifest)
+    runner = StudyRunner(study, manifest, Path("/tmp/test-study"))
 
     original_run_one = runner._run_one
 
@@ -471,7 +473,7 @@ def test_sigint_during_gap_exits_immediately() -> None:
         patch("llenergymeasure.study.runner.run_gap", side_effect=fake_run_gap),
         pytest.raises(SystemExit) as exc_info,
     ):
-        runner = StudyRunner(study, manifest)
+        runner = StudyRunner(study, manifest, Path("/tmp/test-study"))
         runner.run()
 
     assert exc_info.value.code == 130
@@ -489,7 +491,7 @@ def test_sigint_second_ctrl_c_kills_immediately() -> None:
     ctx = _make_mock_context(proc, pipe_has_data=False)
 
     with patch("multiprocessing.get_context", return_value=ctx):
-        runner = StudyRunner(study, manifest)
+        runner = StudyRunner(study, manifest, Path("/tmp/test-study"))
         # Directly set _active_process so the handler can reference it
         runner._active_process = proc
 
@@ -505,3 +507,52 @@ def test_sigint_second_ctrl_c_kills_immediately() -> None:
             runner._active_process.kill()
 
     proc.kill.assert_called_once()
+
+
+# =============================================================================
+# Task 2 (Plan 02): Worker wiring tests
+# =============================================================================
+
+
+def test_worker_no_longer_stub() -> None:
+    """_run_experiment_worker no longer raises NotImplementedError."""
+    src = inspect.getsource(_run_experiment_worker)
+    assert "NotImplementedError" not in src, (
+        "_run_experiment_worker still contains NotImplementedError — worker not wired"
+    )
+
+
+def test_worker_calls_get_backend(monkeypatch) -> None:
+    """_run_experiment_worker calls get_backend with the config's backend name.
+
+    Uses a mock conn (not a real Pipe) so MagicMock results don't need pickling.
+    """
+    config = ExperimentConfig(model="test/model", backend="pytorch", n=10)
+
+    backend_calls: list[str] = []
+    sent_results: list = []
+    fake_result = MagicMock()
+
+    def fake_get_backend(name: str):
+        backend_calls.append(name)
+        mock_backend = MagicMock()
+        mock_backend.run.return_value = fake_result
+        return mock_backend
+
+    monkeypatch.setattr("llenergymeasure.core.backends.get_backend", fake_get_backend)
+    monkeypatch.setattr("llenergymeasure.orchestration.preflight.run_preflight", lambda c: None)
+
+    # Use a mock connection to avoid pickling MagicMock through a real Pipe
+    mock_conn = MagicMock()
+    mock_conn.send.side_effect = lambda r: sent_results.append(r)
+
+    progress_q: queue.SimpleQueue = queue.SimpleQueue()
+
+    _run_experiment_worker(config, mock_conn, progress_q)
+
+    assert len(backend_calls) == 1, f"Expected 1 get_backend call, got {backend_calls}"
+    assert backend_calls[0] == "pytorch"
+
+    # Worker should have sent the fake result via conn.send()
+    assert len(sent_results) == 1, "Worker did not call conn.send()"
+    assert sent_results[0] is fake_result

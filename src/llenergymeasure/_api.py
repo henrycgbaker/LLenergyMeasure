@@ -217,7 +217,12 @@ def _run_in_process(
     manifest: Any,
     study_dir: Path,
 ) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
-    """Run a single experiment in-process. Returns (result_files, results, warnings)."""
+    """Run a single experiment in-process. Returns (result_files, results, warnings).
+
+    Errors from run_preflight() and backend.run() propagate unchanged (PreFlightError,
+    BackendError). Only result-saving errors are caught so a save failure does not
+    discard a completed measurement.
+    """
     from llenergymeasure.core.backends import get_backend
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
     from llenergymeasure.orchestration.preflight import run_preflight
@@ -229,22 +234,21 @@ def _run_in_process(
 
     manifest.mark_running(config_hash, cycle)
 
-    result: ExperimentResult | None = None
+    # Pre-flight and backend run — errors propagate naturally (PreFlightError, BackendError)
+    run_preflight(config)
+    backend = get_backend(config.backend)
+    result = backend.run(config)
+
     result_files: list[str] = []
     warnings: list[str] = []
-
     try:
-        run_preflight(config)
-        backend = get_backend(config.backend)
-        result = backend.run(config)
-
         result_path = save_result(result, study_dir)
         rel_path = str(result_path.relative_to(study_dir))
         result_files.append(str(result_path))
         manifest.mark_completed(config_hash, cycle, rel_path)
     except Exception as exc:
-        warnings.append(str(exc))
-        manifest.mark_failed(config_hash, cycle, type(exc).__name__, str(exc))
+        warnings.append(f"Result save failed: {exc}")
+        manifest.mark_completed(config_hash, cycle, result_file="")
 
     return result_files, [result], warnings
 
