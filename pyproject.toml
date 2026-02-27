@@ -38,11 +38,18 @@ zeus = ["zeus>=0.13.1"]
 codecarbon = ["codecarbon>=2.8"]
 webhooks = ["httpx>=0.23"]
 dev = [
+    # Test/lint tooling
     "pytest>=8.0",
     "pytest-cov>=4.0",
     "ruff>=0.8",
     "mypy>=1.0",
     "types-pyyaml>=6.0.12",
+    # All CPU-testable backends (vllm/tensorrt need GPU runtime)
+    "llenergymeasure[pytorch,codecarbon,zeus,webhooks]",
+]
+dev-gpu = [
+    # Everything in dev + GPU-only backends
+    "llenergymeasure[dev,vllm,tensorrt]",
 ]
 
 [project.scripts]
