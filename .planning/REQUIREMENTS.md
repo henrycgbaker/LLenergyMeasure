@@ -30,8 +30,8 @@ Requirements for M3. Each maps to roadmap phases.
 
 ### Measurement Quality
 
-- [ ] **MEAS-01**: NVML GPU memory verification check before each experiment dispatch (both local and Docker paths). Ref: optimum-benchmark relies on process exit for cleanup; AIEnergyScore does explicit cleanup in non-Docker path. Subprocess isolation is more thorough — verification catches driver edge cases.
-- [ ] **MEAS-02**: Warning logged if residual GPU memory exceeds threshold before experiment start
+- [x] **MEAS-01**: NVML GPU memory verification check before each experiment dispatch (both local and Docker paths). Ref: optimum-benchmark relies on process exit for cleanup; AIEnergyScore does explicit cleanup in non-Docker path. Subprocess isolation is more thorough — verification catches driver edge cases.
+- [x] **MEAS-02**: Warning logged if residual GPU memory exceeds threshold before experiment start
 - [ ] **MEAS-03**: `aienergyscore.jsonl` built-in dataset file created (carried from M1)
 - [ ] **MEAS-04**: `peak_memory_mb` measurement semantics confirmed and documented (carried from M1)
 
@@ -102,8 +102,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VLLM-02 | Phase 19 | Pending |
 | VLLM-03 | Phase 19 | Pending |
 | VLLM-04 | Phase 19.1 | Pending |
-| MEAS-01 | Phase 16 | Pending |
-| MEAS-02 | Phase 16 | Pending |
+| MEAS-01 | Phase 16 | Complete |
+| MEAS-02 | Phase 16 | Complete |
 | MEAS-03 | Phase 21 | Pending |
 | MEAS-04 | Phase 21 | Pending |
 | DOCS-01 | Phase 22 | Pending |
