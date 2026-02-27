@@ -74,14 +74,66 @@ What shipped:
 
 ## Current
 
-### M3 — Docker Multi-Backend
+### v1.19.0 — M3: Docker + vLLM
 
-**Goal:** TBD — Docker container lifecycle, GPU passthrough, multi-backend execution.
+**Goal:** Docker container infrastructure with ephemeral per-experiment lifecycle, vLLM backend activation (P0 fixes), Docker pre-flight validation, GPU memory verification, vLLM parameter audit, and full user documentation including Docker setup guide.
+
+**Phases:** 16–23 (9 phases including 19.1 insertion)
+**Requirements:** 24 (DOCK-01–11, VLLM-01–04, MEAS-01–04, DOCS-01–04, TEST-01)
+
+**Key decisions:**
+- One backend per milestone (M3=vLLM, M4=TRT, M5=SGLang) — reduces risk
+- Runner configurable per-backend (ref: AIEnergyScore `USE_DOCKER` pattern)
+- GPU state verification via NVML, not in-process cleanup (ref: optimum-benchmark)
+- Subprocess isolation more thorough than `torch.cuda.empty_cache()` — process exit destroys CUDA context
 
 ---
 
 ## Planned
 
-### M4 — Advanced Features
+### v1.20.0 — M4: TensorRT-LLM
 
-See `.product/ROADMAP.md` for full milestone definitions.
+**Goal:** TensorRT-LLM backend activation via Docker, TRT engine compilation cache, TRT parameter audit, official TRT Docker image.
+
+**Scope (from .product/REQUIREMENTS.md):**
+- CM-03: TensorRT-LLM inference backend (Docker)
+- INF-15: TRT engine cache at `~/.llenergymeasure/trt-engines/{hash}/`
+- INF-16: Official TRT images (GHCR)
+- TRT parameter audit (like Phase 4.1 PyTorch and Phase 19.1 vLLM)
+
+**Key decisions:**
+- Reuses Docker infrastructure built in M3
+- TRT engine cache key includes `tensorrt_llm.__version__` for auto-invalidation on upgrade
+- `llem compile-engines` pre-compilation command deferred (implicit caching only)
+
+**Entry criteria:** M3 complete (Docker runner + vLLM working)
+
+---
+
+### v1.21.0 — M5: SGLang
+
+**Goal:** SGLang backend activation via Docker. RadixAttention creates genuinely different energy profiles vs PagedAttention (vLLM) — high research differentiation.
+
+**Scope:**
+- SGLang inference backend activated via Docker
+- Official SGLang Docker image (GHCR)
+- SGLang parameter audit (RadixAttention-specific params)
+- Cross-backend study: PyTorch vs vLLM vs SGLang energy comparison
+
+**Key decisions:**
+- Accelerated from v3.x to v2.2 candidate based on research (29% H100 throughput advantage, PyTorch ecosystem member, 29K+ stars)
+- RadixAttention (automatic KV cache reuse) creates meaningfully different energy profiles vs PagedAttention
+- Likely CUDA conflicts with TRT-LLM (same as vLLM + TRT issue) — Docker isolation handles it
+
+**Entry criteria:** M4 complete (TRT-LLM working)
+
+---
+
+### Future — Advanced Features
+
+**Goal:** Traffic simulation, streaming latency, study resume, webhooks.
+
+**Scope:** STU-10, STU-11, and advanced measurement features.
+**Version:** TBD (after M5). See `.product/ROADMAP.md` for full definitions.
+
+**v2.0.0** reserved for full multi-backend completion (after all backend milestones ship).

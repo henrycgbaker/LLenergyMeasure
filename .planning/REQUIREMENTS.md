@@ -26,6 +26,7 @@ Requirements for M3. Each maps to roadmap phases.
 - [ ] **VLLM-01**: vLLM inference backend activated and producing valid ExperimentResult via Docker
 - [ ] **VLLM-02**: P0 fix: vLLM streaming broken (CM-07 from .product/REQUIREMENTS.md)
 - [ ] **VLLM-03**: P0 fix: vLLM `--shm-size 8g` passed to container (CM-09 from .product/REQUIREMENTS.md)
+- [ ] **VLLM-04**: VLLMConfig fields audited against upstream vLLM API — all energy-relevant params exposed (enforce_eager, block_size, kv_cache_dtype, swap_space, dtype, speculative_model, etc.). Ref: Phase 4.1 PyTorch parameter audit pattern.
 
 ### Measurement Quality
 
@@ -86,35 +87,36 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DOCK-01 | — | Pending |
-| DOCK-02 | — | Pending |
-| DOCK-03 | — | Pending |
-| DOCK-04 | — | Pending |
-| DOCK-05 | — | Pending |
-| DOCK-06 | — | Pending |
-| DOCK-07 | — | Pending |
-| DOCK-08 | — | Pending |
-| DOCK-09 | — | Pending |
-| DOCK-10 | — | Pending |
-| DOCK-11 | — | Pending |
-| VLLM-01 | — | Pending |
-| VLLM-02 | — | Pending |
-| VLLM-03 | — | Pending |
-| MEAS-01 | — | Pending |
-| MEAS-02 | — | Pending |
-| MEAS-03 | — | Pending |
-| MEAS-04 | — | Pending |
-| DOCS-01 | — | Pending |
-| DOCS-02 | — | Pending |
-| DOCS-03 | — | Pending |
-| DOCS-04 | — | Pending |
-| TEST-01 | — | Pending |
+| DOCK-01 | Phase 17 | Pending |
+| DOCK-02 | Phase 17 | Pending |
+| DOCK-03 | Phase 17 | Pending |
+| DOCK-04 | Phase 17 | Pending |
+| DOCK-05 | Phase 17 | Pending |
+| DOCK-06 | Phase 17 | Pending |
+| DOCK-07 | Phase 18 | Pending |
+| DOCK-08 | Phase 18 | Pending |
+| DOCK-09 | Phase 18 | Pending |
+| DOCK-10 | Phase 20 | Pending |
+| DOCK-11 | Phase 17 | Pending |
+| VLLM-01 | Phase 19 | Pending |
+| VLLM-02 | Phase 19 | Pending |
+| VLLM-03 | Phase 19 | Pending |
+| VLLM-04 | Phase 19.1 | Pending |
+| MEAS-01 | Phase 16 | Pending |
+| MEAS-02 | Phase 16 | Pending |
+| MEAS-03 | Phase 21 | Pending |
+| MEAS-04 | Phase 21 | Pending |
+| DOCS-01 | Phase 22 | Pending |
+| DOCS-02 | Phase 22 | Pending |
+| DOCS-03 | Phase 22 | Pending |
+| DOCS-04 | Phase 22 | Pending |
+| TEST-01 | Phase 23 | Pending |
 
 **Coverage:**
-- v1.19.0 requirements: 23 total
-- Mapped to phases: 0
-- Unmapped: 23 (roadmap not yet created)
+- v1.19.0 requirements: 24 total
+- Mapped to phases: 24
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-27*
-*Last updated: 2026-02-27 after initial definition*
+*Last updated: 2026-02-27 — roadmap created, traceability complete*
