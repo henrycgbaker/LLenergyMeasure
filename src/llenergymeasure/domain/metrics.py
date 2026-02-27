@@ -180,7 +180,7 @@ class FlopsResult(BaseModel):
     """
 
     value: float = Field(..., description="Estimated FLOPs count")
-    method: Literal["calflops", "architecture", "parameter_estimate"] = Field(
+    method: Literal["calflops", "architecture", "parameter_estimate", "palm_formula"] = Field(
         ..., description="Estimation method used"
     )
     confidence: Literal["high", "medium", "low"] = Field(
@@ -264,6 +264,17 @@ class EnergyMetrics(BaseModel):
 # =============================================================================
 # Schema v3: Energy Breakdown, Thermal Throttle, Warmup Result
 # =============================================================================
+
+
+class MultiGPUMetrics(BaseModel):
+    """Per-device energy breakdown for multi-GPU experiments."""
+
+    num_gpus: int = Field(..., description="Number of GPUs used")
+    energy_per_gpu_j: list[float] = Field(..., description="Per-device energy in joules")
+    energy_total_j: float = Field(..., description="Sum of energy across all devices")
+    energy_per_output_token_j: float = Field(
+        ..., description="Primary cross-configuration efficiency metric"
+    )
 
 
 class EnergyBreakdown(BaseModel):
@@ -356,6 +367,11 @@ class WarmupResult(BaseModel):
     latencies_ms: list[float] = Field(
         default_factory=list,
         description="Warmup latencies in ms (for debugging)",
+    )
+    thermal_floor_wait_s: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Seconds spent in thermal floor wait after warmup. Set by caller, not by warmup_until_converged().",
     )
 
 

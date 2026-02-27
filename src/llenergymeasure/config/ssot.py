@@ -30,8 +30,10 @@ DECODING_SUPPORT: dict[str, list[str]] = {
 # Backends that support the full DecoderConfig temperature/top_k/top_p fields.
 # All current backends support these — this dict exists to make future
 # backend additions explicit rather than implicit.
+# min_p and min_new_tokens: pytorch and vLLM support them (identical semantics).
+# vLLM/TensorRT support for min_p/min_new_tokens confirmed in M1 audit; TensorRT deferred to M3.
 DECODER_PARAM_SUPPORT: dict[str, list[str]] = {
-    "pytorch": ["temperature", "top_k", "top_p", "repetition_penalty"],
+    "pytorch": ["temperature", "top_k", "top_p", "repetition_penalty", "min_p", "min_new_tokens"],
     "vllm": ["temperature", "top_k", "top_p", "repetition_penalty"],
     "tensorrt": ["temperature", "top_k", "top_p"],  # TRT-LLM: repetition_penalty support varies
 }

@@ -1,18 +1,23 @@
 """Unit tests for the llenergymeasure public API surface.
 
-Tests cover all Phase 3 success criteria:
+Tests cover Phase 3 and Phase 4 (Plan 03) success criteria:
 1. Public imports resolve
 2. run_experiment returns ExperimentResult (no union, no None)
 3. No disk writes when output_dir not set
 4. Internal names raise AttributeError
-5. __version__ == "1.17.0"
+5. __version__ matches pyproject.toml
 6. run_study raises NotImplementedError with M2 message
-7. All test cases pass without GPU hardware (uses monkeypatching)
+7. _run() calls run_preflight once per experiment config
+8. _run() calls get_backend with correct backend name
+9. _run() returns StudyResult with experiment results
+10. _run() propagates PreFlightError and BackendError unchanged
+11. run_experiment end-to-end with mocked backend returns ExperimentResult
+12. All test cases pass without GPU hardware (uses monkeypatching)
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -27,6 +32,11 @@ from llenergymeasure import (
     run_study,
 )
 from llenergymeasure.domain.experiment import AggregationMetadata
+from llenergymeasure.exceptions import BackendError, PreFlightError
+
+_EPOCH = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+_EPOCH_END = datetime(2026, 1, 1, 0, 0, 5, tzinfo=timezone.utc)
+
 
 # =============================================================================
 # Test helper
@@ -37,6 +47,8 @@ def _make_experiment_result(**overrides) -> ExperimentResult:
     """Build a minimal valid ExperimentResult for testing."""
     defaults = {
         "experiment_id": "test-001",
+        "measurement_config_hash": "abc123def4567890",
+        "measurement_methodology": "total",
         "aggregation": AggregationMetadata(num_processes=1),
         "total_tokens": 1000,
         "total_energy_j": 10.0,
@@ -44,8 +56,8 @@ def _make_experiment_result(**overrides) -> ExperimentResult:
         "avg_tokens_per_second": 200.0,
         "avg_energy_per_token_j": 0.01,
         "total_flops": 1e9,
-        "start_time": datetime(2026, 1, 1),
-        "end_time": datetime(2026, 1, 1, 0, 1),
+        "start_time": _EPOCH,
+        "end_time": _EPOCH_END,
     }
     defaults.update(overrides)
     return ExperimentResult(**defaults)
@@ -69,7 +81,7 @@ def test_public_imports_resolve():
     assert StudyConfig is not None
     assert ExperimentResult is not None
     assert StudyResult is not None
-    assert __version__ == "1.17.0"
+    assert __version__ == llenergymeasure.__version__
 
 
 # =============================================================================
@@ -270,3 +282,178 @@ def test_run_experiment_kwargs_backend(monkeypatch):
     run_experiment(model="gpt2", backend="pytorch")
 
     assert captured_study["value"].experiments[0].backend == "pytorch"
+
+
+# =============================================================================
+# Phase 4 Plan 03: _run() wiring tests
+# =============================================================================
+
+
+class _MockBackend:
+    """Minimal mock InferenceBackend for _run() tests."""
+
+    def __init__(self, result: ExperimentResult) -> None:
+        self._result = result
+        self.run_calls: list[ExperimentConfig] = []
+
+    @property
+    def name(self) -> str:
+        return "pytorch"
+
+    def run(self, config: ExperimentConfig) -> ExperimentResult:
+        self.run_calls.append(config)
+        return self._result
+
+
+def test_run_calls_preflight_once_per_config(monkeypatch):
+    """_run() calls run_preflight once for each experiment config in the study."""
+    import llenergymeasure._api as api_module
+
+    preflight_calls: list = []
+
+    def mock_preflight(config):
+        preflight_calls.append(config)
+
+    mock_result = _make_experiment_result()
+    mock_backend = _MockBackend(mock_result)
+
+    monkeypatch.setattr(
+        "llenergymeasure.orchestration.preflight.run_preflight",
+        mock_preflight,
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.core.backends.get_backend",
+        lambda name: mock_backend,
+    )
+
+    # Patch the deferred imports inside _run by patching at the module level
+    import llenergymeasure.core.backends as backends_module
+    import llenergymeasure.orchestration.preflight as pf_module
+
+    monkeypatch.setattr(pf_module, "run_preflight", mock_preflight)
+    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+
+    config1 = ExperimentConfig(model="gpt2")
+    config2 = ExperimentConfig(model="bert-base-uncased")
+    study = StudyConfig(experiments=[config1, config2])
+
+    _study_result = api_module._run(study)
+
+    assert len(preflight_calls) == 2, f"Expected 2 preflight calls, got {len(preflight_calls)}"
+    assert preflight_calls[0].model == "gpt2"
+    assert preflight_calls[1].model == "bert-base-uncased"
+
+
+def test_run_calls_get_backend_with_correct_name(monkeypatch):
+    """_run() calls get_backend with the experiment's backend name."""
+    import llenergymeasure._api as api_module
+    import llenergymeasure.core.backends as backends_module
+    import llenergymeasure.orchestration.preflight as pf_module
+
+    mock_result = _make_experiment_result()
+    mock_backend = _MockBackend(mock_result)
+
+    backend_calls: list[str] = []
+
+    def mock_get_backend(name: str):
+        backend_calls.append(name)
+        return mock_backend
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(backends_module, "get_backend", mock_get_backend)
+
+    config = ExperimentConfig(model="gpt2", backend="pytorch")
+    study = StudyConfig(experiments=[config])
+
+    api_module._run(study)
+
+    assert len(backend_calls) == 1
+    assert backend_calls[0] == "pytorch"
+
+
+def test_run_returns_study_result(monkeypatch):
+    """_run() returns a StudyResult containing the experiment results."""
+    import llenergymeasure._api as api_module
+    import llenergymeasure.core.backends as backends_module
+    import llenergymeasure.orchestration.preflight as pf_module
+
+    mock_result = _make_experiment_result(experiment_id="wired-001")
+    mock_backend = _MockBackend(mock_result)
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+
+    config = ExperimentConfig(model="gpt2")
+    study = StudyConfig(experiments=[config], name="my-study")
+
+    study_result = api_module._run(study)
+
+    assert isinstance(study_result, StudyResult)
+    assert study_result.name == "my-study"
+    assert len(study_result.experiments) == 1
+    assert study_result.experiments[0].experiment_id == "wired-001"
+
+
+def test_run_propagates_preflight_error(monkeypatch):
+    """_run() propagates PreFlightError without catching it."""
+    import llenergymeasure._api as api_module
+    import llenergymeasure.core.backends as backends_module
+    import llenergymeasure.orchestration.preflight as pf_module
+
+    def failing_preflight(config):
+        raise PreFlightError(["CUDA not available"])
+
+    monkeypatch.setattr(pf_module, "run_preflight", failing_preflight)
+    monkeypatch.setattr(
+        backends_module, "get_backend", lambda name: _MockBackend(_make_experiment_result())
+    )
+
+    config = ExperimentConfig(model="gpt2")
+    study = StudyConfig(experiments=[config])
+
+    with pytest.raises(PreFlightError):
+        api_module._run(study)
+
+
+def test_run_propagates_backend_error(monkeypatch):
+    """_run() propagates BackendError without catching it."""
+    import llenergymeasure._api as api_module
+    import llenergymeasure.core.backends as backends_module
+    import llenergymeasure.orchestration.preflight as pf_module
+
+    class _FailingBackend:
+        @property
+        def name(self) -> str:
+            return "pytorch"
+
+        def run(self, config: ExperimentConfig) -> ExperimentResult:
+            raise BackendError("GPU out of memory")
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(backends_module, "get_backend", lambda name: _FailingBackend())
+
+    config = ExperimentConfig(model="gpt2")
+    study = StudyConfig(experiments=[config])
+
+    with pytest.raises(BackendError, match="GPU out of memory"):
+        api_module._run(study)
+
+
+def test_run_experiment_end_to_end_mocked(monkeypatch):
+    """run_experiment() flows through the real _run() pipeline (mocked backend) and returns ExperimentResult."""
+    import llenergymeasure.core.backends as backends_module
+    import llenergymeasure.orchestration.preflight as pf_module
+
+    expected_result = _make_experiment_result(experiment_id="e2e-test")
+    mock_backend = _MockBackend(expected_result)
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+
+    result = run_experiment(model="gpt2")
+
+    assert isinstance(result, ExperimentResult)
+    assert not isinstance(result, StudyResult)
+    assert result.experiment_id == "e2e-test"
+    assert len(mock_backend.run_calls) == 1
+    assert mock_backend.run_calls[0].model == "gpt2"

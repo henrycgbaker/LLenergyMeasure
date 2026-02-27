@@ -62,13 +62,19 @@ def show_aggregated_result(result: AggregatedResult) -> None:
     Args:
         result: The aggregated result to display.
     """
-    from llenergymeasure.results.aggregation import calculate_efficiency_metrics
-
     console.print(f"\n[bold cyan]Experiment: {result.experiment_id}[/bold cyan]")
     console.print(f"Schema version: {result.schema_version}")
     console.print(f"Processes: {result.aggregation.num_processes}")
 
-    metrics = calculate_efficiency_metrics(result)
+    tokens_per_second = (
+        result.total_tokens / result.duration_sec if result.duration_sec > 0 else 0.0
+    )
+    tokens_per_joule = (
+        result.total_tokens / result.total_energy_j if result.total_energy_j > 0 else 0.0
+    )
+    joules_per_token = (
+        result.total_energy_j / result.total_tokens if result.total_tokens > 0 else 0.0
+    )
 
     # Main metrics table
     table = Table(title="Aggregated Metrics")
@@ -78,9 +84,9 @@ def show_aggregated_result(result: AggregatedResult) -> None:
     table.add_row("Total Tokens", f"{result.total_tokens:,}")
     table.add_row("Total Energy", f"{result.total_energy_j:.2f} J")
     table.add_row("Duration", f"{result.duration_sec:.2f} s")
-    table.add_row("Throughput", f"{metrics['tokens_per_second']:.2f} tok/s")
-    table.add_row("Efficiency", f"{metrics['tokens_per_joule']:.2f} tok/J")
-    table.add_row("Energy/Token", f"{metrics['joules_per_token']:.4f} J/tok")
+    table.add_row("Throughput", f"{tokens_per_second:.2f} tok/s")
+    table.add_row("Efficiency", f"{tokens_per_joule:.2f} tok/J")
+    table.add_row("Energy/Token", f"{joules_per_token:.4f} J/tok")
     table.add_row("Total FLOPs", f"{result.total_flops:.2e}")
 
     console.print(table)

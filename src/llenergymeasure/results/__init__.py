@@ -2,11 +2,9 @@
 
 from llenergymeasure.results.aggregation import (
     aggregate_results,
-    calculate_efficiency_metrics,
 )
 from llenergymeasure.results.exporters import (
     ResultsExporter,
-    export_aggregated_to_csv,
     export_raw_to_csv,
     flatten_model,
 )
@@ -22,8 +20,6 @@ __all__ = [
     "ResultsExporter",
     "aggregate_results",
     "aggregate_timeseries",
-    "calculate_efficiency_metrics",
-    "export_aggregated_to_csv",
     "export_raw_to_csv",
     "export_timeseries",
     "flatten_model",

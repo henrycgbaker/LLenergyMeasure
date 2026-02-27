@@ -1,476 +1,621 @@
-# Architecture Audit: LLenergyMeasure v2.0 Decisions vs Peer Evidence
+# Architecture Research
 
-**Audited:** 2026-02-25
-**Scope:** Decisions A through J in `.product/decisions/architecture.md`, plus config-architecture.md, experiment-study-architecture.md, experiment-isolation.md, error-handling.md, backward-compatibility.md
-**Method:** Fresh research against peer tools (optimum-benchmark, lm-eval-harness, Zeus, MLflow, vLLM, Hydra/OmegaConf), cross-referenced with existing `.product/research/` evidence
-
----
-
-## Audit Summary
-
-| Decision | Verdict | Confidence | One-Liner |
-|----------|---------|------------|-----------|
-| **A. Library-first** | ALIGNED | HIGH | Industry standard; lm-eval, optimum-benchmark, Zeus all do this |
-| **B. Module structure** | ALIGNED | HIGH | Single package with internal modules is universal |
-| **C. Three-layer config** | QUESTIONABLE | MEDIUM | Over-engineered vs peers; no peer tool uses three explicit layers |
-| **D. Field placement** | OVER-ENGINEERED | MEDIUM | The "three questions" framework adds complexity without peer precedent |
-| **E. Runner resolution** | ALIGNED | MEDIUM | Keeping runner out of experiment YAML is correct; precedence chain is fine |
-| **F. Infrastructure metadata** | ALIGNED | HIGH | Auto-detect + store is exactly what Zeus and CodeCarbon do |
-| **G. Energy vs CO2** | ALIGNED | HIGH | Independent concerns; matches Zeus/CodeCarbon split exactly |
-| **H. Library API surface** | QUESTIONABLE | HIGH | Union return type from `run()` contradicts peer practice and typing guidance |
-| **I. Subprocess isolation** | ALIGNED | HIGH | `multiprocessing.Process` per experiment matches optimum-benchmark exactly |
-| **J. Study ships at v2.0** | ALIGNED | MEDIUM | Reasonable scope; sweeps are the differentiator |
-
-**Config architecture (C1/C2):** ALIGNED for composition; ALIGNED for dotted sweep notation
-**Experiment-study architecture (Option C):** QUESTIONABLE on unified `run()` return type
-**Error handling:** ALIGNED; exception hierarchy is standard
-**Backward compatibility:** ALIGNED; `__init__.py` exports is industry standard
+**Domain:** Multi-experiment study/sweep execution integration for an LLM inference efficiency measurement tool
+**Researched:** 2026-02-27
+**Confidence:** HIGH (subprocess and IPC patterns verified against PyTorch official docs and optimum-benchmark source; manifest and display patterns verified from existing confirmed design docs)
 
 ---
 
-## Decision-by-Decision Analysis
+## Scope
 
-### A. Architecture Pattern: Library-First at v2.0
+This file answers: **How does study/sweep execution integrate with the existing single-experiment architecture?**
 
-**Verdict: ALIGNED**
-**Confidence: HIGH**
+Specifically:
+- Where does `StudyRunner` live and how does it dispatch to `ExperimentOrchestrator`?
+- How do subprocess-spawned experiments access the orchestrator?
+- How do results flow back from child to parent process?
+- How does `ManifestWriter` checkpoint state incrementally?
+- How does the CLI display multi-experiment progress?
 
-Every credible peer tool in this space is library-first:
-
-| Tool | Library API | CLI relationship |
-|------|------------|-----------------|
-| lm-eval-harness | `simple_evaluate()`, `evaluate()` | CLI wraps these via `__main__.py` |
-| optimum-benchmark | `Benchmark.launch(BenchmarkConfig)` | CLI is Hydra `@hydra.main` wrapping `Benchmark.launch()` |
-| Zeus | `ZeusMonitor()`, `begin_window()`/`end_window()` | CLI (`zeus monitor`) wraps the library |
-| MLflow | `mlflow.log_metric()`, `MlflowClient()` | CLI wraps the client |
-| CodeCarbon | `EmissionsTracker()`, `tracker.stop()` | No separate CLI (pure library) |
-
-lm-eval exports exactly three items from `__init__.py`: `evaluate`, `simple_evaluate`, `__version__`. This is the narrowest public surface in the ecosystem and matches the llem decision precisely.
-
-optimum-benchmark's `Benchmark.launch(config)` is a static method that spawns a `multiprocessing.Process` internally. The API is: construct config objects, call one function, get a report back. This is the exact same pattern as llem's `run()`.
-
-**No challenge to this decision.** Library-first is unambiguously correct.
-
-**Sources:** [lm-eval-harness GitHub](https://github.com/EleutherAI/lm-evaluation-harness), [optimum-benchmark GitHub](https://github.com/huggingface/optimum-benchmark), [Zeus GitHub](https://github.com/ml-energy/zeus)
+All architectural decisions are already confirmed in `.product/designs/`. This file documents the integration pattern, component boundaries, data flow, and build order for the milestone implementation. Note: the existing ARCHITECTURE.md was an earlier decision audit — this file supersedes it with integration-focused architecture for study/sweep.
 
 ---
 
-### B. Module Structure: Single Package
-
-**Verdict: ALIGNED**
-**Confidence: HIGH**
-
-All peer tools use a single package:
-
-- `lm_eval/` with `evaluator.py`, `models/`, `tasks/`, `api/`
-- `optimum_benchmark/` with `benchmark/`, `backends/`, `launchers/`, `scenarios/`, `trackers/`
-- `zeus/` with `monitor/`, `optimizer/`, `device/`, `utils/`
-
-No peer tool splits CLI, study/sweep, or backend modules into separate installable packages. The `src/llenergymeasure/` layout with `cli/`, `study/`, `core/`, `config/` inside is standard.
-
-optimum-benchmark's structure is the closest analogue:
+## System Overview
 
 ```
-optimum_benchmark/
-    backends/        # inference backends (PyTorch, vLLM, TRT-LLM, etc.)
-    benchmark/       # BenchmarkConfig, Benchmark.launch()
-    launchers/       # process, inline, torchrun
-    scenarios/       # inference, training
-    trackers/        # energy, memory, latency
-    cli.py           # Hydra CLI entry point
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  CLI Layer   cli/commands/run.py                                              │
+│                                                                               │
+│   llem run study.yaml                                                         │
+│        │                                                                      │
+│        ├── detect: study (has sweep: or experiments: list)                   │
+│        ├── load_study_config()  -> StudyConfig                               │
+│        ├── run pre-flight (study-level: backends, energy, models)            │
+│        └── call run_study(StudyConfig)  -> StudyResult                      │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼────────────────────────────────────────────┐
+│  Public API   _api.py                                                         │
+│                                                                               │
+│   run_study(StudyConfig)                                                      │
+│        └── _run(StudyConfig)  -> StudyResult      <- internal always          │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼────────────────────────────────────────────┐
+│  Study Layer   study/                                                         │
+│                                                                               │
+│   ┌─────────────────────┐     ┌──────────────────────┐                       │
+│   │    StudyRunner      │────>│    grid.expand()     │  sweep -> list[Cfg]   │
+│   │   (runner.py)       │     └──────────────────────┘                       │
+│   │                     │     ┌──────────────────────┐                       │
+│   │ for cfg in configs: │────>│   ManifestWriter     │  checkpoint per step  │
+│   │   _run_one(cfg)     │     │   (manifest.py)      │                       │
+│   └─────────┬───────────┘     └──────────────────────┘                       │
+│             │                                                                  │
+│             │  mp_ctx.Process(target=_run_experiment_worker, ...)             │
+│             │                                                                  │
+│  ┌──────────▼──────────────────────────────────────┐                         │
+│  │  Child Process  (isolated, spawn start method)  │                         │
+│  │                                                  │                         │
+│  │  _run_experiment_worker(config, conn, queue)     │                         │
+│  │       └── ExperimentOrchestrator(config).run()  │                         │
+│  │             └── ExperimentResult                │                         │
+│  │                      │                          │                         │
+│  │               conn.send(result)                 │                         │
+│  └──────────────────────────────────────────────── ┘                         │
+│                         │                                                      │
+│   Parent reads Pipe ────> ExperimentResult | StudyFailed                     │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼────────────────────────────────────────────┐
+│  Existing Layers  (unmodified by this milestone)                             │
+│                                                                               │
+│  orchestration/orchestrator.py  <- ExperimentOrchestrator (single expt)      │
+│  core/backends/                 <- PyTorchBackend (+ future vllm, tensorrt)  │
+│  core/energy/                   <- NVMLBackend / ZeusBackend / CodeCarbon    │
+│  domain/results.py              <- ExperimentResult, StudyResult, StudyFailed│
+│  results/persistence.py         <- to_json(), to_parquet(), from_json()      │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-This maps well to llem's planned structure. The key architectural parallel: backends, launchers (isolation), scenarios (what to measure), and trackers (how to measure) are all separate modules within one package.
+---
 
-**No challenge to this decision.**
+## Component Responsibilities
+
+| Component | Responsibility | Module | New or Modified |
+|-----------|---------------|--------|-----------------|
+| `StudyRunner` | Orchestrate sequential subprocess execution; coordinate manifest, gaps, cycles | `study/runner.py` | **NEW** |
+| `grid.expand()` | Resolve sweep grammar -> `list[ExperimentConfig]` with n_cycles and cycle_order applied | `study/grid.py` | **NEW** |
+| `ManifestWriter` | Write/update `study_manifest.json` at each state transition | `study/manifest.py` | **NEW** |
+| `_run_experiment_worker()` | Module-level function; runs in child process; calls `ExperimentOrchestrator.run()` | `study/runner.py` | **NEW** |
+| `_collect_result()` | Interprets process exit state; reads result from Pipe | `study/runner.py` | **NEW** |
+| `_consume_progress_events()` | Daemon thread in parent; drains Queue; calls `display.update()` | `study/runner.py` | **NEW** |
+| `run_study()` | Public API wrapper; thin; delegates to `_run()` | `_api.py` | **MODIFIED** (add) |
+| `_run()` | Internal dispatcher; always takes `StudyConfig`; single-experiment is degenerate study | `_api.py` | **MODIFIED** (add) |
+| CLI `run.py` | Detect study vs experiment from YAML; route to `run_study()` or `run_experiment()` | `cli/commands/run.py` | **MODIFIED** |
+| `display.py` | Add study-level display: outer progress bar, per-experiment status lines, thermal gap countdown | `cli/display.py` | **MODIFIED** |
+| `ExperimentOrchestrator` | Unchanged — still handles single experiment lifecycle in child process | `orchestration/orchestrator.py` | **UNMODIFIED** |
+| `StudyResult` | `add(result_or_error)` method needs implementing for accumulation | `domain/results.py` | **MODIFIED** (minor) |
 
 ---
 
-### C. Three-Layer Config Model
+## Recommended Module Structure
 
-**Verdict: QUESTIONABLE**
-**Confidence: MEDIUM**
+The study module is already defined in the architecture design. This confirms the new files:
 
-This is the most over-engineered decision relative to peer practice. No peer tool uses an explicit "three-layer" config model with named layers.
+```
+src/llenergymeasure/
+  study/
+    __init__.py
+    runner.py           <- StudyRunner, _run_experiment_worker, _collect_result,
+                        <-   _consume_progress_events, _calculate_timeout, _send_result
+    grid.py             <- expand_grid(StudyConfig) -> list[ExperimentConfig]
+                        <-   handles n_cycles, cycle_order (sequential/interleaved/shuffled)
+    manifest.py         <- ManifestWriter, StudyManifest, ExperimentManifestEntry
+```
 
-**What peers actually do:**
-
-| Tool | Config layers | Notes |
-|------|-------------|-------|
-| **optimum-benchmark** | 1 layer: `BenchmarkConfig` (launcher + scenario + backend composed) | Environment auto-captured separately |
-| **lm-eval** | 1 layer: `simple_evaluate()` kwargs or YAML task config | No user config file; model_args is a flat string |
-| **Zeus** | 0 layers: constructor args to `ZeusMonitor(gpu_indices=[0,1])` | No config file at all |
-| **vLLM bench sweep** | 2 JSON files: serve_params.json + bench_params.json | No user config; environment is implicit |
-| **Hydra** | N layers: config groups composed at runtime | Most complex; also the most complained-about |
-| **MLflow** | 1 config + tracking server | Environment/artifact store config is server-side |
-
-**The core issue:** Layer 1 (user config), Layer 2 (experiment YAML), and Layer 3 (infrastructure context) are presented as a fundamental architectural concept requiring a "three questions" decision framework. In practice:
-
-- **Layer 1** is just a user preferences file (`~/.config/...`). Every tool that has user preferences has this. It does not need a special "layer" name.
-- **Layer 2** is the experiment definition. This IS the config. Calling it "Layer 2" adds jargon without adding clarity.
-- **Layer 3** is auto-captured runtime metadata stored with results. This is not config at all -- it is output. Zeus stores GPU info with measurements. CodeCarbon stores hardware info with emissions. Neither calls this a "config layer".
-
-**The valid separation underneath the jargon is sound:**
-1. Machine-local preferences (results_dir, runner mappings) -- user config file
-2. Experiment definition (model, backend, params) -- experiment YAML, shareable
-3. Runtime environment snapshot (GPU model, CUDA version) -- auto-captured, stored with results
-
-This is a two-config-source + auto-capture pattern, not a three-layer config model. The distinction matters because "three layers" implies three things the user must understand and configure. In reality, Layer 3 is invisible to the user (auto-captured) and Layer 1 has sensible defaults that most users never touch.
-
-**Recommendation:** Keep the separation (it is correct). Drop the "three-layer" naming and framework. Call them what they are: user config, experiment config, and environment snapshot. The "three questions" in Decision D add cognitive overhead for implementors without preventing any real mistakes.
-
-**Risk if unchanged:** Implementors treat Layer 3 as something that needs config-level validation, precedence resolution, and user-facing documentation. It does not. It is auto-captured metadata.
+Three new files. All other changes are modifications to existing modules.
 
 ---
 
-### D. Field Placement (Three Questions Framework)
+## Architectural Patterns
 
-**Verdict: OVER-ENGINEERED**
-**Confidence: MEDIUM**
+### Pattern 1: Subprocess-per-Experiment with `spawn` Start Method
 
-The "three questions" framework ("Does this vary between machines?", "Does this define what I'm measuring?", "Does this describe the physical environment?") is a decision heuristic that is more complex than needed. In practice, the field placement table in architecture.md already resolves every field -- the questions are a retroactive justification, not a discovery tool.
+**What:** Each experiment in a study runs in a fresh `multiprocessing.Process`. The parent `StudyRunner` blocks at `p.join(timeout=...)` while the child runs. Results return via `multiprocessing.Pipe`.
 
-**What peers do instead:** Fields belong in the experiment config if the user specifies them. Everything else is either auto-detected or has a sensible default. There is no formal placement framework.
+**Why:** PyTorch's CUDA allocator does not fully release GPU memory across `del model; torch.cuda.empty_cache()`. Memory fragmentation and CUDA context state persist within a process. A fresh process with `spawn` start method guarantees a clean CUDA context. This is a correctness requirement, not an optimisation choice.
 
-optimum-benchmark example: `BenchmarkConfig` takes `launcher`, `scenario`, and `backend` configs. The `environment` field is auto-populated from `get_system_info()` at construction time. No placement decision framework needed.
-
-**The field placement table itself is useful** (it documents where every field lives). The "three questions" heuristic adds no value on top of the table.
-
-**Recommendation:** Keep the field placement table. Remove the "three questions" framework. It is solving a problem that does not recur -- once the table is written, it is the SSOT.
-
----
-
-### E. Runner Resolution
-
-**Verdict: ALIGNED**
-**Confidence: MEDIUM**
-
-Keeping `runner:` out of experiment YAML is correct. The precedence chain (env var > user config > CLI flag > default) is standard.
-
-**Peer evidence:**
-- optimum-benchmark: launcher type is specified in the Hydra config but is conceptually separate from the experiment definition. The backend config (what to measure) is independent of the launcher config (how to run).
-- vLLM bench sweep: `--serve-cmd` is a CLI argument, not in the sweep params JSON.
-- lm-eval: No runner concept -- runs in-process always.
-
-The only concern: the precedence chain has four levels (`LLEM_RUNNER_<BACKEND>` env var > user config > `--runner` CLI flag > default). Four levels is one more than most tools. Env var override of user config is standard. CLI flag overriding user config is standard. Both overriding each other introduces a question: which wins, env var or CLI flag?
-
-The current precedence puts env var above CLI flag. This is unconventional -- most tools put CLI flags above env vars (CLI is more explicit). However, for runner selection in CI/Docker environments, env var taking precedence is defensible because the environment determines what runners are available.
-
-**Minor concern only.** The decision is sound.
-
----
-
-### F. Infrastructure Metadata as Scientific Record
-
-**Verdict: ALIGNED**
-**Confidence: HIGH**
-
-Auto-detect + store with results is exactly what peers do:
-
-- **Zeus**: `ZeusMonitor` auto-detects GPU count, model, NVML capabilities. Energy results include GPU indices and device info.
-- **CodeCarbon**: Auto-detects CPU, GPU, cloud provider, region. Stores in `emissions.csv` alongside energy data.
-- **optimum-benchmark**: `environment` field on `BenchmarkConfig` auto-populates from `get_system_info()` + `get_hf_libs_info()` at instantiation.
-- **lm-eval**: Captures `model_info`, `versions` dict, git hash, and full config in result output.
-
-Calling this "Layer 3" is the jargon issue (see Decision C). The practice itself is industry-standard.
-
-**No challenge to this decision.**
-
----
-
-### G. Energy vs CO2 as Independent Concerns
-
-**Verdict: ALIGNED**
-**Confidence: HIGH**
-
-This maps perfectly to the Zeus/CodeCarbon split:
-
-- **Zeus**: Measures energy (Joules, Watts). No CO2 estimation.
-- **CodeCarbon**: Estimates CO2 emissions. Uses its own energy measurement internally (NVML polling or RAPL).
-- **ML.ENERGY leaderboard**: Reports energy in Joules. CO2 is a separate calculation using regional carbon intensity.
-
-The decision to make base package = NVML polling, `[zeus]` = accurate energy, `[codecarbon]` = CO2 matches the ecosystem perfectly. The NVML single-session owner constraint (only one of base NVML poller or Zeus can be active) is a genuine technical constraint documented in Zeus.
-
-**No challenge to this decision.**
-
----
-
-### H. Library API Surface: Unified `run()` with Union Return Type
-
-**Verdict: QUESTIONABLE**
-**Confidence: HIGH**
-
-This is the second most concerning decision. The unified `run()` function returns `ExperimentResult | StudyResult` based on input type. This creates a union return type that callers must narrow.
-
-**The typing problem is well-documented.** From python/mypy#1693: "Having a union return type is often a problem... any attempt to use operations specific to one return type will fail a type check." Python's `@overload` can help if the input type determines the output type, but in llem's case:
+**Confidence:** HIGH. PyTorch official docs explicitly state CUDA requires `spawn` or `forkserver`, not `fork`. Optimum-benchmark (HuggingFace) independently arrived at the identical pattern for the same reason, using it as a core design principle.
 
 ```python
-# These both take str | Path -- overload cannot distinguish them
-result = llem.run("experiment.yaml")   # -> ExperimentResult
-result = llem.run("study.yaml")        # -> StudyResult
+# study/runner.py
+mp_ctx = multiprocessing.get_context("spawn")   # not fork -- CUDA requirement
+
+child_conn, parent_conn = mp_ctx.Pipe(duplex=False)
+progress_queue = mp_ctx.Queue()
+
+p = mp_ctx.Process(
+    target=_run_experiment_worker,
+    args=(config, child_conn, progress_queue),
+    daemon=False,    # NOT daemon: CUDA teardown needs to complete cleanly
+)
+p.start()
+child_conn.close()   # parent does not write; close parent's copy
+p.join(timeout=timeout)
 ```
 
-The overload only works for `ExperimentConfig` vs `StudyConfig` input. For path-based input (the common case for YAML users), the return type is `ExperimentResult | StudyResult` and every call site needs `isinstance()` or `assert`.
+**Single vs multi distinction:** `run_experiment()` (single experiment) runs `ExperimentOrchestrator` in-process — no subprocess needed because clean GPU state at start is guaranteed for a single run. Only `run_study()` uses subprocess isolation.
 
-**What peers do:**
+**Trade-offs:**
+- Higher per-experiment overhead (process start + CUDA init, ~1-2s on Linux with spawn)
+- Clean GPU state is guaranteed — no contamination between experiments
+- `daemon=False` means CUDA teardown completes even if parent exits abnormally (optimum-benchmark uses same setting)
 
-| Tool | API shape | Return type |
-|------|----------|-------------|
-| lm-eval | `simple_evaluate(model, tasks)` | Always `EvalResults` (one type) |
-| optimum-benchmark | `Benchmark.launch(config)` | Always `BenchmarkReport` (one type) |
-| Zeus | `monitor.end_window(name)` | Always `Measurement` (one type) |
-| MLflow | `mlflow.start_run()` context | Returns `Run` (one type) |
+### Pattern 2: Dual-Channel IPC — Pipe for Result, Queue for Progress Events
 
-**Every peer tool returns exactly one type from its entry point.** None uses a union return type.
+**What:** Two IPC channels per experiment subprocess: a `Pipe` (one-way, child to parent) for the final result or error, and a `Queue` (multi-item, child to parent) for incremental progress events during execution.
 
-**The existing designs/library-api.md actually anticipated this.** It originally had `run_experiment()` returning `ExperimentResult` and `run_study()` returning `StudyResult` -- two functions, each with an unambiguous return type. The justification for unification was "Why not `run("config.yaml")`? A single `run()` has an ambiguous return type" -- the doc correctly identified the problem, then the experiment-study-architecture.md decision overrode it.
+**Why separate channels:**
+- `Pipe` for result: single send at experiment end; typed; low overhead; direct
+- `Queue` for progress: multiple events during experiment (started, warmup progress, measurement progress, completed/failed); needs buffering; never blocks worker on slow parent
 
-**Alternatives:**
+**Optimum-benchmark precedent (HIGH confidence):** Verified from source code. Uses identical dual-channel pattern — `Pipe` for result return with 1MB file-based fallback for large payloads. Same `FILE_BASED_COMM_THRESHOLD = 1_000_000` value. Uses a separate mechanism for process synchronisation events.
 
-1. **Revert to two functions** (`run_experiment()` + `run_study()`): Matches peer practice. Unambiguous types. The cost (two functions to learn) is trivial.
+```python
+# study/runner.py -- result transmission with size-based fallback
+def _send_result(conn: Connection, result: ExperimentResult) -> None:
+    serialised = result.model_dump_json()
+    if len(serialised) > 1_000_000:   # 1MB threshold -- matches optimum-benchmark
+        tmp = Path(tempfile.mkstemp(suffix=".json")[1])
+        tmp.write_text(serialised)
+        conn.send({"__file__": str(tmp)})   # parent reads from file
+    else:
+        conn.send(result)   # direct in-memory Pipe transmission
+```
 
-2. **Always return `StudyResult`**: Since internally all paths go through `_run(StudyConfig)`, the natural return type is `StudyResult`. Single experiments return a `StudyResult` with `len(experiments) == 1`. Callers always get the same type. This is analogous to how lm-eval always returns `EvalResults` even for a single task.
+**Pipe buffer edge case:** OS pipe buffer on Linux is ~64KB. If the child sends data before the parent reads and it exceeds this, the child blocks — deadlock with parent at `p.join()`. The 1MB file-based fallback handles large results. In practice, v2.0 `ExperimentResult` is well under 64KB.
 
-3. **Keep unified `run()` but accept the typing tax**: Use `@overload` for the `ExperimentConfig`/`StudyConfig` input case and accept that path-based input returns a union.
+**Pipe vs Queue choice:** `Pipe` is ~3x faster than `Queue` (Queue is built on Pipe plus a feeder thread). For the single final result, `Pipe` is preferred. For streaming progress events, `Queue` provides buffering so the worker never blocks waiting for the parent to drain.
 
-**Recommendation:** Option 1 (two functions) is the cleanest. It was the original design for good reason. The argument that unified `run()` is "simpler" is undermined by the union return type making every call site more complex.
+### Pattern 3: Progress Queue Consumer as Daemon Thread
 
-However: Option 2 (always `StudyResult`) is also viable and has the advantage of truly unifying the internal model. A single experiment becomes `StudyResult(experiments=[result])`. Callers who want the single result do `result.experiments[0]`. This is ugly but honest about the internal architecture.
+**What:** A daemon thread in the parent process drains the progress queue while the parent's main thread is blocked at `p.join()`. Without this thread, no progress updates appear until the experiment completes.
 
-**The decision to unify `llem run` at the CLI level is separate and correct.** CLI commands do not have return types. The CLI can present single-experiment results differently from study results without API typing concerns. The library API and CLI do not need to mirror each other -- the existing docs already note this ("CLI names differ from library names").
+**Why a daemon thread (not async, not polling):**
+- Parent main thread is synchronously blocked at `p.join()` — it cannot drain the queue
+- Daemon thread exits automatically when parent exits — no cleanup required
+- Thread is cheap for this I/O-bound draining work; cheaper than another process
 
----
+**SIGKILL sentinel handling:** Events queued by the worker but not yet consumed may be lost when `p.kill()` is called. The parent sends `None` (sentinel) AFTER `p.kill()` or `p.join()`, covering both the normal path (worker sends sentinel itself) and the SIGKILL path (parent sends on worker's behalf). Consumer thread always exits cleanly.
 
-### I. Subprocess Isolation via `multiprocessing.Process`
+```python
+# study/runner.py -- consumer thread starts BEFORE p.start()
+consumer = threading.Thread(
+    target=_consume_progress_events,
+    args=(progress_queue, display),
+    daemon=True,
+)
+consumer.start()
+p.start()
+# ... p.join() ...
+progress_queue.put(None)   # sentinel -- always, regardless of how p exited
+consumer.join()
+```
 
-**Verdict: ALIGNED**
-**Confidence: HIGH**
+### Pattern 4: Manifest Checkpoint Written After Each State Transition
 
-This decision matches optimum-benchmark's core architecture exactly. The research in `13-execution-isolation-patterns.md` already documented this comprehensively.
+**What:** `ManifestWriter` writes `study_manifest.json` after every status change: `mark_running()` writes, `mark_completed()` writes, `mark_failed()` writes. The manifest is always consistent with actual state.
 
-Key confirmations from fresh research:
+**Why write-on-every-change (not write-at-end):**
+- Studies run for hours; power failures and OOM kills happen
+- Resume logic requires knowing which experiments completed before interruption
+- Cost of one small JSON write per experiment is negligible vs study duration
 
-1. **`spawn` start method is mandatory for CUDA.** PyTorch documentation (2025) confirms: "spawn is preferred because it avoids copying the CUDA context into child processes." Fork is unsafe with CUDA -- this is not a design choice, it is a correctness requirement.
+**Ray Tune precedent (MEDIUM confidence):** Ray Tune maintains `experiment/trial_runner.json` checkpoint with trial statuses, enabling study resume after interruption. Same pattern — incremental checkpoint, not end-only write.
 
-2. **`multiprocessing.Pipe` for IPC is correct.** optimum-benchmark uses exactly this pattern, including the 1MB file-based fallback threshold.
+**Two distinct objects:**
+- `StudyManifest` = in-progress checkpoint; written incrementally; survives interruption; file: `study_manifest.json`
+- `StudyResult` = final return value of `run_study()`; written once at completion; file: `study_summary.json`
 
-3. **`daemon=False` is correct.** Allows clean CUDA teardown. optimum-benchmark also uses `daemon=False`.
+```python
+# study/manifest.py -- write-on-every-transition
+class ManifestWriter:
+    def mark_running(self, config_hash: str, cycle: int) -> None:
+        entry = self._find(config_hash, cycle)
+        entry.status = "running"
+        entry.started_at = datetime.utcnow()
+        self._write()   # write immediately after every state change
 
-4. **Timeout via `p.join(timeout=...)` + SIGKILL is correct.** optimum-benchmark uses a polling loop with `p.is_alive()` and `parent_connection.poll()` rather than `p.join(timeout=...)`, but both achieve the same goal. The SIGKILL on timeout is the only reliable mechanism for hung CUDA calls.
+    def mark_completed(self, config_hash: str, cycle: int, result_file: str) -> None:
+        entry = self._find(config_hash, cycle)
+        entry.status = "completed"
+        entry.result_file = result_file
+        entry.completed_at = datetime.utcnow()
+        self._write()   # write immediately
+```
 
-**One minor note:** optimum-benchmark uses sync checkpoints (two `sync_with_child()` calls) before starting the benchmark. This ensures the child process is ready before the parent begins waiting for results. The llem design does not include sync checkpoints. This is a robustness improvement worth considering but not a fundamental architectural difference.
+### Pattern 5: Grid Expansion Before Subprocess Dispatch
 
-**No challenge to this decision.**
+**What:** `grid.expand(study_config)` resolves the complete `list[ExperimentConfig]` (including n_cycles and cycle_order) before any subprocess is launched. The runner iterates a plain list.
 
----
+**Why expand first:**
+- Pre-flight validation (invalid config skipping via Pydantic) happens at expansion time — no GPU time wasted on invalid combos
+- Manifest is populated with all pending entries at study start
+- `cycle_order` (interleaved/shuffled/sequential) is applied at expansion time across the full experiment set
+- Simpler runner: iterates a known, fully-resolved list
 
-### J. Study Module Scope: Ships at v2.0
+**lm-eval precedent (MEDIUM confidence):** lm-eval loads all tasks upfront via `task_manager.load(tasks)` before dispatching any evaluation. Same "resolve everything first, iterate second" principle.
 
-**Verdict: ALIGNED**
-**Confidence: MEDIUM**
+**Hydra multirun precedent (MEDIUM confidence):** Hydra's `BasicLauncher` computes the full set of parameter combinations ("sweeps") before dispatching any job sequentially. Hydra docs state: "Hydra composes configs lazily at job launching time" — the full sweep is known upfront.
 
-Parameter sweeps are the core value proposition of this tool ("how much does implementation choice affect efficiency?"). Deferring sweeps to v2.2 would ship a single-experiment tool that is just a less mature version of existing tools.
-
-**Peer context:**
-- optimum-benchmark includes sweep support from the start (via Hydra `--multirun`).
-- vLLM bench sweep is a first-class feature, not an afterthought.
-- lm-eval runs multiple tasks in a single invocation by default.
-
-Docker multi-backend deferred to v2.2 is reasonable. Local single-backend studies at v2.0 provide immediate research value.
-
-**No challenge to this decision.**
-
----
-
-## Cross-Cutting Decisions
-
-### Config Architecture: Composition (C1) + Dotted Sweep Notation (C2)
-
-**Verdict: ALIGNED**
-**Confidence: MEDIUM**
-
-**C1 (Composition):** The decision to use a single `ExperimentConfig` with optional backend sections is well-justified. The rejected inheritance approach would propagate a union type through every layer. optimum-benchmark uses inheritance (separate backend config classes) but does not have the same problem because its `BenchmarkConfig` takes `backend: Any` -- the type system does not constrain the backend type. llem's composition approach is more type-safe than optimum-benchmark's `Any` while avoiding the union proliferation of full inheritance.
-
-**C2 (Dotted sweep notation):** The `pytorch.batch_size: [1, 8, 32]` syntax is custom but well-designed. The split-on-first-dot parsing is clean. The per-backend Cartesian product is the correct semantic.
-
-**Peer comparison on sweep grammar:**
-
-| Tool | Sweep syntax | Notes |
-|------|-------------|-------|
-| vLLM bench sweep | Separate JSON files for serve_params and bench_params | Cartesian product of serve x bench |
-| optimum-benchmark | Hydra `--multirun` with comma-separated overrides | `backend.device=cpu,cuda` |
-| W&B Sweeps | YAML with `parameters:` block, flat keys | `batch_size: {values: [1, 8, 32]}` |
-| Optuna | Programmatic `trial.suggest_*()` API | No declarative grammar |
-
-llem's dotted notation is more compact than vLLM's separate files and more structured than Hydra's override syntax. It handles the multi-backend case (where backend-specific params are not interchangeable) better than any peer's approach.
-
-**Concern:** The `extra = "forbid"` with an explicit `extra: dict` escape hatch is clever but could confuse users who encounter the Pydantic error message for typos vs the `extra:` field. This is a documentation challenge, not an architectural one.
-
----
-
-### Experiment-Study Architecture (Option C)
-
-**Verdict: ALIGNED on internal architecture, QUESTIONABLE on library API**
-
-The Option C architecture is sound:
-- `ExperimentConfig` = pure data type, zero study knowledge. Correct.
-- `StudyConfig` = resolved container (`list[ExperimentConfig]` + `ExecutionConfig`). Correct.
-- Sweep resolution at YAML parse time, before Pydantic. Correct.
-- Single runner `_run(StudyConfig)`. Correct.
-
-This matches the "config file carries the complexity signal" pattern identified in pytest, lm-eval, and `mlflow run`. The internal unification is good architecture.
-
-The concern is the library API surface (see Decision H above).
-
----
-
-### Error Handling (K1/K2/K3)
-
-**Verdict: ALIGNED**
-**Confidence: HIGH**
-
-**K1 (Exit codes 0/1/2/130):** Correct. No ML benchmarking tool uses granular exit codes. lm-eval uses 0/1.
-
-**K2 (Custom exception hierarchy):** Correct. `LLEMError` root with typed subclasses is standard for library-first tools. httpx, SQLAlchemy, Pydantic all do this.
-
-**K3 (Pydantic ValidationError passthrough):** Correct. Wrapping Pydantic's rich error in a custom exception would lose information. The asymmetry (`ValidationError` is not `LLEMError`) is a known, documented trade-off.
-
-**One note:** The `ExperimentError` class has `config: dict` and `cause: Exception` as class attributes in the design, not `__init__` parameters. These should be instance attributes set in `__init__`. This is a design doc issue, not an architectural issue.
+```python
+# study/grid.py -- pure function
+def expand_grid(study: StudyConfig) -> list[ExperimentConfig]:
+    """
+    Returns complete ordered list of ExperimentConfig to run.
+    Applies: sweep Cartesian product, explicit experiments, n_cycles, cycle_order.
+    Invalid combinations (Pydantic ValidationError) are excluded with a warning logged.
+    """
+    # 1. Universal sweep params x backend-scoped sweep params (per-backend Cartesian)
+    # 2. Append explicit experiments list
+    # 3. Apply n_cycles (repeat the list n times)
+    # 4. Apply cycle_order: sequential=as-is, interleaved=round-robin, shuffled=random
+    ...
+```
 
 ---
 
-### Backward Compatibility
+## Data Flow
 
-**Verdict: ALIGNED**
-**Confidence: HIGH**
+### Study Execution Flow
 
-`__init__.py` exports as the sole stable API is industry standard. One minor version deprecation window is aggressive but appropriate for a pre-1.0-adoption tool.
+```
+llem run study.yaml
+        |
+        v
+load_study_config(path)      <- config/loader.py
+        |
+        v
+run_study(StudyConfig)       <- _api.py (public API)
+        |
+        v
+_run(StudyConfig)            <- _api.py (internal)
+        |
+        v
+StudyRunner(study, display)
+        |
+        +---> expand_grid(study)   -> list[ExperimentConfig]  (grid.py)
+        |         |
+        |         +-- for each raw config:
+        |               try: ExperimentConfig(**raw)   <- Pydantic L1 validation
+        |               except ValidationError: log skip, exclude
+        |
+        +---> ManifestWriter.create(study, results_dir)  (manifest.py)
+        |         +-- writes study_manifest.json with all entries as "pending"
+        |
+        +---> for i, config in enumerate(experiments):
+                  |
+                  +-- if i > 0 and gap > 0: sleep(gap)  [thermal gap + countdown]
+                  |
+                  +-- manifest.mark_running(config.config_hash, cycle)
+                  |
+                  +-- _run_one(config, mp_ctx)
+                  |       |
+                  |       +-- mp_ctx.Pipe()  [child_conn, parent_conn]
+                  |       +-- mp_ctx.Queue() [progress_queue]
+                  |       +-- consumer thread.start()
+                  |       +-- mp_ctx.Process(target=_run_experiment_worker).start()
+                  |       +-- p.join(timeout=...)
+                  |       +-- progress_queue.put(None)  [sentinel]
+                  |       +-- consumer.join()
+                  |       +-- _collect_result(p, parent_conn, config, timeout)
+                  |               -> ExperimentResult | StudyFailed
+                  |
+                  +-- study_result.add(result_or_error)
+                  |
+                  +-- manifest.mark_completed | mark_failed (writes to disk)
 
-lm-eval `__all__ = ["evaluate", "simple_evaluate", "__version__"]` is the exact precedent.
+        +---> return StudyResult
+```
 
-**Note:** The backward-compatibility.md still lists `run_experiment` and `run_study` as the stable exports, while experiment-study-architecture.md changed this to unified `run()`. These docs are internally inconsistent. Whichever API shape is chosen, the docs must be synchronised.
+### Child Process Internal Flow
+
+```
+_run_experiment_worker(config, conn, progress_queue)
+        |
+        +-- progress_queue.put({"event": "started", "config_hash": config.config_hash})
+        |
+        +-- ExperimentOrchestrator(config).run()    <- EXISTING, UNMODIFIED
+        |       |
+        |       +-- pre-flight (within single experiment)
+        |       +-- load model
+        |       +-- warmup
+        |       +-- measure (NVML/Zeus polling)
+        |       +-- aggregate -> ExperimentResult
+        |
+        +-- progress_queue.put({"event": "completed", "result": result.summary_dict()})
+        |
+        +-- _send_result(conn, result)
+              |
+              +-- if len(serialised) <= 1MB: conn.send(result)  [direct Pipe]
+              +-- else: write to tempfile; conn.send({"__file__": path})
+```
+
+### Result Collection in Parent
+
+```
+_collect_result(p, parent_conn, config, timeout)
+        |
+        +-- if p.is_alive():
+        |       p.kill()  [SIGKILL -- SIGTERM insufficient for hung CUDA calls]
+        |       p.join()
+        |       return StudyFailed(exception_type="TimeoutError")
+        |
+        +-- if p.exitcode != 0:
+        |       exc_info = parent_conn.recv() if parent_conn.poll() else None
+        |       return StudyFailed(
+        |           exception_type=exc_info["type"] if exc_info else "ProcessCrash",
+        |           error_message=exc_info["message"] if exc_info else f"Exit {p.exitcode}"
+        |       )
+        |
+        +-- data = parent_conn.recv()
+              +-- if isinstance(data, dict) and "__file__" in data:
+              |       result = ExperimentResult.model_validate_json(tmp.read_text())
+              |       tmp.unlink()
+              |       return result
+              +-- else: return data  [ExperimentResult directly]
+```
 
 ---
 
-## Over-Engineering Assessment
+## Integration Points
 
-### What is appropriately complex:
-- **Subprocess isolation** -- correctness requirement, not optional complexity
-- **Backend config composition** -- genuine multi-backend complexity
-- **Dotted sweep notation** -- solves a real problem compactly
-- **Exception hierarchy** -- standard library-first pattern
-- **Infrastructure auto-capture** -- scientific rigour requirement
+### New vs Existing Module Boundaries
 
-### What is more complex than needed:
-- **Three-layer config naming** -- two sources (user config + experiment YAML) plus auto-capture. Not three "layers".
-- **Field placement three-questions framework** -- the table is the SSOT; the questions add nothing
-- **Union return type from `run()`** -- solves a problem that does not exist at the CLI level and creates a problem at the library level
+| Boundary | Communication | Notes |
+|----------|--------------|-------|
+| `StudyRunner` -> `grid.expand()` | Direct function call | `grid.py` is pure: takes `StudyConfig`, returns `list[ExperimentConfig]` — no side effects |
+| `StudyRunner` -> `ManifestWriter` | Instance method calls | Single `ManifestWriter` instance per study run; it owns the manifest file |
+| `StudyRunner` -> child process | `multiprocessing.Process` + `Pipe` + `Queue` | spawn context; parent blocks at `p.join()` |
+| `_run_experiment_worker` -> `ExperimentOrchestrator` | Direct instantiation in child process | `ExperimentOrchestrator(config).run()` — no IPC needed within the child |
+| `_api.py` -> `StudyRunner` | Direct instantiation | `run_study()` creates `StudyRunner(study, display)`, calls `.run()` |
+| CLI `run.py` -> `_api.py` | `run_study()` or `run_experiment()` call | CLI detects study vs experiment from YAML structure; routes accordingly |
+| `StudyRunner` -> `display` | `display.update(event_dict)` via consumer thread | Display object passed to `StudyRunner`; events sourced from progress queue |
+| `StudyResult` -> `results/persistence.py` | `to_json()` call at study completion | Individual `ExperimentResult` files written inside child process |
 
-### What is missing:
-- **Sync checkpoints between parent and child process** -- optimum-benchmark has this, llem does not. Worth adding for robustness.
-- **Device isolation monitoring** -- optimum-benchmark's `device_isolation: true` detects foreign GPU processes. Useful for measurement integrity.
-- **Progress callback API for library users** -- the design includes Rich progress for CLI but no callback mechanism for library users who want progress events programmatically.
+### CLI Detection: Experiment vs Study
 
----
+```python
+# cli/commands/run.py -- routing logic
+def _detect_yaml_type(path: Path) -> Literal["experiment", "study"]:
+    """
+    Study if YAML has 'sweep:' key or 'experiments:' list. Otherwise experiment.
+    """
+    raw = yaml.safe_load(path.read_text())
+    if "sweep" in raw or ("experiments" in raw and isinstance(raw["experiments"], list)):
+        return "study"
+    return "experiment"
+```
 
-## The Hydra Question: Was Rejecting Hydra Correct?
+### `_api.py` Routing
 
-**Verdict: YES, the rejection was correct.**
+```python
+# _api.py -- both paths go through _run(StudyConfig)
+def run_experiment(config: str | Path | ExperimentConfig | None, **kwargs) -> ExperimentResult:
+    study_config = _to_study_config(config, **kwargs)
+    study_result = _run(study_config)
+    return study_result.experiments[0]   # unwrap single-experiment study
 
-optimum-benchmark uses Hydra and pays a significant cost:
-- `BenchmarkConfig` fields are typed `Any` (not the specific config types) because Hydra's structured configs use dataclasses, not Pydantic
-- Config composition via file-based groups is powerful but adds operational complexity
-- The `--multirun` sweep is less expressive than llem's dotted notation for multi-backend sweeps
-- Hydra takes over the application entry point (`@hydra.main`) -- not compatible with a library-first design where the CLI is a thin wrapper
+def run_study(config: str | Path | StudyConfig) -> StudyResult:
+    study_config = _to_study_config(config)
+    return _run(study_config)
 
-**Key evidence:** pytorch/torchtitan opened an issue requesting Hydra/OmegaConf adoption (2025) and the discussion revealed that many teams are moving away from Hydra toward simpler approaches. The Facebook Research stopes project uses Hydra but documents significant configuration complexity.
+def _run(study: StudyConfig) -> StudyResult:
+    display = _make_display(study)
+    return StudyRunner(study, display).run()
+```
 
-llem's approach (Pydantic models + YAML + custom sweep resolution) is simpler, more type-safe, and more compatible with library-first architecture. Hydra would force the config system to use dataclasses instead of Pydantic, losing validation, `extra = "forbid"`, and the None-as-sentinel pattern.
+### Progress Display Integration
 
-**Sources:** [pytorch/torchtitan Hydra issue](https://github.com/pytorch/torchtitan/issues/1415), [facebookresearch/hydra composition bug](https://github.com/facebookresearch/hydra/issues/1592)
+The display layer receives events from the progress queue consumer thread. Study mode requires two display changes:
 
----
+1. **Outer progress bar** (tqdm): tracks `N/total_experiments` across the study
+2. **Per-experiment status lines** (print to stderr): symbols `+` completed, `>` running, `.` queued, `!` failed
+3. **Thermal gap countdown** (print to stderr): `waiting thermal gap (55s remaining)` — silence during a 5-minute gap would make users think the tool crashed
 
-## Specific Challenges and Recommendations
+```python
+# cli/display.py -- study event handler
+def update(self, event: dict) -> None:
+    event_type = event.get("event")
+    if event_type == "started":
+        tqdm.write(f"  > [{self._current}/{self._total}]  {event['config_summary']}  running...", file=sys.stderr)
+    elif event_type == "completed":
+        tqdm.write(f"  + [{self._current}/{self._total}]  {event['config_summary']}  -> ...", file=sys.stderr)
+        self._pbar.update(1)
+    elif event_type == "failed":
+        tqdm.write(f"  ! [{self._current}/{self._total}]  failed: {event['error']['message']}", file=sys.stderr)
+        self._pbar.update(1)
+```
 
-### Challenge 1: Simplify Config Naming (Decisions C and D)
-
-**Current:** Three-layer model (Layer 1, Layer 2, Layer 3) with a three-questions placement framework.
-
-**Proposed:** Two config sources + auto-capture:
-- **User config** (`~/.config/llenergymeasure/config.yaml`) -- machine-local preferences, runner mappings
-- **Experiment config** (experiment.yaml / study.yaml) -- what to measure, shareable
-- **Environment snapshot** -- auto-captured at runtime, stored with results (not a config layer)
-
-The separation is identical. The naming is simpler and matches what every peer calls these things. "Layer 1/2/3" is project-specific jargon that will confuse new contributors.
-
-### Challenge 2: Resolve the Library API Return Type (Decision H)
-
-**Current:** `run()` returns `ExperimentResult | StudyResult`.
-
-**Options ranked by recommendation:**
-
-1. **Two functions** (`run_experiment()` + `run_study()`): Cleanest types. Original design. Matches lm-eval's `evaluate()` + `simple_evaluate()` pattern (two entry points, no ambiguity).
-
-2. **Always return `StudyResult`**: Consistent with internal architecture. `StudyResult` with `len(experiments) == 1` for single runs. Less ergonomic but type-safe.
-
-3. **Accept the union**: Workable with `@overload` for typed inputs; path-based input returns union. Tax at every call site.
-
-The CLI remains unified `llem run` regardless. This is a library API question only.
-
-### Challenge 3: Add Sync Checkpoints to Subprocess Isolation (Decision I)
-
-**Current:** Parent spawns child, waits on `p.join(timeout=...)`.
-
-**Missing:** No verification that child process initialised successfully before starting the wait. optimum-benchmark uses two sync checkpoints:
-1. After child spawns (verify it is alive)
-2. After device isolation setup (verify GPU is accessible)
-
-Without sync checkpoints, a child that fails during import/setup will cause the parent to wait for the full timeout before detecting failure. Adding sync checkpoints reduces failure-to-detection time from `timeout` seconds to near-instant.
-
-### Challenge 4: Document the Inconsistency Between API Docs
-
-**backward-compatibility.md** lists `run_experiment` and `run_study` as stable exports.
-**experiment-study-architecture.md** specifies unified `run()`.
-**designs/library-api.md** still documents `run_experiment()` and `run_study()` with full overload signatures.
-
-These must be synchronised after resolving Challenge 2.
+**Critical:** Use `tqdm.write()` for all print calls during study — not plain `print()`. `tqdm.write()` coordinates with the progress bar to avoid overwriting the bar's output line.
 
 ---
 
-## Peer Architecture Comparison Matrix
+## Anti-Patterns
 
-| Aspect | optimum-benchmark | lm-eval | Zeus | vLLM bench | **llem (planned)** |
-|--------|-------------------|---------|------|-----------|-------------------|
-| **Entry point** | `Benchmark.launch(config)` | `simple_evaluate(model, tasks)` | `ZeusMonitor()` API | CLI only | `llem.run(config)` |
-| **Config system** | Hydra + dataclasses | Flat kwargs + YAML tasks | Constructor args | JSON param files | Pydantic + YAML |
-| **Return type** | `BenchmarkReport` | `EvalResults` | `Measurement` | N/A (files) | `ExperimentResult \| StudyResult` |
-| **Process isolation** | `multiprocessing.Process` | None (in-process) | None (measurement lib) | `subprocess.Popen` | `multiprocessing.Process` |
-| **Sweep support** | Hydra `--multirun` | Task groups | N/A | JSON Cartesian product | Dotted notation sweep |
-| **Backend selection** | Config group | `--model` string | N/A | `--serve-cmd` | `backend:` field |
-| **User config** | Hydra defaults | None | None | None | `~/.config/.../config.yaml` |
-| **Environment capture** | `get_system_info()` auto | Versions dict | GPU indices auto | N/A | Auto-detect (Layer 3) |
-| **Error handling** | Exceptions (unstructured) | Plain exceptions | Plain exceptions | Exit codes | `LLEMError` hierarchy |
-| **API stability** | No explicit policy | No explicit policy | No explicit policy | No explicit policy | `__init__.py` exports + SemVer |
+### Anti-Pattern 1: CLI Re-entry (current v1.x `CampaignRunner` pattern)
 
-**Key takeaway:** llem's architecture is more thoroughly designed than any peer. The risk is not under-engineering -- it is over-engineering. The decisions are overwhelmingly sound; the naming and abstraction layers are where complexity creeps in without proportional value.
+**What people do:** Spawn a subprocess via `subprocess.run(["llem", "experiment", ...])` to run each experiment. The current `CampaignRunner` does exactly this.
+
+**Why it is wrong:**
+- No structured error IPC — only exit code; exception type and message lost
+- No timeout — a hung CUDA process blocks forever
+- Result IPC via filesystem only — no in-memory path; relies on result file conventions
+- CLI startup overhead per experiment (Python import + Typer init, ~0.5–1s per run)
+
+**Do this instead:** `multiprocessing.Process` with `spawn` start method and `Pipe` for result IPC. `ExperimentOrchestrator` is importable as a library object — no CLI re-entry needed.
+
+### Anti-Pattern 2: Sharing CUDA State Across Experiments In-Process
+
+**What people do:** Run multiple experiments sequentially in the same Python process, calling `del model; torch.cuda.empty_cache()` between them.
+
+**Why it is wrong:**
+- PyTorch's CUDA allocator does not fully release memory on `empty_cache()`
+- CUDA context state (caching allocator pools, memory fragmentation, pinned memory) persists
+- Experiment N+1 starts with contaminated CUDA state from experiment N
+- Energy measurements are inflated and irreproducible
+
+**Do this instead:** Fresh `multiprocessing.Process` with `spawn` start method per experiment in study mode. Single-experiment (`run_experiment()`) runs in-process because clean state at start is guaranteed.
+
+### Anti-Pattern 3: Using `fork` Start Method with CUDA
+
+**What people do:** Use Linux's default `fork` start method.
+
+**Why it is wrong:** PyTorch explicitly states CUDA does not support `fork`. The CUDA runtime is not fork-safe — forked child processes inherit CUDA context state from the parent, causing incorrect measurements, deadlocks, or crashes.
+
+**Do this instead:** `multiprocessing.get_context("spawn")` — scoped to `StudyRunner`, never via global `set_start_method()` which would affect other libraries.
+
+### Anti-Pattern 4: Generating Configs On-the-Fly During Study Execution
+
+**What people do:** Generate the next `ExperimentConfig` inside the study loop, after the previous experiment completes.
+
+**Why it is wrong:**
+- Cannot pre-validate all configs upfront (invalid combos discovered mid-study after wasting warmup time and GPU allocation)
+- Cannot populate manifest with all pending entries at study start (resume shows incomplete picture)
+- Cannot apply `cycle_order` across the full experiment set before starting
+
+**Do this instead:** `expand_grid(study)` resolves the complete ordered `list[ExperimentConfig]` before any subprocess launches. Invalid configs are caught by Pydantic at expansion time and logged as skipped. The runner iterates a plain, fully-known list.
+
+### Anti-Pattern 5: Plain `print()` During Study Progress Display
+
+**What people do:** Use `print(..., file=sys.stderr)` for experiment status lines while tqdm is showing an outer progress bar.
+
+**Why it is wrong:** `print()` writes newlines that leave the tqdm progress bar on a stale line. The bar then re-draws on the next line, leaving visual artifacts. tqdm assumes exclusive control over its output line.
+
+**Do this instead:** `tqdm.write(message, file=sys.stderr)` for all study progress messages. `tqdm.write()` coordinates with tqdm's output to print cleanly above the active bar.
+
+---
+
+## Build Order
+
+The study/sweep integration has clear dependencies. This order allows incremental testing at each step.
+
+### Step 1: Grid Expansion (`study/grid.py`)
+
+Build and test in isolation. Pure function — no side effects, no subprocess needed.
+- Input: `StudyConfig`. Output: `list[ExperimentConfig]`.
+- Cartesian product of universal sweep dims
+- Backend-scoped sweep dims (dotted notation: `pytorch.batch_size`)
+- Independent grids per backend (multi-backend study)
+- `n_cycles` repetition with `cycle_order`: sequential, interleaved, shuffled
+- Invalid config exclusion (Pydantic `ValidationError` catch + log)
+
+**Test:** Unit tests with mock `StudyConfig`, assert output list shape and ordering for each cycle_order mode.
+
+**Dependency:** Only `config/models.py` (existing). No new dependencies introduced.
+
+### Step 2: Manifest Schema and Writer (`study/manifest.py`)
+
+Build and test in isolation. No subprocess needed.
+- `StudyManifest` and `ExperimentManifestEntry` Pydantic models
+- `ManifestWriter` lifecycle: `__init__` creates file with all entries as "pending" -> `mark_running` -> `mark_completed` / `mark_failed`
+- File write on every state transition via `_write()`
+
+**Test:** Create manifest for 3-experiment study; call mark_running then mark_completed; re-read file; assert status transitions are persisted correctly.
+
+**Dependency:** Only `domain/results.py` (existing `StudyFailed`). No new dependencies.
+
+### Step 3: Subprocess Worker Functions (`study/runner.py` — worker functions only)
+
+Implement `_run_experiment_worker`, `_send_result`, `_collect_result` as standalone functions. Test by manually spawning a subprocess without using `StudyRunner`.
+- `spawn` context confirmed working
+- `Pipe` result transmission: both direct and file-based (>1MB) paths
+- Error propagation: child exception -> `StudyFailed` with type and message
+- Timeout: `p.join(timeout=...)` -> `p.kill()` -> `StudyFailed("TimeoutError")`
+
+**Test:** Minimal child function that either raises or returns a dummy `ExperimentResult`; verify parent `_collect_result` handles all cases (success, non-zero exit, timeout).
+
+**Dependency:** `orchestration/orchestrator.py` (existing). The worker function imports and calls `ExperimentOrchestrator` directly.
+
+### Step 4: Progress Event Queue and Display Consumer
+
+Implement progress `Queue` + `_consume_progress_events` daemon thread + display integration.
+- Queue send from child worker at key lifecycle events: started, completed, failed
+- Consumer thread draining queue, calling `display.update(event)`
+- Sentinel `None` sent after `p.join()` (covers both normal and SIGKILL paths)
+- `display.py` study-mode: tqdm outer progress bar, per-experiment status lines with `tqdm.write()`, thermal gap countdown
+
+**Test:** Mock display; verify events arrive in correct order and sentinel causes clean thread exit; verify no deadlock on SIGKILL path.
+
+**Dependency:** Steps 3 + display.py modifications.
+
+### Step 5: `StudyRunner` Integration
+
+Wire steps 1–4 together in `StudyRunner.run()`.
+- Sequential experiment dispatch with thermal gap (`time.sleep`)
+- `manifest.mark_running()` / `mark_completed()` / `mark_failed()` calls around each `_run_one()`
+- `StudyResult.add(result_or_error)` accumulation
+- Cycle gap (`cycle_gap_seconds`) between complete cycles
+
+**Test:** Integration test with mock `ExperimentOrchestrator` (monkeypatched via `unittest.mock` inside child, or replaced with a fast stub); 3-experiment study; assert all manifest entries written, `StudyResult` contains expected results.
+
+**Dependency:** Steps 1–4. Requires `StudyResult.add()` to be implemented in `domain/results.py`.
+
+### Step 6: `_api.py` and CLI Integration
+
+Implement `run_study()`, `_run()`, `_to_study_config()`. Modify CLI `run.py` for study detection and routing. Finesse `display.py` for full study output.
+- `run_study()` public signature matching confirmed library API design
+- `run_experiment()` unchanged externally; internally routes via degenerate `StudyConfig`
+- CLI YAML type detection heuristic
+- Study pre-flight (study-level backend checks before first experiment launches)
+
+**Test:** End-to-end with real PyTorch backend; 2-experiment study; verify `StudyResult` and two `ExperimentResult` files on disk; verify manifest at study completion.
+
+---
+
+## Scaling Considerations
+
+| Study Size | Architectural Impact |
+|------------|---------------------|
+| 1–10 experiments (typical single-sweep) | No changes needed; sequential subprocess with Pipe is sufficient |
+| 10–100 experiments (multi-backend sweep) | No architecture changes; overnight study; manifest checkpointing becomes critical for recovery |
+| 100+ experiments (publication-quality, multi-cycle) | No architecture changes; study resume (`llem run --resume`) becomes essential (later milestone). Hundreds of `ExperimentResult` JSON files are fine — studies are sequential not parallel. |
+
+Parallelism across experiments is not a goal. GPU ownership prevents within-machine parallelism. Cross-machine parallelism is a future concern not in v2.0 scope.
+
+---
+
+## Key Peer Evidence
+
+| Tool | Pattern | Relevance | Confidence |
+|------|---------|-----------|------------|
+| **optimum-benchmark** | `ProcessLauncher`: `mp_ctx.Process + Pipe + daemon=False + 1MB file fallback` | Direct precedent for our exact subprocess + IPC pattern | HIGH — source verified |
+| **optimum-benchmark** | Hydra `--multirun` for sequential config sweep dispatch | Sequential sweep -> process per run is the industry standard | HIGH — docs verified |
+| **PyTorch docs** | `spawn` required for CUDA; `fork` explicitly unsupported | Confirms start method choice is a correctness requirement, not style | HIGH — official docs |
+| **lm-eval-harness** | All tasks loaded upfront via `task_manager.load()`; then sequential evaluation | Confirms "expand first, iterate second" pattern | MEDIUM — source verified |
+| **Ray Tune** | `experiment/trial_runner.json` checkpoint for study resume | Confirms manifest checkpoint pattern for long-running study recovery | MEDIUM — docs verified |
+| **tqdm-multiprocess** | Queue-based progress events from worker processes to tqdm in parent | Confirms Queue + consumer thread for cross-process progress display | MEDIUM — docs verified |
+| **Hydra BasicLauncher** | Full sweep computed before first job dispatched; jobs run serially by default | Confirms expand-first pattern | MEDIUM — docs verified |
 
 ---
 
 ## Sources
 
-- [optimum-benchmark GitHub](https://github.com/huggingface/optimum-benchmark) -- BenchmarkConfig, launcher system, process isolation
-- [optimum-benchmark README](https://github.com/huggingface/optimum-benchmark/blob/main/README.md) -- Python API usage examples
-- [lm-eval-harness GitHub](https://github.com/EleutherAI/lm-evaluation-harness) -- `__init__.py` exports, `simple_evaluate()` signature
-- [lm-eval architecture blog](https://slyracoon23.github.io/blog/posts/2025-03-21_eleutherai-evaluation-methods.html) -- Architecture overview
-- [Zeus project](https://ml.energy/zeus/) -- Monitor API, measurement architecture
-- [Zeus GitHub](https://github.com/ml-energy/zeus) -- Multi-platform energy measurement
-- [vLLM parameter sweeps](https://docs.vllm.ai/en/latest/benchmarking/sweeps/) -- Sweep config format
-- [vLLM benchmark CLI](https://docs.vllm.ai/en/latest/benchmarking/cli/) -- Benchmark architecture
-- [MLflow Tracking](https://mlflow.org/docs/latest/tracking/) -- Run/experiment hierarchy
-- [PyTorch multiprocessing docs](https://docs.pytorch.org/docs/stable/notes/multiprocessing.html) -- Spawn method for CUDA
-- [python/mypy#1693](https://github.com/python/mypy/issues/1693) -- Union return types as anti-pattern
-- [python/typing overload spec](https://typing.python.org/en/latest/spec/overload.html) -- @overload limitations
-- [pytorch/torchtitan Hydra issue](https://github.com/pytorch/torchtitan/issues/1415) -- Hydra adoption challenges
-- `.product/research/13-execution-isolation-patterns.md` -- Existing peer isolation research (HIGH confidence)
-- `.product/research/15-config-architecture-patterns.md` -- Existing peer config research
+- PyTorch Multiprocessing with CUDA: https://docs.pytorch.org/docs/stable/notes/multiprocessing.html
+- Optimum-benchmark ProcessLauncher (source verified): https://github.com/huggingface/optimum-benchmark/blob/main/optimum_benchmark/launchers/process/launcher.py
+- Optimum-benchmark README (Hydra multirun + process isolation): https://github.com/huggingface/optimum-benchmark
+- lm-eval-harness evaluator.py (task loading pattern): https://github.com/EleutherAI/lm-evaluation-harness
+- Ray Tune checkpoints and resume: https://docs.ray.io/en/latest/tune/tutorials/tune-trial-checkpoints.html
+- tqdm-multiprocess (queue-based cross-process progress): https://github.com/EleutherAI/tqdm-multiprocess
+- Hydra multirun documentation: https://hydra.cc/docs/tutorials/basic/running_your_app/multi-run/
+- `.product/designs/experiment-isolation.md`: Subprocess isolation pattern (confirmed design, source of truth)
+- `.product/designs/architecture.md`: Module layout, call graph, StudyRunner pseudocode
+- `.product/designs/study-resume.md`: ManifestWriter and StudyManifest schema
+- `.product/designs/observability.md`: Progress display spec for study mode
+
+---
+
+*Architecture research for: LLM inference efficiency measurement tool — study/sweep execution integration*
+*Researched: 2026-02-27*

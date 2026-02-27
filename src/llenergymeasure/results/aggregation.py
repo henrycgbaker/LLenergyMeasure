@@ -2,25 +2,32 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-from loguru import logger
 from pydantic import BaseModel, Field
 
 from llenergymeasure.constants import COMPLETION_MARKER_PREFIX
+from llenergymeasure.domain.environment import EnvironmentSnapshot
 from llenergymeasure.domain.experiment import (
-    AggregatedResult,
     AggregationMetadata,
+    ExperimentResult,
     RawProcessResult,
 )
 from llenergymeasure.domain.metrics import (
+    EnergyBreakdown,
     ExtendedEfficiencyMetrics,
     LatencyMeasurements,
     LatencyStatistics,
+    MultiGPUMetrics,
+    ThermalThrottleInfo,
+    WarmupResult,
 )
 from llenergymeasure.exceptions import AggregationError
+
+logger = logging.getLogger(__name__)
 
 
 class CompletenessReport(BaseModel):
@@ -113,16 +120,31 @@ def validate_process_completeness(
 
 
 def aggregate_results(
-    experiment_id: str,
     raw_results: list[RawProcessResult],
+    experiment_id: str,
+    measurement_config_hash: str,
+    measurement_methodology: str = "total",
+    steady_state_window: tuple[float, float] | None = None,
+    baseline_power_w: float | None = None,
+    energy_adjusted_j: float | None = None,
+    energy_per_device_j: list[float] | None = None,
+    energy_breakdown: EnergyBreakdown | None = None,
+    multi_gpu: MultiGPUMetrics | None = None,
+    environment_snapshot: EnvironmentSnapshot | None = None,
+    measurement_warnings: list[str] | None = None,
+    warmup_excluded_samples: int | None = None,
+    warmup_result: WarmupResult | None = None,
+    thermal_throttle: ThermalThrottleInfo | None = None,
+    timeseries: str | None = None,
+    effective_config: dict[str, Any] | None = None,
     verify_temporal_overlap: bool = True,
     verify_gpu_attribution: bool = True,
     expected_processes: int | None = None,
     results_dir: Path | None = None,
     strict: bool = True,
     allow_mixed_backends: bool = False,
-) -> AggregatedResult:
-    """Aggregate raw per-process results into a single result.
+) -> ExperimentResult:
+    """Aggregate raw per-process results into a single ExperimentResult (v2.0).
 
     Aggregation strategy:
     - Energy: Sum across processes (each GPU's energy is additive)
@@ -130,20 +152,35 @@ def aggregate_results(
     - Throughput: Average (tokens_per_second / num_processes gives per-GPU rate)
     - FLOPs: Sum across processes
     - Time: Use wall-clock range (earliest start to latest end)
+    - Latencies: Concatenated (late aggregation — no average of averages)
 
     Args:
-        experiment_id: Unique experiment identifier.
         raw_results: List of raw results from each process.
+        experiment_id: Unique experiment identifier.
+        measurement_config_hash: SHA-256[:16] of ExperimentConfig.
+        measurement_methodology: What was measured ("total", "steady_state", "windowed").
+        steady_state_window: (start_sec, end_sec) relative to experiment start.
+        baseline_power_w: Idle GPU power (W) measured before experiment.
+        energy_adjusted_j: Baseline-subtracted energy.
+        energy_per_device_j: Per-GPU energy (Zeus backend).
+        energy_breakdown: Detailed energy breakdown with baseline adjustment.
+        multi_gpu: Multi-GPU metrics. None for single-GPU runs.
+        environment_snapshot: Full software+hardware environment snapshot.
+        measurement_warnings: Measurement quality warnings.
+        warmup_excluded_samples: Number of prompts excluded during warmup.
+        warmup_result: Warmup convergence detection result.
+        thermal_throttle: GPU thermal and power throttling information.
+        timeseries: Relative filename of timeseries sidecar.
+        effective_config: Full resolved config (taken from first process if None).
         verify_temporal_overlap: Check that processes ran concurrently.
         verify_gpu_attribution: Check that GPU IDs are unique.
         expected_processes: Expected number of processes (for completeness validation).
         results_dir: Results directory (for marker checking).
         strict: If True, raise on incomplete; if False, warn and proceed.
         allow_mixed_backends: If False (default), reject results from different backends.
-            Mixed-backend aggregation produces statistically invalid comparisons.
 
     Returns:
-        Aggregated result combining all process data.
+        ExperimentResult (v2.0) combining all process data.
 
     Raises:
         AggregationError: If raw_results is empty, strict and incomplete,
@@ -152,22 +189,25 @@ def aggregate_results(
     if not raw_results:
         raise AggregationError("Cannot aggregate empty results list")
 
-    warnings: list[str] = []
+    warnings: list[str] = list(measurement_warnings or [])
     num_processes = len(raw_results)
 
-    # Backend consistency validation (Phase 3)
+    # Backend consistency validation
     backends = {r.backend for r in raw_results}
     if len(backends) > 1:
         backend_list = ", ".join(sorted(backends))
-        msg = f"Mixed backends detected: {backend_list}. Aggregating results from different backends produces statistically invalid comparisons."
+        msg = (
+            f"Mixed backends detected: {backend_list}. "
+            "Aggregating results from different backends produces statistically invalid comparisons."
+        )
         if not allow_mixed_backends:
             raise AggregationError(
                 f"{msg} Use --allow-mixed-backends to override (not recommended)."
             )
         warnings.append(msg)
-        logger.warning(f"Proceeding with mixed-backend aggregation: {backend_list}")
+        logger.warning("Proceeding with mixed-backend aggregation: %s", backend_list)
 
-    # Completeness validation (Phase 5)
+    # Completeness validation
     if expected_processes is not None and results_dir is not None:
         report = validate_process_completeness(
             experiment_id, raw_results, expected_processes, results_dir
@@ -177,7 +217,7 @@ def aggregate_results(
                 raise AggregationError(f"Incomplete experiment results: {report.error_message}")
             else:
                 warnings.append(f"Incomplete results: {report.error_message}")
-                logger.warning(f"Proceeding with incomplete results: {report.error_message}")
+                logger.warning("Proceeding with incomplete results: %s", report.error_message)
 
     # Verify temporal overlap
     temporal_overlap_ok = False
@@ -204,9 +244,9 @@ def aggregate_results(
             f"Experiment ran on {len(mig_instances)} MIG instance(s) ({profile_str}). "
             "Energy measurements reflect parent GPU total, not per-instance consumption."
         )
-        logger.info(f"MIG instances detected: {len(mig_instances)} with profiles: {profile_str}")
+        logger.info("MIG instances detected: %d with profiles: %s", len(mig_instances), profile_str)
 
-    # Aggregate metrics
+    # Aggregate core metrics
     total_tokens = sum(r.inference_metrics.total_tokens for r in raw_results)
     total_energy_j = sum(r.energy_metrics.total_energy_j for r in raw_results)
     total_inference_time = sum(r.inference_metrics.inference_time_sec for r in raw_results)
@@ -218,10 +258,9 @@ def aggregate_results(
         if num_processes > 0
         else 0.0
     )
-
     avg_energy_per_token = total_energy_j / total_tokens if total_tokens > 0 else 0.0
 
-    # Find time range
+    # Find time range (wall-clock)
     start_time = min(r.timestamps.start for r in raw_results)
     end_time = max(r.timestamps.end for r in raw_results)
 
@@ -236,42 +275,32 @@ def aggregate_results(
 
     # Aggregate latency measurements if present (streaming mode)
     latency_stats: LatencyStatistics | None = None
-    latency_measurements: list[LatencyMeasurements] = []
+    latency_measurements_list: list[LatencyMeasurements] = []
     for r in raw_results:
         lm = r.inference_metrics.latency_measurements
         if lm is not None:
-            # Handle both LatencyMeasurements instance and dict (from JSON deserialization)
             if isinstance(lm, LatencyMeasurements):
-                latency_measurements.append(lm)
+                latency_measurements_list.append(lm)
             elif isinstance(lm, dict) and "ttft_ms" in lm:
-                # Convert dict to LatencyMeasurements
-                latency_measurements.append(LatencyMeasurements(**lm))
+                latency_measurements_list.append(LatencyMeasurements(**lm))
 
-    if latency_measurements:
-        latency_stats = aggregate_latency_measurements(latency_measurements)
+    if latency_measurements_list:
+        latency_stats = aggregate_latency_measurements(latency_measurements_list)
         if latency_stats:
             logger.info(
-                f"Latency stats: TTFT mean={latency_stats.ttft_mean_ms:.1f}ms, "
-                f"ITL mean={latency_stats.itl_mean_ms:.1f}ms"
-                if latency_stats.itl_mean_ms
-                else ""
+                "Latency stats: TTFT mean=%.1fms",
+                latency_stats.ttft_mean_ms,
             )
 
     logger.info(
-        f"Aggregated {num_processes} processes: "
-        f"tokens={total_tokens}, energy={total_energy_j:.2f}J, "
-        f"throughput={avg_tokens_per_second:.2f} tok/s"
+        "Aggregated %d processes: tokens=%d, energy=%.2fJ, throughput=%.2f tok/s",
+        num_processes,
+        total_tokens,
+        total_energy_j,
+        avg_tokens_per_second,
     )
 
-    # Check if any process had energy tracking failures
-    energy_tracking_failed = any(r.energy_tracking_failed for r in raw_results)
-    if energy_tracking_failed:
-        warnings.append(
-            "Energy tracking failed for one or more processes (metrics may be incomplete)"
-        )
-        logger.warning("Energy tracking failed for one or more processes")
-
-    # Aggregate extended efficiency metrics (Phase 5)
+    # Aggregate extended efficiency metrics (late aggregation)
     extended_metrics = _aggregate_extended_metrics_from_results(
         raw_results=raw_results,
         total_energy_j=total_energy_j,
@@ -280,89 +309,84 @@ def aggregate_results(
         latency_stats=latency_stats,
     )
 
-    # Propagate effective_config, cli_overrides, config_warnings, and backend from first result
-    # All processes have the same config/backend, so any result works
-    effective_config: dict[str, Any] = {}
-    cli_overrides: dict[str, Any] = {}
-    config_warnings: list[str] = []
-    backend = "pytorch"
-    backend_version: str | None = None
-    if raw_results:
-        effective_config = raw_results[0].effective_config
-        cli_overrides = raw_results[0].cli_overrides
-        config_warnings = raw_results[0].config_warnings
-        backend = raw_results[0].backend
-        backend_version = raw_results[0].backend_version
+    # Resolve effective_config and backend from first result if not provided
+    resolved_effective_config: dict[str, Any] = effective_config or (
+        raw_results[0].effective_config if raw_results else {}
+    )
+    backend = raw_results[0].backend if raw_results else "pytorch"
+    backend_version: str | None = raw_results[0].backend_version if raw_results else None
 
-    # --- Schema v3: Aggregate environment, energy_breakdown, thermal_throttle ---
+    # Energy breakdown: sum raw_j and adjusted_j across processes (if not provided)
+    if energy_breakdown is None:
+        breakdowns = [p.energy_breakdown for p in raw_results if p.energy_breakdown]
+        if breakdowns:
+            total_raw = sum(b.raw_j for b in breakdowns)
+            adjusted_values = [b.adjusted_j for b in breakdowns if b.adjusted_j is not None]
+            total_adjusted = sum(adjusted_values) if adjusted_values else None
+            first = breakdowns[0]
+            energy_breakdown = EnergyBreakdown(
+                raw_j=total_raw,
+                adjusted_j=total_adjusted,
+                baseline_power_w=first.baseline_power_w,
+                baseline_method=first.baseline_method,
+                baseline_timestamp=first.baseline_timestamp,
+                baseline_cache_age_sec=first.baseline_cache_age_sec,
+            )
 
-    # Environment: take from first process (all processes share same GPU environment)
-    environment = raw_results[0].environment if raw_results else None
+    # Thermal throttle: merge across processes (if not provided)
+    if thermal_throttle is None:
+        throttles = [p.thermal_throttle for p in raw_results if p.thermal_throttle]
+        if throttles:
+            max_temps = [t.max_temperature_c for t in throttles if t.max_temperature_c is not None]
+            thermal_throttle = ThermalThrottleInfo(
+                detected=any(t.detected for t in throttles),
+                thermal=any(t.thermal for t in throttles),
+                power=any(t.power for t in throttles),
+                sw_thermal=any(t.sw_thermal for t in throttles),
+                hw_thermal=any(t.hw_thermal for t in throttles),
+                hw_power=any(t.hw_power for t in throttles),
+                throttle_duration_sec=max(t.throttle_duration_sec for t in throttles),
+                max_temperature_c=max(max_temps) if max_temps else None,
+            )
 
-    # Energy breakdown: sum raw_j and adjusted_j across processes
-    energy_breakdown = None
-    breakdowns = [p.energy_breakdown for p in raw_results if p.energy_breakdown]
-    if breakdowns:
-        total_raw = sum(b.raw_j for b in breakdowns)
-        adjusted_values = [b.adjusted_j for b in breakdowns if b.adjusted_j is not None]
-        total_adjusted = sum(adjusted_values) if adjusted_values else None
-        first = breakdowns[0]
-        from llenergymeasure.domain.metrics import EnergyBreakdown
-
-        energy_breakdown = EnergyBreakdown(
-            raw_j=total_raw,
-            adjusted_j=total_adjusted,
-            baseline_power_w=first.baseline_power_w,
-            baseline_method=first.baseline_method,
-            baseline_timestamp=first.baseline_timestamp,
-            baseline_cache_age_sec=first.baseline_cache_age_sec,
+    # Warmup result: take from first process if not provided
+    if warmup_result is None:
+        warmup_result = next(
+            (p.warmup_result for p in raw_results if p.warmup_result), None
         )
 
-    # Thermal throttle: merge across processes (any process throttled = throttled)
-    thermal_throttle = None
-    throttles = [p.thermal_throttle for p in raw_results if p.thermal_throttle]
-    if throttles:
-        from llenergymeasure.domain.metrics import ThermalThrottleInfo
-
-        max_temps = [t.max_temperature_c for t in throttles if t.max_temperature_c is not None]
-        thermal_throttle = ThermalThrottleInfo(
-            detected=any(t.detected for t in throttles),
-            thermal=any(t.thermal for t in throttles),
-            power=any(t.power for t in throttles),
-            sw_thermal=any(t.sw_thermal for t in throttles),
-            hw_thermal=any(t.hw_thermal for t in throttles),
-            hw_power=any(t.hw_power for t in throttles),
-            throttle_duration_sec=max(t.throttle_duration_sec for t in throttles),
-            max_temperature_c=max(max_temps) if max_temps else None,
-        )
-
-    # Timeseries path: take from first process that has one
-    timeseries_path = next((p.timeseries_path for p in raw_results if p.timeseries_path), None)
-
-    return AggregatedResult(
+    return ExperimentResult(
+        schema_version="2.0",
         experiment_id=experiment_id,
+        measurement_config_hash=measurement_config_hash,
         backend=backend,
         backend_version=backend_version,
-        aggregation=metadata,
+        measurement_methodology=measurement_methodology,
+        steady_state_window=steady_state_window,
         total_tokens=total_tokens,
         total_energy_j=total_energy_j,
         total_inference_time_sec=total_inference_time,
         avg_tokens_per_second=avg_tokens_per_second,
         avg_energy_per_token_j=avg_energy_per_token,
         total_flops=total_flops,
-        process_results=raw_results,
+        baseline_power_w=baseline_power_w,
+        energy_adjusted_j=energy_adjusted_j,
+        energy_per_device_j=energy_per_device_j,
+        energy_breakdown=energy_breakdown,
+        multi_gpu=multi_gpu,
+        environment_snapshot=environment_snapshot,
+        measurement_warnings=warnings,
+        warmup_excluded_samples=warmup_excluded_samples,
+        timeseries=timeseries,
         start_time=start_time,
         end_time=end_time,
-        effective_config=effective_config,
-        cli_overrides=cli_overrides,
-        config_warnings=config_warnings,
-        latency_stats=latency_stats,
-        energy_tracking_failed=energy_tracking_failed,
-        extended_metrics=extended_metrics,
-        environment=environment,
-        energy_breakdown=energy_breakdown,
+        effective_config=resolved_effective_config,
+        process_results=raw_results,
+        aggregation=metadata,
         thermal_throttle=thermal_throttle,
-        timeseries_path=timeseries_path,
+        warmup_result=warmup_result,
+        latency_stats=latency_stats,
+        extended_metrics=extended_metrics,
     )
 
 
@@ -405,7 +429,7 @@ def _aggregate_extended_metrics_from_results(
     avg_tokens_per_second: float,
     total_output_tokens: int,
     latency_stats: LatencyStatistics | None,
-) -> ExtendedEfficiencyMetrics:
+) -> ExtendedEfficiencyMetrics | None:
     """Aggregate extended efficiency metrics from per-process results.
 
     Collects raw samples from all processes and computes aggregated statistics.
@@ -419,10 +443,9 @@ def _aggregate_extended_metrics_from_results(
         latency_stats: Aggregated latency statistics (for ITL/TPOT).
 
     Returns:
-        Aggregated ExtendedEfficiencyMetrics.
+        Aggregated ExtendedEfficiencyMetrics, or None if aggregation fails.
     """
     from llenergymeasure.core.extended_metrics import aggregate_extended_metrics
-    from llenergymeasure.domain.metrics import ExtendedEfficiencyMetrics
 
     # Collect raw data from all processes for late aggregation
     all_request_latencies: list[float] = []
@@ -430,7 +453,7 @@ def _aggregate_extended_metrics_from_results(
     raw_extended_metrics: list[ExtendedEfficiencyMetrics] = []
 
     for r in raw_results:
-        # Collect per-request latencies
+        # Collect per-request latencies (late aggregation — concatenate, not average)
         if r.per_request_latencies_ms:
             all_request_latencies.extend(r.per_request_latencies_ms)
 
@@ -446,14 +469,6 @@ def _aggregate_extended_metrics_from_results(
     if latency_stats and latency_stats.itl_mean_ms is not None:
         itl_mean_ms = latency_stats.itl_mean_ms
 
-    # Get precision factor from first result's extended metrics (same across all)
-    precision_factor = 1.0
-    if raw_extended_metrics and raw_extended_metrics[0].token_efficiency_index is not None:
-        # Reverse-engineer precision factor from existing TEI if available
-        # TEI = throughput * tokens_per_joule * precision_factor
-        # This is a best-effort approach; precision_factor should be same across processes
-        pass  # Use default 1.0 for now; the per-process metrics capture precision correctly
-
     try:
         extended_metrics = aggregate_extended_metrics(
             raw_extended_metrics=raw_extended_metrics,
@@ -463,52 +478,18 @@ def _aggregate_extended_metrics_from_results(
             aggregated_energy_j=total_energy_j,
             aggregated_tokens_per_sec=avg_tokens_per_second,
             itl_mean_ms=itl_mean_ms,
-            precision_factor=precision_factor,
+            precision_factor=1.0,
         )
         logger.debug(
-            f"Aggregated extended metrics: TPOT={extended_metrics.tpot_ms}, "
-            f"TEI={extended_metrics.token_efficiency_index}"
+            "Aggregated extended metrics: TPOT=%s, TEI=%s",
+            extended_metrics.tpot_ms,
+            extended_metrics.token_efficiency_index,
         )
     except Exception as e:
-        logger.warning(f"Extended metrics aggregation failed (non-fatal): {e}")
+        logger.warning("Extended metrics aggregation failed (non-fatal): %s", e)
         extended_metrics = ExtendedEfficiencyMetrics()
 
     return extended_metrics
-
-
-def calculate_efficiency_metrics(result: AggregatedResult) -> dict[str, float]:
-    """Calculate derived efficiency metrics from aggregated result.
-
-    Returns dictionary with:
-    - tokens_per_joule: Energy efficiency
-    - joules_per_token: Energy cost per token
-    - flops_per_joule: Compute efficiency
-    - tokens_per_second: Throughput
-    - effective_batch_throughput: Total throughput across all GPUs
-    """
-    metrics: dict[str, float] = {}
-
-    # Energy efficiency
-    if result.total_energy_j > 0:
-        metrics["tokens_per_joule"] = result.total_tokens / result.total_energy_j
-        metrics["flops_per_joule"] = result.total_flops / result.total_energy_j
-    else:
-        metrics["tokens_per_joule"] = 0.0
-        metrics["flops_per_joule"] = 0.0
-
-    # Energy cost
-    if result.total_tokens > 0:
-        metrics["joules_per_token"] = result.total_energy_j / result.total_tokens
-    else:
-        metrics["joules_per_token"] = 0.0
-
-    # Throughput
-    metrics["tokens_per_second"] = result.avg_tokens_per_second
-    metrics["effective_batch_throughput"] = (
-        result.avg_tokens_per_second * result.aggregation.num_processes
-    )
-
-    return metrics
 
 
 def aggregate_latency_measurements(
@@ -570,8 +551,9 @@ def aggregate_latency_measurements(
         itl_full_p99_ms = float(np.percentile(itl_full_arr, 99))
 
     logger.info(
-        f"Aggregated latency stats: TTFT samples={len(all_ttft)}, "
-        f"ITL samples={itl_samples} (trimmed)"
+        "Aggregated latency stats: TTFT samples=%d, ITL samples=%d (trimmed)",
+        len(all_ttft),
+        itl_samples,
     )
 
     return LatencyStatistics(
@@ -590,169 +572,3 @@ def aggregate_latency_measurements(
         itl_full_mean_ms=itl_full_mean_ms,
         itl_full_p99_ms=itl_full_p99_ms,
     )
-
-
-def aggregate_campaign_results(
-    results_by_config: dict[str, list[AggregatedResult]],
-    confidence: float = 0.95,
-) -> dict[str, dict[str, Any]]:
-    """Aggregate campaign results by config with bootstrap confidence intervals.
-
-    Groups results from multiple cycles of the same config and computes
-    bootstrap CIs for key metrics.
-
-    Args:
-        results_by_config: Dict mapping config name to list of AggregatedResult
-            objects (one per cycle).
-        confidence: Confidence level for bootstrap CI (default 0.95).
-
-    Returns:
-        Dict mapping config name to aggregated metrics with CIs.
-    """
-    from llenergymeasure.results.bootstrap import bootstrap_ci
-
-    campaign: dict[str, dict[str, Any]] = {}
-
-    for config_name, cycle_results in results_by_config.items():
-        if not cycle_results:
-            continue
-
-        # Extract metric arrays across cycles
-        energy_samples = [r.total_energy_j for r in cycle_results]
-        throughput_samples = [r.avg_tokens_per_second for r in cycle_results]
-        token_samples = [float(r.total_tokens) for r in cycle_results]
-
-        entry: dict[str, Any] = {
-            "n_cycles": len(cycle_results),
-            "energy_j": bootstrap_ci(energy_samples, confidence=confidence).model_dump(),
-            "throughput_tps": bootstrap_ci(throughput_samples, confidence=confidence).model_dump(),
-            "total_tokens": bootstrap_ci(token_samples, confidence=confidence).model_dump(),
-        }
-
-        # Latency metrics if available (streaming mode)
-        ttft_samples = [
-            r.latency_stats.ttft_mean_ms
-            for r in cycle_results
-            if r.latency_stats is not None and r.latency_stats.ttft_mean_ms is not None
-        ]
-        if ttft_samples:
-            entry["ttft_mean_ms"] = bootstrap_ci(ttft_samples, confidence=confidence).model_dump()
-
-        itl_samples = [
-            r.latency_stats.itl_mean_ms
-            for r in cycle_results
-            if r.latency_stats is not None and r.latency_stats.itl_mean_ms is not None
-        ]
-        if itl_samples:
-            entry["itl_mean_ms"] = bootstrap_ci(itl_samples, confidence=confidence).model_dump()
-
-        campaign[config_name] = entry
-
-    return campaign
-
-
-def _extract_field_value(result: AggregatedResult, field_path: str) -> str:
-    """Extract value from AggregatedResult using dot-notation path.
-
-    Handles special fields (backend, model_name, config_name) and
-    traverses nested paths in effective_config.
-
-    Args:
-        result: The aggregated result to extract from.
-        field_path: Dot-notation path (e.g., "backend", "pytorch.batch_size").
-
-    Returns:
-        String value for the field, or "unknown" if not found.
-    """
-    # Handle special top-level fields
-    if field_path == "backend":
-        return result.backend
-    if field_path == "config_name":
-        return str(result.effective_config.get("config_name", "unknown"))
-    if field_path == "model_name":
-        return str(result.effective_config.get("model_name", "unknown"))
-
-    # Traverse nested path in effective_config
-    parts = field_path.split(".")
-    value: Any = result.effective_config
-    for part in parts:
-        if isinstance(value, dict) and part in value:
-            value = value[part]
-        else:
-            return "unknown"
-    return str(value)
-
-
-def aggregate_campaign_with_grouping(
-    results_by_config: dict[str, list[AggregatedResult]],
-    group_by: list[str],
-    confidence: float = 0.95,
-) -> dict[tuple[str, ...], dict[str, Any]]:
-    """Aggregate campaign results with configurable grouping.
-
-    Groups results across configs by specified fields and computes
-    bootstrap CIs for each group. This enables comparison by backend,
-    batch_size, or any config field.
-
-    Args:
-        results_by_config: Dict mapping config name to list of AggregatedResult
-            objects (one per cycle).
-        group_by: List of field paths to group by (e.g., ["backend", "model_name"]).
-        confidence: Confidence level for bootstrap CI (default 0.95).
-
-    Returns:
-        Dict mapping group key tuple to aggregated metrics with CIs.
-        Keys are tuples of field values (e.g., ("pytorch", "1")).
-    """
-    from collections import defaultdict
-
-    from llenergymeasure.results.bootstrap import bootstrap_ci
-
-    # Flatten all results and group by extracted key
-    groups: dict[tuple[str, ...], list[AggregatedResult]] = defaultdict(list)
-
-    for _config_name, cycle_results in results_by_config.items():
-        for result in cycle_results:
-            # Extract grouping key
-            key = tuple(_extract_field_value(result, field) for field in group_by)
-            groups[key].append(result)
-
-    # Compute CI for each group
-    aggregated: dict[tuple[str, ...], dict[str, Any]] = {}
-
-    for group_key, results in groups.items():
-        if not results:
-            continue
-
-        # Extract metric arrays
-        energy_samples = [r.total_energy_j for r in results]
-        throughput_samples = [r.avg_tokens_per_second for r in results]
-
-        entry: dict[str, Any] = {
-            "n_cycles": len(results),
-            "group_fields": group_by,
-            "group_values": list(group_key),
-            "energy_j": bootstrap_ci(energy_samples, confidence=confidence).model_dump(),
-            "throughput_tps": bootstrap_ci(throughput_samples, confidence=confidence).model_dump(),
-        }
-
-        # Latency metrics if available
-        ttft_samples = [
-            r.latency_stats.ttft_mean_ms
-            for r in results
-            if r.latency_stats is not None and r.latency_stats.ttft_mean_ms is not None
-        ]
-        if ttft_samples:
-            entry["ttft_mean_ms"] = bootstrap_ci(ttft_samples, confidence=confidence).model_dump()
-
-        itl_samples = [
-            r.latency_stats.itl_mean_ms
-            for r in results
-            if r.latency_stats is not None and r.latency_stats.itl_mean_ms is not None
-        ]
-        if itl_samples:
-            entry["itl_mean_ms"] = bootstrap_ci(itl_samples, confidence=confidence).model_dump()
-
-        aggregated[group_key] = entry
-
-    return aggregated

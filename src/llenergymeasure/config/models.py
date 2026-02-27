@@ -69,6 +69,12 @@ class DecoderConfig(BaseModel):
     repetition_penalty: float = Field(
         default=1.0, ge=0.1, le=10.0, description="Repetition penalty (1.0=no penalty)"
     )
+    min_p: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Min probability filter (None -> disabled)"
+    )
+    min_new_tokens: int | None = Field(
+        default=None, ge=1, description="Minimum output token count (None -> no minimum)"
+    )
     preset: Literal["deterministic", "standard", "creative", "factual"] | None = Field(
         default=None,
         description="Sampling preset (expands to preset values, overrides apply on top)",
@@ -115,22 +121,54 @@ _validate_sampling_presets()
 class WarmupConfig(BaseModel):
     """Warmup configuration for the measurement phase.
 
-    Controls the warmup phase before measurement begins. Uses fixed iteration count
-    plus a thermal floor wait. CV-based convergence detection is a measurement
-    concern, not a config concern — moved to Phase 5.
+    Controls the warmup phase before measurement begins. Default uses fixed
+    iteration count plus a thermal floor wait. Set convergence_detection=True
+    to enable adaptive CV-based convergence (additive to n_warmup).
+
+    # Confidence: n_warmup=5 HIGH (DeepSpeed 5-10, Zeus 10, AIEnergyScore 10)
+    # Confidence: thermal_floor_seconds=60 HIGH (MLPerf Power mandates 60s minimum)
     """
 
     model_config = {"extra": "forbid"}
 
+    enabled: bool = Field(default=True, description="Enable warmup phase")
+
     n_warmup: int = Field(
-        default=3,
+        default=5,
         ge=1,
         description="Number of full-length warmup prompts before measurement",
     )
     thermal_floor_seconds: float = Field(
         default=60.0,
-        ge=0.0,
-        description="Minimum seconds to wait after warmup before measuring (thermal stabilisation)",
+        ge=30.0,
+        description="Minimum seconds to wait after warmup before measuring (thermal stabilisation). Minimum 30s enforced.",
+    )
+
+    # CV convergence detection (opt-in, additive to n_warmup)
+    convergence_detection: bool = Field(
+        default=False,
+        description="Enable CV-based convergence detection (additive to n_warmup)",
+    )
+    cv_threshold: float = Field(
+        default=0.05,
+        ge=0.01,
+        le=0.5,
+        description="CV target for convergence (only used when convergence_detection=True)",
+    )
+    max_prompts: int = Field(
+        default=20,
+        ge=5,
+        description="Maximum warmup prompts when CV mode is on (safety cap)",
+    )
+    window_size: int = Field(
+        default=5,
+        ge=3,
+        description="Window size for CV calculation",
+    )
+    min_prompts: int = Field(
+        default=5,
+        ge=1,
+        description="Minimum prompts before checking convergence (warm start)",
     )
 
 
@@ -154,6 +192,22 @@ class BaselineConfig(BaseModel):
         ge=5.0,
         le=120.0,
         description="Baseline measurement duration in seconds",
+    )
+
+
+# =============================================================================
+# Energy Configuration
+# =============================================================================
+
+
+class EnergyConfig(BaseModel):
+    """Energy measurement backend configuration."""
+
+    model_config = {"extra": "forbid"}
+
+    backend: Literal["auto", "nvml", "zeus", "codecarbon"] | None = Field(
+        default="auto",
+        description="Energy measurement backend. None (YAML null) disables energy measurement.",
     )
 
 
@@ -268,6 +322,9 @@ class ExperimentConfig(BaseModel):
     baseline: BaselineConfig = Field(
         default_factory=BaselineConfig, description="Baseline power measurement configuration"
     )
+    energy: EnergyConfig = Field(
+        default_factory=EnergyConfig, description="Energy measurement backend configuration"
+    )
 
     # Backend sections (None = use backend's own defaults)
     # GPU detection and cpu-precision cross-validation is Phase 4 (pre-flight).
@@ -369,10 +426,63 @@ def _rebuild_experiment_config() -> None:
 _rebuild_experiment_config()
 
 
+class ExecutionConfig(BaseModel):
+    """Execution controls for a study (cycle repetition, ordering, gaps).
+
+    Controls how many times the experiment list is repeated (n_cycles), the order
+    in which experiments are executed across cycles (cycle_order), optional gaps
+    between configs and cycles for thermal stabilisation, and an explicit shuffle
+    seed override (default: derived from study_design_hash for reproducibility).
+
+    Pydantic defaults are conservative (1 cycle, sequential, no gaps). The CLI
+    will apply research-appropriate effective defaults (e.g. 3 cycles, interleaved)
+    in Phase 12.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    n_cycles: int = Field(
+        default=1, ge=1, description="Number of times to repeat the experiment list"
+    )
+    cycle_order: Literal["sequential", "interleaved", "shuffled"] = Field(
+        default="sequential",
+        description=(
+            "Ordering strategy across cycles. "
+            "sequential: [A,A,A,B,B,B], interleaved: [A,B,A,B,A,B], "
+            "shuffled: random per-cycle order."
+        ),
+    )
+    config_gap_seconds: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "Seconds to wait between individual experiments. "
+            "None = use machine default from user config."
+        ),
+    )
+    cycle_gap_seconds: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "Seconds to wait between full cycles. None = use machine default from user config."
+        ),
+    )
+    shuffle_seed: int | None = Field(
+        default=None,
+        description=(
+            "Explicit seed for shuffled cycle_order. "
+            "None = derived from study_design_hash (same study always shuffles identically)."
+        ),
+    )
+
+
 class StudyConfig(BaseModel):
     """Thin resolved container for a study (list of experiments + execution config).
 
-    M1 stub: only experiments + name. ExecutionConfig and sweep grammar added in M2.
+    Populated by the study loader after sweep expansion. The experiments list
+    contains fully-validated ExperimentConfig objects ready for execution.
+    skipped_configs records any grid points that failed Pydantic validation so
+    they can be displayed to the researcher in pre-flight output.
     """
 
     model_config = {"extra": "forbid"}
@@ -382,4 +492,22 @@ class StudyConfig(BaseModel):
     )
     name: str | None = Field(
         default=None, description="Study name (used in output directory naming)"
+    )
+    execution: ExecutionConfig = Field(
+        default_factory=ExecutionConfig,
+        description="Cycle repetition and ordering controls",
+    )
+    study_design_hash: str | None = Field(
+        default=None,
+        description=(
+            "16-char SHA-256 hex of the resolved experiment list (execution block excluded). "
+            "Set by the loader after expansion; None before expansion."
+        ),
+    )
+    skipped_configs: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Grid points that failed Pydantic validation during expansion. "
+            "Persisted for post-hoc review and pre-flight display."
+        ),
     )

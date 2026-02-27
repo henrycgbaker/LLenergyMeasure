@@ -413,6 +413,15 @@ def get_mutual_exclusions() -> dict[str, list[str]]:
         # PyTorch: can't use both 4-bit and 8-bit quantization
         "pytorch.load_in_4bit": ["pytorch.load_in_8bit"],
         "pytorch.load_in_8bit": ["pytorch.load_in_4bit"],
+        # torch_compile sub-options require torch_compile=True
+        "pytorch.torch_compile_mode": ["pytorch.torch_compile=None|False"],
+        "pytorch.torch_compile_backend": ["pytorch.torch_compile=None|False"],
+        # BitsAndBytes 4-bit sub-options require load_in_4bit=True
+        "pytorch.bnb_4bit_compute_dtype": ["pytorch.load_in_4bit=None|False"],
+        "pytorch.bnb_4bit_quant_type": ["pytorch.load_in_4bit=None|False"],
+        "pytorch.bnb_4bit_use_double_quant": ["pytorch.load_in_4bit=None|False"],
+        # cache_implementation contradicts use_cache=False
+        "pytorch.cache_implementation": ["pytorch.use_cache=False"],
         # vLLM: quantization method is exclusive (can only use one)
         "vllm.quantization": [],  # Handled by Literal type constraint
         # TensorRT: quantization method is exclusive
@@ -432,8 +441,24 @@ def get_backend_specific_params() -> dict[str, list[str]]:
             "pytorch.batch_size",
             "pytorch.attn_implementation",
             "pytorch.torch_compile",
+            "pytorch.torch_compile_mode",
+            "pytorch.torch_compile_backend",
             "pytorch.load_in_4bit",
             "pytorch.load_in_8bit",
+            "pytorch.bnb_4bit_compute_dtype",
+            "pytorch.bnb_4bit_quant_type",
+            "pytorch.bnb_4bit_use_double_quant",
+            "pytorch.use_cache",
+            "pytorch.cache_implementation",
+            "pytorch.num_beams",
+            "pytorch.early_stopping",
+            "pytorch.length_penalty",
+            "pytorch.no_repeat_ngram_size",
+            "pytorch.prompt_lookup_num_tokens",
+            "pytorch.device_map",
+            "pytorch.max_memory",
+            "pytorch.revision",
+            "pytorch.trust_remote_code",
             "pytorch.num_processes",
         ],
         "vllm": [
@@ -487,9 +512,13 @@ def get_params_requiring_gpu_capability(min_compute_capability: float = 8.0) -> 
         "pytorch.attn_implementation=flash_attention_2",
     ]
 
+    # These features require Hopper (9.0) or newer GPUs
+    hopper_required = [
+        "pytorch.attn_implementation=flash_attention_3",
+    ]
+
     if min_compute_capability >= 9.0:
-        # Hopper (9.0) required features — none in v2.0 minimal config
-        return ampere_required
+        return ampere_required + hopper_required
     return ampere_required
 
 
@@ -506,6 +535,10 @@ def get_param_skip_conditions() -> dict[str, str]:
         "tensorrt.tp_size>1": "Requires 2+ GPUs",
         # Flash Attention 2 - requires flash-attn package
         "pytorch.attn_implementation=flash_attention_2": "Requires flash-attn package",
+        # Flash Attention 3 - requires Hopper+ GPU (H100)
+        "pytorch.attn_implementation=flash_attention_3": "Requires Hopper+ GPU (compute capability 9.0+)",
+        # torch.compile - may not work on all model architectures
+        "pytorch.torch_compile=True": "May fail on some model architectures (non-fatal fallback)",
         # FP8 - Ampere or newer
         "vllm.quantization=fp8": "Requires Ampere+ GPU",
         "tensorrt.quantization=fp8": "Requires Ampere+ GPU",
@@ -515,6 +548,12 @@ def get_param_skip_conditions() -> dict[str, str]:
         # PyTorch optional dependencies
         "pytorch.load_in_4bit": "Requires compatible bitsandbytes version",
         "pytorch.load_in_8bit": "Requires compatible bitsandbytes version",
+        # BitsAndBytes 4-bit sub-options
+        "pytorch.bnb_4bit_compute_dtype": "Requires load_in_4bit=True and bitsandbytes package",
+        "pytorch.bnb_4bit_quant_type": "Requires load_in_4bit=True and bitsandbytes package",
+        "pytorch.bnb_4bit_use_double_quant": "Requires load_in_4bit=True and bitsandbytes package",
+        # Prompt lookup speculative decoding
+        "pytorch.prompt_lookup_num_tokens": "Requires compatible model and sufficient prompt overlap",
     }
 
 
@@ -637,6 +676,26 @@ def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
             "vllm": False,  # Not in v2.0 minimal VLLMConfig
             "tensorrt": False,  # Not in v2.0 minimal TensorRTConfig
         },
+        "torch_compile": {
+            "pytorch": "torch_compile" in pytorch_fields,
+            "vllm": False,
+            "tensorrt": False,
+        },
+        "beam_search": {
+            "pytorch": "num_beams" in pytorch_fields,
+            "vllm": False,  # vLLM best_of removed in v1
+            "tensorrt": False,
+        },
+        "speculative_decoding": {
+            "pytorch": "prompt_lookup_num_tokens" in pytorch_fields,
+            "vllm": False,  # vLLM speculative in VLLMConfig (not minimal v2.0)
+            "tensorrt": False,
+        },
+        "static_kv_cache": {
+            "pytorch": "cache_implementation" in pytorch_fields,
+            "vllm": False,
+            "tensorrt": False,
+        },
     }
 
 
@@ -663,6 +722,10 @@ def get_capability_matrix_markdown() -> str:
         "bfloat16_precision": "bfloat16 precision",
         "prefix_caching": "Prefix Caching",
         "lora_adapters": "LoRA Adapters",
+        "torch_compile": "torch.compile",
+        "beam_search": "Beam Search",
+        "speculative_decoding": "Speculative Decoding",
+        "static_kv_cache": "Static KV Cache",
     }
 
     lines = [
@@ -711,6 +774,24 @@ def get_validation_rules() -> list[dict[str, str]]:
             "combination": "load_in_4bit=True + load_in_8bit=True",
             "reason": "Cannot use both 4-bit and 8-bit quantization simultaneously",
             "resolution": "Choose one: pytorch.load_in_4bit=true OR pytorch.load_in_8bit=true",
+        },
+        {
+            "backend": "pytorch",
+            "combination": "torch_compile_mode without torch_compile=True",
+            "reason": "torch_compile_mode/torch_compile_backend only take effect when torch_compile=True",
+            "resolution": "Set pytorch.torch_compile=true when using torch_compile_mode or torch_compile_backend",
+        },
+        {
+            "backend": "pytorch",
+            "combination": "bnb_4bit_* without load_in_4bit=True",
+            "reason": "BitsAndBytes 4-bit options require 4-bit quantization to be enabled",
+            "resolution": "Set pytorch.load_in_4bit=true when using bnb_4bit_compute_dtype, bnb_4bit_quant_type, or bnb_4bit_use_double_quant",
+        },
+        {
+            "backend": "pytorch",
+            "combination": "cache_implementation with use_cache=False",
+            "reason": "Cannot specify a cache strategy when caching is explicitly disabled",
+            "resolution": "Remove use_cache=false or remove cache_implementation",
         },
         {
             "backend": "all",

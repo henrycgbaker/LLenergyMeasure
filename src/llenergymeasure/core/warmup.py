@@ -7,14 +7,16 @@ below a configured threshold, or until the safety cap is reached.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
 import numpy as np
-from loguru import logger
 
 from llenergymeasure.config.models import WarmupConfig
 from llenergymeasure.domain.metrics import WarmupResult
+
+logger = logging.getLogger(__name__)
 
 
 def warmup_until_converged(
@@ -50,21 +52,23 @@ def warmup_until_converged(
     converged = False
     final_cv = 1.0
 
-    # Fixed mode: run all prompts without convergence checking
+    # Fixed mode: run exactly n_warmup prompts without convergence checking.
+    # CV mode: run up to max_prompts with convergence checking after min_prompts.
     fixed_mode = not config.convergence_detection
+    iteration_limit = config.n_warmup if fixed_mode else config.max_prompts
 
     progress = None
     if show_progress:
         from tqdm import tqdm
 
         progress = tqdm(
-            total=config.max_prompts,
+            total=iteration_limit,
             desc="Warmup",
             unit="prompt",
         )
 
     try:
-        for i in range(config.max_prompts):
+        for i in range(iteration_limit):
             # Run single inference, catching exceptions to avoid aborting warmup
             try:
                 latency_ms = run_single_inference()
@@ -119,7 +123,7 @@ def warmup_until_converged(
         logger.info(f"Warmup completed {len(latencies)} fixed iterations (final CV={final_cv:.3f})")
     else:
         logger.warning(
-            f"Warmup did not converge after {config.max_prompts} prompts "
+            f"Warmup did not converge after {iteration_limit} prompts "
             f"(final CV={final_cv:.3f}, target={config.cv_threshold})"
         )
 

@@ -1,0 +1,130 @@
+"""GPU integration tests -- M1 exit criteria validation.
+
+These tests run on real GPU hardware (A100) inside Docker containers.
+They validate the complete pipeline: config -> preflight -> inference -> energy -> result.
+
+Run: pytest tests/integration/ -m gpu -v
+Requires: Docker with --gpus all, gpt2 model access
+"""
+
+import pytest
+
+
+@pytest.mark.gpu
+class TestM1ExitCriteria:
+    """Validates M1 success criteria with a real GPU experiment."""
+
+    def test_run_experiment_gpt2_pytorch(self, tmp_path):
+        """M1 primary exit criterion: llem run --model gpt2 --backend pytorch
+        produces a valid ExperimentResult.
+
+        Validates STU-05: single experiment runs in-process (no subprocess).
+        """
+        from llenergymeasure import ExperimentConfig, ExperimentResult, run_experiment
+
+        config = ExperimentConfig(
+            model="gpt2",
+            backend="pytorch",
+            n=5,  # small for speed
+            output_dir=str(tmp_path),
+        )
+        result = run_experiment(config)
+
+        # Core result assertions
+        assert isinstance(result, ExperimentResult)
+        assert result.schema_version == "2.0"
+        assert result.measurement_config_hash  # non-empty string
+        assert len(result.measurement_config_hash) == 16
+
+        # Energy values populated (non-zero on real GPU)
+        assert result.total_energy_j > 0
+        assert result.avg_energy_per_token_j > 0
+
+        # Throughput values populated
+        assert result.avg_tokens_per_second > 0
+        assert result.total_tokens > 0
+        assert result.total_inference_time_sec > 0
+
+        # FLOPs populated
+        assert result.total_flops > 0
+
+    def test_environment_snapshot_populated(self, tmp_path):
+        """Environment snapshot contains GPU, Python, CUDA info."""
+        from llenergymeasure import ExperimentConfig, run_experiment
+
+        config = ExperimentConfig(
+            model="gpt2",
+            backend="pytorch",
+            n=5,
+            output_dir=str(tmp_path),
+        )
+        result = run_experiment(config)
+
+        assert result.environment_snapshot is not None
+        snap = result.environment_snapshot
+        assert snap.python_version  # non-empty
+        assert snap.hardware.gpu.name  # non-empty GPU name
+        assert snap.cuda_version  # non-empty on GPU machine
+
+    def test_output_files_written(self, tmp_path):
+        """Timeseries parquet file written to output_dir."""
+        from llenergymeasure import ExperimentConfig, run_experiment
+
+        config = ExperimentConfig(
+            model="gpt2",
+            backend="pytorch",
+            n=5,
+            output_dir=str(tmp_path),
+        )
+        _result = run_experiment(config)
+
+        # Timeseries parquet written to output directory
+        output_files = list(tmp_path.iterdir())
+        assert len(output_files) >= 1
+        parquet_files = [f for f in output_files if f.suffix == ".parquet"]
+        assert len(parquet_files) >= 1
+
+    def test_cli_run_produces_valid_output(self, tmp_path):
+        """llem run --model gpt2 --backend pytorch via CLI produces valid output."""
+        from typer.testing import CliRunner
+
+        from llenergymeasure.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--model",
+                "gpt2",
+                "--backend",
+                "pytorch",
+                "--output",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0
+
+    def test_cli_config_shows_gpu_info(self):
+        """llem config shows GPU and backend information."""
+        from typer.testing import CliRunner
+
+        from llenergymeasure.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["config"])
+        assert result.exit_code == 0
+        assert "GPU" in result.output or "gpu" in result.output
+
+    def test_cli_version(self):
+        """llem --version prints version string."""
+        from typer.testing import CliRunner
+
+        from llenergymeasure.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["--version"])
+        assert result.exit_code == 0
+        from llenergymeasure import __version__
+
+        assert __version__ in result.output or "llem" in result.output.lower()
