@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-27T12:50:14.483Z"
+last_updated: "2026-02-27T16:13:18Z"
 progress:
   total_phases: 22
   completed_phases: 17
   total_plans: 77
-  completed_plans: 69
+  completed_plans: 70
 ---
 
 # Project State
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Researchers can run broad parameter sweeps across deployment configurations and produce publishable, methodology-sound measurements showing which implementation choices matter most for LLM energy efficiency.
-**Current focus:** M2 — Study / Sweep (Phase 9 in progress)
+**Current focus:** M2 — Study / Sweep (Phase 10 in progress)
 
 ## Current Position
 
-Phase: 9 (Phase 9 in progress — 09-02 complete)
-Plan: 09-02 complete
+Phase: 10 (Phase 10 in progress — 10-01 complete)
+Plan: 10-01 complete
 Status: In progress
-Last activity: 2026-02-27 — Phase 9 Plan 02 complete: load_study_config(), format_preflight_summary(), 18 new tests (461 total)
+Last activity: 2026-02-27 — Phase 10 Plan 01 complete: StudyManifest, ManifestWriter, atomic writes, 19 new tests (484 total)
 
 Progress: [██░░░░░░░░] ~10%
 
@@ -41,7 +41,7 @@ Progress: [██░░░░░░░░] ~10%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 09-grid-expansion | 2 completed | 10 min | 5 min |
-| 10-manifest-writer | TBD | - | - |
+| 10-manifest-writer | 1 completed | 3 min | 3 min |
 | 11-subprocess-isolation | TBD | - | - |
 | 12-integration | TBD | - | - |
 | 08.1-pytorch-result-wiring | 1 completed | 3 min | 3 min |
@@ -72,6 +72,8 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 - [Phase 08.2-01]: Retroactive Phase 2 verification uses UAT 11/11 results and SUMMARY frontmatter as evidence — no re-execution required
 - [Phase 08.2]: Removed only state.experiment_state import from cli/experiment.py; left rest of dead module intact to minimise change risk
 - [Phase 08.2]: Inline field access replaces calculate_efficiency_metrics() in cli/results.py and cli/display/results.py
+- [Phase 10-01]: Lazy-import __version__ inside _build_manifest() to break circular import (study.__init__ -> manifest -> llenergymeasure)
+- [Phase 10-01]: study_design_hash used in StudyManifest (not study_yaml_hash) per CONTEXT.md CP-6 decision
 
 ### Pending Todos
 
@@ -90,6 +92,6 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 08.1-01-PLAN.md — _build_result() wiring fixes, extra=forbid, timeseries co-location
+Stopped at: Completed 10-01-PLAN.md — StudyManifest, ManifestWriter, atomic writes, 19 tests (484 total)
 Resume file: None
-Next action: Execute Phase 09 Plan 03 (next plan in phase)
+Next action: Execute Phase 10 Plan 02 (next plan in phase, if exists) or Phase 11

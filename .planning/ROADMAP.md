@@ -73,7 +73,7 @@ Plans:
 **Milestone Goal:** `llem run study.yaml` runs a multi-experiment sweep with subprocess isolation, cycle ordering, thermal gaps, and a checkpoint manifest — producing per-experiment `ExperimentResult` files and a `StudyResult` summary.
 
 - [ ] **Phase 9: Grid Expansion and StudyConfig** - Sweep YAML grammar, `StudyConfig` + `ExecutionConfig` models, Cartesian grid expander, cycle ordering, pre-flight count display
-- [ ] **Phase 10: Manifest Writer** - `StudyManifest` checkpoint model, `ManifestWriter` with atomic writes, study output directory layout
+- [x] **Phase 10: Manifest Writer** - `StudyManifest` checkpoint model, `ManifestWriter` with atomic writes, study output directory layout (completed 2026-02-27)
 - [ ] **Phase 11: Subprocess Isolation and StudyRunner** - Subprocess dispatch via `spawn`, `Pipe`/`Queue` IPC, timeout handling, SIGINT, skip-and-continue, thermal gaps
 - [ ] **Phase 12: Integration** - `StudyRunner.run()`, `run_study()` public API, `_run()` body, CLI study flags, study progress display, `StudyResult` assembly, multi-backend hard error
 
@@ -166,7 +166,7 @@ Plans:
 | 8.1. PyTorch Result Wiring Fixes | 1/1 | Complete | 2026-02-27 |
 | 8.2. M1 Tech Debt Cleanup | 2/2 | Complete   | 2026-02-27 |
 | 9. Grid Expansion and StudyConfig | 1/2 | In Progress|  |
-| 10. Manifest Writer | 0/TBD | Not started | - |
+| 10. Manifest Writer | 1/1 | Complete   | 2026-02-27 |
 | 11. Subprocess Isolation and StudyRunner | 0/TBD | Not started | - |
 | 12. Integration | 0/TBD | Not started | - |
 | 13. Documentation — M1 backfill and M2 updates | 0/TBD | Not started | - |
@@ -176,7 +176,7 @@ Plans:
 **Goal:** [To be planned]
 **Requirements**: TBD
 **Depends on:** Phase 12
-**Plans:** 2/2 plans complete
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] TBD (run /gsd:plan-phase 13 to break down)
