@@ -452,7 +452,7 @@ class ExecutionConfig(BaseModel):
             "shuffled: random per-cycle order."
         ),
     )
-    config_gap_seconds: float | None = Field(
+    experiment_gap_seconds: float | None = Field(
         default=None,
         ge=0.0,
         description=(

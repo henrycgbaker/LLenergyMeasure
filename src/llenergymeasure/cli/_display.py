@@ -15,7 +15,7 @@ import traceback
 from pydantic import ValidationError
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.domain.experiment import ExperimentResult
+from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
 from llenergymeasure.exceptions import LLEMError
 
 
@@ -292,3 +292,107 @@ def print_experiment_header(config: ExperimentConfig) -> None:
             parts.append(f"batch={bs}")
 
     print(f"Experiment: {' | '.join(parts)}", file=sys.stderr)
+
+
+def print_study_progress(
+    index: int,
+    total: int,
+    config: ExperimentConfig,
+    status: str = "running",
+    elapsed: float | None = None,
+    energy: float | None = None,
+) -> None:
+    """Print a per-experiment progress line to stderr.
+
+    Format: [3/12] <icon> model backend precision -- elapsed (energy)
+    Icons: completed=OK, failed=FAIL, running=...
+
+    Args:
+        index: 1-based experiment index.
+        total: Total experiments in study.
+        config: ExperimentConfig for this experiment.
+        status: "running", "completed", or "failed".
+        elapsed: Elapsed time in seconds (None if not yet available).
+        energy: Energy in joules (None if not yet available).
+    """
+    icons = {"running": "...", "completed": "OK", "failed": "FAIL"}
+    icon = icons.get(status, "?")
+
+    parts = [f"[{index}/{total}]", icon, config.model, config.backend, config.precision]
+
+    if elapsed is not None:
+        parts.append("--")
+        parts.append(_format_duration(elapsed))
+    if energy is not None:
+        parts.append(f"({_sig3(energy)} J)")
+
+    line = " ".join(parts)
+    print(line, file=sys.stderr)
+
+
+def print_study_summary(result: StudyResult) -> None:
+    """Print study summary table to stdout.
+
+    Columns: #, Config, Status, Time, Energy, tok/s
+    Failed experiments show error type instead of metrics.
+    Footer with totals.
+
+    Args:
+        result: Completed StudyResult.
+    """
+    print()
+    print(f"Study: {result.name or 'unnamed'}")
+    if result.study_design_hash:
+        print(f"Hash:  {result.study_design_hash}")
+    print()
+
+    # Table header
+    header = f"{'#':>3}  {'Config':<40}  {'Status':<8}  {'Time':>8}  {'Energy':>10}  {'tok/s':>8}"
+    print(header)
+    print("-" * len(header))
+
+    # Table rows
+    for i, exp in enumerate(result.experiments, 1):
+        model_short = exp.effective_config.get("model", "unknown")
+        if len(model_short) > 20:
+            model_short = "..." + model_short[-17:]
+        backend = exp.backend
+        precision = getattr(exp, "precision", "?")
+        if hasattr(exp, "effective_config"):
+            precision = exp.effective_config.get("precision", precision)
+        config_str = f"{model_short} / {backend} / {precision}"
+        if len(config_str) > 40:
+            config_str = config_str[:37] + "..."
+
+        time_str = _format_duration(exp.duration_sec)
+        energy_str = f"{_sig3(exp.total_energy_j)} J"
+        toks_str = _sig3(exp.avg_tokens_per_second)
+
+        print(
+            f"{i:>3}  {config_str:<40}  {'OK':<8}  {time_str:>8}  {energy_str:>10}  {toks_str:>8}"
+        )
+
+    print("-" * len(header))
+
+    # Footer with totals
+    if result.summary:
+        s = result.summary
+        print(
+            f"Total: {s.completed}/{s.total_experiments} completed"
+            f"  |  {_format_duration(s.total_wall_time_s)}"
+            f"  |  {_sig3(s.total_energy_j)} J"
+        )
+        if s.failed > 0:
+            print(f"Failed: {s.failed} experiment(s)")
+        if s.warnings:
+            for w in s.warnings:
+                print(f"  Warning: {w}")
+    print()
+
+    # Output paths
+    if result.result_files:
+        print(f"Results saved: {len(result.result_files)} file(s)")
+        for path in result.result_files[:3]:
+            print(f"  {path}")
+        if len(result.result_files) > 3:
+            print(f"  ... and {len(result.result_files) - 3} more")

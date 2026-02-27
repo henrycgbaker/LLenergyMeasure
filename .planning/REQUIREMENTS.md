@@ -133,20 +133,20 @@ Full definitions, context, and design references are in `.product/REQUIREMENTS.m
 | STU-09 | Phase 10 | Complete |
 | RES-14 | Phase 10 | Complete |
 | RES-NEW-01 | Phase 10 | Complete |
-| STU-01 | Phase 11 | Pending |
-| STU-02 | Phase 11 | Pending |
-| STU-03 | Phase 11 | Pending |
-| STU-04 | Phase 11 | Pending |
-| STU-06 | Phase 11 | Pending |
-| STU-07 | Phase 11 | Pending |
-| LA-02 | Phase 12 | Pending |
-| LA-05 | Phase 12 | Pending |
-| STU-NEW-01 | Phase 12 | Pending |
-| RES-13 | Phase 12 | Pending |
-| RES-15 | Phase 12 | Pending |
-| CLI-05 | Phase 12 | Pending |
-| CLI-11 | Phase 12 | Pending |
-| CM-10 | Phase 12 | Pending |
+| STU-01 | Phase 11 | Complete |
+| STU-02 | Phase 11 | Complete |
+| STU-03 | Phase 11 | Complete |
+| STU-04 | Phase 11 | Complete |
+| STU-06 | Phase 11 | Complete |
+| STU-07 | Phase 11 | Complete |
+| LA-02 | Phase 12 | Complete |
+| LA-05 | Phase 12 | Complete |
+| STU-NEW-01 | Phase 12 | Complete |
+| RES-13 | Phase 12 | Complete |
+| RES-15 | Phase 12 | Complete |
+| CLI-05 | Phase 12 | Complete |
+| CLI-11 | Phase 12 | Complete |
+| CM-10 | Phase 12 | Complete |
 
 **Coverage:**
 - M1 gap closure: 3 requirement gaps + 19 verification gaps → Phases 8.1, 8.2

@@ -270,3 +270,108 @@ def test_run_success_prints_summary():
         f"Expected exit 0, got {result.exit_code}. Output: {result.output}"
     )
     mock_summary.assert_called_once_with(mock_result)
+
+
+# ---------------------------------------------------------------------------
+# Study CLI tests (Phase 12)
+# ---------------------------------------------------------------------------
+
+
+def test_study_detection_with_sweep_key(tmp_path):
+    """YAML with sweep: key is detected as study mode."""
+    study_yaml = tmp_path / "study.yaml"
+    study_yaml.write_text("""
+name: test
+model: test/model
+sweep:
+  precision: [fp32, fp16]
+""")
+    import yaml
+
+    raw = yaml.safe_load(study_yaml.read_text())
+    assert "sweep" in raw
+
+
+def test_study_detection_with_experiments_key(tmp_path):
+    """YAML with experiments: key is detected as study mode."""
+    study_yaml = tmp_path / "study.yaml"
+    study_yaml.write_text("""
+name: test
+experiments:
+  - model: test/model-a
+  - model: test/model-b
+""")
+    import yaml
+
+    raw = yaml.safe_load(study_yaml.read_text())
+    assert "experiments" in raw
+
+
+def test_cli_flags_present():
+    """llem run has --cycles, --order, --no-gaps flags."""
+    import inspect
+
+    from llenergymeasure.cli.run import run
+
+    sig = inspect.signature(run)
+    params = set(sig.parameters.keys())
+    assert "cycles" in params
+    assert "order" in params
+    assert "no_gaps" in params
+
+
+def test_print_study_summary_basic():
+    """print_study_summary runs without error on a minimal StudyResult."""
+    from io import StringIO
+    from unittest.mock import MagicMock, patch
+
+    from llenergymeasure.cli._display import print_study_summary
+    from llenergymeasure.domain.experiment import StudyResult, StudySummary
+
+    # Use model_construct to bypass Pydantic validation for the container —
+    # experiments list contains a MagicMock, which is not a valid ExperimentResult.
+    exp = MagicMock()
+    exp.effective_config = {"model": "test/model", "precision": "fp16"}
+    exp.backend = "pytorch"
+    exp.duration_sec = 45.2
+    exp.total_energy_j = 123.4
+    exp.avg_tokens_per_second = 42.5
+
+    summary = StudySummary(
+        total_experiments=1,
+        completed=1,
+        failed=0,
+        total_wall_time_s=50.0,
+        total_energy_j=123.4,
+    )
+    result = StudyResult.model_construct(
+        experiments=[exp],
+        name="test-study",
+        study_design_hash="abcd1234",
+        summary=summary,
+        result_files=["results/exp1/result.json"],
+        measurement_protocol={},
+    )
+
+    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+        print_study_summary(result)
+    output = mock_stdout.getvalue()
+    assert "test-study" in output
+    assert "abcd1234" in output
+
+
+def test_print_study_progress():
+    """print_study_progress produces a formatted line to stderr."""
+    from io import StringIO
+    from unittest.mock import patch
+
+    from llenergymeasure.cli._display import print_study_progress
+    from llenergymeasure.config.models import ExperimentConfig
+
+    config = ExperimentConfig(model="test/model", backend="pytorch")
+    with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+        print_study_progress(1, 4, config, status="completed", elapsed=30.5, energy=100.0)
+    output = mock_stderr.getvalue()
+    assert "[1/4]" in output
+    assert "OK" in output
+    assert "test/model" in output

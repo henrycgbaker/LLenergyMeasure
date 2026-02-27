@@ -26,6 +26,7 @@ from llenergymeasure.exceptions import (
     ConfigError,
     ExperimentError,
     PreFlightError,
+    StudyError,
 )
 
 # ---------------------------------------------------------------------------
@@ -80,6 +81,20 @@ def run(
         bool,
         typer.Option("--verbose", "-v", help="Show detailed output and tracebacks"),
     ] = False,
+    cycles: Annotated[
+        int | None,
+        typer.Option("--cycles", help="Number of cycles (study mode)"),
+    ] = None,
+    order: Annotated[
+        str | None,
+        typer.Option(
+            "--order", help="Cycle ordering: sequential, interleaved, shuffled (study mode)"
+        ),
+    ] = None,
+    no_gaps: Annotated[
+        bool,
+        typer.Option("--no-gaps", help="Disable thermal gaps between experiments (study mode)"),
+    ] = False,
 ) -> None:
     """Run an LLM efficiency experiment."""
 
@@ -103,11 +118,14 @@ def run(
             dry_run=dry_run,
             quiet=quiet,
             verbose=verbose,
+            cycles=cycles,
+            order=order,
+            no_gaps=no_gaps,
         )
     except ConfigError as e:
         print(format_error(e, verbose=verbose), file=sys.stderr)
         raise typer.Exit(code=2) from None
-    except (PreFlightError, ExperimentError, BackendError) as e:
+    except (PreFlightError, ExperimentError, BackendError, StudyError) as e:
         print(format_error(e, verbose=verbose), file=sys.stderr)
         raise typer.Exit(code=1) from None
     except ValidationError as e:
@@ -135,6 +153,9 @@ def _run_impl(
     dry_run: bool,
     quiet: bool,
     verbose: bool,
+    cycles: int | None = None,
+    order: str | None = None,
+    no_gaps: bool = False,
 ) -> None:
     """Core implementation — separated for clean error handling in run()."""
     # Build CLI overrides dict — only include flags the user explicitly passed
@@ -163,6 +184,32 @@ def _run_impl(
             "    llem run experiment.yaml\n"
             "    llem run --model gpt2 --backend pytorch"
         )
+
+    # Study detection: YAML with sweep: or experiments: keys is a study
+    is_study = False
+    if config is not None:
+        import yaml
+
+        try:
+            raw = yaml.safe_load(config.read_text())
+            if isinstance(raw, dict) and ("sweep" in raw or "experiments" in raw):
+                is_study = True
+        except Exception:
+            pass  # Fall through to normal experiment path — loader will raise if invalid
+
+    # Route to study execution path
+    if is_study:
+        assert config is not None  # Guarded by study detection above
+        _run_study_impl(
+            config=config,
+            cli_overrides=cli_overrides,
+            cycles=cycles,
+            order=order,
+            no_gaps=no_gaps,
+            quiet=quiet,
+            verbose=verbose,
+        )
+        return
 
     # Load/resolve the experiment config
     experiment_config = load_experiment_config(
@@ -200,3 +247,80 @@ def _run_impl(
         if ts_source is not None:
             ts_source.unlink(missing_ok=True)
         print(f"Saved: {experiment_config.output_dir}", file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
+# Study execution path
+# ---------------------------------------------------------------------------
+
+
+def _run_study_impl(
+    config: Path,
+    cli_overrides: dict[str, Any],
+    cycles: int | None,
+    order: str | None,
+    no_gaps: bool,
+    quiet: bool,
+    verbose: bool,
+) -> None:
+    """Study execution path — separated for clean error handling."""
+    import yaml
+
+    from llenergymeasure import run_study
+    from llenergymeasure.cli._display import print_study_summary
+    from llenergymeasure.config.loader import load_study_config
+    from llenergymeasure.study.grid import format_preflight_summary
+
+    # Check what the YAML execution block specifies (to apply CLI effective defaults)
+    raw = yaml.safe_load(config.read_text()) or {}
+    yaml_execution = raw.get("execution", {}) or {}
+
+    # Build execution overrides from CLI flags
+    exec_overrides: dict[str, Any] = {}
+
+    # CLI effective defaults: n_cycles=3, cycle_order="shuffled" when neither YAML nor CLI specifies
+    # These are applied at CLI layer; Pydantic defaults are conservative (n_cycles=1)
+    if cycles is not None:
+        exec_overrides["n_cycles"] = cycles
+    elif "n_cycles" not in yaml_execution:
+        exec_overrides["n_cycles"] = 3  # CLI effective default
+
+    if order is not None:
+        exec_overrides["cycle_order"] = order
+    elif "cycle_order" not in yaml_execution:
+        exec_overrides["cycle_order"] = "shuffled"  # CLI effective default
+
+    if no_gaps:
+        exec_overrides["experiment_gap_seconds"] = 0
+        exec_overrides["cycle_gap_seconds"] = 0
+
+    # Build full CLI overrides dict
+    study_cli_overrides: dict[str, Any] = {}
+    if cli_overrides:
+        study_cli_overrides.update(cli_overrides)
+    if exec_overrides:
+        study_cli_overrides["execution"] = exec_overrides
+
+    # Load study config with overrides
+    study_config = load_study_config(
+        path=config,
+        cli_overrides=study_cli_overrides if study_cli_overrides else None,
+    )
+
+    # Pre-flight summary display
+    if not quiet:
+        summary = format_preflight_summary(study_config)
+        print(summary, file=sys.stderr)
+        print(file=sys.stderr)
+
+    # Run the study
+    result = run_study(study_config)
+
+    # Display summary
+    if not quiet:
+        print_study_summary(result)
+
+    # Show output path
+    if result.result_files:
+        first = result.result_files[0]
+        print(f"Study results: {first}", file=sys.stderr)

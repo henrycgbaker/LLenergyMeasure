@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-27T16:18:43.894Z"
+last_updated: "2026-02-27T19:38:05.386Z"
 progress:
-  total_phases: 23
-  completed_phases: 18
-  total_plans: 78
-  completed_plans: 70
+  total_phases: 25
+  completed_phases: 20
+  total_plans: 83
+  completed_plans: 75
 ---
 
 # Project State
@@ -22,10 +22,10 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 10 (Phase 10 in progress — 10-01 complete)
-Plan: 10-01 complete
-Status: In progress
-Last activity: 2026-02-27 — Phase 10 Plan 01 complete: StudyManifest, ManifestWriter, atomic writes, 19 new tests (484 total)
+Phase: 12
+Plan: 12-03 complete (Phase 12 complete)
+Status: Phase 13 next
+Last activity: 2026-02-27 — Phase 12 Plan 03 complete: study-mode CLI flags (--cycles/--order/--no-gaps), YAML study detection, print_study_progress, print_study_summary, 530 tests pass
 
 Progress: [██░░░░░░░░] ~10%
 
@@ -42,13 +42,16 @@ Progress: [██░░░░░░░░] ~10%
 |-------|-------|-------|----------|
 | 09-grid-expansion | 2 completed | 10 min | 5 min |
 | 10-manifest-writer | 1 completed | 3 min | 3 min |
-| 11-subprocess-isolation | TBD | - | - |
-| 12-integration | TBD | - | - |
+| 11-subprocess-isolation | 2 completed | 8 min | 4 min |
+| 12-integration | 1 completed | TBD | - |
 | 08.1-pytorch-result-wiring | 1 completed | 3 min | 3 min |
 
 *Updated after each plan completion*
 | Phase 08.2-m1-tech-debt-cleanup P01 | 3 | 2 tasks | 3 files |
 | Phase 08.2 P02 | 4 | 2 tasks | 6 files |
+| Phase 11 P02 | 5 min | 3 tasks | 6 files |
+| Phase 12-integration P02 | 8 | 2 tasks | 4 files |
+| Phase 12-integration P03 | 3 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -74,6 +77,20 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 - [Phase 08.2]: Inline field access replaces calculate_efficiency_metrics() in cli/results.py and cli/display/results.py
 - [Phase 10-01]: Lazy-import __version__ inside _build_manifest() to break circular import (study.__init__ -> manifest -> llenergymeasure)
 - [Phase 10-01]: study_design_hash used in StudyManifest (not study_yaml_hash) per CONTEXT.md CP-6 decision
+- [Phase 11-01]: _run_experiment_worker is a stub (raises NotImplementedError) — wired to real backend in Phase 12
+- [Phase 11-01]: cycle=1 hardcoded in _run_one — full per-cycle tracking deferred to Phase 12
+- [Phase 11-01]: getattr(execution, 'experiment_timeout_seconds', None) forward-compat — field added in Phase 12
+- [Phase 11]: Grace period 2s (2-3s range): balance between CUDA teardown and responsiveness
+- [Phase 11]: Enter-to-skip uses daemon readline thread (not select/termios): simplest TTY-degrading approach
+- [Phase 11]: interrupt_event.clear() at run() start: allows StudyRunner re-use; SIGINT state is per-run
+- [Phase 12-01]: StudyResult has no extra='forbid' — internal model, not user-visible output
+- [Phase 12-01]: run_study_preflight raises PreFlightError immediately for multi-backend (CM-10); Docker isolation is M3
+- [Phase 12-01]: experiment_gap_seconds replaces config_gap_seconds in both ExecutionConfig and UserExecutionConfig
+- [Phase 12-integration]: _run_in_process propagates PreFlightError and BackendError unchanged; only save failures are caught
+- [Phase 12-integration]: Single experiment + n_cycles=1 dispatches in-process; multi-experiment via StudyRunner subprocess
+- [Phase 12-integration]: result_files list contains absolute path strings; manifest entry stores relative path from study_dir
+- [Phase 12-integration]: CLI effective defaults n_cycles=3 and cycle_order=shuffled applied only when YAML execution block omits those keys
+- [Phase 12-integration]: quiet suppresses CLI-side progress and summary; gap countdown suppression deferred (M2 limitation, subprocess-level)
 
 ### Pending Todos
 
@@ -92,6 +109,6 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 10-01-PLAN.md — StudyManifest, ManifestWriter, atomic writes, 19 tests (484 total)
+Stopped at: Completed 12-03-PLAN.md — study-mode CLI flags, display functions, 530 tests pass
 Resume file: None
-Next action: Execute Phase 10 Plan 02 (next plan in phase, if exists) or Phase 11
+Next action: Phase 13 — Documentation

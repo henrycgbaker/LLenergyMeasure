@@ -208,18 +208,16 @@ def test_run_experiment_no_disk_writes(tmp_path, monkeypatch):
 
 
 # =============================================================================
-# Test 8: run_study raises NotImplementedError
+# Test 8: run_study is implemented (M2)
 # =============================================================================
 
 
-def test_run_study_raises_not_implemented():
-    """run_study raises NotImplementedError with 'M2' in the message."""
-    study_config = StudyConfig(experiments=[ExperimentConfig(model="gpt2")])
+def test_run_study_invalid_type_raises_config_error():
+    """run_study(42) raises ConfigError, not NotImplementedError."""
+    from llenergymeasure.exceptions import ConfigError
 
-    with pytest.raises(NotImplementedError) as exc_info:
-        run_study(study_config)
-
-    assert "M2" in str(exc_info.value)
+    with pytest.raises(ConfigError):
+        run_study(42)  # type: ignore[arg-type]
 
 
 # =============================================================================
@@ -305,9 +303,11 @@ class _MockBackend:
         return self._result
 
 
-def test_run_calls_preflight_once_per_config(monkeypatch):
-    """_run() calls run_preflight once for each experiment config in the study."""
+def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
+    """_run() calls run_preflight once for the single in-process experiment."""
     import llenergymeasure._api as api_module
+    import llenergymeasure.core.backends as backends_module
+    import llenergymeasure.orchestration.preflight as pf_module
 
     preflight_calls: list = []
 
@@ -317,34 +317,28 @@ def test_run_calls_preflight_once_per_config(monkeypatch):
     mock_result = _make_experiment_result()
     mock_backend = _MockBackend(mock_result)
 
-    monkeypatch.setattr(
-        "llenergymeasure.orchestration.preflight.run_preflight",
-        mock_preflight,
-    )
-    monkeypatch.setattr(
-        "llenergymeasure.core.backends.get_backend",
-        lambda name: mock_backend,
-    )
-
-    # Patch the deferred imports inside _run by patching at the module level
-    import llenergymeasure.core.backends as backends_module
-    import llenergymeasure.orchestration.preflight as pf_module
-
     monkeypatch.setattr(pf_module, "run_preflight", mock_preflight)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.study.manifest.create_study_dir",
+        lambda name, output_dir: tmp_path,
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.results.persistence.save_result",
+        lambda result, output_dir, **kw: tmp_path / "result.json",
+    )
 
     config1 = ExperimentConfig(model="gpt2")
-    config2 = ExperimentConfig(model="bert-base-uncased")
-    study = StudyConfig(experiments=[config1, config2])
+    study = StudyConfig(experiments=[config1])
 
-    _study_result = api_module._run(study)
+    api_module._run(study)
 
-    assert len(preflight_calls) == 2, f"Expected 2 preflight calls, got {len(preflight_calls)}"
+    assert len(preflight_calls) == 1, f"Expected 1 preflight call, got {len(preflight_calls)}"
     assert preflight_calls[0].model == "gpt2"
-    assert preflight_calls[1].model == "bert-base-uncased"
 
 
-def test_run_calls_get_backend_with_correct_name(monkeypatch):
+def test_run_calls_get_backend_with_correct_name(monkeypatch, tmp_path):
     """_run() calls get_backend with the experiment's backend name."""
     import llenergymeasure._api as api_module
     import llenergymeasure.core.backends as backends_module
@@ -360,7 +354,16 @@ def test_run_calls_get_backend_with_correct_name(monkeypatch):
         return mock_backend
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
     monkeypatch.setattr(backends_module, "get_backend", mock_get_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.study.manifest.create_study_dir",
+        lambda name, output_dir: tmp_path,
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.results.persistence.save_result",
+        lambda result, output_dir, **kw: tmp_path / "result.json",
+    )
 
     config = ExperimentConfig(model="gpt2", backend="pytorch")
     study = StudyConfig(experiments=[config])
@@ -371,7 +374,7 @@ def test_run_calls_get_backend_with_correct_name(monkeypatch):
     assert backend_calls[0] == "pytorch"
 
 
-def test_run_returns_study_result(monkeypatch):
+def test_run_returns_study_result(monkeypatch, tmp_path):
     """_run() returns a StudyResult containing the experiment results."""
     import llenergymeasure._api as api_module
     import llenergymeasure.core.backends as backends_module
@@ -381,7 +384,16 @@ def test_run_returns_study_result(monkeypatch):
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.study.manifest.create_study_dir",
+        lambda name, output_dir: tmp_path,
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.results.persistence.save_result",
+        lambda result, output_dir, **kw: tmp_path / "result.json",
+    )
 
     config = ExperimentConfig(model="gpt2")
     study = StudyConfig(experiments=[config], name="my-study")
@@ -394,7 +406,7 @@ def test_run_returns_study_result(monkeypatch):
     assert study_result.experiments[0].experiment_id == "wired-001"
 
 
-def test_run_propagates_preflight_error(monkeypatch):
+def test_run_propagates_preflight_error(monkeypatch, tmp_path):
     """_run() propagates PreFlightError without catching it."""
     import llenergymeasure._api as api_module
     import llenergymeasure.core.backends as backends_module
@@ -404,8 +416,13 @@ def test_run_propagates_preflight_error(monkeypatch):
         raise PreFlightError(["CUDA not available"])
 
     monkeypatch.setattr(pf_module, "run_preflight", failing_preflight)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
     monkeypatch.setattr(
         backends_module, "get_backend", lambda name: _MockBackend(_make_experiment_result())
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.study.manifest.create_study_dir",
+        lambda name, output_dir: tmp_path,
     )
 
     config = ExperimentConfig(model="gpt2")
@@ -415,7 +432,7 @@ def test_run_propagates_preflight_error(monkeypatch):
         api_module._run(study)
 
 
-def test_run_propagates_backend_error(monkeypatch):
+def test_run_propagates_backend_error(monkeypatch, tmp_path):
     """_run() propagates BackendError without catching it."""
     import llenergymeasure._api as api_module
     import llenergymeasure.core.backends as backends_module
@@ -430,7 +447,12 @@ def test_run_propagates_backend_error(monkeypatch):
             raise BackendError("GPU out of memory")
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: _FailingBackend())
+    monkeypatch.setattr(
+        "llenergymeasure.study.manifest.create_study_dir",
+        lambda name, output_dir: tmp_path,
+    )
 
     config = ExperimentConfig(model="gpt2")
     study = StudyConfig(experiments=[config])
@@ -439,7 +461,7 @@ def test_run_propagates_backend_error(monkeypatch):
         api_module._run(study)
 
 
-def test_run_experiment_end_to_end_mocked(monkeypatch):
+def test_run_experiment_end_to_end_mocked(monkeypatch, tmp_path):
     """run_experiment() flows through the real _run() pipeline (mocked backend) and returns ExperimentResult."""
     import llenergymeasure.core.backends as backends_module
     import llenergymeasure.orchestration.preflight as pf_module
@@ -448,7 +470,16 @@ def test_run_experiment_end_to_end_mocked(monkeypatch):
     mock_backend = _MockBackend(expected_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.study.manifest.create_study_dir",
+        lambda name, output_dir: tmp_path,
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.results.persistence.save_result",
+        lambda result, output_dir, **kw: tmp_path / "result.json",
+    )
 
     result = run_experiment(model="gpt2")
 
@@ -457,3 +488,127 @@ def test_run_experiment_end_to_end_mocked(monkeypatch):
     assert result.experiment_id == "e2e-test"
     assert len(mock_backend.run_calls) == 1
     assert mock_backend.run_calls[0].model == "gpt2"
+
+
+# =============================================================================
+# Plan 02: run_study() and _run() dispatcher tests
+# =============================================================================
+
+
+def test_run_study_accepts_study_config(monkeypatch, tmp_path):
+    """run_study(StudyConfig) returns StudyResult with populated summary."""
+    import llenergymeasure.core.backends as backends_module
+    import llenergymeasure.orchestration.preflight as pf_module
+
+    mock_result = _make_experiment_result(experiment_id="study-test")
+    mock_backend = _MockBackend(mock_result)
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    # Avoid real disk writes by patching create_study_dir and save_result
+    monkeypatch.setattr(
+        "llenergymeasure.study.manifest.create_study_dir",
+        lambda name, output_dir: tmp_path,
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.results.persistence.save_result",
+        lambda result, output_dir, **kw: tmp_path / "result.json",
+    )
+
+    study = StudyConfig(experiments=[ExperimentConfig(model="gpt2")])
+    result = run_study(study)
+
+    assert isinstance(result, StudyResult)
+    assert result.summary is not None
+    assert result.summary.completed == 1
+    assert result.summary.failed == 0
+
+
+def test_run_study_accepts_path(tmp_path, monkeypatch):
+    """run_study(str path) loads YAML and returns StudyResult."""
+    import llenergymeasure.core.backends as backends_module
+    import llenergymeasure.orchestration.preflight as pf_module
+
+    yaml_content = "experiments:\n  - model: gpt2\n"
+    yaml_path = tmp_path / "study.yaml"
+    yaml_path.write_text(yaml_content)
+
+    mock_result = _make_experiment_result(experiment_id="path-test")
+    mock_backend = _MockBackend(mock_result)
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.study.manifest.create_study_dir",
+        lambda name, output_dir: tmp_path,
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.results.persistence.save_result",
+        lambda result, output_dir, **kw: tmp_path / "result.json",
+    )
+
+    result = run_study(str(yaml_path))
+
+    assert isinstance(result, StudyResult)
+
+
+def test_run_dispatches_single_in_process(monkeypatch, tmp_path):
+    """Single experiment + n_cycles=1 bypasses StudyRunner (in-process path)."""
+    import llenergymeasure._api as api_module
+    import llenergymeasure.core.backends as backends_module
+    import llenergymeasure.orchestration.preflight as pf_module
+    from llenergymeasure.study.runner import StudyRunner
+
+    mock_result = _make_experiment_result(experiment_id="inproc-test")
+    mock_backend = _MockBackend(mock_result)
+
+    runner_created = []
+    original_runner_init = StudyRunner.__init__
+
+    def mock_runner_init(self, *args, **kwargs):
+        runner_created.append(True)
+        original_runner_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.study.manifest.create_study_dir",
+        lambda name, output_dir: tmp_path,
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.results.persistence.save_result",
+        lambda result, output_dir, **kw: tmp_path / "result.json",
+    )
+    monkeypatch.setattr(StudyRunner, "__init__", mock_runner_init)
+
+    study = StudyConfig(
+        experiments=[ExperimentConfig(model="gpt2")],
+        execution={"n_cycles": 1, "cycle_order": "sequential"},
+    )
+    api_module._run(study)
+
+    # Single experiment + n_cycles=1 should NOT create StudyRunner
+    assert runner_created == [], "StudyRunner was created for single in-process path"
+    # Backend was called directly
+    assert len(mock_backend.run_calls) == 1
+
+
+def test_run_study_returns_study_result_type():
+    """run_study return annotation is StudyResult (not a union)."""
+    import inspect
+
+    import llenergymeasure._api as api_module
+
+    try:
+        import typing
+
+        typing.get_type_hints(api_module.run_study)
+    except Exception:
+        pass
+
+    # Check via source that return type is annotated as StudyResult
+    src = inspect.getsource(api_module.run_study)
+    assert "-> StudyResult" in src, "run_study must have -> StudyResult return annotation"
