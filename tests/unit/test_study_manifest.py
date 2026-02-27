@@ -15,11 +15,11 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from llenergymeasure.config.models import ExperimentConfig, ExecutionConfig, StudyConfig
+from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
 from llenergymeasure.study.manifest import (
     ExperimentManifestEntry,
     ManifestWriter,
@@ -28,7 +28,6 @@ from llenergymeasure.study.manifest import (
     create_study_dir,
     experiment_result_filename,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -200,7 +199,7 @@ def test_study_manifest_distinct_from_study_result() -> None:
 
 def test_manifest_writer_creates_initial_manifest(tmp_path: Path) -> None:
     study = _make_study(n_experiments=2, n_cycles=2)
-    writer = ManifestWriter(study=study, study_dir=tmp_path)
+    ManifestWriter(study=study, study_dir=tmp_path)
     manifest_path = tmp_path / "manifest.json"
     assert manifest_path.exists()
     data = json.loads(manifest_path.read_text())
@@ -265,7 +264,7 @@ def test_manifest_writer_uses_atomic_write(tmp_path: Path) -> None:
     study = _make_study(n_experiments=1, n_cycles=1)
 
     with patch("llenergymeasure.study.manifest._atomic_write") as mock_write:
-        writer = ManifestWriter(study=study, study_dir=tmp_path)
+        ManifestWriter(study=study, study_dir=tmp_path)
         assert mock_write.called, "_atomic_write should be called during __init__"
 
 
@@ -277,10 +276,13 @@ def test_manifest_writer_write_failure_logs_warning(tmp_path: Path, caplog: pyte
     config_hash = data["experiments"][0]["config_hash"]
 
     import logging
-    with patch("llenergymeasure.study.manifest._atomic_write", side_effect=OSError("disk full")):
-        with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.manifest"):
-            # Should not raise
-            writer.mark_running(config_hash, cycle=1)
+
+    with (
+        patch("llenergymeasure.study.manifest._atomic_write", side_effect=OSError("disk full")),
+        caplog.at_level(logging.WARNING, logger="llenergymeasure.study.manifest"),
+    ):
+        # Should not raise
+        writer.mark_running(config_hash, cycle=1)
 
     assert any("disk full" in r.message or "manifest" in r.message.lower() for r in caplog.records)
 
@@ -311,9 +313,8 @@ def test_create_study_dir_layout(tmp_path: Path) -> None:
 def test_create_study_dir_raises_study_error_on_failure(tmp_path: Path) -> None:
     from llenergymeasure.exceptions import StudyError
 
-    with patch.object(Path, "mkdir", side_effect=PermissionError("no write")):
-        with pytest.raises(StudyError):
-            create_study_dir(name="sweep", output_dir=tmp_path)
+    with patch.object(Path, "mkdir", side_effect=PermissionError("no write")), pytest.raises(StudyError):
+        create_study_dir(name="sweep", output_dir=tmp_path)
 
 
 # ---------------------------------------------------------------------------
