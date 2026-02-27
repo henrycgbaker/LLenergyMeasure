@@ -3,8 +3,7 @@
 Tests use typer.testing.CliRunner to invoke the CLI without touching GPU hardware
 or the file system. All external probes are mocked.
 
-Note: CliRunner(mix_stderr=True) is used for consistent output capture; see
-test_cli_run.py for full rationale.
+Note: typer's CliRunner routes all output to .output for assertions.
 """
 
 from __future__ import annotations
@@ -18,7 +17,7 @@ from typer.testing import CliRunner
 
 from llenergymeasure.cli import app
 
-runner = CliRunner(mix_stderr=True)
+runner = CliRunner()
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 

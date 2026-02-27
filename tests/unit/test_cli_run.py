@@ -3,10 +3,8 @@
 Tests use typer.testing.CliRunner to invoke the CLI without loading models or
 touching GPU hardware. All heavy operations are mocked.
 
-Note: CliRunner(mix_stderr=True) is used because typer's CliRunner routes all
-output (stdout + stderr) to .output when mix_stderr=True; .stderr is unreliable
-in typer's test harness. Error messages printed to sys.stderr are captured in
-.output for assertion purposes.
+Note: typer's CliRunner routes all output (stdout + stderr) to .output.
+Error messages printed to sys.stderr are captured in .output for assertions.
 """
 
 from __future__ import annotations
@@ -18,7 +16,7 @@ from typer.testing import CliRunner
 
 from llenergymeasure.cli import app
 
-runner = CliRunner(mix_stderr=True)
+runner = CliRunner()
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
