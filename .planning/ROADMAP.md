@@ -73,7 +73,7 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
 **Plans**: 1 plan
 
 Plans:
-- [ ] 16-01-PLAN.md — NVML residual memory check module + StudyRunner pre-dispatch wiring + unit tests
+- [x] 16-01-PLAN.md — NVML residual memory check module + StudyRunner pre-dispatch wiring + unit tests
 
 ### Phase 17: Docker Runner Infrastructure
 **Goal**: StudyRunner can dispatch experiments to ephemeral Docker containers, with config passed in and results passed out via shared volume
@@ -198,7 +198,7 @@ Phase 21 can run in parallel with Phase 20 (no dependency between them).
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 16. GPU Memory Verification | 1/1 | Complete    | 2026-02-27 |
+| 16. GPU Memory Verification | 1/1 | Merged (PR #24) | 2026-02-28 |
 | 17. Docker Runner Infrastructure | 0/TBD | Not started | - |
 | 18. Docker Pre-flight | 0/TBD | Not started | - |
 | 19. vLLM Backend Activation | 0/TBD | Not started | - |
