@@ -58,11 +58,11 @@ def _probe_backend_version(backend: str) -> str | None:
         elif backend == "vllm":
             import vllm
 
-            return vllm.__version__
+            return str(vllm.__version__)
         elif backend == "tensorrt":
             import tensorrt_llm
 
-            return tensorrt_llm.__version__
+            return str(tensorrt_llm.__version__)
     except Exception:
         pass
     return None

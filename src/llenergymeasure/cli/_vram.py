@@ -6,10 +6,7 @@ try/except and return None on any failure. Network errors never block the CLI.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.models import ExperimentConfig
 
 # Bytes per parameter for each precision mode.
 DTYPE_BYTES: dict[str, float] = {

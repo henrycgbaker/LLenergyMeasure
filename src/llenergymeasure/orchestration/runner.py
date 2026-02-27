@@ -18,6 +18,12 @@ from loguru import logger
 
 from llenergymeasure.constants import COMPLETION_MARKER_PREFIX
 from llenergymeasure.domain.experiment import RawProcessResult, Timestamps
+from llenergymeasure.domain.metrics import (
+    CombinedMetrics,
+    ComputeMetrics,
+    EnergyMetrics,
+    ExtendedEfficiencyMetrics,
+)
 from llenergymeasure.orchestration.context import ExperimentContext
 
 if TYPE_CHECKING:
@@ -247,8 +253,6 @@ class ExperimentOrchestrator:
             logger.debug("Energy tracking stopped")
         except Exception as e:
             logger.warning(f"Energy tracking failed (non-fatal): {e}")
-            from llenergymeasure.domain.metrics import EnergyMetrics
-
             energy_metrics = EnergyMetrics.placeholder(
                 duration_sec=inference_result.metrics.inference_time_sec
             )
@@ -260,8 +264,6 @@ class ExperimentOrchestrator:
             combined = self._metrics.collect(model, inference_result, ctx.config)
         except Exception as e:
             logger.warning(f"Metrics collection failed (non-fatal): {e}")
-            from llenergymeasure.domain.metrics import CombinedMetrics, ComputeMetrics
-
             combined = CombinedMetrics(
                 inference=inference_result.metrics,
                 energy=energy_metrics,
@@ -302,7 +304,6 @@ class ExperimentOrchestrator:
 
         # Compute extended efficiency metrics
         from llenergymeasure.core.extended_metrics import compute_extended_metrics
-        from llenergymeasure.domain.metrics import ExtendedEfficiencyMetrics
 
         # Get precision factor from backend result if available
         precision_factor = 1.0
