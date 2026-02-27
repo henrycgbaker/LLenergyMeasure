@@ -167,7 +167,7 @@ Plans:
 | 8.2. M1 Tech Debt Cleanup | 2/2 | Complete   | 2026-02-27 |
 | 9. Grid Expansion and StudyConfig | 1/2 | In Progress|  |
 | 10. Manifest Writer | 1/1 | Complete    | 2026-02-27 |
-| 11. Subprocess Isolation and StudyRunner | 0/TBD | Not started | - |
+| 11. Subprocess Isolation and StudyRunner | 1/2 | In Progress|  |
 | 12. Integration | 0/TBD | Not started | - |
 | 13. Documentation — M1 backfill and M2 updates | 0/TBD | Not started | - |
 
@@ -176,7 +176,7 @@ Plans:
 **Goal:** [To be planned]
 **Requirements**: TBD
 **Depends on:** Phase 12
-**Plans:** 1/1 plans complete
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] TBD (run /gsd:plan-phase 13 to break down)

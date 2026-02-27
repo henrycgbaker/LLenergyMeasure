@@ -133,12 +133,12 @@ Full definitions, context, and design references are in `.product/REQUIREMENTS.m
 | STU-09 | Phase 10 | Complete |
 | RES-14 | Phase 10 | Complete |
 | RES-NEW-01 | Phase 10 | Complete |
-| STU-01 | Phase 11 | Pending |
-| STU-02 | Phase 11 | Pending |
-| STU-03 | Phase 11 | Pending |
-| STU-04 | Phase 11 | Pending |
+| STU-01 | Phase 11 | Complete |
+| STU-02 | Phase 11 | Complete |
+| STU-03 | Phase 11 | Complete |
+| STU-04 | Phase 11 | Complete |
 | STU-06 | Phase 11 | Pending |
-| STU-07 | Phase 11 | Pending |
+| STU-07 | Phase 11 | Complete |
 | LA-02 | Phase 12 | Pending |
 | LA-05 | Phase 12 | Pending |
 | STU-NEW-01 | Phase 12 | Pending |

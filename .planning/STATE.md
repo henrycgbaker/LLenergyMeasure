@@ -22,10 +22,10 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 10 (Phase 10 in progress — 10-01 complete)
-Plan: 10-01 complete
+Phase: 11 (Phase 11 in progress — 11-01 complete)
+Plan: 11-01 complete
 Status: In progress
-Last activity: 2026-02-27 — Phase 10 Plan 01 complete: StudyManifest, ManifestWriter, atomic writes, 19 new tests (484 total)
+Last activity: 2026-02-27 — Phase 11 Plan 01 complete: StudyRunner, subprocess isolation (spawn context, Pipe IPC, SIGKILL timeout), 10 new tests (494 total)
 
 Progress: [██░░░░░░░░] ~10%
 
@@ -74,6 +74,9 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 - [Phase 08.2]: Inline field access replaces calculate_efficiency_metrics() in cli/results.py and cli/display/results.py
 - [Phase 10-01]: Lazy-import __version__ inside _build_manifest() to break circular import (study.__init__ -> manifest -> llenergymeasure)
 - [Phase 10-01]: study_design_hash used in StudyManifest (not study_yaml_hash) per CONTEXT.md CP-6 decision
+- [Phase 11-01]: _run_experiment_worker is a stub (raises NotImplementedError) — wired to real backend in Phase 12
+- [Phase 11-01]: cycle=1 hardcoded in _run_one — full per-cycle tracking deferred to Phase 12
+- [Phase 11-01]: getattr(execution, 'experiment_timeout_seconds', None) forward-compat — field added in Phase 12
 
 ### Pending Todos
 
@@ -92,6 +95,6 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 10-01-PLAN.md — StudyManifest, ManifestWriter, atomic writes, 19 tests (484 total)
+Stopped at: Completed 11-01-PLAN.md — StudyRunner, subprocess isolation, 10 new tests (494 total)
 Resume file: None
-Next action: Execute Phase 10 Plan 02 (next plan in phase, if exists) or Phase 11
+Next action: Execute Phase 11 Plan 02 (11-02-PLAN.md)
