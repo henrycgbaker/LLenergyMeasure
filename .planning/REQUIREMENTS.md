@@ -129,10 +129,10 @@ Full definitions, context, and design references are in `.product/REQUIREMENTS.m
 | CFG-14 | Phase 9 | Complete |
 | CFG-15 | Phase 9 | Complete |
 | CFG-16 | Phase 9 | Complete |
-| STU-08 | Phase 10 | Pending |
-| STU-09 | Phase 10 | Pending |
-| RES-14 | Phase 10 | Pending |
-| RES-NEW-01 | Phase 10 | Pending |
+| STU-08 | Phase 10 | Complete |
+| STU-09 | Phase 10 | Complete |
+| RES-14 | Phase 10 | Complete |
+| RES-NEW-01 | Phase 10 | Complete |
 | STU-01 | Phase 11 | Pending |
 | STU-02 | Phase 11 | Pending |
 | STU-03 | Phase 11 | Pending |

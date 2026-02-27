@@ -1,0 +1,243 @@
+"""Study manifest — checkpoint model and atomic writer."""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import TYPE_CHECKING, Literal
+
+from pydantic import BaseModel
+
+from llenergymeasure.exceptions import StudyError
+from llenergymeasure.results.persistence import _atomic_write
+
+if TYPE_CHECKING:
+    from llenergymeasure.config.models import ExperimentConfig, StudyConfig
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Manifest models
+# ---------------------------------------------------------------------------
+
+
+class ExperimentManifestEntry(BaseModel):
+    """Checkpoint record for a single experiment + cycle execution."""
+
+    model_config = {"extra": "forbid"}
+
+    config_hash: str
+    config_summary: str
+    cycle: int
+    status: Literal["pending", "running", "completed", "failed"]
+    result_file: str | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class StudyManifest(BaseModel):
+    """In-progress checkpoint written after every experiment state transition.
+
+    Distinct from StudyResult (the final return value of _run()).
+    StudyManifest is always-on in M2 and provides the foundation for --resume
+    support in M4.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    schema_version: str = "2.0"
+    study_name: str
+    study_design_hash: str
+    llenergymeasure_version: str
+    started_at: datetime
+    completed_at: datetime | None = None
+    total_experiments: int
+    completed: int = 0
+    failed: int = 0
+    pending: int
+    experiments: list[ExperimentManifestEntry]
+
+
+# ---------------------------------------------------------------------------
+# Public helpers
+# ---------------------------------------------------------------------------
+
+
+def build_config_summary(experiment: ExperimentConfig) -> str:
+    """Return a human-readable summary string for an experiment config.
+
+    Format: "{backend} / {model_slug} / {precision}"
+    model_slug: lowered, '/' replaced with '-', truncated to 30 chars.
+    """
+    model_slug = experiment.model.replace("/", "-").lower()
+    if len(model_slug) > 30:
+        model_slug = model_slug[:30]
+    return f"{experiment.backend} / {model_slug} / {experiment.precision}"
+
+
+def create_study_dir(name: str | None, output_dir: Path) -> Path:
+    """Create study output directory with {name}_{timestamp}/ layout.
+
+    Args:
+        name: Study name prefix. Uses "study" if None.
+        output_dir: Parent directory to create the study directory in.
+
+    Returns:
+        Path to the newly created study directory.
+
+    Raises:
+        StudyError: If directory creation fails.
+    """
+    prefix = name if name else "study"
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+    study_dir = output_dir / f"{prefix}_{timestamp}"
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        study_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise StudyError(f"Failed to create study directory: {exc}") from exc
+    return study_dir
+
+
+def experiment_result_filename(
+    model: str,
+    backend: str,
+    precision: str,
+    config_hash: str,
+    extension: str = ".json",
+) -> str:
+    """Return flat filename for an experiment result file.
+
+    Format: "{model_slug}_{backend}_{precision}_{hash[:8]}{extension}"
+    model_slug: lowered, '/' replaced with '-'.
+    """
+    model_slug = model.replace("/", "-").lower()
+    return f"{model_slug}_{backend}_{precision}_{config_hash[:8]}{extension}"
+
+
+# ---------------------------------------------------------------------------
+# ManifestWriter
+# ---------------------------------------------------------------------------
+
+
+class ManifestWriter:
+    """Writes and maintains manifest.json in the study directory.
+
+    Writes after every state transition (mark_running / mark_completed /
+    mark_failed). Uses atomic os.replace() via _atomic_write.
+
+    Write failures are logged as warnings — they never abort the study.
+    Directory creation failure raises StudyError immediately (fast-fail).
+    """
+
+    def __init__(self, study: StudyConfig, study_dir: Path) -> None:
+        self._study_dir = study_dir
+        self.path = study_dir / "manifest.json"
+        self.manifest = self._build_manifest(study)
+        self._write()
+
+    # ------------------------------------------------------------------
+    # Public interface
+    # ------------------------------------------------------------------
+
+    def mark_running(self, config_hash: str, cycle: int) -> None:
+        """Mark a pending experiment as running."""
+        entry = self._find(config_hash, cycle)
+        entry.status = "running"
+        entry.started_at = datetime.now(timezone.utc)
+        self._recount()
+        self._write()
+
+    def mark_completed(self, config_hash: str, cycle: int, result_file: str) -> None:
+        """Mark a running experiment as completed."""
+        entry = self._find(config_hash, cycle)
+        entry.status = "completed"
+        entry.result_file = result_file
+        entry.completed_at = datetime.now(timezone.utc)
+        self._recount()
+        self._write()
+
+    def mark_failed(
+        self,
+        config_hash: str,
+        cycle: int,
+        error_type: str,
+        error_message: str,
+    ) -> None:
+        """Mark a running experiment as failed."""
+        entry = self._find(config_hash, cycle)
+        entry.status = "failed"
+        entry.error_type = error_type
+        entry.error_message = error_message
+        entry.completed_at = datetime.now(timezone.utc)
+        self._recount()
+        self._write()
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _find(self, config_hash: str, cycle: int) -> ExperimentManifestEntry:
+        """Find entry by (config_hash, cycle). Raises KeyError if not found."""
+        for entry in self.manifest.experiments:
+            if entry.config_hash == config_hash and entry.cycle == cycle:
+                return entry
+        raise KeyError(f"No manifest entry for config_hash={config_hash!r}, cycle={cycle}")
+
+    def _recount(self) -> None:
+        """Recompute aggregate counters from entries."""
+        completed = sum(1 for e in self.manifest.experiments if e.status == "completed")
+        failed = sum(1 for e in self.manifest.experiments if e.status == "failed")
+        pending = sum(1 for e in self.manifest.experiments if e.status in ("pending", "running"))
+        self.manifest = self.manifest.model_copy(
+            update={"completed": completed, "failed": failed, "pending": pending}
+        )
+
+    def _write(self) -> None:
+        """Write manifest to disk atomically. Logs warning on failure."""
+        try:
+            _atomic_write(self.manifest.model_dump_json(indent=2), self.path)
+        except Exception as exc:
+            logger.warning("Failed to write manifest to %s: %s", self.path, exc)
+
+    def _build_manifest(self, study: StudyConfig) -> StudyManifest:
+        """Build initial StudyManifest from a StudyConfig."""
+        from llenergymeasure import __version__
+
+        entries = self._build_entries(study)
+        return StudyManifest(
+            study_name=study.name or "unnamed-study",
+            study_design_hash=study.study_design_hash or "",
+            llenergymeasure_version=__version__,
+            started_at=datetime.now(timezone.utc),
+            total_experiments=len(entries),
+            completed=0,
+            failed=0,
+            pending=len(entries),
+            experiments=entries,
+        )
+
+    @staticmethod
+    def _build_entries(study: StudyConfig) -> list[ExperimentManifestEntry]:
+        """Build pending entries for all (experiment, cycle) combinations."""
+        from llenergymeasure.domain.experiment import compute_measurement_config_hash
+
+        entries: list[ExperimentManifestEntry] = []
+        n_cycles = study.execution.n_cycles
+        for exp in study.experiments:
+            config_hash = compute_measurement_config_hash(exp)
+            summary = build_config_summary(exp)
+            for cycle in range(1, n_cycles + 1):
+                entries.append(
+                    ExperimentManifestEntry(
+                        config_hash=config_hash,
+                        config_summary=summary,
+                        cycle=cycle,
+                        status="pending",
+                    )
+                )
+        return entries

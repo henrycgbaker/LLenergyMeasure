@@ -73,7 +73,7 @@ Plans:
 **Milestone Goal:** `llem run study.yaml` runs a multi-experiment sweep with subprocess isolation, cycle ordering, thermal gaps, and a checkpoint manifest — producing per-experiment `ExperimentResult` files and a `StudyResult` summary.
 
 - [ ] **Phase 9: Grid Expansion and StudyConfig** - Sweep YAML grammar, `StudyConfig` + `ExecutionConfig` models, Cartesian grid expander, cycle ordering, pre-flight count display
-- [ ] **Phase 10: Manifest Writer** - `StudyManifest` checkpoint model, `ManifestWriter` with atomic writes, study output directory layout
+- [x] **Phase 10: Manifest Writer** - `StudyManifest` checkpoint model, `ManifestWriter` with atomic writes, study output directory layout (completed 2026-02-27)
 - [ ] **Phase 11: Subprocess Isolation and StudyRunner** - Subprocess dispatch via `spawn`, `Pipe`/`Queue` IPC, timeout handling, SIGINT, skip-and-continue, thermal gaps
 - [ ] **Phase 12: Integration** - `StudyRunner.run()`, `run_study()` public API, `_run()` body, CLI study flags, study progress display, `StudyResult` assembly, multi-backend hard error
 
@@ -104,12 +104,12 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. `ManifestWriter.mark_running()`, `.mark_completed()`, and `.mark_failed()` each produce a valid `manifest.json` in the study output directory via atomic `os.replace()`
   2. Simulating an interruption mid-write (e.g., killing the process after `write_text()` but before `os.replace()`) leaves the previous `manifest.json` intact and parseable
-  3. The study output directory follows the `{study_name}_{timestamp}/` layout, with per-experiment subdirectories and `manifest.json` at the top level
+  3. The study output directory follows the `{study_name}_{timestamp}/` layout, with flat per-experiment result files and `manifest.json` at the top level
   4. `StudyManifest` and `StudyResult` are distinct types — manifest is the checkpoint, result is the final return value
-**Plans**: TBD
+**Plans**: 1 plan (Wave 1)
 
 Plans:
-- [ ] TBD
+- [ ] 10-01: StudyManifest model, ManifestWriter with atomic writes, study output directory helpers, TDD tests [Wave 1]
 
 ---
 
@@ -166,7 +166,7 @@ Plans:
 | 8.1. PyTorch Result Wiring Fixes | 1/1 | Complete | 2026-02-27 |
 | 8.2. M1 Tech Debt Cleanup | 2/2 | Complete   | 2026-02-27 |
 | 9. Grid Expansion and StudyConfig | 1/2 | In Progress|  |
-| 10. Manifest Writer | 0/TBD | Not started | - |
+| 10. Manifest Writer | 1/1 | Complete    | 2026-02-27 |
 | 11. Subprocess Isolation and StudyRunner | 0/TBD | Not started | - |
 | 12. Integration | 0/TBD | Not started | - |
 | 13. Documentation — M1 backfill and M2 updates | 0/TBD | Not started | - |
@@ -176,7 +176,7 @@ Plans:
 **Goal:** [To be planned]
 **Requirements**: TBD
 **Depends on:** Phase 12
-**Plans:** 2/2 plans complete
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] TBD (run /gsd:plan-phase 13 to break down)
