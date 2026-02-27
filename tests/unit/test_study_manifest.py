@@ -34,14 +34,14 @@ from llenergymeasure.study.manifest import (
 # ---------------------------------------------------------------------------
 
 
-def _make_experiment(model: str = "meta-llama/Llama-3.1-8B", backend: str = "pytorch") -> ExperimentConfig:
+def _make_experiment(
+    model: str = "meta-llama/Llama-3.1-8B", backend: str = "pytorch"
+) -> ExperimentConfig:
     return ExperimentConfig(model=model, backend=backend, precision="bf16")
 
 
 def _make_study(n_experiments: int = 2, n_cycles: int = 2) -> StudyConfig:
-    experiments = [
-        _make_experiment(f"model-{i}") for i in range(n_experiments)
-    ]
+    experiments = [_make_experiment(f"model-{i}") for i in range(n_experiments)]
     return StudyConfig(
         name="test-study",
         experiments=experiments,
@@ -220,7 +220,9 @@ def test_manifest_writer_mark_running(tmp_path: Path) -> None:
     writer.mark_running(first_hash, cycle=1)
 
     data = json.loads((tmp_path / "manifest.json").read_text())
-    entry = next(e for e in data["experiments"] if e["config_hash"] == first_hash and e["cycle"] == 1)
+    entry = next(
+        e for e in data["experiments"] if e["config_hash"] == first_hash and e["cycle"] == 1
+    )
     assert entry["status"] == "running"
     assert entry["started_at"] is not None
 
@@ -236,7 +238,9 @@ def test_manifest_writer_mark_completed(tmp_path: Path) -> None:
     writer.mark_completed(first_hash, cycle=1, result_file="result.json")
 
     data = json.loads((tmp_path / "manifest.json").read_text())
-    entry = next(e for e in data["experiments"] if e["config_hash"] == first_hash and e["cycle"] == 1)
+    entry = next(
+        e for e in data["experiments"] if e["config_hash"] == first_hash and e["cycle"] == 1
+    )
     assert entry["status"] == "completed"
     assert entry["result_file"] == "result.json"
     assert entry["completed_at"] is not None
@@ -253,7 +257,9 @@ def test_manifest_writer_mark_failed(tmp_path: Path) -> None:
     writer.mark_failed(first_hash, cycle=1, error_type="RuntimeError", error_message="boom")
 
     data = json.loads((tmp_path / "manifest.json").read_text())
-    entry = next(e for e in data["experiments"] if e["config_hash"] == first_hash and e["cycle"] == 1)
+    entry = next(
+        e for e in data["experiments"] if e["config_hash"] == first_hash and e["cycle"] == 1
+    )
     assert entry["status"] == "failed"
     assert entry["error_type"] == "RuntimeError"
     assert entry["error_message"] == "boom"
@@ -268,7 +274,9 @@ def test_manifest_writer_uses_atomic_write(tmp_path: Path) -> None:
         assert mock_write.called, "_atomic_write should be called during __init__"
 
 
-def test_manifest_writer_write_failure_logs_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_manifest_writer_write_failure_logs_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     study = _make_study(n_experiments=1, n_cycles=1)
     writer = ManifestWriter(study=study, study_dir=tmp_path)
 
@@ -313,7 +321,10 @@ def test_create_study_dir_layout(tmp_path: Path) -> None:
 def test_create_study_dir_raises_study_error_on_failure(tmp_path: Path) -> None:
     from llenergymeasure.exceptions import StudyError
 
-    with patch.object(Path, "mkdir", side_effect=PermissionError("no write")), pytest.raises(StudyError):
+    with (
+        patch.object(Path, "mkdir", side_effect=PermissionError("no write")),
+        pytest.raises(StudyError),
+    ):
         create_study_dir(name="sweep", output_dir=tmp_path)
 
 
