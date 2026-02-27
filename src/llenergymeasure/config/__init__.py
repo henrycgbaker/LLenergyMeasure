@@ -1,36 +1,40 @@
-"""Configuration management for LLM Bench."""
+"""Configuration subsystem for llenergymeasure.
 
-from llenergymeasure.config.introspection import (
-    get_all_params,
-    get_backend_params,
-    get_param_options,
-    get_param_test_values,
-    get_params_from_model,
-    get_shared_params,
-    list_all_param_paths,
+Public API:
+- ExperimentConfig: Main experiment configuration model
+- load_experiment_config: Load from YAML/JSON with CLI override support
+- load_user_config: Load user preferences from XDG config dir
+- get_user_config_path: Return the XDG user config path
+"""
+
+from llenergymeasure.config.loader import (
+    deep_merge,
+    load_experiment_config,
 )
-from llenergymeasure.config.loader import load_config, validate_config
 from llenergymeasure.config.models import (
-    SAMPLING_PRESETS,
+    BaselineConfig,
     DecoderConfig,
     ExperimentConfig,
-    TrafficSimulation,
+    LoRAConfig,
+    SyntheticDatasetConfig,
+    WarmupConfig,
 )
-from llenergymeasure.config.validation import ConfigWarning
+from llenergymeasure.config.user_config import (
+    UserConfig,
+    get_user_config_path,
+    load_user_config,
+)
 
 __all__ = [
-    "SAMPLING_PRESETS",
-    "ConfigWarning",
+    "BaselineConfig",
     "DecoderConfig",
     "ExperimentConfig",
-    "TrafficSimulation",
-    "get_all_params",
-    "get_backend_params",
-    "get_param_options",
-    "get_param_test_values",
-    "get_params_from_model",
-    "get_shared_params",
-    "list_all_param_paths",
-    "load_config",
-    "validate_config",
+    "LoRAConfig",
+    "SyntheticDatasetConfig",
+    "UserConfig",
+    "WarmupConfig",
+    "deep_merge",
+    "get_user_config_path",
+    "load_experiment_config",
+    "load_user_config",
 ]

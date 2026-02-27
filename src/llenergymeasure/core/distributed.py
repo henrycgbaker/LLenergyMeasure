@@ -168,7 +168,7 @@ def safe_wait(
 
     if not completed.is_set():
         logger.warning(
-            f"Timeout: wait_for_everyone did not complete within {timeout}s " f"for {description}"
+            f"Timeout: wait_for_everyone did not complete within {timeout}s for {description}"
         )
         return False
 

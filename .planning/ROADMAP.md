@@ -1,314 +1,214 @@
-# Roadmap: LLenergyMeasure
-
-
-TODO: this is now degraded - it needs updating based on new product decisions and desings (see phase 4.5)
+# Roadmap: LLenergyMeasure — M1 (Core Single-Experiment)
 
 ## Overview
 
-LLenergyMeasure is a library-first LLM inference efficiency measurement framework. The v2.x series builds a solid, research-grade CLI and library. v3.0 adds quality-alongside-efficiency via lm-eval integration. v4.0 is a separate web platform product.
-
-**Core value:** The only tool that systematically quantifies how deployment configuration (batch size, quantisation, backend, parallelism) affects LLM energy efficiency — with research-grade rigour.
+M1 restructures the existing v1.x codebase (~22,000 lines) into a library-first package with a
+clean public API, rewritten config and results schemas, and a two-command CLI. Phases follow the
+dependency order: foundation → config → API → backend → measurement → results → CLI → testing.
+Every phase delivers a verifiable capability; the final phase confirms end-to-end correctness
+with a real GPU.
 
 ## Milestones
 
-- **v2.0 — Clean Foundation** — Phase 5 (current milestone)
-- **v2.1 — Measurement Depth** — Phase 6 (planned)
-- **v2.2 — Scale** — Phase 7 (planned)
-- **v2.3 — Parameter Completeness** — Phase 8 (planned)
-- **v2.4 — Shareability** — Phase 9 (planned)
-- **v3.0 — Quality + Efficiency** — Phase 10 (planned)
-- **v4.0 — Web Platform** — Separate product, separate repo
+- [x] **v1.x Foundation & Planning** — Phases 1–4.5 (shipped 2026-02-26)
+- [ ] **M1 — Core Single-Experiment** — Phases 1–8 (current)
 
 ## Phases
 
 **Phase Numbering:**
-- Integer phases (1, 2, 3, 4, ...): Planned milestone work
-- Decimal phases (e.g., 2.1): Urgent insertions (marked with INSERTED)
+- Integer phases (1, 2, 3...): Planned M1 work
+- Decimal phases (1.1, 2.1...): Urgent insertions (marked with INSERTED)
 
-- [x] **Phase 1: Measurement Foundations** - Fix systematic energy errors, capture environment metadata, enable warmup convergence
-- [x] **Phase 2: Campaign Orchestrator** - Long-running containers, backend-aware grid generation, manifest tracking
-- [x] **Phase 2.1: Zero-Config Install Experience** - Auto-detect Docker, auto-generate .env, PyPI-ready packaging (INSERTED)
-- [x] **Phase 2.2: Campaign Execution Model** - Fix container routing, cycle context, dual container strategy (INSERTED)
-- [x] **Phase 2.3: Campaign State & Resume** - State persistence, `lem resume`, user preferences (INSERTED)
-- [x] **Phase 2.4: CLI Polish & Testing Infrastructure** - Aggregation group_by, CLI UX, example configs, smoke tests (INSERTED)
-- [x] **Phase 3: GPU Routing Fix** - Fix CUDA_VISIBLE_DEVICES propagation, fail-fast config validation
-- [x] **Phase 4: Codebase Audit** - Identify stubs, dead code, unimplemented features, verify plans vs implementation
-- [x] **Phase 4.5: Strategic Reset** - Product vision settled, versioning roadmap confirmed, architecture decisions recorded (INSERTED)
-- [ ] **Phase 5: Clean Foundation (v2.0)** - Library-first restructure, `llem` rename, P0 bug fixes, dead code removal, CLI 15→9, state machine 6→3
-- [ ] **Phase 6: Measurement Depth (v2.1)** - Zeus energy backend, baseline power, thermal time-series, warmup convergence, env metadata, schema v3
-- [ ] **Phase 7: Scale (v2.2)** - Campaign as separate module, Docker multi-backend, grid generation
-- [ ] **Phase 8: Parameter Completeness (v2.3)** - PyTorch/vLLM/TRT to 90%+, prefill/decode phase split
-- [ ] **Phase 9: Shareability (v2.4)** - `llem results push`, opt-in central DB, HuggingFace Datasets export
-- [ ] **Phase 10: Quality + Efficiency (v3.0)** - lm-eval integration, accuracy vs efficiency tradeoff metrics
-
----
+- [x] **Phase 1: Package Foundation** - Dead code removal, src/ layout, pyproject.toml, protocols, state machine, resilience carry-forwards (completed 2026-02-26)
+- [ ] **Phase 2: Config System** - ExperimentConfig composition model, YAML loader, user config, SSOT introspection
+- [x] **Phase 3: Library API** - `__init__.py` public API, `run_experiment()`, internal `_run(StudyConfig)`, API stability contract (completed 2026-02-26)
+- [ ] **Phase 4: PyTorch Backend and Pre-flight** - PyTorch inference backend (P0 bug fix), InferenceBackend protocol, pre-flight checks, environment snapshot
+- [ ] **Phase 4.1: PyTorch Parameter Audit** - INSERTED — Audit PyTorchConfig fields against upstream `transformers`/`torch` APIs; ensure all researcher-useful parameters are exposed
+- [ ] **Phase 5: Energy Measurement** - NVML poller, Zeus optional, CodeCarbon optional, baseline power, warmup, FLOPs estimation, timeseries
+- [ ] **Phase 6: Results Schema and Persistence** - ExperimentResult schema, EnergyBreakdown, persistence API, late aggregation, output layout, collision handling
+- [ ] **Phase 7: CLI** - `llem run`, `llem config`, `llem --version`, plain text display, exit codes, error hierarchy
+- [ ] **Phase 8: Testing and Integration** - Unit + integration test tiers, protocol mocks, GPU CI workflow, UAT against exit criteria
 
 ## Phase Details
 
-### Phase 1: Measurement Foundations (complete)
-
-**Goal**: Users measure inference energy with research-grade accuracy — baseline power subtracted, thermal throttling detected, environment fully documented, warmup convergence automatic
-
+### Phase 1: Package Foundation
+**Goal**: The codebase is restructured into a clean src/ layout with dead code removed, build system configured, and all reusable infrastructure (protocols, state machine, resilience) in place — ready for new subsystems to be written on top.
 **Depends on**: Nothing (first phase)
-
-**Requirements**: MEAS-01, MEAS-02, MEAS-03, MEAS-04, MEAS-05, MEAS-06, MEAS-07, MEAS-09
-
+**Requirements**: INF-01, INF-02, INF-03, INF-04, INF-05, INF-06, INF-07, INF-08, INF-18, INF-19, INF-20
 **Success Criteria** (what must be TRUE):
-1. User runs experiment and receives both raw energy (backwards compatible) and baseline-adjusted energy (corrects 15-30% systematic overestimation)
-2. User inspects results metadata and sees comprehensive environment details (GPU model, CUDA version, driver, thermal state, power limits, CPU governor, container detection)
-3. User views time-series power/memory/utilisation data at configurable sampling rates (1-10Hz) for any experiment
-4. User receives automatic flag in results when thermal throttling detected during experiment
-5. User configures warmup convergence detection and warmup continues until CV stabilises (not fixed prompt count)
-6. User exports extended efficiency metrics to CSV (memory, GPU utilisation, request latency, batch size, KV cache metrics — currently JSON-only)
-7. Fresh clone installation succeeds, user runs one experiment following quickstart, pain points documented
-8. All config extensions (WarmupConfig, BaselineConfig, TimeSeriesConfig) threaded through SSOT introspection — appear in CLI outputs, results JSON/CSV, runtime validation tests, and generated docs
-
-**Context**: See `phases/01-CONTEXT.md` for detailed implementation decisions
-
-**Plans**: 6 plans in 4 waves
+  1. `pip install -e ".[pytorch]"` installs cleanly from the new src/ layout with no legacy entry points
+  2. `llem --help` is the only entry point — `lem` is absent from the installed package
+  3. `import llenergymeasure` succeeds and `llenergymeasure.__version__` returns `"2.0.0"`
+  4. The 1,524 lines of confirmed dead code are absent from the repository
+  5. `protocols.py` defines the 5 DI interfaces and the 3-state state machine exists in `core/state.py`
+**Plans**: 3 plans
 
 Plans:
-- [x] 01-01-PLAN.md — Schema v3 domain models + configuration extensions (Wave 1)
-- [x] 01-02-PLAN.md — PowerThermalSampler + environment metadata + baseline power (Wave 2)
-- [x] 01-03-PLAN.md — Warmup convergence detection (Wave 2)
-- [x] 01-04-PLAN.md — CSV export extensions + time-series export (Wave 2)
-- [x] 01-05-PLAN.md — Orchestrator integration (Wave 3)
-- [x] 01-06-PLAN.md — Unit tests + UAT round 1 (Wave 4)
+- [ ] 01-01-PLAN.md — Build system (Poetry to hatchling) and dead code removal
+- [ ] 01-02-PLAN.md — Protocols, exceptions, resilience, and security carry-forwards
+- [ ] 01-03-PLAN.md — 3-state machine and subprocess lifecycle carry-forward
 
 ---
 
-### Phase 2: Campaign Orchestrator (complete)
-
-**Goal**: Users orchestrate multi-backend campaigns with long-running containers, backend-aware grid generation, and persistent manifest tracking — no per-experiment container startup overhead. Campaigns own cycles (repetitions of the full experiment set for statistical robustness).
-
-**Depends on**: Phase 1 (needs accurate measurements for campaign validation)
-
-**Requirements**: CAMP-01, CAMP-02, CAMP-03, CAMP-04, CAMP-05, CAMP-06, CAMP-07, CAMP-08, MEAS-08
-
-**Plans**: 8 plans in 4 waves
+### Phase 2: Config System
+**Goal**: Researchers can express any single-experiment configuration as a YAML file or Python object, validate it, and load it — with clear errors on bad input and a user config file for persistent defaults.
+**Depends on**: Phase 1
+**Requirements**: CFG-01, CFG-02, CFG-03, CFG-04, CFG-05, CFG-06, CFG-07, CFG-08, CFG-09, CFG-10, CFG-17, CFG-18, CFG-19, CFG-20, CFG-21, CFG-22, CFG-23, CFG-24, CFG-25, CFG-26
+**Success Criteria** (what must be TRUE):
+  1. A valid experiment YAML loads into an `ExperimentConfig` without error; an invalid YAML raises `ConfigError` with file path context
+  2. Pydantic `ValidationError` (bad field values) passes through unchanged — not wrapped in `ConfigError`
+  3. `~/.config/llenergymeasure/config.yaml` is read on startup; a missing file applies all defaults with no error
+  4. `config/introspection.py` returns the full `ExperimentConfig` JSON schema and per-field constraint metadata
+  5. Cross-validators reject mismatched precision/backend and backend-section/backend-field combinations with clear messages
+**Plans**: 4 plans
 
 Plans:
-- [x] 02-01-PLAN.md — Campaign config extensions (grid, manifest, cold start, health check, daemon, IO models) (Wave 1)
-- [x] 02-02-PLAN.md — Docker dispatch via `docker compose run --rm` (Wave 1)
-- [x] 02-03-PLAN.md — Bootstrap CI + campaign-level aggregation (Wave 1)
-- [x] 02-04-PLAN.md — Campaign manifest persistence + resume (Wave 2)
-- [x] 02-05-PLAN.md — Backend-aware grid expansion + validation (Wave 2)
-- [x] 02-06-PLAN.md — Campaign orchestrator integration (CLI + CampaignRunner wiring) (Wave 3)
-- [x] 02-07-PLAN.md — SSOT introspection threading for campaign config (Wave 3)
-- [x] 02-08-PLAN.md — Unit tests + UAT round 2 (Wave 4)
+- [ ] 02-01-PLAN.md — ExperimentConfig v2.0 schema (field renames, extra=forbid, cross-validators, backend configs)
+- [ ] 02-02-PLAN.md — YAML loader (collect-all-errors, ConfigError, did-you-mean, CLI override merging)
+- [ ] 02-03-PLAN.md — User config (XDG path, v2.0 schema, env var overrides)
+- [ ] 02-04-PLAN.md — Introspection (v2.0 field names, backend_support metadata, JSON schema export)
 
 ---
 
-### Phase 2.1: Zero-Config Install Experience (INSERTED, complete)
-
-**Goal**: Users install via `pip install llenergymeasure` (or `pip install -e .`) and everything works out of the box.
-
-**Plans**: 6 plans in 4 waves — all complete.
-
----
-
-### Phase 2.2: Campaign Execution Model (INSERTED, complete)
-
-**Goal**: Fix container routing bugs, propagate campaign context to experiments, implement dual container strategy.
-
-**Plans**: 4 plans in 3 waves — all complete.
-
----
-
-### Phase 2.3: Campaign State & Resume (INSERTED, complete)
-
-**Goal**: Interactive campaign resume via `lem resume`, guided project setup via `lem init`, and webhook notification system.
-
-**Plans**: 4 plans in 2 waves — all complete.
-
----
-
-### Phase 2.4: CLI Polish & Testing Infrastructure (INSERTED, complete)
-
-**Goal**: Clean up CLI UX issues, improve developer experience with systematic smoke tests, update all example configs to schema v3.0.0.
-
-**Plans**: 6 plans in 2 waves — all complete.
-
----
-
-### Phase 3: GPU Routing Fix (complete)
-
-**Goal**: Fix CUDA_VISIBLE_DEVICES propagation to Docker containers, add fail-fast parallelism validation.
-
-**Plans**: 3 plans in 2 waves — all complete.
-
----
-
-### Phase 4: Codebase Audit (complete)
-
-**Goal**: Thoroughly audit the codebase — stubs, dead code, unimplemented features, over-engineering, planning vs implementation gaps.
-
-**Plans**: 6 plans in 2 waves — all complete.
-
----
-
-### Phase 4.5: Strategic Reset (INSERTED, complete)
-
-**Goal**: Settle product vision, confirm versioning roadmap, record all architecture decisions before beginning Phase 5 work.
-
-**Key outputs**:
-- Product vision: Dual-product (CLI + web platform), deployment efficiency positioning (Option A primary)
-- Versioning: v2.0 Clean Foundation → v2.x series → v3.0 Quality → v4.0 Web Platform
-- Architecture: Library-first restructure at v2.0; study as separate module (v2.2); Zeus as energy backend (v2.1); lm-eval at v3.0
-- Installation: `llem` rename at v2.0, no default backend, explicit extras per backend
-- Decision records: `decisions/` directory with versioning-roadmap.md, product-vision.md, architecture.md, installation.md
-- Design specs: `design/` directory with package-structure.md, cli-commands.md
-
-**Plans**: Research and discussion — no GSD plan files (discussion-format phase)
-
----
-
-### Phase 5: Clean Foundation (v2.0) — CURRENT MILESTONE
-
-**Goal**: Library-first restructure, `llem` rename, P0 bug fixes, dead code removal, CLI 15→3, state machine 6→3.
-
-**Depends on**: Phase 4.5 (vision and architecture decisions confirmed)
-
+### Phase 3: Library API
+**Goal**: The package exports a stable, documented public API — `run_experiment()` and `run_study()` — with no union return types and a clear stability contract so downstream code can depend on it without breakage across minor versions.
+**Depends on**: Phase 2 (config types must exist before API functions can be typed)
+**Requirements**: LA-01, LA-03, LA-04, LA-06, LA-07, LA-08, LA-09, LA-10
 **Success Criteria** (what must be TRUE):
-1. `import llenergymeasure` works as a library — `__init__.py` exports Tier 1 + Tier 2 public API
-2. CLI renamed `lem` → `llem` throughout (pyproject.toml, docs, examples, tests)
-3. All 4 P0 bugs fixed (PyTorch model_kwargs L375, vLLM no native streaming, Docker broken, vLLM shm-size missing)
-4. 1,524 lines of confirmed dead code removed
-5. CLI reduced from 15 to 3 commands (experiment, study, status)
-6. State machine reduced from 6 to 3 states
-7. No default backend at base install — `pip install llenergymeasure` installs no GPU backend
-8. All tests passing at v2.0 library boundary
-
-**Plans**: TBD (run `/gsd:plan-phase 5` to break down)
+  1. `from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult` all resolve without error
+  2. `run_experiment(config)` returns exactly `ExperimentResult` — no union types, no `None`
+  3. `run_experiment()` with no `output_dir` produces no disk writes (side-effect-free)
+  4. Any name not in `__init__.py.__all__` raises `AttributeError` on direct import — internal modules are private
+  5. `llenergymeasure.__version__ == "2.0.0"`
+**Plans**: TBD
 
 Plans:
 - [ ] TBD
 
 ---
 
-### Phase 6: Measurement Depth (v2.1) — planned
-
-**Goal**: Zeus energy backend, baseline power, thermal time-series, warmup convergence, environment metadata, bootstrap CI, schema v3.
-
-**Depends on**: Phase 5 (clean foundation required before extending measurement system)
-
-**Key items**:
-- Zeus as optional energy backend (`llenergymeasure[zeus]`) — NVML-direct, ~5% accuracy vs CodeCarbon ~10-15%
-- Baseline power measurement before experiments
-- Thermal time-series at configurable intervals
-- Warmup convergence detection (CV-based, not fixed count)
-- Environment metadata per experiment
-- Bootstrap resampling for 95% confidence intervals
-- Schema v3 with migration path from v2
-
+### Phase 4: PyTorch Backend and Pre-flight
+**Goal**: PyTorch inference runs correctly end-to-end with the P0 model_kwargs bug fixed, pre-flight checks catch configuration errors before wasting GPU time, and the environment is fully snapshotted at experiment start.
+**Depends on**: Phase 3 (Library API must exist; backend returns `ExperimentResult`)
+**Requirements**: CM-01, CM-04, CM-05, CM-06, CM-29, CM-30, CM-31, CM-32, CM-33, CM-34
+**Success Criteria** (what must be TRUE):
+  1. `run_experiment(ExperimentConfig(model="gpt2", backend="pytorch"))` completes without error on a GPU machine
+  2. The P0 `model_kwargs` bug (L375) is fixed — extra kwargs pass through to the model without `TypeError`
+  3. Pre-flight reports all failures at once (not one at a time) and raises `PreFlightError` before any GPU allocation
+  4. `result.environment_snapshot` contains Python version, CUDA version, driver version, GPU names, and pip freeze
+  5. CUDA version is detected via multi-source fallback (torch → version.txt → nvcc → `None`)
 **Plans**: TBD
+
+Plans:
+- [ ] TBD
 
 ---
 
-### Phase 7: Scale (v2.2) — planned
-
-**Goal**: Campaign as separate importable module, Docker multi-backend orchestration, programmatic grid generation.
-
-**Depends on**: Phase 6 (measurement depth complete before scale work)
-
-**Key items**:
-- `study` module extracted from CLI — importable, not CLI-only
-- `study.runner` + `study.grid` as separate package
-- Docker multi-backend dispatch
-- Backend-aware grid generation retained
-
+### Phase 4.1: PyTorch Parameter Audit
+**INSERTED** — Added 2026-02-26
+**Goal**: Every tuneable PyTorch parameter that a researcher would reasonably want to control is exposed as an `ExperimentConfig` / `PyTorchConfig` field — no hidden knobs that require `passthrough_kwargs` for common use cases.
+**Depends on**: Phase 4 (PyTorch backend must be running and testable)
+**Requirements**: None (quality audit — no formal requirement IDs)
+**Success Criteria** (what must be TRUE):
+  1. `PyTorchConfig` fields cover all parameters accepted by `AutoModelForCausalLM.from_pretrained()` that affect inference behaviour (e.g., `torch_dtype`, `attn_implementation`, `device_map`, quantisation flags)
+  2. `DecoderConfig` fields cover all `model.generate()` parameters that affect output (temperature, top_p, top_k, repetition_penalty, do_sample, etc.)
+  3. Any v1.x parameters that were dropped have a documented rationale (intentional removal, not oversight)
+  4. SSOT introspection (`config/introspection.py`) reflects the updated field set
+  5. Cross-validators updated for any new field interactions
 **Plans**: TBD
+**Note**: Repeat this audit for vLLM and TensorRT-LLM backends when they are implemented in M3.
+
+Plans:
+- [ ] TBD
 
 ---
 
-### Phase 8: Parameter Completeness (v2.3) — planned
-
-**Goal**: 90%+ energy/throughput-impactful parameter coverage for each backend. Prefill/decode phase split.
-
-**Depends on**: Phase 7
-
-**Key items**:
-- PyTorch 93.8% → 95%+, vLLM 81.9% → 90%+, TensorRT 93.8% → 95%+
-- Prefill/decode phase split (separate timing, energy, throughput per phase)
-- SSOT introspection auto-discovers new parameters
-- `extra:` escape hatch validated end-to-end
-
+### Phase 5: Energy Measurement
+**Goal**: Every experiment produces scientifically credible energy numbers — baseline-corrected, warmed-up, with correct measurement backend priority and a 1 Hz timeseries sidecar — so results can be cited in a research paper.
+**Depends on**: Phase 4.1 (config fields must be complete before energy measurement wraps the backend)
+**Requirements**: CM-11, CM-12, CM-13, CM-14, CM-15, CM-16, CM-17, CM-18, CM-19, CM-20, CM-21, CM-22, CM-23, CM-24, CM-25, CM-26, CM-27, CM-28
+**Success Criteria** (what must be TRUE):
+  1. `result.energy_adjusted_j` equals `energy_total_j` minus `(baseline_power_w × duration_sec)` — baseline subtraction is applied
+  2. When Zeus is installed, it is selected over NVML; when only NVML is available, it is used; CodeCarbon is the fallback of last resort
+  3. Warmup runs 5 full-length prompts by default before measurement begins; warmup tokens are excluded from FLOPs calculation
+  4. `result.timeseries` references a `timeseries.parquet` file with 1 Hz GPU power samples from the measurement window
+  5. `result.flops_result.method` and `.confidence` are populated; FLOPs uses the PaLM formula (2 × N_params × tokens)
 **Plans**: TBD
+
+Plans:
+- [ ] TBD
 
 ---
 
-### Phase 9: Shareability (v2.4) — planned
-
-**Goal**: Results sharing infrastructure. `llem results push`, opt-in central database, HuggingFace Datasets export.
-
-**Depends on**: Phase 8
-
-**Key items**:
-- `llem results push <id>` — upload result to central DB
-- Opt-in central archive (growing evidence base for policy advocacy)
-- HuggingFace Datasets export format
-- Privacy: opt-in only, no automatic uploads
-
+### Phase 6: Results Schema and Persistence
+**Goal**: Every experiment produces a complete, schema-versioned `ExperimentResult` written to a stable output directory — with collision-safe naming, a Parquet timeseries sidecar, and a round-trip-safe persistence API.
+**Depends on**: Phase 5 (energy measurement produces the values that populate the result schema)
+**Requirements**: RES-01, RES-02, RES-03, RES-04, RES-05, RES-06, RES-07, RES-08, RES-09, RES-10, RES-11, RES-12, RES-16, RES-17, RES-18, RES-19, RES-20, RES-21
+**Success Criteria** (what must be TRUE):
+  1. `result.schema_version == "2.0"` and `result.measurement_config_hash` is a 16-char hex string derived from the config (environment snapshot excluded)
+  2. Output is written to `{name}_{timestamp}/result.json`; running twice with the same name produces `{name}_{timestamp}_1/` — never overwrites
+  3. `ExperimentResult.from_json(path)` round-trips without data loss — all fields survive serialisation and deserialisation
+  4. `result.measurement_warnings` is a list (empty or populated); `result.reproducibility_notes` is a non-empty string
+  5. `results/aggregation.py` aggregates per-process raw files into a single `ExperimentResult` (PyTorch multi-GPU path)
 **Plans**: TBD
+
+Plans:
+- [ ] TBD
 
 ---
 
-### Phase 10: Quality + Efficiency (v3.0) — planned
-
-**Goal**: lm-eval integration — quality-alongside-efficiency, the unique differentiator no other tool provides.
-
-**Depends on**: v2.x complete (solid CLI foundation required)
-
-**Key items**:
-- `llenergymeasure[lm-eval]` optional extra
-- Run accuracy benchmarks alongside efficiency measurement
-- Quality vs efficiency tradeoff metrics and Pareto frontier analysis
-- Unique positioning: the only tool combining inference efficiency + accuracy benchmarking
-
+### Phase 7: CLI
+**Goal**: Researchers interact with the tool entirely through `llem run` and `llem config` — plain text output, no Rich dependency, correct exit codes on all error paths, and a `--dry-run` that validates without running.
+**Depends on**: Phase 6 (CLI wraps `run_experiment()` and displays `ExperimentResult`)
+**Requirements**: CLI-01, CLI-02, CLI-03, CLI-04, CLI-06, CLI-07, CLI-08, CLI-09, CLI-10, CLI-12, CLI-13, CLI-14
+**Success Criteria** (what must be TRUE):
+  1. `llem run --model gpt2 --backend pytorch` runs a full experiment and prints the result summary to stdout
+  2. `llem run experiment.yaml` loads the YAML, validates, runs, and writes output — same result as the flag-based form
+  3. `llem run --dry-run experiment.yaml` validates the config and estimates VRAM without running inference; exits 0
+  4. `llem config` prints environment state (GPU, backends installed, user config path); `llem config --verbose` adds per-backend detail
+  5. A `ConfigError` exits with code 2; a `PreFlightError` or `ExperimentError` exits with code 1; SIGINT exits with code 130
 **Plans**: TBD
+
+Plans:
+- [ ] TBD
 
 ---
 
-### v4.0: Web Platform — separate product
+### Phase 8: Testing and Integration
+**Goal**: The codebase has systematic test coverage — GPU-free unit tests using protocol injection mocks and GPU integration tests that confirm the M1 exit criteria end-to-end — with a CI workflow that runs both tiers.
+**Depends on**: Phase 7 (all subsystems complete before integration testing)
+**Requirements**: STU-05, INF-09, INF-10, INF-11, INF-12
+**Success Criteria** (what must be TRUE):
+  1. `pytest tests/unit/` passes on a machine without a GPU — no GPU calls in unit tests
+  2. `pytest tests/integration/ -m gpu` on a GPU machine runs a real PyTorch experiment and asserts a valid `ExperimentResult`
+  3. Protocol injection mocks replace real backends in unit tests — no `unittest.mock.patch` on internal modules
+  4. `llem run --model gpt2 --backend pytorch` produces valid `ExperimentResult` JSON (M1 primary exit criterion)
+  5. `llem run experiment.yaml`, `llem config`, and `llem --version` all behave correctly per their Phase 7 success criteria
+**Plans**: TBD
 
-**Goal**: Browser-based results explorer, live dashboard, public leaderboard for policy advocacy.
-
-**Scope**: Separate repo, own lifecycle, shares library API but not server.
-
-**Key items**:
-- Static JSON MVP first (no backend required)
-- Dynamic API second (FastAPI)
-- Live features third (real-time dashboard, leaderboard)
-- Deployment: self-hosted GPU workers + lightweight central server (no GPUs)
-- Users: policy makers, decision makers, public — no GPU required
-
-**Plans**: TBD (separate product planning)
+Plans:
+- [ ] TBD
 
 ---
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 2.1 → 2.2 → 2.3 → 2.4 → 3 → 4 → 4.5 → 5 → 6 → 7 → 8 → 9 → 10
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 4.1 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Measurement Foundations | 6/6 | Complete | 2026-01-29 |
-| 2. Campaign Orchestrator | 8/8 | Complete | 2026-01-30 |
-| 2.1 Zero-Config Install (INSERTED) | 6/6 | Complete | 2026-01-31 |
-| 2.2 Campaign Execution Model (INSERTED) | 4/4 | Complete | 2026-02-03 |
-| 2.3 Campaign State & Resume (INSERTED) | 4/4 | Complete | 2026-02-04 |
-| 2.4 CLI Polish & Testing Infrastructure (INSERTED) | 6/6 | Complete | 2026-02-04 |
-| 3. GPU Routing Fix | 3/3 | Complete | 2026-02-04 |
-| 4. Codebase Audit | 6/6 | Complete | 2026-02-05 |
-| 4.5 Strategic Reset (INSERTED) | — | Complete | 2026-02-17 |
-| 5. Clean Foundation (v2.0) | 0/? | Planned | - |
-| 6. Measurement Depth (v2.1) | 0/? | Planned | - |
-| 7. Scale (v2.2) | 0/? | Planned | - |
-| 8. Parameter Completeness (v2.3) | 0/? | Planned | - |
-| 9. Shareability (v2.4) | 0/? | Planned | - |
-| 10. Quality + Efficiency (v3.0) | 0/? | Planned | - |
+| 1. Package Foundation | 5/5 | Complete   | 2026-02-26 |
+| 2. Config System | 4/4 | Complete   | 2026-02-26 |
+| 3. Library API | 2/2 | Complete   | 2026-02-26 |
+| 4. PyTorch Backend and Pre-flight | 0/? | Not started | - |
+| 4.1. PyTorch Parameter Audit | 0/? | Not started | - |
+| 5. Energy Measurement | 0/? | Not started | - |
+| 6. Results Schema and Persistence | 0/? | Not started | - |
+| 7. CLI | 0/? | Not started | - |
+| 8. Testing and Integration | 0/? | Not started | - |
 
 ---
 
-**Next:** Plan Phase 5 with `/gsd:plan-phase 5`
+*Roadmap created: 2026-02-26 for M1 — Core Single-Experiment*
+*Previous v1.x phases (1–4.5) archived in MILESTONES.md*

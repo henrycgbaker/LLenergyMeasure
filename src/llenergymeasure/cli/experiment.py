@@ -126,8 +126,7 @@ def _display_measurement_summary(
                 wr = first_process.warmup_result
                 status = "converged" if wr.converged else "not converged"
                 console.print(
-                    f"  Warmup: {wr.iterations_completed} prompts "
-                    f"({status}, CV={wr.final_cv:.3f})"
+                    f"  Warmup: {wr.iterations_completed} prompts ({status}, CV={wr.final_cv:.3f})"
                 )
     except Exception:
         pass  # Measurement summary display is non-fatal

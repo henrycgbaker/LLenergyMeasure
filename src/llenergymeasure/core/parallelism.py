@@ -605,8 +605,7 @@ def get_parallelism_strategy(config: ParallelismConfig) -> ParallelismStrategy:
     strategy_cls = strategy_map.get(config.strategy)
     if strategy_cls is None:
         raise ValueError(
-            f"Unknown sharding strategy: {config.strategy}. "
-            f"Supported: {list(strategy_map.keys())}"
+            f"Unknown sharding strategy: {config.strategy}. Supported: {list(strategy_map.keys())}"
         )
 
     return strategy_cls()

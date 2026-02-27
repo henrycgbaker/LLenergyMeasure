@@ -1,4 +1,4 @@
-"""Experiment result domain models for LLM Bench."""
+"""Experiment and study result domain models."""
 
 from datetime import datetime
 from typing import Any
@@ -148,8 +148,8 @@ class AggregationMetadata(BaseModel):
     warnings: list[str] = Field(default_factory=list, description="Aggregation warnings")
 
 
-class AggregatedResult(BaseModel):
-    """Aggregated experiment result from multiple processes.
+class ExperimentResult(BaseModel):
+    """Experiment result combining raw results from all processes.
 
     This combines raw results from all processes in a distributed experiment
     into a single result with proper aggregation (sum energy, average throughput).
@@ -253,3 +253,20 @@ class AggregatedResult(BaseModel):
         if self.total_energy_j > 0:
             return self.total_tokens / self.total_energy_j
         return 0.0
+
+
+class StudyResult(BaseModel):
+    """Container for study results.
+
+    M1 stub: experiments list + name only. Full schema (study_design_hash,
+    measurement_protocol, result_files, StudySummary) added in M2 (RES-13..15).
+    """
+
+    experiments: list[ExperimentResult] = Field(
+        default_factory=list, description="Results for each experiment in the study"
+    )
+    name: str | None = Field(default=None, description="Study name")
+
+
+# v1.x compatibility alias -- remove in v3.0
+AggregatedResult = ExperimentResult

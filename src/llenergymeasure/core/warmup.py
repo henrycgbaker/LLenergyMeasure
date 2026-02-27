@@ -116,9 +116,7 @@ def warmup_until_converged(
             f"(CV={final_cv:.3f} < {config.cv_threshold})"
         )
     elif fixed_mode:
-        logger.info(
-            f"Warmup completed {len(latencies)} fixed iterations " f"(final CV={final_cv:.3f})"
-        )
+        logger.info(f"Warmup completed {len(latencies)} fixed iterations (final CV={final_cv:.3f})")
     else:
         logger.warning(
             f"Warmup did not converge after {config.max_prompts} prompts "

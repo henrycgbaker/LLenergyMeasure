@@ -449,7 +449,6 @@ def run_from_config(
         Tuple of (success, result).
     """
     from llenergymeasure.orchestration.context import experiment_context
-    from llenergymeasure.orchestration.lifecycle import ensure_clean_start
 
     config = ExperimentConfig(**config_data)
 
@@ -457,8 +456,6 @@ def run_from_config(
         logger.info(f"Starting experiment attempt {attempt}/{max_retries}")
 
         try:
-            ensure_clean_start()
-
             with experiment_context(config) as ctx:
                 # This would need actual implementations injected
                 # For now, returns success placeholder
@@ -523,19 +520,17 @@ def _extract_metadata(
         return {}, {}, None, [], None, {}, []
 
 
-def _parse_args() -> (
-    tuple[
-        Path,
-        list[str],
-        dict[str, Any],
-        dict[str, Any],
-        str | None,
-        list[str],
-        str | None,
-        dict[str, dict[str, Any]],
-        list[str],
-    ]
-):
+def _parse_args() -> tuple[
+    Path,
+    list[str],
+    dict[str, Any],
+    dict[str, Any],
+    str | None,
+    list[str],
+    str | None,
+    dict[str, dict[str, Any]],
+    list[str],
+]:
     """Parse command line arguments for accelerate launch.
 
     Returns:
@@ -745,8 +740,7 @@ if __name__ == "__main__":
             os.environ["CUDA_VISIBLE_DEVICES"] = cuda_devices
             # Can't use logger yet, print directly
             print(
-                f"[launcher] Set CUDA_VISIBLE_DEVICES={cuda_devices} "
-                f"(container={in_container})",
+                f"[launcher] Set CUDA_VISIBLE_DEVICES={cuda_devices} (container={in_container})",
                 file=sys.stderr,
             )
         except Exception as e:
@@ -812,9 +806,7 @@ if __name__ == "__main__":
     )
     batch_size, batch_strategy = get_backend_batching(config)
     logger.info(
-        f"  Batch size: {batch_size} | "
-        f"Strategy: {batch_strategy} | "
-        f"Streaming: {config.streaming}"
+        f"  Batch size: {batch_size} | Strategy: {batch_strategy} | Streaming: {config.streaming}"
     )
     # Log backend-native parallelism if configured
     if config.backend == "pytorch" and config.pytorch and config.pytorch.num_processes > 1:

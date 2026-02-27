@@ -1,86 +1,98 @@
 ---
 phase: 01-measurement-foundations
-plan: 04
-subsystem: results-export
-tags: [csv, timeseries, export, json, grouped-columns]
-depends_on:
-  requires: ["01-01"]
-  provides: ["extended-csv-export", "timeseries-export"]
-  affects: ["01-05", "01-06"]
-tech_stack:
+plan: "04"
+subsystem: infra
+tags: [exceptions, compatibility, v1.x-migration]
+
+requires:
+  - phase: 01-02
+    provides: "exceptions.py v2.0 hierarchy (LLEMError + 5 subclasses)"
+
+provides:
+  - "v1.x compatibility aliases in exceptions.py: ConfigurationError, AggregationError, BackendInferenceError, BackendInitializationError, BackendNotAvailableError, BackendConfigError, BackendTimeoutError"
+
+affects:
+  - "02-config-models"
+  - "06-results-layer"
+  - "07-cli"
+  - "all phases that import from llenergymeasure.exceptions"
+
+tech-stack:
   added: []
-  patterns: ["grouped-prefix-columns", "atomic-json-write", "compact-timeseries"]
-key_files:
-  created:
-    - src/llenergymeasure/results/timeseries.py
+  patterns:
+    - "Compatibility alias pattern: OldName = NewName at module bottom with comment block"
+
+key-files:
+  created: []
   modified:
-    - src/llenergymeasure/results/exporters.py
-    - src/llenergymeasure/results/__init__.py
-decisions:
-  - id: "01-04-01"
-    decision: "Renamed total_energy_j to energy_raw_j in CSV column output"
-    rationale: "Grouped prefix convention (energy_*) for CSV readability; model field unchanged"
-  - id: "01-04-02"
-    decision: "Compact JSON keys for timeseries (t, mem_mb, sm_pct, throttle)"
-    rationale: "File size management for long experiments with 100ms sampling"
-metrics:
-  duration: "4 min"
-  completed: "2026-01-29"
+    - "src/llenergymeasure/exceptions.py"
+
+key-decisions:
+  - "Aliases live solely in exceptions.py — no v1.x consumer files modified"
+  - "Aliases excluded from __all__ (if present) — transitional, not public API"
+  - "7 aliases added: ConfigurationError, AggregationError, BackendInferenceError, BackendInitializationError, BackendNotAvailableError, BackendConfigError, BackendTimeoutError"
+
+patterns-established:
+  - "Compatibility block at module bottom: clearly delimited section with removal comment"
+
+requirements-completed:
+  - INF-01
+  - INF-06
+
+duration: 1min
+completed: "2026-02-26"
 ---
 
-# Phase 01 Plan 04: Extended CSV & Time-Series Export Summary
+# Phase 1 Plan 04: Compatibility Aliases Summary
 
-Extended CSV export with ~24 new grouped-prefix columns (energy_, thermal_, env_, gpu_, latency_, batch_, kv_cache_) and separate JSON time-series files with compact sample format and summary statistics.
+**Seven v1.x exception name aliases added to exceptions.py, unblocking transitive package imports without modifying any v1.x consumer files.**
 
-## Tasks Completed
+## Performance
 
-| Task | Name | Commit | Key Files |
-|------|------|--------|-----------|
-| 1 | Extended CSV export with grouped-prefix columns | 053d9e5 | exporters.py |
-| 2 | Time-series export to separate JSON files | f83688f | timeseries.py, __init__.py |
+- **Duration:** 1 min
+- **Started:** 2026-02-26T12:03:14Z
+- **Completed:** 2026-02-26T12:03:55Z
+- **Tasks:** 1
+- **Files modified:** 1
 
-## What Was Built
+## Accomplishments
 
-### Task 1: Extended CSV Export
+- All 7 deleted v1.x exception names (`ConfigurationError`, `AggregationError`, `BackendInferenceError`, `BackendInitializationError`, `BackendNotAvailableError`, `BackendConfigError`, `BackendTimeoutError`) now resolve to their v2.0 equivalents via `is`-identity aliases
+- `llenergymeasure.config.loader` now importable without `ImportError` (previously blocked by missing `ConfigurationError`)
+- `llenergymeasure.results.aggregation` no longer raises `ImportError` on `AggregationError` at module load
 
-Updated `_aggregated_to_row()` to include schema v3 fields:
-- **energy_** group: `energy_raw_j` (renamed from `total_energy_j`), `energy_adjusted_j`, `energy_baseline_w`, `energy_baseline_method`
-- **thermal_** group: `thermal_throttle_detected`, `thermal_throttle_duration_sec`, `thermal_max_temp_c`
-- **env_** group: `env_gpu_name`, `env_gpu_vram_mb`, `env_cuda_version`, `env_driver_version`, `env_gpu_temp_c`, `env_power_limit_w`, `env_cpu_governor`, `env_in_container`, `env_summary`
-- **Extended metrics**: `gpu_util_mean_pct`, `gpu_mem_peak_mb`, `latency_e2e_mean_ms`, `latency_e2e_p95_ms`, `batch_effective_size`, `kv_cache_hit_rate`
-- **Reference**: `timeseries_path`
+## Task Commits
 
-Updated `_order_columns()` to group columns by prefix for spreadsheet readability.
+1. **Task 1: Add v1.x compatibility aliases to exceptions.py** - `45eb52a` (fix)
 
-All new fields default to `None`/`False`/`0.0` when schema v3 data is absent (backwards compatible).
+**Plan metadata:** pending (final commit)
 
-### Task 2: Time-Series Export
+## Files Created/Modified
 
-Created `results/timeseries.py` with three functions:
-- `export_timeseries()` - Per-process JSON with compact samples and summary header
-- `load_timeseries()` - Simple JSON loader with FileNotFoundError
-- `aggregate_timeseries()` - Bundles per-process files into one aggregated file
-
-Features: atomic writes (temp + rename), empty sample handling, summary statistics (power mean/min/max, memory mean/max, temperature mean/max, throttle count).
+- `src/llenergymeasure/exceptions.py` — 12-line compatibility block appended after `InvalidStateTransitionError`; no other files modified
 
 ## Decisions Made
 
-1. **Renamed CSV column `total_energy_j` to `energy_raw_j`**: Follows grouped-prefix convention. The Pydantic model field is unchanged; only the CSV column name changed.
-2. **Compact JSON keys for timeseries**: Uses `t`, `mem_mb`, `sm_pct`, `throttle` instead of full names to keep file size manageable for long experiments at 100ms sampling intervals.
+None — followed plan as specified. Mapping rationale was pre-determined in plan (flattened hierarchy: all backend variants to `BackendError`, config variants to `ConfigError`, aggregation to `ExperimentError`).
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+None — plan executed exactly as written.
 
-## Verification
+## Issues Encountered
 
-- All 15 existing export tests pass unchanged
-- CSV row contains 37 columns (up from ~15)
-- Grouped prefixes verified: energy_(4), thermal_(3), env_(9), gpu_(3), latency_(2), batch_(1), kv_(1)
-- Time-series export/load/aggregate all verified with mock samples
-- Empty sample edge case verified
-- FileNotFoundError verified
+None. `llenergymeasure.results.aggregation` import check raises `ImportError: cannot import name 'ResultAggregator'` (not `AggregationError`) — this is expected per plan ("may fail for other reasons... that is expected and acceptable"). The `AggregationError` alias itself resolved correctly.
+
+## User Setup Required
+
+None — no external service configuration required.
 
 ## Next Phase Readiness
 
-No blockers. The time-series export is ready for integration with the PowerThermalSampler (Plan 02/03) and the results pipeline.
+- Gap 1 of 2 closed: exception import chain unblocked for all 8 files that import deleted v1.x names
+- Gap 2 remains: `state/__init__.py` still imports from deleted `state/experiment_state.py` — addressed by plan 01-05
+- All Phase 1 infrastructure modules remain correctly wired
+
+---
+*Phase: 01-measurement-foundations*
+*Completed: 2026-02-26*

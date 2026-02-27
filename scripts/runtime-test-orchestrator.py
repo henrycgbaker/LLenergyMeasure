@@ -717,7 +717,7 @@ def main() -> int:
 
     # Check/build images
     backends_needed = list(all_params.keys())
-    existing, missing = check_docker_images(backends_needed)
+    _existing, missing = check_docker_images(backends_needed)
 
     if missing:
         if args.build:

@@ -1,14 +1,14 @@
-"""Resilience utilities for LLM Bench framework."""
+"""Resilience utilities for llenergymeasure."""
 
 import functools
-import gc
+import logging
 import time
 from collections.abc import Callable
 from typing import TypeVar
 
-from loguru import logger
+from llenergymeasure.exceptions import LLEMError
 
-from llenergymeasure.exceptions import RetryableError
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -17,7 +17,7 @@ def retry_on_error(
     max_retries: int = 3,
     delay_seconds: float = 1.0,
     backoff_factor: float = 2.0,
-    exceptions: tuple[type[Exception], ...] = (RetryableError,),
+    exceptions: tuple[type[Exception], ...] = (LLEMError,),
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """Decorator for retrying functions on transient errors.
 
@@ -44,13 +44,16 @@ def retry_on_error(
                     last_exception = e
                     if attempt < max_retries:
                         logger.warning(
-                            f"Attempt {attempt + 1}/{max_retries + 1} failed: {e}. "
-                            f"Retrying in {delay:.1f}s..."
+                            "Attempt %d/%d failed: %s. Retrying in %.1fs...",
+                            attempt + 1,
+                            max_retries + 1,
+                            e,
+                            delay,
                         )
                         time.sleep(delay)
                         delay *= backoff_factor
                     else:
-                        logger.error(f"All {max_retries + 1} attempts failed: {e}")
+                        logger.error("All %d attempts failed: %s", max_retries + 1, e)
 
             if last_exception:
                 raise last_exception
@@ -59,39 +62,3 @@ def retry_on_error(
         return wrapper
 
     return decorator
-
-
-def cleanup_gpu_memory() -> None:
-    """Attempt to free GPU memory after an error or between experiments."""
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-            gc.collect()
-            logger.debug("GPU memory cache cleared")
-    except ImportError:
-        pass
-    except Exception as e:
-        logger.warning(f"GPU cleanup failed: {e}")
-
-
-def safe_cleanup(cleanup_func: Callable[[], None]) -> Callable[[], None]:
-    """Wrap a cleanup function to catch and log exceptions.
-
-    Args:
-        cleanup_func: Function to wrap.
-
-    Returns:
-        Wrapped function that won't raise exceptions.
-    """
-
-    @functools.wraps(cleanup_func)
-    def wrapper() -> None:
-        try:
-            cleanup_func()
-        except Exception as e:
-            logger.warning(f"Cleanup function {cleanup_func.__name__} failed: {e}")
-
-    return wrapper

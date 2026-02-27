@@ -1,108 +1,53 @@
-[tool.poetry]
-name = "llenergymeasure"
-version = "2.0.0"
-description = "LLenergyMeasure - LLM inference efficiency measurement framework"
-authors = ["henrycgbaker <henry.c.g.baker@gmail.com>"]
-readme = "README.md"
-packages = [{include = "llenergymeasure", from = "src"}]
-
-[tool.poetry.dependencies]
-python = "^3.10"
-# Core dependencies (includes PyTorch backend by default)
-torch = "^2.5.0"
-pydantic = "^2.0"
-loguru = "^0.7.0"
-typer = ">=0.15.0"
-codecarbon = ">=2.8.0"
-nvidia-ml-py = ">=12.0.0"  # GPU monitoring (replaces deprecated pynvml)
-datasets = ">=3.0.0"
-schedule = "^1.2.2"
-python-dotenv = "^1.0.0"
-tqdm = "^4.66.0"
-transformers = "^4.49.0"
-pyyaml = ">=6.0"  # Config file parsing (used directly, not just transitively)
-numpy = ">=1.24"  # Statistics, metrics, bootstrap CI
-python-on-whales = ">=0.70"  # Docker container orchestration (default host workflow)
-questionary = ">=2.0"  # Interactive prompts for CLI (resume, init)
-httpx = ">=0.23.0"  # HTTP client for webhooks and API calls
-accelerate = "^1.4.0"  # PyTorch backend (default)
-bitsandbytes = "^0.45.0"  # PyTorch backend (default)
-calflops = "^0.2.0"  # PyTorch backend (default)
-peft = "^0.18.1"  # PyTorch backend (default)
-
-# Optional: vLLM backend (high-throughput inference)
-# Requires: NVIDIA GPU, Linux only
-# Note: Has dependency conflicts with TensorRT - install separately
-vllm = {version = ">=0.6.0", optional = true}
-
-# Optional: ONNX Runtime optimization for PyTorch backend
-# Enables torch.compile to use ONNX Runtime for execution
-onnxruntime-gpu = {version = ">=1.17.0", optional = true}
-
-# Optional: TensorRT-LLM backend (high-performance compiled inference)
-# Requires: NVIDIA GPU with compute capability >= 8.0 (Ampere/Ada/Hopper), CUDA 12.x, Linux only
-# Note: Has dependency conflicts with vLLM - install separately
-tensorrt-llm = {version = ">=0.12.0", optional = true}
-
-# Optional: API/Web backend
-fastapi = {version = "^0.115.0", optional = true}
-uvicorn = {version = "^0.32.0", optional = true}
-sqlalchemy = {version = "^2.0", extras = ["asyncio"], optional = true}
-asyncpg = {version = "^0.30.0", optional = true}
-alembic = {version = "^1.14.0", optional = true}
-pydantic-settings = {version = "^2.0", optional = true}
-python-jose = {version = "^3.3.0", extras = ["cryptography"], optional = true}
-# httpx moved to main dependencies for webhook support
-
-# Optional: dev dependencies
-pytest = {version = ">=8.0", optional = true}
-pytest-cov = {version = ">=4.0", optional = true}
-ruff = {version = ">=0.8.0", optional = true}
-mypy = {version = ">=1.0", optional = true}
-pre-commit = {version = ">=3.0", optional = true}
-types-pyyaml = {version = ">=6.0.12", optional = true}
-commitizen = {version = ">=4.0", optional = true}
-
-[tool.poetry.extras]
-# Base install includes PyTorch backend (torch + transformers + accelerate + bitsandbytes + calflops + peft)
-# Usage: pip install llenergymeasure
-
-# ONNX Runtime optimization for PyTorch backend
-# Enables torch.compile to use ONNX Runtime for execution
-# Usage: pip install llenergymeasure[onnxrt]
-onnxrt = ["onnxruntime-gpu"]
-
-# vLLM backend (high-throughput inference)
-# Requires: NVIDIA GPU, Linux only
-# Usage: pip install llenergymeasure[vllm]
-# WARNING: Do not install alongside [tensorrt] - dependency conflicts
-vllm = ["vllm"]
-
-# TensorRT-LLM backend (high-performance compiled inference)
-# Requires: NVIDIA GPU (Ampere+, compute capability >= 8.0), CUDA 12.x, Linux only
-# Usage: pip install llenergymeasure[tensorrt]
-# WARNING: Do not install alongside [vllm] - dependency conflicts
-tensorrt = ["tensorrt-llm"]
-
-# Web API backend (leaderboard server)
-# Usage: pip install llenergymeasure[api]
-api = ["fastapi", "uvicorn", "sqlalchemy", "asyncpg", "alembic", "pydantic-settings", "python-jose"]
-
-# Development tools
-# Usage: pip install llenergymeasure[dev]
-dev = ["pytest", "pytest-cov", "ruff", "mypy", "pre-commit", "types-pyyaml", "commitizen"]
-
-# Development + all extras (for testing)
-# Usage: pip install llenergymeasure[all]
-all = ["pytest", "pytest-cov", "ruff", "mypy", "pre-commit", "types-pyyaml", "commitizen"]
-
-[tool.poetry.scripts]
-llenergymeasure = "llenergymeasure.cli:app"
-lem = "llenergymeasure.cli:app"  # Short alias (recommended)
-
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llenergymeasure"
+version = "1.17.0"
+description = "LLenergyMeasure - LLM inference efficiency measurement framework"
+authors = [
+    {name = "henrycgbaker", email = "henry.c.g.baker@gmail.com"},
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0",
+    "typer>=0.9",
+    "pyyaml>=6.0",
+    "platformdirs>=3.0",
+    "nvidia-ml-py>=12.0",
+    "pyarrow>=14.0",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+pytorch = [
+    "torch>=2.5",
+    "transformers>=4.49",
+    "accelerate>=1.4",
+    "bitsandbytes>=0.45",
+    "calflops>=0.2",
+    "peft>=0.18",
+]
+vllm = ["vllm>=0.6"]
+tensorrt = ["tensorrt-llm>=0.12"]
+zeus = ["zeus-ml>=0.10"]
+codecarbon = ["codecarbon>=2.8"]
+webhooks = ["httpx>=0.23"]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.8",
+    "mypy>=1.0",
+    "types-pyyaml>=6.0.12",
+]
+
+[project.scripts]
+llem = "llenergymeasure.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/llenergymeasure"]
 
 [tool.ruff]
 line-length = 100
@@ -128,21 +73,26 @@ exclude = [
     "experiment_core_utils",
     "experiment_orchestration_utils",
     "configs",
+    # v1.x legacy modules — will be replaced/deleted by subsequent PRs
+    "core/warmup\\.py",
+    "core/model_loader\\.py",
+    "core/flops\\.py",
+    "core/dataset_loader\\.py",
+    "core/gpu_info\\.py",
+    "core/state\\.py",
+    "core/inference_backends/",
+    "config/validation\\.py",
+    "cli/config\\.py",
+    "cli/display",
+    "cli/experiment\\.py",
+    "orchestration/",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
-
-[tool.commitizen]
-name = "cz_conventional_commits"
-version = "2.0.0"
-version_files = ["VERSION", "pyproject.toml:tool.poetry.version"]
-tag_format = "v$version"
-update_changelog_on_bump = true
-changelog_file = "CHANGELOG.md"
-major_version_zero = false
-bump_pattern = "^(feat|fix|refactor|perf|revert)"
-bump_map = { feat = "MINOR", fix = "PATCH", refactor = "PATCH", perf = "PATCH", revert = "PATCH" }
+addopts = "-v --tb=short -m \"not gpu\""
+markers = [
+    "gpu: marks tests as requiring GPU hardware (deselect with '-m \"not gpu\"')",
+]
