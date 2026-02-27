@@ -61,7 +61,6 @@ def _make_mock_process(
     proc = MagicMock()
     proc.pid = pid
     proc.exitcode = exitcode
-    is_alive_calls = [is_alive_after_join]
 
     def fake_join(timeout=None):
         # After join, is_alive reflects whether timed out
@@ -154,9 +153,6 @@ def test_daemon_false(study_config: StudyConfig) -> None:
     # daemon=False must be explicitly passed
     call_kwargs = ctx.Process.call_args
     assert call_kwargs is not None, "Process() was never called"
-    daemon_value = call_kwargs.kwargs.get(
-        "daemon", call_kwargs.args[2] if len(call_kwargs.args) > 2 else None
-    )
     # Check keyword arg
     assert ctx.Process.call_args.kwargs.get("daemon") is False, (
         f"Expected daemon=False, got daemon={ctx.Process.call_args.kwargs.get('daemon')!r}"
@@ -302,7 +298,7 @@ def _make_ordering_study(
 
 def test_interleaved_ordering() -> None:
     """cycle_order=interleaved with 2 experiments x 2 cycles = A,B,A,B order."""
-    study, (exp_a, exp_b) = _make_ordering_study("interleaved", n_cycles=2)
+    study, (_exp_a, _exp_b) = _make_ordering_study("interleaved", n_cycles=2)
     manifest = MagicMock()
 
     call_order: list[str] = []
@@ -350,7 +346,7 @@ def test_interleaved_ordering() -> None:
 
 def test_sequential_ordering() -> None:
     """cycle_order=sequential with 2 experiments x 2 cycles = A,A,B,B order."""
-    study, (exp_a, exp_b) = _make_ordering_study("sequential", n_cycles=2)
+    study, (_exp_a, _exp_b) = _make_ordering_study("sequential", n_cycles=2)
     manifest = MagicMock()
 
     call_order: list[str] = []

@@ -5,6 +5,7 @@ Provides run_gap() for use by StudyRunner between experiments.
 
 from __future__ import annotations
 
+import contextlib
 import sys
 import threading
 import time
@@ -60,10 +61,8 @@ def run_gap(seconds: float, label: str, interrupt_event: threading.Event) -> Non
     if sys.stdin.isatty():
 
         def _wait_for_enter() -> None:
-            try:
+            with contextlib.suppress(Exception):
                 sys.stdin.readline()
-            except Exception:
-                pass
             skip_event.set()
 
         reader = threading.Thread(target=_wait_for_enter, daemon=True)

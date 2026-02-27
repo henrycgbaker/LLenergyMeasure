@@ -602,11 +602,10 @@ def test_run_study_returns_study_result_type():
 
     import llenergymeasure._api as api_module
 
-    hints = {}
     try:
         import typing
 
-        hints = typing.get_type_hints(api_module.run_study)
+        typing.get_type_hints(api_module.run_study)
     except Exception:
         pass
 

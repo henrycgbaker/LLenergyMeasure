@@ -13,6 +13,7 @@ Key design decisions (locked in .product/decisions/experiment-isolation.md):
 
 from __future__ import annotations
 
+import contextlib
 import multiprocessing
 import signal
 import sys
@@ -96,16 +97,12 @@ def _run_experiment_worker(
             "message": str(exc),
             "traceback": traceback.format_exc(),
         }
-        try:
-            conn.send(error_payload)
-        except Exception:
+        with contextlib.suppress(Exception):
             # Pipe may be broken (e.g. parent killed). Best-effort only.
-            pass
+            conn.send(error_payload)
 
-        try:
+        with contextlib.suppress(Exception):
             progress_queue.put({"event": "failed", "error": str(exc)})
-        except Exception:
-            pass
 
         raise
 
