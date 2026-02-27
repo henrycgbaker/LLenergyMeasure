@@ -225,6 +225,8 @@ class StudyRunner:
         self._interrupt_event: threading.Event = threading.Event()
         self._active_process: Any = None  # multiprocessing.Process | None
         self._interrupt_count: int = 0
+        # Per-config_hash cycle counters — reset at the start of each run()
+        self._cycle_counters: dict[str, int] = {}
 
     def run(self) -> list[Any]:
         """Run all experiments in order; return list of results or failure dicts.
@@ -233,16 +235,20 @@ class StudyRunner:
         SIGTERM to the active subprocess and sets interrupt_event. Second Ctrl+C (or
         grace period expiry) sends SIGKILL. After the loop exits, if interrupted,
         calls manifest.mark_interrupted() and sys.exit(130).
-        """
-        from llenergymeasure.study.grid import CycleOrder, apply_cycles
 
-        ordered = apply_cycles(
-            self.study.experiments,
-            self.study.execution.n_cycles,
-            CycleOrder(self.study.execution.cycle_order),
-            self.study.study_design_hash or "",
-            self.study.execution.shuffle_seed,
-        )
+        Note: study.experiments is already the fully-ordered execution sequence produced
+        by apply_cycles() in load_study_config(). The runner must not call apply_cycles()
+        again — doing so would multiply the count by n_cycles a second time.
+        """
+        from llenergymeasure.domain.experiment import compute_measurement_config_hash
+
+        # study.experiments is already cycled by load_study_config(); use as-is.
+        ordered = self.study.experiments
+
+        # n_unique: count of distinct configs (for cycle-gap detection).
+        # Do not use len(ordered) — that includes repetitions.
+        seen_hashes = {compute_measurement_config_hash(c) for c in self.study.experiments}
+        n_unique = len(seen_hashes)
 
         # spawn: CUDA-safe; fork causes silent CUDA corruption (CP-1)
         mp_ctx = multiprocessing.get_context("spawn")
@@ -251,6 +257,7 @@ class StudyRunner:
         self._interrupt_event.clear()
         self._interrupt_count = 0
         self._active_process = None
+        self._cycle_counters = {}
 
         def _sigint_handler(signum: int, frame: Any) -> None:
             self._interrupt_count += 1
@@ -271,7 +278,6 @@ class StudyRunner:
 
         try:
             results: list[Any] = []
-            n_unique = len(self.study.experiments)
 
             for i, config in enumerate(ordered):
                 if self._interrupt_event.is_set():
@@ -320,7 +326,10 @@ class StudyRunner:
         from llenergymeasure.domain.experiment import compute_measurement_config_hash
 
         config_hash = compute_measurement_config_hash(config)
-        cycle = 1  # cycle tracking deferred to Phase 12 wiring
+        # Increment per-config_hash counter: 1st run → cycle=1, 2nd → cycle=2, etc.
+        current = self._cycle_counters.get(config_hash, 0) + 1
+        self._cycle_counters[config_hash] = current
+        cycle = current
 
         # Use user-supplied timeout if set, otherwise fall back to heuristic
         user_timeout = getattr(self.study.execution, "experiment_timeout_seconds", None)
