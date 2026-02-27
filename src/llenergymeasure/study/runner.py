@@ -15,9 +15,12 @@ from __future__ import annotations
 
 import multiprocessing
 import signal
+import sys
 import threading
 import traceback
 from typing import TYPE_CHECKING, Any
+
+from llenergymeasure.study.gaps import run_gap
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, StudyConfig
@@ -203,15 +206,25 @@ class StudyRunner:
 
     Uses multiprocessing.get_context('spawn') — never fork.
     Results travel via Pipe. Failures are structured and non-fatal.
+    Handles SIGINT (Ctrl+C) with two-stage escalation: SIGTERM → 2s grace → SIGKILL.
     """
 
     def __init__(self, study: StudyConfig, manifest_writer: ManifestWriter) -> None:
         self.study = study
         self.manifest = manifest_writer
-        self._interrupted = False
+        # SIGINT state — initialised here, set live in run()
+        self._interrupt_event: threading.Event = threading.Event()
+        self._active_process: Any = None  # multiprocessing.Process | None
+        self._interrupt_count: int = 0
 
     def run(self) -> list[Any]:
-        """Run all experiments in order; return list of results or failure dicts."""
+        """Run all experiments in order; return list of results or failure dicts.
+
+        Installs a SIGINT handler for the duration of the run. First Ctrl+C sends
+        SIGTERM to the active subprocess and sets interrupt_event. Second Ctrl+C (or
+        grace period expiry) sends SIGKILL. After the loop exits, if interrupted,
+        calls manifest.mark_interrupted() and sys.exit(130).
+        """
         from llenergymeasure.study.grid import CycleOrder, apply_cycles
 
         ordered = apply_cycles(
@@ -225,15 +238,76 @@ class StudyRunner:
         # spawn: CUDA-safe; fork causes silent CUDA corruption (CP-1)
         mp_ctx = multiprocessing.get_context("spawn")
 
-        results = []
-        for config in ordered:
-            result = self._run_one(config, mp_ctx)
-            results.append(result)
+        # Reset interrupt state for this run
+        self._interrupt_event.clear()
+        self._interrupt_count = 0
+        self._active_process = None
+
+        def _sigint_handler(signum: int, frame: Any) -> None:
+            self._interrupt_count += 1
+            self._interrupt_event.set()
+            if self._interrupt_count == 1:
+                print(
+                    "\nInterrupt received. Waiting for experiment to finish cleanly "
+                    "(Ctrl+C again to force)..."
+                )
+                if self._active_process is not None and self._active_process.is_alive():
+                    self._active_process.terminate()  # SIGTERM — gentle first attempt
+            else:
+                print("\nForce-killing experiment subprocess...")
+                if self._active_process is not None and self._active_process.is_alive():
+                    self._active_process.kill()  # SIGKILL
+
+        original_sigint = signal.signal(signal.SIGINT, _sigint_handler)
+
+        try:
+            results: list[Any] = []
+            n_unique = len(self.study.experiments)
+
+            for i, config in enumerate(ordered):
+                if self._interrupt_event.is_set():
+                    break
+
+                # Config gap: between every consecutive experiment pair
+                if i > 0:
+                    gap_secs = float(self.study.execution.config_gap_seconds or 0)
+                    if gap_secs > 0:
+                        run_gap(gap_secs, "Config gap", self._interrupt_event)
+                        if self._interrupt_event.is_set():
+                            break
+
+                # Cycle gap: after every complete round of N unique configs
+                if n_unique > 0 and i > 0 and i % n_unique == 0:
+                    cycle_gap_secs = float(self.study.execution.cycle_gap_seconds or 0)
+                    if cycle_gap_secs > 0:
+                        run_gap(cycle_gap_secs, "Cycle gap", self._interrupt_event)
+                        if self._interrupt_event.is_set():
+                            break
+
+                result = self._run_one(config, mp_ctx)
+                results.append(result)
+
+        finally:
+            signal.signal(signal.SIGINT, original_sigint)
+
+        if self._interrupt_event.is_set():
+            completed = sum(1 for r in results if not isinstance(r, dict))
+            total = len(ordered)
+            print(
+                f"\n{completed}/{total} experiments completed. "
+                "Results in study directory. Manifest: interrupted."
+            )
+            self.manifest.mark_interrupted()
+            sys.exit(130)
 
         return results
 
     def _run_one(self, config: ExperimentConfig, mp_ctx: Any) -> Any:
-        """Spawn a subprocess for one experiment; collect result or failure dict."""
+        """Spawn a subprocess for one experiment; collect result or failure dict.
+
+        If interrupt_event is set after join, attempts graceful SIGTERM → 2s grace →
+        SIGKILL before collecting whatever result is available.
+        """
         from llenergymeasure.domain.experiment import compute_measurement_config_hash
 
         config_hash = compute_measurement_config_hash(config)
@@ -260,10 +334,21 @@ class StudyRunner:
         consumer.start()
 
         self.manifest.mark_running(config_hash, cycle)
+        self._active_process = p
 
         p.start()
         child_conn.close()
         p.join(timeout=timeout)
+
+        # SIGINT was received during join: SIGTERM was already sent by handler.
+        # Give child 2s grace for clean CUDA teardown, then SIGKILL.
+        if self._interrupt_event.is_set() and p.is_alive():
+            p.join(timeout=2)  # 2s grace after SIGTERM
+            if p.is_alive():
+                p.kill()
+                p.join()
+
+        self._active_process = None
 
         # Sentinel stops consumer thread — covers SIGKILL path too
         progress_queue.put(None)
