@@ -18,6 +18,7 @@ import signal
 import sys
 import threading
 import traceback
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.study.gaps import run_gap
@@ -74,13 +75,20 @@ def _run_experiment_worker(
         config_hash = compute_measurement_config_hash(config)
         progress_queue.put({"event": "started", "config_hash": config_hash})
 
-        # Run the actual experiment
-        # Phase 12 will wire this to the real ExperimentOrchestrator.
-        # For now, raise NotImplementedError so the caller gets a structured error.
-        raise NotImplementedError(
-            "StudyRunner._run_experiment_worker is not yet wired to an experiment backend. "
-            "Full wiring happens in Phase 12."
-        )
+        # Run the actual experiment in-process (within the spawned subprocess)
+        from llenergymeasure.core.backends import get_backend
+        from llenergymeasure.orchestration.preflight import run_preflight
+
+        # Pre-flight inside subprocess: CUDA availability must be checked in the
+        # process that will use the GPU.
+        run_preflight(config)
+
+        backend = get_backend(config.backend)
+        result = backend.run(config)
+
+        # Send result back to parent via Pipe
+        conn.send(result)
+        progress_queue.put({"event": "completed", "config_hash": config_hash})
 
     except Exception as exc:
         error_payload = {
@@ -209,9 +217,13 @@ class StudyRunner:
     Handles SIGINT (Ctrl+C) with two-stage escalation: SIGTERM → 2s grace → SIGKILL.
     """
 
-    def __init__(self, study: StudyConfig, manifest_writer: ManifestWriter) -> None:
+    def __init__(
+        self, study: StudyConfig, manifest_writer: ManifestWriter, study_dir: Path
+    ) -> None:
         self.study = study
         self.manifest = manifest_writer
+        self.study_dir = study_dir
+        self.result_files: list[str] = []
         # SIGINT state — initialised here, set live in run()
         self._interrupt_event: threading.Event = threading.Event()
         self._active_process: Any = None  # multiprocessing.Process | None
@@ -362,6 +374,16 @@ class StudyRunner:
             error_message = result.get("message", "")
             self.manifest.mark_failed(config_hash, cycle, error_type, error_message)
         else:
-            self.manifest.mark_completed(config_hash, cycle, result_file="")
+            # Save result to study directory and track path (RES-15)
+            try:
+                from llenergymeasure.results.persistence import save_result
+
+                result_path = save_result(result, self.study_dir)
+                self.result_files.append(str(result_path))
+                rel_path = str(result_path.relative_to(self.study_dir))
+                self.manifest.mark_completed(config_hash, cycle, rel_path)
+            except Exception:
+                # Save failure does not abort the study
+                self.manifest.mark_completed(config_hash, cycle, result_file="")
 
         return result
