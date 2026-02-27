@@ -80,7 +80,7 @@ Plans:
 ### M2 Gap Closure
 
 - [x] **Phase 14: Multi-Cycle Execution Fixes** - Fix double `apply_cycles()`, cycle tracking, manifest completion status. Closes 3 requirement gaps + 3 integration defects + 2 broken flows. (completed 2026-02-27)
-- [ ] **Phase 15: M2 Tech Debt and Progress Wiring** - Wire progress display, fix phantom field, ROADMAP/SUMMARY drift, orphaned exports.
+- [x] **Phase 15: M2 Tech Debt and Progress Wiring** - Wire progress display, fix phantom field, ROADMAP/SUMMARY drift, orphaned exports. (completed 2026-02-27)
 
 ## Phase Details
 
@@ -178,7 +178,7 @@ Plans:
 | 11. Subprocess Isolation and StudyRunner | 2/2 | Complete | 2026-02-27 |
 | 12. Integration | 3/3 | Complete | 2026-02-27 |
 | 14. Multi-Cycle Execution Fixes | 1/1 | Complete    | 2026-02-27 |
-| 15. M2 Tech Debt and Progress Wiring | 1/2 | In Progress|  |
+| 15. M2 Tech Debt and Progress Wiring | 2/2 | Complete   | 2026-02-27 |
 | 13. Documentation — M1 backfill and M2 updates | 0/TBD | Not started | - |
 
 ### Phase 13: Documentation — M1 backfill and M2 updates

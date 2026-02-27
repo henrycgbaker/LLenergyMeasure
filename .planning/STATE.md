@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-27T21:11:18.582Z"
+last_updated: "2026-02-27T21:11:55.721Z"
 progress:
   total_phases: 27
-  completed_phases: 21
+  completed_phases: 22
   total_plans: 86
-  completed_plans: 77
+  completed_plans: 78
 ---
 
 # Project State
@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 ## Current Position
 
 Phase: 15
-Plan: 15-02 complete (Phase 15 complete)
-Status: Phase 13 next (Documentation — M1 backfill and M2 updates)
-Last activity: 2026-02-27 — Phase 15 Plan 02 complete: ROADMAP tracking drift fixed (Phase 9/11/12 checkboxes), requirements-completed backfilled into 5 Phase 11/12 SUMMARY files
+Plan: 15-01 complete (Phase 15 in progress)
+Status: Phase 15 Plan 02 next
+Last activity: 2026-02-27 — Phase 15 Plan 01 complete: progress display wired (_consume_progress_events → print_study_progress), phantom experiment_timeout_seconds getattr removed, 536 tests pass
 
 Progress: [██░░░░░░░░] ~10%
 
@@ -54,6 +54,7 @@ Progress: [██░░░░░░░░] ~10%
 | Phase 12-integration P03 | 3 | 2 tasks | 3 files |
 | Phase 14 P01 | 13 | 2 tasks | 5 files |
 | Phase 15 P02 | 1 | 2 tasks | 6 files |
+| Phase 15 P01 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,9 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 - [Phase 14]: _build_entries deduplication: deduplicate study.experiments by config_hash before looping n_cycles — recovers correct n_unique*n_cycles entry count from the pre-cycled list
 - [Phase 14]: mark_study_completed only reached on success path: SIGINT path calls sys.exit(130) before _run() returns, so no guard needed
 - [Phase 15]: STU-07 credited to 11-02 (original cycle ordering implementation) despite Phase 14 fixing the double-apply bug
+- [Phase 15]: Lazy import pattern for print_study_progress inside event handlers: avoids coupling study/runner.py to CLI layer at import time
+- [Phase 15]: Phantom getattr(execution, experiment_timeout_seconds, None) removed — field never existed on ExecutionConfig (extra=forbid), always returned None
+- [Phase 15]: _run_one() now takes explicit index and total params passed from run() loop — cleaner than threading through closure or class state
 
 ### Pending Todos
 
@@ -116,6 +120,6 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 15-02-PLAN.md — ROADMAP tracking drift and SUMMARY traceability fixes
+Stopped at: Completed 15-01-PLAN.md — progress display wired, phantom getattr removed: 536 tests pass
 Resume file: None
 Next action: Phase 13 — Documentation (M1 backfill and M2 updates)
