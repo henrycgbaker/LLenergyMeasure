@@ -3,13 +3,9 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-
-if TYPE_CHECKING:
-    pass
-
 
 # =============================================================================
 # Precision Metadata - For cross-backend comparisons

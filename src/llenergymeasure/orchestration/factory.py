@@ -14,9 +14,12 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from llenergymeasure.core.inference_backends.protocols import InferenceBackend
+from llenergymeasure.exceptions import ConfigurationError
+from llenergymeasure.orchestration.context import ExperimentContext
+from llenergymeasure.results.repository import FileSystemRepository
+
 if TYPE_CHECKING:
-    from llenergymeasure.core.inference_backends.protocols import InferenceBackend
-    from llenergymeasure.orchestration.context import ExperimentContext
     from llenergymeasure.orchestration.runner import ExperimentOrchestrator
     from llenergymeasure.protocols import (
         EnergyBackend,
@@ -50,7 +53,6 @@ def _validate_backend(backend_name: str) -> None:
         ConfigurationError: If backend is not available.
     """
     from llenergymeasure.core.inference_backends import get_backend, is_backend_available
-    from llenergymeasure.exceptions import ConfigurationError
 
     if not is_backend_available(backend_name):
         # Try to get the backend to produce a helpful error message
@@ -120,7 +122,6 @@ def _create_backend_components(
         BackendModelLoaderAdapter,
     )
     from llenergymeasure.core.inference_backends.protocols import BackendRuntime
-    from llenergymeasure.results.repository import FileSystemRepository
 
     # Query backend capabilities to determine device/accelerator handling
     capabilities = backend.get_runtime_capabilities()

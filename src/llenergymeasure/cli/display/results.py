@@ -6,16 +6,14 @@ experiment results.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from rich.markup import escape as rich_escape
 from rich.table import Table
 
 from llenergymeasure.cli.display.console import console
 from llenergymeasure.cli.display.summaries import show_effective_config
-
-if TYPE_CHECKING:
-    from llenergymeasure.domain.experiment import AggregatedResult, RawProcessResult
+from llenergymeasure.domain.experiment import AggregatedResult, RawProcessResult
 
 
 def show_raw_result(result: RawProcessResult, show_config: bool = True) -> None:

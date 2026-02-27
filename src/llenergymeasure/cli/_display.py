@@ -11,14 +11,12 @@ import difflib
 import math
 import sys
 import traceback
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from pydantic import ValidationError
+from pydantic import ValidationError
 
-    from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.domain.experiment import ExperimentResult
-    from llenergymeasure.exceptions import LLEMError
+from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.domain.experiment import ExperimentResult
+from llenergymeasure.exceptions import LLEMError
 
 
 def _sig3(value: float) -> str:

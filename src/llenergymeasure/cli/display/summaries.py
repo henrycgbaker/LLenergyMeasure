@@ -19,12 +19,15 @@ from llenergymeasure.cli.display.tables import (
     format_dict_field,
     print_value,
 )
+from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.provenance import ResolvedConfig
 from llenergymeasure.constants import DEFAULT_STREAMING_WARMUP_REQUESTS
 
 if TYPE_CHECKING:
-    from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.config.provenance import ResolvedConfig
-    from llenergymeasure.state.experiment_state import ExperimentState
+    # ExperimentState is only used by display_incomplete_experiment(),
+    # which is legacy v1.x code (called only from dead cli/experiment.py).
+    # Keep under TYPE_CHECKING until that dead code is removed.
+    from llenergymeasure.core.state import ExperimentState
 
 
 def display_config_summary(

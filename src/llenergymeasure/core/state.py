@@ -139,7 +139,7 @@ class ExperimentState(BaseModel):
             return False
 
 
-def compute_config_hash(config_dict: dict) -> str:
+def compute_config_hash(config_dict: dict[str, object]) -> str:
     """Compute a stable 16-character SHA-256 hash of an experiment config.
 
     Excludes volatile fields (``experiment_id``, ``_metadata``) so that

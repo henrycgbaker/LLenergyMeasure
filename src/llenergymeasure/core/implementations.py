@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.domain.metrics import CombinedMetrics, EnergyMetrics
+
 if TYPE_CHECKING:
     from accelerate import Accelerator
     from transformers import PreTrainedModel, PreTrainedTokenizer
-
-    from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.domain.metrics import CombinedMetrics
 
 
 class HuggingFaceModelLoader:
@@ -68,7 +68,6 @@ class ThroughputMetricsCollector:
             Combined metrics (inference, energy placeholder, compute).
         """
         from llenergymeasure.core.compute_metrics import collect_compute_metrics
-        from llenergymeasure.domain.metrics import CombinedMetrics, EnergyMetrics
 
         compute = collect_compute_metrics(
             model=model,
