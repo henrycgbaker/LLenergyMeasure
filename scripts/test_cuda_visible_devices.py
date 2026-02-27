@@ -209,7 +209,7 @@ def main():
 
     # Test 1: Basic torch CUDA visibility
     print("\n--- Test 1: PyTorch CUDA Visibility ---")
-    available, count = test_torch_cuda_visibility()
+    available, _count = test_torch_cuda_visibility()
     results["torch_cuda"] = available
 
     # Test 2: Subprocess inheritance

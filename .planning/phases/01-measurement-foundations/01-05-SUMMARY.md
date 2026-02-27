@@ -1,84 +1,98 @@
-# Phase 01 Plan 05: Orchestrator Integration Summary
+---
+phase: 01-measurement-foundations
+plan: 05
+subsystem: infra
+tags: [state-machine, imports, package-structure]
 
-## One-liner
-Wire all Phase 1 measurement components (environment, baseline, warmup, power/thermal sampler, timeseries) into the experiment lifecycle with non-fatal graceful degradation.
+requires:
+  - phase: 01-03
+    provides: core/state.py with ExperimentPhase, ExperimentState, StateManager, compute_config_hash
+provides:
+  - state/__init__.py redirects to core/state.py for backwards-compatible imports
+affects:
+  - cli (Phase 7) — cli/experiment.py, cli/utils.py, cli/display/summaries.py still import from deleted path; these are Phase 7 scope
 
-## Tasks Completed
+tech-stack:
+  added: []
+  patterns:
+    - "Package redirect pattern: state/__init__.py re-exports from core/state.py without shims for deleted v1.x names"
 
-| Task | Name | Commit | Key Files |
-|------|------|--------|-----------|
-| 1 | Wire measurement components into ExperimentOrchestrator.run() | a4c9ee4 | src/llenergymeasure/orchestration/runner.py |
-| 2 | Aggregation + CLI display for schema v3 fields | c1e190e | src/llenergymeasure/results/aggregation.py, src/llenergymeasure/cli/experiment.py |
+key-files:
+  created: []
+  modified:
+    - src/llenergymeasure/state/__init__.py
 
-## What Was Built
+key-decisions:
+  - "v1.x names (ExperimentStatus, ProcessProgress, ProcessStatus) intentionally NOT re-exported — code referencing them should fail at import site to surface Phase 7 rewrites needed"
+  - "Stale state/CLAUDE.md (describing v1.x 6-state machine) deleted — canonical docs live in core/state.py module docstring"
 
-### Runner Integration (runner.py)
+patterns-established:
+  - "Redirect pattern: when canonical location moves, old package __init__.py becomes a thin re-export only"
 
-The `ExperimentOrchestrator.run()` method now follows this lifecycle:
+requirements-completed: [INF-07, INF-08]
 
-1. **Environment metadata** -- Calls `collect_environment_metadata()` before model load; logs summary line
-2. **Baseline power** -- Calls `measure_baseline_power()` with config-driven parameters; supports cache TTL, required/optional modes
-3. **Model load** -- Unchanged
-4. **Warmup convergence** -- Calls `warmup_until_converged()` with CV-based detection after model load, before inference
-5. **PowerThermalSampler** -- Context manager wraps inference call; samples power, temp, memory, throttle state
-6. **Inference** -- Unchanged (runs inside sampler context)
-7. **Energy breakdown** -- Calls `create_energy_breakdown()` to compute baseline-adjusted energy
-8. **Thermal throttle info** -- Extracts from sampler; warns if throttling detected
-9. **Save result** -- All new fields (environment, energy_breakdown, thermal_throttle, warmup_result) added to RawProcessResult
-10. **Time-series export** -- Exports sampler data when config.timeseries.save=True; updates result with path via model_copy
+duration: 3min
+completed: 2026-02-26
+---
 
-All integration points wrapped in try/except with non-fatal logging. Experiment always completes even if all new features fail.
+# Phase 1 Plan 05: State Package Redirect Summary
 
-### Aggregation (aggregation.py)
+**state/__init__.py rewired from deleted experiment_state.py to core/state.py, closing verification gap #2 with a 4-symbol re-export and intentional omission of v1.x-only names**
 
-Added schema v3 field aggregation to `aggregate_results()`:
-- **environment**: Taken from first process (all share same GPU)
-- **energy_breakdown**: raw_j summed, adjusted_j summed (when available), baseline info from first
-- **thermal_throttle**: Merged via OR across processes (any throttled = throttled), max duration/temperature
-- **timeseries_path**: First available path propagated
+## Performance
 
-### CLI Display (experiment.py)
+- **Duration:** 3 min
+- **Started:** 2026-02-26T12:03:19Z
+- **Completed:** 2026-02-26T12:06:30Z
+- **Tasks:** 1
+- **Files modified:** 1
 
-Added `_display_measurement_summary()` helper called after experiment completion:
-- Environment summary line (GPU, CUDA, driver, temp)
-- Thermal throttle warning (yellow, with duration)
-- Energy breakdown (raw vs adjusted with baseline power)
-- Warmup status (converged/not, iterations, CV)
+## Accomplishments
 
-## Deviations from Plan
+- Replaced broken `from llenergymeasure.state.experiment_state import ...` with redirect to `llenergymeasure.core.state`
+- `from llenergymeasure.state import ExperimentState, StateManager, ExperimentPhase, compute_config_hash` now works correctly
+- Deleted `state/CLAUDE.md` — it described the v1.x 6-state machine and was actively misleading
+- Closed Phase 1 verification gap #2 (broken state module redirect)
 
-### Auto-fixed Issues
+## Task Commits
 
-**1. [Rule 1 - Bug] Timeseries path assignment after frozen model save**
-- **Found during:** Task 1
-- **Issue:** RawProcessResult is frozen (Pydantic), so timeseries_path cannot be set after initial construction since it's only known after save
-- **Fix:** Use `model_copy(update=...)` to create updated result with timeseries_path, then re-save
-- **Files modified:** runner.py
+Each task was committed atomically:
 
-**2. [Rule 3 - Blocking] Gitignored results/ path matching src/llenergymeasure/results/**
-- **Found during:** Task 2 commit
-- **Issue:** `.gitignore` pattern `results/` matches the source module path
-- **Fix:** Used `git add -f` for the results module file
-- **Files modified:** N/A (git operation only)
+1. **Task 1: Update state/__init__.py to redirect to core/state.py** - `c6ccdde` (fix)
 
-**3. [Rule 1 - Bug] Mypy type narrowing error in CLI helper**
-- **Found during:** Task 2 commit
-- **Issue:** mypy flagged `AggregatedResult | None` assignment incompatible with prior `AggregatedResult` type
-- **Fix:** Added explicit type annotation `result: AggregatedResult | None` before the branch
-- **Files modified:** experiment.py
+## Files Created/Modified
+
+- `src/llenergymeasure/state/__init__.py` - Replaced v1.x broken import with 4-symbol re-export from core/state.py
 
 ## Decisions Made
 
-None -- plan executed as written with only bug fixes.
+- v1.x names (ExperimentStatus, ProcessProgress, ProcessStatus) intentionally NOT re-exported — importing code should fail at the import site so Phase 7 rewrites surface naturally rather than silently inheriting stale behaviour
+- `state/CLAUDE.md` deleted as it described the deleted 6-state machine; core/state.py module docstring is the canonical reference
 
-## Test Results
+## Deviations from Plan
 
-- Unit tests: 791 passed, 0 failed
-- Integration tests: 94 passed, 2 skipped, 0 failed
-- All pre-commit hooks passed (ruff, mypy, formatting)
+None — plan executed exactly as written.
 
-## Metrics
+## Issues Encountered
 
-- Duration: 7 min
-- Tasks: 2/2
-- Completed: 2026-01-29
+None.
+
+## User Setup Required
+
+None — no external service configuration required.
+
+## Next Phase Readiness
+
+- Phase 1 verification gap #2 (state redirect) is now closed
+- Remaining Phase 1 gap: v1.x files (config/loader.py, cli/experiment.py, results/aggregation.py, etc.) still import deleted exception names (`ConfigurationError`, `AggregationError`) — this is the gap targeted by plan 01-04, not in scope here
+- cli/experiment.py, cli/utils.py, cli/display/summaries.py still import from the deleted `state.experiment_state` submodule path (not the package __init__); those are Phase 7 scope and will be rewritten entirely
+
+---
+*Phase: 01-measurement-foundations*
+*Completed: 2026-02-26*
+
+## Self-Check: PASSED
+
+- FOUND: src/llenergymeasure/state/__init__.py
+- FOUND: .planning/phases/01-measurement-foundations/01-05-SUMMARY.md
+- FOUND: commit c6ccdde

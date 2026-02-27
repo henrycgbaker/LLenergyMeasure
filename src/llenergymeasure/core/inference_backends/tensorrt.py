@@ -916,8 +916,7 @@ class TensorRTBackend:
         output_texts: list[str] = []
 
         logger.info(
-            f"Running batch inference with TTFT estimation on "
-            f"{len(measurement_prompts)} prompts..."
+            f"Running batch inference with TTFT estimation on {len(measurement_prompts)} prompts..."
         )
         start_time = time.perf_counter()
 

@@ -1,130 +1,220 @@
 """User preferences configuration loading.
 
-Loads optional user preferences from .lem-config.yaml in project root.
-This is a minimal implementation for Phase 2.2 (thermal gaps, docker strategy).
-Full user preferences system (lem init wizard) is Phase 2.3.
+Loads optional user preferences from ~/.config/llenergymeasure/config.yaml
+(XDG-compliant path via platformdirs). Missing file silently applies all
+defaults. Invalid YAML or schema raises ConfigError.
+
+Precedence (low → high):
+  built-in defaults < config file < env vars < CLI flags (handled elsewhere)
 """
 
 from __future__ import annotations
 
+import contextlib
+import os
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 
-class ThermalGapConfig(BaseModel):
-    """Thermal gap configuration."""
+class UserOutputConfig(BaseModel):
+    """Output path preferences."""
 
-    between_experiments: float = Field(
-        default=60.0,
-        ge=0,
-        description="Seconds between experiments within a cycle",
-    )
-    between_cycles: float = Field(
-        default=300.0,
-        ge=0,
-        description="Seconds between cycles",
+    model_config = {"extra": "forbid"}
+
+    results_dir: str = Field(default="./results", description="Default results output location")
+    model_cache_dir: str = Field(
+        default="~/.cache/huggingface", description="HuggingFace model cache"
     )
 
 
-class DockerConfig(BaseModel):
-    """Docker execution configuration."""
+class UserRunnersConfig(BaseModel):
+    """Runner selection per backend."""
 
-    strategy: Literal["ephemeral", "persistent"] = Field(
-        default="ephemeral",
-        description="Container strategy: ephemeral (run --rm) or persistent (up + exec)",
-    )
-    warmup_delay: float = Field(
-        default=0.0,
-        ge=0,
-        description="Seconds to wait after container start before first experiment",
-    )
-    auto_teardown: bool = Field(
-        default=True,
-        description="Auto-teardown containers after campaign (persistent mode only)",
+    model_config = {"extra": "forbid"}
+
+    pytorch: str = Field(default="local", description="PyTorch runner: 'local' or 'docker:<image>'")
+    vllm: str = Field(default="local", description="vLLM runner: 'local' or 'docker:<image>'")
+    tensorrt: str = Field(
+        default="local", description="TensorRT runner: 'local' or 'docker:<image>'"
     )
 
+    @model_validator(mode="after")
+    def validate_runner_format(self) -> UserRunnersConfig:
+        for field_name in ("pytorch", "vllm", "tensorrt"):
+            value = getattr(self, field_name)
+            if value.startswith("singularity:"):
+                raise ValueError(
+                    f"Singularity runner not yet supported (runners.{field_name}='{value}'). "
+                    "Use 'local' or 'docker:<image>'."
+                )
+            if value != "local" and not value.startswith("docker:"):
+                raise ValueError(
+                    f"runners.{field_name}: expected 'local' or 'docker:<image>', got '{value}'"
+                )
+        return self
 
-class NotificationsConfig(BaseModel):
-    """Webhook notification configuration."""
 
-    webhook_url: str | None = Field(
-        default=None,
-        description="URL for webhook POST notifications",
+class UserMeasurementConfig(BaseModel):
+    """Energy measurement preferences."""
+
+    model_config = {"extra": "forbid"}
+
+    energy_backend: Literal["auto", "nvml", "zeus"] = Field(
+        default="auto", description="Energy backend: auto=zeus if installed else nvml"
     )
-    on_complete: bool = Field(
-        default=True,
-        description="Send notification on experiment completion",
+    carbon_intensity_gco2_kwh: float | None = Field(
+        default=None, ge=0.0, description="gCO2/kWh for local electricity grid"
     )
-    on_failure: bool = Field(
-        default=True,
-        description="Send notification on experiment failure",
+    datacenter_pue: float = Field(default=1.0, ge=1.0, description="Power Usage Effectiveness")
+
+
+class UserUIConfig(BaseModel):
+    """User interface preferences."""
+
+    model_config = {"extra": "forbid"}
+
+    verbosity: Literal["quiet", "standard", "verbose"] = Field(default="standard")
+    prompt: bool = Field(default=True, description="Enable interactive prompts (False for CI/HPC)")
+
+
+class UserAdvancedConfig(BaseModel):
+    """Advanced measurement tuning."""
+
+    model_config = {"extra": "forbid"}
+
+    nvml_poll_interval_ms: int = Field(
+        default=100, ge=10, le=10000, description="NVML sampling interval in milliseconds"
+    )
+
+
+class UserExecutionConfig(BaseModel):
+    """Execution gap preferences (machine-local thermal defaults)."""
+
+    model_config = {"extra": "forbid"}
+
+    config_gap_seconds: float = Field(
+        default=60.0, ge=0.0, description="Thermal gap between experiments"
+    )
+    cycle_gap_seconds: float = Field(
+        default=300.0, ge=0.0, description="Thermal gap between cycles"
     )
 
 
 class UserConfig(BaseModel):
-    """User preferences loaded from .lem-config.yaml.
+    """User preferences loaded from ~/.config/llenergymeasure/config.yaml.
 
-    All fields are optional with sensible defaults. Missing file
-    or fields gracefully fall back to defaults.
+    All fields are optional — missing file or missing fields fall back to
+    built-in defaults. Invalid values raise ConfigError via load_user_config().
     """
 
-    verbosity: Literal["quiet", "normal", "verbose"] = Field(
-        default="normal",
-        description="Default output verbosity: quiet (warnings only), normal (info), verbose (debug)",
+    model_config = {"extra": "forbid"}
+
+    output: UserOutputConfig = Field(default_factory=UserOutputConfig)
+    runners: UserRunnersConfig = Field(default_factory=UserRunnersConfig)
+    measurement: UserMeasurementConfig = Field(default_factory=UserMeasurementConfig)
+    ui: UserUIConfig = Field(default_factory=UserUIConfig)
+    advanced: UserAdvancedConfig = Field(default_factory=UserAdvancedConfig)
+    execution: UserExecutionConfig = Field(default_factory=UserExecutionConfig)
+
+
+def get_user_config_path() -> Path:
+    """Return the XDG-compliant user config path.
+
+    Linux:   ~/.config/llenergymeasure/config.yaml
+    macOS:   ~/Library/Application Support/llenergymeasure/config.yaml
+    Windows: %APPDATA%\\llenergymeasure\\config.yaml
+    """
+    from platformdirs import user_config_dir
+
+    return Path(user_config_dir("llenergymeasure")) / "config.yaml"
+
+
+def _apply_env_overrides(config: UserConfig) -> UserConfig:
+    """Apply LLEM_* environment variable overrides to user config.
+
+    Env vars sit above config file and below CLI flags in precedence.
+    Returns updated UserConfig (Pydantic models are immutable; use model_copy).
+    """
+    runners_updates: dict[str, str] = {}
+    for backend in ("pytorch", "vllm", "tensorrt"):
+        env_key = f"LLEM_RUNNER_{backend.upper()}"
+        if val := os.environ.get(env_key):
+            runners_updates[backend] = val
+
+    measurement_updates: dict[str, Any] = {}
+    if val := os.environ.get("LLEM_CARBON_INTENSITY"):
+        with contextlib.suppress(ValueError):
+            measurement_updates["carbon_intensity_gco2_kwh"] = float(val)
+    if val := os.environ.get("LLEM_DATACENTER_PUE"):
+        with contextlib.suppress(ValueError):
+            measurement_updates["datacenter_pue"] = float(val)
+
+    ui_updates: dict[str, Any] = {}
+    if os.environ.get("LLEM_NO_PROMPT"):
+        ui_updates["prompt"] = False
+
+    # Apply updates using model_copy(update=...) for immutable Pydantic models
+    new_runners = (
+        config.runners.model_copy(update=runners_updates) if runners_updates else config.runners
     )
-    thermal_gaps: ThermalGapConfig = Field(
-        default_factory=ThermalGapConfig,
-        description="Thermal gap settings",
+    new_measurement = (
+        config.measurement.model_copy(update=measurement_updates)
+        if measurement_updates
+        else config.measurement
     )
-    docker: DockerConfig = Field(
-        default_factory=DockerConfig,
-        description="Docker execution settings",
-    )
-    notifications: NotificationsConfig = Field(
-        default_factory=NotificationsConfig,
-        description="Webhook notification settings",
-    )
-    results_dir: str = Field(
-        default="results",
-        description="Default results directory",
-    )
+    new_ui = config.ui.model_copy(update=ui_updates) if ui_updates else config.ui
+
+    if runners_updates or measurement_updates or ui_updates:
+        return config.model_copy(
+            update={
+                "runners": new_runners,
+                "measurement": new_measurement,
+                "ui": new_ui,
+            }
+        )
+    return config
 
 
 def load_user_config(config_path: Path | None = None) -> UserConfig:
-    """Load user configuration from .lem-config.yaml.
+    """Load user configuration from ~/.config/llenergymeasure/config.yaml.
+
+    Missing file: silently applies all defaults — no error.
+    Invalid YAML: raises ConfigError with parse error detail.
+    Invalid schema: raises ConfigError with field path context.
 
     Args:
-        config_path: Optional explicit path. Defaults to .lem-config.yaml in cwd.
+        config_path: Explicit path override (for testing). None = XDG default.
 
     Returns:
-        UserConfig with values from file or defaults if file missing.
+        UserConfig with file values merged over defaults, env vars applied on top.
     """
-    if config_path is None:
-        config_path = Path(".lem-config.yaml")
+    from llenergymeasure.exceptions import ConfigError
 
-    if not config_path.exists():
-        # No config file - return defaults
-        return UserConfig()
+    path = config_path or get_user_config_path()
+
+    if not path.exists():
+        # Missing file — zero-config, apply all defaults + env var overrides
+        return _apply_env_overrides(UserConfig())
 
     try:
-        with open(config_path) as f:
-            data = yaml.safe_load(f) or {}
-        return UserConfig.model_validate(data)
+        content = path.read_text()
+        data = yaml.safe_load(content) or {}
+        if not isinstance(data, dict):
+            raise ConfigError(f"User config must be a YAML mapping: {path}")
     except yaml.YAMLError as e:
-        msg = f"Invalid YAML in {config_path}: {e}"
-        raise ValueError(msg) from e
-    except Exception as e:
-        msg = f"Invalid config in {config_path}: {e}"
-        raise ValueError(msg) from e
+        raise ConfigError(f"Invalid YAML in user config {path}: {e}") from e
+
+    try:
+        config = UserConfig.model_validate(data)
+    except ValidationError as e:
+        # Format Pydantic errors as ConfigError with field paths for researcher clarity
+        errors = [f"  {err['loc']}: {err['msg']}" for err in e.errors()]
+        raise ConfigError(f"Invalid user config {path}:\n" + "\n".join(errors)) from e
+
+    return _apply_env_overrides(config)
 
 
-__all__ = [
-    "DockerConfig",
-    "NotificationsConfig",
-    "ThermalGapConfig",
-    "UserConfig",
-    "load_user_config",
-]
+__all__ = ["UserConfig", "get_user_config_path", "load_user_config"]

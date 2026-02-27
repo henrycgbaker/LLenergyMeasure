@@ -269,7 +269,7 @@ def _load_and_merge_adapter(
         from peft import PeftModel
     except ImportError as e:
         raise ConfigurationError(
-            "LoRA adapter loading requires the 'peft' package. " "Install with: pip install peft"
+            "LoRA adapter loading requires the 'peft' package. Install with: pip install peft"
         ) from e
 
     logger.info(f"Loading LoRA adapter: {adapter_path}")

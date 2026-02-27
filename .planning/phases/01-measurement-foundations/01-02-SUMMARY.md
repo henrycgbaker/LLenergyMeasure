@@ -1,105 +1,122 @@
 ---
 phase: 01-measurement-foundations
 plan: 02
-subsystem: core
-tags: [nvml, pynvml, power-sampling, thermal-throttle, environment-metadata, baseline-power, energy-breakdown]
+subsystem: infra
+tags: [protocols, exceptions, resilience, security, dependency-injection, stdlib]
 
 # Dependency graph
-requires:
-  - phase: 01-measurement-foundations/01-01
-    provides: "ThermalThrottleInfo, EnergyBreakdown, EnvironmentMetadata domain models"
+requires: []
 provides:
-  - "PowerThermalSampler: background GPU power/thermal time-series sampling"
-  - "collect_environment_metadata(): GPU, CUDA, driver, thermal, CPU, container info"
-  - "measure_baseline_power(): idle power measurement with session caching"
-  - "adjust_energy_for_baseline() and create_energy_breakdown(): baseline-adjusted energy"
-affects: [01-measurement-foundations/01-05, 01-measurement-foundations/01-06]
+  - "LLEMError exception hierarchy (LLEMError + 5 direct subclasses)"
+  - "5 runtime-checkable Protocol interfaces for DI (ModelLoader, InferenceEngine, MetricsCollector, EnergyBackend, ResultsRepository)"
+  - "retry_on_error decorator with exponential backoff, no external deps"
+  - "Path sanitisation utilities (validate_path, is_safe_path, sanitize_experiment_id)"
+affects:
+  - all later phases (exceptions, protocols imported everywhere)
+  - phase 02 (config models use ConfigError)
+  - phase 04 (PyTorch backend implements ModelLoader, InferenceEngine protocols)
+  - phase 06 (ExperimentResult referenced in ResultsRepository)
 
 # Tech tracking
 tech-stack:
   added: []
   patterns:
-    - "NVML lazy import pattern (import pynvml inside method, graceful ImportError)"
-    - "Module-level session cache (dict keyed by device_index)"
-    - "Background thread sampler with context manager (matching GPUUtilisationSampler)"
+    - "Flat exception hierarchy: LLEMError -> 5 direct subclasses (no sub-sub-classes)"
+    - "runtime_checkable Protocol for all DI interfaces"
+    - "from __future__ import annotations + TYPE_CHECKING for forward refs"
+    - "stdlib logging (logging.getLogger) not loguru in base package"
 
 key-files:
-  created:
-    - src/llenergymeasure/core/power_thermal.py
-    - src/llenergymeasure/core/environment.py
-    - src/llenergymeasure/core/baseline.py
-  modified: []
+  created: []
+  modified:
+    - src/llenergymeasure/exceptions.py
+    - src/llenergymeasure/protocols.py
+    - src/llenergymeasure/resilience.py
+    - src/llenergymeasure/security.py
 
 key-decisions:
-  - "Used Any type for pynvml module/handle params to satisfy mypy with lazy imports"
-  - "Removed from __future__ import annotations from environment.py to avoid ruff/mypy annotation resolution conflicts"
+  - "Flat exception hierarchy: only 5 LLEMError subclasses, no deeper nesting"
+  - "InvalidStateTransitionError kept as ExperimentError subclass (experiment lifecycle)"
+  - "Pydantic ValidationError passes through unchanged — not wrapped in ConfigError"
+  - "ResultsRepository Protocol: save/load only (v2.0 API) — old save_raw/list_raw/load_raw dropped"
+  - "MetricsCollector.collect returns Any (not CombinedMetrics) — v2.0 type defined later"
+  - "resilience.py uses stdlib logging; loguru not a base package dependency"
 
 patterns-established:
-  - "NVML helper pattern: lazy import, per-field try/except, graceful degradation returning defaults"
-  - "Baseline session cache: module-level dict with TTL-based invalidation"
+  - "Protocol-first DI: all pluggable components implement a Protocol"
+  - "TYPE_CHECKING imports for forward refs to Phase 2/6 types"
+  - "Base package has zero optional-dependency imports (no torch, no loguru)"
+
+requirements-completed:
+  - INF-06
+  - INF-18
+  - INF-20
 
 # Metrics
-duration: 11min
-completed: 2026-01-29
+duration: 8min
+completed: 2026-02-26
 ---
 
-# Phase 1 Plan 2: NVML Measurement Primitives Summary
+# Phase 1 Plan 02: Protocols, Exceptions, Resilience, Security Summary
 
-**Power/thermal time-series sampler, environment metadata collector, and baseline power measurement with session caching -- all via NVML with graceful degradation**
+**v2.0 error hierarchy (LLEMError + 5 subclasses), 5 runtime-checkable Protocol interfaces, stdlib-only retry decorator, and path sanitisation utilities**
 
 ## Performance
 
-- **Duration:** 11 min
-- **Started:** 2026-01-29T14:21:49Z
-- **Completed:** 2026-01-29T14:32:49Z
+- **Duration:** 8 min
+- **Started:** 2026-02-26T11:39:26Z
+- **Completed:** 2026-02-26T11:47:00Z
 - **Tasks:** 2
-- **Files created:** 3
+- **Files modified:** 4
 
 ## Accomplishments
 
-- PowerThermalSampler: background thread sampling power, memory, temperature, utilisation, and thermal throttle state at configurable intervals
-- Environment metadata collector: queries NVML for GPU name/VRAM/compute capability, CUDA/driver versions, thermal state, CPU governor, and container detection
-- Baseline power measurement: samples idle GPU power over configurable duration with module-level session cache (TTL-based invalidation)
-- Energy breakdown: separates raw from baseline-adjusted energy with floor-at-zero safety
+- Replaced v1.x `LLMBenchError` tree (13 classes) with flat `LLEMError + 5` hierarchy matching product decisions
+- Rewrote `protocols.py` with 5 `@runtime_checkable` Protocol classes using v2.0 signatures and forward references
+- Stripped `resilience.py` of loguru and torch deps; `retry_on_error` now uses stdlib logging and defaults to `LLEMError`
+- Removed dead `check_env_for_secrets()` from `security.py`; updated `ConfigError` import
 
 ## Task Commits
 
-1. **Task 1: PowerThermalSampler** - `053d9e5` (feat) -- pre-existing from prior plan execution
-2. **Task 2: Environment metadata + baseline power** - `e647357` (feat)
+Each task was committed atomically:
+
+1. **Task 1: Rewrite protocols.py and exceptions.py** - `d16d87c` (refactor)
+2. **Task 2: Rewrite resilience.py and security.py** - `c782223` (refactor, via pre-commit hook)
 
 ## Files Created/Modified
 
-- `src/llenergymeasure/core/power_thermal.py` - Background power/thermal/throttle sampler with ThermalThrottleInfo summary
-- `src/llenergymeasure/core/environment.py` - NVML-based environment metadata collection (GPU, CUDA, thermal, CPU, container)
-- `src/llenergymeasure/core/baseline.py` - Idle power measurement with session caching and energy breakdown creation
+- `src/llenergymeasure/exceptions.py` - v2.0 flat hierarchy: LLEMError, ConfigError, BackendError, PreFlightError, ExperimentError, StudyError, InvalidStateTransitionError
+- `src/llenergymeasure/protocols.py` - 5 runtime-checkable DI protocols for v2.0 (ModelLoader, InferenceEngine, MetricsCollector, EnergyBackend, ResultsRepository)
+- `src/llenergymeasure/resilience.py` - retry_on_error with stdlib logging, LLEMError default, no torch/loguru
+- `src/llenergymeasure/security.py` - validate_path, is_safe_path, sanitize_experiment_id with ConfigError
 
 ## Decisions Made
 
-- Used `typing.Any` for pynvml module and handle parameters in helper functions: mypy cannot type-check dynamically imported modules, and `from __future__ import annotations` caused ruff to remove `import types` as "unused"
-- Removed `from __future__ import annotations` from `environment.py` to avoid ruff/mypy annotation resolution conflicts (consistent with 01-01 decision about Pydantic incompatibility)
-- Baseline cache uses `time.time()` for TTL (wall-clock) but `time.monotonic()` for sampling duration (monotonic) -- appropriate for each use case
+- `InvalidStateTransitionError` retained as `ExperimentError` subclass (experiment lifecycle semantics)
+- `ResultsRepository` Protocol changed from `save_raw/list_raw/load_raw/save_aggregated` to clean `save/load` (v2.0 API)
+- `MetricsCollector.collect` returns `Any` not `CombinedMetrics` — v2.0 metrics type doesn't exist yet (Phase 6)
+- `from __future__ import annotations` used in protocols.py to resolve forward references cleanly
 
 ## Deviations from Plan
 
-None -- plan executed as written. Task 1 (`power_thermal.py`) was already committed by a prior plan execution (01-04) with identical content; verified it satisfied all requirements and proceeded.
+None — plan executed exactly as written.
 
 ## Issues Encountered
 
-- `from __future__ import annotations` caused ruff to treat type annotation imports as unused (F821 for `types.ModuleType`, removed `import types`). Resolved by dropping the future import and using `typing.Any` directly.
-- Pre-commit mypy hook rejected `object` type hint for pynvml module params (no attribute access on `object`). Resolved by switching to `Any`.
+The pre-commit hook auto-staged and committed `resilience.py` and `security.py` changes as part of a larger commit (`c782223`) that also covered dead code deletions from Plan 01. Both files have the correct v2.0 content.
 
 ## User Setup Required
 
-None -- no external service configuration required.
+None — no external service configuration required.
 
 ## Next Phase Readiness
 
-- All three NVML measurement primitives are ready for orchestrator integration (01-05/01-06)
-- PowerThermalSampler can be wired into inference loop as context manager
-- Environment metadata collector can run at experiment start
-- Baseline power can be measured once per session and used across experiments
-- No blockers
+- All 4 infrastructure modules are clean and v2.0-ready
+- `exceptions.py` and `protocols.py` ready for import by all subsequent phases
+- Phase 2 (config models) can import `ConfigError` immediately
+- Phase 4 (PyTorch backend) can implement `ModelLoader` and `InferenceEngine` protocols
+- Note: 19 v1.x source files still import old exception names — will be updated as each phase rewrites those modules
 
 ---
 *Phase: 01-measurement-foundations*
-*Completed: 2026-01-29*
+*Completed: 2026-02-26*

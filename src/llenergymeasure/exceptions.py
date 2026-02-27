@@ -1,112 +1,46 @@
-"""Exception hierarchy for LLM Bench framework."""
+"""Exception hierarchy for llenergymeasure."""
 
 
-class LLMBenchError(Exception):
-    """Base exception for llm-bench."""
+class LLEMError(Exception):
+    """Base exception for llenergymeasure."""
 
 
-class ConfigurationError(LLMBenchError):
+class ConfigError(LLEMError):
     """Invalid or missing configuration."""
 
 
-class ModelLoadError(LLMBenchError):
-    """Failed to load model or tokenizer."""
+class BackendError(LLEMError):
+    """Error from an inference backend (load, run, timeout)."""
 
 
-class InferenceError(LLMBenchError):
-    """Error during model inference."""
+class PreFlightError(LLEMError):
+    """Pre-flight check failed before GPU allocation."""
 
 
-class EnergyTrackingError(LLMBenchError):
-    """Error in energy measurement backend."""
+class ExperimentError(LLEMError):
+    """Error during experiment execution."""
 
 
-class AggregationError(LLMBenchError):
-    """Error aggregating experiment results."""
+class StudyError(LLEMError):
+    """Error during study orchestration."""
 
 
-class DistributedError(LLMBenchError):
-    """Error in distributed/multi-GPU setup."""
+class InvalidStateTransitionError(ExperimentError):
+    """Invalid state machine transition."""
+
+    def __init__(self, from_state: str, to_state: str):
+        super().__init__(f"Invalid transition: {from_state} -> {to_state}")
+        self.from_state = from_state
+        self.to_state = to_state
 
 
-class RetryableError(LLMBenchError):
-    """Transient errors that can be retried (e.g., OOM, GPU issues).
-
-    Use this for errors where a retry might succeed, such as:
-    - CUDA out of memory (after cleanup)
-    - Transient GPU communication errors
-    - Temporary resource unavailability
-    """
-
-    def __init__(self, message: str, max_retries: int = 3):
-        super().__init__(message)
-        self.max_retries = max_retries
-
-
-# Backend-specific errors
-
-
-class BackendError(LLMBenchError):
-    """Base class for inference backend errors."""
-
-
-class BackendNotAvailableError(BackendError):
-    """Backend is not installed or not usable.
-
-    Raised when a backend's dependencies are missing or the backend
-    reports it cannot be used on the current system.
-    """
-
-    def __init__(self, backend: str, install_hint: str | None = None):
-        msg = f"Backend '{backend}' is not available"
-        if install_hint:
-            msg += f". Install with: {install_hint}"
-        super().__init__(msg)
-        self.backend = backend
-        self.install_hint = install_hint
-
-
-class BackendInitializationError(BackendError):
-    """Failed to initialize backend (model loading, memory allocation, etc.)."""
-
-
-class BackendInferenceError(BackendError):
-    """Error during inference execution."""
-
-
-class BackendTimeoutError(BackendError):
-    """Inference exceeded timeout limit."""
-
-    def __init__(self, backend: str, timeout_sec: float):
-        super().__init__(
-            f"Inference timed out after {timeout_sec}s on backend '{backend}'. "
-            "Consider reducing batch size or prompt count."
-        )
-        self.backend = backend
-        self.timeout_sec = timeout_sec
-
-
-class BackendConfigError(BackendError):
-    """Configuration is incompatible with the selected backend."""
-
-    def __init__(self, backend: str, param: str, message: str):
-        super().__init__(f"Backend '{backend}': parameter '{param}' - {message}")
-        self.backend = backend
-        self.param = param
-
-
-# State machine errors
-
-
-class InvalidStateTransitionError(LLMBenchError):
-    """Invalid state machine transition attempted.
-
-    Raised when code attempts to transition an experiment or process
-    to a state that is not valid from the current state.
-    """
-
-    def __init__(self, from_status: str, to_status: str, entity: str = "experiment"):
-        super().__init__(f"Invalid {entity} state transition: {from_status} -> {to_status}")
-        self.from_status = from_status
-        self.to_status = to_status
-        self.entity = entity
+# ---------------------------------------------------------------------------
+# v1.x compatibility aliases — removed in a later phase when consumers migrate
+# ---------------------------------------------------------------------------
+ConfigurationError = ConfigError
+AggregationError = ExperimentError
+BackendInferenceError = BackendError
+BackendInitializationError = BackendError
+BackendNotAvailableError = BackendError
+BackendConfigError = ConfigError
+BackendTimeoutError = BackendError

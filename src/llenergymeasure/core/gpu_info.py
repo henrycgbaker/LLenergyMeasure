@@ -231,7 +231,7 @@ def _get_device_info_pynvml(handle: Any, index: int, mig_instance_count: int = 0
     # For non-MIG devices, check if MIG is supported/enabled
     if not is_mig_instance:
         try:
-            current_mode, pending_mode = pynvml.nvmlDeviceGetMigMode(handle)
+            current_mode, _pending_mode = pynvml.nvmlDeviceGetMigMode(handle)
             is_mig_capable = True
             is_mig_enabled = current_mode == pynvml.NVML_DEVICE_MIG_ENABLE
         except pynvml.NVMLError:

@@ -1,5 +1,20 @@
-"""State management for LLM Bench experiments."""
+"""State management for llenergymeasure experiments.
 
-from llenergymeasure.state.experiment_state import ExperimentState, StateManager
+This package redirects to llenergymeasure.core.state, which is the canonical
+location since v2.0. Direct imports from this package are supported for
+backwards compatibility.
+"""
 
-__all__ = ["ExperimentState", "StateManager"]
+from llenergymeasure.core.state import (
+    ExperimentPhase,
+    ExperimentState,
+    StateManager,
+    compute_config_hash,
+)
+
+__all__ = [
+    "ExperimentPhase",
+    "ExperimentState",
+    "StateManager",
+    "compute_config_hash",
+]

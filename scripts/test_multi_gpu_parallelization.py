@@ -189,17 +189,17 @@ def main():
 
         # Test PyTorch (data parallel)
         pytorch_config = create_pytorch_config(config_dir)
-        success, output = run_experiment("pytorch", pytorch_config)
+        success, _output = run_experiment("pytorch", pytorch_config)
         results["pytorch"] = success
 
         # Test vLLM (tensor parallel)
         vllm_config = create_vllm_config(config_dir)
-        success, output = run_experiment("vllm", vllm_config)
+        success, _output = run_experiment("vllm", vllm_config)
         results["vllm"] = success
 
         # Test TensorRT (tensor parallel)
         tensorrt_config = create_tensorrt_config(config_dir)
-        success, output = run_experiment(
+        success, _output = run_experiment(
             "tensorrt", tensorrt_config, timeout=900
         )  # TRT needs more time for engine build
         results["tensorrt"] = success

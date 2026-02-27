@@ -288,7 +288,7 @@ def _show_latency_stats(lat: dict[str, float | int | None] | object) -> None:
         )
     if itl_full_mean is not None:
         console.print(
-            f"  [dim]ITL (full): mean={itl_full_mean:.1f}ms  " f"p99={itl_full_p99:.1f}ms[/dim]"
+            f"  [dim]ITL (full): mean={itl_full_mean:.1f}ms  p99={itl_full_p99:.1f}ms[/dim]"
         )
 
 

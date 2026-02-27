@@ -11,13 +11,17 @@ Usage:
         get_shared_params,
         get_all_params,
         get_param_test_values,
+        get_experiment_config_schema,
     )
 
     # Get all params for a backend
     pytorch_params = get_backend_params("pytorch")
 
     # Get test values for a param
-    values = get_param_test_values("pytorch.batching_strategy")
+    values = get_param_test_values("pytorch.batch_size")
+
+    # Get full JSON schema
+    schema = get_experiment_config_schema()
 """
 
 from __future__ import annotations
@@ -175,22 +179,12 @@ def get_params_from_model(
 def _get_custom_test_values() -> dict[str, list[Any]]:
     """Get custom test value overrides for params that need special handling.
 
-    Auto-generated test values from Pydantic models don't always work well
-    for params with constraints or dependencies. This provides manual overrides.
-
     Returns:
-        Dict mapping param paths to custom test values.
+        Empty dict — v2.0 minimal backend configs have no special overrides needed.
+        (v1.x entries removed: vllm.max_model_len, vllm.max_num_batched_tokens,
+        tensorrt.max_input_len — these fields no longer exist in v2.0 minimal configs.)
     """
-    return {
-        # vLLM: max_model_len must be >= prompt length (64+ tokens in test prompts)
-        # plus max_output_tokens (32 in tests). Use reasonable test values.
-        "vllm.max_model_len": [256, 512],
-        # vLLM: max_num_batched_tokens must satisfy scheduler constraints
-        # (must be >= max_model_len when chunked prefill is disabled)
-        "vllm.max_num_batched_tokens": [512, 2048],
-        # TensorRT: Similar constraints on max_input_len
-        "tensorrt.max_input_len": [256, 512],
-    }
+    return {}
 
 
 def get_backend_params(backend: str) -> dict[str, dict[str, Any]]:
@@ -200,7 +194,8 @@ def get_backend_params(backend: str) -> dict[str, dict[str, Any]]:
         backend: One of "pytorch", "vllm", "tensorrt".
 
     Returns:
-        Dict mapping param paths to metadata.
+        Dict mapping param paths to metadata. Each param includes
+        ``backend_support: list[str]`` indicating which backends expose it.
     """
     from llenergymeasure.config.backend_configs import (
         PyTorchConfig,
@@ -223,6 +218,10 @@ def get_backend_params(backend: str) -> dict[str, dict[str, Any]]:
     # All values are Pydantic BaseModel subclasses, mypy can't infer this from dict
     params = get_params_from_model(model_class, prefix=backend)  # type: ignore[arg-type]
 
+    # Add backend_support to every param
+    for param in params.values():
+        param["backend_support"] = [backend]
+
     # Apply custom test value overrides
     custom_values = _get_custom_test_values()
     for param_path, values in custom_values.items():
@@ -236,39 +235,47 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
     """Get shared/universal parameters from ExperimentConfig and DecoderConfig.
 
     Returns params that are universal across all backends:
-    - Top-level: fp_precision, streaming, max_input_tokens, max_output_tokens
+    - Top-level: precision, n, max_input_tokens, max_output_tokens, random_seed
     - Decoder: temperature, do_sample, top_p, top_k, repetition_penalty, preset
+
+    Each param includes ``backend_support: list[str]`` indicating which backends
+    expose each parameter.
     """
     from llenergymeasure.config.models import DecoderConfig
 
     shared: dict[str, dict[str, Any]] = {}
 
-    # Decoder params
+    # Decoder params (introspected from model)
     decoder_params = get_params_from_model(DecoderConfig, prefix="decoder")
+    # Add backend_support to decoder params
+    for param in decoder_params.values():
+        param["backend_support"] = ["pytorch", "vllm", "tensorrt"]
     shared.update(decoder_params)
 
-    # Top-level universal params (manually defined since they're simple)
-    shared["fp_precision"] = {
-        "path": "fp_precision",
-        "name": "fp_precision",
+    # Top-level universal params — defined manually for explicit backend_support
+    shared["precision"] = {
+        "path": "precision",
+        "name": "precision",
         "type_str": "literal",
-        "default": "float16",
+        "default": "bf16",
         "description": "Floating point precision",
-        "options": ["float32", "float16", "bfloat16"],
-        "test_values": ["float32", "float16", "bfloat16"],
+        "options": ["fp32", "fp16", "bf16"],
+        "test_values": ["fp32", "fp16", "bf16"],
         "constraints": {},
         "optional": False,
+        "backend_support": ["pytorch", "vllm", "tensorrt"],
     }
-    shared["streaming"] = {
-        "path": "streaming",
-        "name": "streaming",
-        "type_str": "bool",
-        "default": False,
-        "description": "Enable streaming mode for TTFT/ITL measurement",
+    shared["n"] = {
+        "path": "n",
+        "name": "n",
+        "type_str": "int",
+        "default": 100,
+        "description": "Number of prompts from dataset",
         "options": None,
-        "test_values": [False, True],
-        "constraints": {},
+        "test_values": [10, 100, 500],
+        "constraints": {"ge": 1},
         "optional": False,
+        "backend_support": ["pytorch", "vllm", "tensorrt"],
     }
     shared["max_input_tokens"] = {
         "path": "max_input_tokens",
@@ -277,11 +284,10 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "default": 512,
         "description": "Maximum input token length",
         "options": None,
-        # Test values must leave room for output tokens within model's max_model_len
-        # With max_model_len=512 and max_output_tokens=32, max safe input is ~480
         "test_values": [64, 128, 256],
         "constraints": {"ge": 1},
         "optional": False,
+        "backend_support": ["pytorch", "vllm", "tensorrt"],
     }
     shared["max_output_tokens"] = {
         "path": "max_output_tokens",
@@ -293,9 +299,24 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": [32, 128, 256],
         "constraints": {"ge": 1},
         "optional": False,
+        "backend_support": ["pytorch", "vllm", "tensorrt"],
     }
 
     return shared
+
+
+def get_experiment_config_schema() -> dict[str, Any]:
+    """Return the full ExperimentConfig JSON schema (Pydantic v2 schema).
+
+    Returns:
+        JSON-serialisable dict with the complete schema including all
+        properties, types, constraints, and nested model schemas.
+        Uses Pydantic's built-in model_json_schema() — always in sync
+        with the actual model definition.
+    """
+    from llenergymeasure.config.models import ExperimentConfig
+
+    return ExperimentConfig.model_json_schema()
 
 
 def get_all_params() -> dict[str, dict[str, dict[str, Any]]]:
@@ -392,12 +413,10 @@ def get_mutual_exclusions() -> dict[str, list[str]]:
         # PyTorch: can't use both 4-bit and 8-bit quantization
         "pytorch.load_in_4bit": ["pytorch.load_in_8bit"],
         "pytorch.load_in_8bit": ["pytorch.load_in_4bit"],
-        # vLLM: chunked prefill can conflict with speculative decoding
-        "vllm.enable_chunked_prefill": ["vllm.speculative.model"],
-        # vLLM: fp8 KV cache not compatible with all GPUs
-        "vllm.kv_cache_dtype": [],  # Handled by test infrastructure
-        # TensorRT: calibration only needed for int8_sq quantization
-        "tensorrt.quantization": [],  # Contextual - calibration depends on method
+        # vLLM: quantization method is exclusive (can only use one)
+        "vllm.quantization": [],  # Handled by Literal type constraint
+        # TensorRT: quantization method is exclusive
+        "tensorrt.quantization": [],  # Handled by Literal type constraint
     }
 
 
@@ -406,49 +425,29 @@ def get_backend_specific_params() -> dict[str, list[str]]:
 
     Returns:
         Dict mapping backend name to list of exclusive param paths.
+        Derived from v2.0 minimal backend config fields.
     """
     return {
         "pytorch": [
             "pytorch.batch_size",
-            "pytorch.batching_strategy",
-            "pytorch.load_in_4bit",
-            "pytorch.load_in_8bit",
-            "pytorch.bnb_4bit_quant_type",
-            "pytorch.bnb_4bit_compute_dtype",
-            "pytorch.bnb_4bit_use_double_quant",
             "pytorch.attn_implementation",
             "pytorch.torch_compile",
-            "pytorch.torch_compile_backend",
-            "pytorch.use_bettertransformer",
-            "pytorch.cache_implementation",
-            "pytorch.assisted_generation",
-            "pytorch.beam_search",
+            "pytorch.load_in_4bit",
+            "pytorch.load_in_8bit",
+            "pytorch.num_processes",
         ],
         "vllm": [
             "vllm.max_num_seqs",
-            "vllm.max_num_batched_tokens",
+            "vllm.tensor_parallel_size",
+            "vllm.gpu_memory_utilization",
             "vllm.enable_prefix_caching",
-            "vllm.enable_chunked_prefill",
-            "vllm.kv_cache_dtype",
-            "vllm.block_size",
-            "vllm.enforce_eager",
-            "vllm.attention",
-            "vllm.speculative",
-            "vllm.lora",
             "vllm.quantization",
-            "vllm.logprobs",
         ],
         "tensorrt": [
-            "tensorrt.engine_path",
             "tensorrt.max_batch_size",
-            "tensorrt.builder_opt_level",
-            "tensorrt.strongly_typed",
-            "tensorrt.multiple_profiles",
-            "tensorrt.kv_cache_type",
-            "tensorrt.enable_chunked_context",
-            "tensorrt.enable_kv_cache_reuse",
+            "tensorrt.tp_size",
             "tensorrt.quantization",
-            "tensorrt.calibration",
+            "tensorrt.engine_path",
         ],
     }
 
@@ -466,7 +465,6 @@ def get_special_test_models() -> dict[str, str]:
         # vLLM quantization methods requiring pre-quantized models
         "vllm.quantization=awq": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",
         "vllm.quantization=gptq": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
-        "vllm.quantization=marlin": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
         # TensorRT quantization methods requiring pre-quantized models
         "tensorrt.quantization=int4_awq": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",
         "tensorrt.quantization=int4_gptq": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
@@ -484,18 +482,14 @@ def get_params_requiring_gpu_capability(min_compute_capability: float = 8.0) -> 
     """
     # These features require Ampere (8.0) or newer GPUs
     ampere_required = [
-        "vllm.kv_cache_dtype=fp8",
+        "vllm.quantization=fp8",
         "tensorrt.quantization=fp8",
         "pytorch.attn_implementation=flash_attention_2",
     ]
 
-    # Hopper (9.0) required features
-    hopper_required = [
-        "vllm.attention.flash_version=3",
-    ]
-
     if min_compute_capability >= 9.0:
-        return ampere_required + hopper_required
+        # Hopper (9.0) required features — none in v2.0 minimal config
+        return ampere_required
     return ampere_required
 
 
@@ -509,70 +503,37 @@ def get_param_skip_conditions() -> dict[str, str]:
         # Multi-GPU params - skip if single GPU
         "pytorch.num_processes>1": "Requires 2+ GPUs (data parallelism)",
         "vllm.tensor_parallel_size>1": "Requires 2+ GPUs",
-        "vllm.pipeline_parallel_size>1": "Requires 2+ GPUs",
         "tensorrt.tp_size>1": "Requires 2+ GPUs",
-        "tensorrt.pp_size>1": "Requires 2+ GPUs",
-        # Ray backend - requires ray installation
-        "vllm.distributed_backend=ray": "Requires ray installation",
-        # Flash Attention 3 - Hopper only
-        "vllm.attention.flash_version=3": "Requires Hopper GPU (H100)",
+        # Flash Attention 2 - requires flash-attn package
+        "pytorch.attn_implementation=flash_attention_2": "Requires flash-attn package",
         # FP8 - Ampere or newer
-        "vllm.kv_cache_dtype=fp8": "Requires Ampere+ GPU and FLASHINFER",
+        "vllm.quantization=fp8": "Requires Ampere+ GPU",
         "tensorrt.quantization=fp8": "Requires Ampere+ GPU",
-        # FLASHINFER attention - JIT compile issues in containers
-        "vllm.attention.backend=FLASHINFER": "FLASHINFER JIT compilation fails in some environments",
         # Quantization - requires pre-quantized models (see get_special_test_models)
         "vllm.quantization=awq": "Requires AWQ-quantized model",
         "vllm.quantization=gptq": "Requires GPTQ-quantized model",
-        "vllm.quantization=marlin": "Requires GPTQ-quantized model (Marlin kernel)",
-        "vllm.quantization=squeezellm": "Requires SqueezeLLM-quantized model",
-        "vllm.quantization=bitsandbytes": "Requires bitsandbytes-quantized model",
         # PyTorch optional dependencies
-        "pytorch.attn_implementation=flash_attention_2": "Requires flash-attn package",
-        "pytorch.cache_implementation=static": "Requires CUDA development headers for JIT",
         "pytorch.load_in_4bit": "Requires compatible bitsandbytes version",
         "pytorch.load_in_8bit": "Requires compatible bitsandbytes version",
     }
 
 
 def get_streaming_constraints() -> dict[str, str]:
-    """Get parameters that are affected by streaming=True.
-
-    When streaming=True, certain parameters are ignored or behave differently
-    because streaming requires sequential per-request processing for accurate
-    TTFT (Time To First Token) and ITL (Inter-Token Latency) measurement.
+    """Streaming is a Phase 5 concern.
 
     Returns:
-        Dict mapping param paths to explanations of streaming impact.
+        Empty dict — streaming parameters are not part of v2.0 M1 scope.
     """
-    return {
-        # Parameters ignored when streaming=True
-        "pytorch.batch_size": "Ignored - streaming processes 1 request at a time",
-        "pytorch.batching_strategy": "Ignored - always sequential in streaming mode",
-        "vllm.max_num_seqs": "Effectively 1 in streaming mode for accurate TTFT",
-        # Parameters that may conflict with streaming
-        "pytorch.torch_compile": "May cause graph-tracing errors, falls back to uncompiled",
-        "vllm.enable_chunked_prefill": "May interfere with TTFT measurement accuracy",
-    }
+    return {}
 
 
 def get_streaming_incompatible_tests() -> list[tuple[str, str]]:
-    """Get parameter combinations that should not be tested with streaming=True.
-
-    These combinations either:
-    - Are known to fail or be unreliable
-    - Would give misleading results
-    - Have no meaningful interaction with streaming
+    """Streaming is a Phase 5 concern.
 
     Returns:
-        List of (param_path, reason) tuples.
+        Empty list — streaming parameters are not part of v2.0 M1 scope.
     """
-    return [
-        # torch.compile + streaming is unreliable
-        ("pytorch.torch_compile", "Graph compilation incompatible with streaming callbacks"),
-        # Large batch sizes are pointless with streaming (they're ignored)
-        ("pytorch.batch_size>1", "Batch size ignored in streaming mode"),
-    ]
+    return []
 
 
 # =============================================================================
@@ -624,16 +585,9 @@ def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
     return {
         "tensor_parallel": {
             # PyTorch does NOT support tensor parallelism for HuggingFace models
-            # (device_map="auto" is layer placement, not tensor parallelism)
             "pytorch": False,
             "vllm": "tensor_parallel_size" in vllm_fields,
             "tensorrt": "tp_size" in tensorrt_fields,
-        },
-        "pipeline_parallel": {
-            # PyTorch's generate() doesn't support PP (requires full model for autoregressive)
-            "pytorch": False,
-            "vllm": "pipeline_parallel_size" in vllm_fields,
-            "tensorrt": "pp_size" in tensorrt_fields,
         },
         "data_parallel": {
             # PyTorch uses data parallelism via Accelerate (num_processes)
@@ -655,7 +609,7 @@ def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
         "native_quantization": {
             "pytorch": False,  # PyTorch relies on bitsandbytes, not native
             "vllm": "AWQ/GPTQ/FP8" if vllm_quant_options else False,
-            "tensorrt": "FP8/INT8" if trt_quant_options else False,
+            "tensorrt": "INT8/INT4/FP8" if trt_quant_options else False,
         },
         "float32_precision": {
             "pytorch": True,
@@ -673,21 +627,15 @@ def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
             "vllm": True,
             "tensorrt": True,
         },
-        "streaming": {
-            # All backends support streaming for TTFT/ITL measurement
-            "pytorch": True,
-            "vllm": True,
-            "tensorrt": True,
+        "prefix_caching": {
+            "pytorch": False,
+            "vllm": "enable_prefix_caching" in vllm_fields,
+            "tensorrt": False,
         },
         "lora_adapters": {
             "pytorch": True,  # Via peft library
-            "vllm": "lora" in vllm_fields,
-            "tensorrt": "draft_model" in tensorrt_fields,  # Limited LoRA support
-        },
-        "speculative_decoding": {
-            "pytorch": "assisted_generation" in pytorch_fields,
-            "vllm": "speculative" in vllm_fields,
-            "tensorrt": "draft_model" in tensorrt_fields,
+            "vllm": False,  # Not in v2.0 minimal VLLMConfig
+            "tensorrt": False,  # Not in v2.0 minimal TensorRTConfig
         },
     }
 
@@ -703,10 +651,9 @@ def get_capability_matrix_markdown() -> str:
     """
     capabilities = get_backend_capabilities()
 
-    # Define display names and footnotes
+    # Define display names
     display_names = {
         "tensor_parallel": "Tensor Parallel",
-        "pipeline_parallel": "Pipeline Parallel",
         "data_parallel": "Data Parallel",
         "bitsandbytes_4bit": "BitsAndBytes (4-bit)",
         "bitsandbytes_8bit": "BitsAndBytes (8-bit)",
@@ -714,9 +661,8 @@ def get_capability_matrix_markdown() -> str:
         "float32_precision": "float32 precision",
         "float16_precision": "float16 precision",
         "bfloat16_precision": "bfloat16 precision",
-        "streaming": "Streaming (TTFT/ITL)",
+        "prefix_caching": "Prefix Caching",
         "lora_adapters": "LoRA Adapters",
-        "speculative_decoding": "Speculative Decoding",
     }
 
     lines = [
@@ -731,66 +677,22 @@ def get_capability_matrix_markdown() -> str:
         for backend in ["pytorch", "vllm", "tensorrt"]:
             value = cap_values.get(backend, False)
             if value is True:
-                cells.append("✅")
+                cells.append("Yes")
             elif value is False:
-                cells.append("❌")
+                cells.append("No")
             elif isinstance(value, str):
-                # Has a note - add footnote
-                cells.append(f"✅ ({value})")
+                cells.append(value)
             else:
-                cells.append("❌")
+                cells.append("No")
 
         lines.append(f"| {display_name} | {cells[0]} | {cells[1]} | {cells[2]} |")
 
-    # Add standard footnotes
     lines.append("")
     lines.append("**Notes:**")
     lines.append("- vLLM supports 4-bit via AWQ/GPTQ quantized models, not bitsandbytes")
     lines.append("- TensorRT-LLM is optimised for FP16/BF16/INT8 precision, not FP32")
 
     return "\n".join(lines)
-
-
-def get_campaign_params() -> dict[str, dict[str, Any]]:
-    """Get all parameters from CampaignConfig and its nested models.
-
-    Introspects CampaignConfig, CampaignGridConfig, CampaignHealthCheckConfig,
-    CampaignColdStartConfig, CampaignDaemonConfig, CampaignIOConfig,
-    CampaignExecutionConfig, and CampaignScheduleConfig.
-
-    Returns:
-        Dict mapping param paths (e.g., "grid.backends", "health_check.gpu_memory_threshold_pct")
-        to metadata dicts.
-    """
-    from llenergymeasure.config.campaign_config import CampaignConfig
-
-    return get_params_from_model(CampaignConfig, prefix="", include_nested=True)
-
-
-def get_campaign_grid_params() -> dict[str, dict[str, Any]]:
-    """Get grid-related parameters from CampaignGridConfig.
-
-    Used by campaign grid validation to report available grid axes.
-
-    Returns:
-        Dict mapping param paths to metadata for grid fields only.
-    """
-    from llenergymeasure.config.campaign_config import CampaignGridConfig
-
-    return get_params_from_model(CampaignGridConfig, prefix="grid", include_nested=True)
-
-
-def get_campaign_health_check_params() -> dict[str, dict[str, Any]]:
-    """Get health check parameters from CampaignHealthCheckConfig.
-
-    Returns:
-        Dict mapping param paths to metadata for health check fields only.
-    """
-    from llenergymeasure.config.campaign_config import CampaignHealthCheckConfig
-
-    return get_params_from_model(
-        CampaignHealthCheckConfig, prefix="health_check", include_nested=True
-    )
 
 
 def get_validation_rules() -> list[dict[str, str]]:
@@ -803,49 +705,35 @@ def get_validation_rules() -> list[dict[str, str]]:
     Returns:
         List of dicts with keys: backend, combination, reason, resolution.
     """
-    # These are extracted from ExperimentConfig and backend validators
-    # TODO: In future, could use AST parsing to extract these automatically
     return [
         {
             "backend": "pytorch",
-            "combination": "parallelism.strategy=pipeline_parallel",
-            "reason": "PyTorch's generate() requires full model access for autoregressive generation",
-            "resolution": "Use backend='vllm' or backend='tensorrt' for pipeline parallel",
-        },
-        {
-            "backend": "vllm",
-            "combination": "parallelism.strategy=data_parallel",
-            "reason": "vLLM manages multi-GPU internally via Ray/tensor parallel",
-            "resolution": "Use tensor_parallel_size or pipeline_parallel_size",
-        },
-        {
-            "backend": "vllm",
-            "combination": "quantization.load_in_8bit=True",
-            "reason": "vLLM does not support bitsandbytes 8-bit quantization",
-            "resolution": "Use vllm.quantization (awq, gptq, fp8) for quantized inference",
-        },
-        {
-            "backend": "tensorrt",
-            "combination": "fp_precision=float32",
-            "reason": "TensorRT-LLM is optimised for lower precision inference",
-            "resolution": "Use fp_precision='float16' or 'bfloat16'",
-        },
-        {
-            "backend": "tensorrt",
-            "combination": "quantization.load_in_4bit=True",
-            "reason": "TensorRT does not support bitsandbytes quantization",
-            "resolution": "Use tensorrt.quantization (fp8, int8_sq, int4_awq)",
-        },
-        {
-            "backend": "tensorrt",
-            "combination": "quantization.load_in_8bit=True",
-            "reason": "TensorRT does not support bitsandbytes quantization",
-            "resolution": "Use tensorrt.quantization (fp8, int8_sq, int8_weight_only)",
+            "combination": "load_in_4bit=True + load_in_8bit=True",
+            "reason": "Cannot use both 4-bit and 8-bit quantization simultaneously",
+            "resolution": "Choose one: pytorch.load_in_4bit=true OR pytorch.load_in_8bit=true",
         },
         {
             "backend": "all",
-            "combination": "quantization.load_in_4bit + load_in_8bit",
-            "reason": "Cannot use both 4-bit and 8-bit quantization simultaneously",
-            "resolution": "Choose one: load_in_4bit=True OR load_in_8bit=True",
+            "combination": "backend section mismatch",
+            "reason": "Backend section must match the backend field",
+            "resolution": "Ensure pytorch:/vllm:/tensorrt: section matches backend: field",
+        },
+        {
+            "backend": "all",
+            "combination": "passthrough_kwargs key collision",
+            "reason": "passthrough_kwargs keys must not collide with ExperimentConfig fields",
+            "resolution": "Use named fields directly instead of passthrough_kwargs",
+        },
+        {
+            "backend": "tensorrt",
+            "combination": "precision=fp32",
+            "reason": "TensorRT-LLM is optimised for lower precision inference",
+            "resolution": "Use precision='fp16' or 'bf16'",
+        },
+        {
+            "backend": "vllm",
+            "combination": "load_in_4bit or load_in_8bit",
+            "reason": "vLLM does not support bitsandbytes quantization",
+            "resolution": "Use vllm.quantization (awq, gptq, fp8) for quantized inference",
         },
     ]
