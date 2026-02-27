@@ -168,7 +168,7 @@ Plans:
 | 9. Grid Expansion and StudyConfig | 1/2 | In Progress|  |
 | 10. Manifest Writer | 1/1 | Complete    | 2026-02-27 |
 | 11. Subprocess Isolation and StudyRunner | 2/2 | Complete    | 2026-02-27 |
-| 12. Integration | 0/TBD | Not started | - |
+| 12. Integration | 1/3 | In Progress|  |
 | 13. Documentation — M1 backfill and M2 updates | 0/TBD | Not started | - |
 
 ### Phase 13: Documentation — M1 backfill and M2 updates
@@ -176,7 +176,7 @@ Plans:
 **Goal:** [To be planned]
 **Requirements**: TBD
 **Depends on:** Phase 12
-**Plans:** 2/2 plans complete
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] TBD (run /gsd:plan-phase 13 to break down)

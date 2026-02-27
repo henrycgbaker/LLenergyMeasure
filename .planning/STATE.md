@@ -22,10 +22,10 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 11 (Phase 11 complete — both plans done)
-Plan: 11-02 complete
-Status: Phase 11 complete
-Last activity: 2026-02-27 — Phase 11 Plan 02 complete: SIGINT handling, gap countdown, mark_interrupted(), 17 new tests (511 total)
+Phase: 12
+Plan: 12-01 complete
+Status: Phase 12 in progress
+Last activity: 2026-02-27 — Phase 12 Plan 01 complete: StudyResult full schema (RES-13), StudySummary, experiment_gap_seconds rename, run_study_preflight multi-backend guard (CM-10), 8 new tests
 
 Progress: [██░░░░░░░░] ~10%
 
@@ -43,7 +43,7 @@ Progress: [██░░░░░░░░] ~10%
 | 09-grid-expansion | 2 completed | 10 min | 5 min |
 | 10-manifest-writer | 1 completed | 3 min | 3 min |
 | 11-subprocess-isolation | 2 completed | 8 min | 4 min |
-| 12-integration | TBD | - | - |
+| 12-integration | 1 completed | TBD | - |
 | 08.1-pytorch-result-wiring | 1 completed | 3 min | 3 min |
 
 *Updated after each plan completion*
@@ -81,6 +81,9 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 - [Phase 11]: Grace period 2s (2-3s range): balance between CUDA teardown and responsiveness
 - [Phase 11]: Enter-to-skip uses daemon readline thread (not select/termios): simplest TTY-degrading approach
 - [Phase 11]: interrupt_event.clear() at run() start: allows StudyRunner re-use; SIGINT state is per-run
+- [Phase 12-01]: StudyResult has no extra='forbid' — internal model, not user-visible output
+- [Phase 12-01]: run_study_preflight raises PreFlightError immediately for multi-backend (CM-10); Docker isolation is M3
+- [Phase 12-01]: experiment_gap_seconds replaces config_gap_seconds in both ExecutionConfig and UserExecutionConfig
 
 ### Pending Todos
 
@@ -99,6 +102,6 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 11-02-PLAN.md — SIGINT handling, gap countdown, mark_interrupted(), 17 new tests (511 total)
+Stopped at: Completed 12-01-PLAN.md — StudyResult schema, experiment_gap_seconds rename, multi-backend preflight
 Resume file: None
-Next action: Phase 12 (integration wiring)
+Next action: Phase 12 Plan 02 (core wiring)

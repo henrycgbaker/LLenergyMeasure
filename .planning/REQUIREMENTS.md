@@ -142,11 +142,11 @@ Full definitions, context, and design references are in `.product/REQUIREMENTS.m
 | LA-02 | Phase 12 | Pending |
 | LA-05 | Phase 12 | Pending |
 | STU-NEW-01 | Phase 12 | Pending |
-| RES-13 | Phase 12 | Pending |
+| RES-13 | Phase 12 | Complete |
 | RES-15 | Phase 12 | Pending |
 | CLI-05 | Phase 12 | Pending |
 | CLI-11 | Phase 12 | Pending |
-| CM-10 | Phase 12 | Pending |
+| CM-10 | Phase 12 | Complete |
 
 **Coverage:**
 - M1 gap closure: 3 requirement gaps + 19 verification gaps → Phases 8.1, 8.2
