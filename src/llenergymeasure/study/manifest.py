@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
-from llenergymeasure import __version__
 from llenergymeasure.exceptions import StudyError
 from llenergymeasure.results.persistence import _atomic_write
 
@@ -207,6 +206,8 @@ class ManifestWriter:
 
     def _build_manifest(self, study: StudyConfig) -> StudyManifest:
         """Build initial StudyManifest from a StudyConfig."""
+        from llenergymeasure import __version__
+
         entries = self._build_entries(study)
         return StudyManifest(
             study_name=study.name or "unnamed-study",
