@@ -10,9 +10,9 @@ Dual-product vision: CLI tool for the research community (v2.0), web platform fo
 
 Researchers can run broad parameter sweeps across deployment configurations and produce publishable, methodology-sound measurements showing which implementation choices matter most for LLM energy efficiency.
 
-## Current Milestone: M3 — Docker Multi-Backend
+## Current Milestone: v1.19.0 — M3: Docker + vLLM
 
-**Goal:** TBD — Docker container lifecycle, GPU passthrough, vLLM and TensorRT-LLM backends, multi-backend study execution.
+**Goal:** Docker container infrastructure with ephemeral per-experiment lifecycle, vLLM backend activation, Docker pre-flight validation, GPU memory cleanup, and full user documentation including Docker setup guide.
 
 ## Requirements
 
@@ -42,16 +42,27 @@ Researchers can run broad parameter sweeps across deployment configurations and 
 
 ### Active
 
-<!-- M3 scope — Docker Multi-Backend. Requirements TBD via /gsd:new-milestone -->
+<!-- M3 scope — Docker + vLLM. Defined 2026-02-27. -->
 
-TBD — run `/gsd:new-milestone` to define M3 requirements.
+- [ ] Docker ephemeral runner (`docker run --rm` per experiment, config via env/volume, result via shared volume)
+- [ ] Docker pre-flight checks (NVIDIA Container Toolkit, GPU visibility inside container, CUDA/driver compat)
+- [ ] vLLM inference backend activation (P0 fixes: streaming, shm-size)
+- [ ] GPU memory cleanup between experiments (NVML check in both local and Docker paths)
+- [ ] Docker images for vLLM backend (CI publish on release tag)
+- [ ] Full user documentation including Docker setup guide
+- [ ] `aienergyscore.jsonl` built-in dataset file (carried from M1)
+- [ ] Confirm `peak_memory_mb` measurement semantics (carried from M1)
 
 ### Out of Scope
 
 <!-- Explicit boundaries. -->
 
-- `--resume` flag (M4) — manifest is always-on but resume is deferred
-- Traffic simulation, streaming latency (M4) — advanced features
+- TensorRT-LLM backend (M4/v1.20.0) — Docker infra reused, backend-specific activation
+- SGLang backend (M5/v1.21.0) — RadixAttention energy profiles, Docker-isolated
+- `--resume` flag — manifest is always-on but resume is deferred
+- Traffic simulation, streaming latency — advanced features
+- Persistent Docker containers — ephemeral only in v1.19.0
+- `llem compile-engines` pre-compilation command — deferred
 - lm-eval integration (v3.0) — quality metrics not v2.0 scope
 - Web platform (v4.0) — separate product, separate repo
 
@@ -96,6 +107,8 @@ TBD — run `/gsd:new-milestone` to define M3 requirements.
 | Pipe-only IPC (file fallback dropped) | ExperimentResult fits in Pipe buffer; 1MB fallback over-engineering | ✓ Good (M2) |
 | Manifest always-on, resume deferred | Ship checkpoint pattern in M2; resume logic is M4 | ✓ Good (M2) |
 | Phase 13 docs deferred to M3 | Write docs once against final backend story | — Pending |
+| One backend per milestone (M3–M5) | Each milestone activates one backend on shared Docker infra; reduces risk | — Pending |
+| GPU memory cleanup between experiments | AIEnergyScore pattern; defensive measure for measurement purity | — Pending |
 
 ---
-*Last updated: 2026-02-27 after v1.18.0 M2 milestone*
+*Last updated: 2026-02-27 after M3 milestone setup*
