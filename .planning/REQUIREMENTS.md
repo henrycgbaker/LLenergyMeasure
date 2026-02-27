@@ -129,8 +129,8 @@ Full definitions, context, and design references are in `.product/REQUIREMENTS.m
 | CFG-14 | Phase 9 | Complete |
 | CFG-15 | Phase 9 | Complete |
 | CFG-16 | Phase 9 | Complete |
-| STU-08 | Phase 14 | Pending |
-| STU-09 | Phase 14 | Pending |
+| STU-08 | Phase 14 | Complete |
+| STU-09 | Phase 14 | Complete |
 | RES-14 | Phase 10 | Complete |
 | RES-NEW-01 | Phase 10 | Complete |
 | STU-01 | Phase 11 | Complete |
@@ -138,7 +138,7 @@ Full definitions, context, and design references are in `.product/REQUIREMENTS.m
 | STU-03 | Phase 11 | Complete |
 | STU-04 | Phase 11 | Complete |
 | STU-06 | Phase 11 | Complete |
-| STU-07 | Phase 14 | Pending |
+| STU-07 | Phase 14 | Complete |
 | LA-02 | Phase 12 | Complete |
 | LA-05 | Phase 12 | Complete |
 | STU-NEW-01 | Phase 12 | Complete |

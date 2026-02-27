@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-27T19:38:05.386Z"
+last_updated: "2026-02-27T20:53:05.376Z"
 progress:
-  total_phases: 25
-  completed_phases: 20
-  total_plans: 83
-  completed_plans: 75
+  total_phases: 27
+  completed_phases: 21
+  total_plans: 84
+  completed_plans: 76
 ---
 
 # Project State
@@ -52,6 +52,7 @@ Progress: [██░░░░░░░░] ~10%
 | Phase 11 P02 | 5 min | 3 tasks | 6 files |
 | Phase 12-integration P02 | 8 | 2 tasks | 4 files |
 | Phase 12-integration P03 | 3 | 2 tasks | 3 files |
+| Phase 14 P01 | 13 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,10 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 - [Phase 12-integration]: result_files list contains absolute path strings; manifest entry stores relative path from study_dir
 - [Phase 12-integration]: CLI effective defaults n_cycles=3 and cycle_order=shuffled applied only when YAML execution block omits those keys
 - [Phase 12-integration]: quiet suppresses CLI-side progress and summary; gap countdown suppression deferred (M2 limitation, subprocess-level)
+- [Phase 14]: Remove apply_cycles() from runner: study.experiments is already cycled by load_study_config() — runner consumes the pre-ordered list as-is
+- [Phase 14]: _cycle_counters dict in StudyRunner: per-config_hash cycle numbers, reset per run(), incremented per _run_one() call — correct regardless of cycle_order
+- [Phase 14]: _build_entries deduplication: deduplicate study.experiments by config_hash before looping n_cycles — recovers correct n_unique*n_cycles entry count from the pre-cycled list
+- [Phase 14]: mark_study_completed only reached on success path: SIGINT path calls sys.exit(130) before _run() returns, so no guard needed
 
 ### Pending Todos
 
@@ -109,6 +114,6 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 12-03-PLAN.md — study-mode CLI flags, display functions, 530 tests pass
+Stopped at: Completed 14-01-PLAN.md — multi-cycle execution fixes: 535 tests pass
 Resume file: None
 Next action: Phase 13 — Documentation
