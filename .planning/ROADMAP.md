@@ -104,12 +104,12 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. `ManifestWriter.mark_running()`, `.mark_completed()`, and `.mark_failed()` each produce a valid `manifest.json` in the study output directory via atomic `os.replace()`
   2. Simulating an interruption mid-write (e.g., killing the process after `write_text()` but before `os.replace()`) leaves the previous `manifest.json` intact and parseable
-  3. The study output directory follows the `{study_name}_{timestamp}/` layout, with per-experiment subdirectories and `manifest.json` at the top level
+  3. The study output directory follows the `{study_name}_{timestamp}/` layout, with flat per-experiment result files and `manifest.json` at the top level
   4. `StudyManifest` and `StudyResult` are distinct types — manifest is the checkpoint, result is the final return value
-**Plans**: TBD
+**Plans**: 1 plan (Wave 1)
 
 Plans:
-- [ ] TBD
+- [ ] 10-01: StudyManifest model, ManifestWriter with atomic writes, study output directory helpers, TDD tests [Wave 1]
 
 ---
 
