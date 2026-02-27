@@ -52,6 +52,7 @@ decisions:
   - "Enter-to-skip uses daemon readline thread (not select/termios): simplest TTY-degrading approach"
   - "interrupt_event.clear() at run() start: allows runner to be re-used; SIGINT state is per-run"
   - "SIGINT tests use _run_one side_effect injection: avoids patching signal.signal() globally which is fragile"
+requirements-completed: [STU-06, STU-07]
 metrics:
   duration: "~5 min"
   completed: "2026-02-27T18:18:24Z"

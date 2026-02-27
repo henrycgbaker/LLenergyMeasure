@@ -22,6 +22,7 @@ decisions:
   - "Single experiment + n_cycles=1 dispatches in-process (no subprocess overhead)"
   - "result_files list contains absolute paths (str); manifest gets relative path from study_dir"
   - "test_worker_calls_get_backend uses mock conn (not real Pipe) to avoid MagicMock pickling failure"
+requirements-completed: [LA-02, LA-05, STU-NEW-01, RES-15]
 metrics:
   duration: "~8 min"
   completed_date: "2026-02-27"

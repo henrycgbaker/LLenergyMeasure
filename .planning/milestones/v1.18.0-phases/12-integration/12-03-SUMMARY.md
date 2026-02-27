@@ -20,6 +20,7 @@ decisions:
   - "CLI effective defaults n_cycles=3 and cycle_order=shuffled applied only when YAML execution block omits those keys"
   - "quiet suppresses CLI-side progress and summary; gap countdown suppression deferred (M2 limitation, subprocess-level)"
   - "test_print_study_summary_basic uses model_construct() to bypass Pydantic validation when constructing StudyResult with MagicMock experiments"
+requirements-completed: [CLI-05, CLI-11]
 metrics:
   duration: "~3 min"
   completed_date: "2026-02-27"

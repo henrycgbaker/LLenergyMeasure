@@ -26,6 +26,7 @@ decisions:
   - "StudyResult has no extra='forbid' — internal model, not user-visible output"
   - "run_study_preflight raises PreFlightError immediately for multi-backend (CM-10, Docker is M3)"
   - "experiment_gap_seconds replaces config_gap_seconds in both ExecutionConfig and UserExecutionConfig"
+requirements-completed: [RES-13, CM-10]
 metrics:
   duration: "~10 min"
   completed_date: "2026-02-27"

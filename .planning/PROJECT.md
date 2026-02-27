@@ -10,74 +10,62 @@ Dual-product vision: CLI tool for the research community (v2.0), web platform fo
 
 Researchers can run broad parameter sweeps across deployment configurations and produce publishable, methodology-sound measurements showing which implementation choices matter most for LLM energy efficiency.
 
-## Current Milestone: M2 — Study / Sweep
+## Current Milestone: M3 — Docker Multi-Backend
 
-**Goal:** `llem run study.yaml` runs a multi-experiment sweep with subprocess isolation, cycle ordering, thermal gaps, and a checkpoint manifest — producing per-experiment `ExperimentResult` files and a `StudyResult` summary. Single backend (PyTorch) only in M2.
-
-**Target features:**
-- `StudyConfig` + `ExecutionConfig` resolved from sweep YAML
-- Sweep grammar: dotted notation `pytorch.batch_size: [1, 8]` grid expansion
-- `StudyRunner` with `multiprocessing.get_context("spawn")` subprocess isolation
-- IPC via `Pipe` for result return + `Queue` for progress events
-- `StudyManifest` always-on checkpoint after each experiment
-- Cycle ordering (`sequential` | `interleaved`), thermal gap management
-- `StudyResult` + `run_study()` public API
-- CLI study flags (`--cycles`, `--no-gaps`, `--order`)
-- Study output layout: `{name}_{timestamp}/` with per-experiment subdirs + manifest
+**Goal:** TBD — Docker container lifecycle, GPU passthrough, vLLM and TensorRT-LLM backends, multi-backend study execution.
 
 ## Requirements
 
 ### Validated
 
-<!-- Shipped and confirmed valuable — capabilities proven in v1.x. -->
+<!-- Shipped and confirmed valuable — capabilities proven across M1 + M2. -->
 
-- ✓ Single experiment execution across 3 inference backends (PyTorch, vLLM, TensorRT-LLM)
-- ✓ Docker container execution for backend isolation
-- ✓ Campaign/multi-config execution with scheduling strategies
-- ✓ Energy tracking via CodeCarbon
-- ✓ Result persistence (JSON) with raw per-process and aggregated results
-- ✓ State management with resume capability
-- ✓ Configuration loading/validation via Pydantic with backend-specific configs
-- ✓ GPU routing and multi-GPU detection
-- ✓ Basic metrics: latency (TTFT, TPOT), throughput (tokens/sec), energy (Wh, CO2)
-- ✓ Extended metrics: GPU utilisation sampling, compute metrics
-- ✓ CLI via Typer with Rich output
-- ✓ Product planning complete — 120+ requirements, 4 milestones, all ADRs finalised
+**M1 — Core Single-Experiment (v1.17.0):**
+- ✓ Package foundation with zero-dep base install, `llem` entry point — v1.17.0
+- ✓ ExperimentConfig composition model with `extra="forbid"`, YAML loader, SSOT introspection — v1.17.0
+- ✓ `run_experiment()` public API, `_run(StudyConfig)` internal dispatcher, API stability contract — v1.17.0
+- ✓ PyTorch backend with pre-flight checks, EnvironmentSnapshot, InferenceBackend protocol — v1.17.0
+- ✓ NVML energy poller, baseline power correction, warmup convergence, FLOPs estimation — v1.17.0
+- ✓ ExperimentResult with EnergyBreakdown, JSON + Parquet persistence, late aggregation — v1.17.0
+- ✓ CLI: `llem run`, `llem config`, `--version`, plain text display, error hierarchy — v1.17.0
+- ✓ 258+ GPU-free unit tests with protocol injection fakes — v1.17.0
+
+**M2 — Study / Sweep (v1.18.0):**
+- ✓ StudyConfig + ExecutionConfig with sweep YAML grammar and Cartesian grid expansion — v1.18.0
+- ✓ StudyManifest checkpoint with atomic writes after every state transition — v1.18.0
+- ✓ Subprocess isolation via `multiprocessing.spawn`, Pipe IPC, SIGKILL timeout — v1.18.0
+- ✓ SIGINT handling with manifest preservation and exit 130 — v1.18.0
+- ✓ `run_study()` public API returning `StudyResult`, `_run()` dispatcher — v1.18.0
+- ✓ CLI study flags: `--cycles`, `--order`, `--no-gaps` — v1.18.0
+- ✓ Cycle ordering (sequential/interleaved), thermal gap management — v1.18.0
+- ✓ Multi-backend study without Docker → hard error at pre-flight — v1.18.0
 
 ### Active
 
-<!-- M2 scope — Study/Sweep execution. Full list in .planning/REQUIREMENTS.md -->
+<!-- M3 scope — Docker Multi-Backend. Requirements TBD via /gsd:new-milestone -->
 
-See `.planning/REQUIREMENTS.md` for authoritative M2 requirement list (24 requirements).
-
-**Config/Sweep:** CFG-11 through CFG-16
-**Study Execution:** STU-01 through STU-04, STU-06, STU-07, STU-NEW-01
-**Manifest:** STU-08, STU-09
-**Results:** RES-13 through RES-15, RES-NEW-01
-**CLI:** CLI-05, CLI-11
-**Core Measurement:** CM-10
-**Library API:** LA-02, LA-05
+TBD — run `/gsd:new-milestone` to define M3 requirements.
 
 ### Out of Scope
 
-<!-- Explicit boundaries for M2. -->
+<!-- Explicit boundaries. -->
 
-- Docker multi-backend (M3) — single backend only in M2
 - `--resume` flag (M4) — manifest is always-on but resume is deferred
-- IPC file-based fallback — Pipe-only; dropped from scope
 - Traffic simulation, streaming latency (M4) — advanced features
 - lm-eval integration (v3.0) — quality metrics not v2.0 scope
 - Web platform (v4.0) — separate product, separate repo
 
 ## Context
 
-**Existing codebase**: ~22,000 lines of Python. Modular Typer CLI with layered architecture (CLI → Orchestration → Core → Domain). Three inference backends. Campaign execution with Docker dispatch. Known issues: 4 P0 bugs, ~1,524 lines confirmed dead code. Codebase audit at `.planning/phases/04-codebase-audit/AUDIT-REPORT.md`.
+**Codebase**: ~24,674 lines of Python across `src/llenergymeasure/`. Modular architecture: CLI → API → Study → Core → Domain. Three inference backends (PyTorch active; vLLM and TensorRT-LLM pending Docker isolation in M3). 538 tests.
 
-**Product design (SSOT)**: `.product/` directory — 20+ decision files, 16+ research files, detailed designs, 47-feature preservation audit. All decisions finalised. `.product/REQUIREMENTS.md` and `.product/ROADMAP.md` are authoritative.
+**Product design (SSOT)**: `.product/` directory — 20+ decision files, 16+ research files, detailed designs, 47-feature preservation audit. All decisions finalised.
 
 **Primary audience**: Research community — academics and ML engineers studying LLM inference efficiency.
 
 **Key use case**: Broad parameter sweeps across deployment configurations. Results used for research papers and policy advocacy.
+
+**Shipped milestones**: v1.17.0 (M1 — single experiment), v1.18.0 (M2 — study/sweep). Full history in `.planning/MILESTONES.md`.
 
 ## Constraints
 
@@ -104,6 +92,10 @@ See `.planning/REQUIREMENTS.md` for authoritative M2 requirement list (24 requir
 | All product decisions finalised | `.product/` SSOT complete; ready for implementation | ✓ Good |
 | Web platform deferred to v4.0 | Separate product, separate repo | ✓ Good |
 | lm-eval deferred to v3.0 | Quality metrics not essential for v2.0 scope | ✓ Good |
+| Spawn-only subprocess isolation | Never `set_start_method()` globally; fork causes silent CUDA corruption | ✓ Good (M2) |
+| Pipe-only IPC (file fallback dropped) | ExperimentResult fits in Pipe buffer; 1MB fallback over-engineering | ✓ Good (M2) |
+| Manifest always-on, resume deferred | Ship checkpoint pattern in M2; resume logic is M4 | ✓ Good (M2) |
+| Phase 13 docs deferred to M3 | Write docs once against final backend story | — Pending |
 
 ---
-*Last updated: 2026-02-27 after M2 milestone initialisation*
+*Last updated: 2026-02-27 after v1.18.0 M2 milestone*

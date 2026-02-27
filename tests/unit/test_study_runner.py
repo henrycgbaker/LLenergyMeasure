@@ -284,11 +284,19 @@ def _make_ordering_study(
     cycle_order: str,
     n_cycles: int = 2,
 ) -> tuple[StudyConfig, list[ExperimentConfig]]:
-    """Build a 2-experiment StudyConfig for ordering tests."""
+    """Build a 2-experiment StudyConfig for ordering tests.
+
+    Mirrors what load_study_config() produces: study.experiments is already the
+    fully-cycled execution list from apply_cycles(). The runner must not call
+    apply_cycles() again.
+    """
+    from llenergymeasure.study.grid import CycleOrder, apply_cycles
+
     exp_a = ExperimentConfig(model="model-a", backend="pytorch", n=10)
     exp_b = ExperimentConfig(model="model-b", backend="pytorch", n=10)
+    ordered = apply_cycles([exp_a, exp_b], n_cycles, CycleOrder(cycle_order), "aaaa0000bbbb1111")
     study = StudyConfig(
-        experiments=[exp_a, exp_b],
+        experiments=ordered,
         name="ordering-test",
         execution=ExecutionConfig(n_cycles=n_cycles, cycle_order=cycle_order),
         study_design_hash="aaaa0000bbbb1111",
@@ -416,10 +424,10 @@ def test_sigint_first_ctrl_c_marks_manifest_interrupted() -> None:
 
     original_run_one = runner._run_one
 
-    def sigint_during_run_one(config, mp_ctx):
+    def sigint_during_run_one(config, mp_ctx, index=1, total=1):
         """Call original _run_one, then simulate SIGINT having fired."""
         # Run the real experiment dispatch (mocked below)
-        result = original_run_one(config, mp_ctx)
+        result = original_run_one(config, mp_ctx, index=index, total=total)
         # Simulate first Ctrl+C arriving after experiment completes
         runner._interrupt_event.set()
         runner._interrupt_count = 1
@@ -552,3 +560,159 @@ def test_worker_calls_get_backend(monkeypatch) -> None:
     # Worker should have sent the fake result via conn.send()
     assert len(sent_results) == 1, "Worker did not call conn.send()"
     assert sent_results[0] is fake_result
+
+
+# =============================================================================
+# Bug fixes: correct experiment count and cycle tracking (STU-07, STU-08)
+# =============================================================================
+
+
+def test_multi_cycle_correct_experiment_count() -> None:
+    """2-config x 3-cycle study runs exactly 6 experiments, not 18.
+
+    study.experiments is the pre-cycled list (6 entries) from apply_cycles().
+    The runner must NOT call apply_cycles() again.
+    """
+    from llenergymeasure.study.grid import CycleOrder, apply_cycles
+
+    exp_a = ExperimentConfig(model="model-a", backend="pytorch", n=10)
+    exp_b = ExperimentConfig(model="model-b", backend="pytorch", n=10)
+    ordered = apply_cycles([exp_a, exp_b], 3, CycleOrder.INTERLEAVED, "aabb0011", None)
+    assert len(ordered) == 6, "sanity: apply_cycles should produce 6 entries"
+
+    study = StudyConfig(
+        experiments=ordered,
+        name="count-test",
+        execution=ExecutionConfig(n_cycles=3, cycle_order="interleaved"),
+        study_design_hash="aabb0011",
+    )
+    manifest = MagicMock()
+    fake_result = {"status": "ok"}
+
+    def fake_process_factory(**kwargs):
+        proc = MagicMock()
+        proc.is_alive.return_value = False
+        proc.exitcode = 0
+        proc.pid = 99
+        proc.start.return_value = None
+        proc.join.return_value = None
+        return proc
+
+    def fake_pipe(duplex=True):
+        child = MagicMock()
+        parent = MagicMock()
+        parent.poll.return_value = True
+        parent.recv.return_value = fake_result
+        return child, parent
+
+    ctx = MagicMock()
+    ctx.Process.side_effect = lambda **kwargs: fake_process_factory(**kwargs)
+    ctx.Pipe.side_effect = fake_pipe
+    ctx.Queue.return_value = queue.SimpleQueue()
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study, manifest, Path("/tmp/test-count"))
+        results = runner.run()
+
+    assert len(results) == 6, f"Expected 6 results, got {len(results)}"
+    assert ctx.Process.call_count == 6, f"Expected 6 Process() calls, got {ctx.Process.call_count}"
+
+
+def test_cycle_counter_increments_per_config_hash() -> None:
+    """Cycle counter increments per config_hash, not globally.
+
+    For a 2-config x 2-cycle interleaved study (A, B, A, B):
+    - hash_A: cycles should be [1, 2]
+    - hash_B: cycles should be [1, 2]
+    """
+    from llenergymeasure.domain.experiment import compute_measurement_config_hash
+    from llenergymeasure.study.grid import CycleOrder, apply_cycles
+
+    exp_a = ExperimentConfig(model="model-a", backend="pytorch", n=10)
+    exp_b = ExperimentConfig(model="model-b", backend="pytorch", n=10)
+    hash_a = compute_measurement_config_hash(exp_a)
+    hash_b = compute_measurement_config_hash(exp_b)
+
+    ordered = apply_cycles([exp_a, exp_b], 2, CycleOrder.INTERLEAVED, "aabb0011", None)
+    assert len(ordered) == 4, "sanity: 2 configs x 2 cycles = 4"
+
+    study = StudyConfig(
+        experiments=ordered,
+        name="cycle-test",
+        execution=ExecutionConfig(n_cycles=2, cycle_order="interleaved"),
+        study_design_hash="aabb0011",
+    )
+    manifest = MagicMock()
+    fake_result = {"status": "ok"}
+
+    def fake_process_factory(**kwargs):
+        proc = MagicMock()
+        proc.is_alive.return_value = False
+        proc.exitcode = 0
+        proc.pid = 99
+        proc.start.return_value = None
+        proc.join.return_value = None
+        return proc
+
+    def fake_pipe(duplex=True):
+        child = MagicMock()
+        parent = MagicMock()
+        parent.poll.return_value = True
+        parent.recv.return_value = fake_result
+        return child, parent
+
+    ctx = MagicMock()
+    ctx.Process.side_effect = lambda **kwargs: fake_process_factory(**kwargs)
+    ctx.Pipe.side_effect = fake_pipe
+    ctx.Queue.return_value = queue.SimpleQueue()
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study, manifest, Path("/tmp/test-cycle"))
+        runner.run()
+
+    # Extract (config_hash, cycle) pairs from mark_running calls
+    call_args_list = manifest.mark_running.call_args_list
+    assert len(call_args_list) == 4, f"Expected 4 mark_running calls, got {len(call_args_list)}"
+
+    cycles_by_hash: dict[str, list[int]] = {}
+    for call in call_args_list:
+        h = call.args[0] if call.args else call.kwargs["config_hash"]
+        c = call.args[1] if len(call.args) > 1 else call.kwargs["cycle"]
+        cycles_by_hash.setdefault(h, []).append(c)
+
+    # hash_A and hash_B should each have cycles [1, 2]
+    assert hash_a in cycles_by_hash, f"hash_a not found in mark_running calls: {cycles_by_hash}"
+    assert hash_b in cycles_by_hash, f"hash_b not found in mark_running calls: {cycles_by_hash}"
+    assert sorted(cycles_by_hash[hash_a]) == [1, 2], (
+        f"hash_a cycles: expected [1, 2], got {cycles_by_hash[hash_a]}"
+    )
+    assert sorted(cycles_by_hash[hash_b]) == [1, 2], (
+        f"hash_b cycles: expected [1, 2], got {cycles_by_hash[hash_b]}"
+    )
+
+
+# =============================================================================
+# Progress display wiring
+# =============================================================================
+
+
+def test_progress_events_forwarded():
+    """_consume_progress_events forwards events to print_study_progress."""
+    from queue import Queue
+    from unittest.mock import patch
+
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.study.runner import _consume_progress_events
+
+    config = ExperimentConfig(model="test-model", backend="pytorch", n=10)
+    q = Queue()
+    q.put({"event": "started", "config_hash": "abc123"})
+    q.put({"event": "completed", "config_hash": "abc123"})
+    q.put(None)  # sentinel
+
+    with patch("llenergymeasure.cli._display.print_study_progress") as mock_progress:
+        _consume_progress_events(q, index=3, total=12, config=config)
+
+    assert mock_progress.call_count == 2
+    statuses = [c.kwargs["status"] for c in mock_progress.call_args_list]
+    assert statuses == ["running", "completed"]

@@ -39,8 +39,7 @@ __all__ = ["StudyRunner", "_calculate_timeout", "_run_experiment_worker"]
 def _calculate_timeout(config: ExperimentConfig) -> int:
     """Generous timeout heuristic: 2 seconds per prompt, minimum 10 minutes.
 
-    No model-size scaling — keep it simple. The escape hatch is
-    execution.experiment_timeout_seconds in the study YAML.
+    No model-size scaling — keep it simple for M2.
     """
     return max(config.n * 2, 600)
 
@@ -115,17 +114,39 @@ def _run_experiment_worker(
 # =============================================================================
 
 
-def _consume_progress_events(q: Any) -> None:
-    """Consume and discard progress events from the queue until None sentinel.
+def _consume_progress_events(
+    q: Any,
+    index: int,
+    total: int,
+    config: Any,  # ExperimentConfig
+) -> None:
+    """Consume progress events from the queue and forward to display.
 
-    Runs as a daemon thread. Display wiring is Phase 12 — this stub just
-    drains the queue so the child never blocks on a full Queue.
+    Runs as a daemon thread in the parent process. Receives events from the
+    child subprocess via multiprocessing.Queue and calls print_study_progress()
+    for each meaningful event.
     """
     while True:
         event = q.get()
         if event is None:
             break
-        # Phase 12: forward to Rich display layer here
+
+        if not isinstance(event, dict):
+            continue
+
+        event_type = event.get("event")
+        if event_type == "started":
+            from llenergymeasure.cli._display import print_study_progress
+
+            print_study_progress(index, total, config, status="running")
+        elif event_type == "completed":
+            from llenergymeasure.cli._display import print_study_progress
+
+            print_study_progress(index, total, config, status="completed")
+        elif event_type == "failed":
+            from llenergymeasure.cli._display import print_study_progress
+
+            print_study_progress(index, total, config, status="failed")
 
 
 # =============================================================================
@@ -225,6 +246,8 @@ class StudyRunner:
         self._interrupt_event: threading.Event = threading.Event()
         self._active_process: Any = None  # multiprocessing.Process | None
         self._interrupt_count: int = 0
+        # Per-config_hash cycle counters — reset at the start of each run()
+        self._cycle_counters: dict[str, int] = {}
 
     def run(self) -> list[Any]:
         """Run all experiments in order; return list of results or failure dicts.
@@ -233,16 +256,20 @@ class StudyRunner:
         SIGTERM to the active subprocess and sets interrupt_event. Second Ctrl+C (or
         grace period expiry) sends SIGKILL. After the loop exits, if interrupted,
         calls manifest.mark_interrupted() and sys.exit(130).
-        """
-        from llenergymeasure.study.grid import CycleOrder, apply_cycles
 
-        ordered = apply_cycles(
-            self.study.experiments,
-            self.study.execution.n_cycles,
-            CycleOrder(self.study.execution.cycle_order),
-            self.study.study_design_hash or "",
-            self.study.execution.shuffle_seed,
-        )
+        Note: study.experiments is already the fully-ordered execution sequence produced
+        by apply_cycles() in load_study_config(). The runner must not call apply_cycles()
+        again — doing so would multiply the count by n_cycles a second time.
+        """
+        from llenergymeasure.domain.experiment import compute_measurement_config_hash
+
+        # study.experiments is already cycled by load_study_config(); use as-is.
+        ordered = self.study.experiments
+
+        # n_unique: count of distinct configs (for cycle-gap detection).
+        # Do not use len(ordered) — that includes repetitions.
+        seen_hashes = {compute_measurement_config_hash(c) for c in self.study.experiments}
+        n_unique = len(seen_hashes)
 
         # spawn: CUDA-safe; fork causes silent CUDA corruption (CP-1)
         mp_ctx = multiprocessing.get_context("spawn")
@@ -251,6 +278,7 @@ class StudyRunner:
         self._interrupt_event.clear()
         self._interrupt_count = 0
         self._active_process = None
+        self._cycle_counters = {}
 
         def _sigint_handler(signum: int, frame: Any) -> None:
             self._interrupt_count += 1
@@ -271,7 +299,6 @@ class StudyRunner:
 
         try:
             results: list[Any] = []
-            n_unique = len(self.study.experiments)
 
             for i, config in enumerate(ordered):
                 if self._interrupt_event.is_set():
@@ -293,7 +320,7 @@ class StudyRunner:
                         if self._interrupt_event.is_set():
                             break
 
-                result = self._run_one(config, mp_ctx)
+                result = self._run_one(config, mp_ctx, index=i + 1, total=len(ordered))
                 results.append(result)
 
         finally:
@@ -311,7 +338,7 @@ class StudyRunner:
 
         return results
 
-    def _run_one(self, config: ExperimentConfig, mp_ctx: Any) -> Any:
+    def _run_one(self, config: ExperimentConfig, mp_ctx: Any, index: int, total: int) -> Any:
         """Spawn a subprocess for one experiment; collect result or failure dict.
 
         If interrupt_event is set after join, attempts graceful SIGTERM → 2s grace →
@@ -320,11 +347,12 @@ class StudyRunner:
         from llenergymeasure.domain.experiment import compute_measurement_config_hash
 
         config_hash = compute_measurement_config_hash(config)
-        cycle = 1  # cycle tracking deferred to Phase 12 wiring
+        # Increment per-config_hash counter: 1st run → cycle=1, 2nd → cycle=2, etc.
+        current = self._cycle_counters.get(config_hash, 0) + 1
+        self._cycle_counters[config_hash] = current
+        cycle = current
 
-        # Use user-supplied timeout if set, otherwise fall back to heuristic
-        user_timeout = getattr(self.study.execution, "experiment_timeout_seconds", None)
-        timeout = int(user_timeout) if user_timeout is not None else _calculate_timeout(config)
+        timeout = _calculate_timeout(config)
 
         child_conn, parent_conn = mp_ctx.Pipe(duplex=False)
         progress_queue = mp_ctx.Queue()
@@ -337,7 +365,7 @@ class StudyRunner:
 
         consumer = threading.Thread(
             target=_consume_progress_events,
-            args=(progress_queue,),
+            args=(progress_queue, index, total, config),
             daemon=True,
         )
         consumer.start()
