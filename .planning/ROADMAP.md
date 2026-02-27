@@ -75,7 +75,7 @@ Plans:
 - [ ] **Phase 9: Grid Expansion and StudyConfig** - Sweep YAML grammar, `StudyConfig` + `ExecutionConfig` models, Cartesian grid expander, cycle ordering, pre-flight count display
 - [x] **Phase 10: Manifest Writer** - `StudyManifest` checkpoint model, `ManifestWriter` with atomic writes, study output directory layout (completed 2026-02-27)
 - [x] **Phase 11: Subprocess Isolation and StudyRunner** - Subprocess dispatch via `spawn`, `Pipe`/`Queue` IPC, timeout handling, SIGINT, skip-and-continue, thermal gaps (completed 2026-02-27)
-- [ ] **Phase 12: Integration** - `StudyRunner.run()`, `run_study()` public API, `_run()` body, CLI study flags, study progress display, `StudyResult` assembly, multi-backend hard error
+- [x] **Phase 12: Integration** - `StudyRunner.run()`, `run_study()` public API, `_run()` body, CLI study flags, study progress display, `StudyResult` assembly, multi-backend hard error (completed 2026-02-27)
 
 ## Phase Details
 
@@ -168,7 +168,7 @@ Plans:
 | 9. Grid Expansion and StudyConfig | 1/2 | In Progress|  |
 | 10. Manifest Writer | 1/1 | Complete    | 2026-02-27 |
 | 11. Subprocess Isolation and StudyRunner | 2/2 | Complete    | 2026-02-27 |
-| 12. Integration | 2/3 | In Progress|  |
+| 12. Integration | 3/3 | Complete   | 2026-02-27 |
 | 13. Documentation — M1 backfill and M2 updates | 0/TBD | Not started | - |
 
 ### Phase 13: Documentation — M1 backfill and M2 updates
@@ -176,7 +176,7 @@ Plans:
 **Goal:** [To be planned]
 **Requirements**: TBD
 **Depends on:** Phase 12
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] TBD (run /gsd:plan-phase 13 to break down)

@@ -144,8 +144,8 @@ Full definitions, context, and design references are in `.product/REQUIREMENTS.m
 | STU-NEW-01 | Phase 12 | Complete |
 | RES-13 | Phase 12 | Complete |
 | RES-15 | Phase 12 | Complete |
-| CLI-05 | Phase 12 | Pending |
-| CLI-11 | Phase 12 | Pending |
+| CLI-05 | Phase 12 | Complete |
+| CLI-11 | Phase 12 | Complete |
 | CM-10 | Phase 12 | Complete |
 
 **Coverage:**

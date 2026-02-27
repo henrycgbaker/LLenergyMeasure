@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-27T19:27:51.377Z"
+last_updated: "2026-02-27T19:33:39.643Z"
 progress:
   total_phases: 25
-  completed_phases: 19
+  completed_phases: 20
   total_plans: 83
-  completed_plans: 74
+  completed_plans: 75
 ---
 
 # Project State
@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 ## Current Position
 
 Phase: 12
-Plan: 12-02 complete
-Status: Phase 12 in progress
-Last activity: 2026-02-27 — Phase 12 Plan 02 complete: run_study() implemented, _run() dispatcher (single in-process / multi via StudyRunner), _run_experiment_worker wired to real backend, result_files tracking, 525 tests pass
+Plan: 12-03 complete (Phase 12 complete)
+Status: Phase 13 next
+Last activity: 2026-02-27 — Phase 12 Plan 03 complete: study-mode CLI flags (--cycles/--order/--no-gaps), YAML study detection, print_study_progress, print_study_summary, 530 tests pass
 
 Progress: [██░░░░░░░░] ~10%
 
@@ -51,6 +51,7 @@ Progress: [██░░░░░░░░] ~10%
 | Phase 08.2 P02 | 4 | 2 tasks | 6 files |
 | Phase 11 P02 | 5 min | 3 tasks | 6 files |
 | Phase 12-integration P02 | 8 | 2 tasks | 4 files |
+| Phase 12-integration P03 | 3 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,8 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 - [Phase 12-integration]: _run_in_process propagates PreFlightError and BackendError unchanged; only save failures are caught
 - [Phase 12-integration]: Single experiment + n_cycles=1 dispatches in-process; multi-experiment via StudyRunner subprocess
 - [Phase 12-integration]: result_files list contains absolute path strings; manifest entry stores relative path from study_dir
+- [Phase 12-integration]: CLI effective defaults n_cycles=3 and cycle_order=shuffled applied only when YAML execution block omits those keys
+- [Phase 12-integration]: quiet suppresses CLI-side progress and summary; gap countdown suppression deferred (M2 limitation, subprocess-level)
 
 ### Pending Todos
 
@@ -106,6 +109,6 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 12-02-PLAN.md — run_study() implemented, _run() dispatcher, worker wired, 525 tests pass
+Stopped at: Completed 12-03-PLAN.md — study-mode CLI flags, display functions, 530 tests pass
 Resume file: None
-Next action: Phase 12 Plan 03 (if exists) or Phase 13 Documentation
+Next action: Phase 13 — Documentation
