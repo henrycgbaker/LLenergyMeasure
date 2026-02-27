@@ -70,10 +70,10 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
   1. Before each experiment dispatch (local and Docker paths), NVML is queried for current GPU memory usage
   2. If residual memory exceeds the configured threshold, a warning is logged before the experiment starts
   3. A clean-state experiment (no prior GPU use) produces no warning
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 16-01: NVML residual memory check — add pre-dispatch check to StudyRunner, log warning on threshold breach
+- [ ] 16-01-PLAN.md — NVML residual memory check module + StudyRunner pre-dispatch wiring + unit tests
 
 ### Phase 17: Docker Runner Infrastructure
 **Goal**: StudyRunner can dispatch experiments to ephemeral Docker containers, with config passed in and results passed out via shared volume
