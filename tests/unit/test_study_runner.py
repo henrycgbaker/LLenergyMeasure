@@ -1,0 +1,389 @@
+"""Tests for StudyRunner subprocess lifecycle.
+
+Test strategy: All execution paths are exercised without spawning real subprocesses
+or requiring GPU hardware. Worker functions are replaced with in-process callables
+via mock injection of multiprocessing.get_context. ManifestWriter interactions are
+asserted against MagicMock instances.
+
+The only paths NOT covered here are:
+- Real CUDA teardown (requires GPU hardware — manual verification noted in STATE.md)
+- True cross-process Pipe data transfer (integration test concern)
+"""
+
+from __future__ import annotations
+
+import queue
+from unittest.mock import MagicMock, patch
+
+import pytest
+from llenergymeasure.study.runner import StudyRunner, _calculate_timeout
+
+from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
+
+# =============================================================================
+# Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def basic_config() -> ExperimentConfig:
+    """A minimal ExperimentConfig with n=100."""
+    return ExperimentConfig(model="test/model", backend="pytorch", n=100)
+
+
+@pytest.fixture
+def large_config() -> ExperimentConfig:
+    """A minimal ExperimentConfig with n=1000."""
+    return ExperimentConfig(model="test/model", backend="pytorch", n=1000)
+
+
+@pytest.fixture
+def study_config(basic_config: ExperimentConfig) -> StudyConfig:
+    """Single-experiment StudyConfig."""
+    return StudyConfig(
+        experiments=[basic_config],
+        name="test-study",
+        execution=ExecutionConfig(n_cycles=1, cycle_order="sequential"),
+        study_design_hash="deadbeef12345678",
+    )
+
+
+def _make_mock_process(
+    *,
+    is_alive_after_join: bool = False,
+    exitcode: int = 0,
+    pid: int = 12345,
+) -> MagicMock:
+    """Factory for a mock Process with controllable lifecycle."""
+    proc = MagicMock()
+    proc.pid = pid
+    proc.exitcode = exitcode
+    is_alive_calls = [is_alive_after_join]
+
+    def fake_join(timeout=None):
+        # After join, is_alive reflects whether timed out
+        pass
+
+    proc.join.side_effect = fake_join
+    proc.is_alive.return_value = is_alive_after_join
+    return proc
+
+
+def _make_mock_context(
+    process: MagicMock,
+    pipe_data: object = None,
+    *,
+    pipe_has_data: bool = True,
+) -> MagicMock:
+    """Build a mock multiprocessing context that returns a controlled process.
+
+    pipe_data: the object that parent_conn.recv() will return.
+    pipe_has_data: if False, parent_conn.poll() returns False (empty pipe).
+    """
+    ctx = MagicMock()
+    ctx.Process.return_value = process
+
+    parent_conn = MagicMock()
+    child_conn = MagicMock()
+    parent_conn.poll.return_value = pipe_has_data
+    if pipe_data is not None:
+        parent_conn.recv.return_value = pipe_data
+
+    ctx.Pipe.return_value = (child_conn, parent_conn)
+
+    # Queue: use a real in-process queue so the consumer thread works
+    ctx.Queue.return_value = queue.SimpleQueue()
+
+    return ctx
+
+
+# =============================================================================
+# Task 1a: _calculate_timeout
+# =============================================================================
+
+
+def test_calculate_timeout_minimum(basic_config: ExperimentConfig) -> None:
+    """_calculate_timeout returns >= 600 for n=100."""
+    result = _calculate_timeout(basic_config)
+    assert result >= 600, f"Expected >= 600, got {result}"
+
+
+def test_calculate_timeout_scales_with_n(large_config: ExperimentConfig) -> None:
+    """_calculate_timeout returns >= 2000 for n=1000 (2s/prompt heuristic)."""
+    result = _calculate_timeout(large_config)
+    assert result >= 2000, f"Expected >= 2000 for n=1000, got {result}"
+
+
+# =============================================================================
+# Task 1b: spawn context guaranteed
+# =============================================================================
+
+
+def test_spawn_context_used(study_config: StudyConfig) -> None:
+    """StudyRunner uses multiprocessing.get_context('spawn'), never fork or default."""
+    manifest = MagicMock()
+
+    # A fake ExperimentResult-like dict to return from pipe
+    fake_result = {"status": "ok", "data": "fake"}
+
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
+    ctx = _make_mock_context(proc, pipe_data=fake_result)
+
+    with patch("multiprocessing.get_context", return_value=ctx) as mock_get_context:
+        runner = StudyRunner(study_config, manifest)
+        runner.run()
+        mock_get_context.assert_called_once_with("spawn")
+
+
+def test_daemon_false(study_config: StudyConfig) -> None:
+    """Process is always created with daemon=False."""
+    manifest = MagicMock()
+
+    fake_result = {"status": "ok"}
+
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
+    ctx = _make_mock_context(proc, pipe_data=fake_result)
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study_config, manifest)
+        runner.run()
+
+    # daemon=False must be explicitly passed
+    call_kwargs = ctx.Process.call_args
+    assert call_kwargs is not None, "Process() was never called"
+    daemon_value = call_kwargs.kwargs.get(
+        "daemon", call_kwargs.args[2] if len(call_kwargs.args) > 2 else None
+    )
+    # Check keyword arg
+    assert ctx.Process.call_args.kwargs.get("daemon") is False, (
+        f"Expected daemon=False, got daemon={ctx.Process.call_args.kwargs.get('daemon')!r}"
+    )
+
+
+# =============================================================================
+# Task 1c: Success path
+# =============================================================================
+
+
+def test_study_runner_success_path(
+    study_config: StudyConfig, basic_config: ExperimentConfig
+) -> None:
+    """Happy path: fake worker sends result via Pipe; mark_completed is called."""
+    manifest = MagicMock()
+
+    from llenergymeasure.domain.experiment import compute_measurement_config_hash
+
+    config_hash = compute_measurement_config_hash(basic_config)
+    fake_result = {"config_hash": config_hash, "status": "success", "value": 42}
+
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
+    ctx = _make_mock_context(proc, pipe_data=fake_result, pipe_has_data=True)
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study_config, manifest)
+        results = runner.run()
+
+    assert len(results) == 1
+    # mark_running called before start
+    manifest.mark_running.assert_called_once()
+    # mark_completed called on success
+    manifest.mark_completed.assert_called_once()
+    manifest.mark_failed.assert_not_called()
+
+
+# =============================================================================
+# Task 1d: Subprocess exception path
+# =============================================================================
+
+
+def test_study_runner_subprocess_exception(study_config: StudyConfig) -> None:
+    """Subprocess sends error dict via Pipe; StudyRunner marks failed and continues."""
+    manifest = MagicMock()
+
+    error_payload = {
+        "type": "RuntimeError",
+        "message": "CUDA OOM",
+        "traceback": "Traceback (most recent call last):\n  ...",
+    }
+
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=1)
+    ctx = _make_mock_context(proc, pipe_data=error_payload, pipe_has_data=True)
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study_config, manifest)
+        # Must NOT raise — failures are non-fatal
+        results = runner.run()
+
+    assert len(results) == 1
+    manifest.mark_running.assert_called_once()
+    manifest.mark_failed.assert_called_once()
+    manifest.mark_completed.assert_not_called()
+
+
+# =============================================================================
+# Task 1e: Timeout path
+# =============================================================================
+
+
+def test_study_runner_timeout(study_config: StudyConfig) -> None:
+    """Timeout: p.is_alive() stays True after join; p.kill() is called (SIGKILL)."""
+    manifest = MagicMock()
+
+    # Process stays alive (timed-out)
+    proc = _make_mock_process(is_alive_after_join=True, exitcode=None)
+    ctx = _make_mock_context(proc, pipe_has_data=False)
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study_config, manifest)
+        results = runner.run()
+
+    assert len(results) == 1
+    proc.kill.assert_called_once()  # SIGKILL, not SIGTERM
+    proc.terminate.assert_not_called()
+    manifest.mark_failed.assert_called_once()
+
+    # Verify error_type indicates timeout
+    call_args = manifest.mark_failed.call_args
+    error_type = call_args.kwargs.get("error_type") or call_args.args[2]
+    assert "Timeout" in error_type or "timeout" in error_type.lower(), (
+        f"Expected Timeout error_type, got {error_type!r}"
+    )
+
+
+# =============================================================================
+# Task 1f: Non-zero exitcode, empty Pipe
+# =============================================================================
+
+
+def test_study_runner_exitcode_nonzero_no_pipe_data(study_config: StudyConfig) -> None:
+    """Non-zero exit with empty Pipe: experiment marked failed with ProcessCrash."""
+    manifest = MagicMock()
+
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=1)
+    ctx = _make_mock_context(proc, pipe_has_data=False)
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study_config, manifest)
+        results = runner.run()
+
+    assert len(results) == 1
+    manifest.mark_failed.assert_called_once()
+
+    call_args = manifest.mark_failed.call_args
+    error_type = call_args.kwargs.get("error_type") or call_args.args[2]
+    assert "Crash" in error_type or "crash" in error_type.lower() or "Process" in error_type, (
+        f"Expected ProcessCrash error_type, got {error_type!r}"
+    )
+
+
+# =============================================================================
+# Task 1g: Cycle ordering
+# =============================================================================
+
+
+def _make_ordering_study(
+    cycle_order: str,
+    n_cycles: int = 2,
+) -> tuple[StudyConfig, list[ExperimentConfig]]:
+    """Build a 2-experiment StudyConfig for ordering tests."""
+    exp_a = ExperimentConfig(model="model-a", backend="pytorch", n=10)
+    exp_b = ExperimentConfig(model="model-b", backend="pytorch", n=10)
+    study = StudyConfig(
+        experiments=[exp_a, exp_b],
+        name="ordering-test",
+        execution=ExecutionConfig(n_cycles=n_cycles, cycle_order=cycle_order),
+        study_design_hash="aaaa0000bbbb1111",
+    )
+    return study, [exp_a, exp_b]
+
+
+def test_interleaved_ordering() -> None:
+    """cycle_order=interleaved with 2 experiments x 2 cycles = A,B,A,B order."""
+    study, (exp_a, exp_b) = _make_ordering_study("interleaved", n_cycles=2)
+    manifest = MagicMock()
+
+    call_order: list[str] = []
+    fake_result = {"status": "ok"}
+
+    def fake_process_factory(**kwargs):
+        # Capture which config this process is for via target args
+        proc = MagicMock()
+        proc.is_alive.return_value = False
+        proc.exitcode = 0
+        proc.pid = 99
+
+        args = kwargs.get("args", ())
+        if args:
+            config = args[0]
+            call_order.append(config.model)
+
+        def fake_start():
+            pass
+
+        proc.start.side_effect = fake_start
+        proc.join.return_value = None
+        return proc
+
+    def fake_pipe(duplex=True):
+        child = MagicMock()
+        parent = MagicMock()
+        parent.poll.return_value = True
+        parent.recv.return_value = fake_result
+        return child, parent
+
+    ctx = MagicMock()
+    ctx.Process.side_effect = lambda **kwargs: fake_process_factory(**kwargs)
+    ctx.Pipe.side_effect = fake_pipe
+    ctx.Queue.return_value = queue.SimpleQueue()
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study, manifest)
+        runner.run()
+
+    assert call_order == ["model-a", "model-b", "model-a", "model-b"], (
+        f"Interleaved ordering wrong: {call_order}"
+    )
+
+
+def test_sequential_ordering() -> None:
+    """cycle_order=sequential with 2 experiments x 2 cycles = A,A,B,B order."""
+    study, (exp_a, exp_b) = _make_ordering_study("sequential", n_cycles=2)
+    manifest = MagicMock()
+
+    call_order: list[str] = []
+    fake_result = {"status": "ok"}
+
+    def fake_process_factory(**kwargs):
+        proc = MagicMock()
+        proc.is_alive.return_value = False
+        proc.exitcode = 0
+        proc.pid = 99
+
+        args = kwargs.get("args", ())
+        if args:
+            config = args[0]
+            call_order.append(config.model)
+
+        proc.start.return_value = None
+        proc.join.return_value = None
+        return proc
+
+    def fake_pipe(duplex=True):
+        child = MagicMock()
+        parent = MagicMock()
+        parent.poll.return_value = True
+        parent.recv.return_value = fake_result
+        return child, parent
+
+    ctx = MagicMock()
+    ctx.Process.side_effect = lambda **kwargs: fake_process_factory(**kwargs)
+    ctx.Pipe.side_effect = fake_pipe
+    ctx.Queue.return_value = queue.SimpleQueue()
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study, manifest)
+        runner.run()
+
+    assert call_order == ["model-a", "model-a", "model-b", "model-b"], (
+        f"Sequential ordering wrong: {call_order}"
+    )
