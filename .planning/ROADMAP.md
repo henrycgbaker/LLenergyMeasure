@@ -225,8 +225,8 @@ Plans:
 **Plans**: 2 plans (Wave 1 — parallel)
 
 Plans:
-- [ ] 15-01: Wire progress display in _consume_progress_events(), remove phantom experiment_timeout_seconds reference [Wave 1]
-- [ ] 15-02: Fix ROADMAP.md Phase 9/11/12 tracking, populate requirements-completed in Phase 11/12 SUMMARY frontmatter [Wave 1]
+- [x] 15-01: Wire progress display in _consume_progress_events(), remove phantom experiment_timeout_seconds reference [Wave 1]
+- [x] 15-02: Fix ROADMAP.md Phase 9/11/12 tracking, populate requirements-completed in Phase 11/12 SUMMARY frontmatter [Wave 1]
 
 ---
 
