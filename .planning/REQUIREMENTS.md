@@ -137,7 +137,7 @@ Full definitions, context, and design references are in `.product/REQUIREMENTS.m
 | STU-02 | Phase 11 | Complete |
 | STU-03 | Phase 11 | Complete |
 | STU-04 | Phase 11 | Complete |
-| STU-06 | Phase 11 | Pending |
+| STU-06 | Phase 11 | Complete |
 | STU-07 | Phase 11 | Complete |
 | LA-02 | Phase 12 | Pending |
 | LA-05 | Phase 12 | Pending |

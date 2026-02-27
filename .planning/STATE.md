@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-27T16:18:43.894Z"
+last_updated: "2026-02-27T18:19:31.225Z"
 progress:
-  total_phases: 23
-  completed_phases: 18
-  total_plans: 78
-  completed_plans: 70
+  total_phases: 24
+  completed_phases: 19
+  total_plans: 80
+  completed_plans: 72
 ---
 
 # Project State
@@ -22,10 +22,10 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 11 (Phase 11 in progress — 11-01 complete)
-Plan: 11-01 complete
-Status: In progress
-Last activity: 2026-02-27 — Phase 11 Plan 01 complete: StudyRunner, subprocess isolation (spawn context, Pipe IPC, SIGKILL timeout), 10 new tests (494 total)
+Phase: 11 (Phase 11 complete — both plans done)
+Plan: 11-02 complete
+Status: Phase 11 complete
+Last activity: 2026-02-27 — Phase 11 Plan 02 complete: SIGINT handling, gap countdown, mark_interrupted(), 17 new tests (511 total)
 
 Progress: [██░░░░░░░░] ~10%
 
@@ -42,13 +42,14 @@ Progress: [██░░░░░░░░] ~10%
 |-------|-------|-------|----------|
 | 09-grid-expansion | 2 completed | 10 min | 5 min |
 | 10-manifest-writer | 1 completed | 3 min | 3 min |
-| 11-subprocess-isolation | TBD | - | - |
+| 11-subprocess-isolation | 2 completed | 8 min | 4 min |
 | 12-integration | TBD | - | - |
 | 08.1-pytorch-result-wiring | 1 completed | 3 min | 3 min |
 
 *Updated after each plan completion*
 | Phase 08.2-m1-tech-debt-cleanup P01 | 3 | 2 tasks | 3 files |
 | Phase 08.2 P02 | 4 | 2 tasks | 6 files |
+| Phase 11 P02 | 5 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,9 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 - [Phase 11-01]: _run_experiment_worker is a stub (raises NotImplementedError) — wired to real backend in Phase 12
 - [Phase 11-01]: cycle=1 hardcoded in _run_one — full per-cycle tracking deferred to Phase 12
 - [Phase 11-01]: getattr(execution, 'experiment_timeout_seconds', None) forward-compat — field added in Phase 12
+- [Phase 11]: Grace period 2s (2-3s range): balance between CUDA teardown and responsiveness
+- [Phase 11]: Enter-to-skip uses daemon readline thread (not select/termios): simplest TTY-degrading approach
+- [Phase 11]: interrupt_event.clear() at run() start: allows StudyRunner re-use; SIGINT state is per-run
 
 ### Pending Todos
 
@@ -95,6 +99,6 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 11-01-PLAN.md — StudyRunner, subprocess isolation, 10 new tests (494 total)
+Stopped at: Completed 11-02-PLAN.md — SIGINT handling, gap countdown, mark_interrupted(), 17 new tests (511 total)
 Resume file: None
-Next action: Execute Phase 11 Plan 02 (11-02-PLAN.md)
+Next action: Phase 12 (integration wiring)
