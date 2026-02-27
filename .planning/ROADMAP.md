@@ -97,8 +97,8 @@ Plans:
 **Plans**: 2 plans (Wave 1 → Wave 2)
 
 Plans:
-- [ ] 09-01: ExecutionConfig + StudyConfig models, study/grid.py (expand_grid, apply_cycles, hash, SkippedConfig), unit tests (TDD) [Wave 1]
-- [ ] 09-02: load_study_config() in loader.py, format_preflight_summary(), integration tests [Wave 2]
+- [x] 09-01: ExecutionConfig + StudyConfig models, study/grid.py (expand_grid, apply_cycles, hash, SkippedConfig), unit tests (TDD) [Wave 1]
+- [x] 09-02: load_study_config() in loader.py, format_preflight_summary(), integration tests [Wave 2]
 
 ---
 
@@ -128,10 +128,11 @@ Plans:
   3. A subprocess that exceeds `experiment_timeout_seconds` is killed via SIGKILL, not SIGTERM, and the manifest marks the experiment as `"failed"`
   4. Pressing Ctrl+C during a study kills the active subprocess, marks the manifest as interrupted, and exits with code 130 — `manifest.json` is left in a readable state
   5. Config gap (`config_gap_seconds`) between experiments and cycle gap (`cycle_gap_seconds`) between cycles are both honoured, with a visible countdown in the terminal during each pause
-**Plans**: TBD
+**Plans**: 2 plans (Wave 1 → Wave 2)
 
 Plans:
-- [ ] TBD
+- [x] 11-01: StudyRunner subprocess isolation — spawn context, Pipe IPC, timeout SIGKILL, structured failures, progress queue [Wave 1]
+- [x] 11-02: SIGINT handling and gap countdown — two-stage interrupt, mark_interrupted, thermal gap countdown, Enter-to-skip [Wave 2]
 
 ---
 
@@ -145,10 +146,12 @@ Plans:
   3. `llem run study.yaml --cycles 5 --order interleaved --no-gaps` overrides `execution:` block values from YAML
   4. `llem run study.yaml` with `backend: [pytorch, vllm]` raises `PreFlightError` with a message directing the user to the Docker runner (M3) — exits with code 1
   5. The terminal displays a per-experiment progress line and a visible thermal gap countdown during inter-experiment pauses
-**Plans**: TBD
+**Plans**: 3 plans (Wave 1 → Wave 2 → Wave 3)
 
 Plans:
-- [ ] TBD
+- [x] 12-01: StudyResult schema, experiment_gap_seconds rename, run_study_preflight multi-backend guard [Wave 1]
+- [x] 12-02: run_study() API, _run() dispatcher, result_files tracking, worker wiring [Wave 2]
+- [x] 12-03: Study-mode CLI flags (--cycles/--order/--no-gaps), YAML detection, print_study_summary, print_study_progress [Wave 3]
 
 ---
 
@@ -175,7 +178,7 @@ Plans:
 | 11. Subprocess Isolation and StudyRunner | 2/2 | Complete | 2026-02-27 |
 | 12. Integration | 3/3 | Complete | 2026-02-27 |
 | 14. Multi-Cycle Execution Fixes | 1/1 | Complete    | 2026-02-27 |
-| 15. M2 Tech Debt and Progress Wiring | 0/TBD | Not started | - |
+| 15. M2 Tech Debt and Progress Wiring | 0/2 | Not started | - |
 | 13. Documentation — M1 backfill and M2 updates | 0/TBD | Not started | - |
 
 ### Phase 13: Documentation — M1 backfill and M2 updates
@@ -219,13 +222,15 @@ Plans:
   2. `experiment_timeout_seconds` is either a field on `ExecutionConfig` or the phantom `getattr` reference is removed
   3. ROADMAP.md Phase 9 shows correct status and ticked checkboxes
   4. SUMMARY.md frontmatter for Phases 11 and 12 has populated `requirements_completed` lists
-**Plans**: TBD
+**Plans**: 2 plans (Wave 1 — parallel)
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 15 to break down)
+- [ ] 15-01: Wire progress display in _consume_progress_events(), remove phantom experiment_timeout_seconds reference [Wave 1]
+- [ ] 15-02: Fix ROADMAP.md Phase 9/11/12 tracking, populate requirements-completed in Phase 11/12 SUMMARY frontmatter [Wave 1]
 
 ---
 
 *M1 roadmap created: 2026-02-26*
 *M2 roadmap appended: 2026-02-27*
+*Phase 15 plans added: 2026-02-27*
 *M2 gap closure phases added: 2026-02-27*
