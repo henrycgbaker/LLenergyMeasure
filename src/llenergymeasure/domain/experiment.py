@@ -306,17 +306,47 @@ class ExperimentResult(BaseModel):
         return load_result(path)
 
 
-class StudyResult(BaseModel):
-    """Container for study results.
+class StudySummary(BaseModel):
+    """Aggregate summary statistics for a completed study."""
 
-    M1 stub: experiments list + name only. Full schema (study_design_hash,
-    measurement_protocol, result_files, StudySummary) added in M2 (RES-13..15).
+    total_experiments: int = Field(..., description="Total experiments in the study")
+    completed: int = Field(default=0, description="Number of successfully completed experiments")
+    failed: int = Field(default=0, description="Number of failed experiments")
+    total_wall_time_s: float = Field(default=0.0, description="Total wall-clock time in seconds")
+    total_energy_j: float = Field(default=0.0, description="Total energy consumed in joules")
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Runtime warnings (CLI narrowing, failures, etc.)",
+    )
+
+
+class StudyResult(BaseModel):
+    """Final return value of a study run (RES-13).
+
+    Distinct from StudyManifest (the in-progress checkpoint). StudyResult is
+    assembled once after all experiments complete (or after interrupt) and returned
+    to the caller.
     """
 
     experiments: list[ExperimentResult] = Field(
         default_factory=list, description="Results for each experiment in the study"
     )
     name: str | None = Field(default=None, description="Study name")
+    study_design_hash: str | None = Field(
+        default=None, description="16-char SHA-256 hex of experiment list"
+    )
+    measurement_protocol: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Flat dict from ExecutionConfig: n_cycles, cycle_order, experiment_gap_seconds, "
+            "cycle_gap_seconds, shuffle_seed, experiment_timeout_seconds"
+        ),
+    )
+    result_files: list[str] = Field(
+        default_factory=list,
+        description="Paths to per-experiment result.json files (RES-15: paths, not embedded)",
+    )
+    summary: StudySummary | None = Field(default=None, description="Aggregate summary statistics")
 
 
 # v1.x compatibility alias -- remove in v3.0
