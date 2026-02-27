@@ -4,7 +4,7 @@
 
 - [x] **v1.x Foundation & Planning** — Phases 1–4.5 (shipped 2026-02-26)
 - [x] **M1 — Core Single-Experiment** — Phases 1–8.2 (completed 2026-02-27)
-- [ ] **M2 — Study / Sweep** — Phases 9–13
+- [ ] **M2 — Study / Sweep** — Phases 9–15
 
 ## Phases
 
@@ -72,10 +72,15 @@ Plans:
 
 **Milestone Goal:** `llem run study.yaml` runs a multi-experiment sweep with subprocess isolation, cycle ordering, thermal gaps, and a checkpoint manifest — producing per-experiment `ExperimentResult` files and a `StudyResult` summary.
 
-- [ ] **Phase 9: Grid Expansion and StudyConfig** - Sweep YAML grammar, `StudyConfig` + `ExecutionConfig` models, Cartesian grid expander, cycle ordering, pre-flight count display
+- [x] **Phase 9: Grid Expansion and StudyConfig** - Sweep YAML grammar, `StudyConfig` + `ExecutionConfig` models, Cartesian grid expander, cycle ordering, pre-flight count display (completed 2026-02-27)
 - [x] **Phase 10: Manifest Writer** - `StudyManifest` checkpoint model, `ManifestWriter` with atomic writes, study output directory layout (completed 2026-02-27)
 - [x] **Phase 11: Subprocess Isolation and StudyRunner** - Subprocess dispatch via `spawn`, `Pipe`/`Queue` IPC, timeout handling, SIGINT, skip-and-continue, thermal gaps (completed 2026-02-27)
 - [x] **Phase 12: Integration** - `StudyRunner.run()`, `run_study()` public API, `_run()` body, CLI study flags, study progress display, `StudyResult` assembly, multi-backend hard error (completed 2026-02-27)
+
+### M2 Gap Closure
+
+- [ ] **Phase 14: Multi-Cycle Execution Fixes** - Fix double `apply_cycles()`, cycle tracking, manifest completion status. Closes 3 requirement gaps + 3 integration defects + 2 broken flows.
+- [ ] **Phase 15: M2 Tech Debt and Progress Wiring** - Wire progress display, fix phantom field, ROADMAP/SUMMARY drift, orphaned exports.
 
 ## Phase Details
 
@@ -150,7 +155,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-8.1 → 8.2 → 9 → 10 → 11 → 12 → 13
+8.1 → 8.2 → 9 → 10 → 11 → 12 → 14 → 15 → 13
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -164,11 +169,13 @@ Plans:
 | 7. CLI | 3/3 | Complete | 2026-02-27 |
 | 8. Testing and Integration | 3/3 | Complete | 2026-02-27 |
 | 8.1. PyTorch Result Wiring Fixes | 1/1 | Complete | 2026-02-27 |
-| 8.2. M1 Tech Debt Cleanup | 2/2 | Complete   | 2026-02-27 |
-| 9. Grid Expansion and StudyConfig | 1/2 | In Progress|  |
-| 10. Manifest Writer | 1/1 | Complete    | 2026-02-27 |
-| 11. Subprocess Isolation and StudyRunner | 2/2 | Complete    | 2026-02-27 |
-| 12. Integration | 3/3 | Complete    | 2026-02-27 |
+| 8.2. M1 Tech Debt Cleanup | 2/2 | Complete | 2026-02-27 |
+| 9. Grid Expansion and StudyConfig | 2/2 | Complete | 2026-02-27 |
+| 10. Manifest Writer | 1/1 | Complete | 2026-02-27 |
+| 11. Subprocess Isolation and StudyRunner | 2/2 | Complete | 2026-02-27 |
+| 12. Integration | 3/3 | Complete | 2026-02-27 |
+| 14. Multi-Cycle Execution Fixes | 0/TBD | Not started | - |
+| 15. M2 Tech Debt and Progress Wiring | 0/TBD | Not started | - |
 | 13. Documentation — M1 backfill and M2 updates | 0/TBD | Not started | - |
 
 ### Phase 13: Documentation — M1 backfill and M2 updates
@@ -176,12 +183,49 @@ Plans:
 **Goal:** [To be planned]
 **Requirements**: TBD
 **Depends on:** Phase 12
-**Plans:** 3/3 plans complete
+**Plans:** 0/TBD
 
 Plans:
 - [ ] TBD (run /gsd:plan-phase 13 to break down)
 
 ---
 
+### M2 Gap Closure
+
+### Phase 14: Multi-Cycle Execution Fixes
+**Goal:** Fix the 3 integration defects (2 high severity) that break multi-cycle study execution — restoring correct experiment counts, per-cycle manifest tracking, and study completion status.
+**Depends on**: Phase 12 (fixes integration bugs found by M2 audit)
+**Requirements**: STU-07, STU-08, STU-09
+**Gap Closure:** Closes 3 requirement gaps, 3 integration gaps, 2 broken flows from M2 audit
+**Success Criteria** (what must be TRUE):
+  1. A 2-config × 3-cycle study runs exactly 6 experiments (not 18) — double `apply_cycles()` removed from `runner.py`
+  2. Manifest entries for cycles 2+ transition correctly through running → completed/failed — cycle counter per `config_hash` replaces hardcoded `cycle=1`
+  3. `StudyManifest.status` is `"completed"` after a successful study run — `ManifestWriter.mark_study_completed()` exists and is called
+  4. All existing multi-cycle and manifest tests pass with the fixes applied
+**Plans**: TBD
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 14 to break down)
+
+---
+
+### Phase 15: M2 Tech Debt and Progress Wiring
+**Goal:** Wire the orphaned progress display, fix phantom fields, and clean up ROADMAP/SUMMARY tracking drift from M2 execution.
+**Depends on**: Phase 14 (execution fixes must land first)
+**Requirements**: None (tech debt and progress wiring — no new requirements)
+**Gap Closure:** Closes 1 broken flow (progress display) + 12 tech debt items from M2 audit
+**Success Criteria** (what must be TRUE):
+  1. `_consume_progress_events()` forwards events to `print_study_progress()` — progress display visible during study execution
+  2. `experiment_timeout_seconds` is either a field on `ExecutionConfig` or the phantom `getattr` reference is removed
+  3. ROADMAP.md Phase 9 shows correct status and ticked checkboxes
+  4. SUMMARY.md frontmatter for Phases 11 and 12 has populated `requirements_completed` lists
+**Plans**: TBD
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 15 to break down)
+
+---
+
 *M1 roadmap created: 2026-02-26*
 *M2 roadmap appended: 2026-02-27*
+*M2 gap closure phases added: 2026-02-27*
