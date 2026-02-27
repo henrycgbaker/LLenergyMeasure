@@ -26,7 +26,7 @@ def check_gpu_memory_residual(
     Args:
         device_index: GPU device index to query (default 0, single-GPU assumption).
         threshold_mb: Warning threshold in megabytes (default 100 MB).
-            Driver overhead is typically 50–80 MB on modern GPUs; 100 MB
+            Driver overhead is typically 50-80 MB on modern GPUs; 100 MB
             accommodates that while catching real residual allocations.
     """
     try:
