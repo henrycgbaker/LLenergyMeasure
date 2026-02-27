@@ -180,9 +180,9 @@ def _auto_select() -> EnergyBackend | None:
 
     # CodeCarbon — software fallback
     if importlib.util.find_spec("codecarbon") is not None:
-        backend = CodeCarbonBackend()
-        if backend.is_available():
-            return backend
+        cc_backend = CodeCarbonBackend()
+        if cc_backend.is_available():
+            return cc_backend
 
     # CPU-only or no energy measurement available
     return None

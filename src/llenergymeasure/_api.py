@@ -6,7 +6,7 @@ This module is internal (underscore prefix). Import via llenergymeasure.__init__
 from __future__ import annotations
 
 from pathlib import Path
-from typing import overload
+from typing import Any, overload
 
 from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
@@ -34,7 +34,7 @@ def run_experiment(
     backend: str | None = None,
     n: int = 100,
     dataset: str = "aienergyscore",
-    **kwargs,
+    **kwargs: Any,
 ) -> ExperimentResult: ...
 
 
@@ -45,7 +45,7 @@ def run_experiment(
     backend: str | None = None,
     n: int = 100,
     dataset: str = "aienergyscore",
-    **kwargs,
+    **kwargs: Any,
 ) -> ExperimentResult:
     """Run a single LLM inference efficiency experiment.
 
@@ -106,7 +106,7 @@ def _to_study_config(
     backend: str | None = None,
     n: int = 100,
     dataset: str = "aienergyscore",
-    **kwargs,
+    **kwargs: Any,
 ) -> StudyConfig:
     """Convert any run_experiment() input form to a degenerate StudyConfig."""
     if isinstance(config, ExperimentConfig):
@@ -121,7 +121,7 @@ def _to_study_config(
             )
         # Build kwargs dict for ExperimentConfig — only include non-default values
         # to let Pydantic defaults apply for omitted fields.
-        ec_kwargs: dict = {"model": model, "n": n, "dataset": dataset}
+        ec_kwargs: dict[str, Any] = {"model": model, "n": n, "dataset": dataset}
         if backend is not None:
             ec_kwargs["backend"] = backend
         ec_kwargs.update(kwargs)
