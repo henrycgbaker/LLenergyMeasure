@@ -186,6 +186,21 @@ class ManifestWriter:
         self.manifest = self.manifest.model_copy(update={"status": "interrupted"})
         self._write()
 
+    def mark_study_completed(self) -> None:
+        """Set manifest status to 'completed' and record completion time.
+
+        Called by _run() after all experiments finish successfully (no SIGINT).
+        Only reached on the success path — SIGINT triggers mark_interrupted() then
+        sys.exit(130) before _run() returns.
+        """
+        self.manifest = self.manifest.model_copy(
+            update={
+                "status": "completed",
+                "completed_at": datetime.now(timezone.utc),
+            }
+        )
+        self._write()
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
@@ -232,13 +247,26 @@ class ManifestWriter:
 
     @staticmethod
     def _build_entries(study: StudyConfig) -> list[ExperimentManifestEntry]:
-        """Build pending entries for all (experiment, cycle) combinations."""
+        """Build pending entries for all (experiment, cycle) combinations.
+
+        study.experiments is already the cycled execution list from apply_cycles()
+        in load_study_config() (e.g. 6 entries for 2 configs x 3 cycles). Iterating
+        it directly and then looping over n_cycles would produce 18 entries instead
+        of 6. Deduplicate by config_hash first to recover the unique configs, then
+        build one entry per (config_hash, cycle) pair.
+        """
         from llenergymeasure.domain.experiment import compute_measurement_config_hash
+
+        # Deduplicate: preserve first-seen order, discard repetitions from cycling.
+        seen: dict[str, ExperimentConfig] = {}
+        for exp in study.experiments:
+            h = compute_measurement_config_hash(exp)
+            if h not in seen:
+                seen[h] = exp
 
         entries: list[ExperimentManifestEntry] = []
         n_cycles = study.execution.n_cycles
-        for exp in study.experiments:
-            config_hash = compute_measurement_config_hash(exp)
+        for config_hash, exp in seen.items():
             summary = build_config_summary(exp)
             for cycle in range(1, n_cycles + 1):
                 entries.append(

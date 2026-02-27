@@ -392,3 +392,91 @@ def test_mark_interrupted_sets_status(tmp_path: Path) -> None:
     # On-disk check
     data = json.loads((tmp_path / "manifest.json").read_text())
     assert data["status"] == "interrupted"
+
+
+# ---------------------------------------------------------------------------
+# Bug fix tests: _build_entries deduplication and mark_study_completed (STU-09)
+# ---------------------------------------------------------------------------
+
+
+def test_build_entries_deduplicates_cycled_experiments(tmp_path: Path) -> None:
+    """_build_entries() produces exactly n_unique * n_cycles entries, not len(experiments) * n_cycles.
+
+    study.experiments is the pre-cycled list from apply_cycles() (6 entries for
+    2 configs x 3 cycles). Without deduplication, _build_entries would loop over
+    those 6 entries and multiply by n_cycles=3, producing 18 entries. With
+    deduplication by config_hash it should produce exactly 6.
+    """
+    from collections import defaultdict
+
+    from llenergymeasure.study.grid import CycleOrder, apply_cycles
+
+    exp_a = ExperimentConfig(model="model-a", backend="pytorch", n=10)
+    exp_b = ExperimentConfig(model="model-b", backend="pytorch", n=10)
+    ordered = apply_cycles([exp_a, exp_b], 3, CycleOrder.INTERLEAVED, "aabb0011", None)
+    assert len(ordered) == 6, "sanity: apply_cycles should produce 6 entries"
+
+    study = StudyConfig(
+        experiments=ordered,
+        name="dedup-test",
+        execution=ExecutionConfig(n_cycles=3, cycle_order="interleaved"),
+        study_design_hash="aabb0011",
+    )
+    writer = ManifestWriter(study=study, study_dir=tmp_path)
+
+    # Should be 6 entries (2 unique configs x 3 cycles), NOT 18
+    assert len(writer.manifest.experiments) == 6, (
+        f"Expected 6 entries, got {len(writer.manifest.experiments)}"
+    )
+
+    # Each unique config_hash should have exactly cycles [1, 2, 3]
+    cycles_by_hash: dict[str, list[int]] = defaultdict(list)
+    for entry in writer.manifest.experiments:
+        cycles_by_hash[entry.config_hash].append(entry.cycle)
+
+    assert len(cycles_by_hash) == 2, f"Expected 2 unique config hashes, got {len(cycles_by_hash)}"
+    for h, cycles in cycles_by_hash.items():
+        assert sorted(cycles) == [1, 2, 3], (
+            f"config_hash {h!r}: expected cycles [1, 2, 3], got {sorted(cycles)}"
+        )
+
+
+def test_mark_study_completed(tmp_path: Path) -> None:
+    """mark_study_completed() sets status='completed' and records completed_at."""
+    study = _make_study(n_experiments=1, n_cycles=1)
+    writer = ManifestWriter(study=study, study_dir=tmp_path)
+
+    writer.mark_study_completed()
+
+    # In-memory check
+    assert writer.manifest.status == "completed"
+    assert writer.manifest.completed_at is not None
+
+    # On-disk check
+    data = json.loads((tmp_path / "manifest.json").read_text())
+    assert data["status"] == "completed"
+    assert data["completed_at"] is not None
+
+
+def test_manifest_status_after_all_experiments_complete(tmp_path: Path) -> None:
+    """Full lifecycle: running → completed per entry, then mark_study_completed → 'completed'."""
+    study = _make_study(n_experiments=2, n_cycles=1)
+    writer = ManifestWriter(study=study, study_dir=tmp_path)
+
+    # Drive each entry through pending → running → completed
+    for entry in writer.manifest.experiments:
+        writer.mark_running(entry.config_hash, entry.cycle)
+        writer.mark_completed(entry.config_hash, entry.cycle, result_file="result.json")
+
+    # All experiments done — pending should be 0
+    assert writer.manifest.pending == 0
+
+    # Mark study as a whole completed
+    writer.mark_study_completed()
+
+    assert writer.manifest.status == "completed"
+    assert writer.manifest.completed_at is not None
+
+    data = json.loads((tmp_path / "manifest.json").read_text())
+    assert data["status"] == "completed"
+    assert data["pending"] == 0
