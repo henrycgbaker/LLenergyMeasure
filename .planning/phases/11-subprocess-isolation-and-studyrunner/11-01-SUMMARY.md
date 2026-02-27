@@ -45,6 +45,7 @@ decisions:
   - Pipe-only IPC (no temp files): ExperimentResult fits in Pipe buffer for M2 sizes
   - _run_experiment_worker is a stub (raises NotImplementedError); wired to real backend in Phase 12
   - cycle tracking (cycle=1 hardcoded): full per-cycle tracking deferred to Phase 12 wiring
+requirements-completed: [STU-01, STU-02, STU-03, STU-04]
 metrics:
   duration: "~3 min"
   completed: "2026-02-27T18:11:32Z"
