@@ -35,17 +35,20 @@ import importlib.util
 from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.core.energy_backends.base import EnergyBackend
-from llenergymeasure.core.energy_backends.codecarbon import (
-    CodeCarbonBackend,
-    CodeCarbonData,
-    warm_up,
-)
 from llenergymeasure.core.energy_backends.nvml import EnergyMeasurement, NVMLBackend
 from llenergymeasure.core.energy_backends.zeus import ZeusBackend
 from llenergymeasure.exceptions import ConfigError, ConfigurationError
 
 if TYPE_CHECKING:
-    pass
+    from llenergymeasure.core.energy_backends.codecarbon import (
+        CodeCarbonBackend as CodeCarbonBackend,
+    )
+    from llenergymeasure.core.energy_backends.codecarbon import (
+        CodeCarbonData as CodeCarbonData,
+    )
+    from llenergymeasure.core.energy_backends.codecarbon import (
+        warm_up as warm_up,
+    )
 
 # ---------------------------------------------------------------------------
 # Legacy plugin registry
@@ -107,8 +110,12 @@ def clear_backends() -> None:
 
 def _register_default_backends() -> None:
     """Register built-in backends in the legacy registry."""
-    register_backend("codecarbon", CodeCarbonBackend)
     register_backend("nvml", NVMLBackend)
+    # CodeCarbon requires torch — register lazily only if available
+    if importlib.util.find_spec("codecarbon") is not None:
+        from llenergymeasure.core.energy_backends.codecarbon import CodeCarbonBackend
+
+        register_backend("codecarbon", CodeCarbonBackend)
 
 
 # Auto-register on import
@@ -180,6 +187,8 @@ def _auto_select() -> EnergyBackend | None:
 
     # CodeCarbon — software fallback
     if importlib.util.find_spec("codecarbon") is not None:
+        from llenergymeasure.core.energy_backends.codecarbon import CodeCarbonBackend
+
         cc_backend = CodeCarbonBackend()
         if cc_backend.is_available():
             return cc_backend
@@ -205,6 +214,8 @@ def _instantiate(name: str) -> EnergyBackend:
     if name == "zeus":
         return ZeusBackend()
     if name == "codecarbon":
+        from llenergymeasure.core.energy_backends.codecarbon import CodeCarbonBackend
+
         return CodeCarbonBackend()
 
     known = ", ".join(["nvml", "zeus", "codecarbon", "auto"])

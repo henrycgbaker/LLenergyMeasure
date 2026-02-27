@@ -211,7 +211,7 @@ def test_select_backend_auto_priority_codecarbon_fallback() -> None:
             return_value=False,
         ),
         patch(
-            "llenergymeasure.core.energy_backends.CodeCarbonBackend.is_available",
+            "llenergymeasure.core.energy_backends.codecarbon.CodeCarbonBackend.is_available",
             return_value=True,
         ),
     ):
