@@ -352,9 +352,7 @@ class StudyRunner:
         self._cycle_counters[config_hash] = current
         cycle = current
 
-        # Use user-supplied timeout if set, otherwise fall back to heuristic
-        user_timeout = getattr(self.study.execution, "experiment_timeout_seconds", None)
-        timeout = int(user_timeout) if user_timeout is not None else _calculate_timeout(config)
+        timeout = _calculate_timeout(config)
 
         child_conn, parent_conn = mp_ctx.Pipe(duplex=False)
         progress_queue = mp_ctx.Queue()
