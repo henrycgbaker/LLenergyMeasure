@@ -373,6 +373,11 @@ class StudyRunner:
         self.manifest.mark_running(config_hash, cycle)
         self._active_process = p
 
+        # Pre-dispatch GPU memory residual check (MEAS-01, MEAS-02)
+        from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
+
+        check_gpu_memory_residual()
+
         p.start()
         child_conn.close()
         p.join(timeout=timeout)

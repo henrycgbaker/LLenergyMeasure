@@ -716,3 +716,48 @@ def test_progress_events_forwarded():
     assert mock_progress.call_count == 2
     statuses = [c.kwargs["status"] for c in mock_progress.call_args_list]
     assert statuses == ["running", "completed"]
+
+
+# =============================================================================
+# GPU memory residual check wiring (MEAS-01, MEAS-02)
+# =============================================================================
+
+
+def test_gpu_memory_check_called_before_dispatch(study_config: StudyConfig) -> None:
+    """check_gpu_memory_residual() is called once before p.start() in _run_one().
+
+    Verifies the wiring exists and ordering is correct: memory check fires
+    before the child process starts.
+    """
+    manifest = MagicMock()
+    fake_result = {"status": "ok"}
+
+    call_order: list[str] = []
+
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
+    ctx = _make_mock_context(proc, pipe_data=fake_result)
+
+    # Track call order between gpu check and p.start()
+    def record_start(*args, **kwargs):
+        call_order.append("p.start")
+
+    proc.start.side_effect = record_start
+
+    def record_gpu_check(*args, **kwargs):
+        call_order.append("gpu_check")
+
+    with (
+        patch("multiprocessing.get_context", return_value=ctx),
+        patch(
+            "llenergymeasure.study.gpu_memory.check_gpu_memory_residual",
+            side_effect=record_gpu_check,
+        ) as mock_check,
+    ):
+        runner = StudyRunner(study_config, manifest, Path("/tmp/test-study"))
+        runner.run()
+
+    mock_check.assert_called_once()
+    # GPU check must precede p.start()
+    assert call_order.index("gpu_check") < call_order.index("p.start"), (
+        f"GPU check should happen before p.start(), got order: {call_order}"
+    )
