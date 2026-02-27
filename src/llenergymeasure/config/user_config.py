@@ -95,7 +95,7 @@ class UserExecutionConfig(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    config_gap_seconds: float = Field(
+    experiment_gap_seconds: float = Field(
         default=60.0, ge=0.0, description="Thermal gap between experiments"
     )
     cycle_gap_seconds: float = Field(

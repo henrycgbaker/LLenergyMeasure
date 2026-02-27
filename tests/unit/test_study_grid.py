@@ -34,7 +34,7 @@ class TestExecutionConfig:
         ec = ExecutionConfig()
         assert ec.n_cycles == 1
         assert ec.cycle_order == "sequential"
-        assert ec.config_gap_seconds is None
+        assert ec.experiment_gap_seconds is None
         assert ec.cycle_gap_seconds is None
         assert ec.shuffle_seed is None
 
@@ -60,13 +60,13 @@ class TestExecutionConfig:
             ExecutionConfig(cycle_order="random")
 
     def test_gap_fields_non_negative(self):
-        ec = ExecutionConfig(config_gap_seconds=0.0, cycle_gap_seconds=60.5)
-        assert ec.config_gap_seconds == 0.0
+        ec = ExecutionConfig(experiment_gap_seconds=0.0, cycle_gap_seconds=60.5)
+        assert ec.experiment_gap_seconds == 0.0
         assert ec.cycle_gap_seconds == 60.5
 
     def test_gap_fields_negative_raises(self):
         with pytest.raises(ValidationError):
-            ExecutionConfig(config_gap_seconds=-1.0)
+            ExecutionConfig(experiment_gap_seconds=-1.0)
 
     def test_shuffle_seed_explicit(self):
         ec = ExecutionConfig(shuffle_seed=12345)

@@ -270,9 +270,9 @@ class StudyRunner:
 
                 # Config gap: between every consecutive experiment pair
                 if i > 0:
-                    gap_secs = float(self.study.execution.config_gap_seconds or 0)
+                    gap_secs = float(self.study.execution.experiment_gap_seconds or 0)
                     if gap_secs > 0:
-                        run_gap(gap_secs, "Config gap", self._interrupt_event)
+                        run_gap(gap_secs, "Experiment gap", self._interrupt_event)
                         if self._interrupt_event.is_set():
                             break
 

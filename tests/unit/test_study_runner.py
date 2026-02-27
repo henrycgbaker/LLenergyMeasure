@@ -450,7 +450,9 @@ def test_sigint_during_gap_exits_immediately() -> None:
             ExperimentConfig(model="model-b", backend="pytorch", n=10),
         ],
         name="gap-interrupt-test",
-        execution=ExecutionConfig(n_cycles=1, cycle_order="sequential", config_gap_seconds=60.0),
+        execution=ExecutionConfig(
+            n_cycles=1, cycle_order="sequential", experiment_gap_seconds=60.0
+        ),
         study_design_hash="deadbeef12345678",
     )
     manifest = MagicMock()

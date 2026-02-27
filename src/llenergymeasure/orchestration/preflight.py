@@ -12,7 +12,7 @@ import importlib.util
 import logging
 from pathlib import Path
 
-from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.models import ExperimentConfig, StudyConfig
 from llenergymeasure.exceptions import PreFlightError
 
 logger = logging.getLogger(__name__)
@@ -148,3 +148,25 @@ def run_preflight(config: ExperimentConfig) -> None:
 
     # Non-blocking warning (after all checks pass)
     _warn_if_persistence_mode_off()
+
+
+def run_study_preflight(study: StudyConfig) -> None:
+    """Pre-flight checks for a study configuration.
+
+    Raises PreFlightError if the study uses multiple backends (CM-10).
+    Single-backend studies pass through — per-experiment pre-flight
+    runs later in the subprocess.
+
+    Args:
+        study: Resolved StudyConfig.
+
+    Raises:
+        PreFlightError: Multi-backend study without Docker runner.
+    """
+    backends = {exp.backend for exp in study.experiments}
+    if len(backends) > 1:
+        backend_list = ", ".join(sorted(backends))
+        raise PreFlightError(
+            f"Multi-backend studies require Docker isolation (available in M3). "
+            f"Found backends: {backend_list}. Use a single backend for now."
+        )
