@@ -199,6 +199,7 @@ def _run_impl(
 
     # Route to study execution path
     if is_study:
+        assert config is not None  # Guarded by study detection above
         _run_study_impl(
             config=config,
             cli_overrides=cli_overrides,
