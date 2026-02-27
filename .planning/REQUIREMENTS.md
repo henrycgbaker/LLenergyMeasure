@@ -139,11 +139,11 @@ Full definitions, context, and design references are in `.product/REQUIREMENTS.m
 | STU-04 | Phase 11 | Complete |
 | STU-06 | Phase 11 | Complete |
 | STU-07 | Phase 11 | Complete |
-| LA-02 | Phase 12 | Pending |
-| LA-05 | Phase 12 | Pending |
-| STU-NEW-01 | Phase 12 | Pending |
+| LA-02 | Phase 12 | Complete |
+| LA-05 | Phase 12 | Complete |
+| STU-NEW-01 | Phase 12 | Complete |
 | RES-13 | Phase 12 | Complete |
-| RES-15 | Phase 12 | Pending |
+| RES-15 | Phase 12 | Complete |
 | CLI-05 | Phase 12 | Pending |
 | CLI-11 | Phase 12 | Pending |
 | CM-10 | Phase 12 | Complete |

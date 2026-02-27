@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-27T18:23:42.405Z"
+last_updated: "2026-02-27T19:27:51.377Z"
 progress:
   total_phases: 25
   completed_phases: 19
-  total_plans: 80
-  completed_plans: 72
+  total_plans: 83
+  completed_plans: 74
 ---
 
 # Project State
@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 ## Current Position
 
 Phase: 12
-Plan: 12-01 complete
+Plan: 12-02 complete
 Status: Phase 12 in progress
-Last activity: 2026-02-27 — Phase 12 Plan 01 complete: StudyResult full schema (RES-13), StudySummary, experiment_gap_seconds rename, run_study_preflight multi-backend guard (CM-10), 8 new tests
+Last activity: 2026-02-27 — Phase 12 Plan 02 complete: run_study() implemented, _run() dispatcher (single in-process / multi via StudyRunner), _run_experiment_worker wired to real backend, result_files tracking, 525 tests pass
 
 Progress: [██░░░░░░░░] ~10%
 
@@ -50,6 +50,7 @@ Progress: [██░░░░░░░░] ~10%
 | Phase 08.2-m1-tech-debt-cleanup P01 | 3 | 2 tasks | 3 files |
 | Phase 08.2 P02 | 4 | 2 tasks | 6 files |
 | Phase 11 P02 | 5 min | 3 tasks | 6 files |
+| Phase 12-integration P02 | 8 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,9 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 - [Phase 12-01]: StudyResult has no extra='forbid' — internal model, not user-visible output
 - [Phase 12-01]: run_study_preflight raises PreFlightError immediately for multi-backend (CM-10); Docker isolation is M3
 - [Phase 12-01]: experiment_gap_seconds replaces config_gap_seconds in both ExecutionConfig and UserExecutionConfig
+- [Phase 12-integration]: _run_in_process propagates PreFlightError and BackendError unchanged; only save failures are caught
+- [Phase 12-integration]: Single experiment + n_cycles=1 dispatches in-process; multi-experiment via StudyRunner subprocess
+- [Phase 12-integration]: result_files list contains absolute path strings; manifest entry stores relative path from study_dir
 
 ### Pending Todos
 
@@ -102,6 +106,6 @@ All M2 decisions pre-confirmed in `.product/decisions/`. Key points for executio
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 12-01-PLAN.md — StudyResult schema, experiment_gap_seconds rename, multi-backend preflight
+Stopped at: Completed 12-02-PLAN.md — run_study() implemented, _run() dispatcher, worker wired, 525 tests pass
 Resume file: None
-Next action: Phase 12 Plan 02 (core wiring)
+Next action: Phase 12 Plan 03 (if exists) or Phase 13 Documentation
