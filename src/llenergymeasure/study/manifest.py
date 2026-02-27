@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from llenergymeasure.exceptions import StudyError
 from llenergymeasure.results.persistence import _atomic_write
