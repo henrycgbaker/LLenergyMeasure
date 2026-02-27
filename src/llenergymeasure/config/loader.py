@@ -19,10 +19,16 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
 from llenergymeasure.exceptions import ConfigError
+from llenergymeasure.study.grid import (
+    CycleOrder,
+    apply_cycles,
+    compute_study_design_hash,
+    expand_grid,
+)
 
-__all__ = ["deep_merge", "load_experiment_config"]
+__all__ = ["deep_merge", "load_experiment_config", "load_study_config"]
 
 
 # =============================================================================
@@ -100,6 +106,96 @@ def load_experiment_config(
     except Exception as e:
         context = f" (in {path})" if path else ""
         raise ConfigError(f"Config construction failed{context}: {e}") from e
+
+
+def load_study_config(
+    path: Path | str,
+    cli_overrides: dict[str, Any] | None = None,
+) -> StudyConfig:
+    """Load, expand, and validate a study YAML file.
+
+    Resolution order:
+      1. Load YAML file
+      2. Apply CLI overrides on execution block
+      3. Parse execution block (Pydantic validates it)
+      4. expand_grid() — Cartesian product + Pydantic validation of each ExperimentConfig
+      5. Guard: empty or all-invalid → ConfigError
+      6. compute_study_design_hash() over valid experiments
+      7. apply_cycles() for cycle ordering
+      8. Construct and return StudyConfig
+
+    This is the CFG-12 contract: sweep resolution at YAML parse time, before
+    Pydantic sees the individual ExperimentConfig objects.
+
+    Args:
+        path: Path to study YAML file.
+        cli_overrides: Optional dict of CLI flag overrides for execution block
+            (e.g. {"execution": {"n_cycles": 5}}). Phase 12 translates
+            --cycles/--order/--no-gaps flags into this dict.
+
+    Returns:
+        Resolved StudyConfig with ordered experiments and study_design_hash.
+
+    Raises:
+        ConfigError: File not found, parse error, base file missing, ALL configs invalid,
+            empty study (no sweep and no experiments).
+        ValidationError: Pydantic structural errors on ExecutionConfig pass through.
+    """
+    path = Path(path)
+    raw = _load_file(path)  # reuse existing _load_file — raises ConfigError on missing/parse error
+
+    # Apply CLI overrides (Phase 12 translates --cycles etc. into this dict)
+    if cli_overrides:
+        raw = deep_merge(raw, cli_overrides)
+
+    # Strip version key (same as experiment loader)
+    raw.pop("version", None)
+
+    # Extract study-level metadata
+    name = raw.get("name")
+
+    # Parse execution block — Pydantic validates it
+    execution = ExecutionConfig(**(raw.get("execution") or {}))
+
+    # Expand sweep → list[ExperimentConfig], collect skipped
+    # This is CFG-12: sweep resolution at YAML parse time, before Pydantic
+    valid_experiments, skipped = expand_grid(raw, study_yaml_path=path)
+
+    # Guard: empty study — expand_grid already raises if all_raw_configs is empty,
+    # but we also need to handle the degenerate case where expand_grid itself
+    # returns no valid experiments and raises. If we reach here, valid_experiments
+    # has at least one entry (expand_grid raises ConfigError if all invalid).
+    # The "empty study" case (no model, no sweep, no experiments) is already
+    # caught inside expand_grid(). We add an extra guard here for clarity:
+    total = len(valid_experiments) + len(skipped)
+    if total == 0:
+        raise ConfigError("Study produced no experiments (empty sweep and no experiments: list).")
+    if not valid_experiments:
+        skip_details = "\n".join(f"  {s.short_label}: {s.reason}" for s in skipped[:5])
+        raise ConfigError(
+            f"All {total} generated configs are invalid. "
+            "Nothing to run. Check sweep dimensions against backend constraints.\n" + skip_details
+        )
+
+    # Compute study_design_hash BEFORE applying cycles (hash is over unique configs)
+    study_hash = compute_study_design_hash(valid_experiments)
+
+    # Apply cycle ordering to produce execution sequence
+    ordered = apply_cycles(
+        valid_experiments,
+        n_cycles=execution.n_cycles,
+        cycle_order=CycleOrder(execution.cycle_order),
+        study_design_hash=study_hash,
+        shuffle_seed=execution.shuffle_seed,
+    )
+
+    return StudyConfig(
+        experiments=ordered,
+        name=name,
+        execution=execution,
+        study_design_hash=study_hash,
+        skipped_configs=[s.to_dict() for s in skipped],
+    )
 
 
 # =============================================================================

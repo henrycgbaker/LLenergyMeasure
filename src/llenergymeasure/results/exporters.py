@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import csv
+import logging
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
+from llenergymeasure.domain.experiment import ExperimentResult, RawProcessResult
 
-from llenergymeasure.domain.experiment import AggregatedResult, RawProcessResult
+logger = logging.getLogger(__name__)
 
 
 def flatten_model(model: Any, prefix: str = "") -> dict[str, Any]:
@@ -49,14 +50,14 @@ def flatten_model(model: Any, prefix: str = "") -> dict[str, Any]:
 
 
 def export_aggregated_to_csv(
-    results: list[AggregatedResult],
+    results: list[ExperimentResult],
     output_path: Path,
     include_process_breakdown: bool = False,
 ) -> Path:
     """Export aggregated results to CSV.
 
     Args:
-        results: List of aggregated results to export.
+        results: List of ExperimentResult (v2.0) to export.
         output_path: Path to output CSV file.
         include_process_breakdown: Include per-process columns.
 
@@ -95,31 +96,36 @@ def export_aggregated_to_csv(
         writer.writeheader()
         writer.writerows(rows)
 
-    logger.info(f"Exported {len(results)} results to {output_path}")
+    logger.info("Exported %d results to %s", len(results), output_path)
     return output_path
 
 
 def _aggregated_to_row(
-    result: AggregatedResult,
+    result: ExperimentResult,
     include_process_breakdown: bool,
 ) -> dict[str, Any]:
-    """Convert an aggregated result to a flat row dict.
+    """Convert an ExperimentResult (v2.0) to a flat row dict.
 
     Columns are grouped by prefix for CSV readability:
     - Core metrics (experiment_id, tokens, energy, throughput)
-    - energy_* : Energy breakdown (schema v3)
+    - methodology_* : Measurement methodology fields
+    - energy_* : Energy breakdown
     - thermal_* : Thermal throttling info
-    - env_* : Environment metadata
+    - env_* : Environment snapshot
     - gpu_*/latency_*/batch_*/kv_cache_* : Extended efficiency metrics
-    - timeseries_path : Reference to time-series data file
+    - timeseries : Reference to time-series data file
     """
+    # Aggregation fields (may be None for single-GPU)
+    agg = result.aggregation
     row: dict[str, Any] = {
         "experiment_id": result.experiment_id,
+        "schema_version": result.schema_version,
+        "measurement_config_hash": result.measurement_config_hash,
         "start_time": result.start_time.isoformat(),
         "end_time": result.end_time.isoformat(),
         "duration_sec": result.duration_sec,
-        "num_processes": result.aggregation.num_processes,
-        "aggregation_method": result.aggregation.method,
+        "num_processes": agg.num_processes if agg else 1,
+        "aggregation_method": agg.method if agg else "single_process",
         # Core metrics
         "total_tokens": result.total_tokens,
         "energy_raw_j": result.total_energy_j,
@@ -128,19 +134,28 @@ def _aggregated_to_row(
         "avg_energy_per_token_j": result.avg_energy_per_token_j,
         "total_flops": result.total_flops,
         "tokens_per_joule": result.tokens_per_joule,
-        # Verification
-        "temporal_overlap_verified": result.aggregation.temporal_overlap_verified,
-        "gpu_attribution_verified": result.aggregation.gpu_attribution_verified,
+        # Methodology
+        "measurement_methodology": result.measurement_methodology,
+        "steady_state_window": (
+            f"{result.steady_state_window[0]}-{result.steady_state_window[1]}"
+            if result.steady_state_window
+            else None
+        ),
+        # Verification (multi-GPU only)
+        "temporal_overlap_verified": agg.temporal_overlap_verified if agg else None,
+        "gpu_attribution_verified": agg.gpu_attribution_verified if agg else None,
     }
 
-    # Add warnings if any
-    if result.aggregation.warnings:
-        row["warnings"] = "; ".join(result.aggregation.warnings)
+    # Add aggregation warnings if any
+    if agg and agg.warnings:
+        row["warnings"] = "; ".join(agg.warnings)
+    elif result.measurement_warnings:
+        row["warnings"] = "; ".join(result.measurement_warnings)
 
-    # --- Energy breakdown (schema v3) ---
+    # --- Energy breakdown ---
     eb = result.energy_breakdown
-    row["energy_adjusted_j"] = eb.adjusted_j if eb else None
-    row["energy_baseline_w"] = eb.baseline_power_w if eb else None
+    row["energy_adjusted_j"] = result.energy_adjusted_j or (eb.adjusted_j if eb else None)
+    row["energy_baseline_w"] = result.baseline_power_w or (eb.baseline_power_w if eb else None)
     row["energy_baseline_method"] = eb.baseline_method if eb else None
 
     # --- Thermal throttling ---
@@ -149,8 +164,8 @@ def _aggregated_to_row(
     row["thermal_throttle_duration_sec"] = tt.throttle_duration_sec if tt else 0.0
     row["thermal_max_temp_c"] = tt.max_temperature_c if tt else None
 
-    # --- Environment metadata ---
-    env = result.environment
+    # --- Environment snapshot (v2.0 field name) ---
+    env = result.environment_snapshot
     row["env_gpu_name"] = env.gpu.name if env else None
     row["env_gpu_vram_mb"] = env.gpu.vram_total_mb if env else None
     row["env_cuda_version"] = env.cuda.version if env else None
@@ -170,8 +185,8 @@ def _aggregated_to_row(
     row["batch_effective_size"] = em.batch.effective_batch_size if em else None
     row["kv_cache_hit_rate"] = em.kv_cache.kv_cache_hit_rate if em else None
 
-    # --- Time-series reference ---
-    row["timeseries_path"] = result.timeseries_path
+    # --- Timeseries reference (v2.0 field name: timeseries not timeseries_path) ---
+    row["timeseries"] = result.timeseries
 
     # Optionally add per-process breakdown
     if include_process_breakdown:
@@ -189,12 +204,14 @@ def _order_columns(keys: list[str]) -> list[str]:
     """Order columns in a logical sequence.
 
     Groups related columns by prefix for CSV readability:
-    core > energy_ > thermal_ > env_ > gpu_/latency_/batch_/kv_cache_ > timeseries > process_
+    core > methodology_ > energy_ > thermal_ > env_ > gpu_/latency_/batch_/kv_cache_ > timeseries > process_
     """
     # Priority ordering - these appear first
     priority = [
         # Core identification and metrics
         "experiment_id",
+        "schema_version",
+        "measurement_config_hash",
         "start_time",
         "end_time",
         "duration_sec",
@@ -210,7 +227,10 @@ def _order_columns(keys: list[str]) -> list[str]:
         "temporal_overlap_verified",
         "gpu_attribution_verified",
         "warnings",
-        # Energy breakdown (schema v3)
+        # Methodology
+        "measurement_methodology",
+        "steady_state_window",
+        # Energy breakdown
         "energy_adjusted_j",
         "energy_baseline_w",
         "energy_baseline_method",
@@ -218,7 +238,7 @@ def _order_columns(keys: list[str]) -> list[str]:
         "thermal_throttle_detected",
         "thermal_throttle_duration_sec",
         "thermal_max_temp_c",
-        # Environment metadata
+        # Environment snapshot
         "env_gpu_name",
         "env_gpu_vram_mb",
         "env_cuda_version",
@@ -235,8 +255,8 @@ def _order_columns(keys: list[str]) -> list[str]:
         "latency_e2e_p95_ms",
         "batch_effective_size",
         "kv_cache_hit_rate",
-        # Time-series reference
-        "timeseries_path",
+        # Timeseries reference
+        "timeseries",
     ]
 
     ordered = [k for k in priority if k in keys]
@@ -285,7 +305,7 @@ def export_raw_to_csv(
         writer.writeheader()
         writer.writerows(rows)
 
-    logger.info(f"Exported {len(results)} raw results to {output_path}")
+    logger.info("Exported %d raw results to %s", len(results), output_path)
     return output_path
 
 
@@ -303,7 +323,7 @@ class ResultsExporter:
 
     def export_aggregated(
         self,
-        results: list[AggregatedResult],
+        results: list[ExperimentResult],
         filename: str = "results.csv",
         include_process_breakdown: bool = False,
     ) -> Path:
@@ -322,7 +342,7 @@ class ResultsExporter:
 
     def export_json(
         self,
-        results: list[AggregatedResult],
+        results: list[ExperimentResult],
         filename: str = "results.json",
     ) -> Path:
         """Export aggregated results to JSON."""
@@ -334,5 +354,5 @@ class ResultsExporter:
         with path.open("w") as f:
             json.dump(data, f, indent=2, default=str)
 
-        logger.info(f"Exported {len(results)} results to {path}")
+        logger.info("Exported %d results to %s", len(results), path)
         return path

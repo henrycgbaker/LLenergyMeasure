@@ -10,13 +10,14 @@ Gracefully degrades when NVML is unavailable — returns None instead of crashin
 from __future__ import annotations
 
 import contextlib
+import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from loguru import logger
-
 from llenergymeasure.domain.metrics import EnergyBreakdown
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,8 +60,9 @@ def measure_baseline_power(
     cached = _baseline_cache.get(device_index)
     if cached is not None and (time.time() - cached.timestamp) < cache_ttl_sec:
         logger.info(
-            f"Using cached baseline: {cached.power_w:.1f}W "
-            f"(age: {time.time() - cached.timestamp:.0f}s)"
+            "Using cached baseline: %.1fW (age: %.0fs)",
+            cached.power_w,
+            time.time() - cached.timestamp,
         )
         return cached
 
@@ -73,13 +75,13 @@ def measure_baseline_power(
         logger.warning("Baseline: pynvml not available, cannot measure baseline power")
         return None
     except Exception as e:
-        logger.warning(f"Baseline: NVML init failed: {e}")
+        logger.warning("Baseline: NVML init failed: %s", e)
         return None
 
     try:
         handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
     except pynvml.NVMLError as e:
-        logger.warning(f"Baseline: failed to get device handle: {e}")
+        logger.warning("Baseline: failed to get device handle: %s", e)
         pynvml.nvmlShutdown()
         return None
 
@@ -96,7 +98,7 @@ def measure_baseline_power(
                 pass
             time.sleep(interval)
     except Exception as e:
-        logger.warning(f"Baseline: sampling failed: {e}")
+        logger.warning("Baseline: sampling failed: %s", e)
     finally:
         with contextlib.suppress(Exception):
             pynvml.nvmlShutdown()
@@ -119,8 +121,10 @@ def measure_baseline_power(
     _baseline_cache[device_index] = result
 
     logger.info(
-        f"Baseline power measured: {mean_power:.1f}W "
-        f"({len(samples)} samples over {actual_duration:.1f}s)"
+        "Baseline power measured: %.1fW (%d samples over %.1fs)",
+        mean_power,
+        len(samples),
+        actual_duration,
     )
 
     return result
@@ -134,7 +138,7 @@ def invalidate_baseline_cache(device_index: int | None = None) -> None:
     """
     if device_index is not None:
         _baseline_cache.pop(device_index, None)
-        logger.debug(f"Baseline cache invalidated for device {device_index}")
+        logger.debug("Baseline cache invalidated for device %d", device_index)
     else:
         _baseline_cache.clear()
         logger.debug("Baseline cache cleared (all devices)")

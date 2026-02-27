@@ -34,7 +34,7 @@ def run_experiment(
     backend: str | None = None,
     n: int = 100,
     dataset: str = "aienergyscore",
-    **kwargs: object,
+    **kwargs: Any,
 ) -> ExperimentResult: ...
 
 
@@ -45,7 +45,7 @@ def run_experiment(
     backend: str | None = None,
     n: int = 100,
     dataset: str = "aienergyscore",
-    **kwargs: object,
+    **kwargs: Any,
 ) -> ExperimentResult:
     """Run a single LLM inference efficiency experiment.
 
@@ -106,12 +106,12 @@ def _to_study_config(
     backend: str | None = None,
     n: int = 100,
     dataset: str = "aienergyscore",
-    **kwargs: object,
+    **kwargs: Any,
 ) -> StudyConfig:
     """Convert any run_experiment() input form to a degenerate StudyConfig."""
     if isinstance(config, ExperimentConfig):
         experiment = config
-    elif isinstance(config, str | Path):
+    elif isinstance(config, (str, Path)):
         experiment = load_experiment_config(path=Path(config))
     elif config is None:
         if model is None:
@@ -136,10 +136,20 @@ def _to_study_config(
 def _run(study: StudyConfig) -> StudyResult:
     """Internal runner -- always receives StudyConfig, returns StudyResult.
 
-    M1 stub: raises NotImplementedError. Phase 4 (PyTorch Backend) implements
-    the real measurement engine.
+    Calls run_preflight() then get_backend().run() for each experiment config.
+    Pre-flight runs once per experiment (each config may differ in model/backend).
+    Errors propagate naturally -- PreFlightError and BackendError are not caught here.
     """
-    raise NotImplementedError(
-        "Core measurement engine not yet implemented (Phase 4). "
-        "This stub exists to satisfy the type contract."
-    )
+    from llenergymeasure.core.backends import get_backend
+    from llenergymeasure.orchestration.preflight import run_preflight
+
+    results = []
+    for config in study.experiments:
+        # Pre-flight runs once per experiment config (CM-29, CM-30, CM-31)
+        run_preflight(config)
+
+        backend = get_backend(config.backend)
+        result = backend.run(config)
+        results.append(result)
+
+    return StudyResult(experiments=results, name=study.name)

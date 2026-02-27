@@ -1,16 +1,8 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Dry run (preview changes without releasing)'
-        type: boolean
-        default: false
-      prerelease:
-        description: 'Pre-release type (alpha, beta, rc) or leave empty for stable'
-        type: string
-        default: ''
+  push:
+    tags: ["v*"]
 
 jobs:
   release:
@@ -20,60 +12,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.12"
 
-      - name: Install commitizen
-        run: pip install commitizen
-
-      - name: Configure git
+      - name: Build package
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Preview version bump (dry run)
-        if: inputs.dry_run == true
-        run: |
-          echo "=== DRY RUN: Preview of version bump ==="
-          cz bump --dry-run --yes
-          echo ""
-          echo "=== Current VERSION file ==="
-          cat VERSION
-          echo ""
-          echo "=== No changes made (dry run) ==="
-
-      - name: Bump version and update changelog
-        if: inputs.dry_run != true
-        id: bump
-        run: |
-          if [ -n "${{ inputs.prerelease }}" ]; then
-            echo "Creating pre-release: ${{ inputs.prerelease }}"
-            cz bump --yes --prerelease ${{ inputs.prerelease }} --changelog
-          else
-            echo "Creating stable release"
-            cz bump --yes --changelog
-          fi
-          NEW_VERSION=$(cat VERSION)
-          echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
-          echo "New version: ${NEW_VERSION}"
-
-      - name: Push changes and tags
-        if: inputs.dry_run != true
-        run: |
-          git push origin main --follow-tags
+          pip install build
+          python -m build
 
       - name: Create GitHub Release
-        if: inputs.dry_run != true
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.bump.outputs.version }}
-          name: v${{ steps.bump.outputs.version }}
-          body_path: CHANGELOG.md
           draft: false
-          prerelease: ${{ inputs.prerelease != '' }}
+          generate_release_notes: true

@@ -1,40 +1,59 @@
-"""Energy measurement backends for LLM Bench.
+"""Energy measurement backends for llenergymeasure.
 
-This module provides a plugin registry for energy measurement backends.
-Each backend implements the EnergyBackend protocol.
+Provides a plugin registry (legacy) and the v2.0 ``select_energy_backend()``
+auto-selection function.
 
-Usage:
-    # Get the default backend
+Backend priority for auto-selection: Zeus > NVML > CodeCarbon > None.
+
+Usage (v2.0 API)::
+
+    from llenergymeasure.core.energy_backends import select_energy_backend
+
+    # Auto-select best available backend
+    backend = select_energy_backend("auto")
+
+    # Explicit backend (raises ConfigError if unavailable)
+    backend = select_energy_backend("zeus")
+
+    # Intentional disable — returns None, no warnings
+    backend = select_energy_backend(None)
+
+    if backend is not None:
+        tracker = backend.start_tracking()
+        # ... run inference ...
+        measurement = backend.stop_tracking(tracker)
+
+Legacy registry usage::
+
     backend = get_backend("codecarbon")
 
-    # Use the backend
-    tracker = backend.start_tracking()
-    # ... run inference ...
-    metrics = backend.stop_tracking(tracker)
-
-    # List available backends
-    backends = list_backends()
-
-    # Register a custom backend
-    register_backend("custom", CustomBackend)
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import importlib.util
+from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.core.energy_backends.base import EnergyBackend
-from llenergymeasure.core.energy_backends.codecarbon import (
-    CodeCarbonBackend,
-    CodeCarbonData,
-    warm_up,
-)
-from llenergymeasure.exceptions import ConfigurationError
+from llenergymeasure.core.energy_backends.nvml import EnergyMeasurement, NVMLBackend
+from llenergymeasure.core.energy_backends.zeus import ZeusBackend
+from llenergymeasure.exceptions import ConfigError, ConfigurationError
 
 if TYPE_CHECKING:
-    pass
+    from llenergymeasure.core.energy_backends.codecarbon import (
+        CodeCarbonBackend as CodeCarbonBackend,
+    )
+    from llenergymeasure.core.energy_backends.codecarbon import (
+        CodeCarbonData as CodeCarbonData,
+    )
+    from llenergymeasure.core.energy_backends.codecarbon import (
+        warm_up as warm_up,
+    )
 
-# Registry of available backends
+# ---------------------------------------------------------------------------
+# Legacy plugin registry
+# ---------------------------------------------------------------------------
+
 _BACKENDS: dict[str, type[EnergyBackend]] = {}
 
 
@@ -53,7 +72,7 @@ def register_backend(name: str, backend_cls: type[EnergyBackend]) -> None:
     _BACKENDS[name] = backend_cls
 
 
-def get_backend(name: str, **kwargs: object) -> EnergyBackend:
+def get_backend(name: str, **kwargs: Any) -> EnergyBackend:
     """Get an instance of a registered backend.
 
     Args:
@@ -90,21 +109,132 @@ def clear_backends() -> None:
 
 
 def _register_default_backends() -> None:
-    """Register built-in backends."""
-    register_backend("codecarbon", CodeCarbonBackend)
+    """Register built-in backends in the legacy registry."""
+    register_backend("nvml", NVMLBackend)
+    # CodeCarbon requires torch — register lazily only if available
+    if importlib.util.find_spec("codecarbon") is not None:
+        from llenergymeasure.core.energy_backends.codecarbon import CodeCarbonBackend
+
+        register_backend("codecarbon", CodeCarbonBackend)
 
 
-# Auto-register default backends on import
+# Auto-register on import
 _register_default_backends()
+
+
+# ---------------------------------------------------------------------------
+# v2.0 auto-selection API
+# ---------------------------------------------------------------------------
+
+_INSTALL_GUIDANCE: dict[str, str] = {
+    "zeus": "pip install 'llenergymeasure[zeus]'",
+    "nvml": "pip install 'llenergymeasure'  # nvidia-ml-py is a base dependency",
+    "codecarbon": "pip install 'llenergymeasure[codecarbon]'",
+}
+
+
+def select_energy_backend(explicit: str | None) -> EnergyBackend | None:
+    """Select and return an energy measurement backend.
+
+    This is the primary v2.0 API for backend selection.
+
+    Selection rules:
+    - ``None``: intentional disable — returns ``None`` immediately, no warnings.
+    - Specific name (``"nvml"``, ``"zeus"``, ``"codecarbon"``): instantiate that
+      backend; raise ``ConfigError`` with install guidance if unavailable.
+    - ``"auto"``: probe in priority order (Zeus > NVML > CodeCarbon); return the
+      first available backend, or ``None`` if nothing is available (CPU-only machine).
+
+    Args:
+        explicit: Backend name, ``"auto"``, or ``None`` to disable energy measurement.
+
+    Returns:
+        An EnergyBackend instance, or ``None`` if measurement is unavailable/disabled.
+
+    Raises:
+        ConfigError: When an explicitly requested backend is not available.
+    """
+    # Intentional disable — null in YAML maps to Python None
+    if explicit is None:
+        return None
+
+    if explicit == "auto":
+        return _auto_select()
+
+    # Explicit backend requested
+    backend = _instantiate(explicit)
+    if not backend.is_available():
+        guidance = _INSTALL_GUIDANCE.get(explicit, f"pip install llenergymeasure[{explicit}]")
+        raise ConfigError(
+            f"Energy backend '{explicit}' is not available on this system.\n"
+            f"Install with: {guidance}"
+        )
+    return backend
+
+
+def _auto_select() -> EnergyBackend | None:
+    """Auto-select best available backend: Zeus > NVML > CodeCarbon > None."""
+    # Zeus — preferred: hardware energy register accuracy
+    if importlib.util.find_spec("zeus") is not None:
+        backend = ZeusBackend()
+        if backend.is_available():
+            return backend
+
+    # NVML — always available on GPU machines (nvidia-ml-py is a base dep)
+    nvml_backend = NVMLBackend()
+    if nvml_backend.is_available():
+        return nvml_backend
+
+    # CodeCarbon — software fallback
+    if importlib.util.find_spec("codecarbon") is not None:
+        from llenergymeasure.core.energy_backends.codecarbon import CodeCarbonBackend
+
+        cc_backend = CodeCarbonBackend()
+        if cc_backend.is_available():
+            return cc_backend
+
+    # CPU-only or no energy measurement available
+    return None
+
+
+def _instantiate(name: str) -> EnergyBackend:
+    """Instantiate a named backend.
+
+    Args:
+        name: One of ``"nvml"``, ``"zeus"``, ``"codecarbon"``.
+
+    Returns:
+        Backend instance (not yet checked for availability).
+
+    Raises:
+        ConfigError: If the name is not a known backend.
+    """
+    if name == "nvml":
+        return NVMLBackend()
+    if name == "zeus":
+        return ZeusBackend()
+    if name == "codecarbon":
+        from llenergymeasure.core.energy_backends.codecarbon import CodeCarbonBackend
+
+        return CodeCarbonBackend()
+
+    known = ", ".join(["nvml", "zeus", "codecarbon", "auto"])
+    raise ConfigError(
+        f"Unknown energy backend: '{name}'. Valid options are: {known}, or null to disable."
+    )
 
 
 __all__ = [
     "CodeCarbonBackend",
     "CodeCarbonData",
     "EnergyBackend",
+    "EnergyMeasurement",
+    "NVMLBackend",
+    "ZeusBackend",
     "clear_backends",
     "get_backend",
     "list_backends",
     "register_backend",
+    "select_energy_backend",
     "warm_up",
 ]

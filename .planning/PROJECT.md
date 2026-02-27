@@ -10,20 +10,20 @@ Dual-product vision: CLI tool for the research community (v2.0), web platform fo
 
 Researchers can run broad parameter sweeps across deployment configurations and produce publishable, methodology-sound measurements showing which implementation choices matter most for LLM energy efficiency.
 
-## Current Milestone: M1 — Core Single-Experiment
+## Current Milestone: M2 — Study / Sweep
 
-**Goal:** `llem run --model meta-llama/Llama-3.1-8B` produces a complete `ExperimentResult` with energy measurement, baseline correction, warmup, FLOPs, environment snapshot, JSON + Parquet output. PyTorch backend, local execution only.
+**Goal:** `llem run study.yaml` runs a multi-experiment sweep with subprocess isolation, cycle ordering, thermal gaps, and a checkpoint manifest — producing per-experiment `ExperimentResult` files and a `StudyResult` summary. Single backend (PyTorch) only in M2.
 
 **Target features:**
-- Library-first restructure (`import llenergymeasure`, `__init__.py` public API)
-- `ExperimentConfig` composition model (Pydantic v2, backend sections, field renames)
-- PyTorch inference backend (with P0 model_kwargs bug fix)
-- Energy measurement (NVML base, Zeus optional, CodeCarbon optional)
-- Baseline power + warmup + FLOPs estimation
-- `ExperimentResult` schema (all v2.0 fields)
-- `llem run` + `llem config` + `llem --version` CLI
-- Plain text output, pre-flight checks, error hierarchy
-- Dead code removal (1,524 lines), test infrastructure
+- `StudyConfig` + `ExecutionConfig` resolved from sweep YAML
+- Sweep grammar: dotted notation `pytorch.batch_size: [1, 8]` grid expansion
+- `StudyRunner` with `multiprocessing.get_context("spawn")` subprocess isolation
+- IPC via `Pipe` for result return + `Queue` for progress events
+- `StudyManifest` always-on checkpoint after each experiment
+- Cycle ordering (`sequential` | `interleaved`), thermal gap management
+- `StudyResult` + `run_study()` public API
+- CLI study flags (`--cycles`, `--no-gaps`, `--order`)
+- Study output layout: `{name}_{timestamp}/` with per-experiment subdirs + manifest
 
 ## Requirements
 
@@ -46,29 +46,28 @@ Researchers can run broad parameter sweeps across deployment configurations and 
 
 ### Active
 
-<!-- M1 scope — Core Single-Experiment, PyTorch local. Full list in .product/REQUIREMENTS.md -->
+<!-- M2 scope — Study/Sweep execution. Full list in .planning/REQUIREMENTS.md -->
 
-See `.product/REQUIREMENTS.md` for authoritative M1 requirement list (~90 requirements tagged M1).
+See `.planning/REQUIREMENTS.md` for authoritative M2 requirement list (24 requirements).
 
-**Library API:** LA-01 through LA-10
-**Config:** CFG-01 through CFG-10, CFG-17 through CFG-26
-**Core Measurement:** CM-01, CM-04 through CM-06, CM-11 through CM-34
-**Results:** RES-01 through RES-12, RES-16 through RES-21
-**CLI:** CLI-01 through CLI-04, CLI-06 through CLI-14
-**Infrastructure:** STU-05, INF-01 through INF-12, INF-18 through INF-20
+**Config/Sweep:** CFG-11 through CFG-16
+**Study Execution:** STU-01 through STU-04, STU-06, STU-07, STU-NEW-01
+**Manifest:** STU-08, STU-09
+**Results:** RES-13 through RES-15, RES-NEW-01
+**CLI:** CLI-05, CLI-11
+**Core Measurement:** CM-10
+**Library API:** LA-02, LA-05
 
 ### Out of Scope
 
-<!-- Explicit boundaries for M1. -->
+<!-- Explicit boundaries for M2. -->
 
-- Study/sweep execution (M2) — needs single experiment working first
-- Docker multi-backend (M3) — PyTorch local only in M1
-- Traffic simulation, streaming latency, study resume (M4) — advanced features
+- Docker multi-backend (M3) — single backend only in M2
+- `--resume` flag (M4) — manifest is always-on but resume is deferred
+- IPC file-based fallback — Pipe-only; dropped from scope
+- Traffic simulation, streaming latency (M4) — advanced features
 - lm-eval integration (v3.0) — quality metrics not v2.0 scope
 - Web platform (v4.0) — separate product, separate repo
-- Bootstrap CIs (v2.1) — raw measurement is primary
-- Singularity/Apptainer runner (v2.1+) — NotImplementedError in v2.0
-- Shareability/upload (post-v2.0) — trust model unresolved
 
 ## Context
 
@@ -107,4 +106,4 @@ See `.product/REQUIREMENTS.md` for authoritative M1 requirement list (~90 requir
 | lm-eval deferred to v3.0 | Quality metrics not essential for v2.0 scope | ✓ Good |
 
 ---
-*Last updated: 2026-02-26 after M1 milestone initialisation*
+*Last updated: 2026-02-27 after M2 milestone initialisation*

@@ -19,7 +19,7 @@ from llenergymeasure.cli.display import (
     show_raw_result,
 )
 from llenergymeasure.exceptions import AggregationError
-from llenergymeasure.results.aggregation import aggregate_results, calculate_efficiency_metrics
+from llenergymeasure.results.aggregation import aggregate_results
 from llenergymeasure.results.repository import FileSystemRepository
 
 results_app = typer.Typer(help="Results inspection commands", invoke_without_command=True)
@@ -164,11 +164,20 @@ def aggregate_one(
         )
 
         # Show summary
-        metrics = calculate_efficiency_metrics(aggregated)
+        tps = (
+            aggregated.total_tokens / aggregated.duration_sec
+            if aggregated.duration_sec > 0
+            else 0.0
+        )
+        tpj = (
+            aggregated.total_tokens / aggregated.total_energy_j
+            if aggregated.total_energy_j > 0
+            else 0.0
+        )
         console.print(f"  Tokens: {aggregated.total_tokens:,}")
         console.print(f"  Energy: {aggregated.total_energy_j:.2f} J")
-        console.print(f"  Throughput: {metrics['tokens_per_second']:.2f} tok/s")
-        console.print(f"  Efficiency: {metrics['tokens_per_joule']:.2f} tok/J")
+        console.print(f"  Throughput: {tps:.2f} tok/s")
+        console.print(f"  Efficiency: {tpj:.2f} tok/J")
 
         # Show streaming latency if present
         if aggregated.latency_stats is not None:

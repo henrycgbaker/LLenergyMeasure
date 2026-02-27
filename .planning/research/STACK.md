@@ -663,30 +663,163 @@ The following stack elements have been reviewed and no change is warranted:
 
 ---
 
+## 12. M2 Study Execution: New Capabilities Stack
+
+**Updated:** 2026-02-27 — focused stack for M2 (study/sweep execution). No new dependencies
+required; all capabilities use Python stdlib + existing project dependencies.
+
+### Subprocess Isolation (NEW in M2)
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `multiprocessing.get_context("spawn")` | Python stdlib (3.10+) | Spawn isolated child process per experiment | PyTorch docs mandate `spawn` (not `fork`) for CUDA; `get_context()` avoids global side-effects on other libraries |
+| `multiprocessing.Pipe(duplex=False)` | Python stdlib (3.10+) | Return `ExperimentResult` from child to parent | Faster than Queue (Queue adds lock overhead); single producer/consumer — Pipe is the correct primitive |
+| `multiprocessing.Queue` | Python stdlib (3.10+) | Progress events from child to parent, concurrent with `p.join()` | Supports daemon thread drain while parent blocks; sentinel pattern handles SIGKILL path cleanly |
+| `threading.Thread` | Python stdlib (3.10+) | Drain progress Queue in parent while blocked at `p.join()` | Main thread blocks at `p.join()`; daemon thread enables live progress updates |
+
+**Confirmed peer pattern:** optimum-benchmark (`launcher=process`) sets multiprocessing start
+method to `spawn` — confirmed from GitHub issue logs showing `[process][INFO] - + Setting
+multiprocessing start method to spawn`. This is the de facto industry standard for GPU
+subprocess isolation.
+
+**Critical: use `get_context("spawn")`, NOT `set_start_method("spawn")`:** The context form
+is scoped to `StudyRunner` only. The global form conflicts with Datasets, Accelerate, and other
+libraries that also call `set_start_method` — raises `RuntimeError: context already set`.
+
+**Critical: `daemon=False` on worker process:** With `daemon=True`, `Ctrl+C` kills the daemon
+immediately and CUDA contexts do not teardown cleanly. With `daemon=False`, `StudyRunner` calls
+`p.join()` explicitly — orphaned processes are prevented in normal operation, and CUDA teardown
+is clean on the signal path.
+
+**Critical: `p.kill()` not `p.terminate()` for timeouts:** SIGTERM (`p.terminate()`) may be
+ignored by a GPU kernel stuck in a CUDA operation. CUDA signal handling is not re-entrant.
+SIGKILL (`p.kill()`) guarantees termination.
+
+**Pipe buffer concern:** Linux OS pipe buffer is ~64KB. If `ExperimentResult.model_dump_json()`
+exceeds 64KB before parent reads it, sender blocks → deadlock with `p.join()`. Current
+`ExperimentResult` is well under 64KB for v2.0 fields. The `_send_result()` fallback (write to
+temp file >1MB, send path via Pipe) handles the rare large-result case. No reader thread needed.
+
+**What NOT to use:**
+
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| `multiprocessing.fork` (Linux default) | CUDA runtime is not fork-safe — `RuntimeError: Cannot re-initialize CUDA in forked subprocess` | `multiprocessing.get_context("spawn")` |
+| `subprocess.run(["llem", "experiment", ...])` | CLI re-entry (v1.x pattern): no timeout, exit-code-only errors, filesystem-only IPC, CLI startup overhead | `mp_ctx.Process(target=_run_experiment_worker, ...)` |
+| `ProcessPoolExecutor` | Pool reuses processes — CUDA state bleeds between experiments | Fresh `mp_ctx.Process` per experiment |
+| `daemon=True` on worker | Killed on Ctrl+C before CUDA teardown | `daemon=False` (default) + explicit `p.join()` |
+| `p.terminate()` for timeouts | Ignored by hung CUDA kernels | `p.kill()` (SIGKILL) |
+
+### Sweep Grid Expansion (NEW in M2)
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `itertools.product` | Python stdlib (3.10+) | Cartesian product over sweep dimensions | Zero dependency; lazy iterator; correct; standard for grid sweeps in all ML frameworks |
+
+**Implementation:** `itertools.product(*[values for values in sweep_dict.values()])` with
+`zip(sweep_dict.keys(), combo)` to reconstruct named parameter dicts. Dotted key parsing uses
+`key.split(".", 1)` (first dot only) to handle nested backend params.
+
+**No external library:** ConfigSpace has declarative constraint syntax but 0 of 5 peer tools
+use it (W&B, Hydra, Ray Tune, Optuna, lm-eval all implement constraints via their own
+validators). Pydantic `@model_validator` is the standard pattern. itertools.product handles all
+grid expansion; constraints handled at ExperimentConfig construction time.
+
+### Manifest Checkpointing (NEW in M2)
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `pydantic.BaseModel.model_dump_json()` | 2.12.5 (installed) | Serialise `StudyManifest` to JSON | Already project dependency; consistent with ExperimentResult serialisation |
+| `os.replace()` | Python stdlib (3.10+) | Atomic manifest write (POSIX rename) | Reader always sees complete JSON, never partial write |
+| `tempfile.mkstemp(dir=path.parent)` | Python stdlib (3.10+) | Temp file for atomic rename | Same-directory temp ensures rename stays on same filesystem (no cross-device copy) |
+
+**Atomic write pattern (verified locally):**
+```python
+import os, tempfile
+from pathlib import Path
+
+def _atomic_write(path: Path, content: str) -> None:
+    fd, tmp = tempfile.mkstemp(suffix=".json", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+        os.replace(tmp, str(path))   # POSIX atomic rename(2)
+    except Exception:
+        try: os.unlink(tmp)
+        except OSError: pass
+        raise
+```
+
+**Not needed:** `atomicwrites` PyPI package adds `fsync` before rename (crash-safe on power
+failure). Benchmark manifests do not require power-failure guarantees — if the host loses power
+mid-study, the study re-runs. stdlib `os.replace()` is sufficient.
+
+### Thermal Gap Management (EXISTING PATTERN, NEW WIRING in M2)
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `time.sleep()` | Python stdlib (3.10+) | Fixed thermal gap between experiments | Simplest correct implementation; parent deliberately blocks during gap |
+
+**Implementation:** Single `time.sleep(gap_seconds)` in parent between `_run_one()` calls.
+Rich progress display during gap uses a spinner or countdown — the existing
+`display.show_thermal_gap(gap)` call handles this; implementation can use 1s sleep loop
+with Rich `Progress` updates if live countdown is desired.
+
+**No adaptive logic in v2.0:** Gap values are fixed from `execution.config_gap_seconds`
+(default 60s) and `execution.cycle_gap_seconds` (default 300s). GPU-temperature-based adaptive
+gaps are a v2.x research question. `psutil` (already installed, 7.2.1) provides CPU/system
+temperature if adaptive gaps are ever added.
+
+### New Module Layout (M2, no new dependencies)
+
+```
+src/llenergymeasure/
+└── study/                          ← NEW package (M2)
+    ├── __init__.py
+    ├── runner.py                    ← StudyRunner (multiprocessing.Process per experiment)
+    ├── grid.py                      ← expand_grid() (itertools.product + dotted key parsing)
+    └── manifest.py                  ← StudyManifest, ManifestWriter (atomic JSON writes)
+```
+
+**Integration points:**
+- `StudyRunner._run_one()` calls `ExperimentOrchestrator(config).run()` inside child — M1
+  single-experiment path, unchanged
+- `StudyConfig` in `config/models.py` gains `execution: ExecutionConfig` field (M1 stub exists)
+- `run_study()` in `_api.py` currently raises `NotImplementedError` — M2 implements via `StudyRunner`
+- `ManifestWriter` writes to `results/{study_name}_{timestamp}/study_manifest.json`
+
+### Version Compatibility (M2 capabilities)
+
+| Package | Installed | Min Required | Notes |
+|---------|-----------|-------------|-------|
+| Python | 3.12.12 | 3.10 (pyproject.toml) | `get_context("spawn")` available since 3.4 |
+| pydantic | 2.12.5 | ≥2.0 | `model_dump_json()` is Pydantic v2 API — verified working |
+| rich | 14.2.0 | ≥10.0 | `Progress`, `Live`, spinner stable |
+| loguru | 0.7.3 | any | Study lifecycle logging |
+| pyarrow | 23.0.0 | ≥14.0 | Parquet export for study results |
+
+**No new pyproject.toml entries required for M2.** All subprocess isolation, grid expansion,
+manifest checkpointing, and thermal gap capabilities use Python stdlib + existing dependencies.
+
+---
+
 ## Sources
 
+- [PyTorch Multiprocessing Best Practices](https://docs.pytorch.org/docs/stable/notes/multiprocessing.html) — `spawn` mandate for CUDA — HIGH confidence
+- [Python multiprocessing docs](https://docs.python.org/3/library/multiprocessing.html) — Pipe/Queue semantics, buffer characteristics — HIGH confidence
+- [optimum-benchmark GitHub](https://github.com/huggingface/optimum-benchmark) — `launcher=process` spawn pattern — MEDIUM confidence (README + issue logs)
+- [Python itertools docs](https://docs.python.org/3/library/itertools.html) — `product()` semantics — HIGH confidence
+- Local verification — `get_context("spawn")`, `os.replace()`, `itertools.product`, `model_dump_json()` verified in Python 3.12.12 — HIGH confidence
+- `.product/designs/experiment-isolation.md` — Full `StudyRunner` pattern — HIGH confidence
+- `.product/designs/study-yaml.md` — Sweep grammar, dotted key notation — HIGH confidence
+- `.product/designs/study-resume.md` — `StudyManifest` schema, `ManifestWriter` — HIGH confidence
 - Zeus v0.13.1 — [https://github.com/ml-energy/zeus](https://github.com/ml-energy/zeus) — HIGH confidence
-- zeus PyPI — [https://pypi.org/project/zeus/](https://pypi.org/project/zeus/) — HIGH confidence
-- zeus-ml migration note — [https://pypi.org/project/zeus-ml/](https://pypi.org/project/zeus-ml/) — HIGH confidence
 - CodeCarbon 3.2.2 — [https://pypi.org/project/codecarbon/](https://pypi.org/project/codecarbon/) — HIGH confidence
 - vLLM 0.15.1 — [https://pypi.org/project/vllm/](https://pypi.org/project/vllm/) — HIGH confidence
 - TensorRT-LLM 1.3.0rc4 — [https://pypi.org/project/tensorrt-llm/](https://pypi.org/project/tensorrt-llm/) — HIGH confidence
-- PyTorch 2.10.0 — [https://github.com/pytorch/pytorch/releases](https://github.com/pytorch/pytorch/releases) — HIGH confidence
-- Transformers v5 — [https://huggingface.co/blog/transformers-v5](https://huggingface.co/blog/transformers-v5) — HIGH confidence
-- SGLang PyTorch ecosystem — [https://pytorch.org/blog/sglang-joins-pytorch/](https://pytorch.org/blog/sglang-joins-pytorch/) — HIGH confidence
-- SGLang production scale — [https://github.com/sgl-project/sglang](https://github.com/sgl-project/sglang) — HIGH confidence
-- SGLang vs vLLM benchmark — [https://research.aimultiple.com/inference-engines/](https://research.aimultiple.com/inference-engines/) — MEDIUM confidence
-- uv vs Poetry 2026 — [https://cuttlesoft.com/blog/2026/01/27/python-dependency-management-in-2026/](https://cuttlesoft.com/blog/2026/01/27/python-dependency-management-in-2026/) — MEDIUM confidence
-- Poetry vs uv downloads — [https://medium.com/@hitorunajp/poetry-vs-uv-which-python-package-manager-should-you-use-in-2025-4212cb5e0a14](https://medium.com/@hitorunajp/poetry-vs-uv-which-python-package-manager-should-you-use-in-2025-4212cb5e0a14) — MEDIUM confidence
-- MLOps uv migration — [https://mlops.community/poetry-was-good-uv-is-better-an-mlops-migration-story/](https://mlops.community/poetry-was-good-uv-is-better-an-mlops-migration-story/) — MEDIUM confidence
 - scipy.stats.bootstrap — [https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html) — HIGH confidence
-- cyclopts vs Typer — [https://cyclopts.readthedocs.io/en/latest/vs_typer/README.html](https://cyclopts.readthedocs.io/en/latest/vs_typer/README.html) — MEDIUM confidence
-- Scaphandre accuracy concern — [https://arxiv.org/abs/2511.05597](https://arxiv.org/abs/2511.05597) — MEDIUM confidence
-- GPU testing patterns — [https://innereye-deeplearning.readthedocs.io/md/testing.html](https://innereye-deeplearning.readthedocs.io/md/testing.html) — MEDIUM confidence
-- Pydantic + Hydra comparison — [https://towardsdatascience.com/configuration-management-for-model-training-experiments-using-pydantic-and-hydra-d14a6ae84c13/](https://towardsdatascience.com/configuration-management-for-model-training-experiments-using-pydantic-and-hydra-d14a6ae84c13/) — MEDIUM confidence
-- Prior internal research — `.product/research/03-codecarbon-zeus-energy.md`, `05-zeus-deep-dive.md`, `08-energy-plugin-architecture.md` — HIGH confidence (own codebase analysis)
 
 ---
 
 *Stack audit for: LLenergyMeasure v2.0*
-*Audited: 2026-02-25*
+*Audited: 2026-02-25 (original); M2 addendum: 2026-02-27*

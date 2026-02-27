@@ -6,15 +6,8 @@ state management, and other shared CLI utilities.
 
 from __future__ import annotations
 
-import json
 import re
-from datetime import datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from llenergymeasure.state.experiment_state import ExperimentState, StateManager
-
+from typing import Any
 
 # Re-export deep_merge from config.loader for backwards compatibility
 from llenergymeasure.config.loader import deep_merge
@@ -23,7 +16,6 @@ __all__ = [
     "apply_cli_overrides",
     "deep_merge",
     "parse_duration",
-    "update_process_state_from_markers",
 ]
 
 
@@ -98,55 +90,6 @@ def apply_cli_overrides(
         tracked_overrides[key] = {"new": value, "original": original}
 
     return config_dict, tracked_overrides
-
-
-def update_process_state_from_markers(
-    state: ExperimentState,
-    state_manager: StateManager,
-    results_dir: Path,
-) -> ExperimentState:
-    """Update experiment state by scanning completion markers.
-
-    Args:
-        state: Current experiment state.
-        state_manager: State manager for persistence.
-        results_dir: Base results directory.
-
-    Returns:
-        Updated experiment state.
-    """
-    from llenergymeasure.constants import COMPLETION_MARKER_PREFIX
-    from llenergymeasure.state.experiment_state import ProcessProgress, ProcessStatus
-
-    raw_dir = results_dir / "raw" / state.experiment_id
-
-    for i in range(state.num_processes):
-        marker_path = raw_dir / f"{COMPLETION_MARKER_PREFIX}{i}"
-        if marker_path.exists():
-            try:
-                marker_data = json.loads(marker_path.read_text())
-                state.process_progress[i] = ProcessProgress(
-                    process_index=i,
-                    status=ProcessStatus.COMPLETED,
-                    gpu_id=marker_data.get("gpu_id"),
-                    completed_at=datetime.fromisoformat(marker_data["timestamp"]),
-                )
-            except Exception:
-                # Marker exists but couldn't parse - still mark as completed
-                state.process_progress[i] = ProcessProgress(
-                    process_index=i,
-                    status=ProcessStatus.COMPLETED,
-                )
-        elif i not in state.process_progress:
-            # No marker and not previously tracked = failed or didn't start
-            state.process_progress[i] = ProcessProgress(
-                process_index=i,
-                status=ProcessStatus.FAILED,
-                error_message="No completion marker found",
-            )
-
-    state_manager.save(state)
-    return state
 
 
 def parse_duration(duration_str: str) -> float:

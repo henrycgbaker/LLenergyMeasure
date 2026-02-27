@@ -1,11 +1,8 @@
-"""Backend-specific configuration models (v2.0 schema, M1 minimal).
+"""Backend-specific configuration models (v2.0 schema).
 
 Each backend section uses None-as-default: all fields default to None, meaning
 "use the backend's own default at execution time". This makes it explicit when
 a researcher has set a value versus when the backend's built-in default applies.
-
-full parameter completeness audit is Phase 4.1 — this file covers only the
-fields the M1 PyTorch backend will actively use.
 
 Usage in YAML:
     backend: pytorch
@@ -31,7 +28,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 # =============================================================================
-# PyTorch Backend Configuration (M1 minimal)
+# PyTorch Backend Configuration (v2.0)
 # =============================================================================
 
 
@@ -42,24 +39,132 @@ class PyTorchConfig(BaseModel):
     This distinguishes explicit researcher choices from backend defaults,
     which is important for result reproducibility and experiment attribution.
 
-    M1 scope: fields used by the M1 PyTorch backend implementation.
-    Phase 4.1 will audit and expand based on what researchers actually need.
+    Fields cover the complete researcher-useful parameter space for
+    AutoModelForCausalLM.from_pretrained() and model.generate().
     """
 
     model_config = {"extra": "forbid"}
 
+    # -------------------------------------------------------------------------
+    # Batching
+    # -------------------------------------------------------------------------
+
     batch_size: int | None = Field(default=None, ge=1, description="Batch size (None -> 1)")
-    attn_implementation: Literal["sdpa", "flash_attention_2", "eager"] | None = Field(
-        default=None, description="Attention implementation (None -> sdpa)"
-    )
+
+    # -------------------------------------------------------------------------
+    # Attention implementation
+    # -------------------------------------------------------------------------
+
+    attn_implementation: (
+        Literal["sdpa", "flash_attention_2", "flash_attention_3", "eager"] | None
+    ) = Field(default=None, description="Attention implementation (None -> sdpa)")
+
+    # -------------------------------------------------------------------------
+    # Compilation
+    # -------------------------------------------------------------------------
+
     torch_compile: bool | None = Field(
         default=None, description="Enable torch.compile (None -> False)"
     )
+    torch_compile_mode: str | None = Field(
+        default=None,
+        description="torch.compile mode: 'default', 'reduce-overhead', 'max-autotune' (None -> 'default')",
+    )
+    torch_compile_backend: str | None = Field(
+        default=None, description="torch.compile backend (None -> 'inductor')"
+    )
+
+    # -------------------------------------------------------------------------
+    # BitsAndBytes quantization
+    # -------------------------------------------------------------------------
+
     load_in_4bit: bool | None = Field(default=None, description="BitsAndBytes 4-bit quantization")
     load_in_8bit: bool | None = Field(default=None, description="BitsAndBytes 8-bit quantization")
+    bnb_4bit_compute_dtype: Literal["float16", "bfloat16", "float32"] | None = Field(
+        default=None,
+        description="Compute dtype for 4-bit (None -> float32, usually want bfloat16)",
+    )
+    bnb_4bit_quant_type: Literal["nf4", "fp4"] | None = Field(
+        default=None, description="4-bit quantization type (None -> 'nf4')"
+    )
+    bnb_4bit_use_double_quant: bool | None = Field(
+        default=None, description="Double quantization saves ~0.4 bits/param (None -> False)"
+    )
+
+    # -------------------------------------------------------------------------
+    # KV caching
+    # -------------------------------------------------------------------------
+
+    use_cache: bool | None = Field(
+        default=None, description="Use KV cache during generation (None -> True)"
+    )
+    cache_implementation: Literal["static", "offloaded_static", "sliding_window"] | None = Field(
+        default=None,
+        description="KV cache strategy; 'static' enables CUDA graphs (None -> dynamic)",
+    )
+
+    # -------------------------------------------------------------------------
+    # Beam search
+    # -------------------------------------------------------------------------
+
+    num_beams: int | None = Field(
+        default=None, ge=1, description="Beam search width (None -> 1, greedy/sampling)"
+    )
+    early_stopping: bool | None = Field(
+        default=None, description="Stop beam search when all beams hit EOS (None -> False)"
+    )
+    length_penalty: float | None = Field(
+        default=None,
+        description="Beam length penalty: >1 shorter, <1 longer (None -> 1.0)",
+    )
+
+    # -------------------------------------------------------------------------
+    # N-gram repetition
+    # -------------------------------------------------------------------------
+
+    no_repeat_ngram_size: int | None = Field(
+        default=None, ge=0, description="Prevent n-gram repetition (None -> 0, disabled)"
+    )
+
+    # -------------------------------------------------------------------------
+    # Speculative decoding (prompt-lookup — draft model via passthrough_kwargs)
+    # -------------------------------------------------------------------------
+
+    prompt_lookup_num_tokens: int | None = Field(
+        default=None,
+        ge=1,
+        description="Prompt-lookup speculative decoding tokens (None -> disabled)",
+    )
+
+    # -------------------------------------------------------------------------
+    # Model loading
+    # -------------------------------------------------------------------------
+
+    device_map: str | None = Field(
+        default=None, description="Device placement strategy (None -> 'auto')"
+    )
+    max_memory: dict | None = Field(
+        default=None,
+        description="Per-device memory limits, e.g. {0: '10GiB', 'cpu': '50GiB'}",
+    )
+    revision: str | None = Field(
+        default=None, description="Model revision/commit hash for reproducibility"
+    )
+    trust_remote_code: bool | None = Field(
+        default=None, description="Trust remote code in model repo (None -> True)"
+    )
+
+    # -------------------------------------------------------------------------
+    # Data parallelism
+    # -------------------------------------------------------------------------
+
     num_processes: int | None = Field(
         default=None, ge=1, description="Data parallel processes via Accelerate (None -> 1)"
     )
+
+    # -------------------------------------------------------------------------
+    # Cross-validators
+    # -------------------------------------------------------------------------
 
     @model_validator(mode="after")
     def validate_quantization(self) -> PyTorchConfig:
@@ -67,6 +172,35 @@ class PyTorchConfig(BaseModel):
         if self.load_in_4bit and self.load_in_8bit:
             raise ValueError(
                 "Cannot use both load_in_4bit=True and load_in_8bit=True simultaneously"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_torch_compile_options(self) -> PyTorchConfig:
+        """torch_compile_mode/torch_compile_backend require torch_compile=True."""
+        if (
+            self.torch_compile_mode is not None or self.torch_compile_backend is not None
+        ) and self.torch_compile is not True:
+            raise ValueError("torch_compile_mode/torch_compile_backend requires torch_compile=True")
+        return self
+
+    @model_validator(mode="after")
+    def validate_bnb_4bit_options(self) -> PyTorchConfig:
+        """bnb_4bit_* fields require load_in_4bit=True."""
+        if (
+            self.bnb_4bit_compute_dtype is not None
+            or self.bnb_4bit_quant_type is not None
+            or self.bnb_4bit_use_double_quant is not None
+        ) and self.load_in_4bit is not True:
+            raise ValueError("bnb_4bit_* fields require load_in_4bit=True")
+        return self
+
+    @model_validator(mode="after")
+    def validate_cache_options(self) -> PyTorchConfig:
+        """cache_implementation requires use_cache to be True or None (not explicitly False)."""
+        if self.cache_implementation is not None and self.use_cache is False:
+            raise ValueError(
+                "cache_implementation requires use_cache to be True or None (not explicitly False)"
             )
         return self
 

@@ -4,9 +4,17 @@ Captures the hardware and software environment at experiment time,
 enabling post-hoc analysis of environmental factors affecting measurements.
 """
 
+import importlib.util
+import logging
+import platform
+import shutil
+import subprocess
+import sys
 from datetime import datetime
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 class GPUEnvironment(BaseModel):
@@ -130,3 +138,144 @@ class EnvironmentMetadata(BaseModel):
             parts.append("container")
 
         return " | ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# EnvironmentSnapshot — full software + hardware context (CM-32)
+# ---------------------------------------------------------------------------
+
+
+class EnvironmentSnapshot(BaseModel):
+    """Full software+hardware environment snapshot for experiment reproducibility."""
+
+    hardware: EnvironmentMetadata
+    python_version: str
+    pip_freeze: str
+    conda_list: str | None = None
+    tool_version: str
+    cuda_version: str | None = None
+    cuda_version_source: str | None = None  # "torch" | "version_txt" | "nvcc" | None
+
+
+# ---------------------------------------------------------------------------
+# CUDA version detection (CM-33) — multi-source fallback chain
+# ---------------------------------------------------------------------------
+
+
+def detect_cuda_version_with_source() -> tuple[str | None, str | None]:
+    """Detect the CUDA version using a fallback chain.
+
+    Returns:
+        Tuple of (version_string, source_name) where source_name is one of:
+        "torch", "version_txt", "nvcc", or None if detection failed.
+    """
+    # Source 1: torch.version.cuda
+    if importlib.util.find_spec("torch") is not None:
+        try:
+            import torch
+
+            cuda_ver = torch.version.cuda
+            if cuda_ver:
+                return cuda_ver, "torch"
+        except Exception:
+            logger.debug("CUDA version: torch source failed", exc_info=True)
+
+    # Source 2: /usr/local/cuda/version.txt or version.json
+    import re
+
+    for version_file in (
+        "/usr/local/cuda/version.txt",
+        "/usr/local/cuda/version.json",
+    ):
+        try:
+            with open(version_file) as f:
+                content = f.read()
+            match = re.search(r"(\d+\.\d+)", content)
+            if match:
+                return match.group(1), "version_txt"
+        except Exception:
+            pass
+
+    # Source 3: nvcc --version
+    try:
+        result = subprocess.run(
+            ["nvcc", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        match = re.search(r"release (\d+\.\d+)", result.stdout)
+        if match:
+            return match.group(1), "nvcc"
+    except Exception:
+        logger.debug("CUDA version: nvcc source failed", exc_info=True)
+
+    # Source 4: Give up
+    return None, None
+
+
+# ---------------------------------------------------------------------------
+# Subprocess helpers
+# ---------------------------------------------------------------------------
+
+
+def _capture_pip_freeze() -> str:
+    """Run `pip freeze` and return output as a string."""
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "freeze"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout
+    except Exception:
+        logger.debug("pip freeze failed", exc_info=True)
+        return ""
+
+
+def _capture_conda_list() -> str | None:
+    """Run `conda list` and return output, or None if conda is not available."""
+    if shutil.which("conda") is None:
+        return None
+    try:
+        result = subprocess.run(
+            ["conda", "list"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout
+    except Exception:
+        logger.debug("conda list failed", exc_info=True)
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Collection function
+# ---------------------------------------------------------------------------
+
+
+def collect_environment_snapshot() -> "EnvironmentSnapshot":
+    """Capture a full environment snapshot before experiment start.
+
+    Collects hardware metadata (via core/environment.py), Python version,
+    pip freeze, optional conda list, tool version, and CUDA version.
+    """
+    # Deferred import to avoid circular dependency (core -> domain -> core)
+    # Deferred import of __version__ to avoid circular import
+    from llenergymeasure import __version__ as tool_version
+    from llenergymeasure.core.environment import collect_environment_metadata
+
+    hardware = collect_environment_metadata()
+    cuda_version, cuda_version_source = detect_cuda_version_with_source()
+
+    return EnvironmentSnapshot(
+        hardware=hardware,
+        python_version=platform.python_version(),
+        pip_freeze=_capture_pip_freeze(),
+        conda_list=_capture_conda_list(),
+        tool_version=tool_version,
+        cuda_version=cuda_version,
+        cuda_version_source=cuda_version_source,
+    )

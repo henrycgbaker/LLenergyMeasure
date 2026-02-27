@@ -1,575 +1,426 @@
-# Measurement Methodology & Pitfalls Audit
+# Pitfalls Research
 
-**Domain:** LLM inference energy measurement -- scientific validity for publishable research
-**Researched:** 2026-02-25
-**Scope:** Audit of `.product/` methodology decisions against current evidence and peer practice
-**Overall confidence:** MEDIUM-HIGH (most claims verified via multiple sources; NVML accuracy specs remain under-documented by NVIDIA)
+**Domain:** Multi-experiment study execution — adding subprocess isolation, sweep grammar, and manifest checkpointing to an existing single-experiment LLM benchmarking tool
+**Researched:** 2026-02-27
+**Confidence:** HIGH for CUDA subprocess and IPC pitfalls (design documents + peer codebase verification); MEDIUM-HIGH for sweep explosion and thermal contamination; MEDIUM for manifest corruption patterns
 
 ---
 
-## Executive Summary
-
-This audit examines every measurement methodology decision in `.product/` against current evidence from the ML.ENERGY Benchmark (NeurIPS D&B 2025), MLPerf Power (IEEE HPCA 2025), the "Part-time Power Measurements" paper (arXiv:2312.02741), and peer tool implementations. The existing decisions are broadly sound in direction but several contain specific calibration errors, under-specified parameters, or unaddressed systematic biases that would compromise publishable-quality results.
-
-**The three most serious findings:**
-
-1. **The 30-second thermal floor is under-calibrated.** NVIDIA A100/H100 GPUs take 100ms update periods with 25% sampling coverage; thermal and power state stabilisation requires 60+ seconds under load, not 30 seconds at idle before load.
-2. **The NVML accuracy numbers cited in `.product/` are wrong.** The existing docs claim Zeus/NVML is "~5% accurate" and CodeCarbon is "~15% accurate". In reality, NVML accuracy is +/-5 *watts* (not percent), and the percentage error depends on GPU power draw. For a 300W A100 this is ~1.7%; for a 40W idle GPU it is ~12.5%. CodeCarbon uses the same NVML readings with added overhead -- the accuracy gap between Zeus and CodeCarbon is primarily in *what* they measure (energy counter vs power polling), not a fixed percentage difference.
-3. **FLOPs as a "primary metric" is scientifically misleading for this tool's stated purpose.** FLOPs are deterministic for a given model+input -- they do not vary between backends, batch sizes, or deployment configurations. For a tool that measures "how implementation choices affect efficiency", FLOPs provide zero discriminatory power. Energy-per-token and tokens-per-second are the metrics that actually vary.
+> **Scope note:** This document covers pitfalls for the M2 milestone (adding `StudyRunner` and
+> multi-experiment execution to an existing working M1 tool). Measurement methodology pitfalls
+> (NVML accuracy, thermal floor calibration, FLOPs as a metric, bootstrap CIs) are covered in
+> the pre-existing `.planning/research/PITFALLS.md` from the M1 research phase — not duplicated
+> here. The two files are complementary.
 
 ---
 
 ## Critical Pitfalls
 
-### CP-1: NVML Power Measurement Accuracy Is Worse Than Documented
+### CP-1: Using `fork` Instead of `spawn` for CUDA Subprocesses
 
-**Current state in `.product/`:**
-- `designs/energy-backends.md` claims Zeus/NVML energy counter is "~5% accurate"
-- `designs/energy-backends.md` claims NVML power polling is "~10-15% accurate"
-- `designs/energy-backends.md` claims CodeCarbon (NVML) is "~10-15% accurate"
-- These figures are treated as fixed percentages
+**What goes wrong:**
+Linux defaults to `fork` for `multiprocessing`. Forked children inherit the parent's CUDA driver state, including initialised contexts, memory allocations, and CUDA runtime handles. This produces either a hard crash (`RuntimeError: Cannot re-initialize CUDA in forked subprocess`) or, more dangerously, silent incorrect measurements where the child appears to run successfully but the CUDA context is in an undefined state.
 
-**What the evidence actually shows:**
+The silent failure case is the dangerous one. The child process starts, loads the model, runs inference, and sends results back — but the underlying CUDA context is corrupted. Energy readings and latency measurements are invalid with no error signal.
 
-NVIDIA documents `nvmlDeviceGetPowerUsage` accuracy as +/-5 *watts*, not +/-5 percent (NVML API Reference Guide). The percentage error therefore depends on the absolute power draw:
+**Why it happens:**
+Linux's `fork` is so fast and familiar that developers reach for it instinctively. The global `multiprocessing.set_start_method('spawn')` fix is mentioned in PyTorch docs, but calling it globally breaks other libraries. The scoped `get_context('spawn')` pattern is less well known.
 
-| GPU State | Typical Power | +/-5W Error | Percentage |
-|-----------|--------------|-------------|------------|
-| A100 idle | ~40W | +/-5W | **12.5%** |
-| A100 under load | ~300W | +/-5W | **1.7%** |
-| H100 SXM under load | ~600W | +/-5W | **0.8%** |
-| Consumer GPU idle | ~15W | +/-5W | **33%** |
+**How to avoid:**
+Use `multiprocessing.get_context("spawn")` scoped to `StudyRunner` only — never call `set_start_method()` globally:
 
-The "Part-time Power Measurements" paper (Burtscher et al., arXiv:2312.02741) found even worse issues:
-- A100/H100: 100ms update period, but only 25% of runtime is sampled (75% unmeasured)
-- Without correction methodology, power polling errors reached 30% standard deviation on A100
-- With their proposed correction (32+ iterations, randomised delays, discarding rise time data), error reduces to ~5%
-
-For `nvmlDeviceGetTotalEnergyConsumption` (the hardware energy counter used by Zeus on Volta+ GPUs):
-- Returns millijoules since driver load
-- More accurate than power polling because it integrates at the hardware level
-- Known discrepancy reported on RTX 6000 Ada: readings ~0.5x expected (NVIDIA forum, unresolved June 2025)
-- No formal accuracy specification published by NVIDIA for this counter
-
-**Impact on LLenergyMeasure:**
-- The accuracy table in `energy-backends.md` must be rewritten with conditional accuracy (varies by power draw)
-- Results must report absolute power draw alongside energy so readers can assess measurement uncertainty
-- Short, low-power experiments (batch_size=1 on small models) have the worst accuracy -- precisely the configuration space most interesting to this tool
-- The claim that "Zeus is ~5% accurate" must be softened to "Zeus energy counter accuracy depends on GPU and workload; expect 1-5% under sustained load on Volta+ GPUs"
-
-**Recommendation:** Replace the fixed-percentage accuracy table with a formula: `accuracy_pct = 5W / mean_power_W * 100`. Report this per-experiment in `ExperimentResult`. Add a `measurement_uncertainty_pct` field.
-
-**Confidence:** MEDIUM-HIGH (NVIDIA +/-5W spec is documented; energy counter accuracy is under-documented; Burtscher paper is peer-reviewed)
-
-**Sources:**
-- [NVML API Reference Guide](https://docs.nvidia.com/deploy/nvml-api/group__nvmlDeviceQueries.html)
-- [Part-time Power Measurements (arXiv:2312.02741)](https://arxiv.org/html/2312.02741v2)
-- [NVIDIA Forum: energy counter discrepancy](https://forums.developer.nvidia.com/t/value-from-nvmldevicegettotalenergyconsumption-seems-to-be-off-by-a-factor/336318)
-- [ML.ENERGY: Measuring GPU Energy Best Practices](https://ml.energy/blog/energy/measurement/measuring-gpu-energy-best-practices/)
-
----
-
-### CP-2: 30-Second Thermal Floor Is Under-Calibrated
-
-**Current state in `.product/`:**
-- `decisions/warmup-strategy.md` specifies a 30-second thermal floor before energy measurement
-- Rationale cites "10-30s GPU power state ramp documented in hardware literature"
-- No source is actually cited for the 30-second figure
-
-**What the evidence shows:**
-
-The 30-second figure appears to be an estimate, not a measured value. The actual thermal stabilisation time depends on:
-
-1. **GPU power state transitions:** NVIDIA GPUs use Dynamic Voltage and Frequency Scaling (DVFS). Moving from idle (P8) to compute (P0) happens in milliseconds, but the *power draw at P0* continues to change as the GPU thermally stabilises.
-
-2. **Thermal ramp time under load:** Research on A100/H100 shows:
-   - Initial power spike within 1-2 seconds of load onset
-   - Power draw continues to drift upward for 45-90 seconds as die temperature increases from ambient to operating temperature (~70-83C)
-   - The exact duration depends on cooling solution (SXM vs PCIe), ambient temperature, and airflow
-   - MLPerf Power requires a **minimum 60-second measurement window** specifically because shorter windows are unreliable
-
-3. **The 30-second floor as currently designed measures idle, not loaded stability.** The warmup strategy description implies 30 seconds of observation before the workload starts. But thermal stabilisation requires the GPU to be *under the representative workload* for the stabilisation period. 5 warmup runs at 2 tokens each do not thermally load the GPU.
-
-**The actual problem:**
-- 5 warmup runs x 2 tokens each = maybe 2-3 seconds of actual GPU compute (on a fast model)
-- 30-second thermal floor (if measured at idle) does nothing -- the GPU cools back toward idle temperature
-- The measurement window starts with the GPU thermally cold, then warms during measurement
-- This creates a systematic bias: early measurement samples have lower power draw than later samples
-- For parameter sweeps comparing batch sizes, this bias affects small-batch experiments more (shorter duration, less time to thermally stabilise)
-
-**What peer tools do:**
-- **MLPerf Power:** 60-second minimum measurement window (workloads loop until 60s reached)
-- **ML.ENERGY Benchmark:** Defines steady state as batch-size-saturated period; implicitly excludes ramp-up by only measuring after server is at full utilisation
-- **optimum-benchmark:** 10-20 warmup_runs (full inference runs, not 2-token stubs), which naturally provides thermal load
-- **AIEnergyScore:** 10 runs of 1000 queries each; no explicit thermal handling but sheer volume provides natural stabilisation
-
-**Recommendation:**
-1. Increase warmup_runs default to **10** full-length runs (not reduced-output), matching optimum-benchmark practice. This provides genuine thermal loading.
-2. Change thermal floor from 30 to **60 seconds of actual loaded operation** (matching MLPerf Power). This means the warmup phase must run the actual workload, not 2-token stubs.
-3. Alternatively, keep reduced-output warmup for JIT/CUDA purposes (5 runs, 2 tokens) but add a separate **thermal conditioning phase** of 60 seconds running the actual workload before measurement begins. This separates the two concerns (JIT warmup vs thermal stabilisation).
-4. Record GPU temperature at measurement start and end in `ExperimentResult` so thermal drift can be detected post-hoc.
-
-**Confidence:** HIGH (MLPerf 60s minimum is documented; thermal drift physics are well understood; the 30s figure has no cited source)
-
-**Sources:**
-- [MLPerf Power Benchmark (arXiv:2410.12032)](https://arxiv.org/html/2410.12032v2)
-- [ML.ENERGY Benchmark (arXiv:2505.06371)](https://arxiv.org/html/2505.06371v1)
-- [NeurIPS 2025 Tutorial: Accurately Benchmarking Power & Energy](https://ml.energy/tutorials/neurips25/session-1.html)
-
----
-
-### CP-3: FLOPs as "Primary Metric" Is Misleading for This Tool's Purpose
-
-**Current state in `.product/`:**
-- `decisions/flops-estimation.md` positions FLOPs as a core metric, with `flops_per_output_token` as a "primary cross-run comparison metric"
-- `designs/result-schema.md` includes `flops_total`, `flops_per_token` in the Parquet export schema
-- The decision rationale is "to enable comparison of energy efficiency across hardware generations"
-
-**Why this is problematic:**
-
-LLenergyMeasure's stated purpose is measuring "how implementation choice(s) alone affect LLM inference efficiency" -- batch size, quantisation, precision, backend, etc. For a given model and input:
-
-```
-FLOPs = 2 * N_params * tokens
+```python
+# Correct: scoped to StudyRunner, does not affect other code
+mp_ctx = multiprocessing.get_context("spawn")
+p = mp_ctx.Process(target=_run_experiment_worker, args=(config, conn, queue))
 ```
 
-This is a **deterministic function of model architecture and input/output length**. It does not change between:
-- PyTorch vs vLLM vs TensorRT-LLM (same model, same FLOPs)
-- batch_size=1 vs batch_size=32 (FLOPs per token is identical)
-- fp16 vs bf16 vs fp32 (same MAC count; precision affects hardware throughput, not FLOPs)
-- Quantisation INT8 vs INT4 (FLOPs are defined for FP operations; quantised ops are not "FLOPs")
+Never:
+```python
+# Wrong: global mutation — breaks any other library using multiprocessing
+multiprocessing.set_start_method("spawn")
+```
 
-The only parameters that change FLOPs per token are model size and sequence length (via attention). **None of the deployment parameters this tool measures affect FLOPs.**
+**Warning signs:**
+- `RuntimeError: Cannot re-initialize CUDA in forked subprocess`
+- Child process runs successfully but energy readings are systematically lower than expected
+- CUDA errors only appear after the second or third experiment in a study (first experiment in a fork often works by accident because the parent CUDA context was not yet initialised when fork happened)
+- `CUDA error: initialization error` in worker stderr
 
-FLOPs are useful for:
-- Comparing energy efficiency *across different models* (energy per FLOP)
-- Comparing *hardware* (FLOP/s per watt across GPU generations)
-- Academic papers that need a normalisation baseline
-
-FLOPs are *not* useful for:
-- Comparing deployment configurations on the *same model* (this tool's primary use case)
-- Understanding whether vLLM or PyTorch is more energy-efficient (both execute the same FLOPs)
-- Diagnosing why batch_size=32 uses less energy per token than batch_size=1 (FLOPs are identical)
-
-Recent literature explicitly argues against FLOPs as a primary inference metric:
-- "The bottleneck is bandwidth -- not FLOPs" (arXiv:2503.08311, "Mind the Memory Gap")
-- "Model FLOPs Utilisation (MFU) better reflects arithmetic saturation and correlates with dynamic power" (arXiv:2507.11417) -- but MFU requires knowing peak hardware FLOPs, which this tool defers to v2.1
-- Databricks' inference engineering guide prioritises tokens/second and TTFT over FLOPs
-
-**Recommendation:**
-1. **Demote FLOPs from "primary metric" to "reference metadata".** FLOPs should be stored in results but not surfaced as a primary comparison axis. They are context, not a measurement.
-2. **Promote `energy_per_output_token` (joules/token) and `tokens_per_second` as the primary metrics.** These actually vary between deployment configurations and directly answer the tool's research question.
-3. **Defer MFU to v2.1 as planned**, but note that MFU is the only FLOPs-derived metric that has diagnostic value for this tool (it shows how well the hardware is utilised, which does vary by backend/config).
-4. **Do not report FLOPs in CLI summary output.** Reserve for Parquet export and detailed JSON. Researchers who need it can find it; casual users should not be misled into thinking FLOPs differences explain efficiency differences.
-
-**Confidence:** HIGH (the mathematical argument is irrefutable; peer evidence supports the conclusion)
-
-**Sources:**
-- [The Real Cost of LLM Inference: Memory Bandwidth, Not FLOPs](https://dev.to/avik12345678/the-real-cost-of-llm-inference-memory-bandwidth-not-flops-3855)
-- [Mind the Memory Gap (arXiv:2503.08311)](https://arxiv.org/html/2503.08311v2)
-- [Databricks: LLM Inference Performance Engineering Best Practices](https://www.databricks.com/blog/llm-inference-performance-engineering-best-practices)
-- [MatX: Optimise for inference too, not just training FLOPs](https://matx.com/research/lifetime_llm_cost)
+**Phase to address:** StudyRunner implementation (M2, study execution phase). Test by running a 3-experiment study immediately after the runner is wired up — confirm each child gets a clean CUDA context by checking NVML memory before model load.
 
 ---
 
-### CP-4: Baseline Power Subtraction Methodology Is Under-Specified
+### CP-2: Pipe Deadlock — Sender Blocked, Parent at `p.join()`
 
-**Current state in `.product/`:**
-- `designs/result-schema.md` specifies `baseline_power_w` measured during "30-second window immediately before experiment starts"
-- `energy_adjusted_j = energy_total_j - (baseline_power_w * duration_sec)`
-- Deferred to v2.1
+**What goes wrong:**
+Python's `multiprocessing.Pipe()` uses an OS pipe with a kernel buffer of approximately 64KB on Linux. If the child sends data that exceeds this buffer before the parent reads it, the child's `conn.send()` call blocks indefinitely waiting for the parent to drain the pipe. The parent, blocked at `p.join()`, never reads from the pipe. Both processes deadlock.
 
-**Problems with this approach:**
+This is not a theoretical edge case. It manifests when:
+- An exception traceback references many deeply nested frames (long tracebacks can exceed 64KB)
+- A future `ExperimentResult` adds new fields (e.g., per-token latency arrays, time-series energy data)
+- The child sends an error dict containing a large model state or configuration dump
 
-1. **Idle baseline != loaded baseline.** GPU idle power (P8 state, ~40W on A100) is very different from "baseline" power during inference (P0 state, fans running, HBM active, ~70-90W on A100 even between batches). Subtracting idle power overcorrects -- the GPU consumes significant power just being in the compute-ready state.
+The particularly insidious aspect: the deadlock only appears for certain error types (those with long stack traces), making it look like an intermittent hang rather than a systematic bug.
 
-2. **The subtraction formula assumes constant baseline power over the experiment duration.** In reality, baseline power increases as the GPU heats up. A linear correction `baseline_power_w * duration_sec` assumes steady-state idle power throughout, but:
-   - At experiment start: GPU is near idle temperature, baseline is lower
-   - At experiment end: GPU is at operating temperature, baseline is higher
-   - The error grows with experiment duration
+**Why it happens:**
+The Pipe buffer limit is not documented prominently in the Python `multiprocessing` docs. Developers testing with simple configs see it work; edge cases with large payloads only appear under specific failure conditions.
 
-3. **No peer tool publishes baseline-corrected energy** (as the result schema doc itself notes). This is not because it is too hard -- it is because the correction introduces more uncertainty than it removes for most use cases. The ML.ENERGY Benchmark reports raw energy because:
-   - Relative comparisons (A vs B on the same hardware) cancel out baseline power
-   - Absolute energy figures are useful for cost estimation, where total power matters
+**How to avoid:**
+Two complementary mitigations:
 
-4. **When baseline subtraction IS useful:** Comparing across hardware with very different idle power (consumer GPU at 15W vs A100 at 45W). But this is a cross-hardware comparison, not a deployment-parameter comparison (this tool's primary use case).
+1. **File-based IPC fallback for large payloads** — detect at send time:
+```python
+FILE_BASED_THRESHOLD = 1_000_000  # 1MB — matches optimum-benchmark pattern
 
-**Recommendation:**
-- Keep `baseline_power_w` as optional metadata (useful for researchers)
-- Do NOT make `energy_adjusted_j` a primary or prominently displayed metric
-- Instead, report `mean_power_draw_w` during the measurement window (this naturally captures the loaded power level and is directly comparable across configurations)
-- If baseline correction is desired, measure it with the GPU in P0 state (loaded but idle between batches), not P8 (fully idle). This requires a brief "hold at P0" period after warmup.
+serialised = result.model_dump_json()
+if len(serialised) > FILE_BASED_THRESHOLD:
+    tmp = Path(tempfile.mkstemp(suffix=".json")[1])
+    tmp.write_text(serialised)
+    conn.send({"__file__": str(tmp)})
+else:
+    conn.send(result)
+```
 
-**Confidence:** MEDIUM-HIGH (physics reasoning is sound; no peer validation of the proposed correction exists precisely because no peer does it)
+2. **Reader thread** (for the exception dict path): if the exception dict is unexpectedly large, drain the pipe in a background thread concurrently with `p.join()`. The design docs note this as a future option if the 1MB threshold proves insufficient.
 
----
+For error dicts specifically, cap the traceback string length: `"traceback": traceback.format_exc()[:8000]` prevents runaway tracebacks from exceeding the buffer.
 
-### CP-5: Bootstrap CI Methodology Is Under-Specified
+**Warning signs:**
+- Study hangs indefinitely on a specific experiment that failed (not a timeout — never reaches it)
+- `p.join(timeout=...)` returns `None` (timeout fired) but `p.is_alive()` is `True` and the child process shows in `ps` but is not consuming CPU (blocked on pipe write)
+- Hang only occurs when a specific error type is triggered (e.g. OOM, which tends to produce long stack traces)
 
-**Current state in `.product/`:**
-- `designs/result-schema.md` specifies `n_bootstrap: int = 1000` with percentile CIs (2.5th/97.5th)
-- Requires `n >= 30` samples
-- Deferred to v2.1
-
-**Issues:**
-
-1. **Percentile vs BCa:** The design specifies simple percentile bootstrap, not bias-corrected and accelerated (BCa). For skewed distributions (which energy measurements typically are -- right-skewed due to occasional GC pauses, thermal events, etc.), percentile bootstrap has poor coverage. BCa corrects for both bias and skewness:
-   - Percentile: adequate for symmetric distributions
-   - BCa: recommended when data may be skewed (Monte Carlo studies show BCa achieves nominal coverage with n >= 20, while percentile requires n >= 50+ for equivalent coverage)
-   - BCa costs ~2x computation (jackknife for acceleration factor) but is trivial for 30 samples
-
-2. **1,000 resamples is adequate for 95% CIs but tight.** The statistical literature recommends:
-   - 1,000 resamples: adequate for 95% CIs (common recommendation)
-   - 2,000 resamples: recommended by modern tools (tidymodels, scipy.stats.bootstrap)
-   - 10,000 resamples: recommended for 99% CIs or when precision matters
-   - For energy measurements at n=30-100 samples, 2,000 resamples is a better default
-
-3. **n >= 30 threshold is conservative for BCa but necessary for percentile.** BCa achieves acceptable coverage with as few as 20 samples. If BCa is adopted, the threshold could be lowered to n >= 20.
-
-4. **What is being bootstrapped matters.** The design says "per-request samples within the experiment". But per-request energy is problematic:
-   - Zeus energy counters measure total GPU energy for a window, not per-request energy
-   - Per-request energy is derived: `total_energy / n_requests`
-   - This gives a *mean*, not a distribution of per-request values
-   - For CIs on energy, you need *per-cycle* energy measurements (multiple experiment cycles), not per-request
-   - Per-request latency CIs are valid (TTFT, ITL have true per-request measurements)
-
-**Recommendation:**
-1. Use **BCa bootstrap** (scipy.stats.bootstrap supports it natively with `method='BCa'`)
-2. Increase default to **2,000 resamples**
-3. For energy CIs: require **multi-cycle studies** (n_cycles >= 5) and bootstrap over per-cycle energy totals
-4. For latency CIs: bootstrap over per-request measurements (TTFT, ITL) as designed
-5. Clearly separate "energy CI" (requires multi-cycle) from "latency CI" (available per-request within single experiment)
-
-**Confidence:** HIGH (bootstrap methodology is well-established statistical practice)
-
-**Sources:**
-- [Bootstrap confidence interval variations (Pustejovsky, 2025)](https://jepusto.com/posts/Bootstrap-CI-variations/)
-- [Bootstrap BCa intervals (SAS)](https://blogs.sas.com/content/iml/2017/07/12/bootstrap-bca-interval.html)
-- [scipy.stats.bootstrap documentation](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html)
-- [TQMP 2025: Bootstrap BCa confidence intervals](https://www.tqmp.org/RegularArticles/vol21-3/p125/p125.pdf)
+**Phase to address:** StudyRunner implementation (M2). Test with a deliberately large error payload in the child process to verify the fallback works before relying on the timeout as the safety net.
 
 ---
 
-## Moderate Pitfalls
+### CP-3: SIGINT (Ctrl+C) Does Not Propagate Cleanly to Subprocess Tree
 
-### MP-1: Docker Container Energy Measurement Overhead Is Unquantified
+**What goes wrong:**
+When the user presses `Ctrl+C` during a study, the terminal sends SIGINT to the foreground process group. If child processes are `daemon=False` (the correct setting for clean CUDA teardown), they are in the same process group and also receive SIGINT. What happens next is undefined:
 
-**Current state in `.product/`:**
-- `decisions/docker-execution.md` discusses container lifecycle but says nothing about measurement accuracy impact
-- `decisions/experiment-isolation.md` uses multiprocessing for local, Docker for v2.2
-- No discussion of whether Docker adds energy measurement overhead or distortion
+- The child may be mid-CUDA-kernel and cannot handle the signal (CUDA signal handlers are not re-entrant)
+- The child may partially write the manifest before dying, leaving it in a corrupt state
+- The parent receives `KeyboardInterrupt` at `p.join()`, which propagates up the call stack — skipping the `progress_queue.put(None)` sentinel and consumer thread cleanup
+- The Rich progress display may not clean up, leaving the terminal in a broken state
 
-**What the evidence shows:**
+The most serious consequence: the manifest shows the experiment as `"running"` when in fact it was aborted mid-run. The resume logic (later milestone) will try to re-run it, but the result file referenced in adjacent experiments may be inconsistent.
 
-Docker containerisation with `--gpus all` uses the NVIDIA Container Toolkit, which passes GPU devices directly to the container via `/dev/nvidia*` device files. This means:
-- NVML queries inside the container hit the same hardware counters as bare metal
-- `nvmlDeviceGetTotalEnergyConsumption` returns the same value inside and outside Docker
-- There is no "Docker overhead" on the NVML energy counter itself
+**Why it happens:**
+The interaction between Python signal handling, the multiprocessing process group, and CUDA's own signal handling is complex. Each layer (Python, CUDA runtime, the backend library) has its own signal handling assumptions that conflict under SIGINT.
 
-However, Docker adds:
-- CPU overhead for the container runtime (~1-3% CPU overhead per benchmarks)
-- Additional memory overhead for the overlay filesystem
-- Potential NUMA misalignment if container scheduler places processes on wrong NUMA node
-- GPU execution time may be slightly longer (~1-3%) due to container syscall overhead
+**How to avoid:**
+Wrap the inner study loop in a signal handler that:
 
-The energy impact: a 1-3% longer execution time at similar power draw means 1-3% more total energy. This is within the NVML measurement uncertainty for most workloads, but for studies comparing Docker vs bare metal, it must be acknowledged.
+1. Catches `KeyboardInterrupt` in the parent
+2. Calls `p.kill()` (SIGKILL — not SIGTERM, which may be ignored by a CUDA-blocked child)
+3. Sends the `None` sentinel to the progress queue
+4. Waits for the consumer thread to exit
+5. Marks the current manifest entry as `"failed"` with `error_type="UserInterrupted"`
+6. Writes the manifest to disk before re-raising
 
-**Recommendation:**
-- Document that Docker adds approximately 1-3% energy overhead due to slightly longer execution time
-- Record `runner: "docker"` vs `runner: "local"` in results (already planned)
-- Do NOT attempt to correct for Docker overhead -- it is within measurement uncertainty
-- Cross-runner comparisons (Docker A100 vs local A100) should note this caveat in the result interpretation
+```python
+try:
+    p.start()
+    child_conn.close()
+    p.join(timeout=timeout)
+except KeyboardInterrupt:
+    if p.is_alive():
+        p.kill()
+        p.join()
+    progress_queue.put(None)  # sentinel always sent
+    consumer.join()
+    manifest.mark_failed(config_hash, cycle, StudyFailed(
+        config=config.model_dump(),
+        exception_type="UserInterrupted",
+        error_message="Study interrupted by user (Ctrl+C)",
+    ))
+    raise  # re-raise to exit the study loop cleanly
+```
 
-**Confidence:** MEDIUM (Docker GPU overhead benchmarks exist but none specifically measure energy impact; the reasoning is physical)
+Additionally, use `p.start()` inside the context, not before the try block — ensures the cleanup path is always reached.
 
-**Sources:**
-- [Docker GPU Passthrough Performance (Brilliance, 2024)](https://jurnal.itscience.org/index.php/brilliance/article/view/6794)
-- [NVIDIA Container Toolkit documentation](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/sample-workload.html)
+**Warning signs:**
+- `Ctrl+C` leaves a zombie child process visible in `ps aux`
+- GPU memory remains allocated after the study exits (NVIDIA SMI shows model still in VRAM)
+- Terminal has broken cursor state or missing newline after `Ctrl+C`
+- `study_manifest.json` shows experiment as `"running"` after the tool exits
 
----
-
-### MP-2: Multi-GPU Energy Aggregation Ignores Interconnect Power
-
-**Current state in `.product/`:**
-- `decisions/multi-gpu.md` specifies `total_energy = sum(per_gpu_energy)` via NVML/Zeus
-- No mention of NVLink, NVSwitch, or PCIe interconnect power
-
-**What the evidence shows:**
-
-NVML energy counters measure per-GPU board power. They do NOT measure:
-- NVLink power consumption (NVLink 4.0 on H100: up to 50W per link at full bandwidth)
-- NVSwitch power (on DGX systems: ~100W per switch)
-- PCIe root complex power
-- Host CPU power for memory copies and synchronisation
-
-For tensor parallelism, the all-reduce operations between GPUs consume significant NVLink bandwidth. The energy consumed by NVLink is *not* captured by per-GPU NVML counters. This means:
-- Summing per-GPU energy **understates** the true total energy of a TP experiment
-- The understatement is proportional to NVLink traffic, which increases with TP degree
-- For TP=4 on DGX A100 with NVLink 3.0: estimated 10-30W of NVLink power per GPU not captured
-- This is 3-10% of total system energy, depending on workload
-
-**Recommendation:**
-- Document the limitation: "Per-GPU NVML energy does not include interconnect power. Multi-GPU experiments understate total energy by approximately 3-10% depending on NVLink traffic."
-- Add `interconnect_energy_note: str` to `MultiGPUMetrics` explaining this limitation
-- For publishable results, recommend researchers note this limitation in their methodology section
-- In v2.3+ (multi-GPU sweep), consider adding a correction factor based on NVLink bandwidth utilisation (if measurable)
-
-**Confidence:** MEDIUM (NVLink power consumption figures are from NVIDIA marketing materials and are approximate; no peer tool measures or corrects for this)
-
-**Sources:**
-- [NVIDIA NVLink and NVSwitch (NVIDIA Blog)](https://developer.nvidia.com/blog/nvidia-nvlink-and-nvidia-nvswitch-supercharge-large-language-model-inference/)
-- [MLPerf Power: Myth #1 -- Measuring ML Components in Isolation is Insufficient](https://arxiv.org/html/2410.12032v2)
+**Phase to address:** StudyRunner implementation (M2). Test `Ctrl+C` during the second experiment of a 3-experiment study. Confirm: manifest shows correct statuses, GPU VRAM is released, terminal is clean.
 
 ---
 
-### MP-3: Warmup Reduced-Output Strategy May Not Warm KV Cache Properly
+### CP-4: `daemon=True` on Child Processes Causes Dirty CUDA Teardown
 
-**Current state in `.product/`:**
-- `decisions/warmup-strategy.md` specifies 5 warmup runs at `max_new_tokens=2`
-- Rationale cites optimum-benchmark's pattern
+**What goes wrong:**
+Setting `daemon=True` on child processes (which is NOT the design choice, but a tempting simplification) means the child is killed immediately when the parent exits. For TensorRT-LLM specifically, this leaves GPU memory reservations orphaned — device memory is held until the next process that initialises CUDA on that GPU. On shared machines, this affects other users. Even for PyTorch and vLLM, abrupt CUDA teardown without calling `torch.cuda.empty_cache()` and letting the Python GC clean up model objects can leave the GPU in a state where the next CUDA initialisation is slower than normal.
 
-**The problem:**
+**Why it happens:**
+`daemon=True` is convenient: the parent does not need to call `p.join()` and child processes are guaranteed to not outlive the parent. Developers use it to avoid orphan processes.
 
-The reduced-output warmup (2 tokens) only triggers:
-- CUDA kernel JIT compilation (if using `torch.compile`)
-- Prefill path execution
-- One or two decode steps
+**How to avoid:**
+Use `daemon=False` (the default). `StudyRunner` always calls `p.join()` before returning — orphan processes do not occur in normal operation. For the abnormal case (parent crash without calling `p.join()`), the child becomes a genuine orphan, but it will complete its experiment and exit cleanly, releasing CUDA resources. This is the correct trade-off.
 
-It does NOT trigger:
-- KV cache at the actual operational size (2-token decode vs 100-token decode uses different KV cache allocation patterns)
-- Memory allocation for the full output sequence
-- For vLLM: continuous batching scheduler at operational batch depth
-- For TensorRT-LLM: engine pages at operational capacity
+The design documentation (`designs/experiment-isolation.md`) documents this choice explicitly. Do not change it in implementation.
 
-This means the first "real" measurement run may still encounter:
-- KV cache page allocation overhead (vLLM paged attention)
-- Memory fragmentation from the mismatch between warmup and measurement allocation patterns
-- Scheduler warm-up in vLLM (first full-batch run triggers different scheduling path than 2-token runs)
+**Warning signs:**
+- GPU VRAM not released after study exits (check `nvidia-smi`)
+- Subsequent `llem run` invocations are slower than expected to initialise CUDA
+- TRT-LLM engine compilation step is triggered again when it should have been cached (indicates the previous engine process did not complete its cleanup and left cache in an inconsistent state)
 
-**optimum-benchmark uses reduced output for speed,** not because it is methodologically ideal. For a tool prioritising scientific rigour over benchmark speed, full-length warmup is defensible.
-
-**Recommendation:**
-- For latency benchmarks: reduced-output warmup is acceptable (JIT is the primary concern)
-- For energy benchmarks: use full-length warmup runs (the thermal stabilisation concern from CP-2 aligns with this -- full-length runs provide both JIT warmup AND thermal conditioning)
-- Make warmup strategy configurable: `warmup_mode: "fast" | "full"` with `fast` = reduced output, `full` = actual workload. Default to `full` for energy measurements.
-
-**Confidence:** MEDIUM (theoretical reasoning; no peer tool has studied the measurement impact of reduced vs full warmup on KV cache allocation)
+**Phase to address:** StudyRunner implementation (M2). Default is correct — pitfall is regressing to `daemon=True` during debugging. Add a comment in `StudyRunner` code explaining why `daemon=False` is required.
 
 ---
 
-### MP-4: CodeCarbon Accuracy Claims Need Revision
+### CP-5: Sweep Grid Combinatorial Explosion Without Pre-Flight Warning
 
-**Current state in `.product/`:**
-- Multiple documents cite CodeCarbon accuracy as "~15%" or "~10-20%"
-- These appear to originate from the PMC comparison paper that found "up to 400% variation between tools"
+**What goes wrong:**
+A researcher adds multiple sweep dimensions without realising the grid grows multiplicatively. The study YAML looks innocuous:
 
-**What the evidence shows:**
+```yaml
+sweep:
+  precision: [fp16, bf16, int8]          # 3
+  batch_size: [1, 2, 4, 8, 16, 32, 64]  # 7
+  pytorch.num_threads: [1, 2, 4, 8]      # 4
+  max_new_tokens: [50, 100, 200, 500]    # 4
+```
 
-CodeCarbon v3.2.2 uses *the same NVML readings* as Zeus. The accuracy difference is not in the sensor but in the methodology:
+This generates 3 × 7 × 4 × 4 = **336 experiments**. With `n_cycles: 3`, that is 1,008 individual subprocess invocations. With a 60-second thermal gap between each, the study takes 17+ hours. The tool silently starts running.
 
-| Factor | Zeus (ZeusMonitor) | CodeCarbon (EmissionsTracker) |
-|--------|-------------------|-------------------------------|
-| GPU energy source | `nvmlDeviceGetTotalEnergyConsumption` (Volta+) | `nvmlDeviceGetPowerUsage` polled at intervals |
-| Measurement approach | Hardware energy counter delta | Power sampling + trapezoidal integration |
-| Default polling interval | N/A (hardware counter) | 15 seconds (configurable) |
-| Accuracy driver | Hardware counter resolution | Sampling frequency vs workload variability |
-| CPU-GPU sync | Explicit (`torch.cuda.synchronize()`) | None (no framework integration) |
+Worse: if a new sweep dimension is added by mistake (e.g., `vllm.max_num_seqs` accidentally added to a PyTorch-only study), it passes Pydantic validation (because `vllm` is a valid backend), creates a second per-backend grid, and doubles the experiment count unexpectedly.
 
-The "15% inaccuracy" of CodeCarbon comes from:
-1. **15-second default polling interval** -- misses power transients (the Burtscher paper's core finding)
-2. **No CPU-GPU synchronisation** -- GPU work may not be complete when power is sampled
-3. **TDP fallback** -- when NVML is unavailable, CodeCarbon estimates from TDP tables (20-30% error)
+**Why it happens:**
+Researchers think of sweeps as "a few values per dimension" without multiplying. The grid expansion is implicit and non-obvious from the YAML alone.
 
-If CodeCarbon is configured with high polling frequency (e.g., 1 second) and NVML is available, its accuracy approaches that of direct NVML polling (~5-10% for sustained workloads). The gap with Zeus is real but smaller than documented.
+**How to avoid:**
+Show a pre-flight summary before any experiment runs:
 
-**Recommendation:**
-- Rewrite accuracy claims: "Zeus energy counter: ~1-5% for sustained loads on Volta+. CodeCarbon NVML polling: ~5-15% depending on polling interval and workload duration. CodeCarbon TDP fallback: ~20-30%."
-- When CodeCarbon is the energy backend, automatically set `measure_power_secs` to 1 (not the default 15)
-- Document that CodeCarbon's CO2 estimation layer adds no measurement error -- it is a multiplication by a carbon intensity constant
+```
+Study: batch-size-sweep (336 experiments × 3 cycles = 1,008 runs)
+  Estimated wall time: ~17h 30min (at 60s gap + ~2min per experiment)
+  GPU memory check: all configs within available VRAM
 
-**Confidence:** HIGH (CodeCarbon source code confirms NVML usage; polling interval is configurable)
+  Skipping 0 invalid combinations.
 
-**Sources:**
-- [CodeCarbon Methodology](https://mlco2.github.io/codecarbon/methodology.html)
-- [PMC: Energy Tools Comparison](https://pmc.ncbi.nlm.nih.gov/articles/PMC10661046/)
+  Continue? [y/N]
+```
 
----
+For non-interactive use (`--yes` / `-y` flag, or TTY detection), skip the prompt but always print the summary. The experiment count and estimated duration must always be visible before the first subprocess spawns.
 
-### MP-5: No Minimum Measurement Duration Specified
+Additionally, add a hard cap with a clear error:
+```python
+MAX_EXPERIMENTS_WITHOUT_CONFIRMATION = 100  # configurable in user config
 
-**Current state in `.product/`:**
-- No minimum duration is specified for the measurement window
-- The design allows single-prompt experiments with no lower bound on duration
+if len(experiments) > MAX_EXPERIMENTS_WITHOUT_CONFIRMATION and not confirmed:
+    raise ConfigError(
+        f"Study would run {len(experiments)} experiments × {n_cycles} cycles = "
+        f"{len(experiments) * n_cycles} total runs. "
+        f"Pass --yes to confirm, or reduce the sweep grid."
+    )
+```
 
-**Why this matters:**
+**Warning signs:**
+- Study YAML has 3+ sweep dimensions with more than 3 values each
+- `backend:` is a list combined with sweep dimensions (multiplies across backends)
+- `n_cycles` > 1 combined with a large grid (n_cycles multiplies total runs)
 
-The Burtscher paper demonstrated that NVML power readings on A100/H100 use 100ms update periods with only 25% sampling coverage. For very short measurement windows:
-
-| Measurement Duration | Expected NVML Samples | Accuracy |
-|---------------------|----------------------|----------|
-| < 100ms | 0-1 | **Unreliable** -- may miss entirely |
-| 100ms - 1s | 1-10 | **High variance** -- insufficient sampling |
-| 1s - 10s | 10-100 | **Moderate** -- adequate for relative comparison |
-| > 10s | 100+ | **Good** -- statistical averaging reduces error |
-
-For the hardware energy counter (`nvmlDeviceGetTotalEnergyConsumption`), the situation is better but still has a floor: the counter resolution is millijoules, so experiments consuming < 100 mJ may have significant quantisation error.
-
-**Recommendation:**
-- Set minimum measurement duration to **10 seconds** (or loop the workload until 10s reached, matching MLPerf's approach)
-- Alternatively, require `n >= 10` prompts per experiment to naturally exceed the minimum
-- Flag results where measurement duration < 10 seconds with a `short_measurement_warning: true`
-
-**Confidence:** HIGH (NVML sampling behaviour is empirically documented)
+**Phase to address:** Sweep grid expansion (`expand_grid()` function, M2). The pre-flight summary must be implemented alongside the grid expander — not deferred.
 
 ---
 
-## Minor Pitfalls
+### CP-6: Manifest Corruption from Partial Writes During Interruption
 
-### mP-1: CPU-GPU Synchronisation Not Explicitly Required
+**What goes wrong:**
+`ManifestWriter._write()` calls `self.path.write_text(self.manifest.model_dump_json(indent=2))`. On Linux, `write_text()` is not atomic — it opens the file, truncates it, then writes. If the process is killed (SIGKILL, OOM killer, power failure) between the truncate and the completed write, the manifest file is either empty or contains partial JSON. When the resume logic (later milestone) reads the manifest, it gets a JSON parse error and cannot resume.
 
-**Current state in `.product/`:**
-- The existing research docs reference Zeus's `sync_execution_with` parameter
-- But `decisions/warmup-strategy.md` and the energy measurement design do not specify a synchronisation requirement
+A secondary corruption vector: if two processes somehow both call `_write()` simultaneously (not expected in the current single-writer design, but possible in future parallel extensions), concurrent writes to the same file without locking corrupt it.
 
-**The problem:** Without `torch.cuda.synchronize()` (or equivalent) before starting and ending the measurement window, the CPU may start/stop the energy measurement timer while GPU work is still in flight. This introduces up to 10-50ms of timing error per measurement boundary.
+**Why it happens:**
+`pathlib.Path.write_text()` is convenient but not atomic. Most developers do not think about the truncate-then-write window.
 
-The ML.ENERGY blog explicitly states: "To accurately measure GPU time and energy consumption, make the CPU wait for GPU work to complete."
+**How to avoid:**
+Use atomic write-then-rename:
 
-**Recommendation:** Add an explicit requirement: energy measurement windows MUST call `torch.cuda.synchronize()` (or backend equivalent) before `begin_window()` and `end_window()`. This is already handled by Zeus when `sync_execution_with="torch"`, but must be explicitly required in the measurement protocol, not left as a Zeus implementation detail.
+```python
+def _write(self) -> None:
+    content = self.manifest.model_dump_json(indent=2)
+    tmp_path = self.path.with_suffix(".tmp")
+    tmp_path.write_text(content)
+    tmp_path.replace(self.path)  # atomic on POSIX (same filesystem)
+```
 
-**Confidence:** HIGH (documented by Zeus and ML.ENERGY)
+`Path.replace()` is a POSIX rename, which is atomic on the same filesystem. The manifest is either the old version or the new version — never partial. The `.tmp` file is cleaned up automatically if the process exits after writing but before the rename (it is simply ignored on next startup, not mistaken for a valid manifest).
 
----
+For the read side (resume logic), always validate the JSON before trusting it:
+```python
+try:
+    manifest = StudyManifest.model_validate_json(path.read_text())
+except (json.JSONDecodeError, pydantic.ValidationError) as e:
+    raise StudyError(f"Manifest at {path} is corrupt: {e}") from e
+```
 
-### mP-2: MIG Energy Measurement Gives Whole-GPU, Not Slice-Level Readings
+**Warning signs:**
+- `study_manifest.json` is 0 bytes after an interrupted study
+- `json.JSONDecodeError` when attempting to resume
+- Manifest file modification time is very close to the time the study was killed (partial write window)
 
-**Current state in `.product/`:** Mentioned briefly in the old PITFALLS.md but not addressed in any decision document.
-
-NVML energy counters report at the *physical GPU* level, not the MIG instance level. If other workloads are running on sibling MIG slices, the energy reading includes their contribution. There is no correction for this.
-
-**Recommendation:** Detect MIG mode at pre-flight. Warn users that energy readings include all MIG slices on the physical GPU. Recommend running without MIG or ensuring no other workloads on sibling slices.
-
-**Confidence:** HIGH (documented NVML limitation)
-
----
-
-### mP-3: Power Limit Capping Affects Energy Measurements
-
-GPU power limits (`nvidia-smi -pl <watts>`) constrain the GPU's power draw. If a power limit is set below the GPU's natural draw for a workload, the GPU throttles to stay within the limit. This changes both energy and latency measurements. The tool does not detect or record the active power limit.
-
-**Recommendation:** Record `gpu_power_limit_w` in `EnvironmentSnapshot` via `nvmlDeviceGetPowerManagementLimit()`. Flag if it differs from the default limit (`nvmlDeviceGetPowerManagementDefaultLimit()`). This is a single NVML call per GPU, zero overhead.
-
-**Confidence:** HIGH (NVML API for this is well-documented)
-
----
-
-## Challenged Decisions: Summary Table
-
-| Decision | Document | Current State | Verdict | Recommended Action |
-|----------|----------|---------------|---------|-------------------|
-| NVML ~5% accuracy | `designs/energy-backends.md` | Fixed percentage | **Wrong** | Replace with conditional accuracy formula |
-| CodeCarbon ~15% accuracy | `designs/energy-backends.md` | Fixed percentage | **Misleading** | Rewrite as range dependent on config |
-| 30s thermal floor | `decisions/warmup-strategy.md` | 30 seconds at idle | **Under-calibrated** | Increase to 60s under load; or use full-length warmup runs |
-| 5 warmup runs, 2 tokens | `decisions/warmup-strategy.md` | Reduced-output warmup | **Questionable for energy** | Use full-length runs for energy benchmarks |
-| FLOPs as primary metric | `decisions/flops-estimation.md` | Core metric | **Misleading for this tool** | Demote to reference metadata |
-| Baseline power subtraction | `designs/result-schema.md` | Simple linear correction | **Over-simplified** | Measure in P0 state, not P8; do not make primary |
-| Bootstrap 1000 percentile | `designs/result-schema.md` | Percentile bootstrap | **Sub-optimal** | Use BCa with 2000 resamples |
-| Multi-GPU sum | `decisions/multi-gpu.md` | Sum per-GPU NVML | **Understates** | Document interconnect power gap |
-| Process isolation | `decisions/experiment-isolation.md` | multiprocessing.spawn | **Sound** | No changes needed |
-| CO2 estimation | `decisions/carbon-intensity.md` | CodeCarbon delegation | **Sound** | No changes needed |
-| Config hash | `designs/result-schema.md` | SHA-256 of config | **Sound** | No changes needed |
-| Steady state window | `designs/result-schema.md` | Explicit field | **Sound** | No changes needed |
+**Phase to address:** `ManifestWriter` implementation (M2). Atomic write is two lines instead of one — use it from the start. Do not defer this as "we'll fix it when we implement resume."
 
 ---
 
-## Unaddressed Areas That Should Be
+### CP-7: Timeout Too Conservative Causes Spurious Experiment Failures
 
-### UA-1: No Persistence Mode Requirement
+**What goes wrong:**
+The timeout formula `max(config.n * 2, 600)` gives a minimum of 10 minutes regardless of the model or hardware. For a large model (Llama-3.1-70B) on a single GPU, model loading alone can take 5-8 minutes. If `n=50` (100-second estimate), the total timeout is 600 seconds. A 70B model loading at 6 minutes (360 seconds) leaves only 240 seconds for inference of 50 prompts. At typical 70B throughput (5-10 tokens/sec per prompt, 100 tokens output), 50 prompts × 100 tokens = 5,000 tokens / 7.5 tok/s = ~667 seconds. The experiment times out and is recorded as failed, with no result, when it would have completed given another 200 seconds.
 
-NVIDIA GPUs not in persistence mode (`nvidia-smi -pm 1`) add ~100ms NVML initialisation overhead per query. More importantly, without persistence mode, the GPU drops to a lower power state between experiments, requiring re-stabilisation. All serious benchmarking assumes persistence mode is enabled.
+**Why it happens:**
+The timeout estimate of "2 seconds per prompt" is calibrated for 7B-13B models at batch_size=1 on an A100. It does not account for model loading time or larger models. The minimum of 600 seconds seems generous but is not.
 
-**Recommendation:** Check persistence mode at pre-flight. Warn (or error) if not enabled. This is a single NVML call.
+**How to avoid:**
+Make the timeout formula model-aware. Use a rough parameter count estimate from the model name or config:
+
+```python
+def _calculate_timeout(config: ExperimentConfig) -> int:
+    # Generous base for model loading (larger models take longer)
+    # No reliable way to know param count without downloading; use heuristic from name
+    loading_seconds = 600  # minimum 10 min — covers 7B models
+    if "70b" in config.model.lower() or "65b" in config.model.lower():
+        loading_seconds = 1800  # 30 min for 70B
+    elif "30b" in config.model.lower():
+        loading_seconds = 1200  # 20 min
+
+    # Inference time: 10s per prompt is very conservative
+    inference_seconds = config.n * 10
+
+    return loading_seconds + inference_seconds
+```
+
+Alternatively, make timeout configurable in `execution:` block (advanced users can override):
+```yaml
+execution:
+  experiment_timeout_seconds: 3600  # override for large models
+```
+
+The cost of a spurious timeout is an experiment failure that must be re-run manually. The cost of no timeout is an indefinitely blocked study. Err on the side of generosity.
+
+**Warning signs:**
+- Studies with 70B+ parameter models show `TimeoutError` for experiments that should succeed
+- Study completes with all experiments as `"failed"` with `TimeoutError` on a machine with sufficient VRAM
+- Timeout fires shortly after `"started"` event is received from the worker (model loading was the bottleneck)
+
+**Phase to address:** StudyRunner implementation (M2). The timeout formula must be reviewed before the first large-model study is run.
 
 ---
 
-### UA-2: No ECC Memory Status Recording
+## Technical Debt Patterns
 
-ECC (Error Correcting Code) memory has a ~3-5% performance overhead and corresponding energy impact. Whether ECC is enabled should be recorded in `EnvironmentSnapshot`. On datacenter GPUs (A100, H100) ECC is enabled by default; disabling it changes both performance and energy characteristics.
+Shortcuts that seem reasonable but create long-term problems.
 
-**Recommendation:** Record `ecc_enabled: bool` in `EnvironmentSnapshot` via `nvmlDeviceGetEccMode()`.
-
----
-
-### UA-3: No GPU Clock Frequency Recording
-
-The GPU's actual clock frequency during measurement affects both latency and energy. Boost clocks vary based on thermal state, power limit, and other GPUs in the system (power budget sharing on DGX). Without recording the actual achieved clock frequency, reproducibility is compromised.
-
-**Recommendation:** Record `gpu_clock_mhz` (actual, not max) at measurement start and end via `nvmlDeviceGetClockInfo()`.
-
----
-
-### UA-4: No CPU Governor Check
-
-On Linux, the CPU frequency governor affects both CPU energy and can introduce measurement variance. The `performance` governor provides consistent results; `powersave` or `ondemand` introduce frequency scaling delays that affect timing measurements.
-
-**Recommendation:** Check and record `/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor` in `EnvironmentSnapshot`.
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| `multiprocessing.set_start_method("spawn")` globally | Simpler than `get_context` | Breaks other libraries using multiprocessing (torch.distributed, Zeus's own internals) | Never — always use `get_context` |
+| Sending full `ExperimentResult` through Pipe without size check | Simpler code | Deadlock when result exceeds 64KB OS buffer — silent hang | Never — always check size |
+| `path.write_text()` for manifest (non-atomic) | One line | Corrupt manifest on SIGKILL during write | Never for checkpoint files — always use atomic rename |
+| `daemon=True` on worker processes | Automatic cleanup if parent crashes | Dirty CUDA teardown, orphaned GPU memory (especially TRT-LLM) | Never |
+| Skipping the pre-flight experiment count display | Simpler implementation | Researcher unknowingly starts a 17-hour study | Acceptable only behind an explicit `--quiet` flag |
+| Running `expand_grid()` at study execution time (not at YAML parse time) | Defers validation | Combinatorial explosion discovered after first model is loaded (wasted time, corrupt state if interrupted) | Never — expand at parse time per the design decision |
+| Using `progress_queue.get()` with no timeout in the consumer thread | Simpler code | Consumer thread hangs forever if the sentinel is never sent (e.g. bug in SIGKILL path) | Never — use `queue.get(timeout=5)` with a loop |
 
 ---
 
-## Phase-Specific Warnings
+## Integration Gotchas
 
-| Phase / Version | Likely Pitfall | Mitigation |
-|-----------------|---------------|------------|
-| v2.0 Energy measurement | NVML accuracy claims challenged by users reading the same papers | Pre-empt: document conditional accuracy in user-facing docs |
-| v2.0 Warmup | 30s thermal floor insufficient for H100 under heavy load | Implement 60s loaded warmup as default |
-| v2.0 Results | FLOPs prominently displayed; users confused why "same FLOPs, different energy" | Demote FLOPs; lead with energy/token |
-| v2.1 Baseline correction | Simple linear subtraction criticised for ignoring thermal drift | Measure baseline in P0 state; document as estimate |
-| v2.1 Confidence intervals | Percentile bootstrap with skewed energy data; CIs have poor coverage | Use BCa; require multi-cycle for energy CIs |
-| v2.2 Docker | Users compare Docker vs local energy and attribute difference to Docker overhead | Document ~1-3% overhead; recommend consistent runner within a study |
-| v2.3 Multi-GPU sweep | NVLink energy not captured; users underestimate TP energy cost | Document interconnect gap; note in methodology |
+Common mistakes when connecting the study runner to existing components.
+
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| `ExperimentOrchestrator` in worker | Importing it at module level in worker file causes CUDA to initialise at import time on spawn | Import `ExperimentOrchestrator` inside `_run_experiment_worker()`, not at the module's top level |
+| `ManifestWriter` and `StudyResult` | Conflating the two objects — merging their fields into one class | Keep them separate: manifest is a checkpoint (written incrementally), result is the final return value (written once at completion) |
+| `expand_grid()` and Pydantic validation | Running `expand_grid()` after Pydantic validates the `StudyConfig` means invalid combos only discovered at runtime | Run `expand_grid()` during `StudyConfig.__init__` (or a pre-run validation step) so invalid combos are caught at YAML parse time with a clear error |
+| Progress queue in worker | Worker starts sending events before the consumer thread is started | Start the consumer thread BEFORE calling `p.start()` — the worker can send events immediately on startup |
+| `child_conn` in parent after `p.start()` | Parent holds both ends of the Pipe — parent's copy of child end keeps the pipe alive and may cause reads to block | Close `child_conn` in the parent immediately after `p.start()`: `child_conn.close()` |
+| Thermal gap timing | Sleeping `config_gap_seconds` in the child process (inside the worker) rather than in the parent between experiments | Thermal gap must be in `StudyRunner` (parent), not in the worker. The child process is dead during the gap — sleeping there does nothing |
+| NVML session ownership | Creating a new NVML session per experiment worker | Worker inherits no NVML state from parent (spawn). Worker must call `pynvml.nvmlInit()` at the start and `pynvml.nvmlShutdown()` at the end. No sharing across process boundary. |
+
+---
+
+## Performance Traps
+
+Patterns that work at small scale but fail as study size grows.
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Keeping completed `ExperimentResult` objects in parent memory during study | RAM grows linearly with experiment count; OOM on large studies | Write each result to disk immediately, store only the file path in `StudyResult.result_files` | Around 50-100 experiments if results contain time-series data |
+| Manifest growing linearly in size | `model_dump_json()` serialises the entire manifest on every write; slows down as experiment count grows | Acceptable for v2.0 (studies are unlikely to exceed 500 experiments); for v3.0+, consider append-only manifest format | > 500 experiments (manifest approaches ~1MB; write latency becomes noticeable) |
+| `p.join(timeout=timeout)` with no loop | One missed timeout leaves a zombie experiment and blocks the study | `p.join()` is correct for a single wait; just ensure `p.kill()` + `p.join()` follows immediately if `p.is_alive()` | N/A — design is correct; trap is implementing the join without the is_alive check |
+| Starting all sweep experiments before any run (eager expansion) | Memory overhead for large grids; validation errors only appear at the end | Expand grid lazily (one row at a time) or eagerly but only hold one `ExperimentConfig` in memory at a time | > 10,000 experiments (rare but possible with 5+ sweep dimensions) |
+
+---
+
+## "Looks Done But Isn't" Checklist
+
+Things that appear complete but are missing critical pieces.
+
+- [ ] **StudyRunner wired up:** confirm the worker uses `spawn` context, not the Linux default `fork` — check with `print(mp.current_process().daemon)` and `mp.get_start_method()` in the worker
+- [ ] **SIGINT handled:** pressing Ctrl+C during experiment 2 of 3 should exit cleanly, leaving manifest with correct statuses (not all showing `"running"`)
+- [ ] **Manifest atomic write:** verify by checking that `study_manifest.json` is never 0 bytes or partial JSON — kill the process mid-write and confirm the file is still valid
+- [ ] **Pipe size safe:** test with a deliberately large error payload (e.g., an exception with a 100KB traceback) — confirm no hang
+- [ ] **Pre-flight count displayed:** even for a 2-experiment study, the count and estimated time must be printed before anything runs
+- [ ] **Thermal gap in parent, not worker:** inspect code to confirm `time.sleep(gap)` is called in `StudyRunner.run()`, not inside `_run_experiment_worker()`
+- [ ] **Consumer thread sentinel always sent:** both the normal path AND the SIGKILL path must call `progress_queue.put(None)` — verify the finally/except blocks
+- [ ] **Invalid combos skipped before GPU allocation:** Pydantic validation must run before any subprocess spawns, not inside the worker
+
+---
+
+## Recovery Strategies
+
+When pitfalls occur despite prevention, how to recover.
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Fork instead of spawn (silent CUDA corruption) | HIGH | Stop the study, identify affected results by cross-checking energy readings (will be anomalously low or zero), delete and re-run the study from scratch after fixing the start method |
+| Pipe deadlock (study hangs indefinitely) | MEDIUM | Kill the parent process (`kill -9 <pid>`), check manifest for last completed experiment, fix the payload size issue, re-run from last checkpoint (if resume is available) or from scratch |
+| Sweep explosion (17-hour study started accidentally) | LOW | Kill the study (`Ctrl+C`), check manifest for completed experiments before interruption, run a filtered explicit `experiments:` list instead of the full grid |
+| Manifest corruption (corrupt JSON) | LOW | The result files (per-experiment JSONs) are unaffected. Reconstruct the manifest by scanning the results directory for completed JSON files — their filenames contain the `config_hash`. Implement a `llem repair-manifest <results-dir>` command for this |
+| Timeout miscalibration (spurious failures) | LOW | Check `ExperimentResult.duration_seconds` for successful experiments to calibrate; re-run failed experiments with `--experiment-timeout <seconds>` override |
+| Dirty CUDA teardown (GPU memory not released) | MEDIUM | Run `nvidia-smi` to identify the orphaned process, `kill -9 <pid>` to force cleanup. On subsequent runs, CUDA will reinitialise correctly from a clean state |
+
+---
+
+## Pitfall-to-Phase Mapping
+
+How roadmap phases should address these pitfalls.
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| Fork vs spawn (CP-1) | StudyRunner core implementation | Confirm `mp.get_start_method()` returns `"spawn"` inside worker; check CUDA device count in worker vs parent match |
+| Pipe deadlock (CP-2) | StudyRunner core implementation | Inject oversized payloads in tests; verify fallback to file-based IPC triggers correctly |
+| SIGINT propagation (CP-3) | StudyRunner core implementation | Manual test: `Ctrl+C` during experiment 2 of 3; manifest must show exp-1 as completed, exp-2 as failed, exp-3 as pending |
+| daemon=True regression (CP-4) | StudyRunner core implementation | Code review checklist item; confirmed by VRAM check after study exit |
+| Sweep combinatorial explosion (CP-5) | Sweep grid expander + pre-flight | Run a study YAML with 4 dimensions × 5 values each; confirm pre-flight shows count and prompts for confirmation |
+| Manifest corruption (CP-6) | ManifestWriter implementation | `kill -KILL <pid>` during manifest write; confirm file is valid JSON on next read |
+| Timeout miscalibration (CP-7) | StudyRunner + timeout formula | Run a 70B model experiment to completion; confirm timeout is not triggered before results arrive |
 
 ---
 
 ## Sources
 
-### Peer-Reviewed Papers
-- [Part-time Power Measurements: nvidia-smi's Lack of Attention (Burtscher et al., 2023)](https://arxiv.org/html/2312.02741v2) -- NVML accuracy
-- [The ML.ENERGY Benchmark (NeurIPS D&B 2025)](https://arxiv.org/html/2505.06371v1) -- steady-state methodology
-- [MLPerf Power Benchmark (IEEE HPCA 2025)](https://arxiv.org/html/2410.12032v2) -- 60s minimum, full-system measurement
-- [Mind the Memory Gap (arXiv:2503.08311)](https://arxiv.org/html/2503.08311v2) -- FLOPs vs memory bandwidth
-- [Quantifying LLM Inference Energy via Simulations (arXiv:2507.11417)](https://arxiv.org/html/2507.11417v1) -- MFU power model
-- [Verified Instruction-Level GPU Energy Consumption (ACM CF 2020)](https://dl.acm.org/doi/10.1145/3387902.3392613) -- NVML verification
-- [PMC: Energy Tools Comparison](https://pmc.ncbi.nlm.nih.gov/articles/PMC10661046/) -- cross-tool accuracy
-- [Bootstrap BCa intervals (TQMP 2025)](https://www.tqmp.org/RegularArticles/vol21-3/p125/p125.pdf)
+### Design Documents (Primary — this project)
+- [`.product/designs/experiment-isolation.md`](../../.product/designs/experiment-isolation.md) — Full `StudyRunner` implementation pattern with rationale
+- [`.product/decisions/experiment-isolation.md`](../../.product/decisions/experiment-isolation.md) — Fork vs spawn decision; daemon=False rationale; SIGKILL rationale
+- [`.product/designs/study-yaml.md`](../../.product/designs/study-yaml.md) — Sweep grammar; grid expansion algorithm; invalid combo handling
+- [`.product/designs/study-resume.md`](../../.product/designs/study-resume.md) — `ManifestWriter`; `StudyManifest` vs `StudyResult` distinction
+
+### Peer Codebase Research
+- [`.product/research/13-execution-isolation-patterns.md`](../../.product/research/13-execution-isolation-patterns.md) — Optimum-benchmark process launcher source; AIEnergyScore cleanup pattern; vLLM sweep server management
+- [optimum-benchmark process launcher](https://github.com/huggingface/optimum-benchmark/blob/main/optimum_benchmark/launchers/process/launcher.py) — 1MB file-based IPC threshold; Pipe + sync checkpoint pattern; daemon=False
 
 ### Official Documentation
-- [NVIDIA NVML API Reference Guide](https://docs.nvidia.com/deploy/nvml-api/group__nvmlDeviceQueries.html)
-- [ML.ENERGY: Measuring GPU Energy Best Practices](https://ml.energy/blog/energy/measurement/measuring-gpu-energy-best-practices/)
-- [Zeus Project Documentation](https://ml.energy/zeus/measure/)
-- [NeurIPS 2025 Tutorial: Accurately Benchmarking Power & Energy](https://ml.energy/tutorials/neurips25/session-1.html)
-- [CodeCarbon Methodology](https://mlco2.github.io/codecarbon/methodology.html)
-- [scipy.stats.bootstrap](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html)
-
-### Peer Tool Implementations
-- [optimum-benchmark (HuggingFace)](https://github.com/huggingface/optimum-benchmark)
-- [AIEnergyScore v2 (HuggingFace)](https://huggingface.co/blog/sasha/ai-energy-score-v2)
-- [vLLM benchmark tooling](https://docs.vllm.ai/en/latest/)
-
-### Industry
-- [Databricks: LLM Inference Performance Engineering](https://www.databricks.com/blog/llm-inference-performance-engineering-best-practices)
-- [NVIDIA NVLink/NVSwitch Technical Blog](https://developer.nvidia.com/blog/nvidia-nvlink-and-nvidia-nvswitch-supercharge-large-language-model-inference/)
-- [Docker GPU Passthrough Benchmarks](https://jurnal.itscience.org/index.php/brilliance/article/view/6794)
+- [Python multiprocessing — Start Methods](https://docs.python.org/3/library/multiprocessing.html#contexts-and-start-methods) — `get_context("spawn")` vs global `set_start_method`; fork-CUDA incompatibility
+- [PyTorch: Best Practices for Multiprocessing](https://pytorch.org/docs/stable/notes/multiprocessing.html) — "CUDA runtime does not support fork"
+- [POSIX rename(2) man page](https://man7.org/linux/man-pages/man2/rename.2.html) — Atomic rename guarantee on same filesystem (basis for write-then-rename pattern)
 
 ---
-
-## Confidence Assessment
-
-| Area | Confidence | Reason |
-|------|-----------|--------|
-| NVML accuracy characterisation | MEDIUM-HIGH | +/-5W spec is documented; energy counter accuracy is not formally specified by NVIDIA |
-| Thermal floor calibration | HIGH | MLPerf 60s minimum is peer-reviewed; physics of thermal ramp are well understood |
-| FLOPs metric critique | HIGH | Mathematical argument is deterministic; extensive literature support |
-| Bootstrap methodology | HIGH | Well-established statistical practice with extensive literature |
-| Docker energy overhead | MEDIUM | Reasoning from GPU passthrough benchmarks; no direct energy measurement study |
-| NVLink power gap | MEDIUM | NVLink TDP figures from NVIDIA marketing; no peer-measured data |
-| CodeCarbon accuracy | HIGH | Source code confirms NVML usage; polling behaviour is configurable and documented |
+*Pitfalls research for: multi-experiment study execution with subprocess isolation, sweep grammar, and manifest checkpointing*
+*Researched: 2026-02-27*

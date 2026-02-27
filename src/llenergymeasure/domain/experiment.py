@@ -1,12 +1,16 @@
 """Experiment and study result domain models."""
 
+from __future__ import annotations
+
+import hashlib
+import json
 from datetime import datetime
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
-from llenergymeasure.constants import SCHEMA_VERSION
-from llenergymeasure.domain.environment import EnvironmentMetadata
+from llenergymeasure.domain.environment import EnvironmentSnapshot
 from llenergymeasure.domain.metrics import (
     ComputeMetrics,
     EnergyBreakdown,
@@ -14,9 +18,24 @@ from llenergymeasure.domain.metrics import (
     ExtendedEfficiencyMetrics,
     InferenceMetrics,
     LatencyStatistics,
+    MultiGPUMetrics,
     ThermalThrottleInfo,
     WarmupResult,
 )
+
+if TYPE_CHECKING:
+    from llenergymeasure.config.models import ExperimentConfig
+
+
+def compute_measurement_config_hash(config: ExperimentConfig) -> str:
+    """SHA-256[:16] of ExperimentConfig. Layer 3 fields excluded by design.
+
+    Layer 3 fields (datacenter_pue, grid_carbon_intensity) are not in
+    ExperimentConfig (they live in user config only), so model_dump()
+    naturally excludes them. No special exclusion logic needed.
+    """
+    canonical = json.dumps(config.model_dump(), sort_keys=True)
+    return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
 
 class Timestamps(BaseModel):
@@ -27,7 +46,7 @@ class Timestamps(BaseModel):
     duration_sec: float = Field(..., description="Duration in seconds")
 
     @classmethod
-    def from_times(cls, start: datetime, end: datetime) -> "Timestamps":
+    def from_times(cls, start: datetime, end: datetime) -> Timestamps:
         """Create Timestamps from start and end times."""
         duration = (end - start).total_seconds()
         return cls(start=start, end=end, duration_sec=duration)
@@ -40,7 +59,7 @@ class RawProcessResult(BaseModel):
     experiment. Raw results are saved individually and aggregated separately.
     """
 
-    schema_version: str = Field(default=SCHEMA_VERSION, description="Result schema version")
+    schema_version: str = Field(default="2.0", description="Result schema version")
     experiment_id: str = Field(..., description="Unique experiment identifier")
     backend: str = Field(default="pytorch", description="Inference backend used")
     backend_version: str | None = Field(
@@ -55,10 +74,6 @@ class RawProcessResult(BaseModel):
         default=None,
         description="Warning about energy measurement accuracy (e.g., MIG limitations)",
     )
-    energy_tracking_failed: bool = Field(
-        default=False,
-        description="True if energy tracking failed during this run (metrics are placeholders)",
-    )
     config_name: str = Field(..., description="Configuration name for this experiment")
     model_name: str = Field(..., description="Model name/path used")
     timestamps: Timestamps = Field(..., description="Timing information")
@@ -69,25 +84,7 @@ class RawProcessResult(BaseModel):
     # Effective configuration (for reproducibility)
     effective_config: dict[str, Any] = Field(
         default_factory=dict,
-        description="Full resolved config (CLI > config file > preset > defaults)",
-    )
-    cli_overrides: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Parameters that were overridden via CLI flags",
-    )
-    config_warnings: list[str] = Field(
-        default_factory=list,
-        description="Config validation warnings that were present at runtime",
-    )
-
-    # Parameter provenance tracking (new in schema v2)
-    parameter_provenance: dict[str, dict[str, Any]] = Field(
-        default_factory=dict,
-        description="Full provenance for each parameter (path -> {value, source, source_detail})",
-    )
-    preset_chain: list[str] = Field(
-        default_factory=list,
-        description="Presets applied in order (for preset inheritance tracking)",
+        description="Full resolved config",
     )
 
     # Extended efficiency metrics (always present, fields null when not computable)
@@ -106,11 +103,7 @@ class RawProcessResult(BaseModel):
         description="GPU utilisation samples for late aggregation",
     )
 
-    # Schema v3: Environment, energy breakdown, thermal, warmup
-    environment: EnvironmentMetadata | None = Field(
-        default=None,
-        description="Hardware/software environment metadata for reproducibility",
-    )
+    # Energy breakdown, thermal, warmup
     energy_breakdown: EnergyBreakdown | None = Field(
         default=None,
         description="Detailed energy breakdown with baseline adjustment",
@@ -122,10 +115,6 @@ class RawProcessResult(BaseModel):
     warmup_result: WarmupResult | None = Field(
         default=None,
         description="Warmup convergence detection result",
-    )
-    timeseries_path: str | None = Field(
-        default=None,
-        description="Path to time-series data file if saved",
     )
 
     model_config = {"frozen": True}
@@ -149,31 +138,90 @@ class AggregationMetadata(BaseModel):
 
 
 class ExperimentResult(BaseModel):
-    """Experiment result combining raw results from all processes.
+    """Experiment result — the user-visible output of a measurement run.
 
-    This combines raw results from all processes in a distributed experiment
-    into a single result with proper aggregation (sum energy, average throughput).
+    Combines raw results from all processes into a single result with proper
+    aggregation (sum energy, average throughput). For single-GPU experiments,
+    process_results has exactly one item.
+
+    v2.0 schema: all fields ship together (decision #50).
     """
 
-    schema_version: str = Field(default=SCHEMA_VERSION, description="Result schema version")
+    # Identity
+    schema_version: str = Field(default="2.0", description="Result schema version")
     experiment_id: str = Field(..., description="Unique experiment identifier")
+    measurement_config_hash: str = Field(
+        ..., description="SHA-256[:16] of ExperimentConfig (environment excluded)"
+    )
+
+    # Backend
     backend: str = Field(default="pytorch", description="Inference backend used")
     backend_version: str | None = Field(
         default=None, description="Backend version string for reproducibility"
     )
-    aggregation: AggregationMetadata = Field(..., description="Aggregation metadata")
 
-    # Aggregated metrics
+    # Methodology (RES-03, RES-04)
+    measurement_methodology: Literal["total", "steady_state", "windowed"] = Field(
+        ..., description="What was measured — total run, steady-state window, or explicit window"
+    )
+    steady_state_window: tuple[float, float] | None = Field(
+        default=None,
+        description="(start_sec, end_sec) of measurement window relative to experiment start",
+    )
+
+    # Core metrics
     total_tokens: int = Field(..., description="Total tokens across all processes")
     total_energy_j: float = Field(..., description="Total energy (sum across processes)")
     total_inference_time_sec: float = Field(..., description="Total inference time")
     avg_tokens_per_second: float = Field(..., description="Average throughput")
     avg_energy_per_token_j: float = Field(..., description="Average energy per token")
-    total_flops: float = Field(..., description="Total FLOPs")
+    total_flops: float = Field(..., description="Total FLOPs (reference metadata)")
 
-    # Per-process breakdown (for debugging/analysis)
-    process_results: list[RawProcessResult] = Field(
-        default_factory=list, description="Original per-process results"
+    # Energy detail (RES-06, RES-07)
+    baseline_power_w: float | None = Field(
+        default=None, description="Idle GPU power (W) measured before experiment"
+    )
+    energy_adjusted_j: float | None = Field(
+        default=None, description="Baseline-subtracted energy attributable to inference"
+    )
+    energy_per_device_j: list[float] | None = Field(
+        default=None, description="Per-GPU energy breakdown (Zeus backend only)"
+    )
+    energy_breakdown: EnergyBreakdown | None = Field(
+        default=None, description="Detailed energy breakdown with baseline adjustment"
+    )
+
+    # Multi-GPU (from result-schema.md design)
+    multi_gpu: MultiGPUMetrics | None = Field(
+        default=None, description="Multi-GPU metrics. None for single-GPU runs."
+    )
+
+    # Environment (RES-09)
+    environment_snapshot: EnvironmentSnapshot | None = Field(
+        default=None, description="Full software+hardware environment snapshot"
+    )
+
+    # Quality (RES-08, RES-10, RES-11)
+    measurement_warnings: list[str] = Field(
+        default_factory=list,
+        description="Measurement quality warnings (e.g., short duration, thermal drift)",
+    )
+    warmup_excluded_samples: int | None = Field(
+        default=None,
+        description="Number of prompts excluded during warmup. None when methodology=total.",
+    )
+    reproducibility_notes: str = Field(
+        default=(
+            "Energy measured via NVML polling. Accuracy +/-5%. "
+            "Results may vary with thermal state and system load."
+        ),
+        description="Fixed disclaimer about measurement accuracy",
+    )
+
+    # Timeseries sidecar reference
+    timeseries: str | None = Field(
+        default=None,
+        description="Relative filename of timeseries sidecar (e.g. 'timeseries.parquet')",
     )
 
     # Timestamps
@@ -183,64 +231,33 @@ class ExperimentResult(BaseModel):
     # Effective configuration (for reproducibility)
     effective_config: dict[str, Any] = Field(
         default_factory=dict,
-        description="Full resolved config (CLI > config file > preset > defaults)",
-    )
-    cli_overrides: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Parameters that were overridden via CLI flags",
-    )
-    config_warnings: list[str] = Field(
-        default_factory=list,
-        description="Config validation warnings that were present at runtime",
+        description="Full resolved config",
     )
 
-    # Parameter provenance tracking (new in schema v2)
-    parameter_provenance: dict[str, dict[str, Any]] = Field(
-        default_factory=dict,
-        description="Full provenance for each parameter (path -> {value, source, source_detail})",
+    # Per-process breakdown (embedded, not separate files per CONTEXT.md)
+    process_results: list[RawProcessResult] = Field(
+        default_factory=list, description="Original per-process results"
     )
-    preset_chain: list[str] = Field(
-        default_factory=list,
-        description="Presets applied in order (for preset inheritance tracking)",
+    aggregation: AggregationMetadata | None = Field(
+        default=None, description="Aggregation metadata (populated for multi-GPU)"
     )
 
-    # Streaming latency statistics (computed at aggregation time from raw measurements)
+    # Carry-forward fields (v1.x compat, used by aggregation/CLI)
+    thermal_throttle: ThermalThrottleInfo | None = Field(
+        default=None, description="GPU thermal and power throttling information"
+    )
+    warmup_result: WarmupResult | None = Field(
+        default=None, description="Warmup convergence detection result"
+    )
     latency_stats: LatencyStatistics | None = Field(
         default=None,
         description="Computed TTFT/ITL statistics from streaming inference",
     )
-
-    # Energy tracking status
-    energy_tracking_failed: bool = Field(
-        default=False,
-        description="True if any process had energy tracking failures (metrics may be incomplete)",
+    extended_metrics: ExtendedEfficiencyMetrics | None = Field(
+        default=None, description="Extended efficiency metrics (when computed)"
     )
 
-    # Extended efficiency metrics (aggregated from per-process metrics)
-    extended_metrics: ExtendedEfficiencyMetrics = Field(
-        default_factory=ExtendedEfficiencyMetrics,
-        description="Aggregated extended efficiency metrics",
-    )
-
-    # Schema v3: Environment, energy breakdown, thermal
-    environment: EnvironmentMetadata | None = Field(
-        default=None,
-        description="Hardware/software environment metadata (from first process)",
-    )
-    energy_breakdown: EnergyBreakdown | None = Field(
-        default=None,
-        description="Aggregated energy breakdown with baseline adjustment",
-    )
-    thermal_throttle: ThermalThrottleInfo | None = Field(
-        default=None,
-        description="GPU thermal and power throttling information",
-    )
-    timeseries_path: str | None = Field(
-        default=None,
-        description="Path to time-series data file if saved",
-    )
-
-    model_config = {"frozen": True}
+    model_config = {"frozen": True, "extra": "forbid"}
 
     @property
     def duration_sec(self) -> float:
@@ -253,6 +270,40 @@ class ExperimentResult(BaseModel):
         if self.total_energy_j > 0:
             return self.total_tokens / self.total_energy_j
         return 0.0
+
+    def save(
+        self,
+        output_dir: Path,
+        timeseries_source: Path | None = None,
+    ) -> Path:
+        """Save result to {output_dir}/{model}_{backend}_{timestamp}/ directory.
+
+        Returns the path to result.json (for from_json() round-trip).
+
+        Args:
+            output_dir: Parent directory for the output subdirectory.
+            timeseries_source: Optional .parquet file to copy into the output dir.
+        """
+        from pathlib import Path as _Path
+
+        from llenergymeasure.results.persistence import save_result
+
+        return save_result(self, _Path(output_dir), timeseries_source=timeseries_source)
+
+    @classmethod
+    def from_json(cls, path: Path) -> ExperimentResult:
+        """Load ExperimentResult from result.json path.
+
+        Auto-discovers timeseries.parquet from the same directory.
+        If sidecar missing, loads successfully with timeseries field preserved
+        and emits a UserWarning.
+
+        Args:
+            path: Path to result.json (as returned by save()).
+        """
+        from llenergymeasure.results.persistence import load_result
+
+        return load_result(path)
 
 
 class StudyResult(BaseModel):

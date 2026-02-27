@@ -10,13 +10,14 @@ conflicts with vLLM).
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from dataclasses import dataclass, field
 
-from loguru import logger
-
 from llenergymeasure.domain.metrics import ThermalThrottleInfo
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -101,7 +102,7 @@ class PowerThermalSampler:
             try:
                 handle = pynvml.nvmlDeviceGetHandleByIndex(self._device_index)
             except pynvml.NVMLError as e:
-                logger.debug(f"Power/thermal: failed to get device handle: {e}")
+                logger.debug("Power/thermal: failed to get device handle: %s", e)
                 pynvml.nvmlShutdown()
                 return
 
@@ -170,7 +171,7 @@ class PowerThermalSampler:
         except ImportError:
             logger.debug("Power/thermal: pynvml not available")
         except Exception as e:
-            logger.debug(f"Power/thermal sampling failed: {e}")
+            logger.debug("Power/thermal sampling failed: %s", e)
 
     def get_samples(self) -> list[PowerThermalSample]:
         """Get all collected samples."""

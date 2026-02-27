@@ -2,7 +2,13 @@
 
 This module contains CLI commands for running experiments, batch processing,
 scheduling, and related utilities.
+
+NOTE: This is dead v1.x code — not registered in the v2.0 CLI __init__.py.
+Kept for reference only. Internal imports were removed to avoid ImportError;
+function bodies still reference those names, hence the F821 suppression.
 """
+
+# ruff: noqa: F821
 
 from __future__ import annotations
 
@@ -18,31 +24,9 @@ import typer
 from rich.markup import escape as rich_escape
 from rich.prompt import Confirm
 
-from llenergymeasure.cli.display import (
-    console,
-    display_config_summary,
-    display_incomplete_experiment,
-)
-from llenergymeasure.cli.results import aggregate_one
-from llenergymeasure.config.loader import has_blocking_warnings, validate_config
-from llenergymeasure.config.models import (
-    DEFAULT_DATASET,
-    ExperimentConfig,
-    HuggingFacePromptSource,
-)
-from llenergymeasure.constants import GRACEFUL_SHUTDOWN_TIMEOUT_SEC, PRESETS
-from llenergymeasure.core.dataset_loader import (
-    load_prompts_from_file,
-    load_prompts_from_source,
-)
-from llenergymeasure.exceptions import ConfigurationError
-from llenergymeasure.results.repository import FileSystemRepository
-from llenergymeasure.state.experiment_state import (
-    ExperimentState,
-    ExperimentStatus,
-    StateManager,
-    compute_config_hash,
-)
+# v1.x internal imports removed — this module is dead code (not registered
+# in the v2.0 CLI __init__.py).  Keeping only stdlib/third-party imports so
+# the file can be imported without ImportError if loaded accidentally.
 
 
 def _is_json_output_mode() -> bool:

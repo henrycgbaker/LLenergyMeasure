@@ -1,35 +1,98 @@
-"""Multi-strategy FLOPs estimation with graceful degradation.
+"""FLOPs estimation for LLM inference.
 
-This module provides FLOPs estimation using a fallback chain:
-1. calflops library - direct measurement (high confidence)
-2. Architecture-based - uses model config (medium confidence)
-3. Parameter-based - simple 2*P approximation (low confidence)
+v2.0 primary method: PaLM/Chinchilla formula (estimate_flops_palm).
+    FLOPs = 2 * N_non_embedding_params * total_tokens
+    Split: prefill (input) + decode (output).
+
+Legacy fallback chain (FlopsEstimator class):
+1. calflops library — direct measurement (high confidence)
+2. Architecture-based — uses model config (medium confidence)
+3. Parameter-based — simple 2*P approximation (low confidence)
 
 Key insight: For BitsAndBytes quantization, FLOPs = FP16 FLOPs because
-computation happens at FP16 after dequantization. We do NOT apply
-reduction factors for BNB quantization.
+computation happens at FP16 after dequantization.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
-
-import torch
-from loguru import logger
 
 from llenergymeasure.domain.metrics import FlopsResult
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# v2.0 Primary API — PaLM formula
+# =============================================================================
+
+
+def _count_non_embedding_params(model: Any) -> int:
+    """Count non-embedding parameters. Embeddings are memory-bound lookups, not MAC ops."""
+    total = 0
+    for name, param in model.named_parameters():
+        if "embed" not in name.lower():
+            total += param.numel()
+    return total
+
+
+def estimate_flops_palm(
+    model: Any,
+    n_input_tokens: int,
+    n_output_tokens: int,
+    batch_size: int = 1,
+) -> FlopsResult:
+    """PaLM/Chinchilla inference FLOPs estimate (v2.0 primary method).
+
+    Formula: FLOPs = 2 * N_non_embedding_params * total_tokens
+    Split: prefill (input) + decode (output).
+    Caller must exclude warmup tokens from n_input_tokens/n_output_tokens (CM-28).
+
+    Args:
+        model: The model (must support named_parameters()).
+        n_input_tokens: Number of input/prefill tokens (measurement phase only).
+        n_output_tokens: Number of output/decode tokens (measurement phase only).
+        batch_size: Batch size multiplier.
+
+    Returns:
+        FlopsResult with PaLM formula estimate and high confidence.
+    """
+    n_params = _count_non_embedding_params(model)
+    flops_prefill = 2 * n_params * batch_size * n_input_tokens
+    flops_decode = 2 * n_params * batch_size * n_output_tokens
+    flops_total = flops_prefill + flops_decode
+
+    return FlopsResult(
+        value=float(flops_total),
+        method="palm_formula",
+        confidence="high",
+        precision="n/a",  # precision doesn't affect FLOPs (forward pass)
+        notes=(
+            f"PaLM formula: 2x{n_params:,}x({n_input_tokens}+{n_output_tokens}) tokens. "
+            f"Attention FLOPs omitted (v2.0 limitation, significant only for seq_len>=2048)."
+        ),
+    )
+
+
+# =============================================================================
+# Legacy fallback chain — FlopsEstimator class
+# =============================================================================
+
 
 class FlopsEstimator:
     """Multi-strategy FLOPs estimation with graceful degradation.
 
+    LEGACY: This class is the v1.x fallback chain. Use estimate_flops_palm()
+    for v2.0 measurements.
+
     Strategy order (highest to lowest confidence):
-    1. calflops library - direct measurement, works with most HF models
-    2. Architecture-based - uses model config (hidden_size, num_layers, etc.)
-    3. Parameter-based - simple 2*P approximation
+    1. calflops library — direct measurement, works with most HF models
+    2. Architecture-based — uses model config (hidden_size, num_layers, etc.)
+    3. Parameter-based — simple 2*P approximation
 
     Note: For BitsAndBytes quantization, FLOPs = FP16 FLOPs because
     computation happens at FP16 after dequantization.
@@ -47,7 +110,7 @@ class FlopsEstimator:
     def estimate(
         self,
         model: Any,
-        input_ids: torch.Tensor,
+        input_ids: Any,
         config: ExperimentConfig | None = None,
     ) -> FlopsResult:
         """Estimate FLOPs using the fallback chain.
@@ -60,6 +123,7 @@ class FlopsEstimator:
         Returns:
             FlopsResult with the estimate and provenance information.
         """
+
         seq_len = input_ids.shape[1] if input_ids.dim() > 1 else input_ids.shape[0]
 
         # Determine actual compute precision (BNB always computes at FP16)
@@ -98,8 +162,8 @@ class FlopsEstimator:
             # BNB always dequantizes to FP16 (or bfloat16 for 4bit compute dtype)
             return pytorch_cfg.bnb_4bit_compute_dtype if pytorch_cfg.load_in_4bit else "fp16"
 
-        # Use the config's fp_precision
-        precision = config.fp_precision.lower()
+        # Use the config's precision field
+        precision = config.precision.lower()
         if precision in ("float32", "fp32"):
             return "fp32"
         if precision in ("bfloat16", "bf16"):
@@ -144,7 +208,7 @@ class FlopsEstimator:
                 flops = self._parse_flops_string(flops)
 
             if flops is not None and flops > 0:
-                logger.debug(f"calflops estimation: {flops:.2e} FLOPs")
+                logger.debug("calflops estimation: %.2e FLOPs", flops)
                 return FlopsResult(
                     value=float(flops),
                     method="calflops",
@@ -155,7 +219,7 @@ class FlopsEstimator:
         except ImportError:
             logger.debug("calflops not installed, trying architecture-based")
         except Exception as e:
-            logger.debug(f"calflops failed: {e}, trying architecture-based")
+            logger.debug("calflops failed: %s, trying architecture-based", e)
 
         return None
 
@@ -211,8 +275,11 @@ class FlopsEstimator:
 
             model_type = getattr(model_config, "model_type", "unknown")
             logger.debug(
-                f"Architecture estimation for {model_type}: "
-                f"{total:.2e} FLOPs ({layers} layers, {hidden} hidden)"
+                "Architecture estimation for %s: %.2e FLOPs (%d layers, %d hidden)",
+                model_type,
+                total,
+                layers,
+                hidden,
             )
 
             return FlopsResult(
@@ -224,9 +291,9 @@ class FlopsEstimator:
             )
 
         except AttributeError as e:
-            logger.debug(f"Architecture estimation failed (missing attr): {e}")
+            logger.debug("Architecture estimation failed (missing attr): %s", e)
         except Exception as e:
-            logger.debug(f"Architecture estimation failed: {e}")
+            logger.debug("Architecture estimation failed: %s", e)
 
         return None
 
@@ -254,8 +321,10 @@ class FlopsEstimator:
             flops = 2 * params * seq_len
 
             logger.debug(
-                f"Parameter-based estimation: {flops:.2e} FLOPs "
-                f"(2 * {params:,} params * {seq_len} tokens)"
+                "Parameter-based estimation: %.2e FLOPs (2 * %d params * %d tokens)",
+                flops,
+                params,
+                seq_len,
             )
 
             return FlopsResult(
@@ -267,7 +336,7 @@ class FlopsEstimator:
             )
 
         except Exception as e:
-            logger.error(f"All FLOPs estimation methods failed: {e}")
+            logger.error("All FLOPs estimation methods failed: %s", e)
             return FlopsResult(
                 value=0.0,
                 method="parameter_estimate",
@@ -324,10 +393,12 @@ def get_flops_estimator() -> FlopsEstimator:
 
 def estimate_flops(
     model: Any,
-    input_ids: torch.Tensor,
+    input_ids: Any,
     config: ExperimentConfig | None = None,
 ) -> FlopsResult:
-    """Convenience function to estimate FLOPs.
+    """Convenience function to estimate FLOPs (legacy backward-compat wrapper).
+
+    For new code, prefer estimate_flops_palm() which is the v2.0 primary method.
 
     Args:
         model: The model to measure.
@@ -338,3 +409,12 @@ def estimate_flops(
         FlopsResult with the estimate and provenance.
     """
     return get_flops_estimator().estimate(model, input_ids, config)
+
+
+__all__ = [
+    "FlopsEstimator",
+    "_count_non_embedding_params",
+    "estimate_flops",
+    "estimate_flops_palm",
+    "get_flops_estimator",
+]
