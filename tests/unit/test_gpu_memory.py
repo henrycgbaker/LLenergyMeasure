@@ -36,9 +36,11 @@ def test_clean_state_no_warning(caplog: pytest.LogCaptureFixture) -> None:
     """50 MB used (below 100 MB threshold) → no warning logged."""
     pynvml_mock = _make_pynvml_mock(used_bytes=50 * 1024 * 1024)
 
-    with patch.dict(sys.modules, {"pynvml": pynvml_mock}):
-        with caplog.at_level("WARNING", logger="llenergymeasure.study.gpu_memory"):
-            check_gpu_memory_residual()
+    with (
+        patch.dict(sys.modules, {"pynvml": pynvml_mock}),
+        caplog.at_level("WARNING", logger="llenergymeasure.study.gpu_memory"),
+    ):
+        check_gpu_memory_residual()
 
     assert not caplog.records, f"Expected no log records, got: {caplog.records}"
 
@@ -47,9 +49,11 @@ def test_residual_memory_warning(caplog: pytest.LogCaptureFixture) -> None:
     """500 MB used (above 100 MB threshold) → warning with device and MB info."""
     pynvml_mock = _make_pynvml_mock(used_bytes=500 * 1024 * 1024)
 
-    with patch.dict(sys.modules, {"pynvml": pynvml_mock}):
-        with caplog.at_level("WARNING", logger="llenergymeasure.study.gpu_memory"):
-            check_gpu_memory_residual()
+    with (
+        patch.dict(sys.modules, {"pynvml": pynvml_mock}),
+        caplog.at_level("WARNING", logger="llenergymeasure.study.gpu_memory"),
+    ):
+        check_gpu_memory_residual()
 
     assert len(caplog.records) == 1
     msg = caplog.records[0].message
@@ -61,27 +65,33 @@ def test_custom_threshold(caplog: pytest.LogCaptureFixture) -> None:
     """200 MB used: warns at threshold=150 MB but not at threshold=250 MB."""
     pynvml_mock = _make_pynvml_mock(used_bytes=200 * 1024 * 1024)
 
-    with patch.dict(sys.modules, {"pynvml": pynvml_mock}):
+    with (
+        patch.dict(sys.modules, {"pynvml": pynvml_mock}),
+        caplog.at_level("WARNING", logger="llenergymeasure.study.gpu_memory"),
+    ):
         # Below 250 MB threshold → no warning
-        with caplog.at_level("WARNING", logger="llenergymeasure.study.gpu_memory"):
-            check_gpu_memory_residual(threshold_mb=250.0)
+        check_gpu_memory_residual(threshold_mb=250.0)
     assert not caplog.records, "Expected no warning at threshold=250 MB"
 
     caplog.clear()
 
-    with patch.dict(sys.modules, {"pynvml": pynvml_mock}):
+    with (
+        patch.dict(sys.modules, {"pynvml": pynvml_mock}),
+        caplog.at_level("WARNING", logger="llenergymeasure.study.gpu_memory"),
+    ):
         # Above 150 MB threshold → warning
-        with caplog.at_level("WARNING", logger="llenergymeasure.study.gpu_memory"):
-            check_gpu_memory_residual(threshold_mb=150.0)
+        check_gpu_memory_residual(threshold_mb=150.0)
     assert len(caplog.records) == 1
     assert "Residual GPU memory detected" in caplog.records[0].message
 
 
 def test_pynvml_not_available(caplog: pytest.LogCaptureFixture) -> None:
     """pynvml unavailable → function returns without error, debug log only."""
-    with patch.dict(sys.modules, {"pynvml": None}):
-        with caplog.at_level("DEBUG", logger="llenergymeasure.study.gpu_memory"):
-            check_gpu_memory_residual()  # must not raise
+    with (
+        patch.dict(sys.modules, {"pynvml": None}),
+        caplog.at_level("DEBUG", logger="llenergymeasure.study.gpu_memory"),
+    ):
+        check_gpu_memory_residual()  # must not raise
 
     warnings = [r for r in caplog.records if r.levelname == "WARNING"]
     assert not warnings, "Expected no warning when pynvml is unavailable"
@@ -100,9 +110,11 @@ def test_nvml_error_graceful(caplog: pytest.LogCaptureFixture) -> None:
     nvml_error = Exception("NVMLError: driver not loaded")
     pynvml_mock.nvmlDeviceGetHandleByIndex.side_effect = nvml_error
 
-    with patch.dict(sys.modules, {"pynvml": pynvml_mock}):
-        with caplog.at_level("WARNING", logger="llenergymeasure.study.gpu_memory"):
-            check_gpu_memory_residual()  # must not raise
+    with (
+        patch.dict(sys.modules, {"pynvml": pynvml_mock}),
+        caplog.at_level("WARNING", logger="llenergymeasure.study.gpu_memory"),
+    ):
+        check_gpu_memory_residual()  # must not raise
 
     warnings = [r for r in caplog.records if r.levelname == "WARNING"]
     assert not warnings, "Expected no warning on NVMLError"
