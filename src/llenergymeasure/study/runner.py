@@ -39,8 +39,7 @@ __all__ = ["StudyRunner", "_calculate_timeout", "_run_experiment_worker"]
 def _calculate_timeout(config: ExperimentConfig) -> int:
     """Generous timeout heuristic: 2 seconds per prompt, minimum 10 minutes.
 
-    No model-size scaling — keep it simple. The escape hatch is
-    execution.experiment_timeout_seconds in the study YAML.
+    No model-size scaling — keep it simple for M2.
     """
     return max(config.n * 2, 600)
 
@@ -115,17 +114,39 @@ def _run_experiment_worker(
 # =============================================================================
 
 
-def _consume_progress_events(q: Any) -> None:
-    """Consume and discard progress events from the queue until None sentinel.
+def _consume_progress_events(
+    q: Any,
+    index: int,
+    total: int,
+    config: Any,  # ExperimentConfig
+) -> None:
+    """Consume progress events from the queue and forward to display.
 
-    Runs as a daemon thread. Display wiring is Phase 12 — this stub just
-    drains the queue so the child never blocks on a full Queue.
+    Runs as a daemon thread in the parent process. Receives events from the
+    child subprocess via multiprocessing.Queue and calls print_study_progress()
+    for each meaningful event.
     """
     while True:
         event = q.get()
         if event is None:
             break
-        # Phase 12: forward to Rich display layer here
+
+        if not isinstance(event, dict):
+            continue
+
+        event_type = event.get("event")
+        if event_type == "started":
+            from llenergymeasure.cli._display import print_study_progress
+
+            print_study_progress(index, total, config, status="running")
+        elif event_type == "completed":
+            from llenergymeasure.cli._display import print_study_progress
+
+            print_study_progress(index, total, config, status="completed")
+        elif event_type == "failed":
+            from llenergymeasure.cli._display import print_study_progress
+
+            print_study_progress(index, total, config, status="failed")
 
 
 # =============================================================================
@@ -299,7 +320,7 @@ class StudyRunner:
                         if self._interrupt_event.is_set():
                             break
 
-                result = self._run_one(config, mp_ctx)
+                result = self._run_one(config, mp_ctx, index=i + 1, total=len(ordered))
                 results.append(result)
 
         finally:
@@ -317,7 +338,7 @@ class StudyRunner:
 
         return results
 
-    def _run_one(self, config: ExperimentConfig, mp_ctx: Any) -> Any:
+    def _run_one(self, config: ExperimentConfig, mp_ctx: Any, index: int, total: int) -> Any:
         """Spawn a subprocess for one experiment; collect result or failure dict.
 
         If interrupt_event is set after join, attempts graceful SIGTERM → 2s grace →
@@ -346,7 +367,7 @@ class StudyRunner:
 
         consumer = threading.Thread(
             target=_consume_progress_events,
-            args=(progress_queue,),
+            args=(progress_queue, index, total, config),
             daemon=True,
         )
         consumer.start()

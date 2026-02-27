@@ -424,10 +424,10 @@ def test_sigint_first_ctrl_c_marks_manifest_interrupted() -> None:
 
     original_run_one = runner._run_one
 
-    def sigint_during_run_one(config, mp_ctx):
+    def sigint_during_run_one(config, mp_ctx, index=1, total=1):
         """Call original _run_one, then simulate SIGINT having fired."""
         # Run the real experiment dispatch (mocked below)
-        result = original_run_one(config, mp_ctx)
+        result = original_run_one(config, mp_ctx, index=index, total=total)
         # Simulate first Ctrl+C arriving after experiment completes
         runner._interrupt_event.set()
         runner._interrupt_count = 1
@@ -689,3 +689,30 @@ def test_cycle_counter_increments_per_config_hash() -> None:
     assert sorted(cycles_by_hash[hash_b]) == [1, 2], (
         f"hash_b cycles: expected [1, 2], got {cycles_by_hash[hash_b]}"
     )
+
+
+# =============================================================================
+# Progress display wiring
+# =============================================================================
+
+
+def test_progress_events_forwarded():
+    """_consume_progress_events forwards events to print_study_progress."""
+    from queue import Queue
+    from unittest.mock import patch
+
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.study.runner import _consume_progress_events
+
+    config = ExperimentConfig(model="test-model", backend="pytorch", n=10)
+    q = Queue()
+    q.put({"event": "started", "config_hash": "abc123"})
+    q.put({"event": "completed", "config_hash": "abc123"})
+    q.put(None)  # sentinel
+
+    with patch("llenergymeasure.cli._display.print_study_progress") as mock_progress:
+        _consume_progress_events(q, index=3, total=12, config=config)
+
+    assert mock_progress.call_count == 2
+    statuses = [c.kwargs["status"] for c in mock_progress.call_args_list]
+    assert statuses == ["running", "completed"]
