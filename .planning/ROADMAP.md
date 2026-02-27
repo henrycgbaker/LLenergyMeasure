@@ -166,7 +166,7 @@ Plans:
 | 8.1. PyTorch Result Wiring Fixes | 1/1 | Complete | 2026-02-27 |
 | 8.2. M1 Tech Debt Cleanup | 2/2 | Complete   | 2026-02-27 |
 | 9. Grid Expansion and StudyConfig | 1/2 | In Progress|  |
-| 10. Manifest Writer | 1/1 | Complete   | 2026-02-27 |
+| 10. Manifest Writer | 1/1 | Complete    | 2026-02-27 |
 | 11. Subprocess Isolation and StudyRunner | 0/TBD | Not started | - |
 | 12. Integration | 0/TBD | Not started | - |
 | 13. Documentation — M1 backfill and M2 updates | 0/TBD | Not started | - |
