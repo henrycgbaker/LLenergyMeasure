@@ -367,3 +367,28 @@ def test_config_summary_from_experiment() -> None:
     assert "bf16" in summary
     # Model slug: lowered, slashes to hyphens
     assert "llama" in summary.lower()
+
+
+# ---------------------------------------------------------------------------
+# ManifestWriter status / interrupted tests
+# ---------------------------------------------------------------------------
+
+
+def test_manifest_initial_status_is_running(tmp_path: Path) -> None:
+    study = _make_study(n_experiments=1, n_cycles=1)
+    writer = ManifestWriter(study=study, study_dir=tmp_path)
+    assert writer.manifest.status == "running"
+
+
+def test_mark_interrupted_sets_status(tmp_path: Path) -> None:
+    study = _make_study(n_experiments=1, n_cycles=1)
+    writer = ManifestWriter(study=study, study_dir=tmp_path)
+
+    writer.mark_interrupted()
+
+    # In-memory check
+    assert writer.manifest.status == "interrupted"
+
+    # On-disk check
+    data = json.loads((tmp_path / "manifest.json").read_text())
+    assert data["status"] == "interrupted"

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from llenergymeasure.exceptions import StudyError
 from llenergymeasure.results.persistence import _atomic_write
@@ -55,6 +55,10 @@ class StudyManifest(BaseModel):
     llenergymeasure_version: str
     started_at: datetime
     completed_at: datetime | None = None
+    status: Literal["running", "completed", "interrupted", "failed"] = Field(
+        default="running",
+        description="Overall study status. 'interrupted' = user Ctrl+C (not an error).",
+    )
     total_experiments: int
     completed: int = 0
     failed: int = 0
@@ -175,6 +179,11 @@ class ManifestWriter:
         entry.error_message = error_message
         entry.completed_at = datetime.now(timezone.utc)
         self._recount()
+        self._write()
+
+    def mark_interrupted(self) -> None:
+        """Set manifest status to 'interrupted'. Called on SIGINT before sys.exit(130)."""
+        self.manifest = self.manifest.model_copy(update={"status": "interrupted"})
         self._write()
 
     # ------------------------------------------------------------------
