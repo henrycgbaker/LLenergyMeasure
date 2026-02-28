@@ -107,7 +107,7 @@ class DockerRunner:
                     text=True,
                     timeout=self.timeout,
                 )
-            except subprocess.TimeoutExpired:
+            except subprocess.TimeoutExpired as exc:
                 logger.debug(
                     "Docker container timed out after %ss. Debug artifacts at %s",
                     self.timeout,
@@ -116,7 +116,7 @@ class DockerRunner:
                 raise DockerTimeoutError(
                     message=f"Container timed out after {self.timeout}s.",
                     fix_suggestion="Increase timeout or reduce experiment size.",
-                )
+                ) from exc
 
             # --- Handle non-zero exit ---
             if proc.returncode != 0:
