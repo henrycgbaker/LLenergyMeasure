@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.17
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-28T03:08:43.745Z"
+last_updated: "2026-02-28T11:09:34.000Z"
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Researchers can run broad parameter sweeps across deployment configurations and produce publishable, methodology-sound measurements showing which implementation choices matter most for LLM energy efficiency.
-**Current focus:** Phase 18 — Docker Pre-flight Checks
+**Current focus:** Phase 19 — vLLM Backend Activation
 
 ## Current Position
 
-Phase: 18 of 23 in progress (Docker Pre-flight — Plan 01 complete)
-Next: Phase 18 Plan 02 (or Phase 19 — vLLM backend activation)
-Status: Phase 18 Plan 01 shipped (Docker pre-flight module, --skip-preflight CLI, CUDA/driver compat checks, 63 unit tests)
-Last activity: 2026-02-28 — Phase 18 Plan 01 complete on gsd/phase-18-docker-pre-flight
+Phase: 19 of 23 in progress (vLLM Backend Activation — Plan 01 complete)
+Next: Phase 19 Plan 02 (vLLM parameter audit) or Phase 20
+Status: Phase 19 Plan 01 shipped (VLLMBackend, offline batch inference, get_backend registration)
+Last activity: 2026-02-28 — Phase 19 Plan 01 complete on gsd/phase-19-vllm-backend-activation
 
-Progress: [████░░░░░░] 27%
+Progress: [████░░░░░░] 29%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 6
+- Total plans completed (M3): 7
 - Average duration: 248s
-- Total execution time: 3078s (173s + 492s + 300s + 300s + 1020s + 793s)
+- Total execution time: 3507s (173s + 492s + 300s + 300s + 1020s + 793s + 429s)
 
 *Updated after each plan completion*
 
@@ -63,6 +63,10 @@ Progress: [████░░░░░░] 27%
 - [Phase 18-01]: CUDA compat detection uses specific patterns (cuda+version, driver/library mismatch, nvml+driver) to avoid false positives from generic GPU access errors containing "device driver"
 - [Phase 18-01]: run_docker_preflight imported inside function body in run_study_preflight — lazy import prevents circular dependency
 - [Phase 18-01]: resolve_study_runners called without yaml_runners/user_config in pre-flight — uses auto-detection to check if Docker runners are active
+- [Phase 19-01]: VLLMBackend uses offline batch mode only — CM-07 (streaming bug) resolved structurally by design, not patched
+- [Phase 19-01]: FLOPs estimation wrapped in try/except — vLLM exposes HF model via internal API path, defaults to 0.0 on failure
+- [Phase 19-01]: top_k=0 (our disabled sentinel) maps to top_k=-1 (vLLM's disabled sentinel) in _build_sampling_params()
+- [Phase 19-01]: PyTorch takes priority over vLLM in detect_default_backend() — pytorch is the simpler, always-available default
 
 ### Carried Items
 
@@ -77,5 +81,5 @@ Progress: [████░░░░░░] 27%
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Phase 18 Plan 01 complete (Docker pre-flight checks, --skip-preflight CLI, 63 tests). Ready for Phase 18 Plan 02 or Phase 19 (vLLM backend).
+Stopped at: Completed 19-vllm-backend-activation-19-01-PLAN.md (VLLMBackend class + get_backend registration, 2 tasks, 2 files).
 Resume file: None
