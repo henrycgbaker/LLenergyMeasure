@@ -133,9 +133,14 @@ class DockerRunner:
             # --- Read result ---
             result = self._read_result(exchange_dir, config_hash)
 
-            # --- Success: clean up and inject runner metadata ---
+            # --- Success: clean up ---
             self._cleanup_exchange_dir(exchange_dir)
             exchange_dir = None  # type: ignore[assignment]
+
+            # Error payload dicts ({type, message, traceback}) are returned as-is —
+            # they have no effective_config to annotate with runner metadata.
+            if isinstance(result, dict):
+                return result
 
             return self._inject_runner_metadata(result)
 
