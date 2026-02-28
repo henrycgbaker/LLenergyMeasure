@@ -474,6 +474,14 @@ class ExecutionConfig(BaseModel):
             "None = derived from study_design_hash (same study always shuffles identically)."
         ),
     )
+    skip_preflight: bool = Field(
+        default=False,
+        description=(
+            "Skip Docker pre-flight checks (GPU visibility, CUDA/driver compatibility). "
+            "Useful for remote Docker daemon setups or CI environments. "
+            "The --skip-preflight CLI flag always overrides this setting."
+        ),
+    )
 
 
 class StudyConfig(BaseModel):

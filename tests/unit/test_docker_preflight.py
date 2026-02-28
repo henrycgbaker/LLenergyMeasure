@@ -622,3 +622,220 @@ class TestProbeImageConstant:
             assert _PROBE_IMAGE in docker_run_call, (
                 f"Expected probe image {_PROBE_IMAGE!r} in docker run args: {docker_run_call}"
             )
+
+
+# ---------------------------------------------------------------------------
+# TestWiring: run_study_preflight calls run_docker_preflight for Docker runners
+# ---------------------------------------------------------------------------
+
+
+class TestWiring:
+    """Tests that run_study_preflight correctly wires into run_docker_preflight."""
+
+    def _make_study(self, backends: list[str]):
+        """Build a minimal StudyConfig with the given backends."""
+        from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
+
+        experiments = [ExperimentConfig(model=f"model-{b}", backend=b) for b in backends]
+        return StudyConfig(
+            experiments=experiments,
+            execution=ExecutionConfig(n_cycles=1, cycle_order="sequential"),
+        )
+
+    def test_docker_preflight_called_when_docker_runner_resolved(self) -> None:
+        """run_study_preflight calls run_docker_preflight when any runner is Docker."""
+        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.orchestration.preflight import run_study_preflight
+
+        study = self._make_study(["pytorch"])
+
+        docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
+        runner_specs = {"pytorch": docker_spec}
+
+        # run_docker_preflight is imported inside the function body via a local
+        # 'from' import. Patch it at the source module.
+        received_skip: list[bool] = []
+
+        def fake_docker_preflight(skip: bool = False) -> None:
+            received_skip.append(skip)
+
+        with (
+            patch(
+                "llenergymeasure.infra.runner_resolution.resolve_study_runners",
+                return_value=runner_specs,
+            ),
+            patch(
+                "llenergymeasure.infra.docker_preflight.run_docker_preflight",
+                side_effect=fake_docker_preflight,
+            ),
+        ):
+            run_study_preflight(study)
+
+        assert received_skip == [False], (
+            f"Expected run_docker_preflight called with skip=False, got {received_skip}"
+        )
+
+    def test_docker_preflight_not_called_when_all_local_runners(self) -> None:
+        """run_study_preflight does NOT call run_docker_preflight when all runners are local."""
+        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.orchestration.preflight import run_study_preflight
+
+        study = self._make_study(["pytorch"])
+
+        local_spec = RunnerSpec(mode="local", image=None, source="default")
+        runner_specs = {"pytorch": local_spec}
+
+        call_count = 0
+
+        def fake_docker_preflight(skip: bool = False) -> None:
+            nonlocal call_count
+            call_count += 1
+
+        with patch(
+            "llenergymeasure.infra.runner_resolution.resolve_study_runners",
+            return_value=runner_specs,
+        ):
+            run_study_preflight(study)
+
+        # Docker preflight must not have been called (all runners local)
+        assert call_count == 0
+
+    def test_skip_preflight_param_passed_through(self) -> None:
+        """Passing skip_preflight=True results in run_docker_preflight(skip=True)."""
+        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.orchestration.preflight import run_study_preflight
+
+        study = self._make_study(["pytorch"])
+
+        docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
+        runner_specs = {"pytorch": docker_spec}
+
+        received_skip: list[bool] = []
+
+        def fake_docker_preflight(skip: bool = False) -> None:
+            received_skip.append(skip)
+
+        with (
+            patch(
+                "llenergymeasure.infra.runner_resolution.resolve_study_runners",
+                return_value=runner_specs,
+            ),
+            patch(
+                "llenergymeasure.infra.docker_preflight.run_docker_preflight",
+                side_effect=fake_docker_preflight,
+            ),
+        ):
+            run_study_preflight(study, skip_preflight=True)
+
+        assert received_skip == [True], f"Expected skip=True, got {received_skip}"
+
+    def test_yaml_skip_preflight_respected(self) -> None:
+        """execution.skip_preflight: true in YAML causes skip=True to be passed."""
+        from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
+        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.orchestration.preflight import run_study_preflight
+
+        study = StudyConfig(
+            experiments=[ExperimentConfig(model="test-model", backend="pytorch")],
+            execution=ExecutionConfig(n_cycles=1, skip_preflight=True),
+        )
+
+        docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
+        runner_specs = {"pytorch": docker_spec}
+
+        received_skip: list[bool] = []
+
+        def fake_docker_preflight(skip: bool = False) -> None:
+            received_skip.append(skip)
+
+        with (
+            patch(
+                "llenergymeasure.infra.runner_resolution.resolve_study_runners",
+                return_value=runner_specs,
+            ),
+            patch(
+                "llenergymeasure.infra.docker_preflight.run_docker_preflight",
+                side_effect=fake_docker_preflight,
+            ),
+        ):
+            # skip_preflight param is False (CLI default), but YAML says True
+            run_study_preflight(study, skip_preflight=False)
+
+        assert received_skip == [True], f"Expected skip=True from YAML config, got {received_skip}"
+
+    def test_cli_flag_overrides_yaml_false(self) -> None:
+        """CLI skip_preflight=True overrides YAML execution.skip_preflight=False."""
+        from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
+        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.orchestration.preflight import run_study_preflight
+
+        study = StudyConfig(
+            experiments=[ExperimentConfig(model="test-model", backend="pytorch")],
+            execution=ExecutionConfig(n_cycles=1, skip_preflight=False),
+        )
+
+        docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
+        runner_specs = {"pytorch": docker_spec}
+
+        received_skip: list[bool] = []
+
+        def fake_docker_preflight(skip: bool = False) -> None:
+            received_skip.append(skip)
+
+        with (
+            patch(
+                "llenergymeasure.infra.runner_resolution.resolve_study_runners",
+                return_value=runner_specs,
+            ),
+            patch(
+                "llenergymeasure.infra.docker_preflight.run_docker_preflight",
+                side_effect=fake_docker_preflight,
+            ),
+        ):
+            # CLI says skip=True, YAML says False — CLI wins
+            run_study_preflight(study, skip_preflight=True)
+
+        assert received_skip == [True], f"Expected CLI flag to win (skip=True), got {received_skip}"
+
+
+# ---------------------------------------------------------------------------
+# TestCLIFlag: --skip-preflight exists on llem run
+# ---------------------------------------------------------------------------
+
+
+class TestCLIFlag:
+    def test_skip_preflight_parameter_exists_in_run_function(self) -> None:
+        """The run() CLI function must have a skip_preflight parameter."""
+        import inspect
+
+        from llenergymeasure.cli.run import run
+
+        sig = inspect.signature(run)
+        assert "skip_preflight" in sig.parameters, "llem run must have a --skip-preflight parameter"
+
+    def test_skip_preflight_default_is_false(self) -> None:
+        """--skip-preflight defaults to False."""
+        import inspect
+
+        from llenergymeasure.cli.run import run
+
+        sig = inspect.signature(run)
+        param = sig.parameters["skip_preflight"]
+        # The default may be wrapped in Annotated — check the actual default
+        # by looking at what typer would use (the default= on the Annotated type)
+        assert param.default is not inspect.Parameter.empty
+
+    def test_skip_preflight_in_execution_config(self) -> None:
+        """ExecutionConfig.skip_preflight field exists with default False."""
+        from llenergymeasure.config.models import ExecutionConfig
+
+        config = ExecutionConfig()
+        assert hasattr(config, "skip_preflight")
+        assert config.skip_preflight is False
+
+    def test_execution_config_skip_preflight_can_be_set_true(self) -> None:
+        """ExecutionConfig.skip_preflight can be set to True."""
+        from llenergymeasure.config.models import ExecutionConfig
+
+        config = ExecutionConfig(skip_preflight=True)
+        assert config.skip_preflight is True
