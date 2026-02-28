@@ -51,7 +51,7 @@ class TestRunContainerExperiment:
     def test_writes_result_json_with_config_hash_name(
         self, config, result_dir: Path, tmp_path: Path
     ):
-        cfg, config_path = config
+        _cfg, config_path = config
         fake_result = make_result()
 
         with (
@@ -79,7 +79,7 @@ class TestRunContainerExperiment:
         assert "experiment_id" in data
 
     def test_calls_preflight_before_backend(self, config, result_dir: Path):
-        cfg, config_path = config
+        _cfg, config_path = config
         fake_result = make_result()
         call_order = []
 
@@ -107,7 +107,7 @@ class TestRunContainerExperiment:
         assert call_order == ["preflight", "get_backend"]
 
     def test_result_dir_created_if_missing(self, config, tmp_path: Path):
-        cfg, config_path = config
+        _cfg, config_path = config
         new_result_dir = tmp_path / "nonexistent" / "deep"
         fake_result = make_result()
 
@@ -127,7 +127,7 @@ class TestRunContainerExperiment:
         assert result_path.exists()
 
     def test_backend_failure_propagates(self, config, result_dir: Path):
-        cfg, config_path = config
+        _cfg, config_path = config
 
         with (
             patch(_PATCH_PREFLIGHT),
@@ -226,7 +226,7 @@ class TestMainErrorHandling:
 
             from llenergymeasure.infra.container_entrypoint import main
 
-            with pytest.raises(Exception):
+            with pytest.raises(Exception, match="boom"):
                 main()
 
         error_files = list(tmp_path.glob("*_error.json"))

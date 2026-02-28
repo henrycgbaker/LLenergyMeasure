@@ -148,9 +148,11 @@ class TestGetCudaMajorVersion:
 
         get_cuda_major_version.cache_clear()
 
-        with patch("subprocess.run", side_effect=FileNotFoundError):
-            with patch.dict("sys.modules", {"pynvml": None}):
-                version = get_cuda_major_version()
+        with (
+            patch("subprocess.run", side_effect=FileNotFoundError),
+            patch.dict("sys.modules", {"pynvml": None}),
+        ):
+            version = get_cuda_major_version()
 
         get_cuda_major_version.cache_clear()
 
