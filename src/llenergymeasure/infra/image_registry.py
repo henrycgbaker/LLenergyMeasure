@@ -1,0 +1,192 @@
+"""Built-in registry mapping backend names to default Docker images.
+
+Images follow the naming convention::
+
+    ghcr.io/llenergymeasure/{backend}:{version}-cuda{cuda_major}
+
+where:
+    {version}    — current package version (e.g. "1.19.0")
+    {cuda_major} — detected CUDA major version (e.g. "12")
+
+If CUDA version cannot be detected, "latest" is used as a fallback.
+
+Runner value parsing
+--------------------
+``parse_runner_value()`` converts the ``runners.{backend}`` YAML field into a
+``(runner_type, image_override)`` tuple::
+
+    "local"                → ("local", None)
+    "docker"               → ("docker", None)   # use built-in default image
+    "docker:custom/img:v1" → ("docker", "custom/img:v1")  # explicit override
+"""
+
+from __future__ import annotations
+
+import contextlib
+import subprocess
+from functools import lru_cache
+
+__all__ = [
+    "DEFAULT_IMAGE_TEMPLATE",
+    "get_cuda_major_version",
+    "get_default_image",
+    "parse_runner_value",
+]
+
+# ---------------------------------------------------------------------------
+# Template and registry
+# ---------------------------------------------------------------------------
+
+# {version} and {cuda_major} are filled at runtime.
+DEFAULT_IMAGE_TEMPLATE = "ghcr.io/llenergymeasure/{backend}:{version}-cuda{cuda_major}"
+
+# Backends that have a Docker image in the registry.
+_SUPPORTED_BACKENDS = frozenset({"pytorch", "vllm", "tensorrt"})
+
+
+# ---------------------------------------------------------------------------
+# CUDA version detection
+# ---------------------------------------------------------------------------
+
+
+@lru_cache(maxsize=1)
+def get_cuda_major_version() -> str | None:
+    """Detect the host CUDA major version.
+
+    Tries ``nvcc --version`` first, falls back to ``nvidia-smi``.
+
+    Returns:
+        CUDA major version string, e.g. ``"12"``, or ``None`` if detection fails.
+    """
+    # --- Primary: nvcc ---
+    try:
+        result = subprocess.run(
+            ["nvcc", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            major = _parse_cuda_major_from_nvcc(result.stdout)
+            if major:
+                return major
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+
+    # --- Secondary: nvidia-smi ---
+    with contextlib.suppress(FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        subprocess.run(
+            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        # nvidia-smi doesn't directly give CUDA version; fall through.
+
+    # --- Tertiary: pynvml ---
+    try:
+        import pynvml  # type: ignore[import-untyped]
+
+        pynvml.nvmlInit()
+        cuda_version_raw = pynvml.nvmlSystemGetCudaDriverVersion()
+        pynvml.nvmlShutdown()
+        # nvmlSystemGetCudaDriverVersion returns an integer like 12030 → major 12
+        major_int = cuda_version_raw // 1000
+        if major_int > 0:
+            return str(major_int)
+    except Exception:
+        pass
+
+    return None
+
+
+def _parse_cuda_major_from_nvcc(output: str) -> str | None:
+    """Extract CUDA major version from ``nvcc --version`` stdout.
+
+    Example line::
+        Cuda compilation tools, release 12.3, V12.3.107
+
+    Args:
+        output: Full stdout string from ``nvcc --version``.
+
+    Returns:
+        Major version string (e.g. ``"12"``), or ``None`` if not parseable.
+    """
+    import re
+
+    match = re.search(r"release\s+(\d+)\.\d+", output)
+    if match:
+        return match.group(1)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def get_default_image(backend: str) -> str:
+    """Resolve the default Docker image for *backend*.
+
+    Uses the current package version and detected CUDA major version.
+    Falls back to ``"latest"`` for both if detection fails.
+
+    Args:
+        backend: Backend name, e.g. ``"vllm"``, ``"pytorch"``, ``"tensorrt"``.
+
+    Returns:
+        Full image reference string, e.g.
+        ``"ghcr.io/llenergymeasure/vllm:1.19.0-cuda12"``.
+    """
+    from llenergymeasure import __version__
+
+    cuda_major = get_cuda_major_version() or "latest"
+    version = __version__ if __version__ else "latest"
+
+    return DEFAULT_IMAGE_TEMPLATE.format(
+        backend=backend,
+        version=version,
+        cuda_major=cuda_major,
+    )
+
+
+def parse_runner_value(value: str) -> tuple[str, str | None]:
+    """Parse a runner config value into ``(runner_type, image_override)``.
+
+    Accepted forms::
+
+        "local"                → ("local", None)
+        "docker"               → ("docker", None)
+        "docker:image/name:tag" → ("docker", "image/name:tag")
+
+    Args:
+        value: Raw string from ``runners.{backend}`` in YAML config.
+
+    Returns:
+        Tuple of ``(runner_type, image_override)`` where ``image_override`` is
+        ``None`` when the built-in default image should be used.
+
+    Raises:
+        ValueError: If ``"docker:"`` is given with an empty image name, or if
+                    the value is not one of the recognised runner types.
+    """
+    if value == "local":
+        return ("local", None)
+
+    if value == "docker":
+        return ("docker", None)
+
+    if value.startswith("docker:"):
+        image = value[len("docker:") :]
+        if not image:
+            raise ValueError(
+                "empty image name in runner value 'docker:' — "
+                "use 'docker' (bare) to select the built-in default image, "
+                "or 'docker:full/image:tag' for an explicit image."
+            )
+        return ("docker", image)
+
+    raise ValueError(
+        f"Unrecognised runner value {value!r}. "
+        "Accepted values: 'local', 'docker', or 'docker:<image-tag>'."
+    )

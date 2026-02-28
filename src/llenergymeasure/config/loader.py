@@ -153,6 +153,9 @@ def load_study_config(
 
     # Extract study-level metadata
     name = raw.get("name")
+    # runners: per-backend runner config (e.g. {"pytorch": "local", "vllm": "docker"})
+    # None if not specified in YAML — caller uses user config / auto-detection.
+    runners: dict[str, str] | None = raw.get("runners") or None
 
     # Parse execution block — Pydantic validates it
     execution = ExecutionConfig(**(raw.get("execution") or {}))
@@ -193,6 +196,7 @@ def load_study_config(
         experiments=ordered,
         name=name,
         execution=execution,
+        runners=runners,
         study_design_hash=study_hash,
         skipped_configs=[s.to_dict() for s in skipped],
     )

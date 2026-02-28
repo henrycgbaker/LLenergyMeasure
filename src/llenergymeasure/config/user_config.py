@@ -35,10 +35,17 @@ class UserRunnersConfig(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    pytorch: str = Field(default="local", description="PyTorch runner: 'local' or 'docker:<image>'")
-    vllm: str = Field(default="local", description="vLLM runner: 'local' or 'docker:<image>'")
+    pytorch: str = Field(
+        default="local",
+        description="PyTorch runner: 'local', 'docker' (built-in image), or 'docker:<image>'",
+    )
+    vllm: str = Field(
+        default="local",
+        description="vLLM runner: 'local', 'docker' (built-in image), or 'docker:<image>'",
+    )
     tensorrt: str = Field(
-        default="local", description="TensorRT runner: 'local' or 'docker:<image>'"
+        default="local",
+        description="TensorRT runner: 'local', 'docker' (built-in image), or 'docker:<image>'",
     )
 
     @model_validator(mode="after")
@@ -48,11 +55,12 @@ class UserRunnersConfig(BaseModel):
             if value.startswith("singularity:"):
                 raise ValueError(
                     f"Singularity runner not yet supported (runners.{field_name}='{value}'). "
-                    "Use 'local' or 'docker:<image>'."
+                    "Use 'local', 'docker', or 'docker:<image>'."
                 )
-            if value != "local" and not value.startswith("docker:"):
+            if value != "local" and value != "docker" and not value.startswith("docker:"):
                 raise ValueError(
-                    f"runners.{field_name}: expected 'local' or 'docker:<image>', got '{value}'"
+                    f"runners.{field_name}: expected 'local', 'docker', or 'docker:<image>', "
+                    f"got '{value}'"
                 )
         return self
 

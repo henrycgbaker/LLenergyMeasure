@@ -1,0 +1,157 @@
+"""Tests for the built-in Docker image registry and runner value parsing."""
+
+from __future__ import annotations
+
+from unittest.mock import patch
+
+import pytest
+
+# ---------------------------------------------------------------------------
+# parse_runner_value
+# ---------------------------------------------------------------------------
+
+
+class TestParseRunnerValue:
+    def test_local_returns_local_none(self):
+        from llenergymeasure.infra.image_registry import parse_runner_value
+
+        assert parse_runner_value("local") == ("local", None)
+
+    def test_docker_returns_docker_none(self):
+        from llenergymeasure.infra.image_registry import parse_runner_value
+
+        assert parse_runner_value("docker") == ("docker", None)
+
+    def test_docker_colon_image_returns_docker_with_image(self):
+        from llenergymeasure.infra.image_registry import parse_runner_value
+
+        assert parse_runner_value("docker:custom/img:v1") == ("docker", "custom/img:v1")
+
+    def test_docker_colon_ghcr_image(self):
+        from llenergymeasure.infra.image_registry import parse_runner_value
+
+        result = parse_runner_value("docker:ghcr.io/org/vllm:1.19.0-cuda12")
+        assert result == ("docker", "ghcr.io/org/vllm:1.19.0-cuda12")
+
+    def test_docker_colon_empty_string_raises(self):
+        from llenergymeasure.infra.image_registry import parse_runner_value
+
+        with pytest.raises(ValueError, match="empty image name"):
+            parse_runner_value("docker:")
+
+    def test_unknown_runner_type_raises(self):
+        from llenergymeasure.infra.image_registry import parse_runner_value
+
+        with pytest.raises(ValueError, match="Unrecognised runner value"):
+            parse_runner_value("kubernetes")
+
+
+# ---------------------------------------------------------------------------
+# get_default_image
+# ---------------------------------------------------------------------------
+
+
+class TestGetDefaultImage:
+    def test_returns_well_formed_image_string(self):
+        from llenergymeasure.infra.image_registry import get_default_image
+
+        with patch(
+            "llenergymeasure.infra.image_registry.get_cuda_major_version", return_value="12"
+        ):
+            image = get_default_image("vllm")
+
+        assert image.startswith("ghcr.io/llenergymeasure/vllm:")
+        assert "cuda12" in image
+
+    def test_fallback_to_latest_when_cuda_unknown(self):
+        from llenergymeasure.infra.image_registry import get_default_image
+
+        with patch(
+            "llenergymeasure.infra.image_registry.get_cuda_major_version", return_value=None
+        ):
+            image = get_default_image("pytorch")
+
+        assert "latest" in image
+
+    def test_backend_name_included_in_image(self):
+        from llenergymeasure.infra.image_registry import get_default_image
+
+        with patch(
+            "llenergymeasure.infra.image_registry.get_cuda_major_version", return_value="12"
+        ):
+            for backend in ("pytorch", "vllm", "tensorrt"):
+                image = get_default_image(backend)
+                assert backend in image, f"Expected backend {backend!r} in image {image!r}"
+
+    def test_package_version_included_in_image(self):
+        from llenergymeasure import __version__
+        from llenergymeasure.infra.image_registry import get_default_image
+
+        with patch(
+            "llenergymeasure.infra.image_registry.get_cuda_major_version", return_value="12"
+        ):
+            image = get_default_image("vllm")
+
+        assert __version__ in image
+
+
+# ---------------------------------------------------------------------------
+# get_cuda_major_version
+# ---------------------------------------------------------------------------
+
+
+class TestGetCudaMajorVersion:
+    def test_parses_nvcc_output_correctly(self):
+        from llenergymeasure.infra.image_registry import _parse_cuda_major_from_nvcc
+
+        sample = (
+            "nvcc: NVIDIA (R) Cuda compiler driver\n"
+            "Copyright (c) 2005-2023 NVIDIA Corporation\n"
+            "Built on Mon_Apr__3_17:16:06_PDT_2023\n"
+            "Cuda compilation tools, release 12.1, V12.1.105\n"
+            "Build cuda_12.1.r12.1/compiler.32688072_0\n"
+        )
+        assert _parse_cuda_major_from_nvcc(sample) == "12"
+
+    def test_parses_nvcc_cuda_11(self):
+        from llenergymeasure.infra.image_registry import _parse_cuda_major_from_nvcc
+
+        sample = "Cuda compilation tools, release 11.8, V11.8.89\n"
+        assert _parse_cuda_major_from_nvcc(sample) == "11"
+
+    def test_returns_none_for_unrecognised_output(self):
+        from llenergymeasure.infra.image_registry import _parse_cuda_major_from_nvcc
+
+        assert _parse_cuda_major_from_nvcc("not a cuda output") is None
+
+    def test_get_cuda_major_version_uses_nvcc_result(self):
+        """get_cuda_major_version() should return major version from nvcc when available."""
+        # Clear lru_cache so the mock actually runs
+        from llenergymeasure.infra.image_registry import get_cuda_major_version
+
+        get_cuda_major_version.cache_clear()
+
+        nvcc_output = "Cuda compilation tools, release 12.3, V12.3.107\n"
+        mock_result = type("R", (), {"returncode": 0, "stdout": nvcc_output})()
+
+        with patch("subprocess.run", return_value=mock_result):
+            version = get_cuda_major_version()
+
+        # Restore cache for subsequent tests
+        get_cuda_major_version.cache_clear()
+
+        assert version == "12"
+
+    def test_get_cuda_major_version_returns_none_when_nvcc_missing(self):
+
+        from llenergymeasure.infra.image_registry import get_cuda_major_version
+
+        get_cuda_major_version.cache_clear()
+
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            with patch.dict("sys.modules", {"pynvml": None}):
+                version = get_cuda_major_version()
+
+        get_cuda_major_version.cache_clear()
+
+        assert version is None
