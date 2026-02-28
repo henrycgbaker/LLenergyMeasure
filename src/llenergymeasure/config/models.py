@@ -497,6 +497,16 @@ class StudyConfig(BaseModel):
         default_factory=ExecutionConfig,
         description="Cycle repetition and ordering controls",
     )
+    runners: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Per-backend runner configuration. Keys are backend names "
+            "('pytorch', 'vllm', 'tensorrt'), values are runner strings "
+            "('local', 'docker', or 'docker:<image>'). "
+            "None = use user config / auto-detection. "
+            "Runner is metadata — not part of the experiment config hash."
+        ),
+    )
     study_design_hash: str | None = Field(
         default=None,
         description=(

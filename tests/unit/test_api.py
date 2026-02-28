@@ -612,3 +612,120 @@ def test_run_study_returns_study_result_type():
     # Check via source that return type is annotated as StudyResult
     src = inspect.getsource(api_module.run_study)
     assert "-> StudyResult" in src, "run_study must have -> StudyResult return annotation"
+
+
+# =============================================================================
+# Plan 04: runner resolution wiring in _run()
+# =============================================================================
+
+
+def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
+    """_run() resolves runners via resolve_study_runners and passes runner_specs to StudyRunner."""
+    import llenergymeasure._api as api_module
+    import llenergymeasure.orchestration.preflight as pf_module
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
+
+    mock_result = _make_experiment_result(experiment_id="runner-wired")
+
+    resolved_specs = {
+        "pytorch": RunnerSpec(mode="local", image=None, source="default"),
+    }
+
+    # Capture what runner_specs was passed to _run_via_runner
+    captured_runner_specs: list = []
+    original_run_via_runner = api_module._run_via_runner
+
+    def mock_run_via_runner(study, manifest, study_dir, runner_specs=None):
+        captured_runner_specs.append(runner_specs)
+        return original_run_via_runner(study, manifest, study_dir, runner_specs=runner_specs)
+
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.resolve_study_runners",
+        lambda backends, yaml_runners=None, user_config=None: resolved_specs,
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.config.user_config.load_user_config",
+        lambda **kwargs: type("C", (), {"runners": None})(),
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.study.manifest.create_study_dir",
+        lambda name, output_dir: tmp_path,
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.results.persistence.save_result",
+        lambda result, output_dir, **kw: tmp_path / "result.json",
+    )
+    monkeypatch.setattr(api_module, "_run_via_runner", mock_run_via_runner)
+
+    # Use a 2-experiment study to force _run_via_runner path (not _run_in_process)
+    import llenergymeasure.core.backends as backends_module
+
+    mock_backend = _MockBackend(mock_result)
+    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+
+    # Mock StudyRunner.run() to avoid real subprocess spawning
+    from llenergymeasure.study.runner import StudyRunner
+
+    monkeypatch.setattr(StudyRunner, "run", lambda self: [mock_result])
+
+    study = StudyConfig(
+        experiments=[
+            ExperimentConfig(model="gpt2", backend="pytorch"),
+            ExperimentConfig(model="gpt2-medium", backend="pytorch"),
+        ]
+    )
+
+    api_module._run(study)
+
+    assert len(captured_runner_specs) == 1, "_run_via_runner not called or called multiple times"
+    assert captured_runner_specs[0] == resolved_specs
+
+
+def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
+    """_run() logs a warning when runner_specs has mixed local/docker modes."""
+    import logging
+
+    import llenergymeasure._api as api_module
+    import llenergymeasure.core.backends as backends_module
+    import llenergymeasure.orchestration.preflight as pf_module
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
+
+    mixed_specs = {
+        "pytorch": RunnerSpec(mode="local", image=None, source="default"),
+        "vllm": RunnerSpec(mode="docker", image=None, source="yaml"),
+    }
+
+    mock_result = _make_experiment_result()
+    mock_backend = _MockBackend(mock_result)
+
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.resolve_study_runners",
+        lambda backends, yaml_runners=None, user_config=None: mixed_specs,
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.config.user_config.load_user_config",
+        lambda **kwargs: type("C", (), {"runners": None})(),
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.study.manifest.create_study_dir",
+        lambda name, output_dir: tmp_path,
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.results.persistence.save_result",
+        lambda result, output_dir, **kw: tmp_path / "result.json",
+    )
+
+    study = StudyConfig(experiments=[ExperimentConfig(model="gpt2")])
+
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure._api"):
+        api_module._run(study)
+
+    warning_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("mixed" in m.lower() for m in warning_messages), (
+        f"Expected mixed runner warning, got: {warning_messages}"
+    )

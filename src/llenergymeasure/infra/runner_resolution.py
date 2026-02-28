@@ -1,0 +1,187 @@
+"""Runner resolution — determine local vs Docker execution mode for each backend.
+
+Precedence chain (highest wins):
+  env var > study/experiment YAML > user config > auto-detection > default
+
+Auto-detection: if Docker + NVIDIA Container Toolkit are available on the host,
+default to Docker for best measurement isolation. Otherwise fall back to local
+with a nudge message.
+
+User config: any value stored in UserRunnersConfig is treated as explicit —
+including "local". If user config is present, auto-detection is skipped for
+that backend. Pass ``user_config=None`` to enable auto-detection.
+
+This module is intentionally free of Docker dispatch mechanics — it only decides
+*what* should run *where*. Dispatch is handled by DockerRunner (Plan 03).
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import shutil
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from llenergymeasure.config.user_config import UserRunnersConfig
+
+# Re-exported from image_registry for convenience — parse_runner_value is defined
+# there (canonical home) but used heavily in this module and its tests.
+from llenergymeasure.infra.image_registry import parse_runner_value
+
+__all__ = [
+    "RunnerSpec",
+    "is_docker_available",
+    "parse_runner_value",
+    "resolve_runner",
+    "resolve_study_runners",
+]
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Docker availability detection
+# ---------------------------------------------------------------------------
+
+
+def is_docker_available() -> bool:
+    """Return True if Docker CLI and NVIDIA Container Toolkit are both on PATH.
+
+    This is a quick host-level check (PATH inspection only). Container-level GPU
+    validation is done at pre-flight time (Phase 18).
+
+    Checks:
+        1. ``docker`` CLI is on PATH (via shutil.which)
+        2. At least one NVIDIA Container Toolkit binary is on PATH:
+           ``nvidia-container-runtime``, ``nvidia-ctk``, or ``nvidia-container-cli``
+    """
+    if shutil.which("docker") is None:
+        return False
+
+    nvidia_tools = (
+        "nvidia-container-runtime",
+        "nvidia-ctk",
+        "nvidia-container-cli",
+    )
+    return any(shutil.which(tool) is not None for tool in nvidia_tools)
+
+
+# ---------------------------------------------------------------------------
+# RunnerSpec dataclass
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RunnerSpec:
+    """Resolved runner specification for a single experiment execution.
+
+    Attributes:
+        mode:   Execution mode — "local" (in-process/subprocess) or "docker".
+        image:  Docker image to use. None for local mode or when the built-in
+                default image for the backend is used (resolved at dispatch time).
+        source: Which layer of the precedence chain produced this spec:
+                "env", "yaml", "user_config", "auto_detected", "default".
+    """
+
+    mode: Literal["local", "docker"]
+    image: str | None
+    source: str
+
+
+# ---------------------------------------------------------------------------
+# Core resolution function
+# ---------------------------------------------------------------------------
+
+
+def resolve_runner(
+    backend: str,
+    yaml_runners: dict[str, str] | None = None,
+    user_config: UserRunnersConfig | None = None,
+) -> RunnerSpec:
+    """Resolve the runner for a single backend using the full precedence chain.
+
+    Precedence (highest to lowest):
+        1. Env var   ``LLEM_RUNNER_{BACKEND}``  — source="env"
+        2. Study YAML ``runners:`` section       — source="yaml"
+        3. User config ``runners.{backend}``     — source="user_config"
+           Any value in user_config is treated as explicit (including "local").
+           Pass ``user_config=None`` to allow auto-detection.
+        4. Auto-detection: Docker + NVIDIA CT    — source="auto_detected"
+        5. Built-in default: local              — source="default"
+
+    When mode is "docker" and image is None, the caller (DockerRunner) should
+    resolve the image via ``get_default_image(backend)`` from image_registry.
+
+    Args:
+        backend:      Backend name, e.g. "pytorch", "vllm", "tensorrt".
+        yaml_runners: Runners dict from study YAML ``runners:`` section.
+                      Keys are backend names, values are runner strings.
+        user_config:  UserRunnersConfig from loaded user preferences.
+                      None = no user config present (enables auto-detection).
+                      When provided, all field values are treated as explicit.
+
+    Returns:
+        RunnerSpec with mode, image, and source fields populated.
+    """
+    # 1. Env var: LLEM_RUNNER_{BACKEND} (highest precedence)
+    env_key = f"LLEM_RUNNER_{backend.upper()}"
+    if env_val := os.environ.get(env_key):
+        mode, image = parse_runner_value(env_val)
+        return RunnerSpec(mode=mode, image=image, source="env")  # type: ignore[arg-type]
+
+    # 2. Study/experiment YAML runners section
+    if yaml_runners is not None and backend in yaml_runners:
+        yaml_val = yaml_runners[backend]
+        if yaml_val is not None:
+            mode, image = parse_runner_value(yaml_val)
+            return RunnerSpec(mode=mode, image=image, source="yaml")  # type: ignore[arg-type]
+
+    # 3. User config — any value is treated as explicit (user opted in or opted out)
+    #    Passing user_config=None means "no user config file present" → auto-detect.
+    if user_config is not None:
+        user_val: str = getattr(user_config, backend, "local")
+        mode, image = parse_runner_value(user_val)
+        return RunnerSpec(mode=mode, image=image, source="user_config")  # type: ignore[arg-type]
+
+    # 4. Auto-detection: Docker + NVIDIA Container Toolkit available?
+    if is_docker_available():
+        logger.info("Docker detected. Using containerised execution for reproducible measurements.")
+        return RunnerSpec(mode="docker", image=None, source="auto_detected")
+
+    # 5. Default: local with nudge message
+    logger.info(
+        "Docker not detected. Install Docker + NVIDIA Container Toolkit "
+        "for reproducible isolated measurements."
+    )
+    return RunnerSpec(mode="local", image=None, source="default")
+
+
+# ---------------------------------------------------------------------------
+# Study-level runner resolution
+# ---------------------------------------------------------------------------
+
+
+def resolve_study_runners(
+    backends: list[str],
+    yaml_runners: dict[str, str] | None = None,
+    user_config: UserRunnersConfig | None = None,
+) -> dict[str, RunnerSpec]:
+    """Resolve runners for all backends in a study.
+
+    Calls ``resolve_runner`` for each unique backend and returns a mapping of
+    backend name → RunnerSpec. The ``yaml_runners`` dict (from the study YAML
+    ``runners:`` section) and ``user_config`` are passed through unchanged.
+
+    Args:
+        backends:     Unique backend names present in the study's experiments.
+        yaml_runners: Study-level ``runners:`` section from YAML (optional).
+        user_config:  Loaded UserRunnersConfig (optional, None = auto-detect).
+
+    Returns:
+        Dict mapping each backend name to its resolved RunnerSpec.
+    """
+    return {
+        backend: resolve_runner(backend, yaml_runners=yaml_runners, user_config=user_config)
+        for backend in backends
+    }

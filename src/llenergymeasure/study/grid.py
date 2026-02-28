@@ -34,7 +34,10 @@ logger = logging.getLogger(__name__)
 
 # Keys that belong to the study YAML structure, not to individual experiments.
 # These are stripped from base: files and excluded from the fixed dict.
-_STUDY_ONLY_KEYS = frozenset({"sweep", "experiments", "execution", "base", "name", "version"})
+# "runners" is study-level metadata (per-backend runner config) — not an experiment field.
+_STUDY_ONLY_KEYS = frozenset(
+    {"sweep", "experiments", "execution", "base", "name", "version", "runners"}
+)
 
 
 class CycleOrder(StrEnum):

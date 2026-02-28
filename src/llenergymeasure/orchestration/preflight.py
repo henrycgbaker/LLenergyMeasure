@@ -153,20 +153,30 @@ def run_preflight(config: ExperimentConfig) -> None:
 def run_study_preflight(study: StudyConfig) -> None:
     """Pre-flight checks for a study configuration.
 
-    Raises PreFlightError if the study uses multiple backends (CM-10).
-    Single-backend studies pass through — per-experiment pre-flight
-    runs later in the subprocess.
+    Single-backend studies pass through — per-experiment pre-flight runs later
+    in the subprocess. Multi-backend studies auto-elevate to Docker when Docker
+    is available (DOCK-05); raise PreFlightError otherwise.
 
     Args:
         study: Resolved StudyConfig.
 
     Raises:
-        PreFlightError: Multi-backend study without Docker runner.
+        PreFlightError: Multi-backend study and Docker is not available.
     """
+    from llenergymeasure.infra.runner_resolution import is_docker_available
+
     backends = {exp.backend for exp in study.experiments}
     if len(backends) > 1:
         backend_list = ", ".join(sorted(backends))
+        if is_docker_available():
+            logger.info(
+                "Multi-backend study detected (%s). Auto-elevating all backends to Docker "
+                "for isolation.",
+                backend_list,
+            )
+            return
         raise PreFlightError(
-            f"Multi-backend studies require Docker isolation (available in M3). "
-            f"Found backends: {backend_list}. Use a single backend for now."
+            f"Multi-backend study requires Docker isolation. "
+            f"Found backends: {backend_list}. "
+            "Install Docker + NVIDIA Container Toolkit, or use a single backend."
         )

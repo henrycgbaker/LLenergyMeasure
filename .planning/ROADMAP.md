@@ -51,7 +51,7 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
 **Milestone Goal:** Docker container infrastructure with ephemeral per-experiment lifecycle, vLLM backend activation, Docker pre-flight validation, GPU memory cleanup, and full user documentation.
 
 - [x] **Phase 16: GPU Memory Verification** - NVML residual memory check before each experiment dispatch in both local and Docker paths (completed 2026-02-27)
-- [ ] **Phase 17: Docker Runner Infrastructure** - StudyRunner Docker dispatch path, config/result transfer via volume, per-backend runner configuration
+- [x] **Phase 17: Docker Runner Infrastructure** - StudyRunner Docker dispatch path, config/result transfer via volume, per-backend runner configuration (completed 2026-02-28)
 - [ ] **Phase 18: Docker Pre-flight** - NVIDIA Container Toolkit detection, GPU visibility validation, CUDA/driver compatibility check
 - [ ] **Phase 19: vLLM Backend Activation** - Fix streaming and shm-size P0 bugs, activate vLLM backend end-to-end via Docker, container entrypoint
 - [ ] **Phase 19.1: vLLM Parameter Audit** - INSERTED — Research upstream vLLM API, expand VLLMConfig fields, wire energy-relevant params (ref: Phase 4.1 PyTorch audit)
@@ -86,13 +86,13 @@ Plans:
   4. A multi-backend study with incompatible backends auto-elevates to Docker and surfaces guidance to the user
   5. Runner can be configured per-backend via `runners:` config section or `LLEM_RUNNER_VLLM=docker:image` env var
   6. Container entrypoint calls `ExperimentOrchestrator` directly (library API, not CLI re-entry)
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 17-01: DockerRunner dispatch — `subprocess.run` blocking call, `docker run --rm`, shared volume mount
-- [ ] 17-02: Config/result transfer — JSON file via volume, `LLEM_CONFIG_PATH` env var, result collection
-- [ ] 17-03: Runner selection — per-backend `runners:` config, env var override, auto-elevation logic
-- [ ] 17-04: Container entrypoint — library API entry point inside container, not CLI re-entry
+- [ ] 17-01-PLAN.md — Docker error hierarchy, container entrypoint (library API), built-in image registry (DOCK-02, DOCK-03, DOCK-11)
+- [ ] 17-02-PLAN.md — Runner resolution module with precedence chain, runners config model (DOCK-06)
+- [ ] 17-03-PLAN.md — DockerRunner dispatch class: subprocess.run, volume management, result collection (DOCK-01, DOCK-04)
+- [ ] 17-04-PLAN.md — StudyRunner integration, auto-elevation for multi-backend studies (DOCK-05)
 
 ### Phase 18: Docker Pre-flight
 **Goal**: Docker pre-flight checks catch misconfigured host environments before any container is launched, giving users actionable error messages
@@ -102,10 +102,10 @@ Plans:
   1. Running `llem run` with a Docker runner on a host without NVIDIA Container Toolkit produces a clear, actionable error before any container starts
   2. A container-level GPU visibility check confirms the GPU is accessible inside the container before the experiment starts
   3. A CUDA/driver version mismatch between host and container image produces a descriptive error naming the versions
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 18-01: Pre-flight checks — NVIDIA Container Toolkit detection, GPU visibility test, CUDA/driver compat validation
+- [ ] 18-01-PLAN.md — Tiered Docker pre-flight checks (NVIDIA CT, GPU visibility, CUDA/driver), --skip-preflight CLI flag, wiring into study execution path (DOCK-07, DOCK-08, DOCK-09)
 
 ### Phase 19: vLLM Backend Activation
 **Goal**: Users can run experiments using the vLLM backend via Docker and receive a valid ExperimentResult
@@ -199,7 +199,7 @@ Phase 21 can run in parallel with Phase 20 (no dependency between them).
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 16. GPU Memory Verification | 1/1 | Merged (PR #24) | 2026-02-28 |
-| 17. Docker Runner Infrastructure | 0/TBD | Not started | - |
+| 17. Docker Runner Infrastructure | 4/4 | Complete    | 2026-02-28 |
 | 18. Docker Pre-flight | 0/TBD | Not started | - |
 | 19. vLLM Backend Activation | 0/TBD | Not started | - |
 | 19.1. vLLM Parameter Audit | 0/TBD | Not started | - |

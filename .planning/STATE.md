@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.19
-milestone_name: "Docker + vLLM"
-status: in_progress
-last_updated: "2026-02-28T11:00:00.000Z"
+milestone: v1.17
+milestone_name: milestone
+status: unknown
+last_updated: "2026-02-28T03:08:43.745Z"
 progress:
-  total_phases: 9
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  total_phases: 4
+  completed_phases: 2
+  total_plans: 6
+  completed_plans: 5
 ---
 
 # Project State
@@ -22,19 +22,19 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 16 of 23 complete (GPU Memory Verification — merged to main)
-Next: Phase 17 (Docker Runner Infrastructure)
-Status: Phase 16 shipped, Phase 17 not started
-Last activity: 2026-02-28 — Phase 16 squash-merged to main (PR #24)
+Phase: 17 of 23 in progress (Docker Runner Infrastructure — Plan 04 complete)
+Next: Phase 18 (Docker pre-flight checks)
+Status: Phase 17 Plans 01+02+03+04 shipped (errors, entrypoint, image registry, runner resolution, DockerRunner dispatch, integration wiring)
+Last activity: 2026-02-28 — Phase 17 Plan 04 complete on gsd/phase-17-docker-runner-infrastructure
 
-Progress: [█░░░░░░░░░] 11%
+Progress: [████░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 1
-- Average duration: 173s
-- Total execution time: 173s
+- Total plans completed (M3): 5
+- Average duration: 225s
+- Total execution time: 2285s (173s + 492s + 300s + 300s + 1020s)
 
 *Updated after each plan completion*
 
@@ -49,6 +49,16 @@ Progress: [█░░░░░░░░░] 11%
 - Phase 13 (docs) folded into Phase 22 of M3 — write docs once against final backend story
 - Local import in _run_one() keeps pynvml lazy; avoids module-level ImportError when pynvml not installed (Phase 16)
 - GPU memory threshold hardcoded at 100 MB for M3; configurability deferred until researcher demand (Phase 16)
+- [Phase 17]: parse_runner_value raises ValueError on empty 'docker:' and unrecognised values — strict contract prevents silent fallbacks
+- [Phase 17]: Container entrypoint uses core.backends.get_backend path (same as StudyRunner worker) — not orchestration factory — for identical measurement behaviour
+- [Phase 17]: Error JSON format {type, message, traceback} mirrors StudyRunner worker payloads — consistent upstream consumer handling
+- [Phase 17-02]: user_config=None enables auto-detection; user_config provided (even with default 'local') blocks auto-detection — explicit presence beats inference
+- [Phase 17-02]: UserRunnersConfig accepts bare "docker" (not just "docker:<image>") to match YAML runner config syntax
+- [Phase 17-03]: DockerRunner returns error payload dicts as-is (no effective_config injection) — error dicts have no result fields to annotate
+- [Phase 17-03]: exchange_dir=None sentinel in finally-block prevents double-cleanup on unexpected exceptions
+- [Phase 17-04]: Auto-elevation is info-log-only (no user prompt) — multi-backend with Docker proceeds automatically
+- [Phase 17-04]: DockerErrors caught in _run_one_docker() and _run_in_process() — converted to non-fatal failure dicts, study continues
+- [Phase 17-04]: test_study_preflight.py tests must mock is_docker_available() — host machine has Docker + NVIDIA CT installed
 
 ### Carried Items
 
@@ -63,5 +73,5 @@ Progress: [█░░░░░░░░░] 11%
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Phase 16 merged to main via PR #24. Ready for Phase 17.
+Stopped at: Phase 17 Plan 04 complete (Docker integration wiring). Ready for Phase 18 (Docker pre-flight checks).
 Resume file: None

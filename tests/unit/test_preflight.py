@@ -15,9 +15,9 @@ from unittest.mock import MagicMock
 import pytest
 
 import llenergymeasure.orchestration.preflight as preflight_module
-from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
 from llenergymeasure.exceptions import PreFlightError
-from llenergymeasure.orchestration.preflight import run_preflight
+from llenergymeasure.orchestration.preflight import run_preflight, run_study_preflight
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -357,3 +357,78 @@ def test_check_model_accessible_network_error(monkeypatch: pytest.MonkeyPatch) -
 
     result = preflight_module._check_model_accessible("some/model")
     assert result is None  # Network errors are non-blocking
+
+
+# ---------------------------------------------------------------------------
+# run_study_preflight: auto-elevation and multi-backend guard (DOCK-05)
+# ---------------------------------------------------------------------------
+
+
+def _make_study(backends: list[str]) -> StudyConfig:
+    """Build a minimal StudyConfig with the given backends."""
+    experiments = [ExperimentConfig(model=f"model-{b}", backend=b) for b in backends]
+    return StudyConfig(
+        experiments=experiments,
+        execution=ExecutionConfig(n_cycles=1, cycle_order="sequential"),
+    )
+
+
+def test_run_study_preflight_single_backend_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Single-backend study passes study preflight unconditionally."""
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
+    study = _make_study(["pytorch"])
+    # Should not raise
+    run_study_preflight(study)
+
+
+def test_run_study_preflight_multi_backend_docker_available_auto_elevates(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Multi-backend study auto-elevates (no error) when Docker is available."""
+    monkeypatch.setattr("llenergymeasure.infra.runner_resolution.is_docker_available", lambda: True)
+    study = _make_study(["pytorch", "vllm"])
+    with caplog.at_level(logging.INFO, logger="llenergymeasure.orchestration.preflight"):
+        # Should not raise
+        run_study_preflight(study)
+
+    # Auto-elevation log message must be present and minimal (one-liner)
+    info_messages = [r.message for r in caplog.records if r.levelno == logging.INFO]
+    assert any(
+        "auto-elevating" in m.lower() or "auto-elevation" in m.lower() for m in info_messages
+    ), f"Expected auto-elevation log message, got: {info_messages}"
+
+
+def test_run_study_preflight_multi_backend_no_docker_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Multi-backend study raises PreFlightError when Docker is not available."""
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
+    study = _make_study(["pytorch", "vllm"])
+    with pytest.raises(PreFlightError) as exc_info:
+        run_study_preflight(study)
+
+    msg = str(exc_info.value)
+    assert "Docker" in msg
+    assert "pytorch" in msg or "vllm" in msg
+    assert "NVIDIA Container Toolkit" in msg or "single backend" in msg
+
+
+def test_run_study_preflight_error_message_contains_backends(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PreFlightError message lists the conflicting backends."""
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
+    study = _make_study(["pytorch", "tensorrt"])
+    with pytest.raises(PreFlightError) as exc_info:
+        run_study_preflight(study)
+
+    msg = str(exc_info.value)
+    # Both backend names must appear in the error message
+    assert "pytorch" in msg
+    assert "tensorrt" in msg

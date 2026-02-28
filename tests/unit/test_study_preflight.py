@@ -1,4 +1,4 @@
-"""Tests for study-level pre-flight checks (CM-10)."""
+"""Tests for study-level pre-flight checks (CM-10, DOCK-05)."""
 
 import pytest
 
@@ -18,8 +18,11 @@ def test_single_backend_passes():
     run_study_preflight(study)  # should not raise
 
 
-def test_multi_backend_raises_preflight_error():
-    """Multi-backend study raises PreFlightError with Docker direction."""
+def test_multi_backend_raises_preflight_error(monkeypatch):
+    """Multi-backend study raises PreFlightError when Docker is not available."""
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     study = StudyConfig(
         experiments=[
             ExperimentConfig(model="m1", backend="pytorch"),
@@ -30,8 +33,11 @@ def test_multi_backend_raises_preflight_error():
         run_study_preflight(study)
 
 
-def test_multi_backend_error_mentions_docker():
-    """Error message directs user to Docker runner (M3)."""
+def test_multi_backend_error_mentions_docker(monkeypatch):
+    """Error message directs user to Docker runner."""
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     study = StudyConfig(
         experiments=[
             ExperimentConfig(model="m1", backend="pytorch"),
@@ -42,8 +48,11 @@ def test_multi_backend_error_mentions_docker():
         run_study_preflight(study)
 
 
-def test_multi_backend_error_lists_backends():
+def test_multi_backend_error_lists_backends(monkeypatch):
     """Error message lists the detected backends."""
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     study = StudyConfig(
         experiments=[
             ExperimentConfig(model="m1", backend="pytorch"),

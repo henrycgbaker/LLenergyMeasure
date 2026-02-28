@@ -26,6 +26,7 @@ from llenergymeasure.study.gaps import run_gap
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, StudyConfig
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
 
 __all__ = ["StudyRunner", "_calculate_timeout", "_run_experiment_worker"]
@@ -236,12 +237,18 @@ class StudyRunner:
     """
 
     def __init__(
-        self, study: StudyConfig, manifest_writer: ManifestWriter, study_dir: Path
+        self,
+        study: StudyConfig,
+        manifest_writer: ManifestWriter,
+        study_dir: Path,
+        runner_specs: dict[str, RunnerSpec] | None = None,
     ) -> None:
         self.study = study
         self.manifest = manifest_writer
         self.study_dir = study_dir
         self.result_files: list[str] = []
+        # Pre-resolved runner specs per backend (None = all experiments use subprocess path)
+        self._runner_specs = runner_specs
         # SIGINT state — initialised here, set live in run()
         self._interrupt_event: threading.Event = threading.Event()
         self._active_process: Any = None  # multiprocessing.Process | None
@@ -339,7 +346,11 @@ class StudyRunner:
         return results
 
     def _run_one(self, config: ExperimentConfig, mp_ctx: Any, index: int, total: int) -> Any:
-        """Spawn a subprocess for one experiment; collect result or failure dict.
+        """Dispatch one experiment via Docker or subprocess, collect result or failure dict.
+
+        Checks runner_specs for this experiment's backend first. If a Docker spec is
+        found, delegates to _run_one_docker(). Otherwise falls through to the existing
+        subprocess dispatch path.
 
         If interrupt_event is set after join, attempts graceful SIGTERM → 2s grace →
         SIGKILL before collecting whatever result is available.
@@ -351,6 +362,13 @@ class StudyRunner:
         current = self._cycle_counters.get(config_hash, 0) + 1
         self._cycle_counters[config_hash] = current
         cycle = current
+
+        # Docker dispatch path — check runner spec for this backend
+        spec = self._runner_specs.get(config.backend) if self._runner_specs else None
+        if spec is not None and spec.mode == "docker":
+            return self._run_one_docker(
+                config, spec, config_hash=config_hash, cycle=cycle, index=index, total=total
+            )
 
         timeout = _calculate_timeout(config)
 
@@ -415,5 +433,85 @@ class StudyRunner:
             except Exception:
                 # Save failure does not abort the study
                 self.manifest.mark_completed(config_hash, cycle, result_file="")
+
+        return result
+
+    def _run_one_docker(
+        self,
+        config: ExperimentConfig,
+        spec: RunnerSpec,
+        *,
+        config_hash: str,
+        cycle: int,
+        index: int,
+        total: int,
+    ) -> Any:
+        """Dispatch one experiment to a Docker container via DockerRunner.
+
+        Blocking dispatch — no subprocess or thread overhead.
+        DockerErrors are caught and converted to non-fatal failure dicts so the
+        study continues even when a container fails.
+
+        Args:
+            config:      ExperimentConfig to run.
+            spec:        Resolved RunnerSpec (mode="docker") for this backend.
+            config_hash: Pre-computed config hash (avoids recomputing).
+            cycle:       Current cycle number for manifest tracking.
+            index:       1-based position in study for progress display.
+            total:       Total experiment count for progress display.
+
+        Returns:
+            ExperimentResult on success, or a failure dict on error.
+        """
+        from llenergymeasure.cli._display import print_study_progress
+        from llenergymeasure.exceptions import DockerError
+        from llenergymeasure.infra.docker_runner import DockerRunner
+        from llenergymeasure.infra.image_registry import get_default_image
+        from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
+
+        # Resolve image — use explicit image from spec or fall back to built-in default
+        image = spec.image if spec.image is not None else get_default_image(config.backend)
+
+        docker_runner = DockerRunner(
+            image=image,
+            timeout=_calculate_timeout(config),
+            source=spec.source,
+        )
+
+        # Pre-dispatch GPU memory residual check (same as local path)
+        check_gpu_memory_residual()
+
+        self.manifest.mark_running(config_hash, cycle)
+        print_study_progress(index, total, config, status="running")
+
+        result: Any
+        try:
+            result = docker_runner.run(config)
+        except DockerError as exc:
+            result = {
+                "type": type(exc).__name__,
+                "message": str(exc),
+                "config_hash": config_hash,
+            }
+
+        # Update manifest based on outcome
+        if isinstance(result, dict) and "type" in result:
+            error_type = result.get("type", "UnknownError")
+            error_message = result.get("message", "")
+            self.manifest.mark_failed(config_hash, cycle, error_type, error_message)
+            print_study_progress(index, total, config, status="failed")
+        else:
+            # Save result to study directory and track path (RES-15)
+            try:
+                from llenergymeasure.results.persistence import save_result
+
+                result_path = save_result(result, self.study_dir)
+                self.result_files.append(str(result_path))
+                rel_path = str(result_path.relative_to(self.study_dir))
+                self.manifest.mark_completed(config_hash, cycle, rel_path)
+            except Exception:
+                # Save failure does not abort the study
+                self.manifest.mark_completed(config_hash, cycle, result_file="")
+            print_study_progress(index, total, config, status="completed")
 
         return result

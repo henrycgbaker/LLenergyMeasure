@@ -25,6 +25,10 @@ class StudyError(LLEMError):
     """Error during study orchestration."""
 
 
+class DockerError(LLEMError):
+    """Base class for Docker container dispatch errors."""
+
+
 class InvalidStateTransitionError(ExperimentError):
     """Invalid state machine transition."""
 
