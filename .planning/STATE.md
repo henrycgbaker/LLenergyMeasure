@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.17
-milestone_name: milestone
-status: unknown
-last_updated: "2026-02-27T23:34:57.734Z"
+milestone: v1.19
+milestone_name: "Docker + vLLM"
+status: in_progress
+last_updated: "2026-02-28T11:00:00.000Z"
 progress:
-  total_phases: 2
+  total_phases: 9
   completed_phases: 1
   total_plans: 1
   completed_plans: 1
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Researchers can run broad parameter sweeps across deployment configurations and produce publishable, methodology-sound measurements showing which implementation choices matter most for LLM energy efficiency.
-**Current focus:** Phase 16 — GPU Memory Verification
+**Current focus:** Phase 17 — Docker Runner Infrastructure
 
 ## Current Position
 
-Phase: 16 of 23 (GPU Memory Verification)
-Plan: 1 of 1 complete
-Status: In progress
-Last activity: 2026-02-27 — Phase 16 Plan 01 complete (GPU memory residual check)
+Phase: 16 of 23 complete (GPU Memory Verification — merged to main)
+Next: Phase 17 (Docker Runner Infrastructure)
+Status: Phase 16 shipped, Phase 17 not started
+Last activity: 2026-02-28 — Phase 16 squash-merged to main (PR #24)
 
 Progress: [█░░░░░░░░░] 11%
 
@@ -62,6 +62,6 @@ Progress: [█░░░░░░░░░] 11%
 
 ## Session Continuity
 
-Last session: 2026-02-27
-Stopped at: Completed Phase 16 Plan 01 — GPU memory residual check
+Last session: 2026-02-28
+Stopped at: Phase 16 merged to main via PR #24. Ready for Phase 17.
 Resume file: None
