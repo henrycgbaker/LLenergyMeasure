@@ -102,10 +102,10 @@ Plans:
   1. Running `llem run` with a Docker runner on a host without NVIDIA Container Toolkit produces a clear, actionable error before any container starts
   2. A container-level GPU visibility check confirms the GPU is accessible inside the container before the experiment starts
   3. A CUDA/driver version mismatch between host and container image produces a descriptive error naming the versions
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 18-01: Pre-flight checks — NVIDIA Container Toolkit detection, GPU visibility test, CUDA/driver compat validation
+- [ ] 18-01-PLAN.md — Tiered Docker pre-flight checks (NVIDIA CT, GPU visibility, CUDA/driver), --skip-preflight CLI flag, wiring into study execution path (DOCK-07, DOCK-08, DOCK-09)
 
 ### Phase 19: vLLM Backend Activation
 **Goal**: Users can run experiments using the vLLM backend via Docker and receive a valid ExperimentResult
