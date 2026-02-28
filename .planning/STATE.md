@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.17
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-28T02:45:00.000Z"
+last_updated: "2026-02-28T03:15:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 6
-  completed_plans: 4
+  total_plans: 7
+  completed_plans: 5
 ---
 
 # Project State
@@ -22,19 +22,19 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 17 of 23 in progress (Docker Runner Infrastructure — Plan 03 complete)
+Phase: 17 of 23 in progress (Docker Runner Infrastructure — Plan 04 complete)
 Next: Phase 18 (Docker pre-flight checks)
-Status: Phase 17 Plans 01+02+03 shipped (errors, entrypoint, image registry, runner resolution, DockerRunner dispatch)
-Last activity: 2026-02-28 — Phase 17 Plan 03 complete on gsd/phase-17-docker-runner-infrastructure
+Status: Phase 17 Plans 01+02+03+04 shipped (errors, entrypoint, image registry, runner resolution, DockerRunner dispatch, integration wiring)
+Last activity: 2026-02-28 — Phase 17 Plan 04 complete on gsd/phase-17-docker-runner-infrastructure
 
-Progress: [███░░░░░░░] 20%
+Progress: [████░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 4
-- Average duration: 241s
-- Total execution time: 1265s (173s + 492s + 300s + 300s)
+- Total plans completed (M3): 5
+- Average duration: 225s
+- Total execution time: 2285s (173s + 492s + 300s + 300s + 1020s)
 
 *Updated after each plan completion*
 
@@ -56,6 +56,9 @@ Progress: [███░░░░░░░] 20%
 - [Phase 17-02]: UserRunnersConfig accepts bare "docker" (not just "docker:<image>") to match YAML runner config syntax
 - [Phase 17-03]: DockerRunner returns error payload dicts as-is (no effective_config injection) — error dicts have no result fields to annotate
 - [Phase 17-03]: exchange_dir=None sentinel in finally-block prevents double-cleanup on unexpected exceptions
+- [Phase 17-04]: Auto-elevation is info-log-only (no user prompt) — multi-backend with Docker proceeds automatically
+- [Phase 17-04]: DockerErrors caught in _run_one_docker() and _run_in_process() — converted to non-fatal failure dicts, study continues
+- [Phase 17-04]: test_study_preflight.py tests must mock is_docker_available() — host machine has Docker + NVIDIA CT installed
 
 ### Carried Items
 
@@ -70,5 +73,5 @@ Progress: [███░░░░░░░] 20%
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Phase 17 Plan 03 complete (DockerRunner dispatch). Ready for Phase 18 (Docker pre-flight checks).
+Stopped at: Phase 17 Plan 04 complete (Docker integration wiring). Ready for Phase 18 (Docker pre-flight checks).
 Resume file: None
