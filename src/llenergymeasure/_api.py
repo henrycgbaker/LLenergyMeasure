@@ -154,18 +154,43 @@ def _run(study: StudyConfig) -> StudyResult:
 
     Always:
     - Calls run_study_preflight(study) first (CM-10 multi-backend guard)
+    - Resolves runner specs for all backends in the study
     - Creates study output directory and ManifestWriter (LA-05)
     - Returns fully populated StudyResult (RES-13 + RES-15)
 
-    Single-experiment / n_cycles=1:  runs in-process (no subprocess overhead).
+    Single-experiment / n_cycles=1:  runs in-process or via DockerRunner directly.
     Otherwise:                         delegates to StudyRunner.
     """
+    import logging
+
+    from llenergymeasure.config.user_config import load_user_config
     from llenergymeasure.domain.experiment import StudySummary
+    from llenergymeasure.infra.runner_resolution import resolve_study_runners
     from llenergymeasure.orchestration.preflight import run_study_preflight
     from llenergymeasure.study.manifest import ManifestWriter, create_study_dir
 
+    _api_logger = logging.getLogger(__name__)
+
     # Multi-backend guard — raises PreFlightError for multi-backend studies (CM-10)
+    # or auto-elevates to Docker when available (DOCK-05)
     run_study_preflight(study)
+
+    # Resolve runner specs for all backends in the study
+    backends: list[str] = list({exp.backend for exp in study.experiments})
+    user_config = load_user_config()
+    runner_specs = resolve_study_runners(
+        backends,
+        yaml_runners=study.runners,
+        user_config=user_config.runners,
+    )
+
+    # Warn on mixed runners (some local, some docker)
+    modes = {spec.mode for spec in runner_specs.values()}
+    if len(modes) > 1:
+        _api_logger.warning(
+            "Mixed runners detected. For consistent measurements, "
+            "consider running all backends in Docker."
+        )
 
     # Always create study dir + manifest (LA-05)
     study_dir = create_study_dir(study.name, Path("results"))
@@ -175,9 +200,13 @@ def _run(study: StudyConfig) -> StudyResult:
     is_single = len(study.experiments) == 1 and study.execution.n_cycles == 1
 
     if is_single:
-        result_files, experiment_results, warnings = _run_in_process(study, manifest, study_dir)
+        result_files, experiment_results, warnings = _run_in_process(
+            study, manifest, study_dir, runner_specs=runner_specs
+        )
     else:
-        result_files, experiment_results, warnings = _run_via_runner(study, manifest, study_dir)
+        result_files, experiment_results, warnings = _run_via_runner(
+            study, manifest, study_dir, runner_specs=runner_specs
+        )
 
     wall_time = time.monotonic() - wall_start
 
@@ -220,28 +249,71 @@ def _run_in_process(
     study: StudyConfig,
     manifest: Any,
     study_dir: Path,
+    runner_specs: Any = None,
 ) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
-    """Run a single experiment in-process. Returns (result_files, results, warnings).
+    """Run a single experiment in-process or via DockerRunner directly.
+
+    When runner_specs resolves the backend to "docker", uses DockerRunner directly
+    (no subprocess spawning). Otherwise runs in-process via the backend.
 
     Errors from run_preflight() and backend.run() propagate unchanged (PreFlightError,
     BackendError). Only result-saving errors are caught so a save failure does not
     discard a completed measurement.
     """
-    from llenergymeasure.core.backends import get_backend
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
-    from llenergymeasure.orchestration.preflight import run_preflight
     from llenergymeasure.results.persistence import save_result
 
     config = study.experiments[0]
     config_hash = compute_measurement_config_hash(config)
     cycle = 1
 
+    # Check runner spec for this backend
+    spec = runner_specs.get(config.backend) if runner_specs else None
+
     manifest.mark_running(config_hash, cycle)
 
-    # Pre-flight and backend run — errors propagate naturally (PreFlightError, BackendError)
-    run_preflight(config)
-    backend = get_backend(config.backend)
-    result = backend.run(config)
+    if spec is not None and spec.mode == "docker":
+        # Docker path: dispatch to container directly (no subprocess)
+        from llenergymeasure.exceptions import DockerError
+        from llenergymeasure.infra.docker_runner import DockerRunner
+        from llenergymeasure.infra.image_registry import get_default_image
+
+        image = spec.image if spec.image is not None else get_default_image(config.backend)
+        from llenergymeasure.study.runner import _calculate_timeout
+
+        docker_runner = DockerRunner(
+            image=image,
+            timeout=_calculate_timeout(config),
+            source=spec.source,
+        )
+        try:
+            result = docker_runner.run(config)
+        except DockerError as exc:
+            # Convert to failure dict — manifest marks failed, study continues
+            error_payload: dict[str, Any] = {
+                "type": type(exc).__name__,
+                "message": str(exc),
+                "config_hash": config_hash,
+            }
+            manifest.mark_failed(
+                config_hash, cycle, error_payload["type"], error_payload["message"]
+            )
+            return [], [None], [error_payload["message"]]
+    else:
+        # Local in-process path — errors propagate naturally (PreFlightError, BackendError)
+        from llenergymeasure.core.backends import get_backend
+        from llenergymeasure.orchestration.preflight import run_preflight
+
+        run_preflight(config)
+        backend = get_backend(config.backend)
+        result = backend.run(config)
+
+    # Handle error payload returned from Docker container (exit 0 but wrote error JSON)
+    if isinstance(result, dict) and "type" in result:
+        error_type = result.get("type", "UnknownError")
+        error_message = result.get("message", "")
+        manifest.mark_failed(config_hash, cycle, error_type, error_message)
+        return [], [None], [error_message]
 
     result_files: list[str] = []
     warnings: list[str] = []
@@ -261,11 +333,12 @@ def _run_via_runner(
     study: StudyConfig,
     manifest: Any,
     study_dir: Path,
+    runner_specs: Any = None,
 ) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
     """Delegate to StudyRunner for multi-experiment / multi-cycle runs."""
     from llenergymeasure.study.runner import StudyRunner
 
-    runner = StudyRunner(study, manifest, study_dir)
+    runner = StudyRunner(study, manifest, study_dir, runner_specs=runner_specs)
     raw_results = runner.run()
 
     warnings: list[str] = []
