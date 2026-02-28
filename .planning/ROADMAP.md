@@ -52,7 +52,7 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
 
 - [x] **Phase 16: GPU Memory Verification** - NVML residual memory check before each experiment dispatch in both local and Docker paths (completed 2026-02-27)
 - [x] **Phase 17: Docker Runner Infrastructure** - StudyRunner Docker dispatch path, config/result transfer via volume, per-backend runner configuration (completed 2026-02-28)
-- [ ] **Phase 18: Docker Pre-flight** - NVIDIA Container Toolkit detection, GPU visibility validation, CUDA/driver compatibility check
+- [x] **Phase 18: Docker Pre-flight** - NVIDIA Container Toolkit detection, GPU visibility validation, CUDA/driver compatibility check (completed 2026-02-28)
 - [ ] **Phase 19: vLLM Backend Activation** - Fix streaming and shm-size P0 bugs, activate vLLM backend end-to-end via Docker, container entrypoint
 - [ ] **Phase 19.1: vLLM Parameter Audit** - INSERTED — Research upstream vLLM API, expand VLLMConfig fields, wire energy-relevant params (ref: Phase 4.1 PyTorch audit)
 - [ ] **Phase 20: Docker Image and CI** - Official vLLM Docker image published to GHCR, CI publish on release tag
@@ -200,7 +200,7 @@ Phase 21 can run in parallel with Phase 20 (no dependency between them).
 |-------|----------------|--------|-----------|
 | 16. GPU Memory Verification | 1/1 | Merged (PR #24) | 2026-02-28 |
 | 17. Docker Runner Infrastructure | 4/4 | Complete    | 2026-02-28 |
-| 18. Docker Pre-flight | 0/TBD | Not started | - |
+| 18. Docker Pre-flight | 1/1 | Complete   | 2026-02-28 |
 | 19. vLLM Backend Activation | 0/TBD | Not started | - |
 | 19.1. vLLM Parameter Audit | 0/TBD | Not started | - |
 | 20. Docker Image and CI | 0/TBD | Not started | - |

@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Researchers can run broad parameter sweeps across deployment configurations and produce publishable, methodology-sound measurements showing which implementation choices matter most for LLM energy efficiency.
-**Current focus:** Phase 17 — Docker Runner Infrastructure
+**Current focus:** Phase 18 — Docker Pre-flight Checks
 
 ## Current Position
 
-Phase: 17 of 23 in progress (Docker Runner Infrastructure — Plan 04 complete)
-Next: Phase 18 (Docker pre-flight checks)
-Status: Phase 17 Plans 01+02+03+04 shipped (errors, entrypoint, image registry, runner resolution, DockerRunner dispatch, integration wiring)
-Last activity: 2026-02-28 — Phase 17 Plan 04 complete on gsd/phase-17-docker-runner-infrastructure
+Phase: 18 of 23 in progress (Docker Pre-flight — Plan 01 complete)
+Next: Phase 18 Plan 02 (or Phase 19 — vLLM backend activation)
+Status: Phase 18 Plan 01 shipped (Docker pre-flight module, --skip-preflight CLI, CUDA/driver compat checks, 63 unit tests)
+Last activity: 2026-02-28 — Phase 18 Plan 01 complete on gsd/phase-18-docker-pre-flight
 
-Progress: [████░░░░░░] 25%
+Progress: [████░░░░░░] 27%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 5
-- Average duration: 225s
-- Total execution time: 2285s (173s + 492s + 300s + 300s + 1020s)
+- Total plans completed (M3): 6
+- Average duration: 248s
+- Total execution time: 3078s (173s + 492s + 300s + 300s + 1020s + 793s)
 
 *Updated after each plan completion*
 
@@ -59,6 +59,10 @@ Progress: [████░░░░░░] 25%
 - [Phase 17-04]: Auto-elevation is info-log-only (no user prompt) — multi-backend with Docker proceeds automatically
 - [Phase 17-04]: DockerErrors caught in _run_one_docker() and _run_in_process() — converted to non-fatal failure dicts, study continues
 - [Phase 17-04]: test_study_preflight.py tests must mock is_docker_available() — host machine has Docker + NVIDIA CT installed
+- [Phase 18-01]: DockerPreFlightError inherits PreFlightError (not DockerError) so existing CLI error handler catches it without changes
+- [Phase 18-01]: CUDA compat detection uses specific patterns (cuda+version, driver/library mismatch, nvml+driver) to avoid false positives from generic GPU access errors containing "device driver"
+- [Phase 18-01]: run_docker_preflight imported inside function body in run_study_preflight — lazy import prevents circular dependency
+- [Phase 18-01]: resolve_study_runners called without yaml_runners/user_config in pre-flight — uses auto-detection to check if Docker runners are active
 
 ### Carried Items
 
@@ -73,5 +77,5 @@ Progress: [████░░░░░░] 25%
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Phase 17 Plan 04 complete (Docker integration wiring). Ready for Phase 18 (Docker pre-flight checks).
+Stopped at: Phase 18 Plan 01 complete (Docker pre-flight checks, --skip-preflight CLI, 63 tests). Ready for Phase 18 Plan 02 or Phase 19 (vLLM backend).
 Resume file: None
