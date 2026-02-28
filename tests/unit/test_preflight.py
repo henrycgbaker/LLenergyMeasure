@@ -388,6 +388,9 @@ def test_run_study_preflight_multi_backend_docker_available_auto_elevates(
 ) -> None:
     """Multi-backend study auto-elevates (no error) when Docker is available."""
     monkeypatch.setattr("llenergymeasure.infra.runner_resolution.is_docker_available", lambda: True)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.docker_preflight.run_docker_preflight", lambda skip=False: None
+    )
     study = _make_study(["pytorch", "vllm"])
     with caplog.at_level(logging.INFO, logger="llenergymeasure.orchestration.preflight"):
         # Should not raise

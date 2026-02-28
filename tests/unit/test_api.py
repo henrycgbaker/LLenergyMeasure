@@ -112,7 +112,7 @@ def test_run_experiment_returns_experiment_result(monkeypatch):
     """run_experiment returns exactly ExperimentResult, not a union or None."""
     import llenergymeasure._api as api_module
 
-    monkeypatch.setattr(api_module, "_run", lambda study: _make_study_result())
+    monkeypatch.setattr(api_module, "_run", lambda study, **kw: _make_study_result())
 
     config = ExperimentConfig(model="gpt2")
     result = run_experiment(config)
@@ -134,7 +134,7 @@ def test_run_experiment_yaml_path_form(tmp_path, monkeypatch):
 
     captured_study = {}
 
-    def mock_run(study):
+    def mock_run(study, **kw):
         captured_study["value"] = study
         return _make_study_result()
 
@@ -161,7 +161,7 @@ def test_run_experiment_kwargs_form(monkeypatch):
 
     captured_study = {}
 
-    def mock_run(study):
+    def mock_run(study, **kw):
         captured_study["value"] = study
         return _make_study_result()
 
@@ -196,7 +196,7 @@ def test_run_experiment_no_disk_writes(tmp_path, monkeypatch):
     """run_experiment produces no disk writes when output_dir is not specified."""
     import llenergymeasure._api as api_module
 
-    monkeypatch.setattr(api_module, "_run", lambda study: _make_study_result())
+    monkeypatch.setattr(api_module, "_run", lambda study, **kw: _make_study_result())
 
     # Change working directory to tmp_path to catch any accidental writes
     config = ExperimentConfig(model="gpt2")
@@ -251,7 +251,7 @@ def test_run_experiment_path_object_form(tmp_path, monkeypatch):
     """run_experiment accepts a Path object as well as a str path."""
     import llenergymeasure._api as api_module
 
-    monkeypatch.setattr(api_module, "_run", lambda study: _make_study_result())
+    monkeypatch.setattr(api_module, "_run", lambda study, **kw: _make_study_result())
 
     config_path = tmp_path / "config.yaml"
     config_path.write_text("model: gpt2\n")
@@ -271,7 +271,7 @@ def test_run_experiment_kwargs_backend(monkeypatch):
 
     captured_study = {}
 
-    def mock_run(study):
+    def mock_run(study, **kw):
         captured_study["value"] = study
         return _make_study_result()
 
@@ -318,7 +318,7 @@ def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", mock_preflight)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -354,7 +354,7 @@ def test_run_calls_get_backend_with_correct_name(monkeypatch, tmp_path):
         return mock_backend
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", mock_get_backend)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -384,7 +384,7 @@ def test_run_returns_study_result(monkeypatch, tmp_path):
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -416,7 +416,7 @@ def test_run_propagates_preflight_error(monkeypatch, tmp_path):
         raise PreFlightError(["CUDA not available"])
 
     monkeypatch.setattr(pf_module, "run_preflight", failing_preflight)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(
         backends_module, "get_backend", lambda name: _MockBackend(_make_experiment_result())
     )
@@ -447,7 +447,7 @@ def test_run_propagates_backend_error(monkeypatch, tmp_path):
             raise BackendError("GPU out of memory")
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: _FailingBackend())
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -470,7 +470,7 @@ def test_run_experiment_end_to_end_mocked(monkeypatch, tmp_path):
     mock_backend = _MockBackend(expected_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -504,7 +504,7 @@ def test_run_study_accepts_study_config(monkeypatch, tmp_path):
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     # Avoid real disk writes by patching create_study_dir and save_result
     monkeypatch.setattr(
@@ -538,7 +538,7 @@ def test_run_study_accepts_path(tmp_path, monkeypatch):
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -572,7 +572,7 @@ def test_run_dispatches_single_in_process(monkeypatch, tmp_path):
         original_runner_init(self, *args, **kwargs)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -639,7 +639,7 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
         captured_runner_specs.append(runner_specs)
         return original_run_via_runner(study, manifest, study_dir, runner_specs=runner_specs)
 
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.resolve_study_runners",
         lambda backends, yaml_runners=None, user_config=None: resolved_specs,
@@ -700,7 +700,7 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
     mock_result = _make_experiment_result()
     mock_backend = _MockBackend(mock_result)
 
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study: None)
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     monkeypatch.setattr(

@@ -150,20 +150,27 @@ def run_preflight(config: ExperimentConfig) -> None:
     _warn_if_persistence_mode_off()
 
 
-def run_study_preflight(study: StudyConfig) -> None:
+def run_study_preflight(study: StudyConfig, skip_preflight: bool = False) -> None:
     """Pre-flight checks for a study configuration.
 
     Single-backend studies pass through — per-experiment pre-flight runs later
     in the subprocess. Multi-backend studies auto-elevate to Docker when Docker
     is available (DOCK-05); raise PreFlightError otherwise.
 
+    When any experiment in the study will use a Docker runner, runs Docker
+    pre-flight checks (GPU visibility, CUDA/driver compat) unless skipped.
+
     Args:
         study: Resolved StudyConfig.
+        skip_preflight: Skip Docker pre-flight checks. The effective skip value
+            is ``skip_preflight OR study.execution.skip_preflight`` — CLI flag
+            takes priority, then YAML config.
 
     Raises:
         PreFlightError: Multi-backend study and Docker is not available.
+        DockerPreFlightError: Docker pre-flight check failed (inherits PreFlightError).
     """
-    from llenergymeasure.infra.runner_resolution import is_docker_available
+    from llenergymeasure.infra.runner_resolution import is_docker_available, resolve_study_runners
 
     backends = {exp.backend for exp in study.experiments}
     if len(backends) > 1:
@@ -174,9 +181,18 @@ def run_study_preflight(study: StudyConfig) -> None:
                 "for isolation.",
                 backend_list,
             )
-            return
-        raise PreFlightError(
-            f"Multi-backend study requires Docker isolation. "
-            f"Found backends: {backend_list}. "
-            "Install Docker + NVIDIA Container Toolkit, or use a single backend."
-        )
+        else:
+            raise PreFlightError(
+                f"Multi-backend study requires Docker isolation. "
+                f"Found backends: {backend_list}. "
+                "Install Docker + NVIDIA Container Toolkit, or use a single backend."
+            )
+
+    # Docker pre-flight: run once if any backend resolves to a Docker runner.
+    # Effective skip = CLI flag (skip_preflight param) OR YAML config value.
+    effective_skip = skip_preflight or getattr(study.execution, "skip_preflight", False)
+    runner_specs = resolve_study_runners(list(backends))
+    if any(spec.mode == "docker" for spec in runner_specs.values()):
+        from llenergymeasure.infra.docker_preflight import run_docker_preflight
+
+        run_docker_preflight(skip=effective_skip)

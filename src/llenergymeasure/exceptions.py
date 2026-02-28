@@ -29,6 +29,14 @@ class DockerError(LLEMError):
     """Base class for Docker container dispatch errors."""
 
 
+class DockerPreFlightError(PreFlightError):
+    """Docker pre-flight check failed before any container is launched.
+
+    Inherits from PreFlightError so it is caught by the existing CLI error
+    handler (PreFlightError catch block in cli/run.py).
+    """
+
+
 class InvalidStateTransitionError(ExperimentError):
     """Invalid state machine transition."""
 

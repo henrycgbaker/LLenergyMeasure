@@ -20,11 +20,11 @@ from llenergymeasure.exceptions import ConfigError
 
 
 @overload
-def run_experiment(config: str | Path) -> ExperimentResult: ...
+def run_experiment(config: str | Path, *, skip_preflight: bool = ...) -> ExperimentResult: ...
 
 
 @overload
-def run_experiment(config: ExperimentConfig) -> ExperimentResult: ...
+def run_experiment(config: ExperimentConfig, *, skip_preflight: bool = ...) -> ExperimentResult: ...
 
 
 @overload
@@ -35,6 +35,7 @@ def run_experiment(
     backend: str | None = None,
     n: int = 100,
     dataset: str = "aienergyscore",
+    skip_preflight: bool = ...,
     **kwargs: Any,
 ) -> ExperimentResult: ...
 
@@ -46,6 +47,7 @@ def run_experiment(
     backend: str | None = None,
     n: int = 100,
     dataset: str = "aienergyscore",
+    skip_preflight: bool = False,
     **kwargs: Any,
 ) -> ExperimentResult:
     """Run a single LLM inference efficiency experiment.
@@ -63,6 +65,7 @@ def run_experiment(
         backend: Inference backend (kwargs form only, defaults to ExperimentConfig default).
         n: Number of prompts (kwargs form only, default 100).
         dataset: Dataset name (kwargs form only, default "aienergyscore").
+        skip_preflight: Skip Docker pre-flight checks (GPU visibility, CUDA/driver compat).
         **kwargs: Additional ExperimentConfig fields (kwargs form only).
 
     Returns:
@@ -73,7 +76,7 @@ def run_experiment(
         pydantic.ValidationError: Invalid field values (passes through unchanged).
     """
     study = _to_study_config(config, model=model, backend=backend, n=n, dataset=dataset, **kwargs)
-    study_result = _run(study)
+    study_result = _run(study, skip_preflight=skip_preflight)
     return study_result.experiments[0]
 
 
@@ -82,7 +85,7 @@ def run_experiment(
 # ---------------------------------------------------------------------------
 
 
-def run_study(config: str | Path | StudyConfig) -> StudyResult:
+def run_study(config: str | Path | StudyConfig, *, skip_preflight: bool = False) -> StudyResult:
     """Run a multi-experiment study.
 
     Always writes manifest.json to disk (LA-05 — documented side-effect).
@@ -90,6 +93,8 @@ def run_study(config: str | Path | StudyConfig) -> StudyResult:
 
     Args:
         config: YAML file path or resolved StudyConfig.
+        skip_preflight: Skip Docker pre-flight checks (GPU visibility, CUDA/driver compat).
+            CLI --skip-preflight flag and YAML execution.skip_preflight: true also bypass.
 
     Returns:
         StudyResult with experiments, result_files, measurement_protocol, summary.
@@ -107,7 +112,7 @@ def run_study(config: str | Path | StudyConfig) -> StudyResult:
         study = config
     else:
         raise ConfigError(f"Expected str, Path, or StudyConfig; got {type(config).__name__}")
-    return _run(study)
+    return _run(study, skip_preflight=skip_preflight)
 
 
 # ---------------------------------------------------------------------------
@@ -149,11 +154,12 @@ def _to_study_config(
     return StudyConfig(experiments=[experiment])
 
 
-def _run(study: StudyConfig) -> StudyResult:
+def _run(study: StudyConfig, skip_preflight: bool = False) -> StudyResult:
     """Dispatcher: single experiment runs in-process; multi-experiment uses StudyRunner.
 
     Always:
-    - Calls run_study_preflight(study) first (CM-10 multi-backend guard)
+    - Calls run_study_preflight(study, skip_preflight) first (CM-10 multi-backend guard
+      and Docker pre-flight checks)
     - Resolves runner specs for all backends in the study
     - Creates study output directory and ManifestWriter (LA-05)
     - Returns fully populated StudyResult (RES-13 + RES-15)
@@ -172,8 +178,9 @@ def _run(study: StudyConfig) -> StudyResult:
     _api_logger = logging.getLogger(__name__)
 
     # Multi-backend guard — raises PreFlightError for multi-backend studies (CM-10)
-    # or auto-elevates to Docker when available (DOCK-05)
-    run_study_preflight(study)
+    # or auto-elevates to Docker when available (DOCK-05). Also runs Docker pre-flight
+    # checks when any backend resolves to a Docker runner.
+    run_study_preflight(study, skip_preflight=skip_preflight)
 
     # Resolve runner specs for all backends in the study
     backends: list[str] = list({exp.backend for exp in study.experiments})

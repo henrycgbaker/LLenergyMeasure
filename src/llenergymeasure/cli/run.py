@@ -95,6 +95,13 @@ def run(
         bool,
         typer.Option("--no-gaps", help="Disable thermal gaps between experiments (study mode)"),
     ] = False,
+    skip_preflight: Annotated[
+        bool,
+        typer.Option(
+            "--skip-preflight",
+            help="Skip Docker pre-flight checks (GPU visibility, CUDA/driver compatibility)",
+        ),
+    ] = False,
 ) -> None:
     """Run an LLM efficiency experiment."""
 
@@ -121,6 +128,7 @@ def run(
             cycles=cycles,
             order=order,
             no_gaps=no_gaps,
+            skip_preflight=skip_preflight,
         )
     except ConfigError as e:
         print(format_error(e, verbose=verbose), file=sys.stderr)
@@ -156,6 +164,7 @@ def _run_impl(
     cycles: int | None = None,
     order: str | None = None,
     no_gaps: bool = False,
+    skip_preflight: bool = False,
 ) -> None:
     """Core implementation — separated for clean error handling in run()."""
     # Build CLI overrides dict — only include flags the user explicitly passed
@@ -208,6 +217,7 @@ def _run_impl(
             no_gaps=no_gaps,
             quiet=quiet,
             verbose=verbose,
+            skip_preflight=skip_preflight,
         )
         return
 
@@ -233,7 +243,7 @@ def _run_impl(
         file=sys.stderr,
         disable=quiet or not sys.stderr.isatty(),
     ) as pbar:
-        result = run_experiment(experiment_config)
+        result = run_experiment(experiment_config, skip_preflight=skip_preflight)
         pbar.set_description("Done")
 
     print_result_summary(result)
@@ -262,6 +272,7 @@ def _run_study_impl(
     no_gaps: bool,
     quiet: bool,
     verbose: bool,
+    skip_preflight: bool = False,
 ) -> None:
     """Study execution path — separated for clean error handling."""
     import yaml
@@ -313,8 +324,8 @@ def _run_study_impl(
         print(summary, file=sys.stderr)
         print(file=sys.stderr)
 
-    # Run the study
-    result = run_study(study_config)
+    # Run the study — pass skip_preflight so CLI flag overrides YAML config
+    result = run_study(study_config, skip_preflight=skip_preflight)
 
     # Display summary
     if not quiet:
