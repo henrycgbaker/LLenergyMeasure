@@ -8,7 +8,7 @@ progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -22,19 +22,19 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 17 of 23 in progress (Docker Runner Infrastructure — Plan 02 complete)
-Next: Phase 17 Plan 03 (DockerRunner dispatch)
-Status: Phase 17 Plans 01+02 shipped (errors, entrypoint, image registry, runner resolution)
-Last activity: 2026-02-28 — Phase 17 Plan 02 complete on gsd/phase-17-docker-runner-infrastructure
+Phase: 17 of 23 in progress (Docker Runner Infrastructure — Plan 03 complete)
+Next: Phase 18 (Docker pre-flight checks)
+Status: Phase 17 Plans 01+02+03 shipped (errors, entrypoint, image registry, runner resolution, DockerRunner dispatch)
+Last activity: 2026-02-28 — Phase 17 Plan 03 complete on gsd/phase-17-docker-runner-infrastructure
 
-Progress: [██░░░░░░░░] 15%
+Progress: [███░░░░░░░] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 3
-- Average duration: 280s
-- Total execution time: 965s (173s + 492s + 300s)
+- Total plans completed (M3): 4
+- Average duration: 241s
+- Total execution time: 1265s (173s + 492s + 300s + 300s)
 
 *Updated after each plan completion*
 
@@ -54,6 +54,8 @@ Progress: [██░░░░░░░░] 15%
 - [Phase 17]: Error JSON format {type, message, traceback} mirrors StudyRunner worker payloads — consistent upstream consumer handling
 - [Phase 17-02]: user_config=None enables auto-detection; user_config provided (even with default 'local') blocks auto-detection — explicit presence beats inference
 - [Phase 17-02]: UserRunnersConfig accepts bare "docker" (not just "docker:<image>") to match YAML runner config syntax
+- [Phase 17-03]: DockerRunner returns error payload dicts as-is (no effective_config injection) — error dicts have no result fields to annotate
+- [Phase 17-03]: exchange_dir=None sentinel in finally-block prevents double-cleanup on unexpected exceptions
 
 ### Carried Items
 
@@ -68,5 +70,5 @@ Progress: [██░░░░░░░░] 15%
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Phase 17 Plan 02 complete. Ready for Phase 17 Plan 03 (DockerRunner dispatch).
+Stopped at: Phase 17 Plan 03 complete (DockerRunner dispatch). Ready for Phase 18 (Docker pre-flight checks).
 Resume file: None

@@ -9,10 +9,10 @@ Requirements for M3. Each maps to roadmap phases.
 
 ### Docker Infrastructure
 
-- [ ] **DOCK-01**: StudyRunner dispatches experiments to ephemeral Docker containers (`docker run --rm`) when runner is `docker`
+- [x] **DOCK-01**: StudyRunner dispatches experiments to ephemeral Docker containers (`docker run --rm`) when runner is `docker`
 - [x] **DOCK-02**: Config passed to container via mounted JSON file + `LLEM_CONFIG_PATH` env var
 - [x] **DOCK-03**: Results returned via shared volume (`{config_hash}_result.json`)
-- [ ] **DOCK-04**: Container completion signalled by process exit (`subprocess.run` blocking call)
+- [x] **DOCK-04**: Container completion signalled by process exit (`subprocess.run` blocking call)
 - [ ] **DOCK-05**: Runner defaults to `local` for all backends. Multi-backend study with incompatible backends auto-elevates to Docker with guidance. Users can override per-backend via config (ref: AIEnergyScore `USE_DOCKER` env var)
 - [x] **DOCK-06**: Runner selection configurable per-backend via user config (`runners:` section) and env var (`LLEM_RUNNER_VLLM=docker:image`). Ref: AIEnergyScore `USE_DOCKER` pattern, extended to per-backend granularity
 - [ ] **DOCK-07**: Docker pre-flight validates NVIDIA Container Toolkit is installed
@@ -87,10 +87,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DOCK-01 | Phase 17 | Pending |
+| DOCK-01 | Phase 17 | Complete |
 | DOCK-02 | Phase 17 | Complete |
 | DOCK-03 | Phase 17 | Complete |
-| DOCK-04 | Phase 17 | Pending |
+| DOCK-04 | Phase 17 | Complete |
 | DOCK-05 | Phase 17 | Pending |
 | DOCK-06 | Phase 17 | Complete |
 | DOCK-07 | Phase 18 | Pending |
