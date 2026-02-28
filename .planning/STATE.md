@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.17
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-28T02:37:36.784Z"
+last_updated: "2026-02-28T02:45:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 6
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -22,19 +22,19 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 17 of 23 in progress (Docker Runner Infrastructure — Plan 01 complete)
-Next: Phase 17 Plan 02 (DockerRunner dispatch)
-Status: Phase 17 Plan 01 shipped (docker errors, container entrypoint, image registry)
-Last activity: 2026-02-28 — Phase 17 Plan 01 complete on gsd/phase-17-docker-runner-infrastructure
+Phase: 17 of 23 in progress (Docker Runner Infrastructure — Plan 02 complete)
+Next: Phase 17 Plan 03 (DockerRunner dispatch)
+Status: Phase 17 Plans 01+02 shipped (errors, entrypoint, image registry, runner resolution)
+Last activity: 2026-02-28 — Phase 17 Plan 02 complete on gsd/phase-17-docker-runner-infrastructure
 
-Progress: [██░░░░░░░░] 13%
+Progress: [██░░░░░░░░] 15%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 2
-- Average duration: 333s
-- Total execution time: 665s (173s + 492s)
+- Total plans completed (M3): 3
+- Average duration: 280s
+- Total execution time: 965s (173s + 492s + 300s)
 
 *Updated after each plan completion*
 
@@ -52,6 +52,8 @@ Progress: [██░░░░░░░░] 13%
 - [Phase 17]: parse_runner_value raises ValueError on empty 'docker:' and unrecognised values — strict contract prevents silent fallbacks
 - [Phase 17]: Container entrypoint uses core.backends.get_backend path (same as StudyRunner worker) — not orchestration factory — for identical measurement behaviour
 - [Phase 17]: Error JSON format {type, message, traceback} mirrors StudyRunner worker payloads — consistent upstream consumer handling
+- [Phase 17-02]: user_config=None enables auto-detection; user_config provided (even with default 'local') blocks auto-detection — explicit presence beats inference
+- [Phase 17-02]: UserRunnersConfig accepts bare "docker" (not just "docker:<image>") to match YAML runner config syntax
 
 ### Carried Items
 
@@ -66,5 +68,5 @@ Progress: [██░░░░░░░░] 13%
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Phase 17 Plan 01 complete. Ready for Phase 17 Plan 02 (DockerRunner dispatch).
+Stopped at: Phase 17 Plan 02 complete. Ready for Phase 17 Plan 03 (DockerRunner dispatch).
 Resume file: None

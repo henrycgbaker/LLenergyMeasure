@@ -199,7 +199,7 @@ Phase 21 can run in parallel with Phase 20 (no dependency between them).
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 16. GPU Memory Verification | 1/1 | Merged (PR #24) | 2026-02-28 |
-| 17. Docker Runner Infrastructure | 1/4 | In Progress|  |
+| 17. Docker Runner Infrastructure | 2/4 | In Progress|  |
 | 18. Docker Pre-flight | 0/TBD | Not started | - |
 | 19. vLLM Backend Activation | 0/TBD | Not started | - |
 | 19.1. vLLM Parameter Audit | 0/TBD | Not started | - |
