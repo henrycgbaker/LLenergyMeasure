@@ -33,8 +33,8 @@ def _make_pynvml_mock(used_bytes: int, total_bytes: int = 80 * 1024 * 1024 * 102
 
 
 def test_clean_state_no_warning(caplog: pytest.LogCaptureFixture) -> None:
-    """50 MB used (below 100 MB threshold) → no warning logged."""
-    pynvml_mock = _make_pynvml_mock(used_bytes=50 * 1024 * 1024)
+    """500 MB used (below 1024 MB default threshold) → no warning logged."""
+    pynvml_mock = _make_pynvml_mock(used_bytes=500 * 1024 * 1024)
 
     with (
         patch.dict(sys.modules, {"pynvml": pynvml_mock}),
@@ -46,8 +46,8 @@ def test_clean_state_no_warning(caplog: pytest.LogCaptureFixture) -> None:
 
 
 def test_residual_memory_warning(caplog: pytest.LogCaptureFixture) -> None:
-    """500 MB used (above 100 MB threshold) → warning with device and MB info."""
-    pynvml_mock = _make_pynvml_mock(used_bytes=500 * 1024 * 1024)
+    """2 GB used (above 1024 MB default threshold) → warning with device and MB info."""
+    pynvml_mock = _make_pynvml_mock(used_bytes=2048 * 1024 * 1024)
 
     with (
         patch.dict(sys.modules, {"pynvml": pynvml_mock}),
@@ -58,7 +58,7 @@ def test_residual_memory_warning(caplog: pytest.LogCaptureFixture) -> None:
     assert len(caplog.records) == 1
     msg = caplog.records[0].message
     assert "Residual GPU memory detected" in msg
-    assert "500" in msg
+    assert "2048" in msg
 
 
 def test_custom_threshold(caplog: pytest.LogCaptureFixture) -> None:

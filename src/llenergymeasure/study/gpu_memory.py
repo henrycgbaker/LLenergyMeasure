@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def check_gpu_memory_residual(
     device_index: int = 0,
-    threshold_mb: float = 100.0,
+    threshold_mb: float = 1024.0,
 ) -> None:
     """Query NVML for residual GPU memory before an experiment dispatch.
 
@@ -25,9 +25,10 @@ def check_gpu_memory_residual(
 
     Args:
         device_index: GPU device index to query (default 0, single-GPU assumption).
-        threshold_mb: Warning threshold in megabytes (default 100 MB).
-            Driver overhead is typically 50-80 MB on modern GPUs; 100 MB
-            accommodates that while catching real residual allocations.
+        threshold_mb: Warning threshold in megabytes (default 1024 MB).
+            NVML driver overhead varies by GPU: ~600 MB on A100, lower on
+            consumer cards. 1 GB accommodates driver baselines while catching
+            real residual allocations (loaded models, KV caches).
     """
     try:
         import pynvml
