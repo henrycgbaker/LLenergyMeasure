@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date decided:** 2026-02-19
-**Last updated:** 2026-02-26
+**Last updated:** 2026-02-28
 **Research:** [../research/13-execution-isolation-patterns.md](../research/13-execution-isolation-patterns.md)
 
 ## Decision
@@ -128,6 +128,33 @@ Cache strategy:
 - Deferred: `llem compile-engines study.yaml` pre-compilation command — not in v2.2
 - Docker images published to Docker Hub under `llenergymeasure/` org — v2.2 planning
 - Apptainer/Singularity HPC compatibility — deferred past v2.2
+
+---
+
+### D6: Default runner — Docker-first vs local-first
+
+> **Added (2026-02-28):** Supersedes the original position that `local` is always the default.
+
+| Option | Pros | Cons |
+|--------|------|------|
+| **Docker-first when available (chosen)** | Best measurement isolation by default; consistent CUDA/driver environment; progressive disclosure — new users never configure runners; aligns with AIEnergyScore's Docker-as-primary model | Requires Docker + NVIDIA Container Toolkit installed; first-run image pull is slow |
+| Local always default (original position) | Zero dependencies; works immediately | Measurements affected by host environment variability; multi-backend studies impossible without explicit config; new users must learn about Docker to get good results |
+
+**Decision:** When Docker + NVIDIA Container Toolkit are detected on the host, the default runner for all backends is `docker`. When Docker is not available, the default is `local` with a one-liner nudge recommending Docker installation. User-set runner config always takes precedence.
+
+**Rationale:** For an energy measurement tool, the environment directly affects measurement quality. Docker provides process isolation, CUDA pinning, and cleaner energy baselines. Making it the default when available means new users get the best measurements without configuration. Users without Docker (or who explicitly prefer local) set `runners:` in their config — progressive disclosure.
+
+All three backends (PyTorch, vLLM, TensorRT-LLM) are architecturally equal with respect to runners. Each implements the `InferenceBackend` protocol and can run in either `local` or `docker` mode. PyTorch is not special-cased despite being more commonly installed locally.
+
+**Runner config syntax:**
+- `runners: {vllm: docker}` — use built-in default image for the backend
+- `runners: {vllm: "docker:ghcr.io/custom/img:tag"}` — explicit image override
+- Per-backend env var override: `LLEM_RUNNER_VLLM=docker:image`
+- Precedence (highest wins): env var > study YAML > user config > built-in registry > default
+
+**Auto-elevation:** When Docker is available and a multi-backend study has no explicit runner config, all backends are dispatched to Docker. A minimal one-liner warning is shown. All backends go to Docker — no hybrid local+Docker within a single study. If user explicitly configures mixed runners (some local, some Docker), a warning is shown but the config is respected.
+
+**Runner as metadata, not identity:** Runner type and image are NOT part of the experiment config hash. They are captured in `effective_config` metadata on `ExperimentResult` (image tag, image digest, container ID).
 
 ---
 
