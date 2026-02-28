@@ -86,13 +86,13 @@ Plans:
   4. A multi-backend study with incompatible backends auto-elevates to Docker and surfaces guidance to the user
   5. Runner can be configured per-backend via `runners:` config section or `LLEM_RUNNER_VLLM=docker:image` env var
   6. Container entrypoint calls `ExperimentOrchestrator` directly (library API, not CLI re-entry)
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 17-01: DockerRunner dispatch — `subprocess.run` blocking call, `docker run --rm`, shared volume mount
-- [ ] 17-02: Config/result transfer — JSON file via volume, `LLEM_CONFIG_PATH` env var, result collection
-- [ ] 17-03: Runner selection — per-backend `runners:` config, env var override, auto-elevation logic
-- [ ] 17-04: Container entrypoint — library API entry point inside container, not CLI re-entry
+- [ ] 17-01-PLAN.md — Docker error hierarchy, container entrypoint (library API), built-in image registry (DOCK-02, DOCK-03, DOCK-11)
+- [ ] 17-02-PLAN.md — Runner resolution module with precedence chain, runners config model (DOCK-06)
+- [ ] 17-03-PLAN.md — DockerRunner dispatch class: subprocess.run, volume management, result collection (DOCK-01, DOCK-04)
+- [ ] 17-04-PLAN.md — StudyRunner integration, auto-elevation for multi-backend studies (DOCK-05)
 
 ### Phase 18: Docker Pre-flight
 **Goal**: Docker pre-flight checks catch misconfigured host environments before any container is launched, giving users actionable error messages
