@@ -20,11 +20,11 @@ from llenergymeasure.exceptions import ConfigError
 
 
 @overload
-def run_experiment(config: str | Path) -> ExperimentResult: ...
+def run_experiment(config: str | Path, *, skip_preflight: bool = ...) -> ExperimentResult: ...
 
 
 @overload
-def run_experiment(config: ExperimentConfig) -> ExperimentResult: ...
+def run_experiment(config: ExperimentConfig, *, skip_preflight: bool = ...) -> ExperimentResult: ...
 
 
 @overload
@@ -35,6 +35,7 @@ def run_experiment(
     backend: str | None = None,
     n: int = 100,
     dataset: str = "aienergyscore",
+    skip_preflight: bool = ...,
     **kwargs: Any,
 ) -> ExperimentResult: ...
 
