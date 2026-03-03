@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Researchers can run broad parameter sweeps across deployment configurations and produce publishable, methodology-sound measurements showing which implementation choices matter most for LLM energy efficiency.
-**Current focus:** Phase 19.2 — vLLM Extended Parameters and Passthrough
+**Current focus:** Phase 19.2 complete — next phase TBD (M3 continues)
 
 ## Current Position
 
-Phase: 19.2 Plan 01 of 2 complete (vLLM Extended Parameters Schema)
-Next: Phase 19.2 Plan 02 (runtime wiring for passthrough and beam search)
-Status: Phase 19.2 Plan 01 complete — VLLMAttentionConfig + VLLMBeamSearchConfig added, extra="allow" on all 5 backend configs, 9 new typed fields, 2 cross-validators
-Last activity: 2026-03-03 — Phase 19.2 Plan 01 complete on gsd/phase-19.2-vllm-extended-parameters-and-passthrough
+Phase: 19.2 Plan 02 of 2 complete (vLLM Runtime Wiring and Tests)
+Next: Next M3 phase (Phase 20 documentation or next backend phase)
+Status: Phase 19.2 complete — all schema changes wired into runtime backends, SSOT updated, 24 new unit tests added
+Last activity: 2026-03-03 — Phase 19.2 Plan 02 complete on gsd/phase-19.2-vllm-extended-parameters-and-passthrough
 
-Progress: [████░░░░░░] 29%
+Progress: [████░░░░░░] 32%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 12
-- Average duration: 216s
-- Total execution time: 5010s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 176s)
+- Total plans completed (M3): 13
+- Average duration: 209s
+- Total execution time: 5910s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 176s + 900s)
 
 *Updated after each plan completion*
 
@@ -80,6 +80,10 @@ Progress: [████░░░░░░] 29%
 - [Phase 19.2-01]: VLLMAttentionConfig.backend is str not Literal — vLLM owns attention backend name validation, not our schema
 - [Phase 19.2-01]: compilation_config typed as dict[str, Any] — vLLM CompilationConfig has ~30 internal fields, full passthrough dict avoids fragile upstream coupling
 - [Phase 19.2-01]: offload_params typed as list[str] in YAML — YAML-friendly; Plan 02 converts to set[str] when forwarding to vLLM if needed
+- [Phase 19.2-02]: Beam search branching at _run_measurement() via isinstance(sampling_params, BeamSearchParams) — type carries routing, no flag needed
+- [Phase 19.2-02]: engine.model_extra merged LAST in _build_llm_kwargs() — user passthrough extras can override explicit fields (escape hatch for vLLM API changes)
+- [Phase 19.2-02]: attention.backend -> attention_backend name mapping applied at wiring time — schema uses vLLM-agnostic name, wiring handles API-specific rename
+- [Phase 19.2-02]: offload_params converts list[str] -> set[str] at wiring time — YAML list is user-friendly, vLLM API expects set[str]
 
 ### Roadmap Evolution
 
@@ -98,5 +102,5 @@ Progress: [████░░░░░░] 29%
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 19.2-vllm-extended-parameters-and-passthrough-19.2-01-PLAN.md (VLLMAttentionConfig + VLLMBeamSearchConfig + extra="allow" + 9 new fields, 1 file).
+Stopped at: Completed 19.2-vllm-extended-parameters-and-passthrough-19.2-02-PLAN.md (runtime wiring: 7 engine fields, attention config, model_extra passthrough, beam search, SSOT updates, 24 new tests).
 Resume file: None

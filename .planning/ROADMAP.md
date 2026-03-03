@@ -55,7 +55,7 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
 - [x] **Phase 18: Docker Pre-flight** - NVIDIA Container Toolkit detection, GPU visibility validation, CUDA/driver compatibility check (completed 2026-02-28)
 - [x] **Phase 19: vLLM Backend Activation** - Fix streaming and shm-size P0 bugs, activate vLLM backend end-to-end via Docker, container entrypoint (completed 2026-02-28)
 - [x] **Phase 19.1: vLLM Parameter Audit** - INSERTED — Research upstream vLLM API, expand VLLMConfig fields, wire energy-relevant params (ref: Phase 4.1 PyTorch audit) (completed 2026-03-03)
-- [ ] **Phase 19.2: vLLM Extended Parameters and Passthrough** - INSERTED — Beam search, attention config, compilation passthrough, CPU offload, passthrough architecture for all backend configs
+- [x] **Phase 19.2: vLLM Extended Parameters and Passthrough** - INSERTED — Beam search, attention config, compilation passthrough, CPU offload, passthrough architecture for all backend configs (completed 2026-03-03)
 - [ ] **Phase 20: Docker Image and CI** - Official vLLM Docker image published to GHCR, CI publish on release tag
 - [ ] **Phase 21: Measurement Carried Items** - `aienergyscore.jsonl` built-in dataset, `peak_memory_mb` semantics confirmed and documented
 - [ ] **Phase 22: Testing** - Manual Ctrl+C SIGINT test on GPU hardware for Docker path
@@ -226,7 +226,7 @@ Phase 22 (SIGINT testing) runs before Phase 23 (docs) so documentation reflects 
 | 18. Docker Pre-flight | 1/1 | Complete   | 2026-02-28 |
 | 19. vLLM Backend Activation | 2/2 | Complete    | 2026-02-28 |
 | 19.1. vLLM Parameter Audit | 2/2 | Complete    | 2026-03-03 |
-| 19.2. vLLM Extended Params & Passthrough | 1/2 | In Progress|  |
+| 19.2. vLLM Extended Params & Passthrough | 2/2 | Complete   | 2026-03-03 |
 | 20. Docker Image and CI | 0/TBD | Not started | - |
 | 21. Measurement Carried Items | 0/TBD | Not started | - |
 | 22. Testing | 0/TBD | Not started | - |
