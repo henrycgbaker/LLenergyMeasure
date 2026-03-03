@@ -215,6 +215,58 @@ class PyTorchConfig(BaseModel):
 # =============================================================================
 
 
+class VLLMAttentionConfig(BaseModel):
+    """vLLM attention implementation configuration.
+
+    Nested under VLLMEngineConfig.attention. Mirrors vLLM's AttentionConfig.
+    All fields default to None — None means "use vLLM's own default".
+    Uses extra="allow" for forward compatibility with new vLLM attention options.
+    """
+
+    model_config = {"extra": "allow"}
+
+    backend: str | None = Field(
+        default=None,
+        description="Attention backend: flash_attn, flashinfer, etc. (None -> auto).",
+    )
+    flash_attn_version: int | None = Field(
+        default=None,
+        description="Flash attention version (None -> auto).",
+    )
+    flash_attn_max_num_splits_for_cuda_graph: int | None = Field(
+        default=None,
+        description="Max splits for CUDA graph with flash attention (None -> auto).",
+    )
+    use_prefill_decode_attention: bool | None = Field(
+        default=None,
+        description="Use prefill-decode attention (None -> True).",
+    )
+    use_prefill_query_quantization: bool | None = Field(
+        default=None,
+        description="Quantize queries during prefill (None -> False).",
+    )
+    use_cudnn_prefill: bool | None = Field(
+        default=None,
+        description="Use cuDNN for prefill (None -> False).",
+    )
+    disable_flashinfer_prefill: bool | None = Field(
+        default=None,
+        description="Disable FlashInfer for prefill (None -> False).",
+    )
+    disable_flashinfer_q_quantization: bool | None = Field(
+        default=None,
+        description="Disable FlashInfer query quantization (None -> False).",
+    )
+    use_trtllm_attention: bool | None = Field(
+        default=None,
+        description="Use TensorRT-LLM attention backend (None -> False).",
+    )
+    use_trtllm_ragged_deepseek_prefill: bool | None = Field(
+        default=None,
+        description="Use TRT-LLM ragged DeepSeek prefill (None -> False).",
+    )
+
+
 class VLLMEngineConfig(BaseModel):
     """vLLM engine-level configuration (vllm.LLM() constructor arguments).
 
@@ -432,6 +484,37 @@ class VLLMSamplingConfig(BaseModel):
             "Continue generating past EOS token (None -> False). "
             "Forces max_tokens generation every time — affects total token count."
         ),
+    )
+
+
+class VLLMBeamSearchConfig(BaseModel):
+    """vLLM beam search configuration.
+
+    When set, the backend uses BeamSearchParams instead of SamplingParams.
+    Nested under VLLMConfig.beam_search.
+    All fields default to None — None means "use vLLM's own default".
+    Uses extra="allow" for forward compatibility with new vLLM beam search options.
+    """
+
+    model_config = {"extra": "allow"}
+
+    beam_width: int | None = Field(
+        default=None,
+        ge=1,
+        description="Number of beams (ge=1).",
+    )
+    length_penalty: float | None = Field(
+        default=None,
+        description="Length penalty: >1 favours shorter, <1 longer (None -> 1.0).",
+    )
+    early_stopping: bool | None = Field(
+        default=None,
+        description="Stop when beam_width complete sequences found (None -> False).",
+    )
+    max_tokens: int | None = Field(
+        default=None,
+        ge=1,
+        description="Max output tokens for beam search (None -> max_output_tokens).",
     )
 
 
