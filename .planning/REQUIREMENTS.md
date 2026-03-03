@@ -27,6 +27,7 @@ Requirements for M3. Each maps to roadmap phases.
 - [x] **VLLM-02**: P0 fix: vLLM streaming broken (CM-07 from .product/REQUIREMENTS.md)
 - [x] **VLLM-03**: P0 fix: vLLM `--shm-size 8g` passed to container (CM-09 from .product/REQUIREMENTS.md)
 - [x] **VLLM-04**: VLLMConfig fields audited against upstream vLLM API — all energy-relevant params exposed (enforce_eager, block_size, kv_cache_dtype, swap_space, dtype, speculative_model, etc.). Ref: Phase 4.1 PyTorch parameter audit pattern.
+- [x] **VLLM-05**: All backend configs accept arbitrary passthrough kwargs (`extra="allow"`) alongside explicitly-typed energy-relevant fields — researchers can use any upstream parameter without waiting for us to type it. Includes beam search, attention config, compilation passthrough, CPU offload, kv_cache_memory_bytes, and sampling n.
 
 ### Measurement Quality
 
@@ -102,19 +103,20 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VLLM-02 | Phase 19 | Complete |
 | VLLM-03 | Phase 19 | Complete |
 | VLLM-04 | Phase 19.1 | Complete |
+| VLLM-05 | Phase 19.2 | Complete |
 | MEAS-01 | Phase 16 | Complete |
 | MEAS-02 | Phase 16 | Complete |
 | MEAS-03 | Phase 21 | Pending |
 | MEAS-04 | Phase 21 | Pending |
-| DOCS-01 | Phase 22 | Pending |
-| DOCS-02 | Phase 22 | Pending |
-| DOCS-03 | Phase 22 | Pending |
-| DOCS-04 | Phase 22 | Pending |
-| TEST-01 | Phase 23 | Pending |
+| DOCS-01 | Phase 23 | Pending |
+| DOCS-02 | Phase 23 | Pending |
+| DOCS-03 | Phase 23 | Pending |
+| DOCS-04 | Phase 23 | Pending |
+| TEST-01 | Phase 22 | Pending |
 
 **Coverage:**
-- v1.19.0 requirements: 24 total
-- Mapped to phases: 24
+- v1.19.0 requirements: 25 total
+- Mapped to phases: 25
 - Unmapped: 0
 
 ---

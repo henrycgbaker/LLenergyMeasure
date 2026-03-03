@@ -55,10 +55,11 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
 - [x] **Phase 18: Docker Pre-flight** - NVIDIA Container Toolkit detection, GPU visibility validation, CUDA/driver compatibility check (completed 2026-02-28)
 - [x] **Phase 19: vLLM Backend Activation** - Fix streaming and shm-size P0 bugs, activate vLLM backend end-to-end via Docker, container entrypoint (completed 2026-02-28)
 - [x] **Phase 19.1: vLLM Parameter Audit** - INSERTED — Research upstream vLLM API, expand VLLMConfig fields, wire energy-relevant params (ref: Phase 4.1 PyTorch audit) (completed 2026-03-03)
+- [ ] **Phase 19.2: vLLM Extended Parameters and Passthrough** - INSERTED — Beam search, attention config, compilation passthrough, CPU offload, passthrough architecture for all backend configs
 - [ ] **Phase 20: Docker Image and CI** - Official vLLM Docker image published to GHCR, CI publish on release tag
 - [ ] **Phase 21: Measurement Carried Items** - `aienergyscore.jsonl` built-in dataset, `peak_memory_mb` semantics confirmed and documented
-- [ ] **Phase 22: Documentation** - Full user docs: installation, getting started, Docker setup guide, backend config guide, study YAML reference
-- [ ] **Phase 23: Testing** - Manual Ctrl+C SIGINT test on GPU hardware for Docker path
+- [ ] **Phase 22: Testing** - Manual Ctrl+C SIGINT test on GPU hardware for Docker path
+- [ ] **Phase 23: Documentation** - Full user docs: installation, getting started, Docker setup guide, backend config guide, study YAML reference
 
 ## Phase Details
 
@@ -136,6 +137,27 @@ Plans:
 - [ ] 19.1-01-PLAN.md — VLLMEngineConfig + VLLMSamplingConfig schema + sweep grammar fix for three-segment paths
 - [ ] 19.1-02-PLAN.md — VLLMBackend wiring for nested config + SSOT introspection update + test migration
 
+### Phase 19.2: vLLM Extended Parameters and Passthrough (INSERTED)
+**Goal**: All backend configs accept arbitrary passthrough kwargs alongside explicitly-typed energy-relevant fields — researchers can use any upstream parameter without waiting for us to type it
+**Depends on**: Phase 19.1
+**Requirements**: VLLM-05
+**Success Criteria** (what must be TRUE):
+  1. VLLMEngineConfig, VLLMSamplingConfig use `extra="allow"` — unknown fields pass through to vLLM
+  2. PyTorchConfig uses `extra="allow"` — same passthrough architecture for consistency
+  3. VLLMBeamSearchConfig exists as third nested section with beam_width, length_penalty, early_stopping, max_tokens
+  4. VLLMAttentionConfig exists with full native mirror of vLLM's AttentionConfig (~11 fields)
+  5. compilation_config passthrough dict passes directly to vLLM's CompilationConfig
+  6. kv_cache_memory_bytes field with mutual exclusion against gpu_memory_utilization
+  7. CPU offload fields (offload_group_size, offload_num_in_group, offload_prefetch_step, offload_params) wired
+  8. Sampling `n` parameter (num sequences) wired
+  9. SSOT introspection covers all new explicitly-typed fields
+  10. All backends' extra="allow" passthrough kwargs forwarded correctly at runtime
+**Plans**: TBD
+
+Plans:
+- [ ] 19.2-01-PLAN.md — Schema changes: VLLMBeamSearchConfig, VLLMAttentionConfig, new fields, extra="allow", cross-validators (VLLM-05)
+- [ ] 19.2-02-PLAN.md — Runtime wiring (new field forwarding, model_extra passthrough, beam search path), PyTorch model_extra, SSOT introspection updates, unit tests (VLLM-05)
+
 ### Phase 20: Docker Image and CI
 **Goal**: An official vLLM Docker image is published to GHCR and automatically updated on each release
 **Depends on**: Phase 19
@@ -162,9 +184,20 @@ Plans:
 - [ ] 21-01: aienergyscore dataset — create `aienergyscore.jsonl` and expose via datasets module
 - [ ] 21-02: peak_memory_mb semantics — confirm measurement point and document in code + result schema
 
-### Phase 22: Documentation
+### Phase 22: Testing
+**Goal**: Docker path SIGINT handling is verified on real GPU hardware
+**Depends on**: Phase 19
+**Requirements**: TEST-01
+**Success Criteria** (what must be TRUE):
+  1. Pressing Ctrl+C during a Docker-dispatched study gracefully stops the container, preserves the manifest, and exits with code 130
+**Plans**: TBD
+
+Plans:
+- [ ] 22-01: Manual SIGINT test — Docker path Ctrl+C on GPU hardware, verify manifest preservation and exit 130
+
+### Phase 23: Documentation
 **Goal**: A researcher new to the tool can install it, run their first experiment, and configure Docker for vLLM without reading source code
-**Depends on**: Phase 19, Phase 21
+**Depends on**: Phase 19, Phase 21, Phase 22
 **Requirements**: DOCS-01, DOCS-02, DOCS-03, DOCS-04
 **Success Criteria** (what must be TRUE):
   1. A user following the installation and getting started guide can run `llem run` successfully on their first attempt
@@ -174,27 +207,17 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 22-01: Core user docs — installation, getting started, configuration reference
-- [ ] 22-02: Docker setup guide — NVIDIA Container Toolkit, host requirements, image selection
-- [ ] 22-03: Backend config guide — PyTorch local, vLLM Docker, runner selection
-- [ ] 22-04: Study YAML reference — sweep grammar, cycle ordering, examples
-
-### Phase 23: Testing
-**Goal**: Docker path SIGINT handling is verified on real GPU hardware
-**Depends on**: Phase 19
-**Requirements**: TEST-01
-**Success Criteria** (what must be TRUE):
-  1. Pressing Ctrl+C during a Docker-dispatched study gracefully stops the container, preserves the manifest, and exits with code 130
-**Plans**: TBD
-
-Plans:
-- [ ] 23-01: Manual SIGINT test — Docker path Ctrl+C on GPU hardware, verify manifest preservation and exit 130
+- [ ] 23-01: Core user docs — installation, getting started, configuration reference
+- [ ] 23-02: Docker setup guide — NVIDIA Container Toolkit, host requirements, image selection
+- [ ] 23-03: Backend config guide — PyTorch local, vLLM Docker, runner selection
+- [ ] 23-04: Study YAML reference — sweep grammar, cycle ordering, examples
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 16 → 17 → 18 → 19 → 19.1 → 20 → 21 → 22 → 23
+Phases execute in numeric order: 16 → 17 → 18 → 19 → 19.1 → 19.2 → 20 → 21 → 22 → 23
 Phase 21 can run in parallel with Phase 20 (no dependency between them).
+Phase 22 (SIGINT testing) runs before Phase 23 (docs) so documentation reflects verified behaviour.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -203,10 +226,11 @@ Phase 21 can run in parallel with Phase 20 (no dependency between them).
 | 18. Docker Pre-flight | 1/1 | Complete   | 2026-02-28 |
 | 19. vLLM Backend Activation | 2/2 | Complete    | 2026-02-28 |
 | 19.1. vLLM Parameter Audit | 2/2 | Complete    | 2026-03-03 |
+| 19.2. vLLM Extended Params & Passthrough | 1/2 | In Progress|  |
 | 20. Docker Image and CI | 0/TBD | Not started | - |
 | 21. Measurement Carried Items | 0/TBD | Not started | - |
-| 22. Documentation | 0/TBD | Not started | - |
-| 23. Testing | 0/TBD | Not started | - |
+| 22. Testing | 0/TBD | Not started | - |
+| 23. Documentation | 0/TBD | Not started | - |
 
 ---
 
@@ -215,4 +239,4 @@ Phase 21 can run in parallel with Phase 20 (no dependency between them).
 *M3 roadmap appended: 2026-02-27*
 *M1 shipped: 2026-02-27 (v1.17.0)*
 *M2 shipped: 2026-02-27 (v1.18.0)*
-*Phase 13 (docs) folded into M3 Phase 22: 2026-02-27*
+*Phase 13 (docs) folded into M3 Phase 23: 2026-02-27*

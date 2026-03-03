@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.17
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-03T17:53:43.893Z"
+last_updated: "2026-03-03T23:23:00Z"
 progress:
   total_phases: 6
   completed_phases: 5
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Researchers can run broad parameter sweeps across deployment configurations and produce publishable, methodology-sound measurements showing which implementation choices matter most for LLM energy efficiency.
-**Current focus:** Phase 19.1 — vLLM Parameter Audit
+**Current focus:** Phase 19.2 — vLLM Extended Parameters and Passthrough
 
 ## Current Position
 
-Phase: 19.1 of 23 complete (vLLM Parameter Audit — both plans done)
-Next: Phase 20 (next planned phase)
-Status: Phase 19.1 complete — VLLMBackend fully wired to nested VLLMEngineConfig/VLLMSamplingConfig, SSOT updated, 53 tests passing
-Last activity: 2026-03-03 — Phase 19.1 Plan 02 complete on gsd/phase-19.1-vllm-parameter-audit
+Phase: 19.2 Plan 01 of 2 complete (vLLM Extended Parameters Schema)
+Next: Phase 19.2 Plan 02 (runtime wiring for passthrough and beam search)
+Status: Phase 19.2 Plan 01 complete — VLLMAttentionConfig + VLLMBeamSearchConfig added, extra="allow" on all 5 backend configs, 9 new typed fields, 2 cross-validators
+Last activity: 2026-03-03 — Phase 19.2 Plan 01 complete on gsd/phase-19.2-vllm-extended-parameters-and-passthrough
 
 Progress: [████░░░░░░] 29%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 11
-- Average duration: 222s
-- Total execution time: 4834s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s)
+- Total plans completed (M3): 12
+- Average duration: 216s
+- Total execution time: 5010s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 176s)
 
 *Updated after each plan completion*
 
@@ -46,7 +46,7 @@ Progress: [████░░░░░░] 29%
 - Docker path is a parallel dispatch method in StudyRunner — not a separate runner class
 - Multi-backend without Docker → hard error at pre-flight (M2, DOCK-05 extends this to auto-elevation)
 - One backend per milestone: M3=vLLM, M4=TRT-LLM, M5=SGLang
-- Phase 13 (docs) folded into Phase 22 of M3 — write docs once against final backend story
+- Phase 13 (docs) folded into Phase 23 of M3 — write docs once against final backend story
 - Local import in _run_one() keeps pynvml lazy; avoids module-level ImportError when pynvml not installed (Phase 16)
 - GPU memory threshold hardcoded at 100 MB for M3; configurability deferred until researcher demand (Phase 16)
 - [Phase 17]: parse_runner_value raises ValueError on empty 'docker:' and unrecognised values — strict contract prevents silent fallbacks
@@ -76,12 +76,20 @@ Progress: [████░░░░░░] 29%
 - [Phase 19.1-02]: dict-then-instantiate in _build_sampling_params() — single return point enables clean VLLMSamplingConfig override injection for both greedy and sampling paths
 - [Phase 19.1-02]: get_backend_capabilities() reads VLLMEngineConfig.model_fields (not VLLMConfig) — capability matrix reflects actual engine fields, not container fields
 - [Phase 19.1-02]: speculative_model + num_speculative_tokens → speculative_config dict — vLLM v0.6+ removed direct speculative_model kwarg
+- [Phase 19.2-01]: extra="allow" on all backend configs — unknown YAML fields stored in model_extra, forwarded to native API at runtime wiring (Plan 02)
+- [Phase 19.2-01]: VLLMAttentionConfig.backend is str not Literal — vLLM owns attention backend name validation, not our schema
+- [Phase 19.2-01]: compilation_config typed as dict[str, Any] — vLLM CompilationConfig has ~30 internal fields, full passthrough dict avoids fragile upstream coupling
+- [Phase 19.2-01]: offload_params typed as list[str] in YAML — YAML-friendly; Plan 02 converts to set[str] when forwarding to vLLM if needed
+
+### Roadmap Evolution
+
+- Phase 19.2 inserted after Phase 19.1: vLLM Extended Parameters and Passthrough — adds beam search, attention config, compilation passthrough, CPU offload params, kv_cache_memory_bytes, and extra="allow" passthrough architecture for all backend configs
 
 ### Carried Items
 
 1. `aienergyscore.jsonl` built-in dataset — Phase 21 (MEAS-03)
 2. `peak_memory_mb` semantics confirmation — Phase 21 (MEAS-04)
-3. Manual Ctrl+C SIGINT test on GPU hardware — Phase 23 (TEST-01)
+3. Manual Ctrl+C SIGINT test on GPU hardware — Phase 22 (TEST-01)
 
 ### Blockers/Concerns
 
@@ -90,5 +98,5 @@ Progress: [████░░░░░░] 29%
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 19.1-vllm-parameter-audit-19.1-02-PLAN.md (VLLMBackend wiring + SSOT update + 53 tests, 3 files).
+Stopped at: Completed 19.2-vllm-extended-parameters-and-passthrough-19.2-01-PLAN.md (VLLMAttentionConfig + VLLMBeamSearchConfig + extra="allow" + 9 new fields, 1 file).
 Resume file: None
