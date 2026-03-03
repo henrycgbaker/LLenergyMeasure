@@ -80,6 +80,10 @@ Progress: [████░░░░░░] 31%
 - [Phase 20-02]: fail-fast:false in matrix ensures vLLM build failure does not cancel PyTorch build
 - [Phase 20-02]: Layer cache scoped per backend (scope=matrix.backend) prevents cross-backend GHA cache collisions
 - [Phase 20-02]: latest=auto in metadata-action attaches latest only on default branch tags, not pre-releases
+- [Phase 20-01]: vllm/vllm-openai and pytorch/pytorch as upstream bases — CUDA/framework compatibility guaranteed by upstream, no shared Dockerfile.base dependency
+- [Phase 20-01]: ENTRYPOINT [] reset in Dockerfile.vllm — DockerRunner appends command after image name (CMD override), not after ENTRYPOINT; vllm/vllm-openai sets its own ENTRYPOINT to API server
+- [Phase 20-01]: --no-deps on .[vllm] pip install — avoids reinstalling vLLM/torch already present in base image
+- [Phase 20-01]: ghcr.io/henrycgbaker/llenergymeasure/ as GHCR namespace — corrects stale placeholder lacking the GitHub user prefix
 
 ### Carried Items
 
