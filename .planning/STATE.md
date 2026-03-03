@@ -22,19 +22,19 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 21 of 23 in progress (Measurement Carried Items — plan 01 done)
-Next: Phase 21 plan 02 (peak_memory_mb semantics)
-Status: Phase 21 plan 01 complete — aienergyscore.jsonl dataset, datasets module, backend wiring, broken import fix
-Last activity: 2026-03-03 — Phase 21 plan 01 complete on gsd/phase-21-measurement-carried-items
+Phase: 21 of 23 in progress (Measurement Carried Items — plans 01 and 02 done)
+Next: Phase 22 (Documentation / final M3 milestone tasks)
+Status: Phase 21 plan 02 complete — peak_memory_mb semantics confirmed, inference_memory_mb field added, vLLM memory capture implemented
+Last activity: 2026-03-03 — Phase 21 plan 02 complete on gsd/phase-21-measurement-carried-items
 
-Progress: [████░░░░░░] 34%
+Progress: [████░░░░░░] 36%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 14
-- Average duration: 209s
-- Total execution time: 6044s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 60s + 62s + 308s + 126s + 462s)
+- Total plans completed (M3): 15
+- Average duration: 211s
+- Total execution time: 6673s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 60s + 62s + 308s + 126s + 462s + 629s)
 
 *Updated after each plan completion*
 
@@ -87,11 +87,16 @@ Progress: [████░░░░░░] 34%
 - [Phase 21-01]: AUTO_DETECT_COLUMNS and BUILTIN_DATASETS live in datasets/loader.py (not config/models) — config.models stays pure config, no dataset logic
 - [Phase 21-01]: FilePromptSource/HuggingFacePromptSource defined as dataclasses in dataset_loader.py — they were never in config.models, self-contained in the loader that uses them
 - [Phase 21-01]: AIEnergyScore/text_generation has single text column, no source field — grouped ordering falls back to file order (stable)
+- [Phase 21-02]: reset_peak_memory_stats() placed before PowerThermalSampler context manager — reset window matches measurement window exactly; model weights excluded from peak
+- [Phase 21-02]: model_memory_mb captured after model load, before warmup — warmup KV cache allocation must not contaminate the model baseline
+- [Phase 21-02]: vLLM pre-allocation heuristic: torch peak within 5% of gpu_memory_utilization * total_vram → fall back to NVML current usage for actual inference peak
+- [Phase 21-02]: inference_memory_mb computed by backend _build_result(), not by caller — derivation always internally consistent
+- [Phase 21-02]: Peak memory tests use source-file inspection (not live imports) — venv resolves to main workspace installation, not worktree source
 
 ### Carried Items
 
 1. ~~`aienergyscore.jsonl` built-in dataset — Phase 21 (MEAS-03)~~ **DONE** (Phase 21 plan 01)
-2. `peak_memory_mb` semantics confirmation — Phase 21 (MEAS-04)
+2. ~~`peak_memory_mb` semantics confirmation — Phase 21 (MEAS-04)~~ **DONE** (Phase 21 plan 02)
 3. Manual Ctrl+C SIGINT test on GPU hardware — Phase 23 (TEST-01)
 
 ### Blockers/Concerns
@@ -101,5 +106,5 @@ Progress: [████░░░░░░] 34%
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed phase 21 plan 01 (aienergyscore.jsonl dataset module + backend wiring).
+Stopped at: Completed phase 21 plan 02 (peak_memory_mb semantics + inference_memory_mb field + vLLM memory capture).
 Resume file: None

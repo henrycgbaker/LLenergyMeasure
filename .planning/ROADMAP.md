@@ -56,7 +56,7 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
 - [x] **Phase 19: vLLM Backend Activation** - Fix streaming and shm-size P0 bugs, activate vLLM backend end-to-end via Docker, container entrypoint (completed 2026-02-28)
 - [x] **Phase 19.1: vLLM Parameter Audit** - INSERTED — Research upstream vLLM API, expand VLLMConfig fields, wire energy-relevant params (ref: Phase 4.1 PyTorch audit) (completed 2026-03-03)
 - [x] **Phase 20: Docker Image and CI** - Official vLLM Docker image published to GHCR, CI publish on release tag (completed 2026-03-03)
-- [ ] **Phase 21: Measurement Carried Items** - `aienergyscore.jsonl` built-in dataset, `peak_memory_mb` semantics confirmed and documented
+- [x] **Phase 21: Measurement Carried Items** - `aienergyscore.jsonl` built-in dataset, `peak_memory_mb` semantics confirmed and documented (completed 2026-03-03)
 - [ ] **Phase 22: Documentation** - Full user docs: installation, getting started, Docker setup guide, backend config guide, study YAML reference
 - [ ] **Phase 23: Testing** - Manual Ctrl+C SIGINT test on GPU hardware for Docker path
 
@@ -204,7 +204,7 @@ Phase 21 can run in parallel with Phase 20 (no dependency between them).
 | 19. vLLM Backend Activation | 2/2 | Complete    | 2026-02-28 |
 | 19.1. vLLM Parameter Audit | 2/2 | Complete    | 2026-03-03 |
 | 20. Docker Image and CI | 2/2 | Complete   | 2026-03-03 |
-| 21. Measurement Carried Items | 1/2 | In Progress|  |
+| 21. Measurement Carried Items | 2/2 | Complete   | 2026-03-03 |
 | 22. Documentation | 0/TBD | Not started | - |
 | 23. Testing | 0/TBD | Not started | - |
 
