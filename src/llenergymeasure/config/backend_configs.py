@@ -28,7 +28,7 @@ Usage in YAML:
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -46,9 +46,10 @@ class PyTorchConfig(BaseModel):
 
     Fields cover the complete researcher-useful parameter space for
     AutoModelForCausalLM.from_pretrained() and model.generate().
+    Unknown fields are forwarded to HuggingFace/transformers APIs via extra="allow".
     """
 
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "allow"}
 
     # -------------------------------------------------------------------------
     # Batching
@@ -272,9 +273,10 @@ class VLLMEngineConfig(BaseModel):
 
     All fields default to None — None means "use vLLM's own default".
     These parameters are loaded once at model initialisation time.
+    Unknown fields are forwarded to vllm.LLM() via extra="allow".
     """
 
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "allow"}
 
     # -------------------------------------------------------------------------
     # Memory management
@@ -424,6 +426,73 @@ class VLLMEngineConfig(BaseModel):
     )
 
     # -------------------------------------------------------------------------
+    # CPU offload
+    # -------------------------------------------------------------------------
+
+    offload_group_size: int | None = Field(
+        default=None,
+        ge=0,
+        description="Groups of layers for CPU offloading (None -> 0).",
+    )
+    offload_num_in_group: int | None = Field(
+        default=None,
+        ge=1,
+        description="Number of layers offloaded per group (None -> 1).",
+    )
+    offload_prefetch_step: int | None = Field(
+        default=None,
+        ge=0,
+        description="Prefetch steps ahead for CPU offload (None -> 1).",
+    )
+    offload_params: list[str] | None = Field(
+        default=None,
+        description="Specific parameter names to offload to CPU (None -> all eligible).",
+    )
+
+    # -------------------------------------------------------------------------
+    # Multi-GPU
+    # -------------------------------------------------------------------------
+
+    disable_custom_all_reduce: bool | None = Field(
+        default=None,
+        description="Disable custom all-reduce for multi-GPU (None -> False).",
+    )
+
+    # -------------------------------------------------------------------------
+    # KV cache (absolute)
+    # -------------------------------------------------------------------------
+
+    kv_cache_memory_bytes: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Absolute KV cache size in bytes (None -> use gpu_memory_utilization). "
+            "Mutually exclusive with gpu_memory_utilization."
+        ),
+    )
+
+    # -------------------------------------------------------------------------
+    # Compilation
+    # -------------------------------------------------------------------------
+
+    compilation_config: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Full passthrough to vLLM CompilationConfig (~30 fields). "
+            "No validation — passed directly."
+        ),
+    )
+
+    # -------------------------------------------------------------------------
+    # Attention
+    # -------------------------------------------------------------------------
+
+    attention: VLLMAttentionConfig | None = Field(
+        default=None,
+        description="Attention implementation configuration.",
+    )
+
+    # -------------------------------------------------------------------------
     # Cross-validators
     # -------------------------------------------------------------------------
 
@@ -432,6 +501,16 @@ class VLLMEngineConfig(BaseModel):
         """speculative_model requires num_speculative_tokens to be set."""
         if self.speculative_model is not None and self.num_speculative_tokens is None:
             raise ValueError("speculative_model requires num_speculative_tokens to be set")
+        return self
+
+    @model_validator(mode="after")
+    def validate_kv_cache_memory(self) -> VLLMEngineConfig:
+        """kv_cache_memory_bytes and gpu_memory_utilization are mutually exclusive."""
+        if self.kv_cache_memory_bytes is not None and self.gpu_memory_utilization is not None:
+            raise ValueError(
+                "kv_cache_memory_bytes and gpu_memory_utilization are mutually exclusive. "
+                "Use one or the other to control KV cache memory."
+            )
         return self
 
 
@@ -443,9 +522,10 @@ class VLLMSamplingConfig(BaseModel):
     live in DecoderConfig and are shared across all backends.
 
     All fields default to None — None means "use vLLM's own default".
+    Unknown fields are forwarded to vllm.SamplingParams() via extra="allow".
     """
 
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "allow"}
 
     max_tokens: int | None = Field(
         default=None,
@@ -484,6 +564,11 @@ class VLLMSamplingConfig(BaseModel):
             "Continue generating past EOS token (None -> False). "
             "Forces max_tokens generation every time — affects total token count."
         ),
+    )
+    n: int | None = Field(
+        default=None,
+        ge=1,
+        description="Number of output sequences per prompt (None -> 1).",
     )
 
 
@@ -540,7 +625,7 @@ class VLLMConfig(BaseModel):
             presence_penalty: 0.0
     """
 
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "allow"}
 
     engine: VLLMEngineConfig | None = Field(
         default=None,
@@ -552,6 +637,23 @@ class VLLMConfig(BaseModel):
             "Sampling-level configuration: vllm.SamplingParams extensions (vLLM-specific only)"
         ),
     )
+    beam_search: VLLMBeamSearchConfig | None = Field(
+        default=None,
+        description=(
+            "Beam search configuration. When set, uses BeamSearchParams instead of SamplingParams. "
+            "Mutually exclusive with sampling section."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_beam_search_exclusive(self) -> VLLMConfig:
+        """beam_search and sampling sections are mutually exclusive."""
+        if self.beam_search is not None and self.sampling is not None:
+            raise ValueError(
+                "Cannot use both beam_search and sampling sections simultaneously. "
+                "beam_search uses BeamSearchParams; sampling uses SamplingParams."
+            )
+        return self
 
 
 # =============================================================================
@@ -567,9 +669,10 @@ class TensorRTConfig(BaseModel):
 
     M1 scope: fields used by the M1 TensorRT backend implementation.
     Phase 4.1 will audit and expand.
+    Unknown fields are forwarded to TensorRT-LLM APIs via extra="allow".
     """
 
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "allow"}
 
     max_batch_size: int | None = Field(
         default=None, ge=1, description="Max batch size (compile-time constant, None -> 8)"
