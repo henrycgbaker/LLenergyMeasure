@@ -341,10 +341,13 @@ energy_total_j, energy_adjusted_j, baseline_power_w, energy_per_token_j, gpu_pow
 tokens_per_second, ttft_mean_ms, itl_mean_ms, itl_p99_ms,
 tokens_per_second_ci_lower, tokens_per_second_ci_upper,
 energy_total_j_ci_lower, energy_total_j_ci_upper,
-flops_total, flops_per_token, peak_memory_mb,    # FLOPs = reference metadata, not primary metric (see decisions/flops-estimation.md)
-# peak_memory_mb: inference window only — torch.cuda.reset_peak_memory_stats() called after
-# model load, before first inference. Captures KV cache + activations + batch buffers, not
-# model weights. Semantics under review — see todo: revisit-peak-memory-mb-measurement-semantics
+flops_total, flops_per_token, peak_memory_mb, model_memory_mb, inference_memory_mb,
+    # FLOPs = reference metadata, not primary metric (see decisions/flops-estimation.md)
+    # peak_memory_mb: inference window only — torch.cuda.reset_peak_memory_stats() called after
+    # warmup, before measurement loop. Captures KV cache + activations + batch buffers, not
+    # model weights. Confirmed semantics — implemented in Phase 21 (MEAS-04).
+    # model_memory_mb: GPU memory after model load (weights + framework overhead), before warmup.
+    # inference_memory_mb: derived — max(0.0, peak_memory_mb - model_memory_mb). KV cache only.
 measurement_methodology, warmup_excluded_samples,
 gpu_name, cuda_version,
 started_at, duration_sec
