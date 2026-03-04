@@ -22,19 +22,19 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 22 (Testing and CI) — Plan 03 complete
-Next: Phase 22, Plan 04 (if any) or next phase
-Status: Phase 22-03 complete — 83 new unit tests for 4 zero-coverage active modules (cli/experiment.py, config/backend_detection.py, config/docker_detection.py, config/provenance.py). Suite: 859 tests passing.
-Last activity: 2026-03-04 — Phase 22-03 executed
+Phase: 22 (Testing and CI) — Plan 04 complete (all plans complete)
+Next: Phase 23 or milestone completion
+Status: Phase 22-04 complete — SIGINT verification script (tests/integration/sigint_verify.sh) and gpt2 study fixture wired into Tier 2 GPU CI. TEST-01 carried item resolved.
+Last activity: 2026-03-04 — Phase 22-04 executed
 
-Progress: [██████░░░░] 57%
+Progress: [███████░░░] 70%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 16
-- Average duration: 213s
-- Total execution time: 6128s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s)
+- Total plans completed (M3): 17
+- Average duration: 210s
+- Total execution time: 6242s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s)
 
 *Updated after each plan completion*
 
@@ -90,12 +90,14 @@ Progress: [██████░░░░] 57%
 - [Phase 22-03]: cli/experiment.py is dead v1.x code with deleted imports (F821 suppressed) — inject missing names via monkeypatch.setattr(module, name, value, raising=False) for testability
 - [Phase 22-03]: backend_detection.py uses direct try/import — patch builtins.__import__ with side_effect that raises for target package name
 - [Phase 22-03]: ensure_env_file imported inside function body — patch at definition site (llenergymeasure.config.env_setup), not at experiment module level
+- [Phase 22-04]: SIGINT script polls ./results/ (not --output dir) — _api.py hardcodes Path("results") as study manifest parent; --output only affects per-experiment result files
+- [Phase 22-04]: Study fixture uses experiments: list with warmup.enabled=false and baseline.enabled=false — avoids 30s+ thermal floor wait in CI
 
 ### Carried Items
 
 1. `aienergyscore.jsonl` built-in dataset — Phase 21 (MEAS-03)
 2. `peak_memory_mb` semantics confirmation — Phase 21 (MEAS-04)
-3. Manual Ctrl+C SIGINT test on GPU hardware — Phase 23 (TEST-01)
+3. ~~Manual Ctrl+C SIGINT test on GPU hardware — Phase 23 (TEST-01)~~ RESOLVED by Phase 22-04 automation
 
 ### Blockers/Concerns
 
@@ -104,5 +106,5 @@ Progress: [██████░░░░] 57%
 ## Session Continuity
 
 Last session: 2026-03-04
-Stopped at: Completed 22-03-PLAN.md (83 new unit tests for 4 zero-coverage modules, 2 tasks, 4 files).
+Stopped at: Completed 22-04-PLAN.md (SIGINT verification script and gpt2 study fixture, 2 tasks, 3 files). Phase 22 complete.
 Resume file: None
