@@ -772,7 +772,7 @@ class TestBeamSearchParams:
         import pydantic
 
         with pytest.raises(
-            pydantic.ValidationError, match="beam_search.*sampling|sampling.*beam_search"
+            pydantic.ValidationError, match=r"beam_search.*sampling|sampling.*beam_search"
         ):
             VLLMConfig(
                 beam_search=VLLMBeamSearchConfig(beam_width=4),
