@@ -104,7 +104,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohappyeyeballs" },
     { name = "aiosignal" },
-    { name = "async-timeout", marker = "python_full_version < '3.11' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "async-timeout", marker = "python_full_version < '3.11'" },
     { name = "attrs" },
     { name = "frozenlist" },
     { name = "multidict" },
@@ -223,7 +223,7 @@ version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "frozenlist" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/61/62/06741b579156360248d1ec624842ad0edf697050bbaf7c3e46394e106ad1/aiosignal-1.4.0.tar.gz", hash = "sha256:f47eecd9468083c2029cc99945502cb7708b082c232f9aca65da147157b251c7", size = 25007, upload-time = "2025-07-03T22:54:43.528Z" }
 wheels = [
@@ -362,7 +362,7 @@ name = "blake3"
 version = "1.0.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.12' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/75/aa/abcd75e9600987a0bc6cfe9b6b2ff3f0e2cb08c170addc6e76035b5c4cb3/blake3-1.0.8.tar.gz", hash = "sha256:513cc7f0f5a7c035812604c2c852a0c1468311345573de647e310aca4ab165ba", size = 117308, upload-time = "2025-10-14T06:47:48.83Z" }
 wheels = [
@@ -457,11 +457,11 @@ name = "build"
 version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "(os_name == 'nt' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name == 'nt' and sys_platform != 'darwin' and sys_platform != 'linux') or (os_name != 'nt' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (sys_platform == 'darwin' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
-    { name = "importlib-metadata", marker = "python_full_version < '3.10.2' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "colorama", marker = "(os_name == 'nt' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name == 'nt' and sys_platform != 'darwin' and sys_platform != 'linux')" },
+    { name = "importlib-metadata", marker = "python_full_version < '3.10.2'" },
     { name = "packaging" },
     { name = "pyproject-hooks" },
-    { name = "tomli", marker = "python_full_version < '3.11' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/18/94eaffda7b329535d91f00fe605ab1f1e5cd68b2074d03f255c7d250687d/build-1.4.0.tar.gz", hash = "sha256:f1b91b925aa322be454f8330c6fb48b465da993d1e7e7e6fa35027ec49f3c936", size = 50054, upload-time = "2026-01-08T16:41:47.696Z" }
 wheels = [
@@ -771,7 +771,7 @@ resolution-markers = [
     "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "numpy", marker = "python_full_version < '3.11' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "numpy", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/66/54/eb9bfc647b19f2009dd5c7f5ec51c4e6ca831725f1aea7a993034f483147/contourpy-1.3.2.tar.gz", hash = "sha256:b6945942715a034c671b7fc54f9588126b0b8bf23db2696e3ca8328f3ff0ab54", size = 13466130, upload-time = "2025-04-15T17:47:53.79Z" }
 wheels = [
@@ -838,47 +838,21 @@ name = "contourpy"
 version = "1.3.3"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.14' and sys_platform == 'win32' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm'",
-    "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm'",
-    "python_full_version >= '3.14' and sys_platform == 'darwin' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm'",
-    "python_full_version >= '3.14' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm'",
-    "(python_full_version >= '3.14' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (python_full_version >= '3.14' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')",
-    "python_full_version == '3.13.*' and sys_platform == 'darwin' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm'",
-    "python_full_version == '3.12.*' and sys_platform == 'darwin' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm'",
-    "python_full_version == '3.13.*' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm'",
-    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm'",
-    "(python_full_version == '3.13.*' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (python_full_version == '3.13.*' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')",
-    "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')",
-    "python_full_version == '3.11.*' and sys_platform == 'darwin' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm'",
-    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm'",
-    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')",
-    "python_full_version >= '3.14' and sys_platform == 'darwin' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "python_full_version >= '3.14' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "(python_full_version >= '3.14' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm') or (python_full_version >= '3.14' and sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm')",
-    "python_full_version == '3.13.*' and sys_platform == 'darwin' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "python_full_version == '3.12.*' and sys_platform == 'darwin' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "python_full_version == '3.13.*' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "(python_full_version == '3.13.*' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm') or (python_full_version == '3.13.*' and sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm')",
-    "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm')",
-    "python_full_version == '3.11.*' and sys_platform == 'darwin' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm')",
-    "python_full_version >= '3.14' and sys_platform == 'darwin' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "python_full_version >= '3.14' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "(python_full_version >= '3.14' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm') or (python_full_version >= '3.14' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm')",
-    "python_full_version == '3.13.*' and sys_platform == 'darwin' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "python_full_version == '3.12.*' and sys_platform == 'darwin' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "python_full_version == '3.13.*' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "(python_full_version == '3.13.*' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm') or (python_full_version == '3.13.*' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm')",
-    "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm')",
-    "python_full_version == '3.11.*' and sys_platform == 'darwin' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm'",
-    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-llenergymeasure-tensorrt' and extra != 'extra-15-llenergymeasure-vllm')",
+    "python_full_version >= '3.14' and sys_platform == 'darwin'",
+    "python_full_version >= '3.14' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version >= '3.14' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.14' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.13.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.12.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.13.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.13.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.13.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "numpy", marker = "python_full_version >= '3.11' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "numpy", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/58/01/1253e6698a07380cd31a736d248a3f2a50a7c88779a1813da27503cadc2a/contourpy-1.3.3.tar.gz", hash = "sha256:083e12155b210502d0bca491432bb04d56dc3432f95a979b429f2848c3dbe880", size = 13466174, upload-time = "2025-07-26T12:03:12.549Z" }
 wheels = [
@@ -1188,8 +1162,8 @@ name = "cupy-cuda12x"
 version = "13.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "fastrlock", marker = "(python_full_version >= '3.14' and extra == 'extra-15-llenergymeasure-vllm') or (python_full_version < '3.14' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or sys_platform != 'darwin'" },
-    { name = "numpy", marker = "(python_full_version >= '3.14' and extra == 'extra-15-llenergymeasure-vllm') or (python_full_version < '3.14' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or sys_platform != 'darwin'" },
+    { name = "fastrlock", marker = "sys_platform != 'darwin'" },
+    { name = "numpy", marker = "sys_platform != 'darwin'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f7/2e/db22c5148884e4e384f6ebbc7971fa3710f3ba67ca492798890a0fdebc45/cupy_cuda12x-13.6.0-cp310-cp310-manylinux2014_aarch64.whl", hash = "sha256:9e37f60f27ff9625dfdccc4688a09852707ec613e32ea9404f425dd22a386d14", size = 126341714, upload-time = "2025-08-18T08:24:08.335Z" },
@@ -1222,7 +1196,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dill" },
     { name = "filelock" },
-    { name = "fsspec", extra = ["http"] },
+    { name = "fsspec", extra = ["http"], marker = "extra == 'extra-15-llenergymeasure-tensorrt'" },
     { name = "httpx" },
     { name = "huggingface-hub" },
     { name = "multiprocess" },
@@ -1347,7 +1321,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "datasets" },
     { name = "dill" },
-    { name = "fsspec", extra = ["http"] },
+    { name = "fsspec", extra = ["http"], marker = "extra == 'extra-15-llenergymeasure-tensorrt'" },
     { name = "huggingface-hub" },
     { name = "multiprocess" },
     { name = "numpy" },
@@ -1367,7 +1341,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (python_full_version < '3.13' and extra == 'extra-15-llenergymeasure-tensorrt') or (python_full_version < '3.13' and extra != 'extra-15-llenergymeasure-vllm') or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -1391,11 +1365,11 @@ wheels = [
 [package.optional-dependencies]
 standard = [
     { name = "email-validator" },
-    { name = "fastapi-cli", extra = ["standard"] },
+    { name = "fastapi-cli", extra = ["standard"], marker = "extra == 'extra-15-llenergymeasure-vllm'" },
     { name = "httpx" },
     { name = "jinja2" },
     { name = "python-multipart" },
-    { name = "uvicorn", extra = ["standard"] },
+    { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-15-llenergymeasure-vllm'" },
 ]
 
 [[package]]
@@ -1404,9 +1378,9 @@ version = "0.0.24"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "rich-toolkit" },
-    { name = "tomli", marker = "python_full_version < '3.11' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "typer" },
-    { name = "uvicorn", extra = ["standard"] },
+    { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-15-llenergymeasure-vllm'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/6e/58/74797ae9e4610cfa0c6b34c8309096d3b20bb29be3b8b5fbf1004d10fa5f/fastapi_cli-0.0.24.tar.gz", hash = "sha256:1afc9c9e21d7ebc8a3ca5e31790cd8d837742be7e4f8b9236e99cb3451f0de00", size = 19043, upload-time = "2026-02-24T10:45:10.476Z" }
 wheels = [
@@ -1416,7 +1390,7 @@ wheels = [
 [package.optional-dependencies]
 standard = [
     { name = "fastapi-cloud-cli" },
-    { name = "uvicorn", extra = ["standard"] },
+    { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-15-llenergymeasure-vllm'" },
 ]
 
 [[package]]
@@ -1426,12 +1400,12 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastar" },
     { name = "httpx" },
-    { name = "pydantic", extra = ["email"] },
+    { name = "pydantic", extra = ["email"], marker = "extra == 'extra-15-llenergymeasure-vllm'" },
     { name = "rich-toolkit" },
     { name = "rignore" },
     { name = "sentry-sdk" },
     { name = "typer" },
-    { name = "uvicorn", extra = ["standard"] },
+    { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-15-llenergymeasure-vllm'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2b/eb/e78ebd05a714c62a0578cdce4339cb6cd138421a7d865fbddedd7242420b/fastapi_cloud_cli-0.14.0.tar.gz", hash = "sha256:d3ecb8c942685a71df0af7bd59f463b5eff76f5818b48e5a03c6159726831e68", size = 39822, upload-time = "2026-02-25T14:19:53.535Z" }
 wheels = [
@@ -2395,56 +2369,6 @@ dependencies = [
 codecarbon = [
     { name = "codecarbon" },
 ]
-dev = [
-    { name = "accelerate" },
-    { name = "bitsandbytes" },
-    { name = "calflops" },
-    { name = "codecarbon" },
-    { name = "httpx" },
-    { name = "mypy" },
-    { name = "peft" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "torch" },
-    { name = "transformers" },
-    { name = "types-pyyaml" },
-    { name = "zeus" },
-]
-dev-tensorrt = [
-    { name = "accelerate" },
-    { name = "bitsandbytes" },
-    { name = "calflops" },
-    { name = "codecarbon" },
-    { name = "httpx" },
-    { name = "mypy" },
-    { name = "peft" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "tensorrt-llm" },
-    { name = "torch" },
-    { name = "transformers" },
-    { name = "types-pyyaml" },
-    { name = "zeus" },
-]
-dev-vllm = [
-    { name = "accelerate" },
-    { name = "bitsandbytes" },
-    { name = "calflops" },
-    { name = "codecarbon" },
-    { name = "httpx" },
-    { name = "mypy" },
-    { name = "peft" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "torch" },
-    { name = "transformers" },
-    { name = "types-pyyaml" },
-    { name = "vllm" },
-    { name = "zeus" },
-]
 pytorch = [
     { name = "accelerate" },
     { name = "bitsandbytes" },
@@ -2466,6 +2390,15 @@ zeus = [
     { name = "zeus" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "types-pyyaml" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "accelerate", marker = "extra == 'pytorch'", specifier = ">=1.4" },
@@ -2473,31 +2406,32 @@ requires-dist = [
     { name = "calflops", marker = "extra == 'pytorch'", specifier = ">=0.2" },
     { name = "codecarbon", marker = "extra == 'codecarbon'", specifier = ">=2.8" },
     { name = "httpx", marker = "extra == 'webhooks'", specifier = ">=0.23" },
-    { name = "llenergymeasure", extras = ["dev", "tensorrt"], marker = "extra == 'dev-tensorrt'" },
-    { name = "llenergymeasure", extras = ["dev", "vllm"], marker = "extra == 'dev-vllm'" },
-    { name = "llenergymeasure", extras = ["pytorch", "codecarbon", "zeus", "webhooks"], marker = "extra == 'dev'" },
     { name = "loguru", specifier = ">=0.7" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "nvidia-ml-py", specifier = ">=12.0" },
     { name = "peft", marker = "extra == 'pytorch'", specifier = ">=0.18" },
     { name = "platformdirs", specifier = ">=3.0" },
     { name = "pyarrow", specifier = ">=14.0" },
     { name = "pydantic", specifier = ">=2.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
     { name = "tensorrt-llm", marker = "extra == 'tensorrt'", specifier = ">=0.12" },
     { name = "torch", marker = "extra == 'pytorch'", specifier = ">=2.5" },
     { name = "tqdm", specifier = ">=4.66" },
     { name = "transformers", marker = "extra == 'pytorch'", specifier = ">=4.49" },
     { name = "typer", specifier = ">=0.9" },
-    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12" },
     { name = "vllm", marker = "extra == 'vllm'", specifier = ">=0.6" },
     { name = "zeus", marker = "extra == 'zeus'", specifier = ">=0.13.1" },
 ]
-provides-extras = ["pytorch", "vllm", "tensorrt", "zeus", "codecarbon", "webhooks", "dev", "dev-vllm", "dev-tensorrt"]
+provides-extras = ["pytorch", "vllm", "tensorrt", "zeus", "codecarbon", "webhooks"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.0" },
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest-cov", specifier = ">=4.0" },
+    { name = "ruff", specifier = ">=0.8" },
+    { name = "types-pyyaml", specifier = ">=6.0.12" },
+]
 
 [[package]]
 name = "llguidance"
@@ -2667,8 +2601,8 @@ name = "matplotlib"
 version = "3.10.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "contourpy", version = "1.3.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
-    { name = "contourpy", version = "1.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "contourpy", version = "1.3.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-15-llenergymeasure-tensorrt') or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "contourpy", version = "1.3.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-15-llenergymeasure-tensorrt') or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
     { name = "cycler" },
     { name = "fonttools" },
     { name = "kiwisolver" },
@@ -2754,7 +2688,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pillow" },
     { name = "pydantic" },
-    { name = "pydantic-extra-types", extra = ["pycountry"] },
+    { name = "pydantic-extra-types", extra = ["pycountry"], marker = "extra == 'extra-15-llenergymeasure-vllm'" },
     { name = "requests" },
     { name = "tiktoken" },
     { name = "typing-extensions" },
@@ -2976,7 +2910,7 @@ name = "multidict"
 version = "6.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1a/c2/c2d94cbe6ac1753f3fc980da97b3d930efe1da3af3c9f5125354436c073d/multidict-6.7.1.tar.gz", hash = "sha256:ec6652a1bee61c53a3e5776b6049172c53b6aaba34f18c9ad04f82712bac623d", size = 102010, upload-time = "2026-01-26T02:46:45.979Z" }
 wheels = [
@@ -3389,7 +3323,7 @@ name = "nvidia-cudnn-cu12"
 version = "9.1.0.70"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12" },
+    { name = "nvidia-cublas-cu12", marker = "(python_full_version < '3.14' and sys_platform == 'emscripten') or (python_full_version < '3.14' and sys_platform == 'win32') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-15-llenergymeasure-tensorrt') or (sys_platform == 'emscripten' and extra != 'extra-15-llenergymeasure-vllm') or (sys_platform == 'win32' and extra == 'extra-15-llenergymeasure-tensorrt') or (sys_platform == 'win32' and extra != 'extra-15-llenergymeasure-vllm') or (sys_platform == 'darwin' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9f/fd/713452cd72343f682b1c7b9321e23829f00b842ceaedcda96e742ea0b0b3/nvidia_cudnn_cu12-9.1.0.70-py3-none-manylinux2014_x86_64.whl", hash = "sha256:165764f44ef8c61fcdfdfdbe769d687e06374059fbb388b6c89ecb0e28793a6f", size = 664752741, upload-time = "2024-04-22T15:24:15.253Z" },
@@ -3423,7 +3357,7 @@ name = "nvidia-cufft-cu12"
 version = "11.2.1.3"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(python_full_version < '3.14' and sys_platform == 'emscripten') or (python_full_version < '3.14' and sys_platform == 'win32') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-15-llenergymeasure-tensorrt') or (sys_platform == 'emscripten' and extra != 'extra-15-llenergymeasure-vllm') or (sys_platform == 'win32' and extra == 'extra-15-llenergymeasure-tensorrt') or (sys_platform == 'win32' and extra != 'extra-15-llenergymeasure-vllm') or (sys_platform == 'darwin' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
 ]
 wheels = [
     { url = "https://pypi.nvidia.com/nvidia-cufft-cu12/nvidia_cufft_cu12-11.2.1.3-py3-none-manylinux2014_aarch64.whl", hash = "sha256:5dad8008fc7f92f5ddfa2101430917ce2ffacd86824914c82e28990ad7f00399" },
@@ -3446,9 +3380,9 @@ name = "nvidia-cusolver-cu12"
 version = "11.6.1.9"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
-    { name = "nvidia-cublas-cu12" },
-    { name = "nvidia-cusparse-cu12" },
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-cublas-cu12", marker = "(python_full_version < '3.14' and sys_platform == 'emscripten') or (python_full_version < '3.14' and sys_platform == 'win32') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-15-llenergymeasure-tensorrt') or (sys_platform == 'emscripten' and extra != 'extra-15-llenergymeasure-vllm') or (sys_platform == 'win32' and extra == 'extra-15-llenergymeasure-tensorrt') or (sys_platform == 'win32' and extra != 'extra-15-llenergymeasure-vllm') or (sys_platform == 'darwin' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "nvidia-cusparse-cu12", marker = "(python_full_version < '3.14' and sys_platform == 'emscripten') or (python_full_version < '3.14' and sys_platform == 'win32') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-15-llenergymeasure-tensorrt') or (sys_platform == 'emscripten' and extra != 'extra-15-llenergymeasure-vllm') or (sys_platform == 'win32' and extra == 'extra-15-llenergymeasure-tensorrt') or (sys_platform == 'win32' and extra != 'extra-15-llenergymeasure-vllm') or (sys_platform == 'darwin' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(python_full_version < '3.14' and sys_platform == 'emscripten') or (python_full_version < '3.14' and sys_platform == 'win32') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-15-llenergymeasure-tensorrt') or (sys_platform == 'emscripten' and extra != 'extra-15-llenergymeasure-vllm') or (sys_platform == 'win32' and extra == 'extra-15-llenergymeasure-tensorrt') or (sys_platform == 'win32' and extra != 'extra-15-llenergymeasure-vllm') or (sys_platform == 'darwin' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
 ]
 wheels = [
     { url = "https://pypi.nvidia.com/nvidia-cusolver-cu12/nvidia_cusolver_cu12-11.6.1.9-py3-none-manylinux2014_aarch64.whl", hash = "sha256:d338f155f174f90724bbde3758b7ac375a70ce8e706d70b018dd3375545fc84e" },
@@ -3461,7 +3395,7 @@ name = "nvidia-cusparse-cu12"
 version = "12.3.1.170"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(python_full_version < '3.14' and sys_platform == 'emscripten') or (python_full_version < '3.14' and sys_platform == 'win32') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-15-llenergymeasure-tensorrt') or (sys_platform == 'emscripten' and extra != 'extra-15-llenergymeasure-vllm') or (sys_platform == 'win32' and extra == 'extra-15-llenergymeasure-tensorrt') or (sys_platform == 'win32' and extra != 'extra-15-llenergymeasure-vllm') or (sys_platform == 'darwin' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (sys_platform == 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
 ]
 wheels = [
     { url = "https://pypi.nvidia.com/nvidia-cusparse-cu12/nvidia_cusparse_cu12-12.3.1.170-py3-none-manylinux2014_aarch64.whl", hash = "sha256:9d32f62896231ebe0480efd8a7f702e143c98cfaa0e8a76df3386c1ba2b54df3" },
@@ -3499,9 +3433,9 @@ dependencies = [
     { name = "packaging" },
     { name = "pydantic" },
     { name = "rich" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
-    { name = "setuptools", marker = "python_full_version >= '3.12' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-15-llenergymeasure-tensorrt') or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-15-llenergymeasure-tensorrt') or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "setuptools", marker = "python_full_version >= '3.12'" },
     { name = "tqdm" },
 ]
 wheels = [
@@ -4574,7 +4508,7 @@ name = "pyzmq"
 version = "27.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "implementation_name == 'pypy' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "cffi", marker = "implementation_name == 'pypy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/04/0b/3c9baedbdf613ecaa7aa07027780b8867f57b6293b6ee50de316c9f3222b/pyzmq-27.1.0.tar.gz", hash = "sha256:ac0765e3d44455adb6ddbf4417dcce460fc40a05978c08efdf2948072f6db540", size = 281750, upload-time = "2025-09-08T23:10:18.157Z" }
 wheels = [
@@ -4778,7 +4712,7 @@ wheels = [
 
 [package.optional-dependencies]
 cgraph = [
-    { name = "cupy-cuda12x", marker = "sys_platform != 'darwin' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "cupy-cuda12x", marker = "sys_platform != 'darwin'" },
 ]
 
 [[package]]
@@ -4788,7 +4722,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
     { name = "rpds-py" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/22/f5/df4e9027acead3ecc63e50fe1e36aca1523e1719559c499951bb4b53188f/referencing-0.37.0.tar.gz", hash = "sha256:44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8", size = 78036, upload-time = "2025-10-13T15:30:48.871Z" }
 wheels = [
@@ -5787,7 +5721,7 @@ dependencies = [
     { name = "numpy" },
     { name = "nvidia-cuda-nvrtc-cu12" },
     { name = "nvidia-ml-py" },
-    { name = "nvidia-modelopt", extra = ["torch"] },
+    { name = "nvidia-modelopt", extra = ["torch"], marker = "extra == 'extra-15-llenergymeasure-tensorrt'" },
     { name = "nvidia-nccl-cu12" },
     { name = "nvtx" },
     { name = "onnx" },
@@ -6230,7 +6164,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "h11" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/32/ce/eeb58ae4ac36fe09e3842eb02e0eb676bf2c53ae062b98f1b2531673efdd/uvicorn-0.41.0.tar.gz", hash = "sha256:09d11cf7008da33113824ee5a1c6422d89fbc2ff476540d69a34c87fab8b571a", size = 82633, upload-time = "2026-02-16T23:07:24.1Z" }
 wheels = [
@@ -6239,11 +6173,11 @@ wheels = [
 
 [package.optional-dependencies]
 standard = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "httptools" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
-    { name = "uvloop", marker = "(platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32') or (platform_python_implementation == 'PyPy' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (sys_platform == 'cygwin' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (sys_platform == 'win32' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "uvloop", marker = "platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'" },
     { name = "watchfiles" },
     { name = "websockets" },
 ]
@@ -6304,14 +6238,14 @@ dependencies = [
     { name = "compressed-tensors" },
     { name = "depyf" },
     { name = "einops" },
-    { name = "fastapi", extra = ["standard"] },
+    { name = "fastapi", extra = ["standard"], marker = "extra == 'extra-15-llenergymeasure-vllm'" },
     { name = "filelock" },
     { name = "gguf" },
     { name = "importlib-metadata" },
     { name = "lark" },
-    { name = "llguidance", marker = "platform_machine == 'aarch64' or platform_machine == 'arm64' or platform_machine == 'x86_64' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "llguidance", marker = "platform_machine == 'aarch64' or platform_machine == 'arm64' or platform_machine == 'x86_64'" },
     { name = "lm-format-enforcer" },
-    { name = "mistral-common", extra = ["opencv"] },
+    { name = "mistral-common", extra = ["opencv"], marker = "extra == 'extra-15-llenergymeasure-vllm'" },
     { name = "msgspec" },
     { name = "ninja" },
     { name = "numba" },
@@ -6329,13 +6263,13 @@ dependencies = [
     { name = "python-json-logger" },
     { name = "pyyaml" },
     { name = "pyzmq" },
-    { name = "ray", extra = ["cgraph"] },
+    { name = "ray", extra = ["cgraph"], marker = "extra == 'extra-15-llenergymeasure-vllm'" },
     { name = "requests" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-15-llenergymeasure-vllm') or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-15-llenergymeasure-vllm') or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
     { name = "sentencepiece" },
-    { name = "setuptools", marker = "python_full_version >= '3.12' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
-    { name = "six", marker = "python_full_version >= '3.12' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "setuptools", marker = "python_full_version >= '3.12'" },
+    { name = "six", marker = "python_full_version >= '3.12'" },
     { name = "tiktoken" },
     { name = "tokenizers" },
     { name = "torch" },
@@ -6345,8 +6279,8 @@ dependencies = [
     { name = "transformers" },
     { name = "typing-extensions" },
     { name = "watchfiles" },
-    { name = "xformers", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (sys_platform != 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
-    { name = "xgrammar", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64' or (extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "xformers", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "xgrammar", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/df/4d/6b27cc14d0c35e578a743a767953500a801ba296694b7e44cca709738b41/vllm-0.8.2.tar.gz", hash = "sha256:9b337b1c4072ccb94b1bf2b716593fadbe2dcb8d091f9bcbd6b5c6d37f9842ac", size = 6450146, upload-time = "2025-03-25T18:06:58.882Z" }
 wheels = [
@@ -6556,8 +6490,8 @@ name = "xformers"
 version = "0.0.29.post2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy" },
-    { name = "torch" },
+    { name = "numpy", marker = "(python_full_version < '3.14' and sys_platform == 'emscripten') or (python_full_version < '3.14' and sys_platform == 'win32') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "torch", marker = "(python_full_version < '3.14' and sys_platform == 'emscripten') or (python_full_version < '3.14' and sys_platform == 'win32') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/27/ed/04ec7ef97a7e1c836add41ef5a2aef8cbdd45c0190ca42cc08f3c21e2b7b/xformers-0.0.29.post2.tar.gz", hash = "sha256:6ca3d1a6db6f2abff25c1154adee96987f77f4dfd5141771805afa5fc13e9395", size = 8468494, upload-time = "2025-02-01T02:33:48.209Z" }
 wheels = [
@@ -6580,7 +6514,7 @@ dependencies = [
     { name = "tiktoken" },
     { name = "torch" },
     { name = "transformers" },
-    { name = "triton", marker = "(platform_machine == 'x86_64' and platform_system == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm') or (platform_system != 'linux' and extra == 'extra-15-llenergymeasure-tensorrt' and extra == 'extra-15-llenergymeasure-vllm')" },
+    { name = "triton", marker = "platform_machine == 'x86_64' and platform_system == 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b8/68/993f4ede8a65c35c242bf70af1f1acee1e27a38649b38c6e9796280a9831/xgrammar-0.1.16.tar.gz", hash = "sha256:4ddd5128a82d0a9c800c03df25c610368ca630704ad20a6bb7a3629f24ced442", size = 1675541, upload-time = "2025-03-15T21:30:57.731Z" }
 wheels = [
