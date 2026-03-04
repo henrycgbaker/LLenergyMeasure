@@ -230,7 +230,7 @@ Phase 22 (Testing/CI) before Phase 23 (Docs) — testing informs documentation.
 | 19.1. vLLM Parameter Audit | 2/2 | Complete    | 2026-03-03 |
 | 20. Docker Image and CI | 0/TBD | Not started | - |
 | 21. Measurement Carried Items | 0/TBD | Not started | - |
-| 21.1. CI & Versioning Scaffold | 0/2 | Not started | - |
+| 21.1. CI & Versioning Scaffold | 1/2 | In Progress|  |
 | 22. Testing and CI | 0/TBD | Not started | - |
 | 23. Documentation | 0/TBD | Not started | - |
 
