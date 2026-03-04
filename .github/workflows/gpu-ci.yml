@@ -1,46 +1,44 @@
 name: GPU CI
 
-# GPU CI disabled — deferred to Phase 22 (GPU runner strategy)
-# on:
-#   push:
-#     branches: [main]
-#   schedule:
-#     - cron: "0 2 * * 1"  # Weekly Monday 02:00 UTC
-#   workflow_dispatch:
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      confirm:
-        description: "GPU CI is disabled. Use manual trigger only for testing."
-        required: true
-        type: boolean
+
+env:
+  UV_FROZEN: "true"
+  UV_NO_PROGRESS: "1"
 
 jobs:
   gpu-integration:
     runs-on: self-hosted
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build GPU test image
-        run: |
-          docker build \
-            -f docker/Dockerfile.pytorch \
-            -t llem-test:pytorch \
-            . || echo "::warning::Docker build failed -- check Dockerfile.pytorch exists"
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: gpu-3.12
+          python-version: "3.12"
 
-      - name: Run GPU integration tests
-        run: |
-          docker run --rm --gpus all \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            llem-test:pytorch \
-            pytest tests/integration/ -m gpu -v --tb=short
+      - run: uv sync --dev --extra pytorch --extra codecarbon --extra zeus
 
-      - name: Run CLI smoke test
-        run: |
-          docker run --rm --gpus all \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            llem-test:pytorch \
-            bash -c "pip install -e '.[pytorch,dev]' && llem run --model gpt2 --backend pytorch --output /tmp/llem-test"
+      - name: Cache HuggingFace models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-models-${{ hashFiles('tests/fixtures/model_list.txt') }}
+          restore-keys: hf-models-
+
+      - name: All tests (including GPU + Docker)
+        run: uv run pytest tests/ -v --tb=short
+
+      - name: Upload replay fixtures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: replay-fixtures-${{ github.sha }}
+          path: tests/fixtures/replay/
+          retention-days: 30
+          if-no-files-found: ignore
