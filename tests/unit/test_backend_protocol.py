@@ -78,9 +78,11 @@ def test_detect_default_backend_raises_when_no_backends():
     from llenergymeasure.exceptions import BackendError
 
     # Patch find_spec inside the backends module so all backend checks return None
-    with patch("llenergymeasure.core.backends.importlib.util.find_spec", return_value=None):
-        with pytest.raises(BackendError, match="No inference backend"):
-            backends_mod.detect_default_backend()
+    with (
+        patch("llenergymeasure.core.backends.importlib.util.find_spec", return_value=None),
+        pytest.raises(BackendError, match="No inference backend"),
+    ):
+        backends_mod.detect_default_backend()
 
 
 def test_detect_default_backend_error_message_has_install_hint():
@@ -91,9 +93,11 @@ def test_detect_default_backend_error_message_has_install_hint():
     from llenergymeasure.exceptions import BackendError
 
     # Patch find_spec inside the backends module so all backend checks return None
-    with patch("llenergymeasure.core.backends.importlib.util.find_spec", return_value=None):
-        with pytest.raises(BackendError, match="pip install"):
-            backends_mod.detect_default_backend()
+    with (
+        patch("llenergymeasure.core.backends.importlib.util.find_spec", return_value=None),
+        pytest.raises(BackendError, match="pip install"),
+    ):
+        backends_mod.detect_default_backend()
 
 
 # =============================================================================
