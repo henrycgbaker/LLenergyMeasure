@@ -27,6 +27,12 @@ jobs:
     runs-on: self-hosted
     timeout-minutes: 60
     steps:
+      - name: Clean workspace (fix root-owned files from Docker)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "find /workspace -not -user $(id -u) -delete 2>/dev/null || true"
+
       - uses: actions/checkout@v4
 
       - name: Build pytorch CI image
