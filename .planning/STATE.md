@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-05T16:52:06.840Z"
+last_updated: "2026-03-05T18:08:45.000Z"
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 15
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 # Project State
@@ -22,19 +22,19 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 23 in progress. Plan 23-03 complete.
-Next: Phase 23 plans 04-05 (remaining doc files)
-Status: Docker setup guide and backend configuration guide complete - docker-setup.md, backends.md written.
-Last activity: 2026-03-05 - Phase 23 plan 03 complete (branch: gsd/phase-23-documentation)
+Phase: 23 in progress. Plan 23-04 complete.
+Next: Phase 23 plan 05 (policy maker guides)
+Status: Study/sweep YAML reference, energy measurement, methodology, and troubleshooting docs complete.
+Last activity: 2026-03-05 - Phase 23 plan 04 complete (branch: gsd/phase-23-documentation)
 
-Progress: [█████████░] 93% (Phase 23 plans 04-05 remaining)
+Progress: [█████████░] 95% (Phase 23 plan 05 remaining)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 19
+- Total plans completed (M3): 20
 - Average duration: 206s
-- Total execution time: 6509s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s + 106s + 161s)
+- Total execution time: 6799s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s + 106s + 161s + 290s)
 
 *Updated after each plan completion*
 
@@ -97,6 +97,7 @@ Progress: [█████████░] 93% (Phase 23 plans 04-05 remaining)
 - [Phase 23-02]: Annotated output in getting-started.md constructed from _display.py source — host cannot run pytorch outside containers; constructed output matches exact print_result_summary() format
 - [Phase 23-02]: CLI reference supplements auto-generated flag table with manually written context (effective defaults, exit codes, examples) — generator output alone is incomplete as a reference
 - [Phase 23-documentation]: Parameter support matrix in backends.md manually constructed from Pydantic config models; GPU test results required for full regeneration via generate_param_matrix.py
+- [Phase 23-04]: WarmupConfig thermal_floor_seconds default is 60.0s (not 30s as stated in plan) — corrected from Pydantic model source; aligned with MLPerf Power minimum
 
 ### Carried Items
 
@@ -111,5 +112,5 @@ Progress: [█████████░] 93% (Phase 23 plans 04-05 remaining)
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Phase 23 plan 03 complete. docker-setup.md (full NVIDIA CT walkthrough with troubleshooting) and backends.md (PyTorch/vLLM params, runner config, parameter matrix) written.
+Stopped at: Phase 23 plan 04 complete. study-config.md (7 sweep grammar patterns, inlined config reference), energy-measurement.md, methodology.md, troubleshooting.md (inlined invalid combos) written.
 Resume file: None
