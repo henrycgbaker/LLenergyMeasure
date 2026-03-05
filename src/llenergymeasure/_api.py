@@ -177,14 +177,22 @@ def _run(study: StudyConfig, skip_preflight: bool = False) -> StudyResult:
 
     _api_logger = logging.getLogger(__name__)
 
+    # Load user config first so runner context can be forwarded to preflight,
+    # ensuring preflight uses the same runner resolution as the actual dispatch path.
+    backends: list[str] = list({exp.backend for exp in study.experiments})
+    user_config = load_user_config()
+
     # Multi-backend guard — raises PreFlightError for multi-backend studies (CM-10)
     # or auto-elevates to Docker when available (DOCK-05). Also runs Docker pre-flight
     # checks when any backend resolves to a Docker runner.
-    run_study_preflight(study, skip_preflight=skip_preflight)
+    run_study_preflight(
+        study,
+        skip_preflight=skip_preflight,
+        yaml_runners=study.runners,
+        user_config=user_config.runners,
+    )
 
     # Resolve runner specs for all backends in the study
-    backends: list[str] = list({exp.backend for exp in study.experiments})
-    user_config = load_user_config()
     runner_specs = resolve_study_runners(
         backends,
         yaml_runners=study.runners,
