@@ -1,9 +1,18 @@
 name: GPU CI
 
+# Tier 2: GPU integration tests on self-hosted runner (ds01-gpu).
+# Triggers:
+#   1. Manual:     workflow_dispatch (run any time via UI or `gh workflow run gpu-ci.yml`)
+#   2. Release:    called by release.yml as reusable workflow (gates GitHub Release)
+#   3. Label-gate: add 'gpu-ci' label to a PR to run GPU tests on that PR
+#
+# Does NOT run on every push to main. See docs/deployment.md for rationale.
+
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+  workflow_call:
+  pull_request:
+    types: [labeled, synchronize]
 
 env:
   UV_FROZEN: "true"
@@ -11,6 +20,11 @@ env:
 
 jobs:
   gpu-integration:
+    # Skip PR runs unless 'gpu-ci' label is present.
+    # workflow_dispatch and workflow_call always run (no PR label context).
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'gpu-ci')
     runs-on: self-hosted
     timeout-minutes: 60
     steps:
