@@ -11,9 +11,9 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from llenergymeasure.core.harness import MeasurementHarness
 
 from llenergymeasure.core.backends.protocol import InferenceOutput
+from llenergymeasure.core.harness import MeasurementHarness
 from llenergymeasure.domain.metrics import WarmupResult
 
 # ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ def minimal_config():
 
     return ExperimentConfig(
         model="fake/model",
-        backend="fake",
+        backend="pytorch",
         n=1,
         max_input_tokens=32,
         max_output_tokens=32,
@@ -102,7 +102,7 @@ def _make_harness_patches():
     patches = [
         patch(
             "llenergymeasure.core.harness.collect_environment_snapshot",
-            return_value=MagicMock(),
+            return_value=None,
         ),
         patch(
             "llenergymeasure.core.harness.measure_baseline_power",
@@ -146,7 +146,7 @@ def _apply_patches():
     patches = [
         patch(
             "llenergymeasure.core.harness.collect_environment_snapshot",
-            return_value=MagicMock(),
+            return_value=None,
         ),
         patch(
             "llenergymeasure.core.harness.measure_baseline_power",
@@ -252,9 +252,12 @@ def test_harness_sets_warmup_result_thermal_floor(minimal_config):
     backend = TrackingBackend()
     harness = MeasurementHarness()
 
-    with _apply_patches(), patch(
-        "llenergymeasure.core.harness.thermal_floor_wait",
-        return_value=45.0,
+    with (
+        _apply_patches(),
+        patch(
+            "llenergymeasure.core.harness.thermal_floor_wait",
+            return_value=45.0,
+        ),
     ):
         harness.run(backend, minimal_config)
 
