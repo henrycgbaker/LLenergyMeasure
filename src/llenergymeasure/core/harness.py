@@ -56,13 +56,14 @@ def _check_persistence_mode() -> bool:
     try:
         import pynvml
 
-        pynvml.nvmlInit()
-        try:
+        from llenergymeasure.core.gpu_info import nvml_context
+
+        result = True  # Default: unknown — don't generate spurious warning
+        with nvml_context():
             handle = pynvml.nvmlDeviceGetHandleByIndex(0)
             mode = pynvml.nvmlDeviceGetPersistenceMode(handle)
-            return mode != pynvml.NVML_FEATURE_DISABLED
-        finally:
-            pynvml.nvmlShutdown()
+            result = mode != pynvml.NVML_FEATURE_DISABLED
+        return result
     except Exception:
         return True  # Unknown — don't generate spurious warning
 

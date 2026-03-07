@@ -425,12 +425,13 @@ class VLLMBackend:
         try:
             import pynvml
 
-            pynvml.nvmlInit()
-            try:
+            from llenergymeasure.core.gpu_info import nvml_context
+
+            mem_mb: float | None = None
+            with nvml_context():
                 handle = pynvml.nvmlDeviceGetHandleByIndex(0)
                 info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                return float(info.used) / (1024 * 1024)
-            finally:
-                pynvml.nvmlShutdown()
+                mem_mb = float(info.used) / (1024 * 1024)
+            return mem_mb
         except Exception:
             return None
