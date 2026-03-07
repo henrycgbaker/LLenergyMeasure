@@ -281,7 +281,7 @@ def _run_in_process(
     discard a completed measurement.
     """
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
-    from llenergymeasure.results.persistence import save_result
+    from llenergymeasure.study.runner import _save_and_record
 
     config = study.experiments[0]
     config_hash = compute_measurement_config_hash(config)
@@ -345,14 +345,7 @@ def _run_in_process(
 
     result_files: list[str] = []
     warnings: list[str] = []
-    try:
-        result_path = save_result(result, study_dir)
-        rel_path = str(result_path.relative_to(study_dir))
-        result_files.append(str(result_path))
-        manifest.mark_completed(config_hash, cycle, rel_path)
-    except Exception as exc:
-        warnings.append(f"Result save failed: {exc}")
-        manifest.mark_completed(config_hash, cycle, result_file="")
+    _save_and_record(result, study_dir, manifest, config_hash, cycle, result_files)
 
     return result_files, [result], warnings
 
