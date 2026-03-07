@@ -793,7 +793,7 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
     import llenergymeasure._api as api_module
     import llenergymeasure.orchestration.preflight as pf_module
 
-    # Build 6 mock results (2 configs × 3 cycles, already cycle-expanded)
+    # Build 6 mock results (2 configs x 3 cycles, already cycle-expanded)
     mock_results = [_make_experiment_result(experiment_id=f"b3-{i}") for i in range(6)]
 
     # Mock _run_via_runner to return pre-built results (bypasses real subprocess)
@@ -817,7 +817,7 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
     monkeypatch.setattr(api_module, "_run_via_runner", mock_run_via_runner)
 
     # Simulate what load_study_config returns: experiments already cycle-expanded.
-    # 2 unique configs × 3 cycles = 6 entries, n_cycles=3 in execution config.
+    # 2 unique configs x 3 cycles = 6 entries, n_cycles=3 in execution config.
     expanded_experiments = [
         ExperimentConfig(model="gpt2"),
         ExperimentConfig(model="gpt2-medium"),
@@ -838,7 +838,7 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
     assert study_result.summary is not None
     assert study_result.summary.total_experiments == 6, (
         f"Expected 6 (cycle-expanded count), got {study_result.summary.total_experiments} "
-        f"(pre-fix bug would give 18 = 6 × 3)"
+        f"(pre-fix bug would give 18 = 6 x 3)"
     )
     assert study_result.summary.unique_configurations == 2, (
         f"Expected 2 unique configurations (6 / 3), got {study_result.summary.unique_configurations}"
