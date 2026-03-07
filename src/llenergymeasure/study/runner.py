@@ -78,6 +78,7 @@ def _run_experiment_worker(
 
         # Run the actual experiment in-process (within the spawned subprocess)
         from llenergymeasure.core.backends import get_backend
+        from llenergymeasure.core.harness import MeasurementHarness
         from llenergymeasure.orchestration.preflight import run_preflight
 
         # Pre-flight inside subprocess: CUDA availability must be checked in the
@@ -85,7 +86,8 @@ def _run_experiment_worker(
         run_preflight(config)
 
         backend = get_backend(config.backend)
-        result = backend.run(config)
+        harness = MeasurementHarness()
+        result = harness.run(backend, config)
 
         # Send result back to parent via Pipe
         conn.send(result)

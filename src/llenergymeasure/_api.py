@@ -276,7 +276,7 @@ def _run_in_process(
     When runner_specs resolves the backend to "docker", uses DockerRunner directly
     (no subprocess spawning). Otherwise runs in-process via the backend.
 
-    Errors from run_preflight() and backend.run() propagate unchanged (PreFlightError,
+    Errors from run_preflight() and harness.run(backend, config) propagate unchanged (PreFlightError,
     BackendError). Only result-saving errors are caught so a save failure does not
     discard a completed measurement.
     """
@@ -328,11 +328,13 @@ def _run_in_process(
     else:
         # Local in-process path — errors propagate naturally (PreFlightError, BackendError)
         from llenergymeasure.core.backends import get_backend
+        from llenergymeasure.core.harness import MeasurementHarness
         from llenergymeasure.orchestration.preflight import run_preflight
 
         run_preflight(config)
         backend = get_backend(config.backend)
-        result = backend.run(config)
+        harness = MeasurementHarness()
+        result = harness.run(backend, config)
 
     # Handle error payload returned from Docker container (exit 0 but wrote error JSON)
     if isinstance(result, dict) and "type" in result:
