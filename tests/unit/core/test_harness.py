@@ -222,13 +222,14 @@ def test_harness_thermal_floor_wait_set_on_warmup_result(minimal_config):
     backend = FakeBackend()
     harness = MeasurementHarness()
 
-    with _apply_patches() as stack:
-        # Override thermal_floor_wait to return a non-zero value
-        with patch(
+    with (
+        _apply_patches(),
+        patch(
             "llenergymeasure.core.harness.thermal_floor_wait",
             return_value=30.0,
-        ):
-            harness.run(backend, minimal_config)
+        ),
+    ):
+        harness.run(backend, minimal_config)
 
     # The WarmupResult returned by backend.warmup() starts with thermal_floor_wait_s=0.0
     # The harness must have set it to 30.0. We verify this indirectly by checking the

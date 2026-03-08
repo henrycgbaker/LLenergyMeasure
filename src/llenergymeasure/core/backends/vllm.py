@@ -14,6 +14,7 @@ hosts without vLLM or CUDA installed.
 
 from __future__ import annotations
 
+import contextlib
 import gc
 import logging
 from typing import Any
@@ -225,10 +226,8 @@ class VLLMBackend:
         # vllm.LLM has llm_engine.model_executor.driver_worker.model_runner.model
         # This is an internal API path — stash in extras, harness will attempt FLOPs.
         hf_model = None
-        try:
+        with contextlib.suppress(Exception):
             hf_model = llm.llm_engine.model_executor.driver_worker.model_runner.model
-        except Exception:
-            pass  # Not available — FLOPs will be 0.0
 
         return InferenceOutput(
             elapsed_time_sec=elapsed,
