@@ -9,6 +9,10 @@ are internal and may change without notice. One minor version deprecation
 window before removing any __all__ export (removed in v2.x+1 at earliest).
 """
 
+import logging
+
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+
 from llenergymeasure._api import run_experiment, run_study
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
