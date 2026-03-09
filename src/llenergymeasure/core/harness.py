@@ -23,6 +23,11 @@ from llenergymeasure.domain.experiment import (
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.core.baseline import BaselineCache
+    from llenergymeasure.core.energy_backends import EnergyBackend
+    from llenergymeasure.core.power_thermal import PowerThermalSample
+    from llenergymeasure.domain.environment import EnvironmentSnapshot
+    from llenergymeasure.domain.metrics import FlopsResult
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +63,11 @@ def _check_persistence_mode() -> bool:
 
         from llenergymeasure.core.gpu_info import nvml_context
 
-        result = True  # Default: unknown — don't generate spurious warning
+        result: bool = True  # Default: unknown — don't generate spurious warning
         with nvml_context():
             handle = pynvml.nvmlDeviceGetHandleByIndex(0)
             mode = pynvml.nvmlDeviceGetPersistenceMode(handle)
-            result = mode != pynvml.NVML_FEATURE_DISABLED
+            result = bool(mode != pynvml.NVML_FEATURE_DISABLED)
         return result
     except Exception:
         return True  # Unknown — don't generate spurious warning
@@ -74,7 +79,7 @@ def _check_persistence_mode() -> bool:
 # ---------------------------------------------------------------------------
 
 
-def collect_environment_snapshot():  # pragma: no cover
+def collect_environment_snapshot() -> EnvironmentSnapshot:  # pragma: no cover
     from llenergymeasure.domain.environment import (
         collect_environment_snapshot as _snap,
     )
@@ -82,25 +87,29 @@ def collect_environment_snapshot():  # pragma: no cover
     return _snap()
 
 
-def measure_baseline_power(duration_sec: float):  # pragma: no cover
+def measure_baseline_power(duration_sec: float) -> BaselineCache | None:  # pragma: no cover
     from llenergymeasure.core.baseline import measure_baseline_power as _mbp
 
     return _mbp(duration_sec=duration_sec)
 
 
-def select_energy_backend(explicit: str | None):  # pragma: no cover
+def select_energy_backend(explicit: str | None) -> EnergyBackend | None:  # pragma: no cover
     from llenergymeasure.core.energy_backends import select_energy_backend as _seb
 
     return _seb(explicit)
 
 
-def estimate_flops_palm(model: Any, n_input_tokens: int, n_output_tokens: int):  # pragma: no cover
+def estimate_flops_palm(
+    model: Any, n_input_tokens: int, n_output_tokens: int
+) -> FlopsResult:  # pragma: no cover
     from llenergymeasure.core.flops import estimate_flops_palm as _efp
 
     return _efp(model=model, n_input_tokens=n_input_tokens, n_output_tokens=n_output_tokens)
 
 
-def write_timeseries_parquet(samples: list, path: Path, gpu_index: int = 0):  # pragma: no cover
+def write_timeseries_parquet(
+    samples: list[PowerThermalSample], path: Path, gpu_index: int = 0
+) -> Path:  # pragma: no cover
     from llenergymeasure.core.timeseries import write_timeseries_parquet as _wts
 
     return _wts(samples, path, gpu_index=gpu_index)
@@ -272,7 +281,7 @@ class MeasurementHarness:
                 import torch
 
                 if torch.cuda.is_available():
-                    return torch.cuda.max_memory_allocated() / (1024 * 1024)
+                    return float(torch.cuda.max_memory_allocated() / (1024 * 1024))
             except Exception:
                 pass
         return 0.0
@@ -306,7 +315,7 @@ class MeasurementHarness:
     def _collect_warnings(
         self,
         duration_sec: float,
-        timeseries_samples: list,
+        timeseries_samples: list[PowerThermalSample],
     ) -> list[str]:
         """Collect measurement quality warnings from timeseries samples."""
         temp_start: float | None = None
