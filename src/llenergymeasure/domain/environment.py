@@ -222,8 +222,8 @@ def _collect_installed_packages() -> list[str]:
     """Enumerate installed packages in-process. Covers pip, conda, manual installs."""
     result = []
     for dist in importlib.metadata.distributions():
-        name = dist.metadata.get("Name")
-        version = dist.metadata.get("Version")
+        name = dist.metadata["Name"]
+        version = dist.metadata["Version"]
         if name and version:
             result.append(f"{name}=={version}")
     return sorted(result)
