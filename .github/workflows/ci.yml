@@ -117,7 +117,7 @@ jobs:
       - name: Version sync check
         run: |
           PYPROJECT_VER=$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); print(tomllib.load(f)['project']['version'])")
-          INIT_VER=$(python3 -c "import re; s=open('src/llenergymeasure/__init__.py').read(); print(re.search(r'__version__\s*=\s*\"([^\"]+)\"', s).group(1))")
+          INIT_VER=$(python3 -c "import re; s=open('src/llenergymeasure/__init__.py').read(); print(re.search(r'__version__[^=]*=\s*\"([^\"]+)\"', s).group(1))")
           echo "pyproject.toml: ${PYPROJECT_VER}"
           echo "__init__.py:    ${INIT_VER}"
           [ "$PYPROJECT_VER" = "$INIT_VER" ] || { echo "ERROR: Version mismatch: pyproject.toml=${PYPROJECT_VER}, __init__.py=${INIT_VER}"; exit 1; }
@@ -150,8 +150,6 @@ jobs:
           - dockerfile: pytorch
             blocking: true
           - dockerfile: vllm
-            blocking: false
-          - dockerfile: tensorrt
             blocking: false
     continue-on-error: ${{ !matrix.blocking }}
     steps:
