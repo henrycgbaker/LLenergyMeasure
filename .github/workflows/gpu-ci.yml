@@ -66,6 +66,18 @@ jobs:
             llenergymeasure-ci:pytorch \
             bash tests/integration/sigint_verify.sh
 
+      - name: Collect replay fixtures
+        if: always()
+        run: |
+          if [ -d "${{ github.workspace }}/results/replay" ]; then
+            cp -r "${{ github.workspace }}/results/replay/"*.json \
+                  "${{ github.workspace }}/tests/fixtures/replay/" 2>/dev/null || true
+            echo "Replay fixtures collected:"
+            ls -la "${{ github.workspace }}/tests/fixtures/replay/"
+          else
+            echo "No replay fixtures produced (results/replay/ not found)"
+          fi
+
       - name: Upload replay fixtures
         if: always()
         uses: actions/upload-artifact@v4
