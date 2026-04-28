@@ -55,7 +55,7 @@ The output is a corpus of rules, each describing one constraint on a config fiel
   │                            │                                        │
   │                            ▼                                        │
   │                   staging files                                     │
-  │              configs/validation_rules/_staging/                     │
+  │              configs/engine_invariants/_staging/                    │
   │                            │                                        │
   │                            ▼                                        │
   │                    build_corpus.py                                  │
@@ -68,10 +68,10 @@ The output is a corpus of rules, each describing one constraint on a config fiel
   │           ┌────────────────┴──────────────────┐                    │
   │           ▼                                   ▼                    │
   │  confirmed rules                   quarantined rules               │
-  │  configs/validation_rules/         configs/validation_rules/        │
-  │  {engine}.yaml                     _staging/_failed_*.yaml         │
-  │  src/.../vendored_rules/                                            │
-  │  {engine}.json                                                      │
+  │  configs/engine_invariants/        configs/engine_invariants/       │
+  │  {engine}.proposed.yaml            _staging/_failed_*.yaml          │
+  │  configs/engine_invariants/                                         │
+  │  {engine}.vendored.yaml                                             │
   └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -389,7 +389,7 @@ The gate runs inside the Docker container for each engine so that the live libra
 
 **Exit codes from `vendor_rules.py`:**
 - `0` - all rules confirmed.
-- `1` - one or more divergences; vendored JSON still written (for diagnostic purposes).
+- `1` - one or more divergences; vendored YAML still written (for diagnostic purposes).
 - `2` - hard error (corpus malformed, engine not importable).
 
 ---
@@ -436,8 +436,9 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │         │                 │                    │                  │
   │         └─────────────────┴────────────────────┘                  │
   │                       ▼                                           │
-  │  build_corpus.py merges staging → configs/validation_rules/       │
-  │  {engine}.yaml; bot commits the new YAML to the PR branch         │
+  │  build_corpus.py merges staging → configs/engine_invariants/     │
+  │  {engine}.proposed.yaml; bot commits the new YAML to the PR       │
+  │  branch                                                           │
   │  with `--force-with-lease` and posts a diff comment.              │
   │                       │                                           │
   │                       ▼                                           │
@@ -450,8 +451,8 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │  the live library inside the engine's Docker container.           │
   │                       │                                           │
   │                       ▼                                           │
-  │  Bot writes updated vendored JSON                                 │
-  │  (src/llenergymeasure/config/vendored_rules/{engine}.json)        │
+  │  Bot writes updated vendored YAML                                 │
+  │  (configs/engine_invariants/{engine}.vendored.yaml)               │
   │  to the PR branch and posts a diff comment.                       │
   │                       │                                           │
   │  ─────────────── parameter-discovery.yml (parallel) ───────       │
@@ -465,10 +466,10 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │  Divergences from --fail-on-divergence are P0 incidents.          │
   │                       │                                           │
   │                       ▼                                           │
-  │  Maintainer reviews corpus diff (YAML), vendored JSON diff, and   │
-  │  schema diff in the PR. Stage 1's YAML commit is the trust seam:  │
-  │  recall regressions show up as YAML rule drops BEFORE the JSON    │
-  │  gate runs.                                                       │
+  │  Maintainer reviews proposed YAML diff, vendored YAML diff, and   │
+  │  schema diff in the PR. Stage 1's proposed YAML commit is the     │
+  │  trust seam: recall regressions show up as rule drops BEFORE      │
+  │  the vendor gate runs.                                            │
   └───────────────────────────────────────────────────────────────────┘
 ```
 

@@ -46,4 +46,4 @@ scripts/probe_*_results.json
 
 # Rule-extractor staging outputs (regenerated each run; consumed by the
 # corpus merger — never hand-edited, never committed).
-configs/validation_rules/_staging/
+configs/engine_invariants/_staging/

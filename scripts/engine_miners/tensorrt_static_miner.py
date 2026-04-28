@@ -33,7 +33,7 @@ out of reach for Python-side construction probing. The adversarial review
 
 Output
 ------
-Writes ``configs/validation_rules/_staging/tensorrt_static_miner.yaml`` —
+Writes ``configs/engine_invariants/_staging/tensorrt_static_miner.yaml`` —
 consumed downstream by ``scripts/engine_miners/build_corpus.py``.
 
 Run::
@@ -1351,10 +1351,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path("configs/validation_rules/_staging/tensorrt_static_miner.yaml"),
+        default=Path("configs/engine_invariants/_staging/tensorrt_static_miner.yaml"),
         help=(
             "Where to write the staging YAML (default: "
-            "configs/validation_rules/_staging/tensorrt_static_miner.yaml)"
+            "configs/engine_invariants/_staging/tensorrt_static_miner.yaml)"
         ),
     )
     parser.add_argument(

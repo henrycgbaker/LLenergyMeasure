@@ -3,7 +3,7 @@ name: Auto-Mine — Generate Validation Rules
 # Stage 1 of the invariant-miner pipeline. Re-runs the per-engine miners +
 # corpus builder when any input under their reach changes (Dockerfile bumps,
 # miner module edits, lift modules, refresh helper). Each matrix cell
-# regenerates configs/validation_rules/{engine}.yaml in place and bot-commits
+# regenerates configs/engine_invariants/{engine}.proposed.yaml in place and bot-commits
 # the regenerated YAML back to the PR branch when the diff is non-empty.
 #
 # After bot writeback, invariant-miner.yml (Stage 2 vendor gate) auto-fires on
@@ -90,7 +90,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CORPUS_DIR: configs/validation_rules
+  CORPUS_DIR: configs/engine_invariants
 
 jobs:
   mine-transformers:
@@ -132,7 +132,7 @@ jobs:
       - name: Save current YAML for diffing
         run: |
           mkdir -p /tmp/auto-mine-diff
-          OLD_YAML="${CORPUS_DIR}/transformers.yaml"
+          OLD_YAML="${CORPUS_DIR}/transformers.proposed.yaml"
           if [[ -f "$OLD_YAML" ]]; then
             cp "$OLD_YAML" /tmp/auto-mine-diff/transformers.old.yaml
           else
@@ -174,7 +174,7 @@ jobs:
       - name: Classify YAML diff
         id: diff
         run: |
-          NEW_YAML="${CORPUS_DIR}/transformers.yaml"
+          NEW_YAML="${CORPUS_DIR}/transformers.proposed.yaml"
           OLD_YAML="/tmp/auto-mine-diff/transformers.old.yaml"
           if diff -q "$OLD_YAML" "$NEW_YAML" >/dev/null 2>&1; then
             CHANGED=false
@@ -202,7 +202,7 @@ jobs:
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
 
-          git add "${CORPUS_DIR}/transformers.yaml"
+          git add "${CORPUS_DIR}/transformers.proposed.yaml"
 
           if git diff --cached --quiet; then
             echo "No corpus changes to commit."
@@ -307,7 +307,7 @@ jobs:
       - name: Save current YAML for diffing
         run: |
           mkdir -p /tmp/auto-mine-diff
-          OLD_YAML="${CORPUS_DIR}/vllm.yaml"
+          OLD_YAML="${CORPUS_DIR}/vllm.proposed.yaml"
           if [[ -f "$OLD_YAML" ]]; then
             cp "$OLD_YAML" /tmp/auto-mine-diff/vllm.old.yaml
           else
@@ -358,7 +358,7 @@ jobs:
       - name: Classify YAML diff
         id: diff
         run: |
-          NEW_YAML="${CORPUS_DIR}/vllm.yaml"
+          NEW_YAML="${CORPUS_DIR}/vllm.proposed.yaml"
           OLD_YAML="/tmp/auto-mine-diff/vllm.old.yaml"
           if diff -q "$OLD_YAML" "$NEW_YAML" >/dev/null 2>&1; then
             CHANGED=false
@@ -384,7 +384,7 @@ jobs:
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
 
-          git add "${CORPUS_DIR}/vllm.yaml"
+          git add "${CORPUS_DIR}/vllm.proposed.yaml"
 
           if git diff --cached --quiet; then
             echo "No corpus changes to commit."
@@ -487,7 +487,7 @@ jobs:
       - name: Save current YAML for diffing
         run: |
           mkdir -p /tmp/auto-mine-diff
-          OLD_YAML="${CORPUS_DIR}/tensorrt.yaml"
+          OLD_YAML="${CORPUS_DIR}/tensorrt.proposed.yaml"
           if [[ -f "$OLD_YAML" ]]; then
             cp "$OLD_YAML" /tmp/auto-mine-diff/tensorrt.old.yaml
           else
@@ -562,7 +562,7 @@ jobs:
       - name: Classify YAML diff
         id: diff
         run: |
-          NEW_YAML="${CORPUS_DIR}/tensorrt.yaml"
+          NEW_YAML="${CORPUS_DIR}/tensorrt.proposed.yaml"
           OLD_YAML="/tmp/auto-mine-diff/tensorrt.old.yaml"
           if diff -q "$OLD_YAML" "$NEW_YAML" >/dev/null 2>&1; then
             CHANGED=false
@@ -588,7 +588,7 @@ jobs:
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
 
-          git add "${CORPUS_DIR}/tensorrt.yaml"
+          git add "${CORPUS_DIR}/tensorrt.proposed.yaml"
 
           if git diff --cached --quiet; then
             echo "No corpus changes to commit."

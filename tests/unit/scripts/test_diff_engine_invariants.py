@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts.diff_validation_rules`."""
+"""Tests for :mod:`scripts.diff_engine_invariants`."""
 
 from __future__ import annotations
 
@@ -12,9 +12,9 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts import diff_validation_rules as diff_rules  # noqa: E402
+from scripts import diff_engine_invariants as diff_rules  # noqa: E402
 
-SCRIPT = _PROJECT_ROOT / "scripts" / "diff_validation_rules.py"
+SCRIPT = _PROJECT_ROOT / "scripts" / "diff_engine_invariants.py"
 
 
 def _envelope(cases: list[dict[str, Any]], **meta: Any) -> dict[str, Any]:
@@ -141,7 +141,7 @@ class TestDiffRules:
         new = _envelope([_case("r1", outcome="error"), _case("r2", outcome="warn")])
         # r1 in both — no change; r2 added — safe
         result = diff_rules.diff_rules(old, new)
-        assert "1 rules-safe" in result.summary
+        assert "1 invariants-safe" in result.summary
 
 
 # ---------------------------------------------------------------------------
@@ -160,14 +160,14 @@ class TestRenderMarkdown:
         old = _envelope([_case("r1", outcome="warn")])
         new = _envelope([_case("r1", outcome="error")])
         md = diff_rules.render_markdown(diff_rules.diff_rules(old, new))
-        assert "rules-breaking" in md
+        assert "invariants-breaking" in md
         assert "severity_escalated" in md
 
     def test_includes_safe_section(self) -> None:
         old = _envelope([_case("r1")])
         new = _envelope([_case("r1"), _case("r2")])
         md = diff_rules.render_markdown(diff_rules.diff_rules(old, new))
-        assert "rules-safe" in md
+        assert "invariants-safe" in md
         assert "added_rule" in md
 
 

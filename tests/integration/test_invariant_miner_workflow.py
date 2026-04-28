@@ -8,19 +8,19 @@ that complements the unit tests for each individual script.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts import _invariant_vendor_common, vendor_rules  # noqa: E402
-from scripts import diff_validation_rules as diff_rules  # noqa: E402
+from scripts import diff_engine_invariants as diff_rules  # noqa: E402
 from scripts._invariant_vendor_common import run_case  # noqa: E402
 from scripts.engine_miners._fixpoint_test import fixpoint_test_corpus  # noqa: E402
 
@@ -134,14 +134,14 @@ class TestWorkflowGlue:
     def test_vendor_writes_envelope_and_no_divergence(
         self, fixture_corpus_path: Path, tmp_path: Path, patched_runner: Any
     ) -> None:
-        out = tmp_path / "transformers.json"
+        out = tmp_path / "transformers.vendored.yaml"
         _envelope, divergences = vendor_rules.vendor_engine(
             engine="transformers",
             corpus_path=fixture_corpus_path,
             out_path=out,
         )
         assert out.exists()
-        written = json.loads(out.read_text())
+        written = yaml.safe_load(out.read_text())
         assert written["schema_version"] == "1.0.0"
         assert len(written["cases"]) == 2
         assert divergences == []
@@ -149,7 +149,7 @@ class TestWorkflowGlue:
     def test_diff_classifier_marks_added_rule_safe(
         self, fixture_corpus_path: Path, tmp_path: Path, patched_runner: Any
     ) -> None:
-        out1 = tmp_path / "first.json"
+        out1 = tmp_path / "first.vendored.yaml"
         envelope1, _ = vendor_rules.vendor_engine(
             engine="transformers",
             corpus_path=fixture_corpus_path,
@@ -177,8 +177,6 @@ class TestWorkflowGlue:
         assert any(c.kind == "added_rule" for c in result.safe)
 
     def test_fixpoint_test_runs_on_fixture_corpus(self, fixture_corpus_path: Path) -> None:
-        import yaml
-
         corpus = yaml.safe_load(fixture_corpus_path.read_text())
         # Should not raise.
         fixpoint_test_corpus(corpus)
@@ -186,7 +184,7 @@ class TestWorkflowGlue:
     def test_markdown_comment_body_well_formed(
         self, fixture_corpus_path: Path, tmp_path: Path, patched_runner: Any
     ) -> None:
-        out = tmp_path / "vendor.json"
+        out = tmp_path / "vendor.vendored.yaml"
         envelope, _ = vendor_rules.vendor_engine(
             engine="transformers",
             corpus_path=fixture_corpus_path,

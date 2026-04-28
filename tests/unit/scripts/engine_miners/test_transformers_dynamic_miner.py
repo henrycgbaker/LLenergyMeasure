@@ -63,7 +63,7 @@ if not tf_walker.TESTED_AGAINST_VERSIONS.contains(
     )
 
 
-_CORPUS_PATH = _PROJECT_ROOT / "configs" / "validation_rules" / "transformers.yaml"
+_CORPUS_PATH = _PROJECT_ROOT / "configs" / "engine_invariants" / "transformers.proposed.yaml"
 
 
 @pytest.fixture(scope="module")
