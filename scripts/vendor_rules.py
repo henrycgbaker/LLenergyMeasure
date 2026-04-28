@@ -3,7 +3,7 @@
 
 The vendor step is the **observe half** of the "observe, don't re-encode"
 design in :doc:`.product/designs/config-deduplication-dormancy/runtime-config-validation.md`.
-The YAML corpus at ``configs/validation_rules/{engine}.yaml`` declares each
+The YAML corpus at ``configs/engine_invariants/{engine}.proposed.yaml`` declares each
 rule's ``expected_outcome``; this script executes the rule through the
 library and records what *actually* happened. Divergence between declared and
 observed fails CI.
@@ -12,24 +12,24 @@ Usage (inside the engine's Docker container)::
 
     python scripts/vendor_rules.py \\
         --engine transformers \\
-        --corpus configs/validation_rules/transformers.yaml \\
-        --out src/llenergymeasure/config/vendored_rules/transformers.json
+        --corpus configs/engine_invariants/transformers.proposed.yaml \\
+        --out configs/engine_invariants/transformers.vendored.yaml
 
 Exit codes:
 
     0 - all rules confirmed (positive + negative + expected matches observed)
-    1 - one or more divergences; JSON still written
+    1 - one or more divergences; envelope still written
     2 - hard error (corpus malformed, engine not importable, etc.)
 
 The envelope structure mirrors the parameter-discovery envelope in
-``src/llenergymeasure/config/discovered_schemas/*.json`` so downstream tooling
-and loaders share the same shape. Sibling by design, per §5 of the design doc.
+``src/llenergymeasure/config/discovered_schemas/*.json`` (same field shape,
+YAML serialisation here so the proposed and vendored corpora share a single
+human-readable format).
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import sys
@@ -38,6 +38,8 @@ from dataclasses import replace as dataclass_replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 # Ensure sibling module imports resolve when run via ``python scripts/...``.
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -85,7 +87,7 @@ class VendorDivergenceError(VendorError):
     def __init__(self, divergences: list[Divergence]) -> None:
         super().__init__(
             f"{len(divergences)} rule(s) diverged from expected_outcome. "
-            "See the vendored JSON 'divergences' array for details."
+            "See the vendored YAML 'divergences' array for details."
         )
         self.divergences = divergences
 
@@ -100,10 +102,6 @@ def _load_corpus(path: Path) -> dict[str, Any]:
         raw_text = path.read_text()
     except FileNotFoundError as exc:
         raise VendorCorpusError(f"Corpus not found at {path}") from exc
-    try:
-        import yaml
-    except ImportError as exc:
-        raise VendorCorpusError("PyYAML not available; cannot parse corpus") from exc
     data = yaml.safe_load(raw_text)
     if not isinstance(data, dict) or "rules" not in data:
         raise VendorCorpusError(f"Corpus at {path} must be a mapping with a top-level 'rules' key.")
@@ -675,7 +673,7 @@ def vendor_engine(
     base_image_ref: str | None = None,
     vendor_commit: str = "unknown",
 ) -> tuple[dict[str, Any], list[Divergence]]:
-    """Run the full vendor loop for one engine; write JSON envelope to ``out_path``.
+    """Run the full vendor loop for one engine; write YAML envelope to ``out_path``.
 
     Returns ``(envelope, divergences)``. Raises :class:`VendorEngineNotImportable`
     if the engine library can't be imported. Does NOT raise on divergence —
@@ -751,7 +749,7 @@ def vendor_engine(
     )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(envelope, indent=2, sort_keys=False) + "\n")
+    out_path.write_text(yaml.safe_dump(envelope, sort_keys=False, default_flow_style=False))
 
     return envelope, divergences
 
@@ -811,7 +809,7 @@ def main(argv: list[str] | None = None) -> int:
         "--out",
         type=Path,
         required=True,
-        help="Path to write the vendored JSON envelope.",
+        help="Path to write the vendored YAML envelope.",
     )
     parser.add_argument(
         "--gpu-cases",
@@ -847,7 +845,7 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "Exit 1 if any rule diverged from its expected_outcome. CI always "
             "passes this flag; locally it's off by default so developers can "
-            "inspect the JSON without CI-style exit."
+            "inspect the YAML without CI-style exit."
         ),
     )
 
@@ -876,7 +874,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[{args.engine}] wrote {args.out}", file=sys.stderr)
     if divergences:
         print(
-            f"[{args.engine}] {len(divergences)} divergence(s) — see JSON 'divergences' array.",
+            f"[{args.engine}] {len(divergences)} divergence(s) — see YAML 'divergences' array.",
             file=sys.stderr,
         )
         for d in divergences[:10]:

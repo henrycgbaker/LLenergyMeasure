@@ -31,7 +31,7 @@ not reachable via this walker's landmarks. Stays hand-written in
 
 Usage::
 
-    python -m scripts.engine_miners.transformers --out configs/validation_rules/transformers.yaml
+    python -m scripts.engine_miners.transformers --out configs/engine_invariants/transformers.proposed.yaml
 
 With ``LLENERGY_WALKER_FROZEN_AT`` set for byte-stable reproducibility.
 """
@@ -57,9 +57,9 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.path)
-    RuleCandidate,
     MinerLandmarkMissingError,
     MinerSource,
+    RuleCandidate,
     check_installed_version,
 )
 from scripts.engine_miners.transformers_dynamic_miner import (  # noqa: E402
