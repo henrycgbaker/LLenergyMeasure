@@ -21,22 +21,22 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from scripts.engine_miners import transformers_miner as tf_walker  # noqa: E402
 from scripts.engine_miners._base import MinerSource, RuleCandidate  # noqa: E402
+from scripts.engine_miners._ssot import load_miner_pin  # noqa: E402
 
 # Pin guard: tests that actually invoke ``tf_walker.walk()`` depend on
-# transformers being inside ``TESTED_AGAINST_VERSIONS``. CI environments that
-# resolve an older version (e.g. 4.51 via ``uv.lock``) lack
+# transformers being inside the SSOT miner pin
+# (``engine_versions/transformers.yaml miner_pins.dynamic``). CI environments
+# that resolve an older version (e.g. 4.51 via ``uv.lock``) lack
 # ``GenerationConfig.validate(strict=True)``. Mark those tests skipped rather
 # than let them fail with a TypeError unrelated to the change under test.
 try:
     import transformers as _tf  # type: ignore
     from packaging import version as _pkg_version
 
-    _TRANSFORMERS_IN_PIN = tf_walker.TESTED_AGAINST_VERSIONS.contains(
-        _pkg_version.Version(_tf.__version__), prereleases=True
-    )
+    _TF_PIN = load_miner_pin("transformers", "dynamic")
+    _TRANSFORMERS_IN_PIN = _TF_PIN.contains(_pkg_version.Version(_tf.__version__), prereleases=True)
     _TRANSFORMERS_PIN_REASON = (
-        f"transformers=={_tf.__version__} is outside walker pin "
-        f"{tf_walker.TESTED_AGAINST_VERSIONS!s}"
+        f"transformers=={_tf.__version__} is outside SSOT miner pin {_TF_PIN!s}"
     )
 except ImportError:
     _TRANSFORMERS_IN_PIN = False
@@ -244,8 +244,17 @@ def test_walk_emits_version_mismatch_when_out_of_range(
     # Force the pinned range to something the installed version can't satisfy.
     from packaging.specifiers import SpecifierSet
 
-    monkeypatch.setattr(tf_walker, "TESTED_AGAINST_VERSIONS", SpecifierSet(">=99.0"))
+    from scripts.engine_miners import _base as base_mod
+    from scripts.engine_miners import _ssot
     from scripts.engine_miners._base import MinerVersionMismatchError
+
+    _ssot.load_miner_pin.cache_clear()
+
+    def _fake(engine: str, producer: str) -> SpecifierSet:
+        return SpecifierSet(">=99.0")
+
+    monkeypatch.setattr(base_mod, "load_miner_pin", _fake)
+    monkeypatch.setattr(tf_walker, "load_miner_pin", _fake)
 
     with pytest.raises(MinerVersionMismatchError):
         tf_walker.walk()

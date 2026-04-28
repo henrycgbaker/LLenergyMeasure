@@ -52,8 +52,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from packaging.specifiers import SpecifierSet
-
 # Make sibling modules importable when run as a plain script.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
@@ -61,8 +59,8 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 # Strip the script directory and any "" entry from sys.path before any third-
 # party imports — same defensive measure as the transformers static miner.
-# A sibling ``transformers.py`` etc. inside scripts/engine_miners/ would otherwise
-# shadow the real installed packages.
+# A sibling ``transformers.py`` etc. inside scripts/engine_miners/ would
+# otherwise shadow the real installed packages.
 _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 sys.path[:] = [p for p in sys.path if Path(p).resolve() != Path(_SCRIPT_DIR).resolve()]
 sys.path[:] = [p for p in sys.path if p != ""]
@@ -76,6 +74,7 @@ from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.
     find_method,
     first_string_arg,
 )
+from scripts.engine_miners._ssot import load_miner_pin  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -84,25 +83,10 @@ from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.
 ENGINE = "tensorrt"
 LIBRARY = "tensorrt_llm"
 
-TESTED_AGAINST_VERSIONS: SpecifierSet = SpecifierSet(">=0.21.0,<0.22.0")
-"""Range of TRT-LLM versions this miner has been validated against.
-
-Pinned tightly to 0.21.x because:
-
-- TRT-LLM 1.x requires CUDA 13 (a separate infrastructure milestone).
-- The 1.x ``BaseLlmArgs`` family added ``StrictBaseModel``, ``MoeConfig``,
-  ``CudaGraphConfig`` and ~4 new validators on top of the 0.21 surface.
-  Mining against 1.x with a 0.21-built corpus would emit drifted rules.
-- The corpus loader uses validator method names + landmark line numbers as
-  provenance; mismatched-version mining produces stale provenance even when
-  the rule shapes still match.
-
-On mismatch, ``check_installed_version`` raises ``MinerVersionMismatchError``
-and CI fails. The miner does NOT call ``check_installed_version`` itself
-because it never imports the library — but the orchestrator
-:mod:`scripts.engine_miners.tensorrt_miner` is responsible for asserting the
-extracted source-tree version against this pin.
-"""
+# The miner does NOT call ``check_installed_version`` itself because it never
+# imports the library — the orchestrator :mod:`scripts.engine_miners.tensorrt_miner`
+# asserts the extracted source-tree version against
+# ``engine_versions/tensorrt.yaml miner_pins.static`` instead.
 
 # Project-side namespace for TRT-LLM config fields. Aligns with
 # ``TensorRTConfig`` in ``src/llenergymeasure/config/engine_configs.py`` —
@@ -1206,7 +1190,7 @@ def walk_tensorrt(source_root: Path | None = None) -> tuple[list[RuleCandidate],
     _verify_method_landmarks(tree)
 
     # Read the version from the source tree so the orchestrator can pin
-    # against TESTED_AGAINST_VERSIONS without importing the library.
+    # against the SSOT miner range without importing the library.
     version = _read_source_version(root)
 
     today = dt.date.today().isoformat()
@@ -1334,7 +1318,7 @@ def emit_yaml(
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
-        "walker_pinned_range": str(TESTED_AGAINST_VERSIONS),
+        "walker_pinned_range": str(load_miner_pin("tensorrt", "static")),
         "mined_at": mined_at,
         "rules": [_candidate_to_dict(c) for c in sorted_candidates],
     }

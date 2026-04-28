@@ -36,6 +36,7 @@ from scripts.engine_miners._base import (  # noqa: E402
 from scripts.engine_miners._dataclass_lift import lift as dataclass_lift  # noqa: E402
 from scripts.engine_miners._msgspec_lift import lift as msgspec_lift  # noqa: E402
 from scripts.engine_miners._pydantic_lift import lift as pydantic_lift  # noqa: E402
+from scripts.engine_miners._ssot import load_miner_pin  # noqa: E402
 from scripts.engine_miners.vllm_dynamic_miner import (  # noqa: E402
     _PYDANTIC_LIFT_TARGETS,
     CLUSTERS,
@@ -43,7 +44,6 @@ from scripts.engine_miners.vllm_dynamic_miner import (  # noqa: E402
 )
 from scripts.engine_miners.vllm_static_miner import (  # noqa: E402
     _AST_TARGETS,
-    TESTED_AGAINST_VERSIONS,
     _check_landmarks,
     walk_vllm_static,
 )
@@ -220,8 +220,8 @@ class TestWalkerSmoke:
     def test_static_miner_emits_rules(self) -> None:
         """Static miner produces a non-trivial number of rules on the live library."""
         candidates, version = walk_vllm_static()
-        assert TESTED_AGAINST_VERSIONS.contains(version, prereleases=True), (
-            f"Installed vllm=={version} outside miner pin"
+        assert load_miner_pin("vllm", "static").contains(version, prereleases=True), (
+            f"Installed vllm=={version} outside SSOT miner pin"
         )
         assert len(candidates) >= 30, (
             f"Static miner emitted only {len(candidates)} candidates; "

@@ -15,9 +15,10 @@ Pipeline this orchestrator drives:
    0.21.0 (CUDA 12.6.x); v1.x requires CUDA 13 and is a separate
    infrastructure milestone.
 2. Read ``tensorrt_llm/version.py`` from the source tree (no import) and
-   pin against :data:`TESTED_AGAINST_VERSIONS`.
-3. Run :mod:`scripts.engine_miners.tensorrt_static_miner` and emit the staging
-   YAML.
+   pin against the SSOT miner range
+   (``engine_versions/tensorrt.yaml miner_pins.static``).
+3. Run :mod:`scripts.engine_miners.tensorrt_static_miner` and emit the
+   staging YAML.
 
 This orchestrator never imports ``tensorrt_llm``. The host has 1.1.0
 installed and importing it would mine the wrong source — exactly the
@@ -56,7 +57,6 @@ from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.
 )
 from scripts.engine_miners.tensorrt_static_miner import (  # noqa: E402
     _DEFAULT_SOURCE_ROOT,
-    TESTED_AGAINST_VERSIONS,
     emit_yaml,
     walk_tensorrt,
 )
@@ -82,10 +82,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     candidates, source_version, rel_path = walk_tensorrt(args.source_root)
-    # Pin the source-tree version against TESTED_AGAINST_VERSIONS — any drift
+    # Pin the source-tree version against the SSOT miner range — any drift
     # (e.g. someone pointed --source-root at a 1.x checkout) becomes a fatal
     # MinerVersionMismatchError instead of silently emitting drifted rules.
-    check_installed_version("tensorrt_llm", source_version, TESTED_AGAINST_VERSIONS)
+    check_installed_version("tensorrt_llm", source_version, engine="tensorrt", producer="static")
 
     text = emit_yaml(candidates, engine_version=source_version, rel_path=rel_path)
     args.out.parent.mkdir(parents=True, exist_ok=True)

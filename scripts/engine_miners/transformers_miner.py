@@ -3,10 +3,10 @@
 Composes two extraction paths to emit a deterministic rules corpus:
 
 1. **GenerationConfig rules via library-API introspection** — delegated to
-   :mod:`scripts.engine_miners.transformers_dynamic_miner`. Every dormancy rule is
-   discovered by probing ``GenerationConfig.validate(strict=True)`` against a
-   synthesised per-type probe value; every error-class rule's message is
-   lifted from the library's own ``ValueError``. Rules emitted:
+   :mod:`scripts.engine_miners.transformers_dynamic_miner`. Every dormancy
+   rule is discovered by probing ``GenerationConfig.validate(strict=True)``
+   against a synthesised per-type probe value; every error-class rule's
+   message is lifted from the library's own ``ValueError``. Rules emitted:
    ``added_by: dynamic_miner``.
 
 2. **BitsAndBytesConfig type-check rules** — hand-curated here. BNB import
@@ -18,10 +18,11 @@ Composes two extraction paths to emit a deterministic rules corpus:
 Landmark verification: imports ``transformers`` and confirms
 ``GenerationConfig``, ``BitsAndBytesConfig``, ``validate`` and ``post_init``
 exist. Missing landmark → :class:`MinerLandmarkMissingError`. Version
-envelope: :data:`TESTED_AGAINST_VERSIONS` pins the walker to a known range;
-a mismatch raises :class:`MinerVersionMismatchError` at CI time. Source
-paths and line numbers are derived via :func:`inspect.getsourcefile` and a
-text grep — informational only, not used for rule matching.
+envelope: :func:`check_installed_version` reads the dynamic miner pin from
+``engine_versions/transformers.yaml`` (``miner_pins.dynamic``); a mismatch
+raises :class:`MinerVersionMismatchError` at CI time. Source paths and line
+numbers are derived via :func:`inspect.getsourcefile` and a text grep —
+informational only, not used for rule matching.
 
 Flash-attention validation (``validate_transformers_flash_attn_dtype``) is
 out of scope: its check lives in ``PreTrainedModel._autoset_attn_implementation``,
@@ -31,7 +32,8 @@ not reachable via this walker's landmarks. Stays hand-written in
 
 Usage::
 
-    python -m scripts.engine_miners.transformers --out configs/engine_invariants/transformers.proposed.yaml
+    python -m scripts.engine_miners.transformers_miner \\
+        --out configs/engine_invariants/transformers.proposed.yaml
 
 With ``LLENERGY_WALKER_FROZEN_AT`` set for byte-stable reproducibility.
 """
@@ -47,11 +49,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from packaging.specifiers import SpecifierSet
-
 # NOTE: the walkers package is a sibling; when run via ``python -m
-# scripts.engine_miners.transformers`` the implicit ``scripts`` package makes this
-# work. When run as a script directly, we need the project root on sys.path.
+# scripts.engine_miners.transformers_miner`` the implicit ``scripts``
+# package makes this work. When run as a script directly, we need the
+# project root on sys.path.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
@@ -62,34 +63,10 @@ from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.
     RuleCandidate,
     check_installed_version,
 )
+from scripts.engine_miners._ssot import load_miner_pin  # noqa: E402
 from scripts.engine_miners.transformers_dynamic_miner import (  # noqa: E402
     walk_generation_config_rules,
 )
-
-TESTED_AGAINST_VERSIONS: SpecifierSet = SpecifierSet(">=4.56,<4.57")
-"""Range of transformers versions this walker has been validated against.
-
-Narrowed to 4.56.x because the introspection walker relies on
-``GenerationConfig.validate(strict=True)`` — that kwarg was introduced in
-4.56 and the 4.56 composed-issue message shape is what the corpus was
-built against. Earlier versions either lack ``strict=`` entirely
-(``TypeError: got an unexpected keyword argument 'strict'``) or expose a
-differently-shaped ``minor_issues`` output. 4.57 restructured
-``validate()`` again — dropped several ``minor_issues`` branches
-(``num_beam_groups``, ``diversity_penalty``, ``constraints`` single-beam
-dormancies) and the watermarking auto-coercion.
-
-On mismatch, :func:`check_installed_version` raises
-:class:`MinerVersionMismatchError` and CI fails.
-
-Note: the project's own ``transformers`` extra in ``pyproject.toml``
-still floors at ``>=4.49`` for user runtime compatibility. The walker is
-a CI-time maintainer tool, not a runtime dependency, so the narrower pin
-doesn't affect end users. Follow-up: align CI's resolved transformers
-version with this pin (currently ``uv.lock`` resolves to 4.51.0) so the
-vendor-rules-refresh workflow can regenerate the corpus in-band.
-"""
-
 
 # ---------------------------------------------------------------------------
 # BitsAndBytesConfig type-check rules (kept hand-curated — CPU-safe)
@@ -269,7 +246,9 @@ def walk() -> tuple[list[RuleCandidate], dict[str, Any]]:
     ``added_by`` tag; the envelope captures the shared version pin.
     """
     installed_version, abs_source_path = _check_landmarks()
-    check_installed_version("transformers", installed_version, TESTED_AGAINST_VERSIONS)
+    check_installed_version(
+        "transformers", installed_version, engine="transformers", producer="dynamic"
+    )
 
     # Corpus paths are relative to site-packages so the committed YAML is
     # reproducible across checkouts with different ``~/.local`` roots.
@@ -311,7 +290,7 @@ def walk() -> tuple[list[RuleCandidate], dict[str, Any]]:
         "schema_version": "1.0.0",
         "engine": "transformers",
         "engine_version": installed_version,
-        "walker_pinned_range": str(TESTED_AGAINST_VERSIONS),
+        "walker_pinned_range": str(load_miner_pin("transformers", "dynamic")),
         "mined_at": mined_at,
     }
     return candidates, envelope

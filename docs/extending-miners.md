@@ -36,16 +36,18 @@ Create `scripts/engine_miners/{engine}_miner.py` (the orchestration entry point)
 
 ```python
 import importlib.metadata
-from packaging.specifiers import SpecifierSet
 from scripts.engine_miners._base import check_installed_version, MinerLandmarkMissingError
+from scripts.engine_miners._ssot import load_miner_pin
 
-TESTED_AGAINST_VERSIONS = SpecifierSet(">=X.Y,<X.Z")
-# Set this to the specific version range you have tested against.
+# Pin source-of-truth lives in ``engine_versions/{engine}.yaml`` under
+# ``miner_pins.{static|dynamic|discovery}``. Pick the producer matching this
+# miner's role; ``load_miner_pin`` returns a ``packaging.SpecifierSet``.
 # Keep the upper bound tight (e.g. <4.60 not <99.0) so
 # MinerVersionMismatchError fires on a library bump.
 
+_envelope = load_miner_pin("myengine", "static")
 _installed = importlib.metadata.version("your-engine-library")
-check_installed_version("your-engine-library", _installed, TESTED_AGAINST_VERSIONS)
+check_installed_version("your-engine-library", _installed, _envelope)
 # Raises MinerVersionMismatchError if installed version is outside the range.
 # This is CI-fatal: the miner will not emit partial output.
 ```
@@ -354,7 +356,7 @@ Each per-engine miner ships with parametrised tests:
 # tests/unit/scripts/engine_miners/test_myengine_miner.py
 
 import pytest
-from scripts.engine_miners.myengine_miner import CLUSTERS, TESTED_AGAINST_VERSIONS
+from scripts.engine_miners.myengine_miner import CLUSTERS
 
 @pytest.mark.parametrize("cluster", CLUSTERS, ids=lambda c: c.name)
 def test_cluster_probes_without_crashing(cluster):
@@ -362,11 +364,13 @@ def test_cluster_probes_without_crashing(cluster):
     rows = probe_cluster(cluster)
     assert isinstance(rows, list)
 
-def test_version_envelope_set():
-    """TESTED_AGAINST_VERSIONS must be a non-empty SpecifierSet."""
+def test_version_envelope_resolves():
+    """The miner pin loaded from the engine SSOT must be a non-empty SpecifierSet."""
     from packaging.specifiers import SpecifierSet
-    assert isinstance(TESTED_AGAINST_VERSIONS, SpecifierSet)
-    assert str(TESTED_AGAINST_VERSIONS) != ""
+    from scripts.engine_miners._ssot import load_miner_pin
+    envelope = load_miner_pin("myengine", "static")
+    assert isinstance(envelope, SpecifierSet)
+    assert str(envelope) != ""
 
 def test_landmark_checks_raise_on_missing():
     """find_class returning None must raise MinerLandmarkMissingError."""
@@ -488,8 +492,8 @@ When Renovate bumps an engine library, the miner pipeline must catch behavioural
 
 The miner pipeline's import-time contract (Step 1 above) raises hard CI errors when the library has drifted out of the envelope the miner was written against:
 
-- **`MinerVersionMismatchError`** - installed library version is outside the miner's `TESTED_AGAINST_VERSIONS` `SpecifierSet`. Forces the maintainer to read release notes and either widen the envelope or update the miner to match new validator semantics.
-  - Example: vLLM 0.7.3 against a miner with `TESTED_AGAINST_VERSIONS = SpecifierSet(">=0.17,<0.18")` raises `MinerVersionMismatchError` at import. Observed empirically on PR #459's `mine-vllm` job.
+- **`MinerVersionMismatchError`** - installed library version is outside the miner's pinned envelope (read from `engine_versions/{engine}.yaml miner_pins.{producer}` via `load_miner_pin`). Forces the maintainer to read release notes and either widen the envelope or update the miner to match new validator semantics.
+  - Example: vLLM 0.7.3 against an SSOT pin of `>=0.17,<0.18` raises `MinerVersionMismatchError` at import. Observed empirically on PR #459's `mine-vllm` job.
 
 - **`MinerLandmarkMissingError`** - an expected class or method symbol is no longer present in the library source. Catches refactors where a class was renamed, moved to a different module, or an API was deprecated and removed.
   - Example: a hypothetical vLLM release dropping `vllm.sampling_params.StructuredOutputsParams` would raise `MinerLandmarkMissingError` at the landmark-check step before any AST walking begins.
@@ -532,7 +536,7 @@ This is the reason the pipeline is split into two stages instead of being unifie
 
 The fail-loud envelope and the YAML diff together cover the failure modes that trip on a routine library bump. Three planned tools extend this for harder cases:
 
-- **Pre-mining envelope check (#469).** Verifies the installed library version is inside `TESTED_AGAINST_VERSIONS` *before* CI invests effort in mining. Today the check happens at miner import time, which is fine but late - if mining takes 5 minutes and the version is wrong, the maintainer waits 5 minutes to find out.
+- **Pre-mining envelope check (#469).** Verifies the installed library version is inside the SSOT-pinned envelope *before* CI invests effort in mining. Today the check happens at miner import time, which is fine but late - if mining takes 5 minutes and the version is wrong, the maintainer waits 5 minutes to find out.
 - **Compat-matrix sweep (#470).** Runs the miner against every library version in a declared support range and reports per-version `(rule_count, divergences, errors)`. Surfaces "this miner mostly works on the new version but loses 3 rules" before a Renovate PR ever opens.
 - **Coordinated bump command `llem bump-engine` (#471).** A single CLI entry point that updates the Dockerfile ARG, regenerates the corpus, runs the vendor gate, and reports the diff in one local invocation - used by maintainers handling library bumps that need manual intervention (e.g. `MinerVersionMismatchError` resolution).
 
@@ -542,7 +546,7 @@ The fail-loud envelope and the YAML diff together cover the failure modes that t
 
 | Mistake | Consequence | Fix |
 |---------|-------------|-----|
-| Not setting `TESTED_AGAINST_VERSIONS` | Miner runs against wrong library version silently | Add `TESTED_AGAINST_VERSIONS = SpecifierSet(">=X,<Y")` and call `check_installed_version` at import |
+| Not pinning the miner envelope in `engine_versions/{engine}.yaml` | Miner runs against wrong library version silently | Set `miner_pins.{static\|dynamic\|discovery}` in the SSOT and call `check_installed_version(load_miner_pin(...))` at import |
 | Catching `ImportError` on landmark imports | Silent degradation (returns `[]` on failure) | Let `ImportError` propagate; or raise `MinerLandmarkMissingError` explicitly |
 | Cartesian-only probing with large clusters | Exponential probe count; CI timeouts | Add Hypothesis supplement for clusters > 200 combinations |
 | Adding `manual_seed` rules for automatable constraints | Pipeline-failure debt | Extend the miner instead |
