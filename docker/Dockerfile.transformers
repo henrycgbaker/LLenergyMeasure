@@ -10,11 +10,15 @@
 #   docker build -f docker/Dockerfile.transformers -t llenergymeasure-transformers .
 #
 # Version pin policy: update PYTORCH_VERSION on each milestone release.
-# TRANSFORMERS_VERSION is monitored by Renovate (PyPI datasource).
 # Must be compatible with pyproject.toml torch>=2.5 / transformers>=4.49 constraints.
 # ============================================================
 ARG PYTORCH_VERSION=2.5.1-cuda12.4-cudnn9-runtime
 ARG PYTORCH_DEVEL_VERSION=2.5.1-cuda12.4-cudnn9-devel
+
+# Source of truth: engine_versions/transformers.yaml `library.current_version`.
+# Renovate authors that file; CI passes the value via
+# `--build-arg TRANSFORMERS_VERSION=$(yq '.library.current_version' engine_versions/transformers.yaml)`
+# at build time. The ARG default below is a fallback for local manual builds only.
 ARG TRANSFORMERS_VERSION=4.57.3
 
 # Build stage: compile flash-attn FA2 + FA3 (needs nvcc from devel image)

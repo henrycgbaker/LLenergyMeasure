@@ -8,9 +8,13 @@
 # Usage:
 #   docker build -f docker/Dockerfile.tensorrt -t llenergymeasure-tensorrt .
 #
-# Version pin policy: update TRTLLM_VERSION on each milestone release.
-# Must be compatible with pyproject.toml tensorrt-llm>=0.12 constraint.
+# Version pin policy: must be compatible with pyproject.toml tensorrt-llm>=0.12 constraint.
 # ============================================================
+
+# Source of truth: engine_versions/tensorrt.yaml `library.current_version`.
+# Renovate authors that file; CI passes the value via
+# `--build-arg TRTLLM_VERSION=$(yq '.library.current_version' engine_versions/tensorrt.yaml)`
+# at build time. The ARG default below is a fallback for local manual builds only.
 ARG TRTLLM_VERSION=0.21.0
 
 FROM nvcr.io/nvidia/tensorrt-llm/release:${TRTLLM_VERSION} AS runtime

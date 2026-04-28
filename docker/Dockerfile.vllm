@@ -8,12 +8,18 @@
 # Usage:
 #   docker build -f docker/Dockerfile.vllm -t llenergymeasure-vllm .
 #
-# Version pin policy: update VLLM_VERSION on each milestone release.
-# Must be compatible with pyproject.toml vllm>=0.6 constraint.
+# Version pin policy: must be compatible with pyproject.toml vllm>=0.6 constraint.
 # ============================================================
-ARG VLLM_VERSION=v0.7.3
 
-FROM vllm/vllm-openai:${VLLM_VERSION} AS runtime
+# Source of truth: engine_versions/vllm.yaml `library.current_version`.
+# Renovate authors that file; CI passes the value via
+# `--build-arg VLLM_VERSION=$(yq '.library.current_version' engine_versions/vllm.yaml)`
+# at build time. The ARG default below is a fallback for local manual builds only.
+# Upstream image tags are prefixed with `v` (e.g. `v0.7.3`); the ARG carries the
+# bare PyPI version and the FROM line adds the prefix.
+ARG VLLM_VERSION=0.7.3
+
+FROM vllm/vllm-openai:v${VLLM_VERSION} AS runtime
 
 # Reset upstream ENTRYPOINT — vLLM sets ENTRYPOINT to its API server,
 # which conflicts with DockerRunner's command override pattern.

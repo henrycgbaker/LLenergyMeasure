@@ -11,23 +11,10 @@
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["docker/Dockerfile\\.transformers$"],
-      "matchStrings": ["ARG TRANSFORMERS_VERSION=(?<currentValue>\\S+)"],
-      "depNameTemplate": "transformers",
-      "datasourceTemplate": "pypi"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": ["docker/Dockerfile\\.vllm$"],
-      "matchStrings": ["ARG VLLM_VERSION=v?(?<currentValue>\\S+)"],
-      "depNameTemplate": "vllm",
-      "datasourceTemplate": "pypi"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": ["docker/Dockerfile\\.tensorrt$"],
-      "matchStrings": ["ARG TRTLLM_VERSION=(?<currentValue>\\S+)"],
-      "depNameTemplate": "tensorrt-llm",
+      "fileMatch": ["^engine_versions/(?:transformers|vllm|tensorrt)\\.yaml$"],
+      "matchStrings": [
+        "pep503_name: (?<depName>[\\w-]+)\\s*\\n\\s*current_version: \"(?<currentValue>[^\"]+)\""
+      ],
       "datasourceTemplate": "pypi"
     }
   ],
