@@ -26,7 +26,7 @@ on:
     types: [opened, synchronize]
     paths:
       - "docker/Dockerfile.*"
-      - "scripts/discover_engine_schemas.py"
+      - "scripts/engine_introspectors/**.py"
       - "scripts/refresh_discovered_schemas.sh"
   workflow_dispatch:
     inputs:
@@ -115,7 +115,11 @@ jobs:
             "docker/Dockerfile.vllm"
             "docker/Dockerfile.tensorrt"
             "docker/Dockerfile.transformers"
-            "scripts/discover_engine_schemas.py"
+            "scripts/engine_introspectors/__init__.py"
+            "scripts/engine_introspectors/_common.py"
+            "scripts/engine_introspectors/transformers_introspector.py"
+            "scripts/engine_introspectors/vllm_introspector.py"
+            "scripts/engine_introspectors/tensorrt_introspector.py"
             "scripts/refresh_discovered_schemas.sh"
           )
           DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
@@ -124,7 +128,7 @@ jobs:
       - name: Run schema refresh
         env:
           LLENERGY_DISCOVERY_FROZEN_AT: ${{ steps.anchor.outputs.date }}
-        # Behaviour: discover_engine_schemas.py prints "[engine] SKIPPED (not
+        # Behaviour: scripts.engine_introspectors prints "[engine] SKIPPED (not
         # importable): ..." to stderr when a library import fails on the
         # current host (e.g. tensorrt's libnvinfer.so.10 missing on a runner
         # without GPU bindings). The Python script treats SKIPPED as

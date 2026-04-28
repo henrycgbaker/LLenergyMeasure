@@ -27,7 +27,7 @@ LLenergyMeasure has two pipelines that work together to give users early, action
   │              │                                                      │
   │              ▼                                                      │
   │   ┌─────────────────────────┐                                       │
-  │   │   Invariant Miner       │  scripts/miners/                     │
+  │   │   Invariant Miner       │  scripts/engine_miners/                     │
   │   │   Pipeline              │                                       │
   │   │  ┌──────────────┐       │                                       │
   │   │  │ static miner │       │  AST walking of validator methods    │
@@ -138,7 +138,7 @@ Both pipelines sit inside the larger LLenergyMeasure architecture. The config-va
            utils/
 ```
 
-The invariant miner pipeline lives in `scripts/miners/` - it is a build-time tool, not a library module. Its output is the vendored corpus that ships with the package.
+The invariant miner pipeline lives in `scripts/engine_miners/` - it is a build-time tool, not a library module. Its output is the vendored corpus that ships with the package.
 
 ---
 

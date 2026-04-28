@@ -456,7 +456,7 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │                       │                                           │
   │  ─────────────── parameter-discovery.yml (parallel) ───────       │
   │                       ▼                                           │
-  │  discover_engine_schemas.py introspects engine config classes     │
+  │  scripts/engine_introspectors introspects engine config classes   │
   │  inside Docker, regenerates discovered_schemas/{engine}.json,     │
   │  bot commits and posts a diff comment.                            │
   │                       │                                           │
@@ -573,7 +573,7 @@ Pivoting vLLM and TRT-LLM into Docker on the self-hosted runner mirrors the proj
 
 ## `_base.py` shared infrastructure
 
-All miners import from `scripts/miners/_base.py`. It provides:
+All miners import from `scripts/engine_miners/_base.py`. It provides:
 
 - `RuleCandidate` - the output type; fields mirror the corpus YAML schema exactly (no translation step needed).
 - `MinerSource` - `{path, method, line_at_scan}` provenance record.
