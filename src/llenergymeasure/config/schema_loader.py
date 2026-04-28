@@ -1,4 +1,4 @@
-"""Load vendored engine schemas discovered by ``scripts/discover_engine_schemas.py``.
+"""Load vendored engine schemas discovered by ``scripts.engine_introspectors``.
 
 The vendored JSON files in ``discovered_schemas/`` are the canonical SSOT for
 "what parameters CAN be configured per engine". They are produced by running

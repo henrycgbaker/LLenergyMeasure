@@ -133,7 +133,7 @@ The lift output is deterministic: no probing, no randomness, pure function of th
 
 The Haiku-era TRT-LLM extractor (PRs #415-#417, reverted in #423) demonstrated a failure mode not discussed in the prior-art literature: a miner that silently degraded on import errors. When `LlmConfig` (a class that does not exist in TRT-LLM 0.21.0) failed to import, the extractor caught the `ImportError` and returned `[]`. The empty return was indistinguishable from "no rules found for this engine".
 
-The fail-loud import contract - `TESTED_AGAINST_VERSIONS` + `check_installed_version` + `MinerLandmarkMissingError` - makes silent coverage loss impossible. This is a design contribution specifically for the setting where the miner is a CI artefact that runs against a pinned library version: the version pin and the landmark check together guarantee that a miner either mines at the version it was tested against or fails loudly.
+The fail-loud import contract - the SSOT-pinned envelope read via `load_miner_pin` + `check_installed_version` + `MinerLandmarkMissingError` - makes silent coverage loss impossible. This is a design contribution specifically for the setting where the miner is a CI artefact that runs against a pinned library version: the version pin and the landmark check together guarantee that a miner either mines at the version it was tested against or fails loudly.
 
 ---
 

@@ -1,33 +1,31 @@
 """Load, match, and render validation rules from the YAML corpus.
 
-The corpus at ``configs/validation_rules/{engine}.yaml`` is parsed here into
-typed :class:`Rule` entries. Each rule carries a match predicate (operators
-defined in :func:`evaluate_predicate`) and a message template. The generic
-``@model_validator`` in ``config/models.py`` calls :meth:`Rule.try_match` on
-every rule for a given engine and emits error/warn/dormant annotations based
-on the rule's severity.
+The corpus at ``configs/engine_invariants/{engine}.proposed.yaml`` is parsed
+here into typed :class:`Rule` entries. Each rule carries a match predicate
+(operators defined in :func:`evaluate_predicate`) and a message template.
+The generic ``@model_validator`` in ``config/models.py`` calls
+:meth:`Rule.try_match` on every rule for a given engine and emits
+error/warn/dormant annotations based on the rule's severity.
 
 Design mirror: this module parallels :mod:`llenergymeasure.config.schema_loader`
 from parameter-discovery — same envelope validation
 (:class:`UnsupportedSchemaVersionError` on major-version mismatch), same
 per-instance caching for test isolation, same lazy load pattern.
 
-Corpus vs vendored JSON:
-  The YAML corpus carries each rule's declared ``expected_outcome``. The
-  ``invariant-miner`` (vendor gate) CI pipeline (see ``scripts/vendor_rules.py``)
-  runs every rule through the real library and emits ``{engine}.json``
-  alongside the package — this JSON captures observed outcomes. When
-  present, the loader overlays the vendored observations onto the corpus
-  so downstream consumers see CI-validated truth; absent, the loader
-  falls back to the YAML corpus so local development without a vendor
-  run still works.
+Lifecycle pair (per the engine-coupling architecture, 2026-04-28):
+  The proposed YAML carries each rule's declared ``expected_outcome``. The
+  ``engine-invariants`` (vendor gate) CI pipeline (see
+  ``scripts/vendor_rules.py``) runs every rule through the real library
+  and emits ``configs/engine_invariants/{engine}.vendored.yaml`` — this
+  YAML captures observed outcomes. When present, the loader overlays the
+  vendored observations onto the corpus so downstream consumers see
+  CI-validated truth; absent, the loader falls back to the proposed YAML
+  so local development without a vendor run still works.
 """
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field, replace
-from importlib import resources
 from pathlib import Path
 from typing import Any, Literal, get_args
 
@@ -190,7 +188,7 @@ class Rule:
     """One validation rule parsed from the corpus.
 
     Field names mirror the YAML schema documented in
-    ``configs/validation_rules/README.md``. Construction goes through
+    ``configs/engine_invariants/README.md``. Construction goes through
     :func:`_parse_rule`; tests can instantiate directly for unit coverage.
     """
 
@@ -214,7 +212,7 @@ class Rule:
     """Other miner sources that produced the same fingerprint as this rule.
 
     Empty for single-source rules. Populated by the corpus merger
-    (``scripts/miners/build_corpus.py``) when two or more miners
+    (``scripts/engine_miners/build_corpus.py``) when two or more miners
     independently emitted a rule with the same ``(engine, severity,
     match.fields)`` fingerprint. ``added_by`` remains the *primary*
     source (used for downstream filtering); ``cross_validated_by`` is
@@ -635,8 +633,7 @@ def _parse_envelope(engine: str, raw_text: str) -> VendoredRules:
 # ---------------------------------------------------------------------------
 
 
-_DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parents[4] / "configs" / "validation_rules"
-_VENDORED_JSON_PACKAGE = "llenergymeasure.config.vendored_rules"
+_DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parents[4] / "configs" / "engine_invariants"
 
 
 class VendoredRulesLoader:
@@ -646,12 +643,12 @@ class VendoredRulesLoader:
     a loader and monkeypatch ``corpus_root`` without polluting other tests.
 
     Load order (picked up automatically):
-      1. **YAML corpus** under ``configs/validation_rules/{engine}.yaml`` —
+      1. **Proposed YAML** under ``configs/engine_invariants/{engine}.proposed.yaml`` —
          the maintainer-seeded source of truth; always present in-repo.
-      2. **Vendored JSON** shipped beside this module
-         (``{engine}.json``) — CI-validated observed behaviour, overlaid
-         onto the corpus's rules when present. Written by
-         ``scripts/vendor_rules.py`` under the invariant-miner CI.
+      2. **Vendored YAML** under ``configs/engine_invariants/{engine}.vendored.yaml`` —
+         CI-validated observed behaviour, overlaid onto the corpus's rules
+         when present. Written by ``scripts/vendor_rules.py`` under the
+         engine-invariants CI.
     """
 
     def __init__(self, corpus_root: Path | None = None) -> None:
@@ -661,8 +658,8 @@ class VendoredRulesLoader:
     def load_rules(self, engine: str) -> VendoredRules:
         """Return the parsed corpus for ``engine``, parsing once per engine.
 
-        When a CI-validated vendored JSON envelope exists beside this
-        module, the loader overlays its observed outcomes onto the
+        When a CI-validated vendored YAML envelope exists at the configured
+        ``corpus_root``, the loader overlays its observed outcomes onto the
         corpus's rules — downstream consumers see empirically-confirmed
         behaviour rather than the corpus's declared shape alone.
         """
@@ -670,20 +667,21 @@ class VendoredRulesLoader:
         if cached is not None:
             return cached
 
-        yaml_path = self.corpus_root / f"{engine}.yaml"
+        yaml_path = self.corpus_root / f"{engine}.proposed.yaml"
         try:
             yaml_text = yaml_path.read_text()
         except FileNotFoundError as exc:
             raise FileNotFoundError(
-                f"Vendored rules for engine {engine!r} not found at {yaml_path}. "
-                f"Run `python -m scripts.miners.{engine}_miner --out {yaml_path}` to generate."
+                f"Engine invariants for {engine!r} not found at {yaml_path}. "
+                f"Run `python -m scripts.engine_miners.{engine}_miner "
+                f"--out {yaml_path}` to generate."
             ) from exc
 
         parsed = _parse_envelope(engine, yaml_text)
 
-        vendored_json = _try_load_vendored_json(engine)
-        if vendored_json is not None:
-            parsed = _overlay_vendored_observations(parsed, vendored_json)
+        vendored = _try_load_vendored_yaml(self.corpus_root, engine)
+        if vendored is not None:
+            parsed = _overlay_vendored_observations(parsed, vendored)
 
         self._cache[engine] = parsed
         return parsed
@@ -697,26 +695,28 @@ class VendoredRulesLoader:
 
 
 # ---------------------------------------------------------------------------
-# Vendored JSON overlay (invariant-miner CI)
+# Vendored YAML overlay (engine-invariants CI)
 # ---------------------------------------------------------------------------
 
 
-def _try_load_vendored_json(engine: str) -> dict[str, Any] | None:
-    """Return parsed vendored-rules JSON for ``engine`` or ``None`` if absent.
+def _try_load_vendored_yaml(corpus_root: Path, engine: str) -> dict[str, Any] | None:
+    """Return parsed vendored-rules YAML for ``engine`` or ``None`` if absent.
 
-    Accessed via :mod:`importlib.resources` so the JSON is picked up
-    regardless of install layout (editable checkout vs installed wheel).
-    Swallows ``JSONDecodeError`` and rejects unsupported envelope versions
-    to avoid breaking startup on a corrupt or future-schema commit-back —
-    the vendor CI job will resurface the issue.
+    Reads from ``{corpus_root}/{engine}.vendored.yaml``. Swallows YAML parse
+    errors and rejects unsupported envelope versions to avoid breaking
+    startup on a corrupt or future-schema commit-back — the vendor CI job
+    will resurface the issue.
     """
+    path = corpus_root / f"{engine}.vendored.yaml"
     try:
-        raw = (resources.files(_VENDORED_JSON_PACKAGE) / f"{engine}.json").read_text()
-    except (FileNotFoundError, ModuleNotFoundError):
+        raw = path.read_text()
+    except FileNotFoundError:
         return None
     try:
-        parsed: dict[str, Any] = json.loads(raw)
-    except json.JSONDecodeError:
+        parsed = yaml.safe_load(raw)
+    except yaml.YAMLError:
+        return None
+    if not isinstance(parsed, dict):
         return None
     envelope_version = str(parsed.get("schema_version", ""))
     if envelope_version:
@@ -739,15 +739,16 @@ _OBSERVED_KEY_MAP = {
 def _overlay_vendored_observations(
     parsed: VendoredRules, vendored: dict[str, Any]
 ) -> VendoredRules:
-    """Overlay observed outcomes from a vendored JSON envelope onto the corpus rules.
+    """Overlay observed outcomes from a vendored YAML envelope onto the corpus rules.
 
-    The corpus carries the declared shape; the vendored JSON carries what
-    CI observed. When JSON is present, the loader writes observed-* keys
-    alongside the corpus's declared ``outcome`` / ``emission_channel`` so
-    consumers (the generic ``@model_validator``) can act on CI-validated
-    truth. The declared fields are left untouched — strict validation in
-    :func:`_parse_rule` is not re-exercised against the observed vocabulary
-    (which is deliberately wider; see ``scripts/_invariant_vendor_common.py``).
+    The corpus carries the declared shape; the vendored YAML carries what
+    CI observed. When the vendored YAML is present, the loader writes
+    observed-* keys alongside the corpus's declared ``outcome`` /
+    ``emission_channel`` so consumers (the generic ``@model_validator``)
+    can act on CI-validated truth. The declared fields are left untouched
+    — strict validation in :func:`_parse_rule` is not re-exercised against
+    the observed vocabulary (which is deliberately wider; see
+    ``scripts/_invariant_vendor_common.py``).
     """
     cases = {c["id"]: c for c in vendored.get("cases", []) if isinstance(c, dict) and "id" in c}
     overlaid = tuple(_overlay_rule(rule, cases.get(rule.id)) for rule in parsed.rules)

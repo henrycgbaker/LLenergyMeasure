@@ -1,0 +1,35 @@
+# Per-engine version-bundle SSOT for vllm.
+#
+# Renovate updates `library.current_version` on each upstream release;
+# every other artefact (Dockerfile ARG, miner pin reads, vendored gates)
+# is derived from this file. See
+# `.product/designs/engine-coupling-architecture-2026-04-28.md` §4.
+#
+# Existing drift between `library.current_version` (Dockerfile-pinned 0.7.3)
+# and `miner_pins.*` (host-installed 0.17.x range) is intentional: the
+# miner is a CI-time tool whose host install diverges from the published
+# container image. Tracked in #378; Renovate will reconcile on the next
+# bump cycle.
+schema_version: 1
+engine: vllm
+library:
+  pep503_name: vllm
+  current_version: "0.7.3"
+  current_commit_sha: null
+image:
+  base_image_ref: "vllm/vllm-openai:v0.7.3"
+  llem_image_ref: null
+miner_pins:
+  static: ">=0.17,<0.18"
+  dynamic: ">=0.17,<0.18"
+  discovery: ">=0.17,<0.18"
+artefact_paths:
+  rules_corpus: configs/engine_invariants/vllm.proposed.yaml
+  vendored_rules: configs/engine_invariants/vllm.vendored.yaml
+  discovered_schemas: src/llenergymeasure/config/discovered_schemas/vllm.json
+last_probe:
+  verdict: unrun
+  version_inside_envelope: null
+  fingerprint: null
+  fingerprint_drift: []
+  ran_at: null

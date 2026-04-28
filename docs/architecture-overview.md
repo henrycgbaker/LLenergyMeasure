@@ -27,7 +27,7 @@ LLenergyMeasure has two pipelines that work together to give users early, action
   │              │                                                      │
   │              ▼                                                      │
   │   ┌─────────────────────────┐                                       │
-  │   │   Invariant Miner       │  scripts/miners/                     │
+  │   │   Invariant Miner       │  scripts/engine_miners/              │
   │   │   Pipeline              │                                       │
   │   │  ┌──────────────┐       │                                       │
   │   │  │ static miner │       │  AST walking of validator methods    │
@@ -45,12 +45,14 @@ LLenergyMeasure has two pipelines that work together to give users early, action
   │   │         │               │                                       │
   │   │    vendor_rules.py      │  replay against live library         │
   │   │         │               │                                       │
-  │   │  corpus YAML            │  configs/validation_rules/{e}.yaml   │
-  │   │  vendored JSON          │  src/.../vendored_rules/{e}.json     │
+  │   │  proposed corpus YAML   │  configs/engine_invariants/          │
+  │   │                          │  {e}.proposed.yaml                   │
+  │   │  vendored corpus YAML   │  configs/engine_invariants/          │
+  │   │                          │  {e}.vendored.yaml                   │
   │   └─────────────────────────┘                                       │
   └─────────────────────────────────────────────────────────────────────┘
                       │
-                      │ vendored JSON ships with package
+                      │ vendored YAML ships with package
                       │
   ┌─────────────────────────────────────────────────────────────────────┐
   │  RUNTIME (user submits ExperimentConfig)                            │
@@ -89,7 +91,7 @@ LLenergyMeasure has two pipelines that work together to give users early, action
 
 **Inputs:** Engine library source code (at a pinned version).
 
-**Outputs:** `configs/validation_rules/{engine}.yaml` (authoritative corpus) and `src/llenergymeasure/config/vendored_rules/{engine}.json` (ship-ready vendored observations).
+**Outputs:** `configs/engine_invariants/{engine}.proposed.yaml` (maintainer-seeded corpus, post-mining) and `configs/engine_invariants/{engine}.vendored.yaml` (CI-validated observed behaviour, post-vendor-replay; both ship with the package).
 
 **Three components:**
 - Static miner - walks Python AST of validator methods; no constructor calls.
@@ -138,7 +140,7 @@ Both pipelines sit inside the larger LLenergyMeasure architecture. The config-va
            utils/
 ```
 
-The invariant miner pipeline lives in `scripts/miners/` - it is a build-time tool, not a library module. Its output is the vendored corpus that ships with the package.
+The invariant miner pipeline lives in `scripts/engine_miners/` - it is a build-time tool, not a library module. Its output is the vendored corpus that ships with the package.
 
 ---
 
@@ -168,7 +170,7 @@ The invariant miner pipeline lives in `scripts/miners/` - it is a build-time too
   build_corpus.py merges staging files
   (dedup by fingerprint; static miner wins on match.fields,
    dynamic miner wins on message_template)
-  → produces configs/validation_rules/{engine}.yaml   (YAML corpus)
+  → produces configs/engine_invariants/{engine}.proposed.yaml (proposed YAML corpus)
                │
                ▼
   Stage 2: invariant-miner.yml fires (vendor gate)
@@ -263,15 +265,19 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
   └── _invariant_vendor_common.py Shared capture + comparison utilities
 
   configs/
-  └── validation_rules/
-      ├── transformers.yaml       Authoritative corpus (transformers, 46 rules)
-      └── _staging/               Per-miner staging output (not committed)
+  └── engine_invariants/
+      ├── transformers.proposed.yaml   Authoritative corpus post-mine (transformers)
+      ├── transformers.vendored.yaml   Vendored observations post-replay (transformers)
+      └── _staging/                    Per-miner staging output (not committed)
 
   src/llenergymeasure/config/
   └── vendored_rules/
-      ├── loader.py               Runtime corpus consumer + predicate engine
-      ├── transformers.json       Vendored observations (ships with package)
+      ├── loader.py                    Runtime corpus consumer + predicate engine
       └── __init__.py
+
+  engine_versions/
+  └── {engine}.yaml                    Per-engine SSOT: library version, miner pins,
+                                       artefact paths. Renovate-authored.
 ```
 
 ---

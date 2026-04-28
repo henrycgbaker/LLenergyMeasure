@@ -10,7 +10,7 @@ This document is the practitioner's guide to adding invariant miner support for 
 
 1. Read [miner-pipeline.md](miner-pipeline.md) to understand the static miner / dynamic miner / lift module split.
 2. Read the [corpus format reference](validation-rule-corpus.md) to understand what rules look like.
-3. Review `scripts/miners/transformers_static_miner.py` and `scripts/miners/transformers_dynamic_miner.py` as the gold standard. The comments in those files contain important design decisions.
+3. Review `scripts/engine_miners/transformers_static_miner.py` and `scripts/engine_miners/transformers_dynamic_miner.py` as the gold standard. The comments in those files contain important design decisions.
 
 ---
 
@@ -32,20 +32,22 @@ Before writing any code, answer these questions:
 
 ## Step 1: Add the fail-loud import contract
 
-Create `scripts/miners/{engine}_miner.py` (the orchestration entry point). The very first thing it must do:
+Create `scripts/engine_miners/{engine}_miner.py` (the orchestration entry point). The very first thing it must do:
 
 ```python
 import importlib.metadata
-from packaging.specifiers import SpecifierSet
-from scripts.miners._base import check_installed_version, MinerLandmarkMissingError
+from scripts.engine_miners._base import check_installed_version, MinerLandmarkMissingError
+from scripts.engine_miners._ssot import load_miner_pin
 
-TESTED_AGAINST_VERSIONS = SpecifierSet(">=X.Y,<X.Z")
-# Set this to the specific version range you have tested against.
+# Pin source-of-truth lives in ``engine_versions/{engine}.yaml`` under
+# ``miner_pins.{static|dynamic|discovery}``. Pick the producer matching this
+# miner's role; ``load_miner_pin`` returns a ``packaging.SpecifierSet``.
 # Keep the upper bound tight (e.g. <4.60 not <99.0) so
 # MinerVersionMismatchError fires on a library bump.
 
+_envelope = load_miner_pin("myengine", "static")
 _installed = importlib.metadata.version("your-engine-library")
-check_installed_version("your-engine-library", _installed, TESTED_AGAINST_VERSIONS)
+check_installed_version("your-engine-library", _installed, _envelope)
 # Raises MinerVersionMismatchError if installed version is outside the range.
 # This is CI-fatal: the miner will not emit partial output.
 ```
@@ -55,7 +57,7 @@ Then declare landmark checks for every class or method the miner will walk:
 ```python
 import ast
 import inspect
-from scripts.miners._base import find_class, find_method
+from scripts.engine_miners._base import find_class, find_method
 
 from enginelib.config import SomeConfigClass
 
@@ -83,7 +85,7 @@ All three lift modules expose a single function named `lift` with the same signa
 
 ```python
 from datetime import date
-from scripts.miners._pydantic_lift import lift as lift_pydantic
+from scripts.engine_miners._pydantic_lift import lift as lift_pydantic
 from enginelib.config import CacheConfig, SchedulerConfig
 
 TODAY = date.today().isoformat()
@@ -105,7 +107,7 @@ The lift emits one rule per `Gt`, `Ge`, `Lt`, `Le`, `MultipleOf`, `MinLen`, `Max
 ### If the engine uses msgspec
 
 ```python
-from scripts.miners._msgspec_lift import lift as lift_msgspec
+from scripts.engine_miners._msgspec_lift import lift as lift_msgspec
 from enginelib.config import SamplingParams
 
 def mine_msgspec_rules():
@@ -122,7 +124,7 @@ Note: if the class ships zero `Meta(ge=...)` annotations (common for msgspec cla
 ### If the engine uses stdlib dataclasses
 
 ```python
-from scripts.miners._dataclass_lift import lift as lift_dataclass
+from scripts.engine_miners._dataclass_lift import lift as lift_dataclass
 from enginelib.config import EngineArgs
 
 def mine_dataclass_rules():
@@ -140,14 +142,14 @@ The dataclass lift is limited to `Literal[...]` value-allowlist rules (no numeri
 
 ## Step 3: Write the static miner
 
-Create `scripts/miners/{engine}_static_miner.py`. The static miner walks the AST of validator methods and emits rules for conditional raises, warnings, and silent normalisations.
+Create `scripts/engine_miners/{engine}_static_miner.py`. The static miner walks the AST of validator methods and emits rules for conditional raises, warnings, and silent normalisations.
 
 ### Pattern: walking a validator method
 
 ```python
 import ast
 import inspect
-from scripts.miners._base import (
+from scripts.engine_miners._base import (
     find_class, find_method, extract_condition_fields,
     filter_condition_references_self,
     ConditionalRaiseDetector, ConditionalSelfAssignDetector,
@@ -222,7 +224,7 @@ Per the transformers static miner's header, per-engine miners currently define t
 
 ## Step 4: Write the dynamic miner (if applicable)
 
-Create `scripts/miners/{engine}_dynamic_miner.py` if the engine's constructors raise on invalid inputs.
+Create `scripts/engine_miners/{engine}_dynamic_miner.py` if the engine's constructors raise on invalid inputs.
 
 **Skip this step if:** probing the engine's constructors yields zero raises. This is the case for TRT-LLM, where `TrtLlmArgs(**kwargs)` is extremely permissive at construction time; constraints are enforced in validator methods (covered by the static miner) or at build time.
 
@@ -312,7 +314,7 @@ def infer_predicates(rows: list[tuple[dict, str | None]]) -> list[RuleCandidate]
 
 ## Step 5: Write the corpus orchestration entry
 
-`scripts/miners/{engine}_miner.py` is the main entry point:
+`scripts/engine_miners/{engine}_miner.py` is the main entry point:
 
 ```python
 def mine() -> list[RuleCandidate]:
@@ -321,25 +323,25 @@ def mine() -> list[RuleCandidate]:
     candidates.extend(mine_dataclass_rules())
 
     # Static miner
-    from scripts.miners.myengine_static_miner import mine as static_mine
+    from scripts.engine_miners.myengine_static_miner import mine as static_mine
     candidates.extend(static_mine())
 
     # Dynamic miner (if applicable)
-    from scripts.miners.myengine_dynamic_miner import mine as dynamic_mine
+    from scripts.engine_miners.myengine_dynamic_miner import mine as dynamic_mine
     candidates.extend(dynamic_mine())
 
     return candidates
 
 if __name__ == "__main__":
     import yaml
-    from scripts.miners._base import candidate_to_dict
+    from scripts.engine_miners._base import candidate_to_dict
     results = mine()
     staging = {
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "rules": [candidate_to_dict(c) for c in results],
     }
-    output_path = Path("configs/validation_rules/_staging/myengine_miner.yaml")
+    output_path = Path("configs/engine_invariants/_staging/myengine_miner.yaml")
     output_path.write_text(yaml.dump(staging, allow_unicode=True))
     print(f"Wrote {len(results)} candidates to {output_path}")
 ```
@@ -351,10 +353,10 @@ if __name__ == "__main__":
 Each per-engine miner ships with parametrised tests:
 
 ```python
-# tests/unit/scripts/miners/test_myengine_miner.py
+# tests/unit/scripts/engine_miners/test_myengine_miner.py
 
 import pytest
-from scripts.miners.myengine_miner import CLUSTERS, TESTED_AGAINST_VERSIONS
+from scripts.engine_miners.myengine_miner import CLUSTERS
 
 @pytest.mark.parametrize("cluster", CLUSTERS, ids=lambda c: c.name)
 def test_cluster_probes_without_crashing(cluster):
@@ -362,15 +364,17 @@ def test_cluster_probes_without_crashing(cluster):
     rows = probe_cluster(cluster)
     assert isinstance(rows, list)
 
-def test_version_envelope_set():
-    """TESTED_AGAINST_VERSIONS must be a non-empty SpecifierSet."""
+def test_version_envelope_resolves():
+    """The miner pin loaded from the engine SSOT must be a non-empty SpecifierSet."""
     from packaging.specifiers import SpecifierSet
-    assert isinstance(TESTED_AGAINST_VERSIONS, SpecifierSet)
-    assert str(TESTED_AGAINST_VERSIONS) != ""
+    from scripts.engine_miners._ssot import load_miner_pin
+    envelope = load_miner_pin("myengine", "static")
+    assert isinstance(envelope, SpecifierSet)
+    assert str(envelope) != ""
 
 def test_landmark_checks_raise_on_missing():
     """find_class returning None must raise MinerLandmarkMissingError."""
-    from scripts.miners._base import find_class, MinerLandmarkMissingError
+    from scripts.engine_miners._base import find_class, MinerLandmarkMissingError
     import ast
     module = ast.parse("class Unrelated: pass")
     cls = find_class(module, "SomeConfigClass")
@@ -390,7 +394,7 @@ def test_landmark_checks_raise_on_missing():
 ```yaml
 - name: Run myengine miners
   run: |
-    python scripts/miners/myengine_miner.py
+    python scripts/engine_miners/myengine_miner.py
 ```
 
 2. Set the runner tier:
@@ -409,15 +413,15 @@ def test_landmark_checks_raise_on_missing():
 Run the miner locally (inside the engine's Docker container if CUDA is required):
 
 ```bash
-python scripts/miners/myengine_miner.py
-# Writes configs/validation_rules/_staging/myengine_miner.yaml
+python scripts/engine_miners/myengine_miner.py
+# Writes configs/engine_invariants/_staging/myengine_miner.yaml
 
-python scripts/miners/build_corpus.py --engine myengine
+python scripts/engine_miners/build_corpus.py --engine myengine
 # Merges staging files, runs vendor-CI gate, writes corpus
 
 python scripts/vendor_rules.py \
   --engine myengine \
-  --corpus configs/validation_rules/myengine.yaml \
+  --corpus configs/engine_invariants/myengine.yaml \
   --out src/llenergymeasure/config/vendored_rules/myengine.json
 # Validates all rules against live library
 ```
@@ -488,8 +492,8 @@ When Renovate bumps an engine library, the miner pipeline must catch behavioural
 
 The miner pipeline's import-time contract (Step 1 above) raises hard CI errors when the library has drifted out of the envelope the miner was written against:
 
-- **`MinerVersionMismatchError`** - installed library version is outside the miner's `TESTED_AGAINST_VERSIONS` `SpecifierSet`. Forces the maintainer to read release notes and either widen the envelope or update the miner to match new validator semantics.
-  - Example: vLLM 0.7.3 against a miner with `TESTED_AGAINST_VERSIONS = SpecifierSet(">=0.17,<0.18")` raises `MinerVersionMismatchError` at import. Observed empirically on PR #459's `mine-vllm` job.
+- **`MinerVersionMismatchError`** - installed library version is outside the miner's pinned envelope (read from `engine_versions/{engine}.yaml miner_pins.{producer}` via `load_miner_pin`). Forces the maintainer to read release notes and either widen the envelope or update the miner to match new validator semantics.
+  - Example: vLLM 0.7.3 against an SSOT pin of `>=0.17,<0.18` raises `MinerVersionMismatchError` at import. Observed empirically on PR #459's `mine-vllm` job.
 
 - **`MinerLandmarkMissingError`** - an expected class or method symbol is no longer present in the library source. Catches refactors where a class was renamed, moved to a different module, or an API was deprecated and removed.
   - Example: a hypothetical vLLM release dropping `vllm.sampling_params.StructuredOutputsParams` would raise `MinerLandmarkMissingError` at the landmark-check step before any AST walking begins.
@@ -532,7 +536,7 @@ This is the reason the pipeline is split into two stages instead of being unifie
 
 The fail-loud envelope and the YAML diff together cover the failure modes that trip on a routine library bump. Three planned tools extend this for harder cases:
 
-- **Pre-mining envelope check (#469).** Verifies the installed library version is inside `TESTED_AGAINST_VERSIONS` *before* CI invests effort in mining. Today the check happens at miner import time, which is fine but late - if mining takes 5 minutes and the version is wrong, the maintainer waits 5 minutes to find out.
+- **Pre-mining envelope check (#469).** Verifies the installed library version is inside the SSOT-pinned envelope *before* CI invests effort in mining. Today the check happens at miner import time, which is fine but late - if mining takes 5 minutes and the version is wrong, the maintainer waits 5 minutes to find out.
 - **Compat-matrix sweep (#470).** Runs the miner against every library version in a declared support range and reports per-version `(rule_count, divergences, errors)`. Surfaces "this miner mostly works on the new version but loses 3 rules" before a Renovate PR ever opens.
 - **Coordinated bump command `llem bump-engine` (#471).** A single CLI entry point that updates the Dockerfile ARG, regenerates the corpus, runs the vendor gate, and reports the diff in one local invocation - used by maintainers handling library bumps that need manual intervention (e.g. `MinerVersionMismatchError` resolution).
 
@@ -542,7 +546,7 @@ The fail-loud envelope and the YAML diff together cover the failure modes that t
 
 | Mistake | Consequence | Fix |
 |---------|-------------|-----|
-| Not setting `TESTED_AGAINST_VERSIONS` | Miner runs against wrong library version silently | Add `TESTED_AGAINST_VERSIONS = SpecifierSet(">=X,<Y")` and call `check_installed_version` at import |
+| Not pinning the miner envelope in `engine_versions/{engine}.yaml` | Miner runs against wrong library version silently | Set `miner_pins.{static\|dynamic\|discovery}` in the SSOT and call `check_installed_version(load_miner_pin(...))` at import |
 | Catching `ImportError` on landmark imports | Silent degradation (returns `[]` on failure) | Let `ImportError` propagate; or raise `MinerLandmarkMissingError` explicitly |
 | Cartesian-only probing with large clusters | Exponential probe count; CI timeouts | Add Hypothesis supplement for clusters > 200 combinations |
 | Adding `manual_seed` rules for automatable constraints | Pipeline-failure debt | Extend the miner instead |
@@ -557,6 +561,6 @@ The fail-loud envelope and the YAML diff together cover the failure modes that t
 - [validation-rule-corpus.md](validation-rule-corpus.md) - corpus format
 - [parameter-discovery.md](parameter-discovery.md) - runtime validation
 - [architecture-overview.md](architecture-overview.md) - system overview
-- `scripts/miners/transformers_static_miner.py` - gold-standard static miner
-- `scripts/miners/transformers_dynamic_miner.py` - gold-standard dynamic miner
-- `scripts/miners/_base.py` - shared infrastructure
+- `scripts/engine_miners/transformers_static_miner.py` - gold-standard static miner
+- `scripts/engine_miners/transformers_dynamic_miner.py` - gold-standard dynamic miner
+- `scripts/engine_miners/_base.py` - shared infrastructure

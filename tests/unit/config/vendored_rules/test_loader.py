@@ -58,7 +58,7 @@ rules:
 
 def _write_corpus(root: Path, engine: str, text: str) -> None:
     root.mkdir(parents=True, exist_ok=True)
-    (root / f"{engine}.yaml").write_text(text)
+    (root / f"{engine}.proposed.yaml").write_text(text)
 
 
 def test_load_rules_returns_parsed_corpus(tmp_path: Path) -> None:
@@ -148,9 +148,9 @@ rules: []
 
 
 def test_default_corpus_root_resolves_to_configs(tmp_path: Path) -> None:
-    # Constructing without corpus_root uses the repo's configs/validation_rules/.
+    # Constructing without corpus_root uses the repo's configs/engine_invariants/.
     loader = VendoredRulesLoader()
-    assert loader.corpus_root.name == "validation_rules"
+    assert loader.corpus_root.name == "engine_invariants"
     assert loader.corpus_root.parent.name == "configs"
 
 
@@ -284,11 +284,11 @@ def test_enum_value_errors_share_common_base_class() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Vendored JSON overlay (invariant-miner CI)
+# Vendored YAML overlay (invariant-miner CI)
 # ---------------------------------------------------------------------------
 
 
-def test_overlay_applied_when_vendored_json_present(
+def test_overlay_applied_when_vendored_yaml_present(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from llenergymeasure.config.vendored_rules import loader as loader_mod
@@ -310,7 +310,11 @@ def test_overlay_applied_when_vendored_json_present(
         "divergences": [],
     }
 
-    monkeypatch.setattr(loader_mod, "_try_load_vendored_json", lambda _engine: vendored_payload)
+    monkeypatch.setattr(
+        loader_mod,
+        "_try_load_vendored_yaml",
+        lambda _root, _engine: vendored_payload,
+    )
 
     result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
     assert len(result.rules) == 1
@@ -320,13 +324,13 @@ def test_overlay_applied_when_vendored_json_present(
     assert expected["observed_messages"] == ["library emitted this"]
 
 
-def test_no_overlay_when_vendored_json_absent(
+def test_no_overlay_when_vendored_yaml_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from llenergymeasure.config.vendored_rules import loader as loader_mod
 
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
-    monkeypatch.setattr(loader_mod, "_try_load_vendored_json", lambda _e: None)
+    monkeypatch.setattr(loader_mod, "_try_load_vendored_yaml", lambda _root, _engine: None)
 
     result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
     assert len(result.rules) == 1
@@ -344,41 +348,27 @@ def test_overlay_skips_rules_without_matching_vendor_case(
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
     monkeypatch.setattr(
         loader_mod,
-        "_try_load_vendored_json",
-        lambda _e: {"cases": [{"id": "some_other_rule", "outcome": "error"}]},
+        "_try_load_vendored_yaml",
+        lambda _root, _engine: {"cases": [{"id": "some_other_rule", "outcome": "error"}]},
     )
     result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
     # No matching case -> rule is returned unchanged.
     assert "observed_outcome" not in result.rules[0].expected_outcome
 
 
-def test_try_load_vendored_json_rejects_non_numeric_schema_version(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_try_load_vendored_yaml_rejects_non_numeric_schema_version(
+    tmp_path: Path,
 ) -> None:
     # A corrupt commit-back could write a non-numeric schema_version
     # (e.g. "dev"). The loader must return None rather than propagating
     # UnsupportedSchemaVersionError from _major() — the vendor CI job
     # resurfaces the issue separately.
-    from llenergymeasure.config.vendored_rules import loader as loader_mod
+    import yaml
 
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
-
-    def fake_read(_self: object, _name: str) -> str:
-        import json as _json
-
-        return _json.dumps({"schema_version": "dev", "cases": []})
-
-    class _FakeFiles:
-        def __truediv__(self, name: str) -> _FakeEntry:
-            return _FakeEntry()
-
-    class _FakeEntry:
-        def read_text(self) -> str:
-            import json as _json
-
-            return _json.dumps({"schema_version": "dev", "cases": []})
-
-    monkeypatch.setattr(loader_mod.resources, "files", lambda _pkg: _FakeFiles())
+    (tmp_path / "transformers.vendored.yaml").write_text(
+        yaml.safe_dump({"schema_version": "dev", "cases": []})
+    )
 
     # Should not raise; should fall back to YAML-only (no observed_* keys).
     result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")

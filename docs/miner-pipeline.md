@@ -55,7 +55,7 @@ The output is a corpus of rules, each describing one constraint on a config fiel
   │                            │                                        │
   │                            ▼                                        │
   │                   staging files                                     │
-  │              configs/validation_rules/_staging/                     │
+  │              configs/engine_invariants/_staging/                    │
   │                            │                                        │
   │                            ▼                                        │
   │                    build_corpus.py                                  │
@@ -68,10 +68,10 @@ The output is a corpus of rules, each describing one constraint on a config fiel
   │           ┌────────────────┴──────────────────┐                    │
   │           ▼                                   ▼                    │
   │  confirmed rules                   quarantined rules               │
-  │  configs/validation_rules/         configs/validation_rules/        │
-  │  {engine}.yaml                     _staging/_failed_*.yaml         │
-  │  src/.../vendored_rules/                                            │
-  │  {engine}.json                                                      │
+  │  configs/engine_invariants/        configs/engine_invariants/       │
+  │  {engine}.proposed.yaml            _staging/_failed_*.yaml          │
+  │  configs/engine_invariants/                                         │
+  │  {engine}.vendored.yaml                                             │
   └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -279,19 +279,26 @@ The three engines have structurally different config surfaces, which determines 
 
 ## Fail-loud import contract
 
-Every miner module must declare its version envelope and validate it at import time. This is a structural contract, not a guideline.
+Every miner module must resolve its version envelope from the engine SSOT and validate it at import time. This is a structural contract, not a guideline.
 
 ```python
-# Every *_miner.py must declare this:
-TESTED_AGAINST_VERSIONS = SpecifierSet(">=4.50,<4.60")
+# Every *_miner.py must resolve its envelope from the engine's SSOT:
+from scripts.engine_miners._ssot import load_miner_pin
+
+_envelope = load_miner_pin("transformers", "static")  # SpecifierSet
 
 # And call this at import time:
 check_installed_version(
     "transformers",
     importlib.metadata.version("transformers"),
-    TESTED_AGAINST_VERSIONS,
+    _envelope,
 )
 ```
+
+The envelope itself lives in `engine_versions/{engine}.yaml` under
+`miner_pins.{static|dynamic|discovery}` — one pin per producer role. There
+is no per-module `TESTED_AGAINST_VERSIONS` constant; Renovate updates the
+SSOT and every miner reads through `load_miner_pin`.
 
 If the installed library version falls outside the envelope, the miner raises `MinerVersionMismatchError` - a hard CI failure.
 
@@ -300,7 +307,7 @@ If an expected class or method is missing from the library source (e.g. a class 
 ```
   check_installed_version()
        │
-       ├── version in TESTED_AGAINST_VERSIONS → continue
+       ├── version inside SSOT envelope → continue
        │
        └── version out of range → MinerVersionMismatchError (CI fatal)
 
@@ -436,8 +443,9 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │         │                 │                    │                  │
   │         └─────────────────┴────────────────────┘                  │
   │                       ▼                                           │
-  │  build_corpus.py merges staging → configs/validation_rules/       │
-  │  {engine}.yaml; bot commits the new YAML to the PR branch         │
+  │  build_corpus.py merges staging → configs/engine_invariants/     │
+  │  {engine}.proposed.yaml; bot commits the new YAML to the PR       │
+  │  branch                                                           │
   │  with `--force-with-lease` and posts a diff comment.              │
   │                       │                                           │
   │                       ▼                                           │
@@ -450,13 +458,13 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │  the live library inside the engine's Docker container.           │
   │                       │                                           │
   │                       ▼                                           │
-  │  Bot writes updated vendored JSON                                 │
-  │  (src/llenergymeasure/config/vendored_rules/{engine}.json)        │
+  │  Bot writes updated vendored YAML                                 │
+  │  (configs/engine_invariants/{engine}.vendored.yaml)               │
   │  to the PR branch and posts a diff comment.                       │
   │                       │                                           │
   │  ─────────────── parameter-discovery.yml (parallel) ───────       │
   │                       ▼                                           │
-  │  discover_engine_schemas.py introspects engine config classes     │
+  │  scripts/engine_introspectors introspects engine config classes   │
   │  inside Docker, regenerates discovered_schemas/{engine}.json,     │
   │  bot commits and posts a diff comment.                            │
   │                       │                                           │
@@ -474,14 +482,14 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
 
 ### Version mismatch as CI signal
 
-When `TESTED_AGAINST_VERSIONS` in a miner module does not cover the newly bumped library version, `MinerVersionMismatchError` is raised and CI fails. This is intentional: it forces a maintainer to update the miner against the new library version before the corpus is regenerated.
+When `engine_versions/{engine}.yaml miner_pins.{producer}` does not cover the newly bumped library version, `MinerVersionMismatchError` is raised and CI fails. This is intentional: it forces a maintainer to update the miner against the new library version before the corpus is regenerated.
 
 The update workflow:
 
 1. Renovate opens PR bumping library version.
 2. CI fires, `MinerVersionMismatchError` raised for the affected miner.
 3. Maintainer checks the library's release notes for validator changes.
-4. Maintainer updates `TESTED_AGAINST_VERSIONS` and any landmark names that changed.
+4. Maintainer updates `miner_pins` in the engine SSOT and any landmark names that changed.
 5. CI re-runs with updated miner; vendor-CI gate runs.
 6. If any rules now diverge, they are quarantined; maintainer updates the corpus.
 
@@ -536,7 +544,7 @@ The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transforme
 
 **What did not work on this PR (separate blockers, not chain-validation failures):**
 
-- `mine-vllm` - Dockerfile.vllm ARG (v0.7.3) is outside the vLLM miner's `TESTED_AGAINST_VERSIONS` envelope (`>=0.17,<0.18`); raised `MinerVersionMismatchError` as designed. Resolution requires the per-engine version-bundle work (#468-#471).
+- `mine-vllm` - Dockerfile.vllm ARG (v0.7.3) is outside the vLLM miner's SSOT-pinned envelope (`engine_versions/vllm.yaml miner_pins.* = >=0.17,<0.18`); raised `MinerVersionMismatchError` as designed. Resolution requires the per-engine version-bundle work (#468-#471).
 - `mine-tensorrt` - runtime-symlink script bug inside the NGC container (#472).
 
 Both are tracked as engine-specific follow-ups; neither invalidates the chain-validation outcome.
@@ -573,7 +581,7 @@ Pivoting vLLM and TRT-LLM into Docker on the self-hosted runner mirrors the proj
 
 ## `_base.py` shared infrastructure
 
-All miners import from `scripts/miners/_base.py`. It provides:
+All miners import from `scripts/engine_miners/_base.py`. It provides:
 
 - `RuleCandidate` - the output type; fields mirror the corpus YAML schema exactly (no translation step needed).
 - `MinerSource` - `{path, method, line_at_scan}` provenance record.
