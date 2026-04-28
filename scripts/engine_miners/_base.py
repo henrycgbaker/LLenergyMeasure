@@ -10,7 +10,8 @@ PRs per engine.
   corpus entry shape in :mod:`llenergymeasure.config.vendored_rules.loader`.
 - :class:`MinerVersionMismatchError`, :class:`MinerLandmarkMissingError` —
   fail-loud exceptions CI treats as fatal.
-- :func:`check_installed_version` — version-envelope guard for each miner.
+- :func:`check_installed_version` — version-envelope guard for each miner;
+  reads the pin from the engine SSOT (``engine_versions/{engine}.yaml``).
 - AST helpers (:func:`extract_condition_fields`, :func:`resolve_local_assign`,
   etc.) — deterministic, stateless primitives for AST-based miners.
 - Pattern detectors (``ConditionalRaiseDetector``, etc.) — one class per
@@ -28,6 +29,8 @@ from typing import Any, Literal
 
 from packaging import version as pkg_version
 from packaging.specifiers import SpecifierSet
+
+from scripts.engine_miners._ssot import Producer, load_miner_pin
 
 # ---------------------------------------------------------------------------
 # Public types
@@ -57,9 +60,9 @@ class MinerSource:
 class RuleCandidate:
     """One extracted rule candidate.
 
-    Serialised verbatim into ``configs/engine_invariants/{engine}.proposed.yaml`` after
-    human review. Field names match the corpus schema so no translation step
-    is needed between walker output and corpus entry.
+    Serialised verbatim into ``configs/engine_invariants/{engine}.proposed.yaml``
+    after human review. Field names match the corpus schema so no
+    translation step is needed between walker output and corpus entry.
     """
 
     id: str
@@ -93,19 +96,31 @@ class MinerVersionMismatchError(MinerError):
     """Raised when the installed library version is outside the miner's pin.
 
     The miner is pinned to the library version it was authored against; on
-    library-bump PRs, Renovate will trip this error and the maintainer updates
-    the miner. See runtime-config-validation.md §4.2.
+    library-bump PRs, Renovate will trip this error and the maintainer
+    widens the SSOT range or updates the miner. The pin lives in
+    ``engine_versions/{engine}.yaml`` under ``miner_pins.{producer}``;
+    ``producer`` is one of ``static`` | ``dynamic`` | ``discovery``.
     """
 
-    def __init__(self, library: str, installed: str, expected: SpecifierSet) -> None:
+    def __init__(
+        self,
+        library: str,
+        installed: str,
+        expected: SpecifierSet,
+        *,
+        engine: str,
+        producer: Producer,
+    ) -> None:
         super().__init__(
             f"Installed {library}=={installed} is outside miner-pinned range "
-            f"{expected!s}. Update scripts/engine_miners/{library}.py "
-            f"(bump TESTED_AGAINST_VERSIONS and re-run against the new source)."
+            f"{expected!s}. Widen engine_versions/{engine}.yaml "
+            f"miner_pins.{producer} or update the miner against the new source."
         )
         self.library = library
         self.installed = installed
         self.expected = expected
+        self.engine = engine
+        self.producer = producer
 
 
 class MinerLandmarkMissingError(MinerError):
@@ -130,19 +145,27 @@ class MinerLandmarkMissingError(MinerError):
 # ---------------------------------------------------------------------------
 
 
-def check_installed_version(library: str, installed: str, expected: SpecifierSet) -> None:
-    """Raise :class:`MinerVersionMismatchError` if ``installed`` isn't in ``expected``.
+def check_installed_version(
+    library: str, installed: str, *, engine: str, producer: Producer
+) -> None:
+    """Raise :class:`MinerVersionMismatchError` if ``installed`` isn't in the SSOT pin.
 
-    ``SpecifierSet.contains(..., prereleases=True)`` allows rc / beta tags,
-    which is what we want for Renovate-opened PRs that bump to a prerelease
-    tag before a stable one exists.
+    The expected range is read from ``engine_versions/{engine}.yaml`` under
+    ``miner_pins.{producer}``. ``SpecifierSet.contains(..., prereleases=True)``
+    allows rc / beta tags, which is what we want for Renovate-opened PRs
+    that bump to a prerelease tag before a stable one exists.
     """
+    expected = load_miner_pin(engine, producer)
     try:
         parsed = pkg_version.Version(installed)
     except pkg_version.InvalidVersion as exc:
-        raise MinerVersionMismatchError(library, installed, expected) from exc
+        raise MinerVersionMismatchError(
+            library, installed, expected, engine=engine, producer=producer
+        ) from exc
     if not expected.contains(parsed, prereleases=True):
-        raise MinerVersionMismatchError(library, installed, expected)
+        raise MinerVersionMismatchError(
+            library, installed, expected, engine=engine, producer=producer
+        )
 
 
 # ---------------------------------------------------------------------------

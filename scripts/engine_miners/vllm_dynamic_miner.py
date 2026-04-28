@@ -81,9 +81,7 @@ from scripts.engine_miners._base import (  # noqa: E402
 )
 from scripts.engine_miners._msgspec_lift import lift as _msgspec_lift  # noqa: E402
 from scripts.engine_miners._pydantic_lift import lift as _pydantic_lift  # noqa: E402
-from scripts.engine_miners.vllm_static_miner import (  # noqa: E402
-    TESTED_AGAINST_VERSIONS,
-)
+from scripts.engine_miners._ssot import load_miner_pin  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -711,7 +709,7 @@ def walk_vllm_dynamic(*, today: str | None = None) -> tuple[list[RuleCandidate],
     var, then to ``dt.date.today()``.
     """
     installed_version = _check_landmarks()
-    check_installed_version("vllm", installed_version, TESTED_AGAINST_VERSIONS)
+    check_installed_version("vllm", installed_version, engine="vllm", producer="dynamic")
 
     if today is None:
         frozen = os.environ.get("LLENERGY_MINER_FROZEN_AT")
@@ -842,7 +840,7 @@ def emit_yaml(candidates: list[RuleCandidate], engine_version: str) -> str:
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
-        "walker_pinned_range": str(TESTED_AGAINST_VERSIONS),
+        "walker_pinned_range": str(load_miner_pin("vllm", "dynamic")),
         "mined_at": mined_at,
         "rules": [_candidate_to_dict(c) for c in sorted_candidates],
     }

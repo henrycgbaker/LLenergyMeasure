@@ -41,19 +41,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from packaging.specifiers import SpecifierSet
-
 # Project root on sys.path for direct script + module-style invocation.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 # Defend against the script directory shadowing site-packages: when invoked
-# as ``python scripts/engine_miners/vllm_static_miner.py``, ``scripts/engine_miners/`` is
-# prepended to sys.path. The directory does not currently contain a
-# ``vllm.py`` stub (which would shadow the installed ``vllm`` package), but
-# we strip it for symmetry with the transformers miner and to defend against
-# future stub additions.
+# as ``python scripts/engine_miners/vllm_static_miner.py``,
+# ``scripts/engine_miners/`` is prepended to sys.path. The directory does
+# not currently contain a ``vllm.py`` stub (which would shadow the
+# installed ``vllm`` package), but we strip it for symmetry with the
+# transformers miner and to defend against future stub additions.
 _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 sys.path[:] = [p for p in sys.path if Path(p).resolve() != Path(_SCRIPT_DIR).resolve()]
 sys.path[:] = [p for p in sys.path if p != ""]
@@ -68,23 +66,7 @@ from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.
     find_method,
     first_string_arg,
 )
-
-# ---------------------------------------------------------------------------
-# Version pin
-# ---------------------------------------------------------------------------
-
-TESTED_AGAINST_VERSIONS: SpecifierSet = SpecifierSet(">=0.17,<0.18")
-"""vLLM versions this miner has been validated against.
-
-Matches the host install used during research (0.17.1). The Docker pin
-(``v0.7.3``) and the open-ended ``vllm>=0.6`` in ``pyproject.toml`` diverge
-from this — see issue #378 for the SSOT alignment work. The miner is a
-CI-time tool, not a runtime dep, so the narrower pin doesn't affect end
-users; the canonical vendor-CI invocation runs on the host install.
-
-On mismatch, :func:`check_installed_version` raises
-:class:`MinerVersionMismatchError` and CI breaks loud."""
-
+from scripts.engine_miners._ssot import load_miner_pin  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Engine + namespace conventions
@@ -1091,7 +1073,7 @@ def walk_vllm_static(*, today: str | None = None) -> tuple[list[RuleCandidate], 
     var, then to ``dt.date.today()``.
     """
     installed_version, abs_paths = _check_landmarks()
-    check_installed_version("vllm", installed_version, TESTED_AGAINST_VERSIONS)
+    check_installed_version("vllm", installed_version, engine="vllm", producer="static")
 
     if today is None:
         frozen = os.environ.get("LLENERGY_MINER_FROZEN_AT")
@@ -1174,7 +1156,7 @@ def emit_yaml(candidates: list[RuleCandidate], engine_version: str) -> str:
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
-        "walker_pinned_range": str(TESTED_AGAINST_VERSIONS),
+        "walker_pinned_range": str(load_miner_pin("vllm", "static")),
         "mined_at": mined_at,
         "rules": [_candidate_to_dict(c) for c in sorted_candidates],
     }

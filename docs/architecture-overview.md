@@ -274,6 +274,10 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
   └── vendored_rules/
       ├── loader.py                    Runtime corpus consumer + predicate engine
       └── __init__.py
+
+  engine_versions/
+  └── {engine}.yaml                    Per-engine SSOT: library version, miner pins,
+                                       artefact paths. Renovate-authored.
 ```
 
 ---

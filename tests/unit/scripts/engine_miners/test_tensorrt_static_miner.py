@@ -4,7 +4,8 @@ Covers:
 
 - Source-extraction landmarks (fail-loud on missing source root / class /
   validator method).
-- ``TESTED_AGAINST_VERSIONS`` declared and pin-shape sane.
+- SSOT miner pin (``engine_versions/tensorrt.yaml miner_pins.static``) is
+  in shape and pins 0.21.x.
 - Method resolution via :func:`scripts.engine_miners._base.find_class` /
   :func:`find_method` (so refactors that drop those helpers fail loudly).
 - Per-validator AST extraction emits the predicate shapes we expect for
@@ -40,6 +41,7 @@ from scripts.engine_miners._base import (  # noqa: E402
     find_method,
 )
 from scripts.engine_miners._fixpoint_test import assert_gate_soundness_fixpoint  # noqa: E402
+from scripts.engine_miners._ssot import load_miner_pin  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Source-availability fixture
@@ -75,15 +77,16 @@ _REQUIRES_SOURCE = pytest.mark.skipif(
 class TestModuleContract:
     """Static-shape contract that holds regardless of source availability."""
 
-    def test_tested_against_versions_declared(self) -> None:
-        assert isinstance(trt_miner.TESTED_AGAINST_VERSIONS, SpecifierSet)
+    def test_ssot_miner_pin_declared(self) -> None:
+        assert isinstance(load_miner_pin("tensorrt", "static"), SpecifierSet)
 
-    def test_tested_against_versions_pins_021(self) -> None:
+    def test_ssot_miner_pin_pins_021(self) -> None:
         # The miner must reject 1.x — that's a separate library generation.
         # The pin must accept 0.21.x and reject 1.x.
-        assert trt_miner.TESTED_AGAINST_VERSIONS.contains("0.21.0", prereleases=True)
-        assert not trt_miner.TESTED_AGAINST_VERSIONS.contains("1.1.0", prereleases=True)
-        assert not trt_miner.TESTED_AGAINST_VERSIONS.contains("0.20.5", prereleases=True)
+        pin = load_miner_pin("tensorrt", "static")
+        assert pin.contains("0.21.0", prereleases=True)
+        assert not pin.contains("1.1.0", prereleases=True)
+        assert not pin.contains("0.20.5", prereleases=True)
 
     def test_method_landmarks_use_find_class_and_find_method(self) -> None:
         """Pin the contract that the miner uses the shared landmark helpers.

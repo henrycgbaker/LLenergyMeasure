@@ -8,8 +8,9 @@ against the source-tree's own ``__version__``) in one named place.
 Coverage:
 
 - TRT-LLM is registered in :data:`scripts.engine_miners.build_corpus._ENGINE_EXTRACTORS`.
-- The orchestrator pins against :data:`TESTED_AGAINST_VERSIONS` and refuses
-  source trees whose version disagrees.
+- The orchestrator pins against the SSOT miner range
+  (``engine_versions/tensorrt.yaml miner_pins.static``) and refuses source
+  trees whose version disagrees.
 - The orchestrator never imports ``tensorrt_llm`` at module load.
 """
 
@@ -27,7 +28,6 @@ if str(_PROJECT_ROOT) not in sys.path:
 from scripts.engine_miners import (  # noqa: E402
     build_corpus,
     tensorrt_miner,
-    tensorrt_static_miner,
 )
 from scripts.engine_miners._base import MinerVersionMismatchError  # noqa: E402
 
@@ -100,6 +100,11 @@ def test_orchestrator_main_rejects_version_mismatch(tmp_path: Path) -> None:
         tensorrt_miner.main(["--out", str(out), "--source-root", str(stub_root)])
 
 
-def test_orchestrator_imports_tested_against_versions() -> None:
-    """The orchestrator must re-export the static miner's pin for clarity."""
-    assert tensorrt_miner.TESTED_AGAINST_VERSIONS is tensorrt_static_miner.TESTED_AGAINST_VERSIONS
+def test_orchestrator_reads_pin_from_ssot() -> None:
+    """The orchestrator's version check resolves through the SSOT loader."""
+    from scripts.engine_miners._ssot import load_miner_pin
+
+    pin = load_miner_pin("tensorrt", "static")
+    # 0.21.x is in pin; 1.x is rejected.
+    assert pin.contains("0.21.0", prereleases=True)
+    assert not pin.contains("1.1.0", prereleases=True)

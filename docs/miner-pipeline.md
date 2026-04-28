@@ -279,19 +279,26 @@ The three engines have structurally different config surfaces, which determines 
 
 ## Fail-loud import contract
 
-Every miner module must declare its version envelope and validate it at import time. This is a structural contract, not a guideline.
+Every miner module must resolve its version envelope from the engine SSOT and validate it at import time. This is a structural contract, not a guideline.
 
 ```python
-# Every *_miner.py must declare this:
-TESTED_AGAINST_VERSIONS = SpecifierSet(">=4.50,<4.60")
+# Every *_miner.py must resolve its envelope from the engine's SSOT:
+from scripts.engine_miners._ssot import load_miner_pin
+
+_envelope = load_miner_pin("transformers", "static")  # SpecifierSet
 
 # And call this at import time:
 check_installed_version(
     "transformers",
     importlib.metadata.version("transformers"),
-    TESTED_AGAINST_VERSIONS,
+    _envelope,
 )
 ```
+
+The envelope itself lives in `engine_versions/{engine}.yaml` under
+`miner_pins.{static|dynamic|discovery}` — one pin per producer role. There
+is no per-module `TESTED_AGAINST_VERSIONS` constant; Renovate updates the
+SSOT and every miner reads through `load_miner_pin`.
 
 If the installed library version falls outside the envelope, the miner raises `MinerVersionMismatchError` - a hard CI failure.
 
@@ -300,7 +307,7 @@ If an expected class or method is missing from the library source (e.g. a class 
 ```
   check_installed_version()
        │
-       ├── version in TESTED_AGAINST_VERSIONS → continue
+       ├── version inside SSOT envelope → continue
        │
        └── version out of range → MinerVersionMismatchError (CI fatal)
 
@@ -475,14 +482,14 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
 
 ### Version mismatch as CI signal
 
-When `TESTED_AGAINST_VERSIONS` in a miner module does not cover the newly bumped library version, `MinerVersionMismatchError` is raised and CI fails. This is intentional: it forces a maintainer to update the miner against the new library version before the corpus is regenerated.
+When `engine_versions/{engine}.yaml miner_pins.{producer}` does not cover the newly bumped library version, `MinerVersionMismatchError` is raised and CI fails. This is intentional: it forces a maintainer to update the miner against the new library version before the corpus is regenerated.
 
 The update workflow:
 
 1. Renovate opens PR bumping library version.
 2. CI fires, `MinerVersionMismatchError` raised for the affected miner.
 3. Maintainer checks the library's release notes for validator changes.
-4. Maintainer updates `TESTED_AGAINST_VERSIONS` and any landmark names that changed.
+4. Maintainer updates `miner_pins` in the engine SSOT and any landmark names that changed.
 5. CI re-runs with updated miner; vendor-CI gate runs.
 6. If any rules now diverge, they are quarantined; maintainer updates the corpus.
 
@@ -537,7 +544,7 @@ The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transforme
 
 **What did not work on this PR (separate blockers, not chain-validation failures):**
 
-- `mine-vllm` - Dockerfile.vllm ARG (v0.7.3) is outside the vLLM miner's `TESTED_AGAINST_VERSIONS` envelope (`>=0.17,<0.18`); raised `MinerVersionMismatchError` as designed. Resolution requires the per-engine version-bundle work (#468-#471).
+- `mine-vllm` - Dockerfile.vllm ARG (v0.7.3) is outside the vLLM miner's SSOT-pinned envelope (`engine_versions/vllm.yaml miner_pins.* = >=0.17,<0.18`); raised `MinerVersionMismatchError` as designed. Resolution requires the per-engine version-bundle work (#468-#471).
 - `mine-tensorrt` - runtime-symlink script bug inside the NGC container (#472).
 
 Both are tracked as engine-specific follow-ups; neither invalidates the chain-validation outcome.
