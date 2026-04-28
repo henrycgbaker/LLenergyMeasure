@@ -79,7 +79,7 @@ OUTPUT_REL="src/llenergymeasure/config/discovered_schemas/${ENGINE}.json"
 
 echo "[$ENGINE] Running discovery inside $IMAGE..." >&2
 # Forward LLENERGY_DISCOVERY_FROZEN_AT into the container if the caller (CI)
-# set it. discover_engine_schemas.py uses it to pin `discovered_at` to a
+# set it. The introspectors use it to pin `discovered_at` to a
 # stable anchor, breaking the writeback->resync loop on unchanged source.
 docker run --rm --gpus all \
     --user "$(id -u):$(id -g)" \
@@ -88,7 +88,8 @@ docker run --rm --gpus all \
     -v "$REPO_ROOT:/repo" \
     -w /repo \
     "$IMAGE" \
-    scripts/discover_engine_schemas.py "$ENGINE" \
+    -m scripts.engine_introspectors \
+    --engine "$ENGINE" \
     --image-ref "$IMAGE" \
     --output "/repo/$OUTPUT_REL"
 

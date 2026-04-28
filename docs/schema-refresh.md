@@ -30,7 +30,7 @@ parameter-discovery.yml auto-fires
 +------------------------------------------+
 |  Runs on self-hosted GPU runner:         |
 |  1. Pulls/builds new engine image        |
-|  2. Runs discover_engine_schemas.py      |
+|  2. Runs scripts.engine_introspectors    |
 |     inside the container                 |
 |  3. Compares old vs new schema           |
 |     (scripts/diff_discovered_schemas.py)            |
@@ -132,7 +132,7 @@ When parameter-discovery labels a PR `schema-breaking`:
 ## Adding a New Engine
 
 1. Create `docker/Dockerfile.<engine>` with an `ARG` version pin
-2. Add a discovery function in `scripts/discover_engine_schemas.py`
+2. Add a per-engine module under `scripts/engine_introspectors/` (mirror an existing `*_introspector.py`) and register it in `scripts/engine_introspectors/__init__.py`
 3. Add a case to `scripts/refresh_discovered_schemas.sh`
 4. Run discovery: `./scripts/refresh_discovered_schemas.sh <engine>`
 5. Add a Renovate `packageRule` in `renovate.json`
