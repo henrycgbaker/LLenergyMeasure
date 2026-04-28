@@ -339,7 +339,7 @@ if __name__ == "__main__":
         "engine": ENGINE,
         "rules": [candidate_to_dict(c) for c in results],
     }
-    output_path = Path("configs/validation_rules/_staging/myengine_miner.yaml")
+    output_path = Path("configs/engine_invariants/_staging/myengine_miner.yaml")
     output_path.write_text(yaml.dump(staging, allow_unicode=True))
     print(f"Wrote {len(results)} candidates to {output_path}")
 ```
@@ -410,15 +410,15 @@ Run the miner locally (inside the engine's Docker container if CUDA is required)
 
 ```bash
 python scripts/engine_miners/myengine_miner.py
-# Writes configs/validation_rules/_staging/myengine_miner.yaml
+# Writes configs/engine_invariants/_staging/myengine_miner.yaml
 
 python scripts/engine_miners/build_corpus.py --engine myengine
 # Merges staging files, runs vendor-CI gate, writes corpus
 
 python scripts/vendor_rules.py \
   --engine myengine \
-  --corpus configs/validation_rules/myengine.yaml \
-  --out src/llenergymeasure/config/vendored_rules/myengine.json
+  --corpus configs/engine_invariants/myengine.proposed.yaml \
+  --out configs/engine_invariants/myengine.vendored.yaml
 # Validates all rules against live library
 ```
 

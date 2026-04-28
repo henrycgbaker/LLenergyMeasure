@@ -1781,7 +1781,7 @@ def main(argv: list[str] | None = None) -> int:
     out_path = (
         Path(_PROJECT_ROOT)
         / "configs"
-        / "validation_rules"
+        / "engine_invariants"
         / "_staging"
         / "transformers_dynamic_miner.yaml"
     )

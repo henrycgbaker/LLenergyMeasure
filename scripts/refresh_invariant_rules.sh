@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Re-vendor a vendored-rules JSON by running scripts/vendor_rules.py inside the
-# appropriate Docker image.
+# Re-vendor a vendored-rules YAML envelope by running scripts/vendor_rules.py
+# inside the appropriate Docker image.
 #
 # Usage: ./scripts/refresh_invariant_rules.sh {transformers|vllm|tensorrt}
 #
@@ -9,14 +9,14 @@
 # artifact. Run this locally to re-vendor against the pinned image before
 # opening a PR; CI will re-run inside the same image on the PR branch.
 #
-# Output: src/llenergymeasure/config/vendored_rules/<engine>.json
-# The JSON IS the canonical SSOT — authority comes from `git commit`, not
+# Output: configs/engine_invariants/<engine>.vendored.yaml
+# The YAML IS the canonical SSOT — authority comes from `git commit`, not
 # from who ran vendoring.
 #
 # Legitimate refresh (e.g. you bumped a Dockerfile FROM tag):
 #   review the diff, `git add`, and open a PR.
 # Exploring a fork or stale image:
-#   `git checkout src/llenergymeasure/config/vendored_rules/<engine>.json`
+#   `git checkout configs/engine_invariants/<engine>.vendored.yaml`
 set -euo pipefail
 
 usage() {
@@ -24,7 +24,7 @@ usage() {
 Usage: ./scripts/refresh_invariant_rules.sh {transformers|vllm|tensorrt}
 
 Builds or pulls the engine's Docker image, runs scripts/vendor_rules.py inside
-it against the tracked corpus, writes the JSON envelope, and prints the git
+it against the tracked corpus, writes the YAML envelope, and prints the git
 diff. Does NOT commit.
 EOF
 }
@@ -66,8 +66,8 @@ case "$ENGINE" in
         ;;
 esac
 
-CORPUS_REL="configs/validation_rules/${ENGINE}.yaml"
-OUTPUT_REL="src/llenergymeasure/config/vendored_rules/${ENGINE}.json"
+CORPUS_REL="configs/engine_invariants/${ENGINE}.proposed.yaml"
+OUTPUT_REL="configs/engine_invariants/${ENGINE}.vendored.yaml"
 
 if [[ ! -f "$REPO_ROOT/$CORPUS_REL" ]]; then
     echo "[$ENGINE] Corpus $CORPUS_REL not found. Run the miner first:" >&2
@@ -97,7 +97,7 @@ fi
 
 if git diff --quiet -- "$OUTPUT_REL" 2>/dev/null; then
     if [[ -z "$(git status --porcelain -- "$OUTPUT_REL")" ]]; then
-        echo "[$ENGINE] No changes to vendored rules JSON." >&2
+        echo "[$ENGINE] No changes to vendored rules YAML." >&2
         exit 0
     fi
 fi

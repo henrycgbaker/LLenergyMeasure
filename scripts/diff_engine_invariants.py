@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""Semantic differ for vendored rules JSON envelopes.
+"""Semantic differ for vendored rules envelopes.
 
 Sibling of :mod:`scripts.diff_discovered_schemas` — same contract (safe vs
 breaking classification, JSON-on-stdout + Markdown summary), different artifact
 kind (rule cases instead of parameter schemas).
 
+Reads YAML envelopes (the vendored corpus format); falls back to JSON parsing
+when YAML's loader returns a non-mapping, so JSON-fixture tests still work.
+
 Usage::
 
-    python scripts/diff_validation_rules.py <old.json> <new.json> [--out pr-comment.md]
+    python scripts/diff_engine_invariants.py <old.yaml> <new.yaml> [--out pr-comment.md]
 
 Exit codes:
-    0 - identical or rules-safe changes only
-    1 - rules-breaking changes detected
-    2 - malformed input (missing file, not JSON, etc.)
+    0 - identical or invariants-safe changes only
+    1 - invariants-breaking changes detected
+    2 - malformed input (missing file, not parseable, etc.)
 
 stdout : JSON with structured diff (mirrors diff_discovered_schemas.py shape)
 stderr : human-readable summary
@@ -27,6 +30,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 # ---------------------------------------------------------------------------
 # Change categories
@@ -96,9 +101,9 @@ class DiffResult:
         for k, v in self.metadata_changes.items():
             parts.append(f"{k}: {v['old']} -> {v['new']}")
         if self.safe:
-            parts.append(f"{len(self.safe)} rules-safe change(s)")
+            parts.append(f"{len(self.safe)} invariants-safe change(s)")
         if self.breaking:
-            parts.append(f"{len(self.breaking)} rules-BREAKING change(s)")
+            parts.append(f"{len(self.breaking)} invariants-BREAKING change(s)")
         if not parts:
             parts.append("No changes")
         return "; ".join(parts)
@@ -236,7 +241,7 @@ def render_markdown(result: DiffResult, *, title: str = "Rules Diff") -> str:
         lines.append("")
 
     if result.breaking:
-        lines.append("### rules-breaking changes")
+        lines.append("### invariants-breaking changes")
         lines.append("")
         lines.append("| Rule ID | Kind | Detail |")
         lines.append("| --- | --- | --- |")
@@ -245,7 +250,7 @@ def render_markdown(result: DiffResult, *, title: str = "Rules Diff") -> str:
         lines.append("")
 
     if result.safe:
-        lines.append("### rules-safe changes")
+        lines.append("### invariants-safe changes")
         lines.append("")
         lines.append("| Rule ID | Kind | Detail |")
         lines.append("| --- | --- | --- |")
@@ -265,10 +270,27 @@ def render_markdown(result: DiffResult, *, title: str = "Rules Diff") -> str:
 # ---------------------------------------------------------------------------
 
 
+def _load_envelope(path: Path) -> dict[str, Any]:
+    """Parse a vendored-rules envelope from YAML, with JSON as a graceful fallback.
+
+    YAML is a superset of JSON, so ``yaml.safe_load`` happily parses both —
+    the explicit fallback is only here for defensiveness against pathological
+    inputs (e.g. embedded tabs that PyYAML rejects but ``json.loads`` accepts).
+    """
+    raw = path.read_text()
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError:
+        data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: envelope must be a mapping; got {type(data).__name__}")
+    return data
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("old", type=Path, help="Path to old JSON envelope")
-    parser.add_argument("new", type=Path, help="Path to new JSON envelope")
+    parser.add_argument("old", type=Path, help="Path to old vendored-rules envelope")
+    parser.add_argument("new", type=Path, help="Path to new vendored-rules envelope")
     parser.add_argument(
         "--out",
         type=Path,
@@ -283,9 +305,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        old = json.loads(args.old.read_text())
-        new = json.loads(args.new.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
+        old = _load_envelope(args.old)
+        new = _load_envelope(args.new)
+    except (json.JSONDecodeError, yaml.YAMLError, OSError, ValueError) as exc:
         print(f"Error reading envelopes: {exc}", file=sys.stderr)
         return 2
 
@@ -302,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"\n{result.summary}", file=sys.stderr)
     if result.breaking:
-        print("\nrules-breaking changes:", file=sys.stderr)
+        print("\ninvariants-breaking changes:", file=sys.stderr)
         for change in result.breaking:
             detail = f" ({change.detail})" if change.detail else ""
             print(f"  - {change.rule_id}: {change.kind}{detail}", file=sys.stderr)

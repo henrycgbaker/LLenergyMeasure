@@ -9,13 +9,13 @@ and fast.
 
 from __future__ import annotations
 
-import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(_PROJECT_ROOT) not in sys.path:
@@ -410,7 +410,7 @@ class TestEnvelope:
         assert envelope["cases"] == []
         assert envelope["divergences"] == []
 
-    def test_vendor_engine_writes_json(
+    def test_vendor_engine_writes_envelope(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         corpus_path = tmp_path / "t.yaml"
@@ -419,7 +419,7 @@ class TestEnvelope:
             "walker_pinned_range: <5.0\nmined_at: 2026-01-01T00:00:00Z\n"
             "rules: []\n"
         )
-        out_path = tmp_path / "t.json"
+        out_path = tmp_path / "t.vendored.yaml"
 
         monkeypatch.setattr(vendor_rules, "_resolve_engine_version", lambda _e: "test-ver")
 
@@ -431,7 +431,7 @@ class TestEnvelope:
         assert out_path.exists()
         assert envelope["engine_version"] == "test-ver"
         assert divergences == []
-        written = json.loads(out_path.read_text())
+        written = yaml.safe_load(out_path.read_text())
         assert written["schema_version"] == "1.0.0"
 
 
@@ -442,7 +442,7 @@ class TestEnvelope:
 
 def test_main_exits_2_on_missing_corpus(tmp_path: Path) -> None:
     missing = tmp_path / "nope.yaml"
-    out = tmp_path / "out.json"
+    out = tmp_path / "out.vendored.yaml"
     exit_code = vendor_rules.main(
         [
             "--engine",
@@ -462,7 +462,7 @@ def test_main_exits_0_on_no_divergence(tmp_path: Path, monkeypatch: pytest.Monke
         "schema_version: 1.0.0\nengine: transformers\nengine_version: 4.56.0\n"
         "walker_pinned_range: <5.0\nmined_at: 2026-01-01T00:00:00Z\nrules: []\n"
     )
-    out_path = tmp_path / "t.json"
+    out_path = tmp_path / "t.vendored.yaml"
 
     monkeypatch.setattr(vendor_rules, "_resolve_engine_version", lambda _e: "test-ver")
 

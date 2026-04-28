@@ -2,10 +2,10 @@
 
 The validation-rules pipeline is split into independent miners (dynamic miner,
 static miner, future runtime-warning miner) that each write to a staging file
-under ``configs/validation_rules/_staging/{engine}_{name}.yaml``. This module
+under ``configs/engine_invariants/_staging/{engine}_{name}.yaml``. This module
 is the single canonical entry point that runs them, merges their outputs into
 one :class:`~llenergymeasure.config.vendored_rules.loader.VendoredRules`-shaped
-document, and writes ``configs/validation_rules/{engine}.yaml``.
+document, and writes ``configs/engine_invariants/{engine}.proposed.yaml``.
 
 Pipeline: miners → staging → merge → **vendor-validate** → write canonical corpus.
 
@@ -153,7 +153,7 @@ class _Extractor:
     each subagent's extractor must accept a single ``--out`` argument.
 
     ``staging_basename`` is the filename written under
-    ``configs/validation_rules/_staging/``. Convention:
+    ``configs/engine_invariants/_staging/``. Convention:
     ``{engine}_{source_name}.yaml`` so the merger's glob pattern stays
     predictable.
     """
@@ -203,7 +203,7 @@ def _staging_dir(corpus_root: Path) -> Path:
 
 
 def _canonical_path(corpus_root: Path, engine: str) -> Path:
-    return corpus_root / f"{engine}.yaml"
+    return corpus_root / f"{engine}.proposed.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -668,10 +668,12 @@ def _validate_candidates(
 
     The function writes the candidates to ``_staging/{engine}_merged_candidates.yaml``
     as a side effect — that file is the input to :func:`vendor_engine`. The
-    JSON envelope ``vendor_engine`` writes goes to a sibling temp path
-    (``_staging/{engine}_vendor.json``) so the canonical
-    ``src/llenergymeasure/config/vendored_rules/{engine}.json`` (the
-    runtime-loaded sidecar) is never overwritten by this build step.
+    YAML envelope ``vendor_engine`` writes goes to a sibling temp path
+    (``_staging/_vendor_envelope_{engine}.yaml``) so the canonical
+    ``configs/engine_invariants/{engine}.vendored.yaml`` (the
+    runtime-loaded sidecar) is never overwritten by this build step. The
+    leading-underscore prefix keeps the temp file out of the
+    ``{engine}_*.yaml`` glob that ``discover_staging_files`` walks.
     """
     # Local import keeps the merger importable in environments that don't have
     # the engine library installed (e.g. CI lint job): only --skip-validation
@@ -679,7 +681,7 @@ def _validate_candidates(
     from scripts.vendor_rules import vendor_engine
 
     candidates_path = _write_merged_candidates(corpus_root, engine, candidates, envelope)
-    vendor_json_path = _staging_dir(corpus_root) / f"{engine}_vendor.json"
+    vendor_envelope_path = _staging_dir(corpus_root) / f"_vendor_envelope_{engine}.yaml"
 
     # vendor_engine returns (envelope, divergences). Divergences carry rule_id,
     # field, expected, observed — exactly the diagnostic we need to surface in
@@ -687,7 +689,7 @@ def _validate_candidates(
     _vendor_envelope, divergences = vendor_engine(
         engine=engine,
         corpus_path=candidates_path,
-        out_path=vendor_json_path,
+        out_path=vendor_envelope_path,
     )
 
     divergence_by_id: dict[str, list[dict[str, Any]]] = {}
@@ -972,7 +974,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--corpus-root",
         type=Path,
-        default=Path(_PROJECT_ROOT) / "configs" / "validation_rules",
+        default=Path(_PROJECT_ROOT) / "configs" / "engine_invariants",
         help="Root directory for both the canonical corpus and the _staging/ subdir.",
     )
     parser.add_argument(

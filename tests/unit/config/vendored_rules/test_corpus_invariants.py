@@ -212,7 +212,10 @@ def test_corpus_file_is_valid_yaml() -> None:
     import yaml
 
     path = (
-        Path(__file__).resolve().parents[4] / "configs" / "validation_rules" / "transformers.yaml"
+        Path(__file__).resolve().parents[4]
+        / "configs"
+        / "engine_invariants"
+        / "transformers.proposed.yaml"
     )
     assert path.exists()
     doc = yaml.safe_load(path.read_text())

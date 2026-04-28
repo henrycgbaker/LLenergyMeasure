@@ -12,9 +12,24 @@ Design doc: [`.product/designs/config-deduplication-dormancy/runtime-config-vali
 
 ## Layout
 
-- `transformers.yaml` — transformers + BitsAndBytesConfig rules
-- `vllm.yaml` — vLLM rules (landing in a later per-engine phase)
-- `tensorrt.yaml` — TensorRT-LLM rules (landing in a later per-engine phase)
+Each engine ships a lifecycle pair of files:
+
+- `transformers.proposed.yaml` + `transformers.vendored.yaml` — transformers + BitsAndBytesConfig rules
+- `vllm.proposed.yaml` + `vllm.vendored.yaml` — vLLM rules
+- `tensorrt.proposed.yaml` + `tensorrt.vendored.yaml` — TensorRT-LLM rules
+- `_staging/` — gitignored scratch directory for the corpus builder's
+  intermediate artefacts (merged candidates, per-engine vendor envelopes from
+  `--skip-validation` runs); never committed.
+
+The `.proposed.yaml` is the post-mine corpus emitted by
+`scripts/engine_miners/{engine}_miner.py` — declared expectations only. The
+`.vendored.yaml` is the post-replay envelope emitted by
+`scripts/vendor_rules.py` after running each rule against the real engine
+library inside its Docker image — it captures observed outcomes plus any
+divergences from the proposed expectations. The runtime
+`VendoredRulesLoader` reads the `.vendored.yaml` when present and overlays
+its observations onto the proposed YAML, falling back to the proposed YAML
+alone for local development without a vendor run.
 
 ## File envelope
 
@@ -177,8 +192,8 @@ encode the pattern (`greedy_strips_X`, `single_beam_strips_X`,
 
 ### Corpus invariants
 
-These are enforced today via `tests/unit/config/vendored_rules/test_corpus_invariants.py`.
-Phase 50.2b's vendor CI gate extends them.
+These are enforced via `tests/unit/config/vendored_rules/test_corpus_invariants.py`
+and extended by the vendor CI gate (`scripts/vendor_rules.py`).
 
 1. Every rule has a unique `id` within the engine.
 2. `match.fields` is non-empty.
@@ -194,11 +209,11 @@ Phase 50.2b's vendor CI gate extends them.
 ### Via miner (preferred)
 
 1. Rerun the miner for the engine:
-   `python -m scripts.miners.{engine}_miner --out configs/validation_rules/{engine}.yaml`
+   `python -m scripts.engine_miners.{engine}_miner --out configs/engine_invariants/{engine}.proposed.yaml`
    (optionally with `LLENERGY_MINER_FROZEN_AT=<iso-utc>` for reproducibility).
 2. Inspect the diff against the previous corpus file. Review the predicate
    shape and verify it matches the library source before merging.
-3. Open a draft PR. Phase 50.2b's CI gate will verify each rule fires on
+3. Open a draft PR. The vendor CI gate verifies each rule fires on
    `kwargs_positive` and doesn't fire on `kwargs_negative`.
 
 ### Via manual seed
@@ -215,9 +230,9 @@ YAML entry directly:
 
 ### Via feedback loop
 
-Phase 50.3 introduces two automated discovery channels: runtime warning
-capture (`runtime_warning`) and observed-collision detection (`observed_collision`).
-Both open draft PRs with `added_by` set accordingly.
+Two automated discovery channels populate rules from study runs: runtime
+warning capture (`runtime_warning`) and observed-collision detection
+(`observed_collision`). Both open draft PRs with `added_by` set accordingly.
 
 ## PR review checklist
 

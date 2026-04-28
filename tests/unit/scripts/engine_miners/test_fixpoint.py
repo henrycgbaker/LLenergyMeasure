@@ -204,7 +204,7 @@ class TestCorpusIntegration:
     def test_seeded_transformers_corpus_converges(self) -> None:
         import yaml
 
-        corpus_path = _PROJECT_ROOT / "configs" / "validation_rules" / "transformers.yaml"
+        corpus_path = _PROJECT_ROOT / "configs" / "engine_invariants" / "transformers.proposed.yaml"
         corpus = yaml.safe_load(corpus_path.read_text())
         # Should not raise.
         fixpoint_test_corpus(corpus)

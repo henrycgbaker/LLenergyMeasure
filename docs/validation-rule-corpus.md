@@ -9,17 +9,23 @@ This document is the reference for the YAML corpus format: what each field means
 ## File locations
 
 ```
-  configs/validation_rules/
-  ├── transformers.yaml          Authoritative corpus - human-reviewable, git-tracked
+  configs/engine_invariants/
+  ├── transformers.proposed.yaml   Maintainer-seeded corpus, post-mining
+  ├── transformers.vendored.yaml   CI-validated overlay, post-vendor-replay
   └── _staging/
       ├── transformers_static_miner.yaml   Per-miner staging output (not committed)
       ├── transformers_dynamic_miner.yaml
       └── _failed_validation_transformers.yaml  Quarantined rules
 
   src/llenergymeasure/config/vendored_rules/
-  ├── transformers.json          Vendored observations - ships with package
   └── loader.py                  Runtime consumer
 ```
+
+The two corpus files form a lifecycle pair: the miner pipeline writes the
+proposed YAML, then `vendor_rules.py` replays each rule inside the
+engine's Docker image and writes the vendored YAML. The runtime loader
+overlays vendored observations onto the proposed corpus, so consumers see
+CI-confirmed behaviour where available and the declared shape elsewhere.
 
 ---
 

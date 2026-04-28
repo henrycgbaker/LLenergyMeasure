@@ -26,7 +26,7 @@ measurement output, not authorship.
 
 Output
 ------
-Writes ``configs/validation_rules/_staging/vllm_static_miner.yaml``.
+Writes ``configs/engine_invariants/_staging/vllm_static_miner.yaml``.
 """
 
 from __future__ import annotations
@@ -1186,7 +1186,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path("configs/validation_rules/_staging/vllm_static_miner.yaml"),
+        default=Path("configs/engine_invariants/_staging/vllm_static_miner.yaml"),
         help="Where to write the staging YAML.",
     )
     args = parser.parse_args(argv)
