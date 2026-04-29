@@ -374,7 +374,7 @@ class TestStability:
     def test_frozen_at_env_overrides_mined_at(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # Contract relied on by .github/workflows/auto-mine.yml: when
+        # Contract relied on by .github/workflows/engine-invariants.yml: when
         # LLENERGY_MINER_FROZEN_AT is set, the merged envelope's ``mined_at``
         # MUST equal that exact value, regardless of staging timestamps. This
         # is the anchor that keeps re-runs on unchanged source byte-identical

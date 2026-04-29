@@ -23,7 +23,7 @@ Renovate opens PR bumping ARG in Dockerfile
 e.g. ARG VLLM_VERSION=v0.7.3 -> v0.8.0
                       |
                       v
-parameter-discovery.yml auto-fires
+engine-schemas.yml auto-fires
 (guarded: only for Renovate-bot PRs touching Dockerfiles)
                       |
                       v
@@ -55,7 +55,7 @@ Maintainer reviews PR:
    Docker Hub image tags (vLLM), NGC image tags (TensorRT-LLM), and PyPI
    package versions via `customManagers` regex (transformers). Weekly schedule,
    3-day stability window before opening a PR.
-2. When Renovate opens a PR, **parameter-discovery.yml** auto-fires on the
+2. When Renovate opens a PR, **engine-schemas.yml** auto-fires on the
    self-hosted GPU runner.
 3. The workflow determines which engine(s) changed by inspecting the modified
    Dockerfile paths, then runs `./scripts/refresh_discovered_schemas.sh <engine>`.
@@ -83,14 +83,14 @@ Compares ARG version in Dockerfile vs engine_version in schema JSON
 
 On failure, the developer can either:
 - Run locally: `./scripts/refresh_discovered_schemas.sh <engine>`
-- Trigger remotely: `gh workflow run parameter-discovery.yml --field engine=<engine> --field pr_number=<N>`
+- Trigger remotely: `gh workflow run engine-schemas.yml --field engine=<engine> --field pr_number=<N>`
 
 ### Manual Refresh (workflow_dispatch)
 
 For ad-hoc refreshes outside the Renovate flow:
 
 ```bash
-gh workflow run parameter-discovery.yml \
+gh workflow run engine-schemas.yml \
   --field engine=vllm \
   --field pr_number=123
 ```
