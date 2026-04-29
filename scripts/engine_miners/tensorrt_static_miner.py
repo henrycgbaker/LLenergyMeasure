@@ -101,6 +101,34 @@ _DEFAULT_SOURCE_ROOT = Path("/tmp/trt-llm-0.21.0/tensorrt_llm")
 LLM_ARGS_REL = Path("llmapi/llm_args.py")
 BUILDER_REL = Path("builder.py")
 
+# Symbols this miner relies on resolving inside the live ``tensorrt_llm``
+# package. Read by ``scripts._probe`` before mining runs; a missing
+# landmark flips the probe verdict to ``fail`` and skips downstream
+# stages. The miner itself walks /tmp source AST rather than the live
+# package (see ``_load_source``), but probe uses live-package landmarks
+# because that is the seam Renovate's library bumps shift first.
+LANDMARKS: tuple[str, ...] = (
+    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs",
+    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_dtype",
+    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_model",
+    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_model_format_misc",
+    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.set_runtime_knobs_from_build_config",
+    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_build_config_with_runtime_params",
+    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_build_config_remaining",
+    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_speculative_config",
+    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_lora_config_consistency",
+    "tensorrt_llm.llmapi.llm_args.TrtLlmArgs",
+    "tensorrt_llm.llmapi.llm_args.TrtLlmArgs.validate_enable_build_cache",
+    "tensorrt_llm.llmapi.llm_args.LookaheadDecodingConfig",
+    "tensorrt_llm.llmapi.llm_args.LookaheadDecodingConfig.validate_positive_values",
+    "tensorrt_llm.llmapi.llm_args.CalibConfig",
+    "tensorrt_llm.llmapi.llm_args.BatchingType",
+    "tensorrt_llm.llmapi.llm_args.CapacitySchedulerPolicy",
+    "tensorrt_llm.llmapi.llm_args.ContextChunkingPolicy",
+    "tensorrt_llm.builder.Builder",
+    "tensorrt_llm.builder.Builder.build_engine",
+)
+
 # Class-level landmarks. Each entry is ``(class_name, file_relative_path)``.
 _CLASS_LANDMARKS: tuple[tuple[str, Path], ...] = (
     ("BaseLlmArgs", LLM_ARGS_REL),

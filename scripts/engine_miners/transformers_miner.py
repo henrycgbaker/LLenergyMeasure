@@ -68,6 +68,17 @@ from scripts.engine_miners.transformers_dynamic_miner import (  # noqa: E402
     walk_generation_config_rules,
 )
 
+# Symbols this orchestrator (and its delegated dynamic miner) relies on
+# inside the live ``transformers`` package. Read by ``scripts._probe``
+# before mining runs; a missing landmark flips the probe verdict to
+# ``fail`` and skips the downstream stages without re-importing here.
+LANDMARKS: tuple[str, ...] = (
+    "transformers.GenerationConfig",
+    "transformers.GenerationConfig.validate",
+    "transformers.BitsAndBytesConfig",
+    "transformers.BitsAndBytesConfig.post_init",
+)
+
 # ---------------------------------------------------------------------------
 # BitsAndBytesConfig type-check rules (kept hand-curated — CPU-safe)
 # ---------------------------------------------------------------------------
