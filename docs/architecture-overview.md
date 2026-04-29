@@ -150,43 +150,41 @@ The invariant miner pipeline lives in `scripts/engine_miners/` - it is a build-t
   Library version bump (e.g. transformers 4.56.0 → 4.57.0)
                │
                ▼
-  Renovate opens PR bumping Dockerfile ARG
+  Renovate opens PR bumping engine_versions/{engine}.yaml
+  (Dockerfile ARG default is derived at build time from the SSOT)
                │
                ▼
-  Stage 1: auto-mine.yml fires (mining)
+  engine-invariants.yml fires (probe + mine + vendor)
                │
-               ├──► transformers miners run (GH-hosted ubuntu-latest, uv sync)
+               ├──► transformers job runs on GH-hosted ubuntu-latest
+               │    (uv sync; CPU-safe import).
                │
-               ├──► vLLM miners run (self-hosted GPU runner, inside the
-               │    vllm/vllm-openai Docker image — Docker isolates from
-               │    the unified uv.lock, see #437/#464)
+               ├──► vLLM job runs inside llenergymeasure:vllm-${VER} on
+               │    a self-hosted GPU runner (Docker isolates from the
+               │    unified uv.lock; see #437/#464).
                │
-               ├──► TRT-LLM miner runs (self-hosted GPU runner, inside the
-               │    llenergymeasure:tensorrt image; CUDA-aware import)
-               │
-               ├──► lift modules run (pydantic / msgspec / dataclass)
-               │
-               ▼
-  build_corpus.py merges staging files
-  (dedup by fingerprint; static miner wins on match.fields,
-   dynamic miner wins on message_template)
-  → produces configs/engine_invariants/{engine}.proposed.yaml (proposed YAML corpus)
+               ├──► TRT-LLM job runs inside llenergymeasure:tensorrt-${VER}
+               │    on a self-hosted GPU runner (CUDA-aware import).
                │
                ▼
-  Stage 2: invariant-miner.yml fires (vendor gate)
+  Per-engine step sequence inside one job:
+    1. Probe — scripts._probe checks landmarks; `fail` skips downstream.
+    2. Mine — build_corpus.py writes
+       configs/engine_invariants/{engine}.proposed.yaml.
+       (lift modules — pydantic / msgspec / dataclass — run inside
+        build_corpus.py; static miner wins on match.fields, dynamic miner
+        wins on message_template.)
+    3. Vendor-replay — vendor_rules.py replays every rule against the
+       live library (checks: kwargs_positive raises, message matches
+       template, kwargs_negative does NOT raise). Confirmed cases write
+       to configs/engine_invariants/{engine}.vendored.yaml; divergent
+       rules surface as a non-zero exit when --fail-on-divergence is set.
+    4. Doc-gen — generate_invariants_doc.py refreshes
+       docs/generated/invariants-{engine}.md.
+    5. Atomic writeback — one bot commit covers proposed.yaml,
+       vendored.yaml, the digest doc, and engine_versions/{engine}.compat.json.
                │
                ▼
-  vendor_rules.py replays every rule against the live library
-  (checks: kwargs_positive raises, message matches template,
-            kwargs_negative does NOT raise)
-               │
-               ├──► divergent rules quarantined to _failed_validation_*.yaml
-               │
-               └──► confirmed rules written to:
-                    configs/engine_invariants/{engine}.vendored.yaml
-               │
-               ▼
-  Bot writes vendored YAML back to PR branch
   CI must be green before merge
                │
                ▼

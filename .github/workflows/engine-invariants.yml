@@ -1,0 +1,1008 @@
+name: Engine Invariants — Probe + Mine + Vendor
+
+# Per-concern workflow for the engine-invariants layer. Each per-engine job
+# probes the producer module's landmarks, mines the rules corpus, vendor-
+# replays it against the live library, regenerates the invariants digest
+# doc, and atomically commits all four artefacts back to the PR branch.
+#
+# Replaces the deleted auto-mine.yml + invariant-miner.yml pair (the
+# Stage-1/Stage-2 split was honest about the YAML existence but the Python
+# code already runs vendor logic in-process during mining; merging the
+# workflows reflects existing coupling).
+#
+# Cross-pipeline coordination — ONE atomic writeback per PR cycle, gated
+# on a wait-for-sibling check against engine-schemas.yml — lands in a
+# follow-up alongside engine-schemas.yml. For now this workflow performs
+# its writeback unconditionally; there is no sibling to coordinate with.
+#
+# Per-engine runner choice mirrors the deleted workflows:
+#   transformers : ubuntu-latest GH-hosted runner; CPU-safe import.
+#   vllm         : self-hosted GPU runner inside llenergymeasure:vllm-${VER}.
+#                  vLLM miners ARE CPU-safe but the unified uv.lock breaks
+#                  vllm's torch/torchvision via tensorrt-llm 0.21.0's
+#                  transitive constraints (#437, #464); building inside the
+#                  vLLM image side-steps the resolution problem.
+#   tensorrt     : self-hosted GPU runner inside llenergymeasure:tensorrt-
+#                  ${VER}; TRT-LLM 0.21.0 loads CUDA bindings on import so
+#                  CPU runners cannot import the library at all.
+#
+# Determinism contract:
+#   The LLENERGY_MINER_FROZEN_AT and LLENERGY_VENDOR_FROZEN_AT env vars are
+#   set from the author date of the most recent commit touching any INPUT
+#   path (Dockerfile, miner modules, lift modules, build_corpus, vendor
+#   script, refresh helper, SSOT yaml). The anchor is stable across the
+#   workflow's own commit-back (which only touches OUTPUT paths), so re-
+#   runs on unchanged source emit byte-identical YAML. This determinism
+#   is THE prevention against the synchronize-loop the watchdog catches.
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - "engine_versions/*.yaml"
+      - "docker/Dockerfile.*"
+      - "scripts/engine_miners/**"
+      - "scripts/vendor_rules.py"
+      - "scripts/_invariant_vendor_common.py"
+      - "scripts/refresh_invariant_rules.sh"
+      - "configs/engine_invariants/**"
+  workflow_dispatch:
+    inputs:
+      engine:
+        description: "Engine to probe + mine + vendor"
+        required: true
+        type: choice
+        options:
+          - transformers
+          - vllm
+          - tensorrt
+          - all
+      pr_number:
+        description: "PR number to comment on and label (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: engine-invariants-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CORPUS_DIR: configs/engine_invariants
+
+jobs:
+  invariants-transformers:
+    if: github.event_name != 'workflow_dispatch' || inputs.engine == 'transformers' || inputs.engine == 'all'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Mint llem-ci-bot App token
+        # Short-lived (~1 hour) GitHub App token. Events it produces are
+        # NOT subject to the default GITHUB_TOKEN recursive-workflow guard,
+        # so the commit-back below can legitimately retrigger downstream
+        # CI. Skipped on fork PRs (secrets are not exposed there) so the
+        # workflow still runs read-only for external contributors.
+        id: app-token
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: engine-invariants-transformers-3.12
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --dev --extra transformers
+
+      - name: Resolve transformers version from SSOT
+        id: version
+        run: |
+          VER=$(yq '.library.current_version' engine_versions/transformers.yaml)
+          if [[ -z "$VER" || "$VER" == "null" ]]; then
+            echo "Could not resolve transformers version from engine_versions/transformers.yaml" >&2
+            exit 1
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute stable mining + vendor anchor
+        id: anchor
+        # Pin the YAML's mined_at + the vendor envelope's vendored_at to
+        # the SHA + author date of the most recent commit touching any
+        # INPUT path. Stable across the workflow's own commit-back (which
+        # only touches OUTPUT YAML), so re-runs on unchanged source emit
+        # byte-identical envelopes. Without this, every re-run emits a
+        # fresh wallclock timestamp, git diff picks it up, the commit-back
+        # fires, and the synchronize loops.
+        run: |
+          PATHS=(
+            "engine_versions/transformers.yaml"
+            "docker/Dockerfile.transformers"
+            "scripts/engine_miners/transformers_static_miner.py"
+            "scripts/engine_miners/transformers_dynamic_miner.py"
+            "scripts/engine_miners/transformers_miner.py"
+            "scripts/engine_miners/build_corpus.py"
+            "scripts/engine_miners/_base.py"
+            "scripts/engine_miners/_pydantic_lift.py"
+            "scripts/engine_miners/_msgspec_lift.py"
+            "scripts/engine_miners/_dataclass_lift.py"
+            "scripts/engine_miners/_fixpoint_test.py"
+            "scripts/vendor_rules.py"
+            "scripts/_invariant_vendor_common.py"
+            "scripts/refresh_invariant_rules.sh"
+          )
+          SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
+          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
+          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+
+      - name: Probe — landmark resolution check
+        id: probe
+        run: |
+          uv run python -m scripts._probe \
+            --engine transformers --producer invariants \
+            > /tmp/probe-transformers.json
+          VERDICT=$(jq -r '.verdict' /tmp/probe-transformers.json)
+          echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
+
+      - name: Save current YAMLs for diffing
+        if: steps.probe.outputs.verdict == 'pass'
+        run: |
+          mkdir -p /tmp/engine-invariants-diff
+          for KIND in proposed vendored; do
+            OLD_YAML="${CORPUS_DIR}/transformers.${KIND}.yaml"
+            DEST="/tmp/engine-invariants-diff/transformers.${KIND}.old.yaml"
+            if [[ -f "$OLD_YAML" ]]; then
+              cp "$OLD_YAML" "$DEST"
+            else
+              : > "$DEST"
+            fi
+          done
+
+      - name: Mine corpus — write proposed.yaml
+        if: steps.probe.outputs.verdict == 'pass'
+        env:
+          LLENERGY_MINER_FROZEN_AT: ${{ steps.anchor.outputs.date }}
+        run: |
+          uv run python -m scripts.engine_miners.build_corpus --engine transformers
+
+      - name: Vendor-replay — write vendored.yaml
+        if: steps.probe.outputs.verdict == 'pass'
+        env:
+          LLENERGY_VENDOR_FROZEN_AT: ${{ steps.anchor.outputs.date }}
+        run: |
+          uv run python scripts/vendor_rules.py \
+            --engine transformers \
+            --corpus "${CORPUS_DIR}/transformers.proposed.yaml" \
+            --out "${CORPUS_DIR}/transformers.vendored.yaml" \
+            --vendor-commit "${{ steps.anchor.outputs.sha }}" \
+            --fail-on-divergence
+
+      - name: Regenerate invariants digest doc
+        if: steps.probe.outputs.verdict == 'pass'
+        run: |
+          uv run python scripts/generate_invariants_doc.py \
+            --engine transformers \
+            --out docs/generated/invariants-transformers.md
+
+      - name: Classify diff (proposed + vendored)
+        if: steps.probe.outputs.verdict == 'pass'
+        id: diff
+        run: |
+          set +e
+          uv run python scripts/diff_engine_invariants.py \
+            /tmp/engine-invariants-diff/transformers.vendored.old.yaml \
+            "${CORPUS_DIR}/transformers.vendored.yaml" \
+            --out /tmp/engine-invariants-diff/transformers.vendored.md \
+            --title "Transformers vendored invariants diff"
+          VENDORED_EXIT=$?
+          set -e
+
+          PROPOSED_CHANGED=true
+          if diff -q /tmp/engine-invariants-diff/transformers.proposed.old.yaml \
+                    "${CORPUS_DIR}/transformers.proposed.yaml" >/dev/null 2>&1; then
+            PROPOSED_CHANGED=false
+          fi
+
+          VENDORED_CHANGED=true
+          if diff -q /tmp/engine-invariants-diff/transformers.vendored.old.yaml \
+                    "${CORPUS_DIR}/transformers.vendored.yaml" >/dev/null 2>&1; then
+            VENDORED_CHANGED=false
+          fi
+
+          if [[ "$PROPOSED_CHANGED" == "false" && "$VENDORED_CHANGED" == "false" ]]; then
+            CLASSIFICATION="no-changes"
+          elif [[ $VENDORED_EXIT -eq 1 ]]; then
+            CLASSIFICATION="breaking"
+          else
+            CLASSIFICATION="safe"
+          fi
+          echo "classification=${CLASSIFICATION}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Engine invariants — transformers"
+            echo
+            if [[ "$CLASSIFICATION" == "no-changes" ]]; then
+              echo "_No changes to proposed or vendored invariants._"
+            else
+              if [[ "$PROPOSED_CHANGED" == "true" ]]; then
+                echo "### Proposed corpus diff"
+                echo
+                echo '```diff'
+                diff -u /tmp/engine-invariants-diff/transformers.proposed.old.yaml \
+                        "${CORPUS_DIR}/transformers.proposed.yaml" | head -n 200 || true
+                echo '```'
+                echo
+              fi
+              if [[ -f /tmp/engine-invariants-diff/transformers.vendored.md ]]; then
+                cat /tmp/engine-invariants-diff/transformers.vendored.md
+              fi
+            fi
+          } > /tmp/engine-invariants-diff/transformers.summary.md
+
+      - name: Probe-fail comment (skip downstream)
+        if: steps.probe.outputs.verdict == 'fail' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          MISSING=$(jq -r '.landmarks_missing | join(", ")' /tmp/probe-transformers.json)
+          {
+            echo "## Engine invariants — transformers (probe-blocked)"
+            echo
+            echo "Probe failed: producer landmarks no longer resolve under the installed library."
+            echo
+            echo "Missing: \`${MISSING}\`"
+            echo
+            echo "Downstream mine + vendor steps were skipped. Patch the producer module or run \`@llem-ci-bot /approve-reuse transformers invariants\` once the landmarks have been updated."
+          } | gh pr comment "$PR_NUMBER" --body-file -
+          gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
+
+      - name: Upload diff artefact
+        if: steps.probe.outputs.verdict == 'pass'
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-invariants-diff-transformers
+          path: |
+            /tmp/engine-invariants-diff/transformers.proposed.old.yaml
+            /tmp/engine-invariants-diff/transformers.vendored.old.yaml
+            /tmp/engine-invariants-diff/transformers.summary.md
+            ${{ env.CORPUS_DIR }}/transformers.proposed.yaml
+            ${{ env.CORPUS_DIR }}/transformers.vendored.yaml
+
+      - name: Post per-pipeline comment (suppress on empty)
+        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          gh pr comment "$PR_NUMBER" --body-file /tmp/engine-invariants-diff/transformers.summary.md
+
+      - name: Apply per-pipeline label
+        if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          for L in invariants-changed invariants-breaking invariants-safe probe-blocked; do
+            gh pr edit "$PR_NUMBER" --remove-label "$L" 2>/dev/null || true
+          done
+          case "${{ steps.diff.outputs.classification }}" in
+            breaking)  gh pr edit "$PR_NUMBER" --add-label "invariants-breaking" --add-label "invariants-changed" 2>/dev/null || true ;;
+            safe)      gh pr edit "$PR_NUMBER" --add-label "invariants-safe" --add-label "invariants-changed" 2>/dev/null || true ;;
+            no-changes) ;;
+          esac
+
+      - name: Atomic writeback
+        # No wait-for-sibling guard yet — engine-schemas.yml lands as a
+        # follow-up; this writeback runs unconditionally for now. The
+        # cross-pipeline rollup label below is also unconditional pending
+        # the sibling.
+        if: steps.probe.outputs.verdict == 'pass' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.name  "llem-ci-bot[bot]"
+          git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
+
+          git add \
+            "${CORPUS_DIR}/transformers.proposed.yaml" \
+            "${CORPUS_DIR}/transformers.vendored.yaml" \
+            docs/generated/invariants-transformers.md \
+            engine_versions/transformers.compat.json 2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "No engine-invariants artefact changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore(invariants): refresh transformers proposed + vendored corpus"
+          git push --force-with-lease
+
+      - name: Apply cross-pipeline rollup label
+        if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          if [[ "${{ steps.diff.outputs.classification }}" != "breaking" ]]; then
+            gh pr edit "$PR_NUMBER" --add-label "safe-bump" 2>/dev/null || true
+          else
+            gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
+          fi
+
+  invariants-vllm:
+    if: github.event_name != 'workflow_dispatch' || inputs.engine == 'vllm' || inputs.engine == 'all'
+    runs-on: self-hosted
+    timeout-minutes: 60
+    steps:
+      - name: Mint llem-ci-bot App token
+        id: app-token
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Clean workspace (fix root-owned files from prior Docker runs)
+        # Container-written artefacts persist as root-owned on the self-
+        # hosted runner and break subsequent checkouts otherwise. Mirrors
+        # gpu-ci.yml.
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "find /workspace -not -user $(id -u) -delete 2>/dev/null || true"
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Resolve vLLM version from SSOT
+        id: version
+        run: |
+          VER=$(yq '.library.current_version' engine_versions/vllm.yaml)
+          if [[ -z "$VER" || "$VER" == "null" ]]; then
+            echo "Could not resolve vllm version from engine_versions/vllm.yaml" >&2
+            exit 1
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "image=llenergymeasure:vllm-${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build or reuse vLLM image
+        # SSOT-driven build-arg per the engine-coupling design's D-1
+        # decision: Renovate updates SSOT only; Dockerfile ARG default
+        # is a fallback for local manual builds; CI passes the SSOT
+        # value at docker-build time. Layer cache makes the FROM step a
+        # no-op when the upstream tag is unchanged.
+        run: |
+          IMAGE="${{ steps.version.outputs.image }}"
+          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            docker build \
+              -f docker/Dockerfile.vllm \
+              -t "$IMAGE" \
+              --build-arg VLLM_VERSION="${{ steps.version.outputs.version }}" \
+              .
+          else
+            echo "Reusing cached $IMAGE."
+          fi
+
+      - name: Compute stable mining + vendor anchor
+        id: anchor
+        run: |
+          PATHS=(
+            "engine_versions/vllm.yaml"
+            "docker/Dockerfile.vllm"
+            "scripts/engine_miners/vllm_static_miner.py"
+            "scripts/engine_miners/vllm_dynamic_miner.py"
+            "scripts/engine_miners/build_corpus.py"
+            "scripts/engine_miners/_base.py"
+            "scripts/engine_miners/_pydantic_lift.py"
+            "scripts/engine_miners/_msgspec_lift.py"
+            "scripts/engine_miners/_dataclass_lift.py"
+            "scripts/engine_miners/_fixpoint_test.py"
+            "scripts/vendor_rules.py"
+            "scripts/_invariant_vendor_common.py"
+            "scripts/refresh_invariant_rules.sh"
+          )
+          SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
+          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
+          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+
+      - name: Probe — landmark resolution check (in container)
+        id: probe
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+        run: |
+          docker run --rm --gpus all \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            --entrypoint python3 \
+            "$IMAGE" \
+            -m scripts._probe --engine vllm --producer invariants \
+            > /tmp/probe-vllm.json
+          VERDICT=$(jq -r '.verdict' /tmp/probe-vllm.json)
+          echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
+
+      - name: Fix container-written file ownership (probe cache)
+        if: always()
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
+
+      - name: Save current YAMLs for diffing
+        if: steps.probe.outputs.verdict == 'pass'
+        run: |
+          mkdir -p /tmp/engine-invariants-diff
+          for KIND in proposed vendored; do
+            OLD_YAML="${CORPUS_DIR}/vllm.${KIND}.yaml"
+            DEST="/tmp/engine-invariants-diff/vllm.${KIND}.old.yaml"
+            if [[ -f "$OLD_YAML" ]]; then
+              cp "$OLD_YAML" "$DEST"
+            else
+              : > "$DEST"
+            fi
+          done
+
+      - name: Mine + vendor inside container
+        if: steps.probe.outputs.verdict == 'pass'
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          ANCHOR_SHA: ${{ steps.anchor.outputs.sha }}
+          ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
+        run: |
+          docker run --rm --gpus all \
+            -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
+            -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            --entrypoint bash \
+            "$IMAGE" \
+            -c "
+              set -euo pipefail
+              python3 -m scripts.engine_miners.build_corpus --engine vllm
+              python3 scripts/vendor_rules.py \
+                --engine vllm \
+                --corpus '${CORPUS_DIR}/vllm.proposed.yaml' \
+                --out '${CORPUS_DIR}/vllm.vendored.yaml' \
+                --vendor-commit '${ANCHOR_SHA}' \
+                --fail-on-divergence
+            "
+
+      - name: Fix container-written file ownership (mine + vendor)
+        if: always()
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
+
+      - name: Set up Python (host) for doc-gen + diff
+        if: steps.probe.outputs.verdict == 'pass'
+        # Doc generator + differ run on the host (no GPU needed); pure
+        # CPU/IO Python.
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: engine-invariants-vllm-docgen-3.12
+          python-version: "3.12"
+
+      - name: Regenerate invariants digest doc
+        if: steps.probe.outputs.verdict == 'pass'
+        run: |
+          uv run --no-sync --with pyyaml python scripts/generate_invariants_doc.py \
+            --engine vllm \
+            --out docs/generated/invariants-vllm.md
+
+      - name: Classify diff (proposed + vendored)
+        if: steps.probe.outputs.verdict == 'pass'
+        id: diff
+        run: |
+          set +e
+          uv run --no-sync --with pyyaml python scripts/diff_engine_invariants.py \
+            /tmp/engine-invariants-diff/vllm.vendored.old.yaml \
+            "${CORPUS_DIR}/vllm.vendored.yaml" \
+            --out /tmp/engine-invariants-diff/vllm.vendored.md \
+            --title "vLLM vendored invariants diff"
+          VENDORED_EXIT=$?
+          set -e
+
+          PROPOSED_CHANGED=true
+          if diff -q /tmp/engine-invariants-diff/vllm.proposed.old.yaml \
+                    "${CORPUS_DIR}/vllm.proposed.yaml" >/dev/null 2>&1; then
+            PROPOSED_CHANGED=false
+          fi
+
+          VENDORED_CHANGED=true
+          if diff -q /tmp/engine-invariants-diff/vllm.vendored.old.yaml \
+                    "${CORPUS_DIR}/vllm.vendored.yaml" >/dev/null 2>&1; then
+            VENDORED_CHANGED=false
+          fi
+
+          if [[ "$PROPOSED_CHANGED" == "false" && "$VENDORED_CHANGED" == "false" ]]; then
+            CLASSIFICATION="no-changes"
+          elif [[ $VENDORED_EXIT -eq 1 ]]; then
+            CLASSIFICATION="breaking"
+          else
+            CLASSIFICATION="safe"
+          fi
+          echo "classification=${CLASSIFICATION}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Engine invariants — vllm"
+            echo
+            if [[ "$CLASSIFICATION" == "no-changes" ]]; then
+              echo "_No changes to proposed or vendored invariants._"
+            else
+              if [[ "$PROPOSED_CHANGED" == "true" ]]; then
+                echo "### Proposed corpus diff"
+                echo
+                echo '```diff'
+                diff -u /tmp/engine-invariants-diff/vllm.proposed.old.yaml \
+                        "${CORPUS_DIR}/vllm.proposed.yaml" | head -n 200 || true
+                echo '```'
+                echo
+              fi
+              if [[ -f /tmp/engine-invariants-diff/vllm.vendored.md ]]; then
+                cat /tmp/engine-invariants-diff/vllm.vendored.md
+              fi
+            fi
+          } > /tmp/engine-invariants-diff/vllm.summary.md
+
+      - name: Probe-fail comment (skip downstream)
+        if: steps.probe.outputs.verdict == 'fail' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          MISSING=$(jq -r '.landmarks_missing | join(", ")' /tmp/probe-vllm.json)
+          {
+            echo "## Engine invariants — vllm (probe-blocked)"
+            echo
+            echo "Probe failed: producer landmarks no longer resolve under the installed library."
+            echo
+            echo "Missing: \`${MISSING}\`"
+            echo
+            echo "Downstream mine + vendor steps were skipped. Patch the producer module or run \`@llem-ci-bot /approve-reuse vllm invariants\` once the landmarks have been updated."
+          } | gh pr comment "$PR_NUMBER" --body-file -
+          gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
+
+      - name: Upload diff artefact
+        if: steps.probe.outputs.verdict == 'pass'
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-invariants-diff-vllm
+          path: |
+            /tmp/engine-invariants-diff/vllm.proposed.old.yaml
+            /tmp/engine-invariants-diff/vllm.vendored.old.yaml
+            /tmp/engine-invariants-diff/vllm.summary.md
+            ${{ env.CORPUS_DIR }}/vllm.proposed.yaml
+            ${{ env.CORPUS_DIR }}/vllm.vendored.yaml
+
+      - name: Post per-pipeline comment (suppress on empty)
+        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          gh pr comment "$PR_NUMBER" --body-file /tmp/engine-invariants-diff/vllm.summary.md
+
+      - name: Apply per-pipeline label
+        if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          for L in invariants-changed invariants-breaking invariants-safe probe-blocked; do
+            gh pr edit "$PR_NUMBER" --remove-label "$L" 2>/dev/null || true
+          done
+          case "${{ steps.diff.outputs.classification }}" in
+            breaking)  gh pr edit "$PR_NUMBER" --add-label "invariants-breaking" --add-label "invariants-changed" 2>/dev/null || true ;;
+            safe)      gh pr edit "$PR_NUMBER" --add-label "invariants-safe" --add-label "invariants-changed" 2>/dev/null || true ;;
+            no-changes) ;;
+          esac
+
+      - name: Atomic writeback
+        if: steps.probe.outputs.verdict == 'pass' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.name  "llem-ci-bot[bot]"
+          git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
+
+          git add \
+            "${CORPUS_DIR}/vllm.proposed.yaml" \
+            "${CORPUS_DIR}/vllm.vendored.yaml" \
+            docs/generated/invariants-vllm.md \
+            engine_versions/vllm.compat.json 2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "No engine-invariants artefact changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore(invariants): refresh vllm proposed + vendored corpus"
+          git push --force-with-lease
+
+      - name: Apply cross-pipeline rollup label
+        if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          if [[ "${{ steps.diff.outputs.classification }}" != "breaking" ]]; then
+            gh pr edit "$PR_NUMBER" --add-label "safe-bump" 2>/dev/null || true
+          else
+            gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
+          fi
+
+  invariants-tensorrt:
+    if: github.event_name != 'workflow_dispatch' || inputs.engine == 'tensorrt' || inputs.engine == 'all'
+    runs-on: self-hosted
+    timeout-minutes: 60
+    steps:
+      - name: Mint llem-ci-bot App token
+        id: app-token
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Clean workspace (fix root-owned files from prior Docker runs)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "find /workspace -not -user $(id -u) -delete 2>/dev/null || true"
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Resolve TRT-LLM version from SSOT
+        id: version
+        run: |
+          VER=$(yq '.library.current_version' engine_versions/tensorrt.yaml)
+          if [[ -z "$VER" || "$VER" == "null" ]]; then
+            echo "Could not resolve tensorrt version from engine_versions/tensorrt.yaml" >&2
+            exit 1
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "image=llenergymeasure:tensorrt-${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build or reuse TRT-LLM image
+        # SSOT-driven build-arg per D-1; layer cache keeps rebuilds fast
+        # when the NGC tag is unchanged. Note Dockerfile ARG is named
+        # TRTLLM_VERSION (not TENSORRT_VERSION) — preserved.
+        run: |
+          IMAGE="${{ steps.version.outputs.image }}"
+          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            docker build \
+              -f docker/Dockerfile.tensorrt \
+              -t "$IMAGE" \
+              --build-arg TRTLLM_VERSION="${{ steps.version.outputs.version }}" \
+              .
+          else
+            echo "Reusing cached $IMAGE."
+          fi
+
+      - name: Compute stable mining + vendor anchor
+        id: anchor
+        run: |
+          PATHS=(
+            "engine_versions/tensorrt.yaml"
+            "docker/Dockerfile.tensorrt"
+            "scripts/engine_miners/tensorrt_static_miner.py"
+            "scripts/engine_miners/tensorrt_miner.py"
+            "scripts/engine_miners/build_corpus.py"
+            "scripts/engine_miners/_base.py"
+            "scripts/engine_miners/_pydantic_lift.py"
+            "scripts/engine_miners/_msgspec_lift.py"
+            "scripts/engine_miners/_dataclass_lift.py"
+            "scripts/engine_miners/_fixpoint_test.py"
+            "scripts/vendor_rules.py"
+            "scripts/_invariant_vendor_common.py"
+            "scripts/refresh_invariant_rules.sh"
+          )
+          SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
+          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
+          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+
+      - name: Probe — landmark resolution check (in container)
+        id: probe
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+        # The NGC image ships the tensorrt_llm package source as part of
+        # the installed package; the static miner expects it at
+        # /tmp/trt-llm-${VER}/tensorrt_llm. Symlink before probe so
+        # _read_landmarks resolves correctly. LD_LIBRARY_PATH override
+        # so libtensorrt_llm.so finds bundled CUDA compat libs on hosts
+        # whose driver predates the NGC image's CUDA target.
+        run: |
+          docker run --rm --gpus all \
+            -e LD_LIBRARY_PATH="/usr/local/cuda/compat/lib.real:/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib" \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            --entrypoint bash \
+            "$IMAGE" \
+            -c "
+              set -euo pipefail
+              SRC=\$(python3 -c 'import tensorrt_llm, pathlib; print(pathlib.Path(tensorrt_llm.__file__).parent)')
+              if [[ -z \"\$SRC\" || ! -d \"\$SRC\" ]]; then
+                echo 'Could not locate installed tensorrt_llm package source' >&2
+                exit 1
+              fi
+              mkdir -p /tmp/trt-llm-${{ steps.version.outputs.version }}
+              ln -sfn \"\$SRC\" /tmp/trt-llm-${{ steps.version.outputs.version }}/tensorrt_llm
+              python3 -m scripts._probe --engine tensorrt --producer invariants
+            " > /tmp/probe-tensorrt.json
+          VERDICT=$(jq -r '.verdict' /tmp/probe-tensorrt.json)
+          echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
+
+      - name: Fix container-written file ownership (probe cache)
+        if: always()
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
+
+      - name: Save current YAMLs for diffing
+        if: steps.probe.outputs.verdict == 'pass'
+        run: |
+          mkdir -p /tmp/engine-invariants-diff
+          for KIND in proposed vendored; do
+            OLD_YAML="${CORPUS_DIR}/tensorrt.${KIND}.yaml"
+            DEST="/tmp/engine-invariants-diff/tensorrt.${KIND}.old.yaml"
+            if [[ -f "$OLD_YAML" ]]; then
+              cp "$OLD_YAML" "$DEST"
+            else
+              : > "$DEST"
+            fi
+          done
+
+      - name: Mine + vendor inside container
+        if: steps.probe.outputs.verdict == 'pass'
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          ANCHOR_SHA: ${{ steps.anchor.outputs.sha }}
+          ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
+          TRTLLM_VER: ${{ steps.version.outputs.version }}
+        run: |
+          docker run --rm --gpus all \
+            -e LD_LIBRARY_PATH="/usr/local/cuda/compat/lib.real:/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib" \
+            -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
+            -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            --entrypoint bash \
+            "$IMAGE" \
+            -c "
+              set -euo pipefail
+              SRC=\$(python3 -c 'import tensorrt_llm, pathlib; print(pathlib.Path(tensorrt_llm.__file__).parent)')
+              mkdir -p /tmp/trt-llm-${TRTLLM_VER}
+              ln -sfn \"\$SRC\" /tmp/trt-llm-${TRTLLM_VER}/tensorrt_llm
+              python3 -m scripts.engine_miners.build_corpus --engine tensorrt
+              python3 scripts/vendor_rules.py \
+                --engine tensorrt \
+                --corpus '${CORPUS_DIR}/tensorrt.proposed.yaml' \
+                --out '${CORPUS_DIR}/tensorrt.vendored.yaml' \
+                --vendor-commit '${ANCHOR_SHA}' \
+                --fail-on-divergence
+            "
+
+      - name: Fix container-written file ownership (mine + vendor)
+        if: always()
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
+
+      - name: Set up Python (host) for doc-gen + diff
+        if: steps.probe.outputs.verdict == 'pass'
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: engine-invariants-tensorrt-docgen-3.12
+          python-version: "3.12"
+
+      - name: Regenerate invariants digest doc
+        if: steps.probe.outputs.verdict == 'pass'
+        run: |
+          uv run --no-sync --with pyyaml python scripts/generate_invariants_doc.py \
+            --engine tensorrt \
+            --out docs/generated/invariants-tensorrt.md
+
+      - name: Classify diff (proposed + vendored)
+        if: steps.probe.outputs.verdict == 'pass'
+        id: diff
+        run: |
+          set +e
+          uv run --no-sync --with pyyaml python scripts/diff_engine_invariants.py \
+            /tmp/engine-invariants-diff/tensorrt.vendored.old.yaml \
+            "${CORPUS_DIR}/tensorrt.vendored.yaml" \
+            --out /tmp/engine-invariants-diff/tensorrt.vendored.md \
+            --title "TensorRT-LLM vendored invariants diff"
+          VENDORED_EXIT=$?
+          set -e
+
+          PROPOSED_CHANGED=true
+          if diff -q /tmp/engine-invariants-diff/tensorrt.proposed.old.yaml \
+                    "${CORPUS_DIR}/tensorrt.proposed.yaml" >/dev/null 2>&1; then
+            PROPOSED_CHANGED=false
+          fi
+
+          VENDORED_CHANGED=true
+          if diff -q /tmp/engine-invariants-diff/tensorrt.vendored.old.yaml \
+                    "${CORPUS_DIR}/tensorrt.vendored.yaml" >/dev/null 2>&1; then
+            VENDORED_CHANGED=false
+          fi
+
+          if [[ "$PROPOSED_CHANGED" == "false" && "$VENDORED_CHANGED" == "false" ]]; then
+            CLASSIFICATION="no-changes"
+          elif [[ $VENDORED_EXIT -eq 1 ]]; then
+            CLASSIFICATION="breaking"
+          else
+            CLASSIFICATION="safe"
+          fi
+          echo "classification=${CLASSIFICATION}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Engine invariants — tensorrt"
+            echo
+            if [[ "$CLASSIFICATION" == "no-changes" ]]; then
+              echo "_No changes to proposed or vendored invariants._"
+            else
+              if [[ "$PROPOSED_CHANGED" == "true" ]]; then
+                echo "### Proposed corpus diff"
+                echo
+                echo '```diff'
+                diff -u /tmp/engine-invariants-diff/tensorrt.proposed.old.yaml \
+                        "${CORPUS_DIR}/tensorrt.proposed.yaml" | head -n 200 || true
+                echo '```'
+                echo
+              fi
+              if [[ -f /tmp/engine-invariants-diff/tensorrt.vendored.md ]]; then
+                cat /tmp/engine-invariants-diff/tensorrt.vendored.md
+              fi
+            fi
+          } > /tmp/engine-invariants-diff/tensorrt.summary.md
+
+      - name: Probe-fail comment (skip downstream)
+        if: steps.probe.outputs.verdict == 'fail' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          MISSING=$(jq -r '.landmarks_missing | join(", ")' /tmp/probe-tensorrt.json)
+          {
+            echo "## Engine invariants — tensorrt (probe-blocked)"
+            echo
+            echo "Probe failed: producer landmarks no longer resolve under the installed library."
+            echo
+            echo "Missing: \`${MISSING}\`"
+            echo
+            echo "Downstream mine + vendor steps were skipped. Patch the producer module or run \`@llem-ci-bot /approve-reuse tensorrt invariants\` once the landmarks have been updated."
+          } | gh pr comment "$PR_NUMBER" --body-file -
+          gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
+
+      - name: Upload diff artefact
+        if: steps.probe.outputs.verdict == 'pass'
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-invariants-diff-tensorrt
+          path: |
+            /tmp/engine-invariants-diff/tensorrt.proposed.old.yaml
+            /tmp/engine-invariants-diff/tensorrt.vendored.old.yaml
+            /tmp/engine-invariants-diff/tensorrt.summary.md
+            ${{ env.CORPUS_DIR }}/tensorrt.proposed.yaml
+            ${{ env.CORPUS_DIR }}/tensorrt.vendored.yaml
+
+      - name: Post per-pipeline comment (suppress on empty)
+        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          gh pr comment "$PR_NUMBER" --body-file /tmp/engine-invariants-diff/tensorrt.summary.md
+
+      - name: Apply per-pipeline label
+        if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          for L in invariants-changed invariants-breaking invariants-safe probe-blocked; do
+            gh pr edit "$PR_NUMBER" --remove-label "$L" 2>/dev/null || true
+          done
+          case "${{ steps.diff.outputs.classification }}" in
+            breaking)  gh pr edit "$PR_NUMBER" --add-label "invariants-breaking" --add-label "invariants-changed" 2>/dev/null || true ;;
+            safe)      gh pr edit "$PR_NUMBER" --add-label "invariants-safe" --add-label "invariants-changed" 2>/dev/null || true ;;
+            no-changes) ;;
+          esac
+
+      - name: Atomic writeback
+        if: steps.probe.outputs.verdict == 'pass' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.name  "llem-ci-bot[bot]"
+          git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
+
+          git add \
+            "${CORPUS_DIR}/tensorrt.proposed.yaml" \
+            "${CORPUS_DIR}/tensorrt.vendored.yaml" \
+            docs/generated/invariants-tensorrt.md \
+            engine_versions/tensorrt.compat.json 2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "No engine-invariants artefact changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore(invariants): refresh tensorrt proposed + vendored corpus"
+          git push --force-with-lease
+
+      - name: Apply cross-pipeline rollup label
+        if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          if [[ "${{ steps.diff.outputs.classification }}" != "breaking" ]]; then
+            gh pr edit "$PR_NUMBER" --add-label "safe-bump" 2>/dev/null || true
+          else
+            gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
+          fi

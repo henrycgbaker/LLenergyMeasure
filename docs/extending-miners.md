@@ -389,22 +389,16 @@ def test_landmark_checks_raise_on_missing():
 
 ## Step 7: Add to CI
 
-1. Add the engine to `invariant-miner.yml`:
-
-```yaml
-- name: Run myengine miners
-  run: |
-    python scripts/engine_miners/myengine_miner.py
-```
+1. Add a per-engine job to `engine-invariants.yml` mirroring the existing `invariants-transformers` / `invariants-vllm` / `invariants-tensorrt` jobs. The job runs probe → mine → vendor-replay → doc-gen → atomic-writeback inline; copying one of the existing jobs and swapping the engine name + module paths is the fastest path.
 
 2. Set the runner tier:
    - CPU-safe import AND clean resolution under the repo's unified `uv.lock` (e.g. transformers): add to the GH-hosted `ubuntu-latest` job with `uv sync --extra <engine>`.
-   - CPU-safe import but unified-lock resolution breaks the engine (e.g. vLLM, where tensorrt-llm 0.21.0's transitive constraints corrupt vllm's torch/torchvision; #437): add to the self-hosted GPU runner inside the engine's published Docker image, mirroring `mine-vllm` in `auto-mine.yml`.
-   - CUDA-aware import required (e.g. TRT-LLM): add to the self-hosted GPU runner inside the engine's Docker image, mirroring `mine-tensorrt`.
+   - CPU-safe import but unified-lock resolution breaks the engine (e.g. vLLM, where tensorrt-llm 0.21.0's transitive constraints corrupt vllm's torch/torchvision; #437): mirror `invariants-vllm` — self-hosted GPU runner inside `llenergymeasure:vllm-${VER}`.
+   - CUDA-aware import required (e.g. TRT-LLM): mirror `invariants-tensorrt` — self-hosted GPU runner inside `llenergymeasure:tensorrt-${VER}`.
 
-3. Add the engine's Dockerfile to the vendor-rules step so `vendor_rules.py` can replay rules inside the engine's container.
+3. The vendor-replay step runs inside the engine's container in the same job as the miner — no separate vendor workflow to update.
 
-4. Add a Renovate `packageRule` so library bumps trigger `invariant-miner.yml`.
+4. Add a Renovate `packageRule` so library bumps trigger `engine-invariants.yml` via the `engine_versions/{engine}.yaml` path filter.
 
 ---
 
@@ -524,13 +518,13 @@ Concrete scenario: a refactor in `_pydantic_lift.py` changes how it walks `Field
 - The Renovate PR merges with a corpus that has 60% the recall it had before.
 - Users hitting the lost validations get no constraint check at runtime.
 
-**Mitigation: the Stage 1 / Stage 2 split (the trust seam).**
+**Mitigation: the proposed-vs-vendored YAML pair (the trust seam).**
 
-Stage 1 (`auto-mine.yml`) regenerates the YAML corpus and the bot writes the new YAML to the PR branch as a commit. Stage 2 (`invariant-miner.yml`) only runs the vendor gate against the YAML.
+`engine-invariants.yml` mines the proposed corpus into `configs/engine_invariants/{engine}.proposed.yaml` and then vendor-replays it into `configs/engine_invariants/{engine}.vendored.yaml` in the same job. Both YAMLs land in one atomic commit-back to the PR branch, and the per-pipeline diff comment includes both diffs.
 
-Because Stage 1 commits the YAML *before* Stage 2 runs, the YAML diff is reviewable in the PR. A miner refactor that silently drops 18 rules shows up as 18 deletions in the YAML diff - a maintainer reading the PR notices the regression before the JSON gate's green tick lands.
+Because the proposed-corpus diff is emitted alongside the vendored diff, a miner refactor that silently drops 18 rules shows up as 18 deletions in the proposed-corpus diff - a maintainer reading the PR notices the regression even when the vendor gate's verdict on the surviving rules is green.
 
-This is the reason the pipeline is split into two stages instead of being unified into one workflow that mines + vendors + commits a single artefact. The split forces YAML-diff visibility *before* the JSON gate's authority is exercised. Cross-reference: #450 (trust seam architecture decision), #465 (auto-mine writeback contract).
+The historical Stage-1 / Stage-2 split between `auto-mine.yml` and `invariant-miner.yml` forced the same property by serialising two workflows; the merger preserves the property by emitting two diffs from one workflow. Cross-reference: #450 (trust seam architecture decision), #465 (writeback contract).
 
 ### Tooling for diagnosis
 
