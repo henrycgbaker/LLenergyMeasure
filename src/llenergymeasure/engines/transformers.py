@@ -41,7 +41,7 @@ class TransformersEngine:
         try:
             import torch
 
-            return torch.__version__
+            return torch.__version__  # type: ignore[no-any-return]
         except Exception:
             return "unknown"
 

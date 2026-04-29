@@ -76,7 +76,7 @@ class VLLMEngine:
         """
         from llenergymeasure.engines._helpers import require_import
 
-        _vllm = require_import("vllm", "vllm")
+        _vllm = require_import("vllm")
         LLM = _vllm.LLM
         SamplingParams = _vllm.SamplingParams
 

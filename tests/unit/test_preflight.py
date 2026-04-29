@@ -120,7 +120,7 @@ def test_preflight_engine_not_installed(monkeypatch: pytest.MonkeyPatch) -> None
     with pytest.raises(PreFlightError) as exc_info:
         run_preflight(config)
 
-    assert "transformers not installed" in str(exc_info.value)
+    assert "transformers not available on host" in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------

@@ -5,11 +5,13 @@ name: Engine Schemas — Probe + Discover
 # inside the SSOT-driven Docker image, regenerates the curation digest doc,
 # and atomically commits artefacts back to the PR branch.
 #
-# Per-engine runner choice:
-#   transformers : ubuntu-latest GH-hosted runner; CPU-safe import.
+# Per-engine runner choice — all engines run inside their Docker image:
+#   transformers : ubuntu-latest GH-hosted runner; introspector runs inside
+#                  llenergymeasure:transformers-${VER} (no GPU needed).
 #   vllm         : self-hosted GPU runner inside llenergymeasure:vllm-${VER}
-#                  (unified uv.lock breaks vllm's torch via tensorrt-llm
-#                  0.21.0's transitive constraints; #437, #464).
+#                  (the host uv.lock used to break vllm's torch via tensorrt-
+#                  llm 0.21.0's transitive constraints; engines now run
+#                  exclusively in their own image — see #437, #464).
 #   tensorrt     : self-hosted GPU runner inside llenergymeasure:tensorrt-
 #                  ${VER}; TRT-LLM 0.21.0 loads CUDA bindings on import.
 #
@@ -81,16 +83,6 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-suffix: engine-schemas-transformers-3.12
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: uv sync --dev --extra transformers
-
       - name: Resolve transformers version from SSOT
         id: version
         run: |
@@ -100,6 +92,25 @@ jobs:
             exit 1
           fi
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "image=llenergymeasure:transformers-${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build or reuse transformers image
+        # SSOT is the canonical version; the Dockerfile ARG default is a
+        # local-build fallback. CI passes the SSOT value at build time so
+        # the two cannot drift. INSTALL_FA3=false keeps the build fast
+        # (FA3 from-source is ~1h); discovery doesn't need flash-attn.
+        run: |
+          IMAGE="${{ steps.version.outputs.image }}"
+          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            docker build \
+              -f docker/Dockerfile.transformers \
+              -t "$IMAGE" \
+              --build-arg TRANSFORMERS_VERSION="${{ steps.version.outputs.version }}" \
+              --build-arg INSTALL_FA3=false \
+              .
+          else
+            echo "Reusing cached $IMAGE."
+          fi
 
       - name: Compute stable discovery anchor
         id: anchor
@@ -125,11 +136,17 @@ jobs:
           fi
           echo "date=${DATE}" >> "$GITHUB_OUTPUT"
 
-      - name: Probe — landmark resolution check
+      - name: Probe — landmark resolution check (in container)
         id: probe
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
         run: |
-          uv run python -m scripts._probe \
-            --engine transformers --producer schemas \
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            --entrypoint python3 \
+            "$IMAGE" \
+            -m scripts._probe --engine transformers --producer schemas \
             > /tmp/probe-transformers.json
           VERDICT=$(jq -r '.verdict' /tmp/probe-transformers.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
@@ -146,14 +163,38 @@ jobs:
             echo '{}' > "$DEST"
           fi
 
-      - name: Discover schema
+      - name: Discover schema inside container
         if: steps.probe.outputs.verdict == 'pass'
         env:
-          LLENERGY_DISCOVERY_FROZEN_AT: ${{ steps.anchor.outputs.date }}
+          IMAGE: ${{ steps.version.outputs.image }}
+          ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
         run: |
-          uv run python -m scripts.engine_introspectors \
-            --engine transformers \
-            --output "${SCHEMAS_DIR}/transformers.json"
+          docker run --rm \
+            -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            --entrypoint python3 \
+            "$IMAGE" \
+            -m scripts.engine_introspectors \
+              --engine transformers \
+              --image-ref "${IMAGE}" \
+              --output "${SCHEMAS_DIR}/transformers.json"
+
+      - name: Set up Python (host) for doc-gen + diff
+        if: steps.probe.outputs.verdict == 'pass'
+        # Doc generator + differ run on the host (no engine import needed,
+        # but they DO import llenergymeasure.* + scripts.engine_miners.*).
+        # `uv sync --dev` installs the lean host project (no engine extras).
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: engine-schemas-transformers-docgen-3.12
+          python-version: "3.12"
+
+      - name: Install lean host project for doc-gen
+        if: steps.probe.outputs.verdict == 'pass'
+        run: uv sync --dev
 
       - name: Regenerate curation digest
         if: steps.probe.outputs.verdict == 'pass'
@@ -210,15 +251,23 @@ jobs:
           if [[ -z "$PR_NUMBER" ]]; then
             exit 0
           fi
-          MISSING=$(jq -r '.landmarks_missing | join(", ")' /tmp/probe-transformers.json)
           {
             echo "## Engine schemas — transformers (probe-blocked)"
             echo
-            echo "Probe failed: introspector landmarks no longer resolve under the installed library."
+            echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
             echo
-            echo "Missing: \`${MISSING}\`"
+            echo "**Missing landmarks:**"
             echo
-            echo "Downstream discovery was skipped. Patch the introspector module or run \`@llem-ci-bot /approve-reuse transformers schemas\` once the landmarks have been updated."
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-transformers.json
+            echo
+            echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
+            echo
+            echo "**To unblock,** choose one of:"
+            echo
+            echo "- **Patch the introspector module's landmarks** — required when the library has genuinely renamed or removed the missing symbols. The introspector code needs updating to match the new library API."
+            echo "- **Run \`@llem-ci-bot /approve-reuse transformers schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
+            echo
+            echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
           } | gh pr comment "$PR_NUMBER" --body-file -
           gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
 
@@ -262,42 +311,6 @@ jobs:
             no-changes) ;;
           esac
 
-      - name: Detect sibling workflow run for this SHA
-        # PRs whose path-filter only matches one workflow's exclusive paths
-        # never trigger the sibling, so wait-on-check-action would block
-        # for its full timeout. This pre-flight skips the wait when no
-        # sibling run was queued for this head SHA.
-        id: sibling
-        if: steps.probe.outputs.verdict == 'pass' && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          SIBLING_NAME="Engine Invariants — Probe + Mine + Vendor"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          COUNT=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&per_page=50" \
-            --jq "[.workflow_runs[] | select(.name == \"${SIBLING_NAME}\")] | length")
-          if [[ "${COUNT}" -gt 0 ]]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Sibling workflow ${SIBLING_NAME} did not fire for this SHA; skipping wait."
-          fi
-
-      - name: Wait for sibling pipeline to complete
-        # Block until the engine-invariants pipeline finishes for this same
-        # head SHA. Already-finished sibling exits immediately. Whichever
-        # pipeline reaches its writeback step second performs its commit
-        # against the tip that already includes the first pipeline's
-        # writeback (disjoint paths; force-with-lease handles the fast-
-        # forward).
-        if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          check-name: 'Engine Invariants — Probe + Mine + Vendor'
-          ref: ${{ github.event.pull_request.head.sha }}
-          timeout: '600'
-          repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-
       - name: Atomic writeback
         if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
@@ -333,6 +346,17 @@ jobs:
           else
             gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
           fi
+
+      - name: Probe-fail gate (red CI)
+        # Probe-fail must show as a red CI check: PRs cannot merge with a
+        # stale corpus. The probe-blocked comment above explains how to
+        # resolve (/approve-reuse to widen the SSOT envelope, or landmark
+        # patch); this gate makes that resolution mandatory rather than
+        # advisory.
+        if: steps.probe.outputs.verdict == 'fail'
+        run: |
+          echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
+          exit 1
 
   schemas-vllm:
     if: github.event_name != 'workflow_dispatch' || inputs.engine == 'vllm' || inputs.engine == 'all'
@@ -470,25 +494,29 @@ jobs:
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
-        # Doc generator + differ run on the host (no GPU needed); pure
-        # CPU/IO Python.
+        # Doc generator + differ run on the host (no GPU needed, but they
+        # DO import llenergymeasure.* + scripts.engine_miners.*).
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-suffix: engine-schemas-vllm-docgen-3.12
           python-version: "3.12"
 
+      - name: Install lean host project for doc-gen
+        if: steps.probe.outputs.verdict == 'pass'
+        run: uv sync --dev
+
       - name: Regenerate curation digest
         if: steps.probe.outputs.verdict == 'pass'
         run: |
-          uv run --no-sync --with pyyaml --with pydantic python scripts/generate_curation_doc.py --engine vllm
+          uv run python scripts/generate_curation_doc.py --engine vllm
 
       - name: Classify diff
         if: steps.probe.outputs.verdict == 'pass'
         id: diff
         run: |
           set +e
-          uv run --no-sync python scripts/diff_discovered_schemas.py \
+          uv run python scripts/diff_discovered_schemas.py \
             /tmp/engine-schemas-diff/vllm.old.json \
             "${SCHEMAS_DIR}/vllm.json" \
             > /tmp/engine-schemas-diff/vllm.diff.json
@@ -533,15 +561,23 @@ jobs:
           if [[ -z "$PR_NUMBER" ]]; then
             exit 0
           fi
-          MISSING=$(jq -r '.landmarks_missing | join(", ")' /tmp/probe-vllm.json)
           {
             echo "## Engine schemas — vllm (probe-blocked)"
             echo
-            echo "Probe failed: introspector landmarks no longer resolve under the installed library."
+            echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
             echo
-            echo "Missing: \`${MISSING}\`"
+            echo "**Missing landmarks:**"
             echo
-            echo "Downstream discovery was skipped. Patch the introspector module or run \`@llem-ci-bot /approve-reuse vllm schemas\` once the landmarks have been updated."
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-vllm.json
+            echo
+            echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
+            echo
+            echo "**To unblock,** choose one of:"
+            echo
+            echo "- **Patch the introspector module's landmarks** — required when the library has genuinely renamed or removed the missing symbols. The introspector code needs updating to match the new library API."
+            echo "- **Run \`@llem-ci-bot /approve-reuse vllm schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
+            echo
+            echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
           } | gh pr comment "$PR_NUMBER" --body-file -
           gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
 
@@ -585,32 +621,6 @@ jobs:
             no-changes) ;;
           esac
 
-      - name: Detect sibling workflow run for this SHA
-        id: sibling
-        if: steps.probe.outputs.verdict == 'pass' && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          SIBLING_NAME="Engine Invariants — Probe + Mine + Vendor"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          COUNT=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&per_page=50" \
-            --jq "[.workflow_runs[] | select(.name == \"${SIBLING_NAME}\")] | length")
-          if [[ "${COUNT}" -gt 0 ]]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Sibling workflow ${SIBLING_NAME} did not fire for this SHA; skipping wait."
-          fi
-
-      - name: Wait for sibling pipeline to complete
-        if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          check-name: 'Engine Invariants — Probe + Mine + Vendor'
-          ref: ${{ github.event.pull_request.head.sha }}
-          timeout: '600'
-          repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-
       - name: Atomic writeback
         if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
@@ -647,7 +657,23 @@ jobs:
             gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
           fi
 
+      - name: Probe-fail gate (red CI)
+        # Probe-fail must show as a red CI check: PRs cannot merge with a
+        # stale corpus. The probe-blocked comment above explains how to
+        # resolve (/approve-reuse to widen the SSOT envelope, or landmark
+        # patch); this gate makes that resolution mandatory rather than
+        # advisory.
+        if: steps.probe.outputs.verdict == 'fail'
+        run: |
+          echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
+          exit 1
+
   schemas-tensorrt:
+    # tensorrt symlink trick (#472) doesn't resolve the package source
+    # inside NGC; both __file__.parent and __path__[0] return non-
+    # directory paths. Tracked separately; #500 explores option-b
+    # source-tarball extraction. Mark non-blocking until that lands.
+    continue-on-error: true
     if: github.event_name != 'workflow_dispatch' || inputs.engine == 'tensorrt' || inputs.engine == 'all'
     runs-on: self-hosted
     timeout-minutes: 60
@@ -737,7 +763,7 @@ jobs:
             "$IMAGE" \
             -c "
               set -euo pipefail
-              SRC=\$(python3 -c 'import tensorrt_llm, pathlib; print(pathlib.Path(tensorrt_llm.__file__).parent)')
+              SRC=\$(python3 -c 'import tensorrt_llm; print(list(tensorrt_llm.__path__)[0])')
               if [[ -z \"\$SRC\" || ! -d \"\$SRC\" ]]; then
                 echo 'Could not locate installed tensorrt_llm package source' >&2
                 exit 1
@@ -785,7 +811,7 @@ jobs:
             "$IMAGE" \
             -c "
               set -euo pipefail
-              SRC=\$(python3 -c 'import tensorrt_llm, pathlib; print(pathlib.Path(tensorrt_llm.__file__).parent)')
+              SRC=\$(python3 -c 'import tensorrt_llm; print(list(tensorrt_llm.__path__)[0])')
               mkdir -p /tmp/trt-llm-${TRTLLM_VER}
               ln -sfn \"\$SRC\" /tmp/trt-llm-${TRTLLM_VER}/tensorrt_llm
               python3 -m scripts.engine_introspectors \
@@ -809,17 +835,21 @@ jobs:
           cache-suffix: engine-schemas-tensorrt-docgen-3.12
           python-version: "3.12"
 
+      - name: Install lean host project for doc-gen
+        if: steps.probe.outputs.verdict == 'pass'
+        run: uv sync --dev
+
       - name: Regenerate curation digest
         if: steps.probe.outputs.verdict == 'pass'
         run: |
-          uv run --no-sync --with pyyaml --with pydantic python scripts/generate_curation_doc.py --engine tensorrt
+          uv run python scripts/generate_curation_doc.py --engine tensorrt
 
       - name: Classify diff
         if: steps.probe.outputs.verdict == 'pass'
         id: diff
         run: |
           set +e
-          uv run --no-sync python scripts/diff_discovered_schemas.py \
+          uv run python scripts/diff_discovered_schemas.py \
             /tmp/engine-schemas-diff/tensorrt.old.json \
             "${SCHEMAS_DIR}/tensorrt.json" \
             > /tmp/engine-schemas-diff/tensorrt.diff.json
@@ -864,15 +894,23 @@ jobs:
           if [[ -z "$PR_NUMBER" ]]; then
             exit 0
           fi
-          MISSING=$(jq -r '.landmarks_missing | join(", ")' /tmp/probe-tensorrt.json)
           {
             echo "## Engine schemas — tensorrt (probe-blocked)"
             echo
-            echo "Probe failed: introspector landmarks no longer resolve under the installed library."
+            echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
             echo
-            echo "Missing: \`${MISSING}\`"
+            echo "**Missing landmarks:**"
             echo
-            echo "Downstream discovery was skipped. Patch the introspector module or run \`@llem-ci-bot /approve-reuse tensorrt schemas\` once the landmarks have been updated."
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-tensorrt.json
+            echo
+            echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
+            echo
+            echo "**To unblock,** choose one of:"
+            echo
+            echo "- **Patch the introspector module's landmarks** — required when the library has genuinely renamed or removed the missing symbols. The introspector code needs updating to match the new library API."
+            echo "- **Run \`@llem-ci-bot /approve-reuse tensorrt schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
+            echo
+            echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
           } | gh pr comment "$PR_NUMBER" --body-file -
           gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
 
@@ -916,32 +954,6 @@ jobs:
             no-changes) ;;
           esac
 
-      - name: Detect sibling workflow run for this SHA
-        id: sibling
-        if: steps.probe.outputs.verdict == 'pass' && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          SIBLING_NAME="Engine Invariants — Probe + Mine + Vendor"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          COUNT=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&per_page=50" \
-            --jq "[.workflow_runs[] | select(.name == \"${SIBLING_NAME}\")] | length")
-          if [[ "${COUNT}" -gt 0 ]]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Sibling workflow ${SIBLING_NAME} did not fire for this SHA; skipping wait."
-          fi
-
-      - name: Wait for sibling pipeline to complete
-        if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          check-name: 'Engine Invariants — Probe + Mine + Vendor'
-          ref: ${{ github.event.pull_request.head.sha }}
-          timeout: '600'
-          repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-
       - name: Atomic writeback
         if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
@@ -977,3 +989,14 @@ jobs:
           else
             gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
           fi
+
+      - name: Probe-fail gate (red CI)
+        # Probe-fail must show as a red CI check: PRs cannot merge with a
+        # stale corpus. The probe-blocked comment above explains how to
+        # resolve (/approve-reuse to widen the SSOT envelope, or landmark
+        # patch); this gate makes that resolution mandatory rather than
+        # advisory.
+        if: steps.probe.outputs.verdict == 'fail'
+        run: |
+          echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
+          exit 1

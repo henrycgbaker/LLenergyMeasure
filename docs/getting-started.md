@@ -14,7 +14,9 @@ This guide has three tracks. Choose one based on your setup:
 
 ### Prerequisites
 
-- `llenergymeasure[transformers]` installed (see [Installation](installation.md))
+- `llenergymeasure` installed (see [Installation](installation.md))
+- Docker + NVIDIA Container Toolkit installed — every engine, including
+  Transformers, runs inside a per-engine Docker image (see [development.md](development.md))
 - NVIDIA GPU available
 
 ### 1. Verify your environment
@@ -23,7 +25,10 @@ This guide has three tracks. Choose one based on your setup:
 llem config
 ```
 
-Check that the output shows `pytorch: installed` under Engines. If it shows "not installed", run `pip install "llenergymeasure[transformers]"`.
+Check that the output shows your GPU detected and an energy sampler
+selected. Engines will show as "not installed" on host — that is expected;
+they run inside Docker. See [Installation](installation.md) and
+[development.md](development.md) for the Docker build/run pattern.
 
 ### 2. Run your first experiment
 
@@ -90,8 +95,9 @@ llem run --model gpt2 -e pytorch --output /data/experiments
 
 ### Prerequisites
 
-- `llenergymeasure[transformers]` installed (base + pytorch needed even for Docker dispatch)
+- `llenergymeasure` installed (host-side orchestrator)
 - Docker + NVIDIA Container Toolkit installed — see [Docker Setup](docker-setup.md)
+- vLLM Docker image built — see [development.md](development.md)
 
 ### 1. Create a config file
 
@@ -133,7 +139,8 @@ runs with the same config load the cached engine and are much faster.
 ### Prerequisites
 
 - Docker + NVIDIA Container Toolkit installed — see [Docker Setup](docker-setup.md)
-- `llenergymeasure[transformers]` installed (base + pytorch needed even for Docker dispatch)
+- `llenergymeasure` installed (host-side orchestrator)
+- TensorRT-LLM Docker image built — see [development.md](development.md)
 - NVIDIA GPU with SM >= 7.5 (Turing or newer; e.g. RTX 2000-series, A100, H100)
 
 ### 1. Create a config file

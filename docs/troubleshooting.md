@@ -23,24 +23,31 @@ environment, or the system is CPU-only.
 
 ---
 
-### Engine not installed
+### Engine not available on host
 
-**Symptom:** `llem run -e vllm ...` fails immediately with an import error.
+**Symptom:** `llem run -e vllm ...` fails immediately with an import error
+mentioning the engine package.
 
-**Cause:** The required engine package is not installed.
+**Cause:** Engines have no host install path — they run inside per-engine
+Docker images. A host import of `transformers`, `vllm`, or `tensorrt_llm`
+will always fail by design.
 
-**Fix:** Install the matching extra:
+**Fix:** Build the engine image and dispatch via the Docker runner. The
+canonical pattern is in [development.md](development.md); the short form
+is:
 
 ```bash
-pip install "llenergymeasure[transformers]"    # Transformers engine
-pip install "llenergymeasure[vllm]"       # vLLM engine
-pip install "llenergymeasure[tensorrt]"   # TensorRT-LLM engine
+VER=$(yq '.library.current_version' engine_versions/transformers.yaml)
+docker build -f docker/Dockerfile.transformers \
+  --build-arg TRANSFORMERS_VERSION="$VER" \
+  -t llenergymeasure:transformers-${VER} .
 ```
 
-Run `llem config` to see the current status of each engine.
+Replace `transformers` with `vllm` or `tensorrt` (and add `--gpus all` for
+those two) for the other engines. Then run `llem run` with a Docker runner
+configured for the engine — see [docker-setup.md](docker-setup.md).
 
-For vLLM and TensorRT-LLM, the recommended approach is to use the Docker runner rather
-than a host install — see [docker-setup.md](docker-setup.md).
+Run `llem config` to see the current status of each engine.
 
 ---
 

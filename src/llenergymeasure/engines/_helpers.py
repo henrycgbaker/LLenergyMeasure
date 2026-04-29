@@ -203,7 +203,7 @@ def get_cuda_peak_memory_mb() -> float:
         import torch
 
         if torch.cuda.is_available():
-            return torch.cuda.max_memory_allocated() / (1024 * 1024)
+            return torch.cuda.max_memory_allocated() / (1024 * 1024)  # type: ignore[no-any-return]
     except Exception:
         pass
     return 0.0
@@ -240,12 +240,16 @@ def raise_engine_error(exc: Exception, engine_name: str, *, hint: str = "") -> N
     raise EngineError(f"{engine_name} inference failed: {exc}") from exc
 
 
-def require_import(module: str, extra_name: str) -> Any:
-    """Import *module* or raise EngineError with install instructions.
+def require_import(module: str) -> Any:
+    """Import *module* or raise EngineError pointing at the Docker contract.
+
+    Engine libraries (`transformers`, `vllm`, `tensorrt_llm`) only resolve
+    inside their respective Docker images. A host import failure is the
+    expected state when running `llem` outside a container — surface that
+    plainly rather than suggesting a host install that no longer exists.
 
     Args:
         module: Fully-qualified module name (e.g. "vllm").
-        extra_name: pip extra name (e.g. "vllm", "tensorrt").
 
     Returns:
         The imported module object.
@@ -256,7 +260,8 @@ def require_import(module: str, extra_name: str) -> Any:
         return importlib.import_module(module)
     except ImportError as e:
         raise EngineError(
-            f"{module} is not installed. Install it with: pip install llenergymeasure[{extra_name}]"
+            f"{module} is not available on host. Engine code runs inside Docker — "
+            f"see docs/development.md for the build/run pattern."
         ) from e
 
 

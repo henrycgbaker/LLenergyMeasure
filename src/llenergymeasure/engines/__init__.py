@@ -25,10 +25,9 @@ def detect_default_engine() -> Engine:
     if is_engine_available(Engine.VLLM):
         return Engine.VLLM
     raise EngineError(
-        "No inference engine installed. Install one with: "
-        "pip install llenergymeasure[transformers], "
-        "pip install llenergymeasure[vllm], or "
-        "pip install llenergymeasure[tensorrt]"
+        "No inference engine available on host. Engines run inside Docker — "
+        "build the engine image and dispatch via `llem run`. "
+        "See docs/development.md for the build/run pattern."
     )
 
 

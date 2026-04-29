@@ -5,13 +5,16 @@ name: Engine Invariants — Probe + Mine + Vendor
 # replays it against the live library, regenerates the invariants digest
 # doc, and atomically commits all four artefacts back to the PR branch.
 #
-# Per-engine runner choice:
-#   transformers : ubuntu-latest GH-hosted runner; CPU-safe import.
+# Per-engine runner choice — all engines run inside their Docker image:
+#   transformers : ubuntu-latest GH-hosted runner; mine inside
+#                  llenergymeasure:transformers-${VER} (no GPU needed,
+#                  miners are CPU-safe).
 #   vllm         : self-hosted GPU runner inside llenergymeasure:vllm-${VER}.
-#                  vLLM miners ARE CPU-safe but the unified uv.lock breaks
-#                  vllm's torch/torchvision via tensorrt-llm 0.21.0's
-#                  transitive constraints (#437, #464); building inside the
-#                  vLLM image side-steps the resolution problem.
+#                  vLLM miners ARE CPU-safe but the unified host uv.lock
+#                  used to break vllm's torch via tensorrt-llm 0.21.0's
+#                  transitive constraints (#437, #464); engines now run
+#                  exclusively in their own image, so this lane never
+#                  touches the host lock.
 #   tensorrt     : self-hosted GPU runner inside llenergymeasure:tensorrt-
 #                  ${VER}; TRT-LLM 0.21.0 loads CUDA bindings on import so
 #                  CPU runners cannot import the library at all.
@@ -89,16 +92,6 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-suffix: engine-invariants-transformers-3.12
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: uv sync --dev --extra transformers
-
       - name: Resolve transformers version from SSOT
         id: version
         run: |
@@ -108,6 +101,27 @@ jobs:
             exit 1
           fi
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "image=llenergymeasure:transformers-${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build or reuse transformers image
+        # SSOT is the canonical version; the Dockerfile ARG default is a
+        # local-build fallback. CI passes the SSOT value at build time so
+        # the two cannot drift. Layer cache makes the FROM step a no-op
+        # when the upstream torch/transformers tag is unchanged.
+        # INSTALL_FA3=false keeps the build fast (FA3 from-source is ~1h);
+        # the miners + vendor pass don't need flash-attn.
+        run: |
+          IMAGE="${{ steps.version.outputs.image }}"
+          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            docker build \
+              -f docker/Dockerfile.transformers \
+              -t "$IMAGE" \
+              --build-arg TRANSFORMERS_VERSION="${{ steps.version.outputs.version }}" \
+              --build-arg INSTALL_FA3=false \
+              .
+          else
+            echo "Reusing cached $IMAGE."
+          fi
 
       - name: Compute stable mining + vendor anchor
         id: anchor
@@ -144,11 +158,17 @@ jobs:
           echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
           echo "date=${DATE}" >> "$GITHUB_OUTPUT"
 
-      - name: Probe — landmark resolution check
+      - name: Probe — landmark resolution check (in container)
         id: probe
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
         run: |
-          uv run python -m scripts._probe \
-            --engine transformers --producer invariants \
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            --entrypoint python3 \
+            "$IMAGE" \
+            -m scripts._probe --engine transformers --producer invariants \
             > /tmp/probe-transformers.json
           VERDICT=$(jq -r '.verdict' /tmp/probe-transformers.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
@@ -167,24 +187,46 @@ jobs:
             fi
           done
 
-      - name: Mine corpus — write proposed.yaml
+      - name: Mine + vendor inside container
         if: steps.probe.outputs.verdict == 'pass'
         env:
-          LLENERGY_MINER_FROZEN_AT: ${{ steps.anchor.outputs.date }}
+          IMAGE: ${{ steps.version.outputs.image }}
+          ANCHOR_SHA: ${{ steps.anchor.outputs.sha }}
+          ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
         run: |
-          uv run python -m scripts.engine_miners.build_corpus --engine transformers
+          docker run --rm \
+            -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
+            -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            --entrypoint bash \
+            "$IMAGE" \
+            -c "
+              set -euo pipefail
+              python3 -m scripts.engine_miners.build_corpus --engine transformers
+              python3 scripts/vendor_rules.py \
+                --engine transformers \
+                --corpus '${CORPUS_DIR}/transformers.proposed.yaml' \
+                --out '${CORPUS_DIR}/transformers.vendored.yaml' \
+                --vendor-commit '${ANCHOR_SHA}' \
+                --fail-on-divergence
+            "
 
-      - name: Vendor-replay — write vendored.yaml
+      - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
-        env:
-          LLENERGY_VENDOR_FROZEN_AT: ${{ steps.anchor.outputs.date }}
-        run: |
-          uv run python scripts/vendor_rules.py \
-            --engine transformers \
-            --corpus "${CORPUS_DIR}/transformers.proposed.yaml" \
-            --out "${CORPUS_DIR}/transformers.vendored.yaml" \
-            --vendor-commit "${{ steps.anchor.outputs.sha }}" \
-            --fail-on-divergence
+        # Doc generator + differ run on the host (no engine import needed,
+        # but they DO import llenergymeasure.* + scripts.engine_miners.*).
+        # `uv sync --dev` installs the lean host project (no engine extras).
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: engine-invariants-transformers-docgen-3.12
+          python-version: "3.12"
+
+      - name: Install lean host project for doc-gen
+        if: steps.probe.outputs.verdict == 'pass'
+        run: uv sync --dev
 
       - name: Regenerate invariants digest doc
         if: steps.probe.outputs.verdict == 'pass'
@@ -257,15 +299,23 @@ jobs:
           if [[ -z "$PR_NUMBER" ]]; then
             exit 0
           fi
-          MISSING=$(jq -r '.landmarks_missing | join(", ")' /tmp/probe-transformers.json)
           {
             echo "## Engine invariants — transformers (probe-blocked)"
             echo
-            echo "Probe failed: producer landmarks no longer resolve under the installed library."
+            echo "**Probe failed.** Producer landmarks no longer resolve under the installed library."
             echo
-            echo "Missing: \`${MISSING}\`"
+            echo "**Missing landmarks:**"
             echo
-            echo "Downstream mine + vendor steps were skipped. Patch the producer module or run \`@llem-ci-bot /approve-reuse transformers invariants\` once the landmarks have been updated."
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-transformers.json
+            echo
+            echo "**Downstream mine + vendor steps were skipped.** No corpus changes were committed against this PR."
+            echo
+            echo "**To unblock,** choose one of:"
+            echo
+            echo "- **Patch the producer module's landmarks** — required when the library has genuinely renamed or removed the missing symbols. The miner code needs updating to match the new library API."
+            echo "- **Run \`@llem-ci-bot /approve-reuse transformers invariants\`** — widens the SSOT pin envelope to declare \"the existing miner code is valid for this library version too.\" Only useful when the library bumped *past* the miner's previously-validated version range but the landmarks still resolve."
+            echo
+            echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only a producer-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
           } | gh pr comment "$PR_NUMBER" --body-file -
           gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
 
@@ -333,17 +383,22 @@ jobs:
 
       - name: Wait for sibling pipeline to complete
         # Block until the engine-schemas pipeline finishes for this same
-        # head SHA. Already-finished sibling exits immediately. Whichever
-        # pipeline reaches its writeback step second performs its commit
-        # against the tip that already includes the first pipeline's
-        # writeback (disjoint paths; force-with-lease + rebase handle the
-        # fast-forward).
+        # head SHA. Already-finished sibling exits immediately. Schemas
+        # writes back first; this wait makes invariants the second writer.
+        # Disjoint writeback paths + force-with-lease + rebase handle
+        # any race on the tip.
+        #
+        # CONTRACT: check-name below must match the sibling cell's JOB ID
+        # in engine-schemas.yml (schemas-{transformers,vllm,tensorrt}). If
+        # those jobs are renamed, this wait silently degrades to a no-op
+        # because wait-on-check-action polls a check that will never
+        # appear. There is no CI guard against this drift — keep them
+        # in sync by hand.
         if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
-          check-name: 'Engine Schemas — Probe + Discover'
+          check-name: 'schemas-transformers'
           ref: ${{ github.event.pull_request.head.sha }}
-          timeout: '600'
           repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Atomic writeback
@@ -382,6 +437,17 @@ jobs:
           else
             gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
           fi
+
+      - name: Probe-fail gate (red CI)
+        # Probe-fail must show as a red CI check: PRs cannot merge with a
+        # stale corpus. The probe-blocked comment above explains how to
+        # resolve (/approve-reuse to widen the SSOT envelope, or landmark
+        # patch); this gate makes that resolution mandatory rather than
+        # advisory.
+        if: steps.probe.outputs.verdict == 'fail'
+        run: |
+          echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
+          exit 1
 
   invariants-vllm:
     if: github.event_name != 'workflow_dispatch' || inputs.engine == 'vllm' || inputs.engine == 'all'
@@ -538,18 +604,23 @@ jobs:
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
-        # Doc generator + differ run on the host (no GPU needed); pure
-        # CPU/IO Python.
+        # Doc generator + differ run on the host (no GPU needed, but they
+        # DO import llenergymeasure.* + scripts.engine_miners.*).
+        # `uv sync --dev` installs the lean host project (no engine extras).
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-suffix: engine-invariants-vllm-docgen-3.12
           python-version: "3.12"
 
+      - name: Install lean host project for doc-gen
+        if: steps.probe.outputs.verdict == 'pass'
+        run: uv sync --dev
+
       - name: Regenerate invariants digest doc
         if: steps.probe.outputs.verdict == 'pass'
         run: |
-          uv run --no-sync --with pyyaml python scripts/generate_invariants_doc.py \
+          uv run python scripts/generate_invariants_doc.py \
             --engine vllm \
             --out docs/generated/invariants-vllm.md
 
@@ -558,7 +629,7 @@ jobs:
         id: diff
         run: |
           set +e
-          uv run --no-sync --with pyyaml python scripts/diff_engine_invariants.py \
+          uv run python scripts/diff_engine_invariants.py \
             /tmp/engine-invariants-diff/vllm.vendored.old.yaml \
             "${CORPUS_DIR}/vllm.vendored.yaml" \
             --out /tmp/engine-invariants-diff/vllm.vendored.md \
@@ -617,15 +688,23 @@ jobs:
           if [[ -z "$PR_NUMBER" ]]; then
             exit 0
           fi
-          MISSING=$(jq -r '.landmarks_missing | join(", ")' /tmp/probe-vllm.json)
           {
             echo "## Engine invariants — vllm (probe-blocked)"
             echo
-            echo "Probe failed: producer landmarks no longer resolve under the installed library."
+            echo "**Probe failed.** Producer landmarks no longer resolve under the installed library."
             echo
-            echo "Missing: \`${MISSING}\`"
+            echo "**Missing landmarks:**"
             echo
-            echo "Downstream mine + vendor steps were skipped. Patch the producer module or run \`@llem-ci-bot /approve-reuse vllm invariants\` once the landmarks have been updated."
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-vllm.json
+            echo
+            echo "**Downstream mine + vendor steps were skipped.** No corpus changes were committed against this PR."
+            echo
+            echo "**To unblock,** choose one of:"
+            echo
+            echo "- **Patch the producer module's landmarks** — required when the library has genuinely renamed or removed the missing symbols. The miner code needs updating to match the new library API."
+            echo "- **Run \`@llem-ci-bot /approve-reuse vllm invariants\`** — widens the SSOT pin envelope to declare \"the existing miner code is valid for this library version too.\" Only useful when the library bumped *past* the miner's previously-validated version range but the landmarks still resolve."
+            echo
+            echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only a producer-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
           } | gh pr comment "$PR_NUMBER" --body-file -
           gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
 
@@ -688,12 +767,14 @@ jobs:
           fi
 
       - name: Wait for sibling pipeline to complete
+        # CONTRACT: check-name below must match the schemas-vllm JOB ID
+        # in engine-schemas.yml. See the transformers wait block above
+        # for full ordering rationale.
         if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
-          check-name: 'Engine Schemas — Probe + Discover'
+          check-name: 'schemas-vllm'
           ref: ${{ github.event.pull_request.head.sha }}
-          timeout: '600'
           repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Atomic writeback
@@ -733,7 +814,23 @@ jobs:
             gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
           fi
 
+      - name: Probe-fail gate (red CI)
+        # Probe-fail must show as a red CI check: PRs cannot merge with a
+        # stale corpus. The probe-blocked comment above explains how to
+        # resolve (/approve-reuse to widen the SSOT envelope, or landmark
+        # patch); this gate makes that resolution mandatory rather than
+        # advisory.
+        if: steps.probe.outputs.verdict == 'fail'
+        run: |
+          echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
+          exit 1
+
   invariants-tensorrt:
+    # tensorrt symlink trick (#472) doesn't resolve the package source
+    # inside NGC; both __file__.parent and __path__[0] return non-
+    # directory paths. Tracked separately; #500 explores option-b
+    # source-tarball extraction. Mark non-blocking until that lands.
+    continue-on-error: true
     if: github.event_name != 'workflow_dispatch' || inputs.engine == 'tensorrt' || inputs.engine == 'all'
     runs-on: self-hosted
     timeout-minutes: 60
@@ -833,7 +930,7 @@ jobs:
             "$IMAGE" \
             -c "
               set -euo pipefail
-              SRC=\$(python3 -c 'import tensorrt_llm, pathlib; print(pathlib.Path(tensorrt_llm.__file__).parent)')
+              SRC=\$(python3 -c 'import tensorrt_llm; print(list(tensorrt_llm.__path__)[0])')
               if [[ -z \"\$SRC\" || ! -d \"\$SRC\" ]]; then
                 echo 'Could not locate installed tensorrt_llm package source' >&2
                 exit 1
@@ -885,7 +982,7 @@ jobs:
             "$IMAGE" \
             -c "
               set -euo pipefail
-              SRC=\$(python3 -c 'import tensorrt_llm, pathlib; print(pathlib.Path(tensorrt_llm.__file__).parent)')
+              SRC=\$(python3 -c 'import tensorrt_llm; print(list(tensorrt_llm.__path__)[0])')
               mkdir -p /tmp/trt-llm-${TRTLLM_VER}
               ln -sfn \"\$SRC\" /tmp/trt-llm-${TRTLLM_VER}/tensorrt_llm
               python3 -m scripts.engine_miners.build_corpus --engine tensorrt
@@ -912,10 +1009,14 @@ jobs:
           cache-suffix: engine-invariants-tensorrt-docgen-3.12
           python-version: "3.12"
 
+      - name: Install lean host project for doc-gen
+        if: steps.probe.outputs.verdict == 'pass'
+        run: uv sync --dev
+
       - name: Regenerate invariants digest doc
         if: steps.probe.outputs.verdict == 'pass'
         run: |
-          uv run --no-sync --with pyyaml python scripts/generate_invariants_doc.py \
+          uv run python scripts/generate_invariants_doc.py \
             --engine tensorrt \
             --out docs/generated/invariants-tensorrt.md
 
@@ -924,7 +1025,7 @@ jobs:
         id: diff
         run: |
           set +e
-          uv run --no-sync --with pyyaml python scripts/diff_engine_invariants.py \
+          uv run python scripts/diff_engine_invariants.py \
             /tmp/engine-invariants-diff/tensorrt.vendored.old.yaml \
             "${CORPUS_DIR}/tensorrt.vendored.yaml" \
             --out /tmp/engine-invariants-diff/tensorrt.vendored.md \
@@ -983,15 +1084,23 @@ jobs:
           if [[ -z "$PR_NUMBER" ]]; then
             exit 0
           fi
-          MISSING=$(jq -r '.landmarks_missing | join(", ")' /tmp/probe-tensorrt.json)
           {
             echo "## Engine invariants — tensorrt (probe-blocked)"
             echo
-            echo "Probe failed: producer landmarks no longer resolve under the installed library."
+            echo "**Probe failed.** Producer landmarks no longer resolve under the installed library."
             echo
-            echo "Missing: \`${MISSING}\`"
+            echo "**Missing landmarks:**"
             echo
-            echo "Downstream mine + vendor steps were skipped. Patch the producer module or run \`@llem-ci-bot /approve-reuse tensorrt invariants\` once the landmarks have been updated."
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-tensorrt.json
+            echo
+            echo "**Downstream mine + vendor steps were skipped.** No corpus changes were committed against this PR."
+            echo
+            echo "**To unblock,** choose one of:"
+            echo
+            echo "- **Patch the producer module's landmarks** — required when the library has genuinely renamed or removed the missing symbols. The miner code needs updating to match the new library API."
+            echo "- **Run \`@llem-ci-bot /approve-reuse tensorrt invariants\`** — widens the SSOT pin envelope to declare \"the existing miner code is valid for this library version too.\" Only useful when the library bumped *past* the miner's previously-validated version range but the landmarks still resolve."
+            echo
+            echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only a producer-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
           } | gh pr comment "$PR_NUMBER" --body-file -
           gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
 
@@ -1054,12 +1163,14 @@ jobs:
           fi
 
       - name: Wait for sibling pipeline to complete
+        # CONTRACT: check-name below must match the schemas-tensorrt JOB ID
+        # in engine-schemas.yml. See the transformers wait block above
+        # for full ordering rationale.
         if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
-          check-name: 'Engine Schemas — Probe + Discover'
+          check-name: 'schemas-tensorrt'
           ref: ${{ github.event.pull_request.head.sha }}
-          timeout: '600'
           repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Atomic writeback
@@ -1098,3 +1209,14 @@ jobs:
           else
             gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
           fi
+
+      - name: Probe-fail gate (red CI)
+        # Probe-fail must show as a red CI check: PRs cannot merge with a
+        # stale corpus. The probe-blocked comment above explains how to
+        # resolve (/approve-reuse to widen the SSOT envelope, or landmark
+        # patch); this gate makes that resolution mandatory rather than
+        # advisory.
+        if: steps.probe.outputs.verdict == 'fail'
+        run: |
+          echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
+          exit 1

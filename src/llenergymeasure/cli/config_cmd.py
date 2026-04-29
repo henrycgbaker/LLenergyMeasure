@@ -117,7 +117,7 @@ def config_command(
                     print(f"  ({version})", end="")
             print()
         else:
-            print(f"  {engine}: not installed  (pip install llenergymeasure[{engine}])")
+            print(f"  {engine}: not installed  (runs in Docker — see docs/development.md)")
 
     # --- Energy backends ---
     print("Energy")

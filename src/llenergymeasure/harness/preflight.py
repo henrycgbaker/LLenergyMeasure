@@ -137,8 +137,9 @@ def run_preflight(config: ExperimentConfig) -> None:
     if not _check_engine_installed(config.engine):
         package = ENGINE_PACKAGES.get(config.engine, config.engine)
         failures.append(
-            f"{config.engine} not installed — pip install llenergymeasure[{config.engine}]"
-            f" (missing: {package})"
+            f"{config.engine} not available on host (missing: {package}). "
+            f"Engine code runs inside Docker — dispatch via `llem run` with a Docker "
+            f"runner, or see docs/development.md for the build/run pattern."
         )
 
     # Check 3: Model accessible
