@@ -183,25 +183,30 @@ jobs:
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
-        # Doc generator + differ run on the host (no engine import needed);
-        # pure CPU/IO Python.
+        # Doc generator + differ run on the host (no engine import needed,
+        # but they DO import llenergymeasure.* + scripts.engine_miners.*).
+        # `uv sync --dev` installs the lean host project (no engine extras).
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-suffix: engine-schemas-transformers-docgen-3.12
           python-version: "3.12"
 
+      - name: Install lean host project for doc-gen
+        if: steps.probe.outputs.verdict == 'pass'
+        run: uv sync --dev
+
       - name: Regenerate curation digest
         if: steps.probe.outputs.verdict == 'pass'
         run: |
-          uv run --no-sync --with pyyaml --with pydantic python scripts/generate_curation_doc.py --engine transformers
+          uv run python scripts/generate_curation_doc.py --engine transformers
 
       - name: Classify diff
         if: steps.probe.outputs.verdict == 'pass'
         id: diff
         run: |
           set +e
-          uv run --no-sync python scripts/diff_discovered_schemas.py \
+          uv run python scripts/diff_discovered_schemas.py \
             /tmp/engine-schemas-diff/transformers.old.json \
             "${SCHEMAS_DIR}/transformers.json" \
             > /tmp/engine-schemas-diff/transformers.diff.json
@@ -506,25 +511,29 @@ jobs:
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
-        # Doc generator + differ run on the host (no GPU needed); pure
-        # CPU/IO Python.
+        # Doc generator + differ run on the host (no GPU needed, but they
+        # DO import llenergymeasure.* + scripts.engine_miners.*).
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-suffix: engine-schemas-vllm-docgen-3.12
           python-version: "3.12"
 
+      - name: Install lean host project for doc-gen
+        if: steps.probe.outputs.verdict == 'pass'
+        run: uv sync --dev
+
       - name: Regenerate curation digest
         if: steps.probe.outputs.verdict == 'pass'
         run: |
-          uv run --no-sync --with pyyaml --with pydantic python scripts/generate_curation_doc.py --engine vllm
+          uv run python scripts/generate_curation_doc.py --engine vllm
 
       - name: Classify diff
         if: steps.probe.outputs.verdict == 'pass'
         id: diff
         run: |
           set +e
-          uv run --no-sync python scripts/diff_discovered_schemas.py \
+          uv run python scripts/diff_discovered_schemas.py \
             /tmp/engine-schemas-diff/vllm.old.json \
             "${SCHEMAS_DIR}/vllm.json" \
             > /tmp/engine-schemas-diff/vllm.diff.json
@@ -845,17 +854,21 @@ jobs:
           cache-suffix: engine-schemas-tensorrt-docgen-3.12
           python-version: "3.12"
 
+      - name: Install lean host project for doc-gen
+        if: steps.probe.outputs.verdict == 'pass'
+        run: uv sync --dev
+
       - name: Regenerate curation digest
         if: steps.probe.outputs.verdict == 'pass'
         run: |
-          uv run --no-sync --with pyyaml --with pydantic python scripts/generate_curation_doc.py --engine tensorrt
+          uv run python scripts/generate_curation_doc.py --engine tensorrt
 
       - name: Classify diff
         if: steps.probe.outputs.verdict == 'pass'
         id: diff
         run: |
           set +e
-          uv run --no-sync python scripts/diff_discovered_schemas.py \
+          uv run python scripts/diff_discovered_schemas.py \
             /tmp/engine-schemas-diff/tensorrt.old.json \
             "${SCHEMAS_DIR}/tensorrt.json" \
             > /tmp/engine-schemas-diff/tensorrt.diff.json

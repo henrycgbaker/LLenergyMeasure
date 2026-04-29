@@ -215,18 +215,23 @@ jobs:
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
-        # Doc generator + differ run on the host (no engine import needed);
-        # pure CPU/IO Python.
+        # Doc generator + differ run on the host (no engine import needed,
+        # but they DO import llenergymeasure.* + scripts.engine_miners.*).
+        # `uv sync --dev` installs the lean host project (no engine extras).
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-suffix: engine-invariants-transformers-docgen-3.12
           python-version: "3.12"
 
+      - name: Install lean host project for doc-gen
+        if: steps.probe.outputs.verdict == 'pass'
+        run: uv sync --dev
+
       - name: Regenerate invariants digest doc
         if: steps.probe.outputs.verdict == 'pass'
         run: |
-          uv run --no-sync --with pyyaml python scripts/generate_invariants_doc.py \
+          uv run python scripts/generate_invariants_doc.py \
             --engine transformers \
             --out docs/generated/invariants-transformers.md
 
@@ -235,7 +240,7 @@ jobs:
         id: diff
         run: |
           set +e
-          uv run --no-sync --with pyyaml python scripts/diff_engine_invariants.py \
+          uv run python scripts/diff_engine_invariants.py \
             /tmp/engine-invariants-diff/transformers.vendored.old.yaml \
             "${CORPUS_DIR}/transformers.vendored.yaml" \
             --out /tmp/engine-invariants-diff/transformers.vendored.md \
@@ -575,18 +580,23 @@ jobs:
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
-        # Doc generator + differ run on the host (no GPU needed); pure
-        # CPU/IO Python.
+        # Doc generator + differ run on the host (no GPU needed, but they
+        # DO import llenergymeasure.* + scripts.engine_miners.*).
+        # `uv sync --dev` installs the lean host project (no engine extras).
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-suffix: engine-invariants-vllm-docgen-3.12
           python-version: "3.12"
 
+      - name: Install lean host project for doc-gen
+        if: steps.probe.outputs.verdict == 'pass'
+        run: uv sync --dev
+
       - name: Regenerate invariants digest doc
         if: steps.probe.outputs.verdict == 'pass'
         run: |
-          uv run --no-sync --with pyyaml python scripts/generate_invariants_doc.py \
+          uv run python scripts/generate_invariants_doc.py \
             --engine vllm \
             --out docs/generated/invariants-vllm.md
 
@@ -595,7 +605,7 @@ jobs:
         id: diff
         run: |
           set +e
-          uv run --no-sync --with pyyaml python scripts/diff_engine_invariants.py \
+          uv run python scripts/diff_engine_invariants.py \
             /tmp/engine-invariants-diff/vllm.vendored.old.yaml \
             "${CORPUS_DIR}/vllm.vendored.yaml" \
             --out /tmp/engine-invariants-diff/vllm.vendored.md \
@@ -949,10 +959,14 @@ jobs:
           cache-suffix: engine-invariants-tensorrt-docgen-3.12
           python-version: "3.12"
 
+      - name: Install lean host project for doc-gen
+        if: steps.probe.outputs.verdict == 'pass'
+        run: uv sync --dev
+
       - name: Regenerate invariants digest doc
         if: steps.probe.outputs.verdict == 'pass'
         run: |
-          uv run --no-sync --with pyyaml python scripts/generate_invariants_doc.py \
+          uv run python scripts/generate_invariants_doc.py \
             --engine tensorrt \
             --out docs/generated/invariants-tensorrt.md
 
@@ -961,7 +975,7 @@ jobs:
         id: diff
         run: |
           set +e
-          uv run --no-sync --with pyyaml python scripts/diff_engine_invariants.py \
+          uv run python scripts/diff_engine_invariants.py \
             /tmp/engine-invariants-diff/tensorrt.vendored.old.yaml \
             "${CORPUS_DIR}/tensorrt.vendored.yaml" \
             --out /tmp/engine-invariants-diff/tensorrt.vendored.md \
