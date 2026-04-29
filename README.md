@@ -24,16 +24,18 @@ LLenergyMeasure is a Python framework for measuring the energy consumption, thro
 ## Quick Install
 
 ```bash
-pip install "llenergymeasure[transformers]"
+pip install llenergymeasure
 ```
 
-Run your first measurement:
+Engine code (Transformers, vLLM, TensorRT-LLM) runs inside per-engine Docker images; the host package is the orchestrator. See [docs/development.md](docs/development.md) for the build/run pattern.
+
+Run your first measurement (host dispatches the appropriate engine container):
 
 ```bash
 llem run --model gpt2 --engine transformers
 ```
 
-See [Installation](docs/installation.md) for system requirements, Docker setup, and available extras. See [Getting Started](docs/getting-started.md) to run and interpret your first experiment.
+See [Installation](docs/installation.md) for system requirements and Docker setup. See [Getting Started](docs/getting-started.md) to run and interpret your first experiment.
 
 ---
 

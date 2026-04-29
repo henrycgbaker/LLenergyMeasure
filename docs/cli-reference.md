@@ -76,8 +76,8 @@ GPU
   NVIDIA A100-SXM4-80GB  80.0 GB
 Engines
   transformers: installed
-  vllm: not installed  (pip install llenergymeasure[vllm])
-  tensorrt: not installed  (pip install llenergymeasure[tensorrt])
+  vllm: not installed  (runs in Docker — see docs/development.md)
+  tensorrt: not installed  (runs in Docker — see docs/development.md)
 Energy
   Energy: nvml
 Config

@@ -434,14 +434,14 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │  ──────────── engine-invariants.yml per-engine job ────────────   │
   │         ┌─────────────────┬────────────────────┐                  │
   │         ▼                 ▼                    ▼                  │
-  │  GH-hosted runner   Self-hosted GPU      Self-hosted GPU          │
-  │  (ubuntu-latest)    inside llenergy-     inside llenergy-         │
-  │  - transformers     measure:vllm-${VER}  measure:tensorrt-${VER}  │
-  │    static miner     - vLLM static        - TRT-LLM static         │
+  │  Self-hosted GPU    Self-hosted GPU      Self-hosted GPU          │
+  │  inside llenergy-   inside llenergy-     inside llenergy-         │
+  │  measure:           measure:vllm-${VER}  measure:tensorrt-${VER}  │
+  │  transformers-${V}  - vLLM static        - TRT-LLM static         │
   │  - transformers     - vLLM dynamic         miner (CUDA-aware      │
-  │    dynamic miner    (Docker isolates       import required)       │
-  │  (uv sync --extra   from unified uv.lock;                         │
-  │   transformers)     #437, #464)                                   │
+  │    static miner     (Docker isolates       import required)       │
+  │  - transformers     from cross-engine                             │
+  │    dynamic miner    constraints; #437)                            │
   │         │                 │                    │                  │
   │         └─────────────────┴────────────────────┘                  │
   │                       ▼                                           │
@@ -564,17 +564,24 @@ Decision: leave the JSON commit-back in place; revisit when #467 lands.
 
 ---
 
-## Two-tier CI
+## Single-tier CI
 
-Miners run on two runner tiers. The choice is driven both by import requirements and by whether the miner can resolve cleanly against the repo's unified `uv.lock`.
+All miners run inside their engine's Docker image. The host has no engine
+libraries (`import transformers`, `import vllm`, `import tensorrt_llm` all
+fail by design — see [development.md](development.md)), so every engine's
+mining stage must run in the matching container.
 
-| Tier | Runner | Image | What runs |
-|------|--------|-------|-----------|
-| GH-hosted | `ubuntu-latest` | host (`uv sync --extra transformers`) | transformers static + dynamic miners (CPU-safe import; resolves cleanly under unified lock) |
-| Self-hosted | GPU runner (closes issue #389) | `vllm/vllm-openai:${VLLM_VERSION}` | vLLM static + dynamic miners (CPU-safe imports, but unified `uv.lock` cascades tensorrt-llm 0.21.0 constraints into vllm's torch/torchvision and breaks `import vllm`; #437, #464). Docker isolates the miner against vLLM's own published torch/vllm combo. |
-| Self-hosted | GPU runner | `llenergymeasure:tensorrt-${TRTLLM_VERSION}` | TRT-LLM static miner (CUDA-aware `import tensorrt_llm`). The NGC-derived image carries the `tensorrt_llm` Python source as part of the installed package; the workflow symlinks it into the miner's expected default path before invoking `build_corpus`. |
+| Runner | Image | What runs |
+|--------|-------|-----------|
+| Self-hosted GPU | `llenergymeasure:transformers-${VER}` | transformers static + dynamic miners |
+| Self-hosted GPU | `llenergymeasure:vllm-${VER}` | vLLM static + dynamic miners. Docker isolates the miner against vLLM's own published torch/vllm combo (#437). |
+| Self-hosted GPU | `llenergymeasure:tensorrt-${VER}` | TRT-LLM static miner (CUDA-aware `import tensorrt_llm`). The NGC-derived image carries the `tensorrt_llm` Python source as part of the installed package; the workflow symlinks it into the miner's expected default path before invoking `build_corpus`. |
 
-Pivoting vLLM and TRT-LLM into Docker on the self-hosted runner mirrors the project's broader principle that engine-touching activity runs inside the same image the user's multi-backend orchestration uses (multi-backend without Docker is a hard error). TRT-LLM is pinned at v0.21.0 (CUDA 12.6.x) because v1.x requires CUDA 13.x, which is not available on the current A100 (SM80) runner fleet.
+The single-tier model mirrors the project's broader principle that
+engine-touching activity runs inside the same image the user's
+multi-backend orchestration uses (multi-backend without Docker is a hard
+error). TRT-LLM is pinned at v0.21.0 (CUDA 12.6.x) because v1.x requires
+CUDA 13.x, which is not available on the current A100 (SM80) runner fleet.
 
 ---
 

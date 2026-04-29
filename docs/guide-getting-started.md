@@ -30,16 +30,26 @@ For a detailed system requirements reference, see the [Installation Guide](insta
 In your terminal, run:
 
 ```bash
-pip install "llenergymeasure[transformers]"
+pip install llenergymeasure
 ```
 
-**What this does:** Downloads and installs llenergymeasure along with the Transformers inference engine — the component that actually runs AI models. The `[transformers]` part tells the installer to include PyTorch as well as the core tool.
+**What this does:** Downloads and installs llenergymeasure — the
+host-side orchestrator that drives experiments and reads results. The AI
+inference engines themselves (Transformers, vLLM, TensorRT-LLM) run
+inside Docker containers, not on your host. You will need Docker
+installed and a Docker image built before running an experiment; see
+the [Installation Guide](installation.md) and the
+[development guide](development.md) for the build/run pattern.
 
-**How long it takes:** Several minutes on first install (PyTorch is a large package). Subsequent installs are faster because packages are cached.
+**How long it takes:** A minute or two — the host package is small. The
+slower step is building (or pulling) the Docker image for the engine you
+want to use.
 
-**What you should see:** Lines of text as packages download and install, ending with `Successfully installed llenergymeasure-...`.
+**What you should see:** Lines of text as packages download and install,
+ending with `Successfully installed llenergymeasure-...`.
 
-If you see a `pip: command not found` error, try `pip3` instead of `pip`, or `python -m pip`.
+If you see a `pip: command not found` error, try `pip3` instead of `pip`,
+or `python -m pip`.
 
 ---
 
@@ -60,8 +70,8 @@ GPU
   NVIDIA A100-SXM4-80GB  80.0 GB
 Engines
   transformers: installed
-  vllm: not installed  (pip install llenergymeasure[vllm])
-  tensorrt: not installed  (pip install llenergymeasure[tensorrt])
+  vllm: not installed  (runs in Docker — see docs/development.md)
+  tensorrt: not installed  (runs in Docker — see docs/development.md)
 Energy
   Energy: nvml
 Config
@@ -74,11 +84,11 @@ Python
 **What to look for:**
 
 - **GPU section** shows your graphics card. If it says "No GPU detected", llenergymeasure will not be able to measure energy. Check that your NVIDIA drivers are installed.
-- **Engines section** should show `pytorch: installed`. This is the inference engine you just installed.
+- **Engines section** lists each engine with its host-import status. Engines run inside Docker, so "not installed" against an engine name is expected — the suffix in brackets points at the Docker workflow. Docker images are what actually run the inference.
 - **Energy section** shows `nvml` — this is the energy measurement method. NVML reads directly from the GPU hardware and is the default.
 - **Python section** confirms your Python version.
 
-If `pytorch` shows "not installed", repeat Step 1. If the GPU is not detected, you may need to install NVIDIA drivers — see the [Installation Guide](installation.md) for guidance.
+If the GPU is not detected, you may need to install NVIDIA drivers — see the [Installation Guide](installation.md) for guidance.
 
 ---
 

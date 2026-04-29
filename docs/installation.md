@@ -18,29 +18,35 @@
 
 ## Install
 
-The base package includes no inference engine. Install with the extras for your use case.
+The host package is the orchestrator only — it carries no engine
+libraries. Install with:
 
 ```bash
-pip install "llenergymeasure[transformers]"
+pip install llenergymeasure
 ```
+
+### Engine code runs in Docker
+
+Each engine (Transformers, vLLM, TensorRT-LLM) runs inside its own image,
+built from the SSOT in `engine_versions/{engine}.yaml`. There is no host
+extra for engines: `import transformers`, `import vllm`, and
+`import tensorrt_llm` will fail on host by design. See
+[docs/development.md](development.md) for the build/run pattern.
 
 ### Available extras
 
+The remaining extras cover host-side energy-measurement scaffolding only:
+
 | Extra | What it installs | When to use |
 |-------|-----------------|-------------|
-| `pytorch` | PyTorch, Transformers, Accelerate | Local inference (default path) |
-| `vllm` | vLLM | vLLM inference via Docker |
-| `tensorrt` | TensorRT-LLM | TensorRT-LLM inference via Docker |
 | `zeus` | Zeus energy monitor | GPU energy via Zeus (alternative to NVML) |
 | `codecarbon` | CodeCarbon | Carbon-aware energy tracking |
 
-Install multiple extras together:
+Install with one or both extras together:
 
 ```bash
-pip install "llenergymeasure[pytorch,zeus]"
+pip install "llenergymeasure[zeus,codecarbon]"
 ```
-
-The base install (`pip install llenergymeasure`) includes no inference engine and cannot run experiments.
 
 ---
 
@@ -51,9 +57,13 @@ The project uses [uv](https://docs.astral.sh/uv/) as its package manager.
 ```bash
 git clone https://github.com/henrycgbaker/llm-efficiency-measurement-tool.git
 cd llm-efficiency-measurement-tool
-uv sync --dev --extra pytorch
+uv sync --dev
 uv run llem --version
 ```
+
+Engine libraries are not installed on host. See
+[docs/development.md](development.md) for how to build and run engine
+images locally.
 
 Expected output:
 
@@ -297,8 +307,8 @@ GPU
   NVIDIA A100-SXM4-80GB  80.0 GB
 Engines
   transformers: installed
-  vllm: not installed  (pip install llenergymeasure[vllm])
-  tensorrt: not installed  (pip install llenergymeasure[tensorrt])
+  vllm: not installed  (runs in Docker — see docs/development.md)
+  tensorrt: not installed  (runs in Docker — see docs/development.md)
 Energy
   Energy: nvml
 Config

@@ -123,8 +123,8 @@ def test_detect_default_engine_raises_when_no_engines():
         engines_mod.detect_default_engine()
 
 
-def test_detect_default_engine_error_message_has_install_hint():
-    """Error message from detect_default_engine includes install hint."""
+def test_detect_default_engine_error_message_has_setup_hint():
+    """Error message from detect_default_engine points at the Docker setup path."""
     from unittest.mock import patch
 
     import llenergymeasure.engines as engines_mod
@@ -133,7 +133,7 @@ def test_detect_default_engine_error_message_has_install_hint():
     # Patch is_engine_available so all engine checks return False
     with (
         patch("llenergymeasure.engines.is_engine_available", return_value=False),
-        pytest.raises(EngineError, match="pip install"),
+        pytest.raises(EngineError, match=r"docs/development\.md"),
     ):
         engines_mod.detect_default_engine()
 

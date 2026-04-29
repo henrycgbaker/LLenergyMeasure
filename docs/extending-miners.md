@@ -391,10 +391,15 @@ def test_landmark_checks_raise_on_missing():
 
 1. Add a per-engine job to `engine-invariants.yml` mirroring the existing `invariants-transformers` / `invariants-vllm` / `invariants-tensorrt` jobs. The job runs probe → mine → vendor-replay → doc-gen → atomic-writeback inline; copying one of the existing jobs and swapping the engine name + module paths is the fastest path.
 
-2. Set the runner tier:
-   - CPU-safe import AND clean resolution under the repo's unified `uv.lock` (e.g. transformers): add to the GH-hosted `ubuntu-latest` job with `uv sync --extra <engine>`.
-   - CPU-safe import but unified-lock resolution breaks the engine (e.g. vLLM, where tensorrt-llm 0.21.0's transitive constraints corrupt vllm's torch/torchvision; #437): mirror `invariants-vllm` — self-hosted GPU runner inside `llenergymeasure:vllm-${VER}`.
-   - CUDA-aware import required (e.g. TRT-LLM): mirror `invariants-tensorrt` — self-hosted GPU runner inside `llenergymeasure:tensorrt-${VER}`.
+2. Set the runner: every engine miner runs inside its own Docker image
+   (no host extras exist — see [development.md](development.md)). Add the
+   new engine's image to `docker/Dockerfile.<engine>`, build it from the
+   SSOT in `engine_versions/<engine>.yaml`, and mirror one of the existing
+   per-engine jobs in `engine-invariants.yml` — self-hosted GPU runner
+   inside `llenergymeasure:<engine>-${VER}`. Use `invariants-vllm` as the
+   template for engines whose miners need a GPU only for `import`-time
+   reasons; use `invariants-tensorrt` as the template for engines that
+   require CUDA-aware imports (e.g. NGC-derived bases).
 
 3. The vendor-replay step runs inside the engine's container in the same job as the miner — no separate vendor workflow to update.
 

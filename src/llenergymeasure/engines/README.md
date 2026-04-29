@@ -63,15 +63,19 @@ default = detect_default_engine()  # "pytorch" if transformers installed, etc.
 
 Priority for auto-detection: pytorch > tensorrt > vllm.
 
-## Installation extras
+## Engine code runs in Docker
 
-Zero engine deps at base. Each engine requires an install extra:
+Engines have no host install path. Each engine runs inside its own Docker
+image, built from the SSOT in `engine_versions/{engine}.yaml`:
 
-| Engine | Install extra | Required package |
-|---------|--------------|-----------------|
-| `pytorch` | `pip install llenergymeasure[transformers]` | `transformers` |
-| `vllm` | `pip install llenergymeasure[vllm]` | `vllm` |
-| `tensorrt` | `pip install llenergymeasure[tensorrt]` | `tensorrt_llm` |
+| Engine | Required package | Image source |
+|---------|-----------------|---------------|
+| `transformers` | `transformers` | `docker/Dockerfile.transformers` |
+| `vllm` | `vllm` | `docker/Dockerfile.vllm` |
+| `tensorrt` | `tensorrt_llm` | `docker/Dockerfile.tensorrt` |
+
+See [docs/development.md](../../../docs/development.md) for the build/run
+pattern. Host imports of these libraries fail by design.
 
 ## Layer constraints
 

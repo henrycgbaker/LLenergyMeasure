@@ -174,7 +174,7 @@ class TensorRTEngine:
         """
         from llenergymeasure.engines._helpers import require_import
 
-        _trt_mod = require_import("tensorrt_llm", "tensorrt")
+        _trt_mod = require_import("tensorrt_llm")
         LLM = _trt_mod.LLM
 
         kwargs = self._build_llm_kwargs(config)
