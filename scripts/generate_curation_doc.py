@@ -4,13 +4,13 @@
 For each engine, produces a Markdown file with a four-column table showing
 every discovered parameter and whether llem's Pydantic layer curates it.
 
-The header now also surfaces a delta-vs-previous block. The previous SSOT
-version is read from ``engine_versions/{engine}.yaml``'s
+The header surfaces a delta-vs-previous block. The previous SSOT version
+is read from ``engine_versions/{engine}.yaml``'s
 ``last_probe.version_inside_envelope`` field if present; on a fresh SSOT
 where ``last_probe.verdict`` is ``unrun`` the block degrades gracefully
 to a "deferred until first probe-pass cycle" placeholder. HEAD~1 is
-deliberately NOT consulted (it can be a bot writeback commit, breaking
-determinism — see PR-4b review).
+deliberately NOT consulted because it can be a bot writeback commit,
+which would make the comparison anchor non-deterministic.
 
 Output: docs/generated/curation-{engine}.md
 
@@ -25,11 +25,14 @@ from typing import Any
 
 import yaml
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_PROJECT_ROOT / "src"))
+sys.path.insert(0, str(_PROJECT_ROOT))
 
-from llenergymeasure.config.introspection import get_engine_params
-from llenergymeasure.config.schema_loader import SchemaLoader
-from llenergymeasure.config.ssot import Engine
+from llenergymeasure.config.introspection import get_engine_params  # noqa: E402
+from llenergymeasure.config.schema_loader import SchemaLoader  # noqa: E402
+from llenergymeasure.config.ssot import Engine  # noqa: E402
+from scripts.engine_miners._ssot import ssot_path  # noqa: E402
 
 ENGINES = tuple(e.value for e in Engine)
 
@@ -38,8 +41,6 @@ _ENGINE_DISPLAY_NAMES = {
     "vllm": "vLLM",
     "tensorrt": "TensorRT-LLM",
 }
-
-_REPO_ROOT = Path(__file__).parent.parent
 
 
 def _get_curated_names(engine: str) -> set[str]:
@@ -59,11 +60,11 @@ def _read_previous_ssot_version(engine: str) -> str | None:
     delta block degrades to a deferred placeholder rather than fabricate
     a comparison.
     """
-    ssot_path = _REPO_ROOT / "engine_versions" / f"{engine}.yaml"
-    if not ssot_path.is_file():
+    path = ssot_path(engine)
+    if not path.is_file():
         return None
     try:
-        data: Any = yaml.safe_load(ssot_path.read_text())
+        data: Any = yaml.safe_load(path.read_text())
     except yaml.YAMLError:
         return None
     if not isinstance(data, dict):
@@ -164,18 +165,30 @@ def generate_engine_doc(engine: str, loader: SchemaLoader | None = None) -> str:
     return "\n".join(lines)
 
 
-def main() -> None:
-    """Generate curation docs for all engines."""
-    output_dir = Path(__file__).parent.parent / "docs" / "generated"
+def main(argv: list[str] | None = None) -> int:
+    """Generate curation docs for one engine or all engines."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--engine",
+        choices=ENGINES,
+        help="Generate the digest for one engine. Omit to render all three.",
+    )
+    args = parser.parse_args(argv)
+
+    output_dir = _PROJECT_ROOT / "docs" / "generated"
     output_dir.mkdir(parents=True, exist_ok=True)
     loader = SchemaLoader()
 
-    for engine in ENGINES:
+    targets = (args.engine,) if args.engine else ENGINES
+    for engine in targets:
         content = generate_engine_doc(engine, loader)
         output_path = output_dir / f"curation-{engine}.md"
         output_path.write_text(content)
         print(f"Generated: {output_path}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

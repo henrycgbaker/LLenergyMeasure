@@ -137,8 +137,12 @@ jobs:
           )
           SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
           DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          if [[ -z "${DATE}" ]]; then
+            echo "::error::No git history found for any anchor input path; refusing to use wallclock fallback (would break determinism)." >&2
+            exit 1
+          fi
           echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
-          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+          echo "date=${DATE}" >> "$GITHUB_OUTPUT"
 
       - name: Probe — landmark resolution check
         id: probe
@@ -306,16 +310,35 @@ jobs:
             no-changes) ;;
           esac
 
+      - name: Detect sibling workflow run for this SHA
+        # PRs whose path-filter only matches one workflow's exclusive paths
+        # never trigger the sibling, so wait-on-check-action would block
+        # for its full timeout. This pre-flight skips the wait when no
+        # sibling run was queued for this head SHA.
+        id: sibling
+        if: steps.probe.outputs.verdict == 'pass' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          SIBLING_NAME="Engine Schemas — Probe + Discover"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          COUNT=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&per_page=50" \
+            --jq "[.workflow_runs[] | select(.name == \"${SIBLING_NAME}\")] | length")
+          if [[ "${COUNT}" -gt 0 ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Sibling workflow ${SIBLING_NAME} did not fire for this SHA; skipping wait."
+          fi
+
       - name: Wait for sibling pipeline to complete
         # Block until the engine-schemas pipeline finishes for this same
         # head SHA. Already-finished sibling exits immediately. Whichever
         # pipeline reaches its writeback step second performs its commit
         # against the tip that already includes the first pipeline's
         # writeback (disjoint paths; force-with-lease + rebase handle the
-        # fast-forward). The atomic-writeback property emerges from the
-        # wait + disjoint paths combination, no separate summariser
-        # workflow needed.
-        if: steps.probe.outputs.verdict == 'pass' && github.event_name == 'pull_request'
+        # fast-forward).
+        if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
           check-name: 'Engine Schemas — Probe + Discover'
@@ -324,19 +347,18 @@ jobs:
           repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Atomic writeback
-        if: steps.probe.outputs.verdict == 'pass' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
 
           # Pull in any sibling-pipeline writeback that landed first.
-          git pull --rebase --autostash || true
+          git pull --rebase --autostash
 
           git add \
             "${CORPUS_DIR}/transformers.proposed.yaml" \
             "${CORPUS_DIR}/transformers.vendored.yaml" \
-            docs/generated/invariants-transformers.md \
-            engine_versions/transformers.compat.json 2>/dev/null || true
+            docs/generated/invariants-transformers.md
 
           if git diff --cached --quiet; then
             echo "No engine-invariants artefact changes to commit."
@@ -402,11 +424,10 @@ jobs:
           echo "image=llenergymeasure:vllm-${VER}" >> "$GITHUB_OUTPUT"
 
       - name: Build or reuse vLLM image
-        # SSOT-driven build-arg per the engine-coupling design's D-1
-        # decision: Renovate updates SSOT only; Dockerfile ARG default
-        # is a fallback for local manual builds; CI passes the SSOT
-        # value at docker-build time. Layer cache makes the FROM step a
-        # no-op when the upstream tag is unchanged.
+        # SSOT is the canonical version; the Dockerfile ARG default is a
+        # local-build fallback. CI passes the SSOT value at build time so
+        # the two cannot drift. Layer cache makes the FROM step a no-op
+        # when the upstream tag is unchanged.
         run: |
           IMAGE="${{ steps.version.outputs.image }}"
           if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
@@ -439,8 +460,12 @@ jobs:
           )
           SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
           DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          if [[ -z "${DATE}" ]]; then
+            echo "::error::No git history found for any anchor input path; refusing to use wallclock fallback (would break determinism)." >&2
+            exit 1
+          fi
           echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
-          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+          echo "date=${DATE}" >> "$GITHUB_OUTPUT"
 
       - name: Probe — landmark resolution check (in container)
         id: probe
@@ -645,8 +670,25 @@ jobs:
             no-changes) ;;
           esac
 
-      - name: Wait for sibling pipeline to complete
+      - name: Detect sibling workflow run for this SHA
+        id: sibling
         if: steps.probe.outputs.verdict == 'pass' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          SIBLING_NAME="Engine Schemas — Probe + Discover"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          COUNT=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&per_page=50" \
+            --jq "[.workflow_runs[] | select(.name == \"${SIBLING_NAME}\")] | length")
+          if [[ "${COUNT}" -gt 0 ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Sibling workflow ${SIBLING_NAME} did not fire for this SHA; skipping wait."
+          fi
+
+      - name: Wait for sibling pipeline to complete
+        if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
           check-name: 'Engine Schemas — Probe + Discover'
@@ -655,19 +697,18 @@ jobs:
           repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Atomic writeback
-        if: steps.probe.outputs.verdict == 'pass' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
 
           # Pull in any sibling-pipeline writeback that landed first.
-          git pull --rebase --autostash || true
+          git pull --rebase --autostash
 
           git add \
             "${CORPUS_DIR}/vllm.proposed.yaml" \
             "${CORPUS_DIR}/vllm.vendored.yaml" \
-            docs/generated/invariants-vllm.md \
-            engine_versions/vllm.compat.json 2>/dev/null || true
+            docs/generated/invariants-vllm.md
 
           if git diff --cached --quiet; then
             echo "No engine-invariants artefact changes to commit."
@@ -730,8 +771,9 @@ jobs:
           echo "image=llenergymeasure:tensorrt-${VER}" >> "$GITHUB_OUTPUT"
 
       - name: Build or reuse TRT-LLM image
-        # SSOT-driven build-arg per D-1; layer cache keeps rebuilds fast
-        # when the NGC tag is unchanged. Note Dockerfile ARG is named
+        # SSOT is the canonical version; the Dockerfile ARG default is a
+        # local-build fallback. Layer cache keeps rebuilds fast when the
+        # NGC tag is unchanged. Note Dockerfile ARG is named
         # TRTLLM_VERSION (not TENSORRT_VERSION) — preserved.
         run: |
           IMAGE="${{ steps.version.outputs.image }}"
@@ -765,8 +807,12 @@ jobs:
           )
           SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
           DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          if [[ -z "${DATE}" ]]; then
+            echo "::error::No git history found for any anchor input path; refusing to use wallclock fallback (would break determinism)." >&2
+            exit 1
+          fi
           echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
-          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+          echo "date=${DATE}" >> "$GITHUB_OUTPUT"
 
       - name: Probe — landmark resolution check (in container)
         id: probe
@@ -990,8 +1036,25 @@ jobs:
             no-changes) ;;
           esac
 
-      - name: Wait for sibling pipeline to complete
+      - name: Detect sibling workflow run for this SHA
+        id: sibling
         if: steps.probe.outputs.verdict == 'pass' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          SIBLING_NAME="Engine Schemas — Probe + Discover"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          COUNT=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&per_page=50" \
+            --jq "[.workflow_runs[] | select(.name == \"${SIBLING_NAME}\")] | length")
+          if [[ "${COUNT}" -gt 0 ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Sibling workflow ${SIBLING_NAME} did not fire for this SHA; skipping wait."
+          fi
+
+      - name: Wait for sibling pipeline to complete
+        if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
           check-name: 'Engine Schemas — Probe + Discover'
@@ -1000,19 +1063,18 @@ jobs:
           repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Atomic writeback
-        if: steps.probe.outputs.verdict == 'pass' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
 
           # Pull in any sibling-pipeline writeback that landed first.
-          git pull --rebase --autostash || true
+          git pull --rebase --autostash
 
           git add \
             "${CORPUS_DIR}/tensorrt.proposed.yaml" \
             "${CORPUS_DIR}/tensorrt.vendored.yaml" \
-            docs/generated/invariants-tensorrt.md \
-            engine_versions/tensorrt.compat.json 2>/dev/null || true
+            docs/generated/invariants-tensorrt.md
 
           if git diff --cached --quiet; then
             echo "No engine-invariants artefact changes to commit."

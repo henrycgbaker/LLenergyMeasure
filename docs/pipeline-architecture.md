@@ -4,8 +4,9 @@ This doc is the chain-diagram reference for the engine-coupling pipeline. SSOT-d
 
 ```
 ================================================================================
-LLenergyMeasure Engine-Coupling Pipeline (target architecture, 2026-04-28)
-Per-concern workflows (Stream B, post-codebase-audit) + summariser coordination
+LLenergyMeasure Engine-Coupling Pipeline
+Per-concern workflows (engine-invariants + engine-schemas) with sibling
+coordination via wait-on-check-action.
 ================================================================================
 
 LEGEND:  [auto]    fully automated, no human action
@@ -248,8 +249,8 @@ ADJACENT PIPELINES (independent of per-PR Renovate cycle)
         but engine collapses (observed_config_hash matches). Flagged
         as gap_detected: true -> dormancy signal.
       - proposed_rule_id field is currently always None; consumer
-        was rejected in PR #404 (over-engineering; no real user yet).
-        Tracked in #405 + #474.
+        deferred until a researcher hits a real gap_detected: true
+        group and asks for tooling. Tracked in #405 + #474.
 ================================================================================
 ```
 
