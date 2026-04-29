@@ -306,41 +306,6 @@ jobs:
             no-changes) ;;
           esac
 
-      - name: Detect sibling workflow run for this SHA
-        # PRs whose path-filter only matches one workflow's exclusive paths
-        # never trigger the sibling, so wait-on-check-action would block
-        # for its full timeout. This pre-flight skips the wait when no
-        # sibling run was queued for this head SHA.
-        id: sibling
-        if: steps.probe.outputs.verdict == 'pass' && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          SIBLING_NAME="Engine Invariants — Probe + Mine + Vendor"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          COUNT=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&per_page=50" \
-            --jq "[.workflow_runs[] | select(.name == \"${SIBLING_NAME}\")] | length")
-          if [[ "${COUNT}" -gt 0 ]]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Sibling workflow ${SIBLING_NAME} did not fire for this SHA; skipping wait."
-          fi
-
-      - name: Wait for sibling pipeline to complete
-        # Block until the engine-invariants pipeline finishes for this same
-        # head SHA. Already-finished sibling exits immediately. Whichever
-        # pipeline reaches its writeback step second performs its commit
-        # against the tip that already includes the first pipeline's
-        # writeback (disjoint paths; force-with-lease handles the fast-
-        # forward).
-        if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          check-name: 'invariants-transformers'
-          ref: ${{ github.event.pull_request.head.sha }}
-          repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-
       - name: Atomic writeback
         if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
@@ -645,31 +610,6 @@ jobs:
             safe)      gh pr edit "$PR_NUMBER" --add-label "schemas-safe" --add-label "schemas-changed" 2>/dev/null || true ;;
             no-changes) ;;
           esac
-
-      - name: Detect sibling workflow run for this SHA
-        id: sibling
-        if: steps.probe.outputs.verdict == 'pass' && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          SIBLING_NAME="Engine Invariants — Probe + Mine + Vendor"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          COUNT=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&per_page=50" \
-            --jq "[.workflow_runs[] | select(.name == \"${SIBLING_NAME}\")] | length")
-          if [[ "${COUNT}" -gt 0 ]]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Sibling workflow ${SIBLING_NAME} did not fire for this SHA; skipping wait."
-          fi
-
-      - name: Wait for sibling pipeline to complete
-        if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          check-name: 'invariants-vllm'
-          ref: ${{ github.event.pull_request.head.sha }}
-          repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Atomic writeback
         if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -993,31 +933,6 @@ jobs:
             safe)      gh pr edit "$PR_NUMBER" --add-label "schemas-safe" --add-label "schemas-changed" 2>/dev/null || true ;;
             no-changes) ;;
           esac
-
-      - name: Detect sibling workflow run for this SHA
-        id: sibling
-        if: steps.probe.outputs.verdict == 'pass' && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          SIBLING_NAME="Engine Invariants — Probe + Mine + Vendor"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          COUNT=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&per_page=50" \
-            --jq "[.workflow_runs[] | select(.name == \"${SIBLING_NAME}\")] | length")
-          if [[ "${COUNT}" -gt 0 ]]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Sibling workflow ${SIBLING_NAME} did not fire for this SHA; skipping wait."
-          fi
-
-      - name: Wait for sibling pipeline to complete
-        if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          check-name: 'invariants-tensorrt'
-          ref: ${{ github.event.pull_request.head.sha }}
-          repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Atomic writeback
         if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
