@@ -1,0 +1,218 @@
+name: Approve Reuse — Slash Command Bot
+
+# Listens for /approve-reuse <engine> <producer> slash commands posted as
+# PR comments. When the commenter has write/maintain/admin permission on
+# this repo, the bot widens the SSOT's miner_pins SpecifierSet for the
+# requested (engine, producer) so the bumped library.current_version
+# falls inside the envelope. Subsequent re-runs of engine-invariants.yml
+# or engine-schemas.yml then probe under the new envelope and proceed.
+#
+# Producer naming
+# ---------------
+# Producer is `invariants | schemas` — matches the probe primitive's
+# user-facing producer kinds and the suggestion text emitted in probe-
+# fail PR comments. The mapping to SSOT miner_pins keys
+# (`static | dynamic | discovery`) lives in
+# scripts/widen_miner_pin.py.
+#
+# Determinism contract
+# --------------------
+# The widening is a pure function of (current SSOT, engine, producer):
+# same inputs always produce the same SSOT mutation. The commit-back is
+# gated on actual diff to the SSOT YAML (no commit when the version is
+# already inside the envelope). The line-surgical YAML edit preserves
+# every comment, quote, and adjacent line, so re-running the same slash
+# command emits zero diff after the first widening lands.
+#
+# Auth model
+# ----------
+# `issue_comment` fires on every PR comment. The job-level `if:` filter
+# narrows to comments containing `/approve-reuse`. Inside the job, the
+# FIRST step after token mint is the permission check. Read-only,
+# triage, and external commenters get a polite rejection comment, never
+# a silent ignore.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: approve-reuse-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  approve-reuse:
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/approve-reuse')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Mint llem-ci-bot App token
+        # Short-lived (~1 hour) GitHub App token. Events the App produces
+        # are NOT subject to the default GITHUB_TOKEN recursive-workflow
+        # guard, so the SSOT commit-back below can legitimately retrigger
+        # downstream engine-invariants / engine-schemas runs.
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Validate commenter has approval rights
+        # `issue_comment` fires on every comment. Permission gate is the
+        # FIRST behavioural step — anything below it must be guarded by
+        # `steps.auth.outputs.authorised == 'true'`. Acceptable repo
+        # roles: admin | maintain | write. Read-only, triage, and non-
+        # collaborators are rejected.
+        id: auth
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          PERMISSION=$(gh api \
+            "repos/${OWNER}/${REPO}/collaborators/${COMMENTER}/permission" \
+            --jq '.permission' 2>/dev/null || echo "none")
+          case "${PERMISSION}" in
+            admin|maintain|write)
+              echo "authorised=true" >> "$GITHUB_OUTPUT"
+              echo "Commenter ${COMMENTER} has ${PERMISSION} permission."
+              ;;
+            *)
+              echo "authorised=false" >> "$GITHUB_OUTPUT"
+              echo "Commenter ${COMMENTER} has ${PERMISSION:-none} permission; rejecting."
+              ;;
+          esac
+
+      - name: Reject unauthorised commenter
+        if: steps.auth.outputs.authorised == 'false'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          gh pr comment "$PR_NUMBER" --body "@${COMMENTER}: \`/approve-reuse\` requires write, maintain, or admin permission on this repository. Your comment was ignored. If you should have access, ask a maintainer to grant the appropriate role."
+
+      - name: Parse slash command arguments
+        # Match the FIRST `/approve-reuse <engine> <producer>` token in
+        # the comment body. Engine + producer are constrained to fixed
+        # vocabularies — no shell injection risk downstream.
+        id: parse
+        if: steps.auth.outputs.authorised == 'true'
+        env:
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          ARGS=$(printf '%s\n' "$BODY" \
+            | grep -oE '/approve-reuse[[:space:]]+[a-z]+[[:space:]]+[a-z]+' \
+            | head -1 || true)
+          if [[ -z "$ARGS" ]]; then
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ENGINE=$(printf '%s\n' "$ARGS" | awk '{print $2}')
+          PRODUCER=$(printf '%s\n' "$ARGS" | awk '{print $3}')
+          case "$ENGINE" in
+            transformers|vllm|tensorrt) ;;
+            *) echo "valid=false" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+          case "$PRODUCER" in
+            invariants|schemas) ;;
+            *) echo "valid=false" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+          {
+            echo "valid=true"
+            echo "engine=$ENGINE"
+            echo "producer=$PRODUCER"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Reject malformed slash command
+        if: steps.auth.outputs.authorised == 'true' && steps.parse.outputs.valid == 'false'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          gh pr comment "$PR_NUMBER" --body "@${COMMENTER}: \`/approve-reuse\` requires \`<engine> <producer>\` arguments. Engines: \`transformers | vllm | tensorrt\`. Producers: \`invariants | schemas\`. Example: \`/approve-reuse transformers invariants\`."
+
+      - name: Resolve PR head ref
+        id: pr
+        if: steps.auth.outputs.authorised == 'true' && steps.parse.outputs.valid == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          REF=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout PR branch
+        if: steps.auth.outputs.authorised == 'true' && steps.parse.outputs.valid == 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.pr.outputs.ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Set up Python
+        if: steps.auth.outputs.authorised == 'true' && steps.parse.outputs.valid == 'true'
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: approve-reuse-bot-3.12
+          python-version: "3.12"
+
+      - name: Widen SSOT miner_pins
+        id: widen
+        if: steps.auth.outputs.authorised == 'true' && steps.parse.outputs.valid == 'true'
+        env:
+          ENGINE: ${{ steps.parse.outputs.engine }}
+          PRODUCER: ${{ steps.parse.outputs.producer }}
+        run: |
+          uv run --no-sync --with pyyaml --with packaging \
+            python scripts/widen_miner_pin.py \
+            --engine "$ENGINE" --producer "$PRODUCER"
+
+      - name: Commit + push SSOT update
+        if: steps.auth.outputs.authorised == 'true' && steps.parse.outputs.valid == 'true' && steps.widen.outputs.changed == 'true'
+        env:
+          ENGINE: ${{ steps.parse.outputs.engine }}
+          PRODUCER: ${{ steps.parse.outputs.producer }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          git config user.name  "llem-ci-bot[bot]"
+          git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
+          git add "engine_versions/${ENGINE}.yaml"
+          if git diff --cached --quiet; then
+            echo "No SSOT change to commit; skipping push."
+            exit 0
+          fi
+          git commit -m "chore(engines): widen ${ENGINE} miner_pins.${PRODUCER} per /approve-reuse from @${COMMENTER}"
+          git push
+
+      - name: Post confirmation comment
+        if: steps.auth.outputs.authorised == 'true' && steps.parse.outputs.valid == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          ENGINE: ${{ steps.parse.outputs.engine }}
+          PRODUCER: ${{ steps.parse.outputs.producer }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+          CHANGED: ${{ steps.widen.outputs.changed }}
+          OLD_RANGE: ${{ steps.widen.outputs.old_range }}
+          NEW_RANGE: ${{ steps.widen.outputs.new_range }}
+        run: |
+          if [[ "$CHANGED" == "true" ]]; then
+            BODY="Widened \`${ENGINE}\` \`miner_pins.${PRODUCER}\`: \`${OLD_RANGE}\` -> \`${NEW_RANGE}\` per @${COMMENTER}'s /approve-reuse. Re-run engine-invariants or engine-schemas to probe under the new envelope."
+          else
+            BODY="\`${ENGINE}\` \`miner_pins.${PRODUCER}\` already covers \`library.current_version\`; no SSOT change needed."
+          fi
+          gh pr comment "$PR_NUMBER" --body "$BODY"
