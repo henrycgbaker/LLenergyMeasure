@@ -52,7 +52,6 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Literal
 
 import yaml
 from packaging.specifiers import SpecifierSet
@@ -62,18 +61,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from scripts._probe import _SSOT_PIN_FOR_PRODUCER, ProducerKind  # noqa: E402
 from scripts.engine_miners._ssot import ssot_path  # noqa: E402
-
-ProducerKind = Literal["invariants", "schemas"]
-
-# Mirrors ``scripts._probe._SSOT_PIN_FOR_PRODUCER``. Duplicated rather
-# than imported so this script stays decoupled from the probe primitive
-# (the probe imports producer modules at runtime; we only need the
-# string-to-string translation).
-_SSOT_PIN_FOR_PRODUCER: dict[ProducerKind, str] = {
-    "invariants": "static",
-    "schemas": "discovery",
-}
 
 
 def _widen_range_string(existing: str, version: Version) -> str:
