@@ -103,28 +103,25 @@ jobs:
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "image=llenergymeasure:transformers-${VER}" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
       - name: Build or reuse transformers image
         # SSOT is the canonical version; the Dockerfile ARG default is a
         # local-build fallback. CI passes the SSOT value at build time so
-        # the two cannot drift. GHA layer cache (scoped per-engine + per-
-        # version) persists across ephemeral runners, so the FA3 stage
-        # only recompiles on a cold cache; warm runs reuse the cached
-        # layer. INSTALL_FA3=true matches production — the CI image is
-        # byte-equivalent to what users get from the documented build.
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/Dockerfile.transformers
-          tags: ${{ steps.version.outputs.image }}
-          build-args: |
-            TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
-            INSTALL_FA3=true
-          cache-from: type=gha,scope=transformers-${{ steps.version.outputs.version }}
-          cache-to: type=gha,mode=max,scope=transformers-${{ steps.version.outputs.version }}
-          load: true
+        # the two cannot drift. Layer cache makes the FROM step a no-op
+        # when the upstream torch/transformers tag is unchanged.
+        # INSTALL_FA3=false keeps the build fast (FA3 from-source is ~1h);
+        # the miners + vendor pass don't need flash-attn.
+        run: |
+          IMAGE="${{ steps.version.outputs.image }}"
+          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            docker build \
+              -f docker/Dockerfile.transformers \
+              -t "$IMAGE" \
+              --build-arg TRANSFORMERS_VERSION="${{ steps.version.outputs.version }}" \
+              --build-arg INSTALL_FA3=false \
+              .
+          else
+            echo "Reusing cached $IMAGE."
+          fi
 
       - name: Compute stable mining + vendor anchor
         id: anchor
@@ -492,27 +489,22 @@ jobs:
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "image=llenergymeasure:vllm-${VER}" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
       - name: Build or reuse vLLM image
         # SSOT is the canonical version; the Dockerfile ARG default is a
         # local-build fallback. CI passes the SSOT value at build time so
-        # the two cannot drift. GHA layer cache (scoped per-engine + per-
-        # version) persists across runs; on the self-hosted runner this
-        # layers on top of the daemon's own image cache, both contributing
-        # to fast warm rebuilds. vLLM's Dockerfile pulls a pre-built base
-        # image, so there's no FA3 equivalent to flip here.
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/Dockerfile.vllm
-          tags: ${{ steps.version.outputs.image }}
-          build-args: |
-            VLLM_VERSION=${{ steps.version.outputs.version }}
-          cache-from: type=gha,scope=vllm-${{ steps.version.outputs.version }}
-          cache-to: type=gha,mode=max,scope=vllm-${{ steps.version.outputs.version }}
-          load: true
+        # the two cannot drift. Layer cache makes the FROM step a no-op
+        # when the upstream tag is unchanged.
+        run: |
+          IMAGE="${{ steps.version.outputs.image }}"
+          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            docker build \
+              -f docker/Dockerfile.vllm \
+              -t "$IMAGE" \
+              --build-arg VLLM_VERSION="${{ steps.version.outputs.version }}" \
+              .
+          else
+            echo "Reusing cached $IMAGE."
+          fi
 
       - name: Compute stable mining + vendor anchor
         id: anchor
@@ -875,26 +867,22 @@ jobs:
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "image=llenergymeasure:tensorrt-${VER}" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
       - name: Build or reuse TRT-LLM image
         # SSOT is the canonical version; the Dockerfile ARG default is a
-        # local-build fallback. GHA layer cache (scoped per-engine + per-
-        # version) persists across runs; on the self-hosted runner this
-        # layers on top of the daemon's own image cache. The NGC base image
-        # is the dominant layer; warm rebuilds are near-instant. Dockerfile
-        # ARG is named TRTLLM_VERSION (not TENSORRT_VERSION) — preserved.
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/Dockerfile.tensorrt
-          tags: ${{ steps.version.outputs.image }}
-          build-args: |
-            TRTLLM_VERSION=${{ steps.version.outputs.version }}
-          cache-from: type=gha,scope=tensorrt-${{ steps.version.outputs.version }}
-          cache-to: type=gha,mode=max,scope=tensorrt-${{ steps.version.outputs.version }}
-          load: true
+        # local-build fallback. Layer cache keeps rebuilds fast when the
+        # NGC tag is unchanged. Note Dockerfile ARG is named
+        # TRTLLM_VERSION (not TENSORRT_VERSION) — preserved.
+        run: |
+          IMAGE="${{ steps.version.outputs.image }}"
+          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            docker build \
+              -f docker/Dockerfile.tensorrt \
+              -t "$IMAGE" \
+              --build-arg TRTLLM_VERSION="${{ steps.version.outputs.version }}" \
+              .
+          else
+            echo "Reusing cached $IMAGE."
+          fi
 
       - name: Compute stable mining + vendor anchor
         id: anchor
