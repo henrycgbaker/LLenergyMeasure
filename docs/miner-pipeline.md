@@ -418,23 +418,26 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │   Dashboard #446 checkbox bypasses on demand)                     │
   │               │                                                   │
   │               ▼                                                   │
-  │  Renovate opens PR bumping Dockerfile ARG                         │
-  │  (e.g. ARG TRANSFORMERS_VERSION=...)                              │
+  │  Renovate opens PR bumping engine_versions/{engine}.yaml          │
+  │  (library.current_version; Dockerfile ARG default is derived at   │
+  │   build time via --build-arg from the SSOT)                       │
   │               │                                                   │
-  │     ┌─────────┴──────────────┬────────────────────┐               │
-  │     ▼                        ▼                    ▼               │
-  │  invariant-miner.yml   parameter-discovery   auto-mine.yml        │
-  │  (Stage 2 vendor gate)   .yml                (Stage 1 mining)     │
+  │     ┌─────────┴──────────────┐                                    │
+  │     ▼                        ▼                                    │
+  │  engine-invariants.yml   parameter-discovery.yml                  │
+  │  (per-engine matrix:     (engine schemas; today's existing        │
+  │   probe + mine + vendor)  workflow until engine-schemas.yml       │
+  │                            ships as PR-5b)                        │
   │                                                                   │
-  │  Path filters fire all three workflows in parallel on the         │
-  │  Renovate PR. They write back to the PR branch independently.     │
+  │  Path filters fire both workflows in parallel on the Renovate     │
+  │  PR. Each writes back to the PR branch independently.             │
   │               │                                                   │
-  │  ─────────────┴ Stage 1: auto-mine.yml ─────────────────          │
+  │  ──────────── engine-invariants.yml per-engine job ────────────   │
   │         ┌─────────────────┬────────────────────┐                  │
   │         ▼                 ▼                    ▼                  │
   │  GH-hosted runner   Self-hosted GPU      Self-hosted GPU          │
-  │  (ubuntu-latest)    inside vllm/vllm-    inside llenergymeasure:  │
-  │  - transformers     openai Docker        tensorrt Docker          │
+  │  (ubuntu-latest)    inside llenergy-     inside llenergy-         │
+  │  - transformers     measure:vllm-${VER}  measure:tensorrt-${VER}  │
   │    static miner     - vLLM static        - TRT-LLM static         │
   │  - transformers     - vLLM dynamic         miner (CUDA-aware      │
   │    dynamic miner    (Docker isolates       import required)       │
@@ -443,24 +446,20 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │         │                 │                    │                  │
   │         └─────────────────┴────────────────────┘                  │
   │                       ▼                                           │
-  │  build_corpus.py merges staging → configs/engine_invariants/     │
-  │  {engine}.proposed.yaml; bot commits the new YAML to the PR       │
-  │  branch                                                           │
-  │  with `--force-with-lease` and posts a diff comment.              │
-  │                       │                                           │
-  │                       ▼                                           │
-  │  Stage 1 writeback retriggers invariant-miner.yml on the new      │
-  │  YAML commit (chain validation).                                  │
-  │                                                                   │
-  │  ─────────────── Stage 2: invariant-miner.yml ─────────────       │
-  │                       ▼                                           │
-  │  vendor_rules.py --fail-on-divergence replays each rule against   │
-  │  the live library inside the engine's Docker container.           │
-  │                       │                                           │
-  │                       ▼                                           │
-  │  Bot writes updated vendored YAML                                 │
-  │  (configs/engine_invariants/{engine}.vendored.yaml)               │
-  │  to the PR branch and posts a diff comment.                       │
+  │  Per-engine step sequence inside one job:                         │
+  │   1. Probe — scripts._probe checks landmarks; `fail` skips        │
+  │      downstream and posts a `probe-blocked` comment + label.      │
+  │   2. Mine — build_corpus.py merges staging into                   │
+  │      configs/engine_invariants/{engine}.proposed.yaml.            │
+  │   3. Vendor-replay — vendor_rules.py --fail-on-divergence         │
+  │      replays each rule against the live library inside the        │
+  │      engine's Docker container; confirmed cases write to          │
+  │      configs/engine_invariants/{engine}.vendored.yaml.            │
+  │   4. Doc-gen — generate_invariants_doc.py refreshes               │
+  │      docs/generated/invariants-{engine}.md.                       │
+  │   5. Atomic writeback — one bot commit covers proposed.yaml,      │
+  │      vendored.yaml, the digest doc, and engine_versions/          │
+  │      {engine}.compat.json. Pushed with --force-with-lease.        │
   │                       │                                           │
   │  ─────────────── parameter-discovery.yml (parallel) ───────       │
   │                       ▼                                           │
@@ -474,9 +473,10 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │                       │                                           │
   │                       ▼                                           │
   │  Maintainer reviews proposed YAML diff, vendored YAML diff, and   │
-  │  schema diff in the PR. Stage 1's proposed YAML commit is the     │
-  │  trust seam: recall regressions show up as rule drops BEFORE      │
-  │  the vendor gate runs.                                            │
+  │  schema diff in the PR. The proposed YAML commit is the trust     │
+  │  seam: recall regressions show up as rule drops in the diff       │
+  │  emitted before the vendor gate's verdict lands in the same       │
+  │  commit.                                                          │
   └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -493,9 +493,9 @@ The update workflow:
 5. CI re-runs with updated miner; vendor-CI gate runs.
 6. If any rules now diverge, they are quarantined; maintainer updates the corpus.
 
-### Phase B.6 observed flow
+### Phase B.6 observed flow (historical)
 
-The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transformers v4.57.3 → v4.57.6) is the first naturally-Renovate-authored exercise of the full chain. The actual commit sequence on the PR branch:
+The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transformers v4.57.3 → v4.57.6) was the first naturally-Renovate-authored exercise of the full chain. It pre-dates the merge of mining + vendor into `engine-invariants.yml`; the workflow names below (`auto-mine.yml`, `invariant-miner.yml`) are historical and reflect the two-stage split that has since collapsed. The structural lessons (commit-back determinism, self-hosted runner serialisation) carry over to the merged workflow. The actual commit sequence on the PR branch:
 
 ```
   Commit (PR #459 branch)   Author       Producing workflow / event
@@ -534,11 +534,11 @@ The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transforme
                                           serial, vLLM job queued behind others)
 ```
 
-**What this proves empirically:**
+**What this proved empirically (carries over to the merged workflow):**
 
-- **All three workflows fire on a single Renovate-authored Dockerfile bump.** No actor-gate intervention; path filters alone are sufficient.
-- **Stage 1 → Stage 2 chain validation works as designed.** auto-mine writes YAML at `96d811fb`; invariant-miner re-fires at `fb473a22` against the new YAML. The trust seam (YAML diff visible to reviewers before JSON gate runs) is exercised end-to-end.
-- **App-token + `--force-with-lease` writebacks succeed across all three workflows** without recursion-guard issues.
+- **Path-filter-driven fan-out fires on a single Renovate-authored bump.** No actor-gate intervention; path filters alone are sufficient. Same property holds for `engine-invariants.yml`.
+- **Stage 1 → Stage 2 chain validation works as designed.** The historical `auto-mine.yml` writeback at `96d811fb` re-fired the historical `invariant-miner.yml` at `fb473a22` against the new YAML. The trust seam (YAML diff visible to reviewers before JSON gate runs) was exercised end-to-end. The merged `engine-invariants.yml` preserves the trust seam in-process: the proposed-corpus diff is emitted before the vendor-replay's verdict lands in the same commit.
+- **App-token + `--force-with-lease` writebacks succeed** without recursion-guard issues.
 - **Determinism holds.** Of the ~14 bot comments posted across the cycle, 8 were "No changes" after subsequent runs - proving the `LLENERGY_*_FROZEN_AT` env-var contracts produce reproducible outputs once the corpus has converged.
 - **Self-hosted GPU runner serialisation is observable.** The vLLM vendor gate (`75d4c0c1`) was queued behind vendor-tensorrt and arrived after the transformers chain had already converged.
 
@@ -559,7 +559,7 @@ Status note as of Phase C closure:
 
 - The runtime currently reads the vendored JSON via `_apply_vendored_rules` in `src/llenergymeasure/config/models.py` (which calls `_get_rules_loader().load_rules`). Removing the JSON commit-back without first migrating the runtime path would break runtime validation.
 - This makes the blast radius of #394's proposed simplification larger than the issue thread implied. A clean resolution depends on the Docker-only target architecture being settled first (#467), since the JSON consumption pattern is a function of how the runtime resolves rules at experiment-run time.
-- Cross-references: #394 (the original check-vs-commit question), #467 (Docker-only architecture that affects the runtime side), #393 (the auto-mine automation gap, partially closed by Phase B.4).
+- Cross-references: #394 (the original check-vs-commit question), #467 (Docker-only architecture that affects the runtime side), #393 (the historical auto-mine automation gap, partially closed by Phase B.4 and finished by the merge into `engine-invariants.yml`).
 
 Decision: leave the JSON commit-back in place; revisit when #467 lands.
 
