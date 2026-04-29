@@ -4,6 +4,14 @@
 For each engine, produces a Markdown file with a four-column table showing
 every discovered parameter and whether llem's Pydantic layer curates it.
 
+The header now also surfaces a delta-vs-previous block. The previous SSOT
+version is read from ``engine_versions/{engine}.yaml``'s
+``last_probe.version_inside_envelope`` field if present; on a fresh SSOT
+where ``last_probe.verdict`` is ``unrun`` the block degrades gracefully
+to a "deferred until first probe-pass cycle" placeholder. HEAD~1 is
+deliberately NOT consulted (it can be a bot writeback commit, breaking
+determinism — see PR-4b review).
+
 Output: docs/generated/curation-{engine}.md
 
 Run: python scripts/generate_curation_doc.py
@@ -13,6 +21,9 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -28,11 +39,69 @@ _ENGINE_DISPLAY_NAMES = {
     "tensorrt": "TensorRT-LLM",
 }
 
+_REPO_ROOT = Path(__file__).parent.parent
+
 
 def _get_curated_names(engine: str) -> set[str]:
     """Get the set of leaf field names curated by llem for this engine."""
     params = get_engine_params(engine)
     return {meta["name"] for meta in params.values()}
+
+
+def _read_previous_ssot_version(engine: str) -> str | None:
+    """Return the previous library version recorded in the SSOT, or ``None``.
+
+    Reads ``engine_versions/{engine}.yaml`` and returns the value of
+    ``last_probe.version_inside_envelope`` only when (a) the SSOT file
+    exists, (b) ``last_probe.verdict`` is one of the post-run verdicts
+    (``pass``/``fail``), and (c) the recorded version differs from the
+    current one. On any other shape (``unrun``, missing, malformed) the
+    delta block degrades to a deferred placeholder rather than fabricate
+    a comparison.
+    """
+    ssot_path = _REPO_ROOT / "engine_versions" / f"{engine}.yaml"
+    if not ssot_path.is_file():
+        return None
+    try:
+        data: Any = yaml.safe_load(ssot_path.read_text())
+    except yaml.YAMLError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    last_probe = data.get("last_probe")
+    if not isinstance(last_probe, dict):
+        return None
+    if last_probe.get("verdict") not in {"pass", "fail"}:
+        return None
+    version = last_probe.get("version_inside_envelope")
+    if not isinstance(version, str) or not version.strip():
+        return None
+    return version
+
+
+def _render_delta_block(engine: str, current_version: str) -> list[str]:
+    """Render the "Delta vs previous" header block.
+
+    On a fresh SSOT (``last_probe.verdict: unrun``) this degrades to an
+    honest placeholder rather than fabricating a comparison from
+    HEAD~1 (which can be a bot writeback commit).
+    """
+    previous = _read_previous_ssot_version(engine)
+    if previous is None:
+        return [
+            "**Delta vs previous:** _deferred until first probe-pass cycle._",
+            "",
+        ]
+    if previous == current_version:
+        return [
+            f"**Delta vs previous:** _no version change since `{previous}`._",
+            "",
+        ]
+    return [
+        f"**Delta vs previous:** `{previous}` -> `{current_version}` "
+        "(field-level diff lands once probe-pass cycles populate the previous-snapshot cache).",
+        "",
+    ]
 
 
 def _render_section(
@@ -84,6 +153,7 @@ def generate_engine_doc(engine: str, loader: SchemaLoader | None = None) -> str:
         f"({engine_total} engine + {sampling_total} sampling discovered)",
         "",
     ]
+    lines.extend(_render_delta_block(engine, schema.engine_version))
 
     if schema.engine_params:
         lines.extend(_render_section("Engine Parameters", schema.engine_params, curated))
