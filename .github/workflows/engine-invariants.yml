@@ -306,7 +306,7 @@ jobs:
             echo
             echo "**Missing landmarks:**"
             echo
-            jq -r '.landmarks_missing[] | "- \`" + . + "\`"' /tmp/probe-transformers.json
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-transformers.json
             echo
             echo "**Downstream mine + vendor steps were skipped.** No corpus changes were committed against this PR."
             echo
@@ -684,7 +684,7 @@ jobs:
             echo
             echo "**Missing landmarks:**"
             echo
-            jq -r '.landmarks_missing[] | "- \`" + . + "\`"' /tmp/probe-vllm.json
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-vllm.json
             echo
             echo "**Downstream mine + vendor steps were skipped.** No corpus changes were committed against this PR."
             echo
@@ -1067,7 +1067,7 @@ jobs:
             echo
             echo "**Missing landmarks:**"
             echo
-            jq -r '.landmarks_missing[] | "- \`" + . + "\`"' /tmp/probe-tensorrt.json
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-tensorrt.json
             echo
             echo "**Downstream mine + vendor steps were skipped.** No corpus changes were committed against this PR."
             echo
