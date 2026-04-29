@@ -257,7 +257,7 @@ build completes in minutes.
 FA3 provides Hopper-optimised attention kernels. Use it via
 `transformers.attn_implementation: flash_attention_3` in your experiment configs.
 
-**To skip FA3** (e.g. for faster CI builds):
+**To skip FA3** for faster local iteration (CI builds with FA3 to match the production image profile, using GHA layer cache to keep cold-build cost amortised):
 
 ```bash
 docker build -f docker/Dockerfile.transformers \

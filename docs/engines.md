@@ -65,8 +65,9 @@ Unknown fields under `pytorch:` are forwarded to HuggingFace APIs.
 
 Note: `flash_attention_3` requires the `flash_attn_3` package (built separately from the
 flash-attn repo's `hopper/` directory) and an Ampere+ GPU (SM80+, e.g. A100 or H100).
-The Docker Transformers image includes FA3 by default. To skip it (e.g. for faster CI builds),
-rebuild with `--build-arg INSTALL_FA3=false`. See
+The Docker Transformers image includes FA3 by default and CI builds with it on too (so the
+CI image matches what production users get). To skip FA3 for faster local iteration, rebuild
+with `--build-arg INSTALL_FA3=false`. See
 [Installation - FlashAttention-3](installation.md#flashattention-3) for details.
 
 **Compilation:**
