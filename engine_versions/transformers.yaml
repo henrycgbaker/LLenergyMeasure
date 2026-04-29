@@ -12,7 +12,7 @@ schema_version: 1
 engine: transformers
 library:
   pep503_name: transformers
-  current_version: "4.57.3"
+  current_version: "5.6.2"
   current_commit_sha: null
 image:
   base_image_ref: "llenergymeasure:transformers-4.57.3"

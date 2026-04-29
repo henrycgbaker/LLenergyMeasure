@@ -28,7 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 transformers = [
     "torch>=2.5",
-    "transformers>=4.56,<5",
+    "transformers>=5.7,<6",
     "accelerate>=1.4",
     "bitsandbytes>=0.45",
     "calflops>=0.2",
