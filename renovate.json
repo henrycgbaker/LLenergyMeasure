@@ -24,7 +24,7 @@
       "matchPackageNames": ["vllm/vllm-openai"],
       "labels": ["renovate", "engine-vllm"],
       "automerge": false,
-      "stabilityDays": 3
+      "minimumReleaseAge": "14 days"
     },
     {
       "matchManagers": ["dockerfile"],
@@ -32,39 +32,64 @@
       "labels": ["renovate", "engine-tensorrt"],
       "registryUrls": ["https://nvcr.io"],
       "automerge": false,
-      "stabilityDays": 3
+      "minimumReleaseAge": "14 days"
     },
     {
       "matchManagers": ["dockerfile"],
       "matchPackageNames": ["pytorch/pytorch"],
       "labels": ["renovate", "engine-transformers"],
       "automerge": false,
-      "stabilityDays": 3
+      "minimumReleaseAge": "14 days"
     },
     {
       "matchManagers": ["custom.regex"],
       "matchPackageNames": ["transformers"],
       "labels": ["renovate", "engine-transformers"],
       "automerge": false,
-      "stabilityDays": 3
+      "minimumReleaseAge": "14 days"
     },
     {
       "matchManagers": ["custom.regex"],
       "matchPackageNames": ["vllm"],
       "labels": ["renovate", "engine-vllm"],
       "automerge": false,
-      "stabilityDays": 3
+      "minimumReleaseAge": "14 days"
     },
     {
       "matchManagers": ["custom.regex"],
       "matchPackageNames": ["tensorrt-llm"],
       "labels": ["renovate", "engine-tensorrt"],
       "automerge": false,
-      "stabilityDays": 3
+      "minimumReleaseAge": "14 days"
     },
     {
       "matchManagers": ["pep621"],
       "rangeStrategy": "replace"
+    },
+    {
+      "description": "Major engine-library bumps require explicit dashboard approval — never auto-PR. Reproducibility-critical: a major version is rarely API-compatible with the previous and demands measurement-result re-baselining.",
+      "matchPackageNames": [
+        "transformers",
+        "vllm",
+        "tensorrt-llm",
+        "vllm/vllm-openai",
+        "nvcr.io/nvidia/tensorrt-llm/release",
+        "pytorch/pytorch"
+      ],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Only auto-PR when Mend merge-confidence signal is high or very-high. Filters out releases that other repos have flagged as unstable via CI / revert patterns.",
+      "matchPackageNames": [
+        "transformers",
+        "vllm",
+        "tensorrt-llm",
+        "vllm/vllm-openai",
+        "nvcr.io/nvidia/tensorrt-llm/release",
+        "pytorch/pytorch"
+      ],
+      "matchConfidence": ["high", "very high"]
     }
   ],
   "schedule": ["before 9am on Monday"],
