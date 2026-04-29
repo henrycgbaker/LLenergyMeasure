@@ -251,15 +251,18 @@ jobs:
           if [[ -z "$PR_NUMBER" ]]; then
             exit 0
           fi
-          MISSING=$(jq -r '.landmarks_missing | join(", ")' /tmp/probe-transformers.json)
           {
             echo "## Engine schemas — transformers (probe-blocked)"
             echo
-            echo "Probe failed: introspector landmarks no longer resolve under the installed library."
+            echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
             echo
-            echo "Missing: \`${MISSING}\`"
+            echo "**Missing landmarks:**"
             echo
-            echo "Downstream discovery was skipped. Patch the introspector module or run \`@llem-ci-bot /approve-reuse transformers schemas\` once the landmarks have been updated."
+            jq -r '.landmarks_missing[] | "- \`" + . + "\`"' /tmp/probe-transformers.json
+            echo
+            echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
+            echo
+            echo "**To unblock:** patch the introspector module's landmarks, or run \`@llem-ci-bot /approve-reuse transformers schemas\` to widen the SSOT envelope. CI will remain red until the probe passes."
           } | gh pr comment "$PR_NUMBER" --body-file -
           gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
 
@@ -334,9 +337,8 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
-          check-name: 'Engine Invariants — Probe + Mine + Vendor'
+          check-name: 'invariants-transformers'
           ref: ${{ github.event.pull_request.head.sha }}
-          timeout: '600'
           repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Atomic writeback
@@ -374,6 +376,17 @@ jobs:
           else
             gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
           fi
+
+      - name: Probe-fail gate (red CI)
+        # Probe-fail must show as a red CI check: PRs cannot merge with a
+        # stale corpus. The probe-blocked comment above explains how to
+        # resolve (/approve-reuse to widen the SSOT envelope, or landmark
+        # patch); this gate makes that resolution mandatory rather than
+        # advisory.
+        if: steps.probe.outputs.verdict == 'fail'
+        run: |
+          echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
+          exit 1
 
   schemas-vllm:
     if: github.event_name != 'workflow_dispatch' || inputs.engine == 'vllm' || inputs.engine == 'all'
@@ -578,15 +591,18 @@ jobs:
           if [[ -z "$PR_NUMBER" ]]; then
             exit 0
           fi
-          MISSING=$(jq -r '.landmarks_missing | join(", ")' /tmp/probe-vllm.json)
           {
             echo "## Engine schemas — vllm (probe-blocked)"
             echo
-            echo "Probe failed: introspector landmarks no longer resolve under the installed library."
+            echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
             echo
-            echo "Missing: \`${MISSING}\`"
+            echo "**Missing landmarks:**"
             echo
-            echo "Downstream discovery was skipped. Patch the introspector module or run \`@llem-ci-bot /approve-reuse vllm schemas\` once the landmarks have been updated."
+            jq -r '.landmarks_missing[] | "- \`" + . + "\`"' /tmp/probe-vllm.json
+            echo
+            echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
+            echo
+            echo "**To unblock:** patch the introspector module's landmarks, or run \`@llem-ci-bot /approve-reuse vllm schemas\` to widen the SSOT envelope. CI will remain red until the probe passes."
           } | gh pr comment "$PR_NUMBER" --body-file -
           gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
 
@@ -651,9 +667,8 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
-          check-name: 'Engine Invariants — Probe + Mine + Vendor'
+          check-name: 'invariants-vllm'
           ref: ${{ github.event.pull_request.head.sha }}
-          timeout: '600'
           repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Atomic writeback
@@ -691,6 +706,17 @@ jobs:
           else
             gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
           fi
+
+      - name: Probe-fail gate (red CI)
+        # Probe-fail must show as a red CI check: PRs cannot merge with a
+        # stale corpus. The probe-blocked comment above explains how to
+        # resolve (/approve-reuse to widen the SSOT envelope, or landmark
+        # patch); this gate makes that resolution mandatory rather than
+        # advisory.
+        if: steps.probe.outputs.verdict == 'fail'
+        run: |
+          echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
+          exit 1
 
   schemas-tensorrt:
     if: github.event_name != 'workflow_dispatch' || inputs.engine == 'tensorrt' || inputs.engine == 'all'
@@ -782,7 +808,7 @@ jobs:
             "$IMAGE" \
             -c "
               set -euo pipefail
-              SRC=\$(python3 -c 'import tensorrt_llm, pathlib; print(pathlib.Path(tensorrt_llm.__file__).parent)')
+              SRC=\$(python3 -c 'import tensorrt_llm; print(list(tensorrt_llm.__path__)[0])')
               if [[ -z \"\$SRC\" || ! -d \"\$SRC\" ]]; then
                 echo 'Could not locate installed tensorrt_llm package source' >&2
                 exit 1
@@ -830,7 +856,7 @@ jobs:
             "$IMAGE" \
             -c "
               set -euo pipefail
-              SRC=\$(python3 -c 'import tensorrt_llm, pathlib; print(pathlib.Path(tensorrt_llm.__file__).parent)')
+              SRC=\$(python3 -c 'import tensorrt_llm; print(list(tensorrt_llm.__path__)[0])')
               mkdir -p /tmp/trt-llm-${TRTLLM_VER}
               ln -sfn \"\$SRC\" /tmp/trt-llm-${TRTLLM_VER}/tensorrt_llm
               python3 -m scripts.engine_introspectors \
@@ -913,15 +939,18 @@ jobs:
           if [[ -z "$PR_NUMBER" ]]; then
             exit 0
           fi
-          MISSING=$(jq -r '.landmarks_missing | join(", ")' /tmp/probe-tensorrt.json)
           {
             echo "## Engine schemas — tensorrt (probe-blocked)"
             echo
-            echo "Probe failed: introspector landmarks no longer resolve under the installed library."
+            echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
             echo
-            echo "Missing: \`${MISSING}\`"
+            echo "**Missing landmarks:**"
             echo
-            echo "Downstream discovery was skipped. Patch the introspector module or run \`@llem-ci-bot /approve-reuse tensorrt schemas\` once the landmarks have been updated."
+            jq -r '.landmarks_missing[] | "- \`" + . + "\`"' /tmp/probe-tensorrt.json
+            echo
+            echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
+            echo
+            echo "**To unblock:** patch the introspector module's landmarks, or run \`@llem-ci-bot /approve-reuse tensorrt schemas\` to widen the SSOT envelope. CI will remain red until the probe passes."
           } | gh pr comment "$PR_NUMBER" --body-file -
           gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
 
@@ -986,9 +1015,8 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
-          check-name: 'Engine Invariants — Probe + Mine + Vendor'
+          check-name: 'invariants-tensorrt'
           ref: ${{ github.event.pull_request.head.sha }}
-          timeout: '600'
           repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Atomic writeback
@@ -1026,3 +1054,14 @@ jobs:
           else
             gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
           fi
+
+      - name: Probe-fail gate (red CI)
+        # Probe-fail must show as a red CI check: PRs cannot merge with a
+        # stale corpus. The probe-blocked comment above explains how to
+        # resolve (/approve-reuse to widen the SSOT envelope, or landmark
+        # patch); this gate makes that resolution mandatory rather than
+        # advisory.
+        if: steps.probe.outputs.verdict == 'fail'
+        run: |
+          echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
+          exit 1
