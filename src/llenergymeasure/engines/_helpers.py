@@ -203,7 +203,7 @@ def get_cuda_peak_memory_mb() -> float:
         import torch
 
         if torch.cuda.is_available():
-            return torch.cuda.max_memory_allocated() / (1024 * 1024)
+            return torch.cuda.max_memory_allocated() / (1024 * 1024)  # type: ignore[no-any-return]
     except Exception:
         pass
     return 0.0

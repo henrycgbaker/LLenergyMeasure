@@ -26,19 +26,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-transformers = [
-    "torch>=2.5",
-    "transformers>=4.56,<5",
-    "accelerate>=1.4",
-    "bitsandbytes>=0.45",
-    "calflops>=0.2",
-]
-vllm = ["vllm>=0.6"]
-tensorrt = ["tensorrt-llm>=0.12"]
+# Engine extras intentionally absent: engines (transformers, vllm, tensorrt-llm)
+# run only inside their Docker images. The host does not import them. See
+# docs/development.md for the layer-split contract.
 zeus = ["zeus>=0.13.1"]
 codecarbon = ["codecarbon>=2.8"]
 dev = [
-    "llenergymeasure[transformers]",
     "pytest>=8.0",
     "pytest-cov>=4.0",
     "pytest-xdist>=3.8.0",
@@ -51,7 +44,6 @@ dev = [
 
 [dependency-groups]
 dev = [
-    "llenergymeasure[transformers]",
     "pytest>=8.0",
     "pytest-cov>=4.0",
     "pytest-xdist>=3.8.0",
@@ -88,37 +80,24 @@ indent-style = "space"
 python_version = "3.10"
 strict = true
 ignore_missing_imports = true
-# Disable checks that fail on untyped third-party libs (torch, transformers)
+# Disable checks that fail on untyped third-party libs imported under
+# TYPE_CHECKING from engine code (torch, transformers, vllm, tensorrt-llm).
+# These libraries never resolve on the host: engines run inside Docker.
 disallow_untyped_calls = false
 # Allow unused type: ignore comments (needed for cross-environment compatibility)
 warn_unused_ignores = false
 exclude = []
-
-[[tool.mypy.overrides]]
-module = "transformers.*"
-# transformers re-exports (AutoConfig, AutoTokenizer, etc.) are not explicitly
-# typed in their __init__.py stubs, causing attr-defined errors.
-no_implicit_reexport = false
 
 [[tool.uv.index]]
 name = "nvidia"
 url = "https://pypi.nvidia.com/"
 
 [tool.uv]
-# vllm and tensorrt pin incompatible torch versions — mark as mutually exclusive extras
-conflicts = [
-    [
-        { extra = "vllm" },
-        { extra = "tensorrt" },
-    ],
-]
-# tensorrt-llm and some vllm transitive deps exist on both nvidia and pypi indexes;
-# unsafe-best-match allows uv to pick the best version across all registered indexes
+# Engines run only inside their Docker images; the host lock has no
+# engine deps, so the vllm-vs-tensorrt extras conflict and the engine-
+# specific git overrides are no longer needed. The nvidia index stays
+# registered for any future host-side tooling that resolves through it.
 index-strategy = "unsafe-best-match"
-override-dependencies = [
-    "flashinfer @ git+https://github.com/flashinfer-ai/flashinfer.git@06309c4e",
-    "s2wrapper @ git+https://github.com/bfshi/scaling_on_scales.git@60da2afe",
-]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

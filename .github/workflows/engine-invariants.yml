@@ -5,13 +5,16 @@ name: Engine Invariants — Probe + Mine + Vendor
 # replays it against the live library, regenerates the invariants digest
 # doc, and atomically commits all four artefacts back to the PR branch.
 #
-# Per-engine runner choice:
-#   transformers : ubuntu-latest GH-hosted runner; CPU-safe import.
+# Per-engine runner choice — all engines run inside their Docker image:
+#   transformers : ubuntu-latest GH-hosted runner; mine inside
+#                  llenergymeasure:transformers-${VER} (no GPU needed,
+#                  miners are CPU-safe).
 #   vllm         : self-hosted GPU runner inside llenergymeasure:vllm-${VER}.
-#                  vLLM miners ARE CPU-safe but the unified uv.lock breaks
-#                  vllm's torch/torchvision via tensorrt-llm 0.21.0's
-#                  transitive constraints (#437, #464); building inside the
-#                  vLLM image side-steps the resolution problem.
+#                  vLLM miners ARE CPU-safe but the unified host uv.lock
+#                  used to break vllm's torch via tensorrt-llm 0.21.0's
+#                  transitive constraints (#437, #464); engines now run
+#                  exclusively in their own image, so this lane never
+#                  touches the host lock.
 #   tensorrt     : self-hosted GPU runner inside llenergymeasure:tensorrt-
 #                  ${VER}; TRT-LLM 0.21.0 loads CUDA bindings on import so
 #                  CPU runners cannot import the library at all.
@@ -89,16 +92,6 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-suffix: engine-invariants-transformers-3.12
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: uv sync --dev --extra transformers
-
       - name: Resolve transformers version from SSOT
         id: version
         run: |
@@ -108,6 +101,27 @@ jobs:
             exit 1
           fi
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "image=llenergymeasure:transformers-${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build or reuse transformers image
+        # SSOT is the canonical version; the Dockerfile ARG default is a
+        # local-build fallback. CI passes the SSOT value at build time so
+        # the two cannot drift. Layer cache makes the FROM step a no-op
+        # when the upstream torch/transformers tag is unchanged.
+        # INSTALL_FA3=false keeps the build fast (FA3 from-source is ~1h);
+        # the miners + vendor pass don't need flash-attn.
+        run: |
+          IMAGE="${{ steps.version.outputs.image }}"
+          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            docker build \
+              -f docker/Dockerfile.transformers \
+              -t "$IMAGE" \
+              --build-arg TRANSFORMERS_VERSION="${{ steps.version.outputs.version }}" \
+              --build-arg INSTALL_FA3=false \
+              .
+          else
+            echo "Reusing cached $IMAGE."
+          fi
 
       - name: Compute stable mining + vendor anchor
         id: anchor
@@ -144,11 +158,17 @@ jobs:
           echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
           echo "date=${DATE}" >> "$GITHUB_OUTPUT"
 
-      - name: Probe — landmark resolution check
+      - name: Probe — landmark resolution check (in container)
         id: probe
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
         run: |
-          uv run python -m scripts._probe \
-            --engine transformers --producer invariants \
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            --entrypoint python3 \
+            "$IMAGE" \
+            -m scripts._probe --engine transformers --producer invariants \
             > /tmp/probe-transformers.json
           VERDICT=$(jq -r '.verdict' /tmp/probe-transformers.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
@@ -167,29 +187,46 @@ jobs:
             fi
           done
 
-      - name: Mine corpus — write proposed.yaml
+      - name: Mine + vendor inside container
         if: steps.probe.outputs.verdict == 'pass'
         env:
-          LLENERGY_MINER_FROZEN_AT: ${{ steps.anchor.outputs.date }}
+          IMAGE: ${{ steps.version.outputs.image }}
+          ANCHOR_SHA: ${{ steps.anchor.outputs.sha }}
+          ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
         run: |
-          uv run python -m scripts.engine_miners.build_corpus --engine transformers
+          docker run --rm \
+            -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
+            -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            --entrypoint bash \
+            "$IMAGE" \
+            -c "
+              set -euo pipefail
+              python3 -m scripts.engine_miners.build_corpus --engine transformers
+              python3 scripts/vendor_rules.py \
+                --engine transformers \
+                --corpus '${CORPUS_DIR}/transformers.proposed.yaml' \
+                --out '${CORPUS_DIR}/transformers.vendored.yaml' \
+                --vendor-commit '${ANCHOR_SHA}' \
+                --fail-on-divergence
+            "
 
-      - name: Vendor-replay — write vendored.yaml
+      - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
-        env:
-          LLENERGY_VENDOR_FROZEN_AT: ${{ steps.anchor.outputs.date }}
-        run: |
-          uv run python scripts/vendor_rules.py \
-            --engine transformers \
-            --corpus "${CORPUS_DIR}/transformers.proposed.yaml" \
-            --out "${CORPUS_DIR}/transformers.vendored.yaml" \
-            --vendor-commit "${{ steps.anchor.outputs.sha }}" \
-            --fail-on-divergence
+        # Doc generator + differ run on the host (no engine import needed);
+        # pure CPU/IO Python.
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: engine-invariants-transformers-docgen-3.12
+          python-version: "3.12"
 
       - name: Regenerate invariants digest doc
         if: steps.probe.outputs.verdict == 'pass'
         run: |
-          uv run python scripts/generate_invariants_doc.py \
+          uv run --no-sync --with pyyaml python scripts/generate_invariants_doc.py \
             --engine transformers \
             --out docs/generated/invariants-transformers.md
 
@@ -198,7 +235,7 @@ jobs:
         id: diff
         run: |
           set +e
-          uv run python scripts/diff_engine_invariants.py \
+          uv run --no-sync --with pyyaml python scripts/diff_engine_invariants.py \
             /tmp/engine-invariants-diff/transformers.vendored.old.yaml \
             "${CORPUS_DIR}/transformers.vendored.yaml" \
             --out /tmp/engine-invariants-diff/transformers.vendored.md \

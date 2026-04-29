@@ -87,8 +87,11 @@ COPY --from=builder /flash-attn-staging/ /opt/conda/lib/python3.11/site-packages
 
 WORKDIR /app
 
-# Install llenergymeasure with transformers extras from source (no PyPI yet).
-# sentencepiece needed for Llama/Qwen tokenisers.
+# Install llenergymeasure from source plus the transformers engine deps inline.
+# Engine deps (transformers/accelerate/bitsandbytes/calflops + sentencepiece/einops)
+# are declared HERE rather than via a host-side pyproject extra: the engine
+# runs only inside this image, so its dependency list belongs in the image's
+# install spec, not in a host extra that nothing else uses.
 # Bind mounts: pyproject.toml/uv.lock/README.md are build-only (not needed at runtime).
 # Cache mount: uv reuses cached wheels across rebuilds without bloating the image.
 COPY src/ ./src/
@@ -97,7 +100,12 @@ RUN --mount=type=bind,source=pyproject.toml,target=/app/pyproject.toml \
     --mount=type=bind,source=uv.lock,target=/app/uv.lock \
     --mount=type=bind,source=README.md,target=/app/README.md \
     --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system ".[transformers]" "transformers==${TRANSFORMERS_VERSION}" sentencepiece einops
+    uv pip install --system "." \
+        "transformers==${TRANSFORMERS_VERSION}" \
+        "accelerate>=1.4" \
+        "bitsandbytes>=0.45" \
+        "calflops>=0.2" \
+        sentencepiece einops
 
 # HuggingFace cache — writable for non-root users
 ENV HF_HOME=/app/.cache/huggingface

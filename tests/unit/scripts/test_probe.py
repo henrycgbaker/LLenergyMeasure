@@ -5,9 +5,12 @@ under the live library?") and emits a richly-diagnosed report. These
 tests verify pass/fail verdict derivation, fingerprint stability + drift,
 SSOT envelope checks, and round-tripping through the cache file.
 
-Synthetic LANDMARKS pinned to the live ``transformers`` package keep
-the suite stable across library versions without depending on private
-symbols.
+LANDMARKS are stdlib symbols (``json.JSONDecodeError`` etc.) rather than
+real engine symbols: the probe imports modules via ``importlib`` and
+introspects with ``getattr``, so any module path works. Engine libraries
+are not installed on host (engines run only inside their Docker images
+— see ``docs/development.md``); using stdlib symbols keeps the probe's
+resolution logic exercised host-side without an engine dependency.
 """
 
 from __future__ import annotations
@@ -86,8 +89,8 @@ def test_probe_pass_when_all_landmarks_resolve(
         engine="transformers",
         producer="invariants",
         landmarks=(
-            "transformers.GenerationConfig",
-            "transformers.PreTrainedModel",
+            "json.JSONDecodeError",
+            "json.JSONEncoder",
         ),
     )
 
@@ -109,15 +112,15 @@ def test_probe_fail_when_landmark_missing(monkeypatch: pytest.MonkeyPatch, tmp_p
         engine="transformers",
         producer="invariants",
         landmarks=(
-            "transformers.GenerationConfig",
-            "transformers.NonExistentSymbolXYZ",
+            "json.JSONDecodeError",
+            "json.NonExistentSymbolXYZ",
         ),
     )
 
     report = _probe.probe(engine="transformers", producer="invariants")
 
     assert report.verdict == "fail"
-    assert report.landmarks_missing == ["transformers.NonExistentSymbolXYZ"]
+    assert report.landmarks_missing == ["json.NonExistentSymbolXYZ"]
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +137,7 @@ def test_probe_fingerprint_stable_across_runs(
         monkeypatch,
         engine="transformers",
         producer="invariants",
-        landmarks=("transformers.GenerationConfig",),
+        landmarks=("json.JSONDecodeError",),
     )
 
     first = _probe.probe(engine="transformers", producer="invariants")
@@ -152,7 +155,7 @@ def test_probe_fingerprint_drift_listed_on_change(
         monkeypatch,
         engine="transformers",
         producer="invariants",
-        landmarks=("transformers.GenerationConfig",),
+        landmarks=("json.JSONDecodeError",),
     )
 
     first = _probe.probe(engine="transformers", producer="invariants")
@@ -165,7 +168,7 @@ def test_probe_fingerprint_drift_listed_on_change(
         monkeypatch,
         engine="transformers",
         producer="invariants",
-        landmarks=("transformers.PreTrainedModel",),
+        landmarks=("json.JSONEncoder",),
     )
     second = _probe.probe(engine="transformers", producer="invariants")
 
@@ -187,7 +190,7 @@ def test_probe_version_inside_envelope_matches_ssot(
         monkeypatch,
         engine="transformers",
         producer="invariants",
-        landmarks=("transformers.GenerationConfig",),
+        landmarks=("json.JSONDecodeError",),
     )
 
     # Rewrite the SSOT so the current version sits OUTSIDE the static pin —
@@ -218,7 +221,7 @@ def test_probe_writes_compat_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
         monkeypatch,
         engine="transformers",
         producer="invariants",
-        landmarks=("transformers.GenerationConfig",),
+        landmarks=("json.JSONDecodeError",),
     )
 
     rc = _probe.main(["--engine", "transformers", "--producer", "invariants"])
@@ -241,7 +244,7 @@ def test_probe_ssot_missing_returns_infra_error(
         monkeypatch,
         engine="ghost_engine",
         producer="invariants",
-        landmarks=("transformers.GenerationConfig",),
+        landmarks=("json.JSONDecodeError",),
     )
 
     rc = _probe.main(["--engine", "ghost_engine", "--producer", "invariants"])
