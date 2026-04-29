@@ -61,6 +61,10 @@
       "labels": ["renovate", "engine-tensorrt"],
       "automerge": false,
       "stabilityDays": 3
+    },
+    {
+      "matchManagers": ["pep621"],
+      "rangeStrategy": "replace"
     }
   ],
   "schedule": ["before 9am on Monday"],
