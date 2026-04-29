@@ -16,12 +16,17 @@ Run::
 from __future__ import annotations
 
 import argparse
-import subprocess
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_PROJECT_ROOT))
+
+from scripts.engine_miners.build_corpus import _PROVENANCE_PRIORITY  # noqa: E402
 
 _ENGINE_DISPLAY_NAMES = {
     "transformers": "Transformers",
@@ -29,16 +34,22 @@ _ENGINE_DISPLAY_NAMES = {
     "tensorrt": "TensorRT-LLM",
 }
 
-_ADDED_BY_DISPLAY = {
+_ADDED_BY_DISPLAY: dict[str, str] = {
     "static_miner": "Static miner (AST analysis)",
     "dynamic_miner": "Dynamic miner (constructor probing)",
     "pydantic_lift": "Pydantic field lift",
     "msgspec_lift": "msgspec field lift",
     "dataclass_lift": "dataclass field lift",
+    "manual_seed": "Manual seed",
     "runtime_warning": "Runtime warning observation",
+    "observed_collision": "Observed collision (runtime hash equivalence)",
 }
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+assert set(_ADDED_BY_DISPLAY) == set(_PROVENANCE_PRIORITY), (
+    "_ADDED_BY_DISPLAY must cover every _PROVENANCE_PRIORITY source; "
+    f"missing: {set(_PROVENANCE_PRIORITY) - set(_ADDED_BY_DISPLAY)}, "
+    f"extra: {set(_ADDED_BY_DISPLAY) - set(_PROVENANCE_PRIORITY)}"
+)
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -49,32 +60,6 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     if not text.strip():
         return {}
     data = yaml.safe_load(text)
-    return data if isinstance(data, dict) else {}
-
-
-def _previous_proposed(engine: str) -> dict[str, Any]:
-    """Read the previous-revision corpus from ``HEAD~1`` for delta computation.
-
-    Returns ``{}`` on any failure (no previous version, malformed YAML,
-    not a git checkout). Deltas degrade gracefully — a fresh corpus
-    reports every rule as "added".
-    """
-    rel_path = f"configs/engine_invariants/{engine}.proposed.yaml"
-    try:
-        text = subprocess.check_output(
-            ["git", "show", f"HEAD~1:{rel_path}"],
-            cwd=_PROJECT_ROOT,
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
-    except subprocess.CalledProcessError:
-        return {}
-    if not text.strip():
-        return {}
-    try:
-        data = yaml.safe_load(text)
-    except yaml.YAMLError:
-        return {}
     return data if isinstance(data, dict) else {}
 
 
@@ -98,34 +83,6 @@ def _group_by_added_by(rules: list[dict[str, Any]]) -> dict[str, list[dict[str, 
     return dict(groups)
 
 
-def _delta_section(current_ids: set[str], previous_ids: set[str]) -> list[str]:
-    """Render the added-vs-removed rule-ID delta against the previous corpus."""
-    added = sorted(current_ids - previous_ids)
-    removed = sorted(previous_ids - current_ids)
-    lines: list[str] = ["## Delta vs previous SSOT version", ""]
-    if not previous_ids:
-        lines.append("_No previous corpus on `HEAD~1`; treating every rule as new._")
-        lines.append("")
-        return lines
-    if not added and not removed:
-        lines.append("_No invariants added or removed since the previous revision._")
-        lines.append("")
-        return lines
-    if added:
-        lines.append(f"**Added ({len(added)}):**")
-        lines.append("")
-        for rule_id in added:
-            lines.append(f"- `{rule_id}`")
-        lines.append("")
-    if removed:
-        lines.append(f"**Removed ({len(removed)}):**")
-        lines.append("")
-        for rule_id in removed:
-            lines.append(f"- `{rule_id}`")
-        lines.append("")
-    return lines
-
-
 def _render(engine: str) -> str:
     """Build the digest Markdown for ``engine``."""
     proposed = _load_yaml(
@@ -144,15 +101,6 @@ def _render(engine: str) -> str:
     vendored_cases = vendored.get("cases") or []
     if not isinstance(vendored_cases, list):
         vendored_cases = []
-
-    previous = _previous_proposed(engine)
-    previous_rules = previous.get("rules") or []
-    previous_ids = {
-        str(r.get("id")) for r in previous_rules if isinstance(r, dict) and r.get("id") is not None
-    }
-    current_ids = {
-        str(r.get("id")) for r in proposed_rules if isinstance(r, dict) and r.get("id") is not None
-    }
 
     display = _ENGINE_DISPLAY_NAMES.get(engine, engine.title())
     lines: list[str] = [
@@ -176,16 +124,25 @@ def _render(engine: str) -> str:
         lines.append("_No invariants in the proposed corpus._")
         lines.append("")
     else:
-        for added_by in sorted(groups):
-            display_label = _ADDED_BY_DISPLAY.get(added_by, added_by)
+        for added_by in _PROVENANCE_PRIORITY:
+            if added_by not in groups:
+                continue
+            display_label = _ADDED_BY_DISPLAY[added_by]
             rules = groups[added_by]
             lines.append(f"### {display_label} ({len(rules)})")
             lines.append("")
             for rule in rules:
                 lines.append(_rule_summary(rule))
             lines.append("")
+        unknown_keys = sorted(set(groups) - set(_PROVENANCE_PRIORITY))
+        for added_by in unknown_keys:
+            rules = groups[added_by]
+            lines.append(f"### {added_by} ({len(rules)})")
+            lines.append("")
+            for rule in rules:
+                lines.append(_rule_summary(rule))
+            lines.append("")
 
-    lines.extend(_delta_section(current_ids, previous_ids))
     return "\n".join(lines)
 
 

@@ -5,17 +5,7 @@ name: Engine Invariants — Probe + Mine + Vendor
 # replays it against the live library, regenerates the invariants digest
 # doc, and atomically commits all four artefacts back to the PR branch.
 #
-# Replaces the deleted auto-mine.yml + invariant-miner.yml pair (the
-# Stage-1/Stage-2 split was honest about the YAML existence but the Python
-# code already runs vendor logic in-process during mining; merging the
-# workflows reflects existing coupling).
-#
-# Cross-pipeline coordination — ONE atomic writeback per PR cycle, gated
-# on a wait-for-sibling check against engine-schemas.yml — lands in a
-# follow-up alongside engine-schemas.yml. For now this workflow performs
-# its writeback unconditionally; there is no sibling to coordinate with.
-#
-# Per-engine runner choice mirrors the deleted workflows:
+# Per-engine runner choice:
 #   transformers : ubuntu-latest GH-hosted runner; CPU-safe import.
 #   vllm         : self-hosted GPU runner inside llenergymeasure:vllm-${VER}.
 #                  vLLM miners ARE CPU-safe but the unified uv.lock breaks
@@ -317,10 +307,6 @@ jobs:
           esac
 
       - name: Atomic writeback
-        # No wait-for-sibling guard yet — engine-schemas.yml lands as a
-        # follow-up; this writeback runs unconditionally for now. The
-        # cross-pipeline rollup label below is also unconditional pending
-        # the sibling.
         if: steps.probe.outputs.verdict == 'pass' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
           git config user.name  "llem-ci-bot[bot]"
