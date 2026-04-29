@@ -183,7 +183,7 @@ def _construct_generic(native_type: str, kwargs: dict[str, Any]) -> Any:
 # Runs inside the ``llenergymeasure:tensorrt`` Docker image on the self-hosted
 # GPU runner — TRT-LLM 0.21.0 cannot be imported on a CPU host (loads CUDA
 # bindings on import), so this codepath is only exercised in CI by the
-# ``vendor-tensorrt`` job in ``.github/workflows/invariant-miner.yml``.
+# ``vendor-tensorrt`` job in ``.github/workflows/engine-invariants.yml``.
 #
 # The static miner emits short-form ``native_type`` values (``tensorrt_llm.X``)
 # matching the AST symbol it walked. Map those to the deep import paths inside

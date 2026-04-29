@@ -514,7 +514,7 @@ llem run experiment.yaml --skip-preflight
 
 When you update an engine version (by bumping the `ARG` in a Dockerfile), the
 vendored parameter schemas must be regenerated. This happens automatically via
-the [Parameter Discovery Pipeline](schema-refresh.md) (`parameter-discovery.yml` workflow)
+the [Parameter Discovery Pipeline](schema-refresh.md) (`engine-schemas.yml` workflow)
 for Renovate-managed bumps. For manual bumps, run:
 
 ```bash

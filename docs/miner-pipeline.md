@@ -424,10 +424,9 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │               │                                                   │
   │     ┌─────────┴──────────────┐                                    │
   │     ▼                        ▼                                    │
-  │  engine-invariants.yml   parameter-discovery.yml                  │
-  │  (per-engine matrix:     (engine schemas; today's existing        │
-  │   probe + mine + vendor)  workflow until engine-schemas.yml       │
-  │                            ships as PR-5b)                        │
+  │  engine-invariants.yml   engine-schemas.yml                       │
+  │  (per-engine matrix:     (engine schemas:                         │
+  │   probe + mine + vendor)  introspect Pydantic configs)            │
   │                                                                   │
   │  Path filters fire both workflows in parallel on the Renovate     │
   │  PR. Each writes back to the PR branch independently.             │
@@ -461,7 +460,7 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │      vendored.yaml, the digest doc, and engine_versions/          │
   │      {engine}.compat.json. Pushed with --force-with-lease.        │
   │                       │                                           │
-  │  ─────────────── parameter-discovery.yml (parallel) ───────       │
+  │  ─────────────── engine-schemas.yml (parallel) ────────────       │
   │                       ▼                                           │
   │  scripts/engine_introspectors introspects engine config classes   │
   │  inside Docker, regenerates discovered_schemas/{engine}.json,     │
@@ -495,7 +494,7 @@ The update workflow:
 
 ### Phase B.6 observed flow (historical)
 
-The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transformers v4.57.3 → v4.57.6) was the first naturally-Renovate-authored exercise of the full chain. It pre-dates the merge of mining + vendor into `engine-invariants.yml`; the workflow names below (`auto-mine.yml`, `invariant-miner.yml`) are historical and reflect the two-stage split that has since collapsed. The structural lessons (commit-back determinism, self-hosted runner serialisation) carry over to the merged workflow. The actual commit sequence on the PR branch:
+The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transformers v4.57.3 → v4.57.6) was the first naturally-Renovate-authored exercise of the full chain. It pre-dates the merge of mining + vendor into `engine-invariants.yml` and the rename of the schema workflow to `engine-schemas.yml`; the workflow names below (`auto-mine.yml`, `invariant-miner.yml`, `parameter-discovery.yml`) are historical and reflect the predecessor pipeline shape that has since collapsed/renamed. The structural lessons (commit-back determinism, self-hosted runner serialisation) carry over to the merged workflow. The actual commit sequence on the PR branch:
 
 ```
   Commit (PR #459 branch)   Author       Producing workflow / event
