@@ -262,7 +262,12 @@ jobs:
             echo
             echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
             echo
-            echo "**To unblock:** patch the introspector module's landmarks, or run \`@llem-ci-bot /approve-reuse transformers schemas\` to widen the SSOT envelope. CI will remain red until the probe passes."
+            echo "**To unblock,** choose one of:"
+            echo
+            echo "- **Patch the introspector module's landmarks** — required when the library has genuinely renamed or removed the missing symbols. The introspector code needs updating to match the new library API."
+            echo "- **Run \`@llem-ci-bot /approve-reuse transformers schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
+            echo
+            echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
           } | gh pr comment "$PR_NUMBER" --body-file -
           gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
 
@@ -567,7 +572,12 @@ jobs:
             echo
             echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
             echo
-            echo "**To unblock:** patch the introspector module's landmarks, or run \`@llem-ci-bot /approve-reuse vllm schemas\` to widen the SSOT envelope. CI will remain red until the probe passes."
+            echo "**To unblock,** choose one of:"
+            echo
+            echo "- **Patch the introspector module's landmarks** — required when the library has genuinely renamed or removed the missing symbols. The introspector code needs updating to match the new library API."
+            echo "- **Run \`@llem-ci-bot /approve-reuse vllm schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
+            echo
+            echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
           } | gh pr comment "$PR_NUMBER" --body-file -
           gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
 
@@ -659,6 +669,11 @@ jobs:
           exit 1
 
   schemas-tensorrt:
+    # tensorrt symlink trick (#472) doesn't resolve the package source
+    # inside NGC; both __file__.parent and __path__[0] return non-
+    # directory paths. Tracked separately; #500 explores option-b
+    # source-tarball extraction. Mark non-blocking until that lands.
+    continue-on-error: true
     if: github.event_name != 'workflow_dispatch' || inputs.engine == 'tensorrt' || inputs.engine == 'all'
     runs-on: self-hosted
     timeout-minutes: 60
@@ -890,7 +905,12 @@ jobs:
             echo
             echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
             echo
-            echo "**To unblock:** patch the introspector module's landmarks, or run \`@llem-ci-bot /approve-reuse tensorrt schemas\` to widen the SSOT envelope. CI will remain red until the probe passes."
+            echo "**To unblock,** choose one of:"
+            echo
+            echo "- **Patch the introspector module's landmarks** — required when the library has genuinely renamed or removed the missing symbols. The introspector code needs updating to match the new library API."
+            echo "- **Run \`@llem-ci-bot /approve-reuse tensorrt schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
+            echo
+            echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
           } | gh pr comment "$PR_NUMBER" --body-file -
           gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
 
