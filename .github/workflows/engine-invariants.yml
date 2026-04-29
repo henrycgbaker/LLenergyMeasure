@@ -383,11 +383,17 @@ jobs:
 
       - name: Wait for sibling pipeline to complete
         # Block until the engine-schemas pipeline finishes for this same
-        # head SHA. Already-finished sibling exits immediately. Whichever
-        # pipeline reaches its writeback step second performs its commit
-        # against the tip that already includes the first pipeline's
-        # writeback (disjoint paths; force-with-lease + rebase handle the
-        # fast-forward).
+        # head SHA. Already-finished sibling exits immediately. Schemas
+        # writes back first; this wait makes invariants the second writer.
+        # Disjoint writeback paths + force-with-lease + rebase handle
+        # any race on the tip.
+        #
+        # CONTRACT: check-name below must match the sibling cell's JOB ID
+        # in engine-schemas.yml (schemas-{transformers,vllm,tensorrt}). If
+        # those jobs are renamed, this wait silently degrades to a no-op
+        # because wait-on-check-action polls a check that will never
+        # appear. There is no CI guard against this drift — keep them
+        # in sync by hand.
         if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
@@ -761,6 +767,9 @@ jobs:
           fi
 
       - name: Wait for sibling pipeline to complete
+        # CONTRACT: check-name below must match the schemas-vllm JOB ID
+        # in engine-schemas.yml. See the transformers wait block above
+        # for full ordering rationale.
         if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
@@ -1154,6 +1163,9 @@ jobs:
           fi
 
       - name: Wait for sibling pipeline to complete
+        # CONTRACT: check-name below must match the schemas-tensorrt JOB ID
+        # in engine-schemas.yml. See the transformers wait block above
+        # for full ordering rationale.
         if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
