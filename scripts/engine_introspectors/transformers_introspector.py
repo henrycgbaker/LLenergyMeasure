@@ -20,6 +20,19 @@ from scripts.engine_introspectors._common import (
     read_dockerfile_from,
 )
 
+# Symbols this introspector relies on inside the live ``transformers``
+# package. Read by ``scripts._probe`` before discovery runs; a missing
+# landmark flips the probe verdict to ``fail`` and skips downstream
+# discovery. Mirrors the imports inside :func:`discover`.
+LANDMARKS: tuple[str, ...] = (
+    "transformers.AutoModelForCausalLM",
+    "transformers.AutoModelForCausalLM.from_pretrained",
+    "transformers.PreTrainedModel",
+    "transformers.PreTrainedModel.from_pretrained",
+    "transformers.GenerationConfig",
+    "transformers.GenerationConfig.to_dict",
+)
+
 
 def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     """Discover HuggingFace Transformers schemas.

@@ -26,6 +26,16 @@ from scripts.engine_introspectors._common import (
     read_dockerfile_from,
 )
 
+# Symbols this introspector relies on inside the live ``tensorrt_llm``
+# package. Read by ``scripts._probe`` before discovery runs; a missing
+# landmark flips the probe verdict to ``fail`` and skips downstream
+# discovery.
+LANDMARKS: tuple[str, ...] = (
+    "tensorrt_llm.SamplingParams",
+    "tensorrt_llm.llmapi.llm_args.TrtLlmArgs",
+    "tensorrt_llm.llmapi.llm_args.TrtLlmArgs.model_json_schema",
+)
+
 
 def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     """Discover TensorRT-LLM engine and sampling schemas.

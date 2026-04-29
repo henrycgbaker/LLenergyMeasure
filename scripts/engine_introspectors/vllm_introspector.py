@@ -16,6 +16,14 @@ from scripts.engine_introspectors._common import (
     read_dockerfile_from,
 )
 
+# Symbols this introspector relies on inside the live ``vllm`` package.
+# Read by ``scripts._probe`` before discovery runs; a missing landmark
+# flips the probe verdict to ``fail`` and skips downstream discovery.
+LANDMARKS: tuple[str, ...] = (
+    "vllm.SamplingParams",
+    "vllm.engine.arg_utils.EngineArgs",
+)
+
 
 def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     """Discover vLLM engine and sampling schemas.
