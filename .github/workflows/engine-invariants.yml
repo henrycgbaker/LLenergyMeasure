@@ -888,6 +888,7 @@ jobs:
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "image=llenergymeasure:tensorrt-${VER}" >> "$GITHUB_OUTPUT"
 
+      # Self-hosted runners must have nvcr.io credentials configured (see docs/development.md).
       - name: Pull TRT-LLM upstream image and tag locally
         # NGC publishes canonical TRT-LLM images at
         # nvcr.io/nvidia/tensorrt-llm/release:${VER}. Pull directly and
