@@ -24,6 +24,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _ENGINES = ("vllm", "tensorrt", "transformers")
@@ -34,25 +36,12 @@ def _normalize_version(version: str) -> str:
     return version.lstrip("v")
 
 
-def _parse_ssot_version(ssot_path: Path) -> str | None:
-    """Extract library.current_version from an engine SSOT yaml.
-
-    Uses a tiny PyYAML-free parser to keep this script free of dependencies
-    that might not be installed in every CI lane.
-    """
-    text = ssot_path.read_text()
-    in_library = False
-    for raw in text.splitlines():
-        line = raw.rstrip()
-        if not line or line.lstrip().startswith("#"):
-            continue
-        if not line[0].isspace():
-            in_library = line.strip().startswith("library:")
-            continue
-        if in_library and line.lstrip().startswith("current_version:"):
-            value = line.split(":", 1)[1].strip()
-            return value.strip("\"'")
-    return None
+def _ssot_current_version(ssot_path: Path) -> str | None:
+    """Return ``library.current_version`` from an engine SSOT yaml."""
+    data = yaml.safe_load(ssot_path.read_text()) or {}
+    library = data.get("library") or {}
+    value = library.get("current_version")
+    return None if value is None else str(value)
 
 
 def _parse_schema_version(schema_path: Path) -> Any:
@@ -71,21 +60,23 @@ def main(repo_root: Path | None = None) -> int:
 
     for engine in _ENGINES:
         ssot_path = ssot_dir / f"{engine}.yaml"
-        if not ssot_path.exists():
+        try:
+            ssot_version = _ssot_current_version(ssot_path)
+        except FileNotFoundError:
             errors.append(f"{engine}: SSOT not found: {ssot_path}")
             continue
 
         schema_path = schema_dir / f"{engine}.json"
-        if not schema_path.exists():
+        try:
+            schema_version = _parse_schema_version(schema_path)
+        except FileNotFoundError:
             errors.append(f"{engine}: schema not found: {schema_path}")
             continue
 
-        ssot_version = _parse_ssot_version(ssot_path)
         if ssot_version is None:
             errors.append(f"{engine}: library.current_version not found in {ssot_path.name}")
             continue
 
-        schema_version = _parse_schema_version(schema_path)
         if schema_version is None:
             errors.append(f"{engine}: engine_version not found in {schema_path.name}")
             continue

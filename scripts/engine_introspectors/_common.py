@@ -32,11 +32,7 @@ SCHEMA_VERSION = "1.0.0"
 # nvcr.io/nvidia/tensorrt-llm/release) that introspectors receive via
 # the workflow-supplied ``--image-ref`` flag rather than reading from a
 # local Dockerfile.
-DOCKERFILE_PATHS: dict[str, str | None] = {
-    "vllm": None,
-    "tensorrt": None,
-    "transformers": "docker/Dockerfile.transformers",
-}
+TRANSFORMERS_DOCKERFILE = "docker/Dockerfile.transformers"
 
 DEFAULT_OUTPUT_DIR = "src/llenergymeasure/config/discovered_schemas"
 

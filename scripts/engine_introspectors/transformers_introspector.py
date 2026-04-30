@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.engine_introspectors._common import (
-    DOCKERFILE_PATHS,
+    TRANSFORMERS_DOCKERFILE,
     annotation_to_type_str,
     jsonable,
     make_envelope,
@@ -119,9 +119,7 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
             }
         )
 
-    dockerfile_path = DOCKERFILE_PATHS["transformers"]
-    assert dockerfile_path is not None  # transformers always has a first-party Dockerfile
-    base_image_ref = read_dockerfile_from(repo_root / dockerfile_path)
+    base_image_ref = read_dockerfile_from(repo_root / TRANSFORMERS_DOCKERFILE)
     return make_envelope(
         engine="transformers",
         engine_version=transformers.__version__,
