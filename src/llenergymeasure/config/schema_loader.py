@@ -160,7 +160,11 @@ def _parse_envelope(*, engine: str, raw_text: str) -> DiscoveredSchema:
         engine_version=data["engine_version"],
         engine_commit_sha=data.get("engine_commit_sha"),
         image_ref=data["image_ref"],
-        base_image_ref=data.get("base_image_ref", data["image_ref"]),
+        # ``base_image_ref`` may be missing OR explicitly null in the
+        # discovered envelope (vllm and tensorrt no longer derive it from a
+        # first-party Dockerfile). Treat both as "fall back to image_ref"
+        # so the loader contract stays "always populated".
+        base_image_ref=data.get("base_image_ref") or data["image_ref"],
         discovered_at=_parse_iso(data["discovered_at"]),
         discovery_method=data.get("discovery_method", ""),
         discovery_limitations=limitations,
