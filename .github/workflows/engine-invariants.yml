@@ -1,14 +1,17 @@
-name: Engine Invariants — Probe + Mine + Vendor
+name: Engine Invariants — Probe + Mine + Vendor (vllm + tensorrt)
 
 # Per-concern workflow for the engine-invariants layer. Each per-engine job
 # probes the producer module's landmarks, mines the rules corpus, vendor-
 # replays it against the live library, regenerates the invariants digest
 # doc, and atomically commits all four artefacts back to the PR branch.
 #
-# Per-engine runner choice — all engines run inside their Docker image:
-#   transformers : ubuntu-latest GH-hosted runner; mine inside
-#                  llenergymeasure:transformers-${VER} (no GPU needed,
-#                  miners are CPU-safe).
+# This workflow handles vllm + tensorrt only. The transformers cell lives
+# in engine-invariants-transformers.yml and is sequenced after Engine
+# Image Build (transformers) via workflow_run. vllm + tensorrt pull
+# upstream images directly (no first-party build) and so don't need the
+# pre-build step.
+#
+# Per-engine runner choice:
 #   vllm         : self-hosted GPU runner inside llenergymeasure:vllm-${VER}.
 #                  vLLM miners ARE CPU-safe but the unified host uv.lock
 #                  used to break vllm's torch via tensorrt-llm 0.21.0's
@@ -22,23 +25,24 @@ name: Engine Invariants — Probe + Mine + Vendor
 # Determinism contract:
 #   The LLENERGY_MINER_FROZEN_AT and LLENERGY_VENDOR_FROZEN_AT env vars are
 #   set from the author date of the most recent commit touching any INPUT
-#   path (Dockerfile, miner modules, lift modules, build_corpus, vendor
-#   script, refresh helper, SSOT yaml). The anchor is stable across the
-#   workflow's own commit-back (which only touches OUTPUT paths), so re-
-#   runs on unchanged source emit byte-identical YAML. This determinism
-#   is THE prevention against the synchronize-loop the watchdog catches.
+#   path (miner modules, lift modules, build_corpus, vendor script, refresh
+#   helper, SSOT yaml). The anchor is stable across the workflow's own
+#   commit-back (which only touches OUTPUT paths), so re-runs on unchanged
+#   source emit byte-identical YAML. This determinism is THE prevention
+#   against the synchronize-loop the watchdog catches.
 
 on:
   pull_request:
     types: [opened, synchronize]
     paths:
-      - "engine_versions/*.yaml"
-      - "docker/Dockerfile.*"
+      - "engine_versions/vllm.yaml"
+      - "engine_versions/tensorrt.yaml"
       - "scripts/engine_miners/**"
       - "scripts/vendor_rules.py"
       - "scripts/_invariant_vendor_common.py"
       - "scripts/refresh_invariant_rules.sh"
       - "configs/engine_invariants/**"
+      - ".github/workflows/engine-invariants.yml"
   workflow_dispatch:
     inputs:
       engine:
@@ -46,7 +50,6 @@ on:
         required: true
         type: choice
         options:
-          - transformers
           - vllm
           - tensorrt
           - all
@@ -68,404 +71,6 @@ env:
   CORPUS_DIR: configs/engine_invariants
 
 jobs:
-  invariants-transformers:
-    if: github.event_name != 'workflow_dispatch' || inputs.engine == 'transformers' || inputs.engine == 'all'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Mint llem-ci-bot App token
-        # Short-lived (~1 hour) GitHub App token. Events it produces are
-        # NOT subject to the default GITHUB_TOKEN recursive-workflow guard,
-        # so the commit-back below can legitimately retrigger downstream
-        # CI. Skipped on fork PRs (secrets are not exposed there) so the
-        # workflow still runs read-only for external contributors.
-        id: app-token
-        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: Checkout PR branch
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref || github.ref }}
-          fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-
-      - name: Resolve transformers version from SSOT
-        id: version
-        run: |
-          VER=$(yq '.library.current_version' engine_versions/transformers.yaml)
-          if [[ -z "$VER" || "$VER" == "null" ]]; then
-            echo "Could not resolve transformers version from engine_versions/transformers.yaml" >&2
-            exit 1
-          fi
-          echo "version=${VER}" >> "$GITHUB_OUTPUT"
-          echo "image=llenergymeasure:transformers-${VER}" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GHCR (read-only, for cache pull)
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build transformers image inline (with cache)
-        # SSOT is the canonical version; the Dockerfile ARG default is a
-        # local-build fallback. CI passes the SSOT value at build time so
-        # the two cannot drift.
-        # cache-from: opportunistic warm hit on the release-time :latest tag
-        # (silently misses if absent — release-time docker-publish.yml keeps
-        # it fresh). cache-to: per-version GHA scope so successive runs of
-        # the same SSOT version reuse the FA3 + apt + uv layers.
-        # INSTALL_FA3=false keeps the build fast (FA3 from-source is ~1h);
-        # the miners + vendor pass don't need flash-attn.
-        # load: true lands the image in the local docker daemon for the
-        # subsequent docker run mining + vendor steps. No push: this PR
-        # does not publish per-PR images.
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/Dockerfile.transformers
-          target: runtime
-          tags: ${{ steps.version.outputs.image }}
-          build-args: |
-            TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
-            INSTALL_FA3=false
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
-          cache-to: type=gha,mode=max,scope=transformers-${{ steps.version.outputs.version }}
-          load: true
-
-      - name: Compute stable mining + vendor anchor
-        id: anchor
-        # Pin the YAML's mined_at + the vendor envelope's vendored_at to
-        # the SHA + author date of the most recent commit touching any
-        # INPUT path. Stable across the workflow's own commit-back (which
-        # only touches OUTPUT YAML), so re-runs on unchanged source emit
-        # byte-identical envelopes. Without this, every re-run emits a
-        # fresh wallclock timestamp, git diff picks it up, the commit-back
-        # fires, and the synchronize loops.
-        run: |
-          PATHS=(
-            "engine_versions/transformers.yaml"
-            "docker/Dockerfile.transformers"
-            "scripts/engine_miners/transformers_static_miner.py"
-            "scripts/engine_miners/transformers_dynamic_miner.py"
-            "scripts/engine_miners/transformers_miner.py"
-            "scripts/engine_miners/build_corpus.py"
-            "scripts/engine_miners/_base.py"
-            "scripts/engine_miners/_pydantic_lift.py"
-            "scripts/engine_miners/_msgspec_lift.py"
-            "scripts/engine_miners/_dataclass_lift.py"
-            "scripts/engine_miners/_fixpoint_test.py"
-            "scripts/vendor_rules.py"
-            "scripts/_invariant_vendor_common.py"
-            "scripts/refresh_invariant_rules.sh"
-          )
-          SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
-          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
-          if [[ -z "${DATE}" ]]; then
-            echo "::error::No git history found for any anchor input path; refusing to use wallclock fallback (would break determinism)." >&2
-            exit 1
-          fi
-          echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
-          echo "date=${DATE}" >> "$GITHUB_OUTPUT"
-
-      - name: Probe — landmark resolution check (in container)
-        id: probe
-        env:
-          IMAGE: ${{ steps.version.outputs.image }}
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/repo" \
-            -w /repo \
-            --entrypoint python3 \
-            "$IMAGE" \
-            -m scripts._probe --engine transformers --producer invariants \
-            > /tmp/probe-transformers.json
-          VERDICT=$(jq -r '.verdict' /tmp/probe-transformers.json)
-          echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
-
-      - name: Save current YAMLs for diffing
-        if: steps.probe.outputs.verdict == 'pass'
-        run: |
-          mkdir -p /tmp/engine-invariants-diff
-          for KIND in proposed vendored; do
-            OLD_YAML="${CORPUS_DIR}/transformers.${KIND}.yaml"
-            DEST="/tmp/engine-invariants-diff/transformers.${KIND}.old.yaml"
-            if [[ -f "$OLD_YAML" ]]; then
-              cp "$OLD_YAML" "$DEST"
-            else
-              : > "$DEST"
-            fi
-          done
-
-      - name: Mine + vendor inside container
-        if: steps.probe.outputs.verdict == 'pass'
-        env:
-          IMAGE: ${{ steps.version.outputs.image }}
-          ANCHOR_SHA: ${{ steps.anchor.outputs.sha }}
-          ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
-        run: |
-          docker run --rm \
-            -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
-            -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
-            -e PYTHONDONTWRITEBYTECODE=1 \
-            -v "${{ github.workspace }}:/repo" \
-            -w /repo \
-            --entrypoint bash \
-            "$IMAGE" \
-            -c "
-              set -euo pipefail
-              python3 -m scripts.engine_miners.build_corpus --engine transformers
-              python3 scripts/vendor_rules.py \
-                --engine transformers \
-                --corpus '${CORPUS_DIR}/transformers.proposed.yaml' \
-                --out '${CORPUS_DIR}/transformers.vendored.yaml' \
-                --vendor-commit '${ANCHOR_SHA}' \
-                --fail-on-divergence
-            "
-
-      - name: Set up Python (host) for doc-gen + diff
-        if: steps.probe.outputs.verdict == 'pass'
-        # Doc generator + differ run on the host (no engine import needed,
-        # but they DO import llenergymeasure.* + scripts.engine_miners.*).
-        # `uv sync --dev` installs the lean host project (no engine extras).
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-suffix: engine-invariants-transformers-docgen-3.12
-          python-version: "3.12"
-
-      - name: Install lean host project for doc-gen
-        if: steps.probe.outputs.verdict == 'pass'
-        run: uv sync --dev
-
-      - name: Regenerate invariants digest doc
-        if: steps.probe.outputs.verdict == 'pass'
-        run: |
-          uv run python scripts/generate_invariants_doc.py \
-            --engine transformers \
-            --out docs/generated/invariants-transformers.md
-
-      - name: Classify diff (proposed + vendored)
-        if: steps.probe.outputs.verdict == 'pass'
-        id: diff
-        run: |
-          set +e
-          uv run python scripts/diff_engine_invariants.py \
-            /tmp/engine-invariants-diff/transformers.vendored.old.yaml \
-            "${CORPUS_DIR}/transformers.vendored.yaml" \
-            --out /tmp/engine-invariants-diff/transformers.vendored.md \
-            --title "Transformers vendored invariants diff"
-          VENDORED_EXIT=$?
-          set -e
-
-          PROPOSED_CHANGED=true
-          if diff -q /tmp/engine-invariants-diff/transformers.proposed.old.yaml \
-                    "${CORPUS_DIR}/transformers.proposed.yaml" >/dev/null 2>&1; then
-            PROPOSED_CHANGED=false
-          fi
-
-          VENDORED_CHANGED=true
-          if diff -q /tmp/engine-invariants-diff/transformers.vendored.old.yaml \
-                    "${CORPUS_DIR}/transformers.vendored.yaml" >/dev/null 2>&1; then
-            VENDORED_CHANGED=false
-          fi
-
-          if [[ "$PROPOSED_CHANGED" == "false" && "$VENDORED_CHANGED" == "false" ]]; then
-            CLASSIFICATION="no-changes"
-          elif [[ $VENDORED_EXIT -eq 1 ]]; then
-            CLASSIFICATION="breaking"
-          else
-            CLASSIFICATION="safe"
-          fi
-          echo "classification=${CLASSIFICATION}" >> "$GITHUB_OUTPUT"
-
-          {
-            echo "## Engine invariants — transformers"
-            echo
-            if [[ "$CLASSIFICATION" == "no-changes" ]]; then
-              echo "_No changes to proposed or vendored invariants._"
-            else
-              if [[ "$PROPOSED_CHANGED" == "true" ]]; then
-                echo "### Proposed corpus diff"
-                echo
-                echo '```diff'
-                diff -u /tmp/engine-invariants-diff/transformers.proposed.old.yaml \
-                        "${CORPUS_DIR}/transformers.proposed.yaml" | head -n 200 || true
-                echo '```'
-                echo
-              fi
-              if [[ -f /tmp/engine-invariants-diff/transformers.vendored.md ]]; then
-                cat /tmp/engine-invariants-diff/transformers.vendored.md
-              fi
-            fi
-          } > /tmp/engine-invariants-diff/transformers.summary.md
-
-      - name: Probe-fail comment (skip downstream)
-        if: steps.probe.outputs.verdict == 'fail' && (github.event_name == 'pull_request' || inputs.pr_number != '')
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
-          {
-            echo "## Engine invariants — transformers (probe-blocked)"
-            echo
-            echo "**Probe failed.** Producer landmarks no longer resolve under the installed library."
-            echo
-            echo "**Missing landmarks:**"
-            echo
-            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-transformers.json
-            echo
-            echo "**Downstream mine + vendor steps were skipped.** No corpus changes were committed against this PR."
-            echo
-            echo "**To unblock,** choose one of:"
-            echo
-            echo "- **Patch the producer module's landmarks** — required when the library has genuinely renamed or removed the missing symbols. The miner code needs updating to match the new library API."
-            echo "- **Run \`@llem-ci-bot /approve-reuse transformers invariants\`** — widens the SSOT pin envelope to declare \"the existing miner code is valid for this library version too.\" Only useful when the library bumped *past* the miner's previously-validated version range but the landmarks still resolve."
-            echo
-            echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only a producer-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
-          } | gh pr comment "$PR_NUMBER" --body-file -
-          gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
-
-      - name: Upload diff artefact
-        if: steps.probe.outputs.verdict == 'pass'
-        uses: actions/upload-artifact@v4
-        with:
-          name: engine-invariants-diff-transformers
-          path: |
-            /tmp/engine-invariants-diff/transformers.proposed.old.yaml
-            /tmp/engine-invariants-diff/transformers.vendored.old.yaml
-            /tmp/engine-invariants-diff/transformers.summary.md
-            ${{ env.CORPUS_DIR }}/transformers.proposed.yaml
-            ${{ env.CORPUS_DIR }}/transformers.vendored.yaml
-
-      - name: Post per-pipeline comment (suppress on empty)
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && (github.event_name == 'pull_request' || inputs.pr_number != '')
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
-          gh pr comment "$PR_NUMBER" --body-file /tmp/engine-invariants-diff/transformers.summary.md
-
-      - name: Apply per-pipeline label
-        if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
-          for L in invariants-changed invariants-breaking invariants-safe probe-blocked; do
-            gh pr edit "$PR_NUMBER" --remove-label "$L" 2>/dev/null || true
-          done
-          case "${{ steps.diff.outputs.classification }}" in
-            breaking)  gh pr edit "$PR_NUMBER" --add-label "invariants-breaking" --add-label "invariants-changed" 2>/dev/null || true ;;
-            safe)      gh pr edit "$PR_NUMBER" --add-label "invariants-safe" --add-label "invariants-changed" 2>/dev/null || true ;;
-            no-changes) ;;
-          esac
-
-      - name: Detect sibling workflow run for this SHA
-        # PRs whose path-filter only matches one workflow's exclusive paths
-        # never trigger the sibling, so wait-on-check-action would block
-        # for its full timeout. This pre-flight skips the wait when no
-        # sibling run was queued for this head SHA.
-        id: sibling
-        if: steps.probe.outputs.verdict == 'pass' && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          SIBLING_NAME="Engine Schemas — Probe + Discover"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          COUNT=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&per_page=50" \
-            --jq "[.workflow_runs[] | select(.name == \"${SIBLING_NAME}\")] | length")
-          if [[ "${COUNT}" -gt 0 ]]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Sibling workflow ${SIBLING_NAME} did not fire for this SHA; skipping wait."
-          fi
-
-      - name: Wait for sibling pipeline to complete
-        # Block until the engine-schemas pipeline finishes for this same
-        # head SHA. Already-finished sibling exits immediately. Schemas
-        # writes back first; this wait makes invariants the second writer.
-        # Disjoint writeback paths + force-with-lease + rebase handle
-        # any race on the tip.
-        #
-        # CONTRACT: check-name below must match the sibling cell's JOB ID
-        # in engine-schemas.yml (schemas-{transformers,vllm,tensorrt}). If
-        # those jobs are renamed, this wait silently degrades to a no-op
-        # because wait-on-check-action polls a check that will never
-        # appear. There is no CI guard against this drift — keep them
-        # in sync by hand.
-        if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          check-name: 'schemas-transformers'
-          ref: ${{ github.event.pull_request.head.sha }}
-          repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-
-      - name: Atomic writeback
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        run: |
-          git config user.name  "llem-ci-bot[bot]"
-          git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
-
-          # Pull in any sibling-pipeline writeback that landed first.
-          git pull --rebase --autostash
-
-          git add \
-            "${CORPUS_DIR}/transformers.proposed.yaml" \
-            "${CORPUS_DIR}/transformers.vendored.yaml" \
-            docs/generated/invariants-transformers.md
-
-          if git diff --cached --quiet; then
-            echo "No engine-invariants artefact changes to commit."
-            exit 0
-          fi
-
-          git commit -m "chore(invariants): refresh transformers proposed + vendored corpus"
-          git push --force-with-lease
-
-      - name: Apply cross-pipeline rollup label
-        if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
-          if [[ "${{ steps.diff.outputs.classification }}" != "breaking" ]]; then
-            gh pr edit "$PR_NUMBER" --add-label "safe-bump" 2>/dev/null || true
-          else
-            gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
-          fi
-
-      - name: Probe-fail gate (red CI)
-        # Probe-fail must show as a red CI check: PRs cannot merge with a
-        # stale corpus. The probe-blocked comment above explains how to
-        # resolve (/approve-reuse to widen the SSOT envelope, or landmark
-        # patch); this gate makes that resolution mandatory rather than
-        # advisory.
-        if: steps.probe.outputs.verdict == 'fail'
-        run: |
-          echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
-          exit 1
-
   invariants-vllm:
     if: github.event_name != 'workflow_dispatch' || inputs.engine == 'vllm' || inputs.engine == 'all'
     runs-on: self-hosted

@@ -44,6 +44,7 @@ jobs:
           file: docker/Dockerfile.transformers
           target: runtime
           push: false
-          build-args: INSTALL_FA3=false
+          # INSTALL_FA3 deliberately not overridden — Dockerfile defaults
+          # to true so this build check exercises the same image users get.
           cache-from: |
             type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/transformers:latest

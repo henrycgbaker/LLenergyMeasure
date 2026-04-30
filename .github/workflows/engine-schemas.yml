@@ -1,13 +1,17 @@
-name: Engine Schemas — Probe + Discover
+name: Engine Schemas — Probe + Discover (vllm + tensorrt)
 
 # Per-concern workflow for the engine-schemas layer. Each per-engine job
 # probes the introspector module's landmarks, discovers parameter schemas
 # inside the SSOT-driven Docker image, regenerates the curation digest doc,
 # and atomically commits artefacts back to the PR branch.
 #
-# Per-engine runner choice — all engines run inside their Docker image:
-#   transformers : ubuntu-latest GH-hosted runner; introspector runs inside
-#                  llenergymeasure:transformers-${VER} (no GPU needed).
+# This workflow handles vllm + tensorrt only. The transformers cell lives
+# in engine-schemas-transformers.yml and is sequenced after Engine Image
+# Build (transformers) via workflow_run. vllm + tensorrt pull upstream
+# images directly (no first-party build) and so don't need the pre-build
+# step.
+#
+# Per-engine runner choice:
 #   vllm         : self-hosted GPU runner inside llenergymeasure:vllm-${VER}
 #                  (the host uv.lock used to break vllm's torch via tensorrt-
 #                  llm 0.21.0's transitive constraints; engines now run
@@ -26,10 +30,11 @@ on:
   pull_request:
     types: [opened, synchronize]
     paths:
-      - "engine_versions/*.yaml"
-      - "docker/Dockerfile.*"
+      - "engine_versions/vllm.yaml"
+      - "engine_versions/tensorrt.yaml"
       - "scripts/engine_introspectors/**"
       - "src/llenergymeasure/config/discovered_schemas/**"
+      - ".github/workflows/engine-schemas.yml"
   workflow_dispatch:
     inputs:
       engine:
@@ -37,7 +42,6 @@ on:
         required: true
         type: choice
         options:
-          - transformers
           - vllm
           - tensorrt
           - all
@@ -59,324 +63,6 @@ env:
   SCHEMAS_DIR: src/llenergymeasure/config/discovered_schemas
 
 jobs:
-  schemas-transformers:
-    if: github.event_name != 'workflow_dispatch' || inputs.engine == 'transformers' || inputs.engine == 'all'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Mint llem-ci-bot App token
-        # Short-lived (~1 hour) GitHub App token. Events it produces are
-        # NOT subject to the default GITHUB_TOKEN recursive-workflow guard,
-        # so the commit-back below can legitimately retrigger downstream
-        # CI. Skipped on fork PRs (secrets are not exposed there) so the
-        # workflow still runs read-only for external contributors.
-        id: app-token
-        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: Checkout PR branch
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref || github.ref }}
-          fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-
-      - name: Resolve transformers version from SSOT
-        id: version
-        run: |
-          VER=$(yq '.library.current_version' engine_versions/transformers.yaml)
-          if [[ -z "$VER" || "$VER" == "null" ]]; then
-            echo "Could not resolve transformers version from engine_versions/transformers.yaml" >&2
-            exit 1
-          fi
-          echo "version=${VER}" >> "$GITHUB_OUTPUT"
-          echo "image=llenergymeasure:transformers-${VER}" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GHCR (read-only, for cache pull)
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build transformers image inline (with cache)
-        # SSOT is the canonical version; the Dockerfile ARG default is a
-        # local-build fallback. CI passes the SSOT value at build time so
-        # the two cannot drift.
-        # cache-from: opportunistic warm hit on the release-time :latest tag
-        # (silently misses if absent — release-time docker-publish.yml keeps
-        # it fresh). cache-to: per-version GHA scope so successive runs of
-        # the same SSOT version reuse the FA3 + apt + uv layers.
-        # INSTALL_FA3=false keeps the build fast (FA3 from-source is ~1h);
-        # discovery doesn't need flash-attn.
-        # load: true lands the image in the local docker daemon for the
-        # subsequent docker run discovery step. No push: this PR does not
-        # publish per-PR images.
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/Dockerfile.transformers
-          target: runtime
-          tags: ${{ steps.version.outputs.image }}
-          build-args: |
-            TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
-            INSTALL_FA3=false
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
-          cache-to: type=gha,mode=max,scope=transformers-${{ steps.version.outputs.version }}
-          load: true
-
-      - name: Compute stable discovery anchor
-        id: anchor
-        # Pin the discovered_at field to the author date of the most recent
-        # commit touching any INPUT path. Stable across the workflow's own
-        # commit-back (which only touches OUTPUT paths), so re-runs on
-        # unchanged source emit byte-identical envelopes. Without this,
-        # every re-run emits a fresh wallclock timestamp, git diff picks
-        # it up, the commit-back fires, and the synchronize loops.
-        run: |
-          PATHS=(
-            "engine_versions/transformers.yaml"
-            "docker/Dockerfile.transformers"
-            "scripts/engine_introspectors/transformers_introspector.py"
-            "scripts/engine_introspectors/_common.py"
-            "scripts/engine_introspectors/__init__.py"
-            "scripts/engine_introspectors/__main__.py"
-          )
-          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
-          if [[ -z "${DATE}" ]]; then
-            echo "::error::No git history found for any anchor input path; refusing to use wallclock fallback (would break determinism)." >&2
-            exit 1
-          fi
-          echo "date=${DATE}" >> "$GITHUB_OUTPUT"
-
-      - name: Probe — landmark resolution check (in container)
-        id: probe
-        env:
-          IMAGE: ${{ steps.version.outputs.image }}
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/repo" \
-            -w /repo \
-            --entrypoint python3 \
-            "$IMAGE" \
-            -m scripts._probe --engine transformers --producer schemas \
-            > /tmp/probe-transformers.json
-          VERDICT=$(jq -r '.verdict' /tmp/probe-transformers.json)
-          echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
-
-      - name: Save current schema for diffing
-        if: steps.probe.outputs.verdict == 'pass'
-        run: |
-          mkdir -p /tmp/engine-schemas-diff
-          OLD="${SCHEMAS_DIR}/transformers.json"
-          DEST="/tmp/engine-schemas-diff/transformers.old.json"
-          if [[ -f "$OLD" ]]; then
-            cp "$OLD" "$DEST"
-          else
-            echo '{}' > "$DEST"
-          fi
-
-      - name: Discover schema inside container
-        if: steps.probe.outputs.verdict == 'pass'
-        env:
-          IMAGE: ${{ steps.version.outputs.image }}
-          ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
-        run: |
-          docker run --rm \
-            -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
-            -e PYTHONDONTWRITEBYTECODE=1 \
-            -v "${{ github.workspace }}:/repo" \
-            -w /repo \
-            --entrypoint python3 \
-            "$IMAGE" \
-            -m scripts.engine_introspectors \
-              --engine transformers \
-              --image-ref "${IMAGE}" \
-              --output "${SCHEMAS_DIR}/transformers.json"
-
-      - name: Set up Python (host) for doc-gen + diff
-        if: steps.probe.outputs.verdict == 'pass'
-        # Doc generator + differ run on the host (no engine import needed,
-        # but they DO import llenergymeasure.* + scripts.engine_miners.*).
-        # `uv sync --dev` installs the lean host project (no engine extras).
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-suffix: engine-schemas-transformers-docgen-3.12
-          python-version: "3.12"
-
-      - name: Install lean host project for doc-gen
-        if: steps.probe.outputs.verdict == 'pass'
-        run: uv sync --dev
-
-      - name: Regenerate curation digest
-        if: steps.probe.outputs.verdict == 'pass'
-        run: |
-          uv run python scripts/generate_curation_doc.py --engine transformers
-
-      - name: Classify diff
-        if: steps.probe.outputs.verdict == 'pass'
-        id: diff
-        run: |
-          set +e
-          uv run python scripts/diff_discovered_schemas.py \
-            /tmp/engine-schemas-diff/transformers.old.json \
-            "${SCHEMAS_DIR}/transformers.json" \
-            > /tmp/engine-schemas-diff/transformers.diff.json
-          DIFF_EXIT=$?
-          set -e
-
-          if diff -q /tmp/engine-schemas-diff/transformers.old.json \
-                    "${SCHEMAS_DIR}/transformers.json" >/dev/null 2>&1; then
-            CLASSIFICATION="no-changes"
-          elif [[ $DIFF_EXIT -eq 1 ]]; then
-            CLASSIFICATION="breaking"
-          else
-            CLASSIFICATION="safe"
-          fi
-          echo "classification=${CLASSIFICATION}" >> "$GITHUB_OUTPUT"
-
-          {
-            echo "## Engine schemas — transformers"
-            echo
-            if [[ "$CLASSIFICATION" == "no-changes" ]]; then
-              echo "_No changes to discovered schema._"
-            else
-              SUMMARY=$(jq -r '.summary // "schema diff produced"' /tmp/engine-schemas-diff/transformers.diff.json 2>/dev/null || echo "schema diff produced")
-              echo "${SUMMARY}"
-              echo
-              echo "<details><summary>Structured diff</summary>"
-              echo
-              echo '```json'
-              jq '.' /tmp/engine-schemas-diff/transformers.diff.json 2>/dev/null | head -n 200 || true
-              echo '```'
-              echo
-              echo "</details>"
-            fi
-          } > /tmp/engine-schemas-diff/transformers.summary.md
-
-      - name: Probe-fail comment (skip downstream)
-        if: steps.probe.outputs.verdict == 'fail' && (github.event_name == 'pull_request' || inputs.pr_number != '')
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
-          {
-            echo "## Engine schemas — transformers (probe-blocked)"
-            echo
-            echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
-            echo
-            echo "**Missing landmarks:**"
-            echo
-            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-transformers.json
-            echo
-            echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
-            echo
-            echo "**To unblock,** choose one of:"
-            echo
-            echo "- **Patch the introspector module's landmarks** — required when the library has genuinely renamed or removed the missing symbols. The introspector code needs updating to match the new library API."
-            echo "- **Run \`@llem-ci-bot /approve-reuse transformers schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
-            echo
-            echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
-          } | gh pr comment "$PR_NUMBER" --body-file -
-          gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
-
-      - name: Upload diff artefact
-        if: steps.probe.outputs.verdict == 'pass'
-        uses: actions/upload-artifact@v4
-        with:
-          name: engine-schemas-diff-transformers
-          path: |
-            /tmp/engine-schemas-diff/transformers.old.json
-            /tmp/engine-schemas-diff/transformers.diff.json
-            /tmp/engine-schemas-diff/transformers.summary.md
-            ${{ env.SCHEMAS_DIR }}/transformers.json
-
-      - name: Post per-pipeline comment (suppress on empty)
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && (github.event_name == 'pull_request' || inputs.pr_number != '')
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
-          gh pr comment "$PR_NUMBER" --body-file /tmp/engine-schemas-diff/transformers.summary.md
-
-      - name: Apply per-pipeline label
-        if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
-          for L in schemas-changed schemas-breaking schemas-safe probe-blocked; do
-            gh pr edit "$PR_NUMBER" --remove-label "$L" 2>/dev/null || true
-          done
-          case "${{ steps.diff.outputs.classification }}" in
-            breaking)  gh pr edit "$PR_NUMBER" --add-label "schemas-breaking" --add-label "schemas-changed" 2>/dev/null || true ;;
-            safe)      gh pr edit "$PR_NUMBER" --add-label "schemas-safe" --add-label "schemas-changed" 2>/dev/null || true ;;
-            no-changes) ;;
-          esac
-
-      - name: Atomic writeback
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        run: |
-          git config user.name  "llem-ci-bot[bot]"
-          git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
-
-          # Pull in any sibling-pipeline writeback that landed first.
-          git pull --rebase --autostash
-
-          git add \
-            "${SCHEMAS_DIR}/transformers.json" \
-            docs/generated/curation-transformers.md
-
-          if git diff --cached --quiet; then
-            echo "No engine-schemas artefact changes to commit."
-            exit 0
-          fi
-
-          git commit -m "chore(schemas): refresh transformers discovered schema"
-          git push --force-with-lease
-
-      - name: Apply cross-pipeline rollup label
-        if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
-          if [[ "${{ steps.diff.outputs.classification }}" != "breaking" ]]; then
-            gh pr edit "$PR_NUMBER" --add-label "safe-bump" 2>/dev/null || true
-          else
-            gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
-          fi
-
-      - name: Probe-fail gate (red CI)
-        # Probe-fail must show as a red CI check: PRs cannot merge with a
-        # stale corpus. The probe-blocked comment above explains how to
-        # resolve (/approve-reuse to widen the SSOT envelope, or landmark
-        # patch); this gate makes that resolution mandatory rather than
-        # advisory.
-        if: steps.probe.outputs.verdict == 'fail'
-        run: |
-          echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
-          exit 1
-
   schemas-vllm:
     if: github.event_name != 'workflow_dispatch' || inputs.engine == 'vllm' || inputs.engine == 'all'
     runs-on: self-hosted
