@@ -15,6 +15,7 @@ This module is consumed by StudyRunner as the dispatch mechanism when
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import os
@@ -109,8 +110,9 @@ def _mask_secrets(text: str, secrets: dict[str, str]) -> str:
     return text
 
 
-def _resolve_package_source_dir() -> Path:
-    """Return the directory containing the ``llenergymeasure/`` package.
+@functools.cache
+def _resolve_package_parent_dir() -> Path:
+    """Return the directory that *contains* the ``llenergymeasure/`` package.
 
     Used to bind-mount the host package source into upstream engine images
     that don't have llenergymeasure pre-installed (vllm, tensorrt). Resolved
@@ -126,7 +128,8 @@ def _resolve_package_source_dir() -> Path:
 
     Three ``.parent`` hops walk docker_runner.py -> infra/ -> llenergymeasure/
     -> <pkg_parent>. Encapsulation here localises path knowledge so a future
-    relayout only needs to touch this helper.
+    relayout only needs to touch this helper. Cached because ``__file__`` is
+    fixed for the life of the process.
     """
     return Path(__file__).resolve().parent.parent.parent
 
@@ -767,7 +770,7 @@ class DockerRunner:
 
         # Determine TRT-LLM tensor parallel size for MPI injection
         tp_size = None
-        if config.engine == "tensorrt" and config.tensorrt is not None:
+        if config.engine == Engine.TENSORRT and config.tensorrt is not None:
             tp_size = config.tensorrt.tensor_parallel_size
 
         # vLLM and TensorRT-LLM use upstream images directly: bind-mount the
@@ -776,7 +779,7 @@ class DockerRunner:
         # root-owned __pycache__ directories.
         mount_based_dispatch = config.engine in (Engine.VLLM, Engine.TENSORRT)
         if mount_based_dispatch:
-            pkg_parent = str(_resolve_package_source_dir())
+            pkg_parent = str(_resolve_package_parent_dir())
             cmd.extend(
                 [
                     "-v",

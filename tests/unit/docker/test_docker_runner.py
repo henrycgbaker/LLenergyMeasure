@@ -16,6 +16,7 @@ from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
     ENV_CONFIG_PATH,
     ENV_HF_TOKEN,
+    Engine,
 )
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
@@ -937,6 +938,57 @@ class TestExtraMounts:
         cmd = self._build_cmd(config, tmp_path, runner)
 
         assert not any("trt-llm" in arg for arg in cmd)
+
+
+# ---------------------------------------------------------------------------
+# Test: --entrypoint per (engine, tp_size)
+# ---------------------------------------------------------------------------
+
+
+class TestEntrypointPerEngine:
+    """The mount-pivot dispatch sets --entrypoint based on (engine, tp_size).
+
+    - transformers (any tp): no --entrypoint override (legacy shape).
+    - vllm (any tp): --entrypoint python3.
+    - tensorrt with tp<=1: --entrypoint python3.
+    - tensorrt with tp>1: --entrypoint mpirun.
+    """
+
+    @staticmethod
+    def _entrypoint(cmd: list[str]) -> str | None:
+        """Return the value of the first ``--entrypoint`` flag, or None if absent."""
+        try:
+            idx = cmd.index("--entrypoint")
+        except ValueError:
+            return None
+        return cmd[idx + 1]
+
+    @pytest.mark.parametrize(
+        "engine,tp_size,expected_entrypoint",
+        [
+            (Engine.TRANSFORMERS, 1, None),
+            (Engine.VLLM, 1, "python3"),
+            (Engine.TENSORRT, 1, "python3"),
+            (Engine.TENSORRT, 2, "mpirun"),
+            (Engine.TENSORRT, 4, "mpirun"),
+        ],
+    )
+    def test_entrypoint_for_engine_and_tp_size(
+        self, engine: Engine, tp_size: int, expected_entrypoint: str | None, tmp_path
+    ):
+        if engine is Engine.TENSORRT:
+            from llenergymeasure.config.engine_configs import TensorRTConfig
+
+            config = make_config(
+                engine=engine, tensorrt=TensorRTConfig(tensor_parallel_size=tp_size)
+            )
+        else:
+            config = make_config(engine=engine)
+
+        runner = DockerRunner(image=IMAGE)
+        cmd = runner._build_docker_cmd(config, "abc123", "/tmp/llem-test")
+
+        assert self._entrypoint(cmd) == expected_entrypoint
 
 
 # ---------------------------------------------------------------------------
