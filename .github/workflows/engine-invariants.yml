@@ -489,12 +489,26 @@ jobs:
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "image=llenergymeasure:vllm-${VER}" >> "$GITHUB_OUTPUT"
 
+      - name: Detect Docker Hub auth availability
+        # `secrets.*` cannot be referenced from a step `if:`; capture
+        # the token's presence into a step output via an env-bridge so
+        # the auth step below can gate on it cleanly.
+        id: dockerhub_auth
+        env:
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [[ -n "$DH_TOKEN" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Authenticate Docker Hub (if token configured)
         # Self-hosted runners pulling 15-50 GB upstream images
         # anonymously can hit Docker Hub rate limits. Auth gated on
         # secret presence so external contributors / unconfigured forks
         # don't fail; missing secret silently skips this step.
-        if: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+        if: steps.dockerhub_auth.outputs.available == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
