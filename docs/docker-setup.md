@@ -369,10 +369,10 @@ for the full mechanism).
 > seconds, so the parallelism gain is small. Left out of `.env.example` to avoid
 > noise; opt in only if you frequently run `make docker-build-all` from cold.
 
-> **When to rebuild.** Images bundle the `llenergymeasure` source at build time. If you
-> modify config models, engines, or the container entrypoint, rebuild for changes to take
-> effect inside containers. Local-runner experiments (Transformers without Docker) use the
-> installed source directly and do not need a rebuild.
+> **When to rebuild.** Images contain the engine substrate only; the project source
+> is bind-mounted at runtime. Rebuild only when the engine library version (SSOT)
+> or the Dockerfile itself changes — edits to `src/llenergymeasure/` or
+> `scripts/` take effect inside containers immediately, no rebuild needed.
 
 ### Override images in YAML
 

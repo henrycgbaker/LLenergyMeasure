@@ -28,10 +28,33 @@ If you want host-side energy-measurement scaffolding without engines:
 uv sync --dev --extra zeus --extra codecarbon
 ```
 
+## Engine image strategy
+
+All three engines follow the same pattern: **engine substrate goes in the
+image; the project bind-mounts at runtime.** The image contains the engine
+library and its CUDA/torch substrate (plus, for transformers, llenergymeasure's
+runtime non-engine deps because the upstream `pytorch/pytorch` base does not
+bring them transitively). The project source itself (`src/llenergymeasure/`
+and `scripts/`) is bind-mounted at runtime via `-v $(pwd):/repo -e
+PYTHONPATH=/repo/src:/repo`.
+
+Why first-party for transformers and upstream for vllm/tensorrt:
+
+- **transformers** — no upstream image ships FA3-included transformers, so we
+  maintain `docker/Dockerfile.transformers` as a thin first-party image
+  layered on `pytorch/pytorch` (FA2 + FA3 + accelerate + ...).
+- **vllm** — `vllm/vllm-openai:<version>` is canonical and pulled directly.
+- **tensorrt** — `nvcr.io/nvidia/tensorrt-llm/release:<version>` is canonical
+  and pulled directly from NGC.
+
+The asymmetry collapses to "is there an upstream image that gives us the
+engine substrate we want?" — for vllm and tensorrt, yes; for transformers
+with FA3 included, no.
+
 ## Running engine code
 
-Build the engine image once, then `docker run` against it. The image tag is
-derived from the SSOT (`engine_versions/{engine}.yaml`):
+For transformers, build the image once, then `docker run` against it. The
+image tag is derived from the SSOT (`engine_versions/{engine}.yaml`):
 
 ```bash
 VER=$(yq '.library.current_version' engine_versions/transformers.yaml)
@@ -41,15 +64,29 @@ docker build -f docker/Dockerfile.transformers \
 
 docker run --rm \
   -v "$(pwd)":/repo -w /repo \
+  -e PYTHONPATH=/repo/src:/repo \
   --entrypoint python3 \
   llenergymeasure:transformers-${VER} \
   -m scripts.engine_miners.build_corpus --engine transformers
 ```
 
-Replace `transformers` with `vllm` or `tensorrt` (and add `--gpus all` for
-those two — they need a CUDA device) for the other engines. The automated
-path is `engine-invariants.yml` and `engine-schemas.yml` in `.github/workflows/`;
-both follow this same pattern across all three engines.
+For vllm and tensorrt, pull the upstream image instead of building. Add
+`--gpus all` because those two need a CUDA device:
+
+```bash
+VER=$(yq '.library.current_version' engine_versions/vllm.yaml)
+docker pull "vllm/vllm-openai:v${VER}"
+
+docker run --rm --gpus all \
+  -v "$(pwd)":/repo -w /repo \
+  -e PYTHONPATH=/repo/src:/repo \
+  --entrypoint python3 \
+  "vllm/vllm-openai:v${VER}" \
+  -m scripts.engine_miners.build_corpus --engine vllm
+```
+
+The automated path is `engine-invariants.yml` and `engine-schemas.yml` in
+`.github/workflows/`; both follow this same pattern across all three engines.
 
 ## Running tests
 
@@ -66,6 +103,7 @@ the matching engine image:
 ```bash
 docker run --rm \
   -v "$(pwd)":/repo -w /repo \
+  -e PYTHONPATH=/repo/src:/repo \
   --entrypoint pytest \
   llenergymeasure:transformers-${VER} \
   tests/unit/scripts/engine_miners/test_transformers_miner.py
