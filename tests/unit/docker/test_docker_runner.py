@@ -882,16 +882,17 @@ class TestExtraMounts:
         assert "/host/a:/container/a" in cmd
         assert "/host/b:/container/b" in cmd
 
-    def test_no_extra_mounts_no_extra_volumes(self, tmp_path):
-        """Without extra_mounts, only the exchange_dir -v mount is present."""
+    def test_no_extra_mounts_two_default_volumes(self, tmp_path):
+        """Without extra_mounts, only the exchange_dir + project source mounts are present."""
         config = make_config()
         runner = DockerRunner(image=IMAGE)
         cmd = self._build_cmd(config, tmp_path, runner)
 
-        # Only one -v flag: the exchange dir
+        # Two -v flags: the exchange dir and the bind-mounted project source
         v_count = cmd.count("-v")
-        assert v_count == 1
+        assert v_count == 2
         assert f"/tmp/llem-test:{CONTAINER_EXCHANGE_DIR}" in cmd
+        assert any(arg.endswith(":/llem-src:ro") for arg in cmd)
 
     def test_tensorrt_auto_cache_mount(self, tmp_path):
         """TRT-LLM engine auto-mounts ~/.cache/trt-llm:/root/.cache/trt-llm."""
@@ -946,12 +947,10 @@ class TestExtraMounts:
 
 
 class TestEntrypointPerEngine:
-    """The mount-pivot dispatch sets --entrypoint based on (engine, tp_size).
+    """All three engines bind-mount the project source and override --entrypoint.
 
-    - transformers (any tp): no --entrypoint override (legacy shape).
-    - vllm (any tp): --entrypoint python3.
-    - tensorrt with tp<=1: --entrypoint python3.
-    - tensorrt with tp>1: --entrypoint mpirun.
+    - transformers / vllm / tensorrt with tp<=1: --entrypoint python3.
+    - tensorrt with tp>1: --entrypoint mpirun (python3 follows as command).
     """
 
     @staticmethod
@@ -966,7 +965,7 @@ class TestEntrypointPerEngine:
     @pytest.mark.parametrize(
         "engine,tp_size,expected_entrypoint",
         [
-            (Engine.TRANSFORMERS, 1, None),
+            (Engine.TRANSFORMERS, 1, "python3"),
             (Engine.VLLM, 1, "python3"),
             (Engine.TENSORRT, 1, "python3"),
             (Engine.TENSORRT, 2, "mpirun"),
