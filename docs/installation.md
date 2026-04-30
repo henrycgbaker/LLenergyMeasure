@@ -153,11 +153,15 @@ chain.
 > no compilation. Building from source is for contributors and for hosts where
 > you've modified `src/llenergymeasure/`.
 
-Every engine image declares `cache_from` entries pointing at the published GHCR tags.
-CI populates the cache on each release with `cache-to=type=registry,mode=max`, which
-exports intermediate layers to `ghcr.io/henrycgbaker/llenergymeasure/{engine}:latest`
-(and the immutable `:v${LLEM_PKG_VERSION}` tag). For Transformers this lets fresh
-machines skip the ~30-min flash-attn FA3 Hopper compile.
+Only Transformers has a project Dockerfile, so it is the only engine with a
+GHCR cache. The image declares `cache_from` pointing at the published GHCR
+tags; release-time CI populates the cache with `cache-to=type=registry,mode=max`,
+exporting intermediate layers to
+`ghcr.io/henrycgbaker/llenergymeasure/transformers:latest` (and the immutable
+`:v${LLEM_PKG_VERSION}` tag). This lets fresh machines skip the ~30-min
+flash-attn FA3 Hopper compile. vLLM and TensorRT-LLM are pulled from upstream
+images (`vllm/vllm-openai`, `nvcr.io/nvidia/tensorrt-llm/release`) and need
+no project-side cache.
 
 Measured on `ds01` (AMD EPYC 7742, 128 cores, 504 GB RAM — Docker 27.0.3 / Buildx
 v0.32.1 / llenergymeasure 0.9.0):
