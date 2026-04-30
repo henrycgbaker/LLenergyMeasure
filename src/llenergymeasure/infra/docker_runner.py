@@ -754,9 +754,12 @@ class DockerRunner:
         # root-owned __pycache__ directories.
         mount_based_dispatch = config.engine in (Engine.VLLM, Engine.TENSORRT)
         if mount_based_dispatch:
-            import llenergymeasure as _llem_pkg
-
-            pkg_parent = str(Path(_llem_pkg.__file__).resolve().parent.parent)
+            # Resolve the directory that contains the llenergymeasure package
+            # without importing the top-level package (would violate the
+            # infra -> api layering contract). docker_runner.py lives at
+            # ``llenergymeasure/infra/docker_runner.py``, so two ``parent``
+            # hops land on the directory holding ``llenergymeasure/``.
+            pkg_parent = str(Path(__file__).resolve().parent.parent.parent)
             cmd.extend(
                 [
                     "-v",
