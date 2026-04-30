@@ -122,12 +122,8 @@ def test_read_dockerfile_no_from_raises(tmp_path: Path) -> None:
 
 
 def test_read_dockerfile_against_real_dockerfiles() -> None:
-    vllm_from = _common.read_dockerfile_from(REPO_ROOT / "docker/Dockerfile.vllm")
-    assert vllm_from.startswith("vllm/vllm-openai:")
-
-    trt_from = _common.read_dockerfile_from(REPO_ROOT / "docker/Dockerfile.tensorrt")
-    assert trt_from.startswith("nvcr.io/nvidia/tensorrt-llm/release:")
-
+    # Only the transformers engine has a first-party Dockerfile post the
+    # mount-pivot; vllm and tensorrt run inside upstream images directly.
     tx_from = _common.read_dockerfile_from(REPO_ROOT / "docker/Dockerfile.transformers")
     # runtime stage uses non-devel tag
     assert "pytorch/pytorch:" in tx_from and "devel" not in tx_from

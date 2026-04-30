@@ -119,7 +119,9 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
             }
         )
 
-    base_image_ref = read_dockerfile_from(repo_root / DOCKERFILE_PATHS["transformers"])
+    dockerfile_path = DOCKERFILE_PATHS["transformers"]
+    assert dockerfile_path is not None  # transformers always has a first-party Dockerfile
+    base_image_ref = read_dockerfile_from(repo_root / dockerfile_path)
     return make_envelope(
         engine="transformers",
         engine_version=transformers.__version__,

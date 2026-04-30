@@ -10,10 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from scripts.engine_introspectors._common import (
-    DOCKERFILE_PATHS,
     dataclass_fields_to_specs,
     make_envelope,
-    read_dockerfile_from,
 )
 
 # Symbols this introspector relies on inside the live ``vllm`` package.
@@ -80,13 +78,15 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         }
     )
 
-    base_image_ref = read_dockerfile_from(repo_root / DOCKERFILE_PATHS["vllm"])
+    # vllm runs inside the upstream vllm/vllm-openai image; the workflow
+    # passes its concrete reference via --image-ref. No first-party
+    # Dockerfile to read.
     return make_envelope(
         engine="vllm",
         engine_version=vllm.__version__,
         engine_commit_sha=getattr(vllm, "__commit__", None),
-        image_ref=image_ref or base_image_ref,
-        base_image_ref=base_image_ref,
+        image_ref=image_ref,
+        base_image_ref=None,
         discovery_method="dataclasses.fields(EngineArgs) + msgspec.json.schema(SamplingParams)",
         discovery_limitations=limitations,
         engine_params=engine_params,
