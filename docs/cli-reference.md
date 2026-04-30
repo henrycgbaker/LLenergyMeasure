@@ -130,7 +130,7 @@ Engine     Image                          Pkg ver     Img FP          Host FP   
 ---------------------------------------------------------------------------------------------
 pytorch     llenergymeasure:transformers        0.9.0       a1b2c3d4e5f6    a1b2c3d4e5f6    OK
 vllm        llenergymeasure:vllm           0.9.0       9988776655ff    a1b2c3d4e5f6    MISMATCH
-            └─ rebuild: make docker-build-vllm
+            └─ repull: docker pull vllm/vllm-openai:0.7.3
 tensorrt    llenergymeasure:tensorrt       0.9.0       a1b2c3d4e5f6    a1b2c3d4e5f6    OK
 
 Host llenergymeasure version: 0.9.0

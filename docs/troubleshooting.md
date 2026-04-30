@@ -134,19 +134,20 @@ and execution continues with the remaining experiments.
 `context canceled` or a Pydantic `ValidationError` mentioning unknown fields (e.g.
 `dtype: Extra inputs are not permitted` or `dataset: Input should be a valid string`).
 
-**Cause:** The Docker image was built from an older version of the source code. The host
-sends config JSON using the current schema, but the container rejects it because its
-bundled code expects the old schema.
+**Cause:** The Transformers Docker image was built from an older version of
+the source code. The host sends config JSON using the current schema, but
+the container rejects it because its bundled code expects the old schema.
+This only applies to Transformers; the vLLM and TensorRT-LLM containers
+bind-mount host source at run time, so they always see the current schema.
 
-**Fix:** Rebuild the Docker images from the current source:
+**Fix:** Rebuild the Transformers image from the current source:
 
 ```bash
-docker build -f docker/Dockerfile.transformers -t ghcr.io/henrycgbaker/llenergymeasure/pytorch:v0.9.0 .
-docker build -f docker/Dockerfile.vllm -t ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0 .
+docker build -f docker/Dockerfile.transformers -t ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.9.0 .
 ```
 
 Replace `v0.9.0` with your installed version (`llem --version`). See
-[Installation - Building Docker Images](installation.md#building-docker-images-from-source)
+[Installation - Getting Engine Images](installation.md#getting-engine-images)
 for full instructions.
 
 ---
@@ -350,12 +351,19 @@ was built. `llem` stamps every image at build time with a
 `ExperimentConfig.model_json_schema()`. `StudyRunner._prepare_images` compares
 that label against the host fingerprint before any experiment starts.
 
-**Fix:** rebuild the affected engine image. One of:
+**Fix:** rebuild or repull the affected engine image. One of:
 
 ```bash
-make docker-build-pytorch        # or -vllm / -tensorrt, local build
-make docker-pull                 # pull the newest published tagged release
+make docker-build-transformers                          # local build, Transformers
+docker pull vllm/vllm-openai:0.7.3                      # repull vLLM upstream
+docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0  # repull TensorRT-LLM upstream
+make docker-pull                                        # pull the newest published Transformers tag
 ```
+
+The vLLM and TensorRT-LLM images bind-mount host source at run time and so
+should not skew on a host-source-only edit; if you see a fingerprint
+mismatch on those, the local image is genuinely stale (e.g. an older
+upstream tag) and needs repulling.
 
 Verify with:
 

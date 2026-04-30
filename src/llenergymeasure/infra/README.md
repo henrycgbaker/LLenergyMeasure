@@ -73,8 +73,10 @@ Two image sources exist for each engine:
 
 | Source | Tag pattern | Built by | Use case |
 |--------|------------|----------|----------|
-| **Local** | `llenergymeasure:{engine}` | `make docker-build-{engine}` | Dev iteration - always reflects current source |
-| **Registry** | `ghcr.io/henrycgbaker/llenergymeasure/{engine}:v{version}` | CI on release tags | Production, CI, pip-install users |
+| **Local** | `llenergymeasure:transformers` | `make docker-build-transformers` | Dev iteration on Transformers - always reflects current source |
+| **Registry (Transformers)** | `ghcr.io/henrycgbaker/llenergymeasure/transformers:v{version}` | CI on release tags | Production, CI, pip-install users |
+| **Upstream (vLLM)** | `vllm/vllm-openai:{version}` | vLLM project | All users; project source bind-mounted at run time |
+| **Upstream (TensorRT-LLM)** | `nvcr.io/nvidia/tensorrt-llm/release:{version}` | NVIDIA NGC | All users; project source bind-mounted at run time |
 
 ### Resolution precedence (`resolve_image()`)
 
@@ -106,17 +108,22 @@ The distinction between `"registry"` and `"registry_cached"` source: when a regi
 is already present in the local Docker cache (from a prior pull), the source is
 `"registry_cached"`. When it will need pulling, the source is `"registry"`.
 
-### Building local images
+### Building or pulling local images
+
+Only Transformers is built from a project Dockerfile. vLLM and TensorRT-LLM
+use upstream images directly and bind-mount project source at run time.
 
 ```bash
-make docker-build-all            # all 3 engines
-make docker-build-transformers   # just transformers
-make docker-build-vllm           # just vllm
-make docker-build-tensorrt       # just tensorrt
+make docker-build-transformers                          # build Transformers from source
+docker pull vllm/vllm-openai:0.7.3                      # pull vLLM upstream
+docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0  # pull TensorRT-LLM upstream (NGC)
 ```
 
-These pull cached layers from GHCR on first build (Transformers: <5 min warm vs ~30 min cold).
-See `docs/installation.md#fast-rebuilds-and-first-pull-cost` for the full mechanism.
+`make docker-build-all` is an alias for `make docker-build-transformers`.
+The Transformers build pulls cached layers from GHCR on first build
+(<5 min warm vs ~30 min cold). See
+`docs/installation.md#fast-rebuilds-and-first-pull-cost` for the full
+mechanism.
 
 ### Study-level image preparation
 
