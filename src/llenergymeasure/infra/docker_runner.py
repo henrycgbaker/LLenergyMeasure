@@ -109,6 +109,28 @@ def _mask_secrets(text: str, secrets: dict[str, str]) -> str:
     return text
 
 
+def _resolve_package_source_dir() -> Path:
+    """Return the directory containing the ``llenergymeasure/`` package.
+
+    Used to bind-mount the host package source into upstream engine images
+    that don't have llenergymeasure pre-installed (vllm, tensorrt). Resolved
+    from ``__file__`` rather than via ``import llenergymeasure`` to keep the
+    infra layer free of upper-layer imports (import-linter contract).
+
+    Layout::
+
+        <pkg_parent>/
+            llenergymeasure/
+                infra/
+                    docker_runner.py   <-- __file__
+
+    Three ``.parent`` hops walk docker_runner.py -> infra/ -> llenergymeasure/
+    -> <pkg_parent>. Encapsulation here localises path knowledge so a future
+    relayout only needs to touch this helper.
+    """
+    return Path(__file__).resolve().parent.parent.parent
+
+
 class DockerRunner:
     """Dispatches a single experiment to an ephemeral Docker container.
 
@@ -754,12 +776,7 @@ class DockerRunner:
         # root-owned __pycache__ directories.
         mount_based_dispatch = config.engine in (Engine.VLLM, Engine.TENSORRT)
         if mount_based_dispatch:
-            # Resolve the directory that contains the llenergymeasure package
-            # without importing the top-level package (would violate the
-            # infra -> api layering contract). docker_runner.py lives at
-            # ``llenergymeasure/infra/docker_runner.py``, so two ``parent``
-            # hops land on the directory holding ``llenergymeasure/``.
-            pkg_parent = str(Path(__file__).resolve().parent.parent.parent)
+            pkg_parent = str(_resolve_package_source_dir())
             cmd.extend(
                 [
                     "-v",
