@@ -1,13 +1,13 @@
 .PHONY: format lint lint-fix typecheck check test test-unit test-integration test-all install dev clean
 .PHONY: test-runtime test-runtime-vllm test-runtime-tensorrt test-runtime-all
 .PHONY: test-runtime-quick test-runtime-local test-runtime-docker
-.PHONY: docker-build docker-build-all docker-build-transformers docker-build-vllm docker-build-tensorrt docker-seed-transformers
+.PHONY: docker-build docker-build-all docker-build-transformers docker-seed-transformers
 .PHONY: docker-build-dev docker-check docker-builder-setup docker-builder-rm
 .PHONY: experiment datasets validate docker-shell docker-dev
 .PHONY: setup docker-setup lem-clean lem-clean-all lem-clean-state lem-clean-cache lem-clean-trt generate-docs check-docs
 .PHONY: discover-schema discover-schemas-all
-.PHONY: package-check docs-check docker-smoke docker-smoke-pytorch docker-smoke-vllm ci ci-all ci-docker
-.PHONY: gpu-ci gpu-ci-pytorch gpu-ci-vllm
+.PHONY: package-check docs-check docker-smoke docker-smoke-pytorch ci ci-all ci-docker
+.PHONY: gpu-ci gpu-ci-pytorch
 
 # PUID/PGID for correct file ownership on bind mounts (LinuxServer.io pattern)
 export PUID := $(shell id -u)
@@ -157,17 +157,12 @@ package-check:
 	@echo "Package validation OK"
 
 # Docker smoke tests — mirrors CI docker-smoke job
-docker-smoke: docker-smoke-pytorch docker-smoke-vllm
+docker-smoke: docker-smoke-pytorch
 
 docker-smoke-pytorch:
 	docker build -f docker/Dockerfile.pytorch --build-arg INSTALL_FA3=false . -t smoke-pytorch
 	docker run --rm smoke-pytorch llem --version
 	docker run --rm smoke-pytorch llem config
-
-docker-smoke-vllm:
-	docker build -f docker/Dockerfile.vllm --build-arg INSTALL_FA3=false . -t smoke-vllm
-	docker run --rm smoke-vllm llem --version
-	docker run --rm smoke-vllm llem config
 
 # CI targets — run the same checks as GitHub Actions
 ci: lint typecheck test package-check docs-check
@@ -202,7 +197,7 @@ ci-docker:
 
 # GPU CI targets — mirrors .github/workflows/gpu-ci.yml
 # Requires: Docker, NVIDIA GPUs, nvidia-container-toolkit
-gpu-ci: gpu-ci-pytorch gpu-ci-vllm
+gpu-ci: gpu-ci-pytorch
 
 gpu-ci-pytorch:
 	docker build -f docker/Dockerfile.pytorch -t llenergymeasure-ci:pytorch .
@@ -221,19 +216,6 @@ gpu-ci-pytorch:
 		llenergymeasure-ci:pytorch \
 		bash tests/integration/sigint_verify.sh
 	docker rmi llenergymeasure-ci:pytorch 2>/dev/null || true
-
-gpu-ci-vllm:
-	docker build -f docker/Dockerfile.vllm -t llenergymeasure-ci:vllm .
-	docker run --name llem-vllm-ci-setup llenergymeasure-ci:vllm pip install --no-cache-dir pytest pytest-xdist
-	docker commit llem-vllm-ci-setup llenergymeasure-ci:vllm
-	docker rm llem-vllm-ci-setup
-	mkdir -p results/
-	docker run --rm --gpus all \
-		-v "$(CURDIR)/tests":/app/tests:ro \
-		-v "$(CURDIR)/results":/app/results \
-		llenergymeasure-ci:vllm \
-		bash tests/integration/killpg_verify.sh
-	docker rmi llenergymeasure-ci:vllm 2>/dev/null || true
 
 # =============================================================================
 # Docker Commands (Production)
@@ -267,27 +249,16 @@ docker-builder-rm:
 CACHE_HINT := @echo "First build pulls cache layers from ghcr.io; warm rebuilds < 5 min."
 BUILD_WITH_REPORT := scripts/docker_build_with_cache_report.sh
 
-# Build all engines (transformers, vllm, tensorrt) — local images.
-# Calls compose directly so all three can build in parallel;
-# per-engine cache-import summary is only emitted for single-engine targets
-# below. For per-engine diagnostics, run `make docker-build-{engine}`.
-docker-build-all:
-	$(CACHE_HINT)
-	BUILDKIT_PROGRESS=$${BUILDKIT_PROGRESS:-plain} docker compose build transformers vllm tensorrt
+# Build the Transformers engine image — the only first-party image we
+# build. vLLM and TensorRT-LLM use upstream images directly
+# (vllm/vllm-openai, nvcr.io/nvidia/tensorrt-llm/release) with the
+# llenergymeasure source bind-mounted at runtime.
+docker-build-all: docker-build-transformers
 
 # Build Transformers engine (default, recommended for most users)
 docker-build-transformers:
 	$(CACHE_HINT)
 	$(BUILD_WITH_REPORT) transformers
-
-# Build specific engines — local images
-docker-build-vllm:
-	$(CACHE_HINT)
-	$(BUILD_WITH_REPORT) vllm
-
-docker-build-tensorrt:
-	$(CACHE_HINT)
-	$(BUILD_WITH_REPORT) tensorrt
 
 # Seed GHCR build cache from a local machine with sufficient RAM.
 # Intended for seeding the Transformers image cache (FA3 Hopper compile,
@@ -313,13 +284,14 @@ docker-seed-transformers:
 	  --tag $$ref:latest \
 	  .
 
-# Pull versioned registry images (ghcr.io) instead of building locally
+# Pull the versioned transformers registry image (ghcr.io) instead of
+# building locally. vLLM and TensorRT-LLM are pulled directly from
+# upstream registries at runtime by DockerRunner; no first-party tag
+# exists for them post-mount-pivot.
 docker-pull:
 	@version=$$(python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo "latest"); \
-	for engine in transformers vllm tensorrt; do \
-		echo "Pulling ghcr.io/henrycgbaker/llenergymeasure/$$engine:v$$version"; \
-		docker pull "ghcr.io/henrycgbaker/llenergymeasure/$$engine:v$$version"; \
-	done
+	echo "Pulling ghcr.io/henrycgbaker/llenergymeasure/transformers:v$$version"; \
+	docker pull "ghcr.io/henrycgbaker/llenergymeasure/transformers:v$$version"
 
 # Show which images llem will use (local vs registry)
 docker-images:
