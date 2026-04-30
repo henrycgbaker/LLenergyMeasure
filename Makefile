@@ -6,7 +6,7 @@
 .PHONY: experiment datasets validate docker-shell docker-dev
 .PHONY: setup docker-setup lem-clean lem-clean-all lem-clean-state lem-clean-cache lem-clean-trt generate-docs check-docs
 .PHONY: discover-schema discover-schemas-all
-.PHONY: package-check docs-check docker-smoke docker-smoke-pytorch ci ci-all ci-docker
+.PHONY: package-check docs-check ci ci-docker
 .PHONY: gpu-ci gpu-ci-pytorch
 
 # PUID/PGID for correct file ownership on bind mounts (LinuxServer.io pattern)
@@ -156,18 +156,8 @@ package-check:
 	 [ "$$PYPROJECT_VER" = "$$VERSION_VER" ] || { echo "ERROR: Version mismatch"; exit 1; }
 	@echo "Package validation OK"
 
-# Docker smoke tests — mirrors CI docker-smoke job
-docker-smoke: docker-smoke-pytorch
-
-docker-smoke-pytorch:
-	docker build -f docker/Dockerfile.pytorch --build-arg INSTALL_FA3=false . -t smoke-pytorch
-	docker run --rm smoke-pytorch llem --version
-	docker run --rm smoke-pytorch llem config
-
 # CI targets — run the same checks as GitHub Actions
 ci: lint typecheck test package-check docs-check
-
-ci-all: ci docker-smoke
 
 # Run CI in a clean container matching GitHub Actions (ubuntu + Python 3.12 + uv)
 # Catches "works on my machine" issues before pushing

@@ -38,12 +38,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build transformers image
+        # Default `INSTALL_FA3=true` (set in Dockerfile.transformers) — this
+        # check exercises the production-equivalent image, including the
+        # from-source FA3 build path.
         uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile.transformers
           target: runtime
           push: false
-          build-args: INSTALL_FA3=false
           cache-from: |
             type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/transformers:latest

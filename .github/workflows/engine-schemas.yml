@@ -5,7 +5,10 @@ name: Engine Schemas — Probe + Discover
 # inside the SSOT-driven Docker image, regenerates the curation digest doc,
 # and atomically commits artefacts back to the PR branch.
 #
-# Per-engine runner choice — all engines run inside their Docker image:
+# Per-engine runner choice — all engines run inside their Docker image; the
+# project source is bind-mounted at /repo with PYTHONPATH=/repo/src:/repo so
+# the in-container Python imports llenergymeasure from the working tree, not
+# from a baked-in copy:
 #   transformers : ubuntu-latest GH-hosted runner; introspector runs inside
 #                  llenergymeasure:transformers-${VER} (no GPU needed).
 #   vllm         : self-hosted GPU runner inside llenergymeasure:vllm-${VER}
@@ -144,6 +147,8 @@ jobs:
           docker run --rm \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
+            -e PYTHONPATH=/repo/src:/repo \
+            -e PYTHONDONTWRITEBYTECODE=1 \
             --entrypoint python3 \
             "$IMAGE" \
             -m scripts._probe --engine transformers --producer schemas \
@@ -172,6 +177,7 @@ jobs:
           docker run --rm \
             -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE=1 \
+            -e PYTHONPATH=/repo/src:/repo \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
             --entrypoint python3 \

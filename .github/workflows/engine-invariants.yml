@@ -5,7 +5,10 @@ name: Engine Invariants — Probe + Mine + Vendor
 # replays it against the live library, regenerates the invariants digest
 # doc, and atomically commits all four artefacts back to the PR branch.
 #
-# Per-engine runner choice — all engines run inside their Docker image:
+# Per-engine runner choice — all engines run inside their Docker image; the
+# project source is bind-mounted at /repo with PYTHONPATH=/repo/src:/repo so
+# the in-container Python imports llenergymeasure from the working tree, not
+# from a baked-in copy:
 #   transformers : ubuntu-latest GH-hosted runner; mine inside
 #                  llenergymeasure:transformers-${VER} (no GPU needed,
 #                  miners are CPU-safe).
@@ -166,6 +169,8 @@ jobs:
           docker run --rm \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
+            -e PYTHONPATH=/repo/src:/repo \
+            -e PYTHONDONTWRITEBYTECODE=1 \
             --entrypoint python3 \
             "$IMAGE" \
             -m scripts._probe --engine transformers --producer invariants \
@@ -198,6 +203,7 @@ jobs:
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
             -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE=1 \
+            -e PYTHONPATH=/repo/src:/repo \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
             --entrypoint bash \
