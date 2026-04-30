@@ -110,9 +110,9 @@ jobs:
         # SSOT is the canonical version; the Dockerfile ARG default is a
         # local-build fallback. CI passes the SSOT value at build time so
         # the two cannot drift. Layer cache makes the FROM step a no-op
-        # when the upstream torch/transformers tag is unchanged.
-        # INSTALL_FA3=false keeps the build fast (FA3 from-source is ~1h);
-        # the miners + vendor pass don't need flash-attn.
+        # when the upstream torch/transformers tag is unchanged. INSTALL_FA3
+        # is not overridden — Dockerfile default is true so CI exercises the
+        # same production-equivalent image users get.
         run: |
           IMAGE="${{ steps.version.outputs.image }}"
           if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
@@ -120,7 +120,6 @@ jobs:
               -f docker/Dockerfile.transformers \
               -t "$IMAGE" \
               --build-arg TRANSFORMERS_VERSION="${{ steps.version.outputs.version }}" \
-              --build-arg INSTALL_FA3=false \
               .
           else
             echo "Reusing cached $IMAGE."
