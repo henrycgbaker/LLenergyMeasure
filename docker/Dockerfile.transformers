@@ -1,16 +1,24 @@
 # syntax=docker/dockerfile:1
 # ============================================================
-# Transformers engine — llenergymeasure on PyTorch base image
+# Transformers engine — engine substrate on PyTorch base image
 # ============================================================
-# Uses pytorch/pytorch as the tensor substrate, then installs llenergymeasure
-# with the HuggingFace Transformers engine on top.
-# CUDA and PyTorch compatibility is guaranteed by the upstream image.
+# Uses pytorch/pytorch as the tensor substrate, then layers the HuggingFace
+# Transformers engine substrate (transformers + FA2 + FA3 + accelerate +
+# bitsandbytes + calflops + sentencepiece + einops) on top. CUDA and PyTorch
+# compatibility is guaranteed by the upstream image.
 #
-# Usage:
+# The llenergymeasure package itself is NOT installed into this image. The
+# project source is bind-mounted at runtime by the caller — see the engine-
+# invariants/engine-schemas workflows and docs/development.md for the canonical
+# `docker run -v $(pwd):/repo -e PYTHONPATH=/repo/src:/repo --entrypoint python3`
+# pattern. This makes image rebuilds depend only on the engine substrate,
+# not on project source edits.
+#
+# Usage (CI builds inline; local builds via `make docker-build-transformers`):
 #   docker build -f docker/Dockerfile.transformers -t llenergymeasure-transformers .
 #
 # Version pin policy: update PYTORCH_VERSION on each milestone release.
-# Must be compatible with pyproject.toml torch>=2.5 / transformers>=4.49 constraints.
+# TRANSFORMERS_VERSION comes from engine_versions/transformers.yaml SSOT.
 # ============================================================
 ARG PYTORCH_VERSION=2.5.1-cuda12.4-cudnn9-runtime
 ARG PYTORCH_DEVEL_VERSION=2.5.1-cuda12.4-cudnn9-devel
@@ -85,31 +93,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 # Copy compiled flash-attn from builder (package dir + dist-info + CUDA extensions)
 COPY --from=builder /flash-attn-staging/ /opt/conda/lib/python3.11/site-packages/
 
-WORKDIR /app
-
-# Install llenergymeasure from source plus the transformers engine deps inline.
+# Install the transformers engine substrate plus the runtime non-engine deps
+# llenergymeasure's host-import-time code expects when the project source is
+# bind-mounted at runtime.
+#
 # Engine deps (transformers/accelerate/bitsandbytes/calflops + sentencepiece/einops)
-# are declared HERE rather than via a host-side pyproject extra: the engine
-# runs only inside this image, so its dependency list belongs in the image's
-# install spec, not in a host extra that nothing else uses.
-# Bind mounts: pyproject.toml/uv.lock/README.md are build-only (not needed at runtime).
-# Cache mount: uv reuses cached wheels across rebuilds without bloating the image.
-COPY src/ ./src/
+# belong in the image because the engine runs only inside this image.
+#
+# Project runtime deps (pydantic/typer/pyyaml/platformdirs/nvidia-ml-py/numpy/
+# pyarrow/tqdm/rich/python-dotenv/filelock) are baked in here because the
+# upstream pytorch/pytorch base does not transitively bring them and the
+# project is no longer pip-installed into this image — it is bind-mounted at
+# /repo by the caller (`docker run -v $(pwd):/repo -e PYTHONPATH=/repo/src:/repo`).
+# This list MUST stay in sync with `[project.dependencies]` in pyproject.toml;
+# drift surfaces as ImportError at the first in-container run and is caught by
+# the engine-invariants/engine-schemas workflow probe step.
 ARG TRANSFORMERS_VERSION
-RUN --mount=type=bind,source=pyproject.toml,target=/app/pyproject.toml \
-    --mount=type=bind,source=uv.lock,target=/app/uv.lock \
-    --mount=type=bind,source=README.md,target=/app/README.md \
-    --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system "." \
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system \
         "transformers==${TRANSFORMERS_VERSION}" \
         "accelerate>=1.4" \
         "bitsandbytes>=0.45" \
         "calflops>=0.2" \
-        sentencepiece einops
+        sentencepiece einops \
+        "pydantic>=2.0" "typer>=0.9" "pyyaml>=6.0" "platformdirs>=3.0" \
+        "nvidia-ml-py>=12.0" "numpy>=1.24" "pyarrow>=14.0" "tqdm>=4.66" \
+        "rich>=13.0" "python-dotenv>=1.0" filelock
 
 # HuggingFace cache — writable for non-root users
-ENV HF_HOME=/app/.cache/huggingface
-RUN mkdir -p /app/.cache/huggingface && chmod 777 /app/.cache/huggingface
+ENV HF_HOME=/root/.cache/huggingface
+RUN mkdir -p /root/.cache/huggingface && chmod 777 /root/.cache/huggingface
 
 # Host/container schema handshake labels (see infra/version_handshake.py).
 # LLEM_PKG_VERSION is the llenergymeasure release; LLEM_EXPCONF_SCHEMA_FINGERPRINT
@@ -120,7 +133,10 @@ LABEL org.opencontainers.image.version="${LLEM_PKG_VERSION}"
 LABEL org.opencontainers.image.source="https://github.com/henrycgbaker/llenergymeasure"
 LABEL llem.expconf.schema.fingerprint="${LLEM_EXPCONF_SCHEMA_FINGERPRINT}"
 
-CMD ["python3", "-m", "llenergymeasure.entrypoints.container"]
+# No CMD: the project is bind-mounted at /repo by the caller, so the image
+# has nothing meaningful to invoke without an explicit command. Callers pass
+# `--entrypoint python3 <image> -m <module>` (see docs/development.md and the
+# engine-invariants/engine-schemas workflows).
 
 # Dev stage — adds development tools for local iteration
 FROM runtime AS dev

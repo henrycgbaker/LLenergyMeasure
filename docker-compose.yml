@@ -1,20 +1,23 @@
 # Docker Compose for the transformers engine image.
 #
-# vLLM and TensorRT-LLM run inside upstream images (vllm/vllm-openai,
-# nvcr.io/nvidia/tensorrt-llm/release) with the llenergymeasure source
-# bind-mounted at runtime by DockerRunner; they do not have compose
-# entries because there is no first-party image to build.
+# All three engine images (transformers, vllm, tensorrt) carry only the engine
+# substrate; the project source (`src/llenergymeasure/` + `scripts/`) is bind-
+# mounted at runtime via `/repo` with `PYTHONPATH=/repo/src:/repo`. vLLM and
+# TensorRT-LLM run inside upstream images (vllm/vllm-openai,
+# nvcr.io/nvidia/tensorrt-llm/release) and have no compose entries — they are
+# pulled directly by DockerRunner.
 #
 # Quick Start:
-#   pip install -e .              # Install llenergymeasure
-#   llem config                   # Check environment
-#   docker compose build transformers  # Build engine image
+#   pip install -e .                   # Install llenergymeasure on host
+#   llem config                        # Check environment
+#   docker compose build transformers  # Build the engine image
 #
 # Manual Usage:
-#   Transformers (default): docker compose run --rm transformers llem --help
+#   Transformers: docker compose run --rm transformers python3 -m llenergymeasure.cli --help
 #
 # Examples:
-#   docker compose run --rm transformers llem run configs/examples/experiment-transformers.yaml
+#   docker compose run --rm transformers \
+#       python3 -m llenergymeasure.cli run configs/examples/experiment-transformers.yaml
 #
 #   # Development shell
 #   docker compose --profile dev run --rm transformers-dev /bin/bash
@@ -63,16 +66,17 @@ x-common: &common
     # NVIDIA Container Toolkit: ensure compute capability for CUDA
     - NVIDIA_VISIBLE_DEVICES=all
     - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    - HF_HOME=/app/.cache/huggingface
+    - HF_HOME=/root/.cache/huggingface
     - PIP_NO_CACHE_DIR=1
     - CODECARBON_LOG_LEVEL=warning
     - NVIDIA_DISABLE_REQUIRE=true
-    # Container sees /app paths regardless of host mount source
-    - LLM_ENERGY_RESULTS_DIR=/app/results
-    - LLM_ENERGY_CONFIGS_DIR=/app/configs
-    - LLM_ENERGY_STATE_DIR=/app/.state
+    # Container sees /repo paths (project bind-mounted at /repo at runtime)
+    - LLM_ENERGY_RESULTS_DIR=/repo/results
+    - LLM_ENERGY_CONFIGS_DIR=/repo/configs
+    - LLM_ENERGY_STATE_DIR=/repo/.state
+    - PYTHONPATH=/repo/src:/repo
 
-  working_dir: /app
+  working_dir: /repo
 
   healthcheck:
     test: ["CMD", "python", "-c", "import torch; assert torch.cuda.is_available()"]
@@ -87,13 +91,11 @@ services:
   transformers:
     <<: *common
     volumes:
-      # Bind mounts: user-accessible data (resume workflow requires host access)
-      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
-      - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
-      - ${LLM_ENERGY_STATE_DIR:-./.state}:/app/.state
-      - ./scripts:/app/scripts:ro
-      # Named volumes: container-managed (no permission issues)
-      - hf-cache:/app/.cache/huggingface
+      # Bind-mount the project source at /repo; the in-container Python
+      # imports llenergymeasure via PYTHONPATH (see x-common above).
+      - .:/repo
+      # Named volume: container-managed HF cache (no permission issues)
+      - hf-cache:/root/.cache/huggingface
     build:
       <<: *cache-transformers
       context: .
@@ -107,8 +109,8 @@ services:
   transformers-dev:
     <<: *common
     volumes:
-      - .:/app
-      - hf-cache:/app/.cache/huggingface
+      - .:/repo
+      - hf-cache:/root/.cache/huggingface
     profiles: ["dev"]
     build:
       <<: *cache-transformers
