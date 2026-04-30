@@ -5,7 +5,7 @@
   "engine_commit_sha": null,
   "image_ref": "llenergymeasure:transformers-4.57.3",
   "base_image_ref": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
-  "discovered_at": "2026-04-29T18:30:12+02:00",
+  "discovered_at": "2026-04-30T10:48:14+02:00",
   "discovery_method": "inspect.signature(from_pretrained) + GenerationConfig().to_dict()",
   "discovery_limitations": [
     {

@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: transformers
 engine_version: 4.57.3
-mined_at: '2026-04-29T18:30:12+02:00'
+mined_at: '2026-04-29T23:05:01+02:00'
 rules:
 - id: transformers_beam_search_num_beams_eq_1
   engine: transformers
@@ -36,7 +36,7 @@ rules:
   references:
   - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
   conflict_note: 'id: dynamic_miner -> ''transformers_beam_search_num_beams_eq_1''; dynamic_miner -> ''transformers_early_stopping_type_num_beams_eq_1'''
 - id: transformers_cache_choice_cache_implementation_not_in_allowlist
   engine: transformers
@@ -73,7 +73,7 @@ rules:
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_cache_choice_use_cache_eq_false
   engine: transformers
   library: transformers
@@ -103,7 +103,7 @@ rules:
   references:
   - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_compile_config_type_compile_config_exceeds_zero
   engine: transformers
   library: transformers
@@ -129,7 +129,7 @@ rules:
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_compile_config_type_compile_config_type_not_in_CompileConfig
   engine: transformers
   library: transformers
@@ -157,7 +157,7 @@ rules:
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_dormant_early_stopping_set_true
   engine: transformers
   library: transformers
@@ -282,7 +282,7 @@ rules:
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_early_stopping_type_early_stopping_not_in_allowlist
   engine: transformers
   library: transformers
@@ -313,7 +313,7 @@ rules:
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str
   engine: transformers
   library: transformers
@@ -345,7 +345,7 @@ rules:
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_greedy_strips_epsilon_cutoff
   engine: transformers
   library: transformers
@@ -380,7 +380,7 @@ rules:
   references:
   - transformers.GenerationConfig.validate() (line ~361)
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_greedy_strips_eta_cutoff
   engine: transformers
   library: transformers
@@ -415,7 +415,7 @@ rules:
   references:
   - transformers.GenerationConfig.validate() (line ~362)
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_greedy_strips_min_p
   engine: transformers
   library: transformers
@@ -448,7 +448,7 @@ rules:
   references:
   - transformers.GenerationConfig.validate() (line ~359)
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_greedy_strips_temperature
   engine: transformers
   library: transformers
@@ -483,7 +483,7 @@ rules:
   references:
   - transformers.GenerationConfig.validate() (line ~356)
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_greedy_strips_top_k
   engine: transformers
   library: transformers
@@ -517,7 +517,7 @@ rules:
   references:
   - transformers.GenerationConfig.validate() (line ~357)
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_greedy_strips_top_p
   engine: transformers
   library: transformers
@@ -551,7 +551,7 @@ rules:
   references:
   - transformers.GenerationConfig.validate() (line ~358)
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_greedy_strips_typical_p
   engine: transformers
   library: transformers
@@ -586,7 +586,7 @@ rules:
   references:
   - transformers.GenerationConfig.validate() (line ~360)
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_negative_pad_token_id
   engine: transformers
   library: transformers
@@ -616,7 +616,7 @@ rules:
   references:
   - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
   conflict_note: 'id: dynamic_miner -> ''transformers_negative_pad_token_id''; dynamic_miner -> ''transformers_output_token_ids_pad_token_id_lt_zero'''
 - id: transformers_no_return_dict_strips_output_attentions
   engine: transformers
@@ -651,7 +651,7 @@ rules:
   references:
   - transformers.GenerationConfig.validate() (line ~389)
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_no_return_dict_strips_output_hidden_states
   engine: transformers
   library: transformers
@@ -685,7 +685,7 @@ rules:
   references:
   - transformers.GenerationConfig.validate() (line ~390)
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_no_return_dict_strips_output_scores
   engine: transformers
   library: transformers
@@ -719,7 +719,7 @@ rules:
   references:
   - transformers.GenerationConfig.validate() (line ~391)
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1
   engine: transformers
   library: transformers
@@ -751,7 +751,7 @@ rules:
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_num_return_vs_beams_num_beams_lt_num_return_sequences
   engine: transformers
   library: transformers
@@ -780,7 +780,7 @@ rules:
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences
   engine: transformers
   library: transformers
@@ -810,7 +810,7 @@ rules:
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_output_token_ids_max_new_tokens_le_zero
   engine: transformers
   library: transformers
@@ -839,7 +839,7 @@ rules:
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_output_token_ids_max_new_tokens_not_in_allowlist
   engine: transformers
   library: transformers
@@ -871,7 +871,7 @@ rules:
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_output_token_ids_pad_token_id_not_in_allowlist
   engine: transformers
   library: transformers
@@ -905,7 +905,7 @@ rules:
   references:
   - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_raises_bnb_4bit_quant_type_not_type_str
   engine: transformers
   library: bitsandbytes
@@ -1234,7 +1234,7 @@ rules:
   references:
   - transformers.GenerationConfig.validate() (line ~339)
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_single_beam_strips_length_penalty
   engine: transformers
   library: transformers
@@ -1268,7 +1268,7 @@ rules:
   references:
   - transformers.GenerationConfig.validate() (line ~365)
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'
 - id: transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig
   engine: transformers
   library: transformers
@@ -1297,4 +1297,4 @@ rules:
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-29'
+  added_at: '2026-04-30'

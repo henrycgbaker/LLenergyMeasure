@@ -543,7 +543,7 @@ The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transforme
 
 **What did not work on this PR (separate blockers, not chain-validation failures):**
 
-- `mine-vllm` - Dockerfile.vllm ARG (v0.7.3) is outside the vLLM miner's SSOT-pinned envelope (`engine_versions/vllm.yaml miner_pins.* = >=0.17,<0.18`); raised `MinerVersionMismatchError` as designed. Resolution requires the per-engine version-bundle work (#468-#471).
+- `mine-vllm` - the vLLM version in use at the time (v0.7.3, then sourced from a project Dockerfile ARG; now sourced from `engine_versions/vllm.yaml library.current_version`) is outside the vLLM miner's SSOT-pinned envelope (`engine_versions/vllm.yaml miner_pins.* = >=0.17,<0.18`); raised `MinerVersionMismatchError` as designed. Resolution requires the per-engine version-bundle work (#468-#471).
 - `mine-tensorrt` - runtime-symlink script bug inside the NGC container (#472).
 
 Both are tracked as engine-specific follow-ups; neither invalidates the chain-validation outcome.

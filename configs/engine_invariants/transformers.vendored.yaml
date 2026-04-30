@@ -3,8 +3,8 @@ engine: transformers
 engine_version: 4.57.3
 image_ref: llenergymeasure:transformers
 base_image_ref: llenergymeasure:transformers
-vendored_at: '2026-04-29T18:30:12+02:00'
-vendor_commit: 394337ae67513977a2a7e6100dc54bd28f3143e4
+vendored_at: '2026-04-29T23:05:01+02:00'
+vendor_commit: ebccd64a51d642ec7d13124046a5668550c4d3da
 cases:
 - id: transformers_beam_search_num_beams_eq_1
   outcome: dormant_announced

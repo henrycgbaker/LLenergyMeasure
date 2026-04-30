@@ -489,29 +489,47 @@ jobs:
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "image=llenergymeasure:vllm-${VER}" >> "$GITHUB_OUTPUT"
 
-      - name: Build or reuse vLLM image
-        # SSOT is the canonical version; the Dockerfile ARG default is a
-        # local-build fallback. CI passes the SSOT value at build time so
-        # the two cannot drift. Layer cache makes the FROM step a no-op
-        # when the upstream tag is unchanged.
+      - name: Detect Docker Hub auth availability
+        # `secrets.*` cannot be referenced from a step `if:`; capture
+        # the token's presence into a step output via an env-bridge so
+        # the auth step below can gate on it cleanly.
+        id: dockerhub_auth
+        env:
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          IMAGE="${{ steps.version.outputs.image }}"
-          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
-            docker build \
-              -f docker/Dockerfile.vllm \
-              -t "$IMAGE" \
-              --build-arg VLLM_VERSION="${{ steps.version.outputs.version }}" \
-              .
+          if [[ -n "$DH_TOKEN" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Reusing cached $IMAGE."
+            echo "available=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Authenticate Docker Hub (if token configured)
+        # Self-hosted runners pulling 15-50 GB upstream images
+        # anonymously can hit Docker Hub rate limits. Auth gated on
+        # secret presence so external contributors / unconfigured forks
+        # don't fail; missing secret silently skips this step.
+        if: steps.dockerhub_auth.outputs.available == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Pull vLLM upstream image and tag locally
+        # vLLM publishes canonical images at vllm/vllm-openai:v${VER}.
+        # Pull directly and re-tag to the convenience local tag the rest
+        # of this job consumes; the llenergymeasure package is mounted at
+        # runtime via PYTHONPATH rather than baked into a first-party
+        # overlay image.
+        run: |
+          UPSTREAM="vllm/vllm-openai:v${{ steps.version.outputs.version }}"
+          docker pull "$UPSTREAM"
+          docker tag "$UPSTREAM" "${{ steps.version.outputs.image }}"
 
       - name: Compute stable mining + vendor anchor
         id: anchor
         run: |
           PATHS=(
             "engine_versions/vllm.yaml"
-            "docker/Dockerfile.vllm"
             "scripts/engine_miners/vllm_static_miner.py"
             "scripts/engine_miners/vllm_dynamic_miner.py"
             "scripts/engine_miners/build_corpus.py"
@@ -541,6 +559,8 @@ jobs:
           docker run --rm --gpus all \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
+            -e PYTHONPATH=/repo/src:/repo \
+            -e PYTHONDONTWRITEBYTECODE=1 \
             --entrypoint python3 \
             "$IMAGE" \
             -m scripts._probe --engine vllm --producer invariants \
@@ -580,6 +600,7 @@ jobs:
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
             -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE=1 \
+            -e PYTHONPATH=/repo/src:/repo \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
             --entrypoint bash \
@@ -867,29 +888,23 @@ jobs:
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "image=llenergymeasure:tensorrt-${VER}" >> "$GITHUB_OUTPUT"
 
-      - name: Build or reuse TRT-LLM image
-        # SSOT is the canonical version; the Dockerfile ARG default is a
-        # local-build fallback. Layer cache keeps rebuilds fast when the
-        # NGC tag is unchanged. Note Dockerfile ARG is named
-        # TRTLLM_VERSION (not TENSORRT_VERSION) — preserved.
+      # Self-hosted runners must have nvcr.io credentials configured (see docs/development.md).
+      - name: Pull TRT-LLM upstream image and tag locally
+        # NGC publishes canonical TRT-LLM images at
+        # nvcr.io/nvidia/tensorrt-llm/release:${VER}. Pull directly and
+        # re-tag to the convenience local tag the rest of this job
+        # consumes; the llenergymeasure package is mounted at runtime
+        # via PYTHONPATH rather than baked into a first-party overlay.
         run: |
-          IMAGE="${{ steps.version.outputs.image }}"
-          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
-            docker build \
-              -f docker/Dockerfile.tensorrt \
-              -t "$IMAGE" \
-              --build-arg TRTLLM_VERSION="${{ steps.version.outputs.version }}" \
-              .
-          else
-            echo "Reusing cached $IMAGE."
-          fi
+          UPSTREAM="nvcr.io/nvidia/tensorrt-llm/release:${{ steps.version.outputs.version }}"
+          docker pull "$UPSTREAM"
+          docker tag "$UPSTREAM" "${{ steps.version.outputs.image }}"
 
       - name: Compute stable mining + vendor anchor
         id: anchor
         run: |
           PATHS=(
             "engine_versions/tensorrt.yaml"
-            "docker/Dockerfile.tensorrt"
             "scripts/engine_miners/tensorrt_static_miner.py"
             "scripts/engine_miners/tensorrt_miner.py"
             "scripts/engine_miners/build_corpus.py"
@@ -924,6 +939,8 @@ jobs:
         run: |
           docker run --rm --gpus all \
             -e LD_LIBRARY_PATH="/usr/local/cuda/compat/lib.real:/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib" \
+            -e PYTHONPATH=/repo/src:/repo \
+            -e PYTHONDONTWRITEBYTECODE=1 \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
             --entrypoint bash \
@@ -976,6 +993,7 @@ jobs:
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
             -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE=1 \
+            -e PYTHONPATH=/repo/src:/repo \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
             --entrypoint bash \

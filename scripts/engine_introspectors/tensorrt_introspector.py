@@ -20,10 +20,8 @@ from pathlib import Path
 from typing import Any
 
 from scripts.engine_introspectors._common import (
-    DOCKERFILE_PATHS,
     dataclass_fields_to_specs,
     make_envelope,
-    read_dockerfile_from,
 )
 
 # Symbols this introspector relies on inside the live ``tensorrt_llm``
@@ -98,13 +96,15 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         }
     )
 
-    base_image_ref = read_dockerfile_from(repo_root / DOCKERFILE_PATHS["tensorrt"])
+    # tensorrt-llm runs inside the NGC release image; the workflow passes
+    # its concrete reference via --image-ref. No first-party Dockerfile
+    # to read.
     return make_envelope(
         engine="tensorrt",
         engine_version=tensorrt_llm.__version__,
         engine_commit_sha=getattr(tensorrt_llm, "__commit__", None),
-        image_ref=image_ref or base_image_ref,
-        base_image_ref=base_image_ref,
+        image_ref=image_ref,
+        base_image_ref=None,
         discovery_method="TrtLlmArgs.model_json_schema() + dataclasses.fields(SamplingParams)",
         discovery_limitations=limitations,
         engine_params=engine_params,

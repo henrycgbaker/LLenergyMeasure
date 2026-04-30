@@ -199,8 +199,6 @@ jobs:
         include:
           - dockerfile: transformers
             blocking: true
-          - dockerfile: vllm
-            blocking: false
     continue-on-error: ${{ !matrix.blocking }}
     steps:
       - uses: actions/checkout@v6

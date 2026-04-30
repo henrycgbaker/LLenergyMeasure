@@ -15,6 +15,7 @@ This module is consumed by StudyRunner as the dispatch mechanism when
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import os
@@ -107,6 +108,30 @@ def _mask_secrets(text: str, secrets: dict[str, str]) -> str:
         if v and len(v) > 4:
             text = text.replace(v, "***")
     return text
+
+
+@functools.cache
+def _resolve_package_parent_dir() -> Path:
+    """Return the directory that *contains* the ``llenergymeasure/`` package.
+
+    Used to bind-mount the host package source into upstream engine images
+    that don't have llenergymeasure pre-installed (vllm, tensorrt). Resolved
+    from ``__file__`` rather than via ``import llenergymeasure`` to keep the
+    infra layer free of upper-layer imports (import-linter contract).
+
+    Layout::
+
+        <pkg_parent>/
+            llenergymeasure/
+                infra/
+                    docker_runner.py   <-- __file__
+
+    Three ``.parent`` hops walk docker_runner.py -> infra/ -> llenergymeasure/
+    -> <pkg_parent>. Encapsulation here localises path knowledge so a future
+    relayout only needs to touch this helper. Cached because ``__file__`` is
+    fixed for the life of the process.
+    """
+    return Path(__file__).resolve().parent.parent.parent
 
 
 class DockerRunner:
@@ -687,9 +712,18 @@ class DockerRunner:
         """Build the ``docker run`` command list.
 
         For TRT-LLM tensor parallelism (tensor_parallel_size > 1), ``mpirun -n {n}
-        --allow-run-as-root`` is injected between the image name and ``python3``.
-        MPI worker ranks re-import the module but do not call ``main()`` because
+        --allow-run-as-root`` wraps the python3 invocation. MPI worker ranks
+        re-import the module but do not call ``main()`` because
         ``container_entrypoint.py`` is guarded by ``if __name__ == "__main__"``.
+
+        For vllm and tensorrt engines, the upstream Docker images
+        (vllm/vllm-openai, nvcr.io/nvidia/tensorrt-llm/release) are used
+        directly without a first-party overlay. The host package source is
+        bind-mounted at ``/llem-src`` and exposed via ``PYTHONPATH`` so the
+        in-container Python can import ``llenergymeasure``. ``--entrypoint``
+        is overridden because both upstream images set entrypoints
+        incompatible with the command-override pattern (vLLM intercepts as
+        api_server args; NGC wraps in /opt/nvidia/nvidia_entrypoint.sh).
 
         Args:
             config:       ExperimentConfig for the current experiment. Used to
@@ -734,6 +768,33 @@ class DockerRunner:
         for host_path, container_path in self.extra_mounts:
             cmd.extend(["-v", f"{host_path}:{container_path}"])
 
+        # Determine TRT-LLM tensor parallel size for MPI injection
+        tp_size = None
+        if config.engine == Engine.TENSORRT and config.tensorrt is not None:
+            tp_size = config.tensorrt.tensor_parallel_size
+
+        # vLLM and TensorRT-LLM use upstream images directly: bind-mount the
+        # host package source and override the entrypoint. PYTHONDONTWRITEBYTECODE
+        # prevents the container from littering the bind-mounted source with
+        # root-owned __pycache__ directories.
+        mount_based_dispatch = config.engine in (Engine.VLLM, Engine.TENSORRT)
+        if mount_based_dispatch:
+            pkg_parent = str(_resolve_package_parent_dir())
+            cmd.extend(
+                [
+                    "-v",
+                    f"{pkg_parent}:/llem-src:ro",
+                    "-e",
+                    "PYTHONPATH=/llem-src",
+                    "-e",
+                    "PYTHONDONTWRITEBYTECODE=1",
+                ]
+            )
+            # For TP > 1, mpirun is the entrypoint and python3 follows in args;
+            # otherwise python3 is the entrypoint directly.
+            entrypoint = "mpirun" if (tp_size is not None and tp_size > 1) else "python3"
+            cmd.extend(["--entrypoint", entrypoint])
+
         # Container name and labels for lifecycle management (cleanup, reaper).
         # These must appear before the image name in the docker run command.
         if self._container_name:
@@ -741,20 +802,32 @@ class DockerRunner:
         for key, value in self._labels.items():
             cmd.extend(["--label", f"{key}={value}"])
 
-        # Determine TRT-LLM tensor parallel size for MPI injection
-        tp_size = None
-        if config.engine == "tensorrt" and config.tensorrt is not None:
-            tp_size = config.tensorrt.tensor_parallel_size
-
         cmd.append(self.image)
 
-        # Inject mpirun for TRT-LLM tensor parallelism > 1.
-        # MPI workers re-import the module but don't hit the __main__ guard,
-        # so only rank 0 runs the experiment. See entrypoints/container.py.
-        if tp_size is not None and tp_size > 1:
-            cmd.extend(["mpirun", "-n", str(tp_size), "--allow-run-as-root"])
-
-        cmd.extend(["python3", "-m", "llenergymeasure.entrypoints.container"])
+        # Post-image arguments. When the entrypoint was overridden to mpirun
+        # (mount-based dispatch with TP > 1), the literal "mpirun" must NOT
+        # appear in the args — it's already the entrypoint. When the
+        # entrypoint was overridden to python3 (mount-based, TP == 1), the
+        # literal "python3" must NOT appear either. The transformers path
+        # (no entrypoint override) keeps the legacy shape.
+        if mount_based_dispatch:
+            if tp_size is not None and tp_size > 1:
+                cmd.extend(
+                    [
+                        "-n",
+                        str(tp_size),
+                        "--allow-run-as-root",
+                        "python3",
+                        "-m",
+                        "llenergymeasure.entrypoints.container",
+                    ]
+                )
+            else:
+                cmd.extend(["-m", "llenergymeasure.entrypoints.container"])
+        else:
+            if tp_size is not None and tp_size > 1:
+                cmd.extend(["mpirun", "-n", str(tp_size), "--allow-run-as-root"])
+            cmd.extend(["python3", "-m", "llenergymeasure.entrypoints.container"])
 
         return cmd
 

@@ -340,23 +340,26 @@ Output shows local vs registry source for each engine:
   vllm       -> llenergymeasure:vllm  (local_build)
 ```
 
-### Building images locally
+### Building or pulling images locally
 
-Build images from source when you have modified the codebase or need images that reflect
-your local changes:
+Only the Transformers engine is built from a project Dockerfile. vLLM and
+TensorRT-LLM use canonical upstream images directly and bind-mount the
+project source at run time.
 
 ```bash
-# Build all engines
-make docker-build-all
+# Transformers — build from project source
+make docker-build-transformers
 
-# Build a specific engine
-make docker-build-pytorch
-make docker-build-vllm
-make docker-build-tensorrt
+# vLLM — pull upstream
+docker pull vllm/vllm-openai:0.7.3
+
+# TensorRT-LLM — pull upstream (NGC)
+docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0
 ```
 
-These targets use `docker compose build` under the hood and pull cached layers from the
-GHCR registry on first build (see
+`make docker-build-all` is an alias for `make docker-build-transformers`
+(the only project-built image). It uses `docker compose build` under the
+hood and pulls cached layers from GHCR on first build (see
 [Fast rebuilds and first-pull cost](installation.md#fast-rebuilds-and-first-pull-cost)
 for the full mechanism).
 

@@ -1,4 +1,9 @@
-# Docker Compose with multiple engine support
+# Docker Compose for the transformers engine image.
+#
+# vLLM and TensorRT-LLM run inside upstream images (vllm/vllm-openai,
+# nvcr.io/nvidia/tensorrt-llm/release) with the llenergymeasure source
+# bind-mounted at runtime by DockerRunner; they do not have compose
+# entries because there is no first-party image to build.
 #
 # Quick Start:
 #   pip install -e .              # Install llenergymeasure
@@ -7,25 +12,14 @@
 #
 # Manual Usage:
 #   Transformers (default): docker compose run --rm transformers llem --help
-#   vLLM:              docker compose run --rm vllm llem --help
-#   TensorRT:          docker compose run --rm tensorrt llem --help
 #
 # Examples:
-#   # Transformers engine (default)
 #   docker compose run --rm transformers llem run configs/examples/experiment-transformers.yaml
 #
-#   # vLLM backend
-#   docker compose run --rm vllm llem run configs/examples/experiment-vllm.yaml
-#
-#   # TensorRT engine
-#   docker compose run --rm tensorrt llem run configs/examples/experiment-tensorrt.yaml
-#
-#   # Development shells
+#   # Development shell
 #   docker compose --profile dev run --rm transformers-dev /bin/bash
-#   docker compose --profile dev run --rm vllm-dev /bin/bash
-#   docker compose --profile dev run --rm tensorrt-dev /bin/bash
 
-# Per-engine BuildKit layer cache (shared across runtime + dev services).
+# BuildKit layer cache for the transformers image.
 # Two sources, in priority order:
 #   1. :v${LLEM_PKG_VERSION} — exact-version image layers from the matching
 #      release. Note the literal `v`: published tags carry a `v` prefix (set by
@@ -38,16 +32,6 @@ x-cache-transformers: &cache-transformers
   cache_from:
     - ghcr.io/henrycgbaker/llenergymeasure/transformers:v${LLEM_PKG_VERSION:-dev}
     - ghcr.io/henrycgbaker/llenergymeasure/transformers:latest
-
-x-cache-vllm: &cache-vllm
-  cache_from:
-    - ghcr.io/henrycgbaker/llenergymeasure/vllm:v${LLEM_PKG_VERSION:-dev}
-    - ghcr.io/henrycgbaker/llenergymeasure/vllm:latest
-
-x-cache-tensorrt: &cache-tensorrt
-  cache_from:
-    - ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v${LLEM_PKG_VERSION:-dev}
-    - ghcr.io/henrycgbaker/llenergymeasure/tensorrt:latest
 
 # Shared configuration anchor
 x-common: &common
@@ -139,98 +123,6 @@ services:
     command: []
 
   # ==========================================================================
-  # vLLM Engine - High-performance inference with PagedAttention etc
-  # ==========================================================================
-  vllm:
-    <<: *common
-    # vLLM requires shared memory for multiprocessing
-    ipc: host
-    volumes:
-      # Bind mounts: user-accessible data (resume workflow requires host access)
-      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
-      - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
-      - ${LLM_ENERGY_STATE_DIR:-./.state}:/app/.state
-      - ./scripts:/app/scripts:ro
-      # Named volumes: container-managed (no permission issues)
-      - hf-cache:/app/.cache/huggingface
-    build:
-      <<: *cache-vllm
-      context: .
-      dockerfile: docker/Dockerfile.vllm
-      target: runtime
-      args:
-        LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
-        LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
-    image: llenergymeasure:vllm
-
-  vllm-dev:
-    <<: *common
-    # vLLM requires shared memory for multiprocessing
-    ipc: host
-    volumes:
-      - .:/app
-      - hf-cache:/app/.cache/huggingface
-    profiles: ["dev"]
-    build:
-      <<: *cache-vllm
-      context: .
-      dockerfile: docker/Dockerfile.vllm
-      target: dev
-      args:
-        LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
-        LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
-    image: llenergymeasure:vllm-dev
-    entrypoint: ["/app/scripts/dev-entrypoint.sh"]
-    command: []
-
-  # ==========================================================================
-  # TensorRT-LLM Engine - High-performance compiled inference
-  # ==========================================================================
-  tensorrt:
-    <<: *common
-    # TensorRT-LLM requires shared memory for multiprocessing
-    ipc: host
-    volumes:
-      # Bind mounts: user-accessible data (resume workflow requires host access)
-      - ${LLM_ENERGY_CONFIGS_DIR:-./configs}:/app/configs
-      - ${LLM_ENERGY_RESULTS_DIR:-./results}:/app/results
-      - ${LLM_ENERGY_STATE_DIR:-./.state}:/app/.state
-      - ./scripts:/app/scripts:ro
-      # Named volumes: container-managed (no permission issues)
-      - hf-cache:/app/.cache/huggingface
-      - trt-engine-cache:/app/.cache/tensorrt-engines
-    build:
-      <<: *cache-tensorrt
-      context: .
-      dockerfile: docker/Dockerfile.tensorrt
-      target: runtime
-      args:
-        LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
-        LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
-    image: llenergymeasure:tensorrt
-
-  tensorrt-dev:
-    <<: *common
-    # TensorRT-LLM requires shared memory for multiprocessing
-    ipc: host
-    volumes:
-      - .:/app
-      - hf-cache:/app/.cache/huggingface
-      - trt-engine-cache:/app/.cache/tensorrt-engines
-    profiles: ["dev"]
-    build:
-      <<: *cache-tensorrt
-      context: .
-      dockerfile: docker/Dockerfile.tensorrt
-      target: dev
-      args:
-        LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
-        LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
-    image: llenergymeasure:tensorrt-dev
-    entrypoint: ["/app/scripts/dev-entrypoint.sh"]
-    command: []
-
-  # ==========================================================================
   # Legacy aliases (backwards compatibility)
   # ==========================================================================
   llenergymeasure-app:
@@ -250,7 +142,6 @@ services:
 #
 # To clear specific volumes:
 #   docker volume rm lem-hf-cache
-#   docker volume rm lem-trt-engine-cache
 #
 # Note: Experiment state (.state/) is now a bind mount for resume workflow.
 #
@@ -258,7 +149,3 @@ volumes:
   # HuggingFace model cache (10-100+ GB)
   hf-cache:
     name: lem-hf-cache
-
-  # TensorRT compiled engine cache (1-10+ GB)
-  trt-engine-cache:
-    name: lem-trt-engine-cache

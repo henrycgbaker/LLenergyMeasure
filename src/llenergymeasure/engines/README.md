@@ -70,9 +70,9 @@ image, built from the SSOT in `engine_versions/{engine}.yaml`:
 
 | Engine | Required package | Image source |
 |---------|-----------------|---------------|
-| `transformers` | `transformers` | `docker/Dockerfile.transformers` |
-| `vllm` | `vllm` | `docker/Dockerfile.vllm` |
-| `tensorrt` | `tensorrt_llm` | `docker/Dockerfile.tensorrt` |
+| `transformers` | `transformers` | `docker/Dockerfile.transformers` (first-party) |
+| `vllm` | `vllm` | `vllm/vllm-openai:<version>` (upstream; project source bind-mounted at run time) |
+| `tensorrt` | `tensorrt_llm` | `nvcr.io/nvidia/tensorrt-llm/release:<version>` (NGC upstream; project source bind-mounted at run time) |
 
 See [docs/development.md](../../../docs/development.md) for the build/run
 pattern. Host imports of these libraries fail by design.

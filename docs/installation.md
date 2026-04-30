@@ -94,43 +94,49 @@ This creates a `llem-builder` with a 200 GiB GC limit. To use it, set
 machine. See [Docker Setup - BuildKit](docker-setup.md#buildkit-builder-setup-recommended)
 for details.
 
-## Building Docker Images from Source
+## Getting Engine Images
 
-The pre-built images from GHCR work for most users. If you need to rebuild images locally
-(e.g. after modifying the source code), use the Make targets:
-
-```bash
-# Build all engines (pytorch, vllm, tensorrt)
-make docker-build-all
-
-# Build a specific engine
-make docker-build-pytorch
-make docker-build-vllm
-make docker-build-tensorrt
-```
-
-These use `docker compose build` under the hood. You can also call it directly:
+Only the Transformers engine is built from a project Dockerfile — vLLM and
+TensorRT-LLM use canonical upstream images directly, because no upstream
+ships an FA3-included Transformers image but vLLM and TensorRT-LLM both
+publish ready-to-use images of their own. The project source is bind-mounted
+into the upstream image at run time, so there is no per-release rebuild for
+vLLM or TensorRT-LLM.
 
 ```bash
-docker compose build pytorch vllm tensorrt
+# Transformers — build from source (FA3 compile is the slow step)
+make docker-build-transformers
+
+# vLLM — pull upstream
+docker pull vllm/vllm-openai:0.7.3
+
+# TensorRT-LLM — pull upstream (NGC)
+docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0
 ```
 
-Or with plain `docker build` (no Compose, no build cache):
+The pinned versions are the SSOT in `engine_versions/{vllm,tensorrt}.yaml`
+under `library.current_version`. Renovate bumps them on each upstream
+release.
+
+You can also build the Transformers image with plain `docker build` (no
+Compose, no build cache):
 
 ```bash
 docker build -f docker/Dockerfile.transformers -t llenergymeasure:transformers .
-docker build -f docker/Dockerfile.vllm -t llenergymeasure:vllm .
-docker build -f docker/Dockerfile.tensorrt -t llenergymeasure:tensorrt .
 ```
 
-Local builds produce images tagged `llenergymeasure:{engine}`. When present, `llem`
-prefers these over registry images. See [Image Management](docker-setup.md#image-management)
-for the full resolution chain.
+Local Transformers builds produce an image tagged `llenergymeasure:transformers`.
+When present, `llem` prefers it over the registry image. See
+[Image Management](docker-setup.md#image-management) for the full resolution
+chain.
 
-> **When to rebuild.** Images bundle the `llenergymeasure` source at build time. If you
-> modify config models, engines, or the container entrypoint, you must rebuild for changes
-> to take effect inside containers. Local-runner experiments (Transformers) use the installed
-> source directly and do not need a rebuild.
+> **When to rebuild Transformers.** The Transformers image bundles
+> `llenergymeasure` source at build time. If you modify config models,
+> engines, or the container entrypoint, rebuild for changes to take effect
+> inside the container. The vLLM and TensorRT-LLM containers bind-mount the
+> project source at run time, so source edits take effect without a rebuild.
+> Local-runner experiments (Transformers without Docker) use the installed
+> source directly and do not need a rebuild either.
 
 ### Other Docker Make targets
 
@@ -187,10 +193,12 @@ compile is in our Dockerfile, ahead of `COPY src/`, so it gets cached.
 Once the upstream base is in local Docker storage (after the first build),
 subsequent rebuilds for vLLM/TRT are seconds — the slow part doesn't repeat.
 
-**Build as normal:**
+**Build (or pull) as normal:**
 
 ```bash
-make docker-build-transformers   # or docker-build-vllm / docker-build-tensorrt
+make docker-build-transformers                       # build Transformers from source
+docker pull vllm/vllm-openai:0.7.3                   # pull vLLM upstream
+docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0  # pull TensorRT-LLM upstream
 ```
 
 **How the cache pipeline is wired:**

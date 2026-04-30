@@ -1,7 +1,12 @@
 name: Docker Build Check
 
-# Validates all engine Docker images build successfully (no push).
-# Catches broken Dockerfiles before release. Uses registry cache for speed.
+# Validates the transformers engine Docker image builds successfully
+# (no push). Catches broken Dockerfile.transformers before release. Uses
+# registry cache for speed.
+#
+# vLLM and TensorRT-LLM are not built here: they run inside upstream
+# images directly via runtime bind-mount. Their CI smoke is provided by
+# the engine-invariants and engine-schemas workflows.
 
 on:
   workflow_call: {}
@@ -17,13 +22,6 @@ env:
 
 jobs:
   docker-build-check:
-    strategy:
-      fail-fast: false
-      matrix:
-        engine: [transformers, vllm, tensorrt]
-        include:
-          - engine: transformers
-            build-args: INSTALL_FA3=false
     runs-on: ubuntu-latest
     permissions:
       packages: read
@@ -39,13 +37,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build ${{ matrix.engine }} image
+      - name: Build transformers image
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: docker/Dockerfile.${{ matrix.engine }}
+          file: docker/Dockerfile.transformers
           target: runtime
           push: false
-          build-args: ${{ matrix.build-args }}
+          build-args: INSTALL_FA3=false
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.engine }}:latest
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/transformers:latest

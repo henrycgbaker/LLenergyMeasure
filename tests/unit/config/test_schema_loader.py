@@ -112,6 +112,16 @@ def test_base_image_ref_falls_back_to_image_ref() -> None:
     assert parsed.base_image_ref == parsed.image_ref
 
 
+def test_base_image_ref_null_falls_back_to_image_ref() -> None:
+    """vllm and tensorrt introspectors emit base_image_ref=null since
+    they no longer derive it from a first-party Dockerfile; the loader
+    should treat null the same as missing and fall back to image_ref."""
+    envelope = _minimal_envelope()
+    envelope["base_image_ref"] = None
+    parsed = _parse_envelope(engine="vllm", raw_text=json.dumps(envelope))
+    assert parsed.base_image_ref == parsed.image_ref
+
+
 def test_discovery_limitations_parsed_into_dataclass() -> None:
     envelope = _minimal_envelope()
     envelope["discovery_limitations"] = [

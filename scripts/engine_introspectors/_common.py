@@ -27,11 +27,12 @@ from typing import Any, Union, get_args, get_origin
 
 SCHEMA_VERSION = "1.0.0"
 
-DOCKERFILE_PATHS = {
-    "vllm": "docker/Dockerfile.vllm",
-    "tensorrt": "docker/Dockerfile.tensorrt",
-    "transformers": "docker/Dockerfile.transformers",
-}
+# Only the transformers engine has a first-party Dockerfile. vllm and
+# tensorrt run inside upstream images (vllm/vllm-openai,
+# nvcr.io/nvidia/tensorrt-llm/release) that introspectors receive via
+# the workflow-supplied ``--image-ref`` flag rather than reading from a
+# local Dockerfile.
+TRANSFORMERS_DOCKERFILE = "docker/Dockerfile.transformers"
 
 DEFAULT_OUTPUT_DIR = "src/llenergymeasure/config/discovered_schemas"
 
@@ -176,8 +177,8 @@ def make_envelope(
     engine: str,
     engine_version: str,
     engine_commit_sha: str | None,
-    image_ref: str,
-    base_image_ref: str,
+    image_ref: str | None,
+    base_image_ref: str | None,
     discovery_method: str,
     discovery_limitations: list[dict[str, Any]],
     engine_params: dict[str, Any],
