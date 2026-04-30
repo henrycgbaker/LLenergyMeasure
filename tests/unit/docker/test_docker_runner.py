@@ -777,31 +777,36 @@ class TestMpirunInjection:
         return captured_cmds[0]
 
     def test_mpirun_injected_for_tensorrt_tp2(self, tmp_path):
-        """TRT-LLM with tensor_parallel_size=2 gets mpirun -n 2 --allow-run-as-root before python3."""
+        """TRT-LLM with tensor_parallel_size=2 dispatches via mpirun entrypoint with -n 2."""
         from llenergymeasure.config.engine_configs import TensorRTConfig
 
         config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=2))
         cmd = self._capture_cmd(config, tmp_path)
 
-        assert "mpirun" in cmd
+        # Mount-based dispatch overrides --entrypoint mpirun before the image;
+        # the post-image args are mpirun's flags (no literal "mpirun" needed there).
+        assert "--entrypoint" in cmd
+        ep_idx = cmd.index("--entrypoint")
+        image_idx = cmd.index(IMAGE)
+        assert ep_idx < image_idx
+        assert cmd[ep_idx + 1] == "mpirun"
         assert "-n" in cmd
         assert "2" in cmd
         assert "--allow-run-as-root" in cmd
 
-        # mpirun must appear after the image name and before python3
-        image_idx = cmd.index(IMAGE)
-        mpirun_idx = cmd.index("mpirun")
+        # python3 -m llenergymeasure.entrypoints.container runs as mpirun's command
         python_idx = cmd.index("python3")
-        assert image_idx < mpirun_idx < python_idx
+        assert image_idx < python_idx
 
     def test_mpirun_injected_for_tensorrt_tp4(self, tmp_path):
-        """TRT-LLM with tensor_parallel_size=4 gets mpirun -n 4 with correct stringified count."""
+        """TRT-LLM with tensor_parallel_size=4 dispatches via mpirun entrypoint with -n 4."""
         from llenergymeasure.config.engine_configs import TensorRTConfig
 
         config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=4))
         cmd = self._capture_cmd(config, tmp_path)
 
-        assert "mpirun" in cmd
+        ep_idx = cmd.index("--entrypoint")
+        assert cmd[ep_idx + 1] == "mpirun"
         n_idx = cmd.index("-n")
         assert cmd[n_idx + 1] == "4"
 
