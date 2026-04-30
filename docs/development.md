@@ -48,13 +48,11 @@ docker run --rm \
 
 Replace `transformers` with `vllm` or `tensorrt` (and add `--gpus all` for
 those two — they need a CUDA device) for the other engines. The automated
-path is the engine pipeline workflows in `.github/workflows/`:
-`engine-image-build.yml` (transformers image build),
-`engine-schemas-transformers.yml` + `engine-invariants-transformers.yml`
-(downstream consumers, sequenced via `workflow_run`), and
-`engine-schemas.yml` + `engine-invariants.yml` (vllm + tensorrt cells, which
-pull upstream images directly). See "CI pipeline ordering" below for the
-full sequence.
+path is three workflow files in `.github/workflows/`: `engine-image-build.yml`
+(builds the transformers image once per SSOT version), and
+`engine-schemas.yml` + `engine-invariants.yml` (one workflow per pipeline,
+each covering all three engines via per-job `if:` gating on the trigger
+source). See "CI pipeline ordering" below for the full sequence.
 
 ## Engine image strategy
 
@@ -98,8 +96,20 @@ The principled rationale:
 
 ## CI pipeline ordering
 
-When Renovate (or a maintainer) bumps `engine_versions/transformers.yaml` or
-`docker/Dockerfile.transformers`, the pipeline fires sequentially:
+There is one workflow file per pipeline (one `engine-schemas.yml`, one
+`engine-invariants.yml`) covering all three engines. The per-engine
+asymmetry — transformers needs a pre-built first-party image, vllm and
+tensorrt pull upstream images directly — is contained inside each workflow
+via multi-trigger + per-job `if:` gating, not via file proliferation.
+
+The transformers cell in `engine-invariants.yml` and `engine-schemas.yml`
+is gated by `workflow_run: completed` on Engine Image Build (transformers);
+the vllm and tensorrt cells in the same files are gated by
+`pull_request: paths`. Per-job `if:` clauses select the correct cell for
+each trigger source.
+
+When Renovate (or a maintainer) bumps `engine_versions/transformers.yaml`
+or `docker/Dockerfile.transformers`, the pipeline fires sequentially:
 
 1. **Engine Image Build** (`engine-image-build.yml`) — builds the transformers
    image once. On PR, pushes to a per-version tag in the
@@ -107,18 +117,20 @@ When Renovate (or a maintainer) bumps `engine_versions/transformers.yaml` or
    On push to `main`, also pushes `:latest` and `:transformers-<VERSION>` to
    the canonical `ghcr.io/<repo>/transformers` repo so external `docker pull`
    users and the next PR cycle's `cache-from :latest` both stay fresh.
-2. **Engine Schemas — transformers** (`engine-schemas-transformers.yml`) —
-   triggered on Engine Image Build's `success`. Pulls the just-built image,
-   runs schema discovery, writes back the discovered JSON + curation digest.
-3. **Engine Invariants — transformers** (`engine-invariants-transformers.yml`) —
-   triggered on Engine Image Build's `success`. Pulls the same image, runs
-   the miner + vendor + invariants digest, rebases against schemas's
-   writeback before pushing its own commit.
+2. **Engine Schemas — transformers** (`schemas-transformers` job in
+   `engine-schemas.yml`) — `workflow_run`-triggered on Engine Image Build's
+   `success`. Pulls the just-built image, runs schema discovery, writes back
+   the discovered JSON + curation digest.
+3. **Engine Invariants — transformers** (`invariants-transformers` job in
+   `engine-invariants.yml`) — `workflow_run`-triggered on Engine Image Build's
+   `success`. Pulls the same image, runs the miner + vendor + invariants
+   digest, rebases against schemas's writeback before pushing its own commit.
 
-`engine-invariants.yml` and `engine-schemas.yml` retain only the vllm + tensorrt
-cells. Those engines pull upstream images directly and don't depend on
-Engine Image Build, so they keep their original `pull_request: paths`
-trigger.
+When Renovate (or a maintainer) bumps `engine_versions/vllm.yaml` or
+`engine_versions/tensorrt.yaml`, the corresponding `invariants-vllm` /
+`invariants-tensorrt` / `schemas-vllm` / `schemas-tensorrt` jobs fire on
+`pull_request: paths` and pull upstream images directly (no first-party
+build).
 
 A weekly scheduled run of Engine Image Build (Monday 05:37 UTC) rebuilds
 the image from scratch with `--no-cache`. If the resulting digest differs

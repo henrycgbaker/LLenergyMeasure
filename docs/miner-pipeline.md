@@ -422,12 +422,14 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │  (library.current_version; Dockerfile ARG default is derived at   │
   │   build time via --build-arg from the SSOT)                       │
   │               │                                                   │
-  │  Per-engine workflow trigger shape:                                │
-  │   - vllm + tensorrt: engine-invariants.yml + engine-schemas.yml   │
-  │     fire in parallel via pull_request: paths.                      │
+  │  Per-engine trigger shape (within a single engine-invariants.yml  │
+  │  + engine-schemas.yml pair, gated by per-job `if:` clauses):       │
+  │   - vllm + tensorrt: invariants-vllm / schemas-vllm /              │
+  │     invariants-tensorrt / schemas-tensorrt fire in parallel via    │
+  │     pull_request: paths.                                            │
   │   - transformers: engine-image-build.yml fires first (single       │
-  │     pre-build of the Docker image), then engine-schemas-           │
-  │     transformers.yml + engine-invariants-transformers.yml fire     │
+  │     pre-build of the Docker image), then invariants-transformers   │
+  │     + schemas-transformers (in the same two workflow files) fire   │
   │     via workflow_run on its success (sequential downstream).       │
   │     See docs/development.md "CI pipeline ordering" for detail.     │
   │               │                                                   │

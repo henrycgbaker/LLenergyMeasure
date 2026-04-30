@@ -518,9 +518,11 @@ llem run experiment.yaml --skip-preflight
 When you update an engine version (by bumping the SSOT in
 `engine_versions/<engine>.yaml`), the vendored parameter schemas must be
 regenerated. This happens automatically via the
-[Parameter Discovery Pipeline](schema-refresh.md): `engine-schemas.yml` for
-vllm + tensorrt; `engine-image-build.yml` then `engine-schemas-transformers.yml`
-(via `workflow_run`) for transformers. For manual bumps, run:
+[Parameter Discovery Pipeline](schema-refresh.md): `engine-schemas.yml`
+covers all three engines via per-job `if:` gating — the vllm + tensorrt
+cells fire on `pull_request: paths`; the transformers cell fires via
+`workflow_run` after `engine-image-build.yml` completes. For manual bumps,
+run:
 
 ```bash
 ./scripts/refresh_discovered_schemas.sh <engine>

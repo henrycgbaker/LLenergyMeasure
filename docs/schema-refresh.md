@@ -23,9 +23,11 @@ Renovate opens PR bumping the SSOT
 e.g. engine_versions/vllm.yaml current_version: 0.7.3 -> 0.8.0
                       |
                       v
-For vllm + tensorrt: engine-schemas.yml auto-fires
+For vllm + tensorrt: schemas-vllm / schemas-tensorrt jobs in
+                     engine-schemas.yml auto-fire on pull_request
 For transformers: engine-image-build.yml builds the image once, then
-                  engine-schemas-transformers.yml fires via workflow_run
+                  the schemas-transformers job in engine-schemas.yml
+                  fires via workflow_run
                       |
                       v
 +------------------------------------------+
@@ -57,14 +59,15 @@ Maintainer reviews PR:
    (TensorRT-LLM), and PyPI package versions (transformers). Weekly schedule,
    3-day stability window before opening a PR.
 2. When Renovate opens a PR:
-   - **vllm + tensorrt**: `engine-schemas.yml` auto-fires on the self-hosted
-     GPU runner (path-filtered on `engine_versions/vllm.yaml` /
+   - **vllm + tensorrt**: the `schemas-vllm` / `schemas-tensorrt` jobs in
+     `engine-schemas.yml` auto-fire on the self-hosted GPU runner
+     (path-filtered on `engine_versions/vllm.yaml` /
      `engine_versions/tensorrt.yaml`).
    - **transformers**: `engine-image-build.yml` fires first (rebuilds the
      transformers Docker image once per (PR, SSOT version) and pushes it
-     to a per-PR cache repo); on success, `engine-schemas-transformers.yml`
-     fires via `workflow_run`, pulls the just-built image, and runs
-     discovery against it.
+     to a per-PR cache repo); on success, the `schemas-transformers` job
+     in `engine-schemas.yml` fires via `workflow_run`, pulls the just-built
+     image, and runs discovery against it.
 3. The workflow runs `./scripts/refresh_discovered_schemas.sh <engine>`
    (or the equivalent steps inline) inside the engine's image.
 4. After discovery, `scripts/diff_discovered_schemas.py` classifies changes as safe or
@@ -92,8 +95,9 @@ Compares ARG version in Dockerfile vs engine_version in schema JSON
 On failure, the developer can either:
 - Run locally: `./scripts/refresh_discovered_schemas.sh <engine>`
 - Trigger remotely: `gh workflow run engine-schemas.yml --field engine=<engine> --field pr_number=<N>`
-  (transformers uses `engine-image-build.yml` followed by `engine-schemas-transformers.yml`,
-  which is `workflow_run`-gated and re-fires automatically once the build run completes)
+  (for transformers, run `engine-image-build.yml` instead — the
+  `schemas-transformers` job in `engine-schemas.yml` is `workflow_run`-gated
+  and re-fires automatically once the build run completes)
 
 ### Manual Refresh (workflow_dispatch)
 

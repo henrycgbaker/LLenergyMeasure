@@ -15,9 +15,9 @@ name: Engine Image Build (transformers)
 #     |  |- on push to main / schedule: also pushes :latest + :transformers-<VERSION>
 #     |  |  to the canonical ghcr.io/<repo>/transformers repo
 #     |  V
-#     |- engine-schemas-transformers.yml  (workflow_run: completed)
+#     |- engine-schemas.yml :: schemas-transformers job  (workflow_run: completed)
 #     |  V
-#     |- engine-invariants-transformers.yml  (workflow_run: completed)
+#     |- engine-invariants.yml :: invariants-transformers job  (workflow_run: completed)
 #
 # Downstream workflows pull this image rather than rebuilding it. The heavy
 # build cost (FA3 from-source compile, ~30-60 min cold) happens once per
