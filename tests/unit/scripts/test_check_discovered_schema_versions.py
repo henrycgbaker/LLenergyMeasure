@@ -11,29 +11,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 from check_discovered_schema_versions import main
 
 
+def _ssot_yaml(version: str) -> str:
+    """Render a minimal engine SSOT yaml carrying ``library.current_version``."""
+    return f"library:\n  current_version: {version}\n"
+
+
 def _setup_repo(
     tmp_path: Path,
     *,
-    vllm_arg: str = "v0.7.3",
+    vllm_ssot: str = "0.7.3",
     vllm_schema_version: str = "0.7.3",
-    trt_arg: str = "0.21.0",
+    trt_ssot: str = "0.21.0",
     trt_schema_version: str = "0.21.0",
-    transformers_arg: str = "5.5.4",
+    transformers_ssot: str = "5.5.4",
     transformers_schema_version: str = "5.5.4",
     skip_vllm_schema: bool = False,
 ) -> Path:
     """Create a minimal repo structure for the version check script."""
     repo = tmp_path / "repo"
-    docker = repo / "docker"
-    docker.mkdir(parents=True)
+    ssot_dir = repo / "engine_versions"
+    ssot_dir.mkdir(parents=True)
 
-    (docker / "Dockerfile.vllm").write_text(f"FROM ubuntu:22.04\nARG VLLM_VERSION={vllm_arg}\n")
-    (docker / "Dockerfile.tensorrt").write_text(
-        f"FROM ubuntu:22.04\nARG TRTLLM_VERSION={trt_arg}\n"
-    )
-    (docker / "Dockerfile.transformers").write_text(
-        f"FROM ubuntu:22.04\nARG TRANSFORMERS_VERSION={transformers_arg}\n"
-    )
+    (ssot_dir / "vllm.yaml").write_text(_ssot_yaml(vllm_ssot))
+    (ssot_dir / "tensorrt.yaml").write_text(_ssot_yaml(trt_ssot))
+    (ssot_dir / "transformers.yaml").write_text(_ssot_yaml(transformers_ssot))
 
     schema_dir = repo / "src" / "llenergymeasure" / "config" / "discovered_schemas"
     schema_dir.mkdir(parents=True)
@@ -54,14 +55,14 @@ class TestVersionsMatch:
         assert main(repo_root=repo) == 0
 
     def test_v_prefix_normalised(self, tmp_path: Path):
-        """v0.7.3 in Dockerfile should match 0.7.3 in schema."""
-        repo = _setup_repo(tmp_path, vllm_arg="v0.7.3", vllm_schema_version="0.7.3")
+        """v0.7.3 in SSOT should match 0.7.3 in schema."""
+        repo = _setup_repo(tmp_path, vllm_ssot="v0.7.3", vllm_schema_version="0.7.3")
         assert main(repo_root=repo) == 0
 
 
 class TestMismatch:
     def test_version_mismatch(self, tmp_path: Path, capsys):
-        repo = _setup_repo(tmp_path, vllm_arg="v0.8.0", vllm_schema_version="0.7.3")
+        repo = _setup_repo(tmp_path, vllm_ssot="0.8.0", vllm_schema_version="0.7.3")
         code = main(repo_root=repo)
         assert code == 1
         captured = capsys.readouterr()
@@ -71,7 +72,7 @@ class TestMismatch:
     def test_transformers_mismatch(self, tmp_path: Path, capsys):
         repo = _setup_repo(
             tmp_path,
-            transformers_arg="5.6.0",
+            transformers_ssot="5.6.0",
             transformers_schema_version="5.5.4",
         )
         code = main(repo_root=repo)
