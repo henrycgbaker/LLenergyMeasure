@@ -48,8 +48,13 @@ docker run --rm \
 
 Replace `transformers` with `vllm` or `tensorrt` (and add `--gpus all` for
 those two — they need a CUDA device) for the other engines. The automated
-path is `engine-invariants.yml` and `engine-schemas.yml` in `.github/workflows/`;
-both follow this same pattern across all three engines.
+path is the engine pipeline workflows in `.github/workflows/`:
+`engine-image-build.yml` (transformers image build),
+`engine-schemas-transformers.yml` + `engine-invariants-transformers.yml`
+(downstream consumers, sequenced via `workflow_run`), and
+`engine-schemas.yml` + `engine-invariants.yml` (vllm + tensorrt cells, which
+pull upstream images directly). See "CI pipeline ordering" below for the
+full sequence.
 
 ## Engine image strategy
 
@@ -58,7 +63,7 @@ asymmetric:
 
 | Engine | CI runner | GPU required | Image source | Why |
 |---|---|---|---|---|
-| transformers | `ubuntu-latest` (GH-hosted) | No | First-party `docker/Dockerfile.transformers` | No upstream provides FA3-included transformers |
+| transformers | `ubuntu-latest` (GH-hosted) | No | First-party `docker/Dockerfile.transformers`, built once by `engine-image-build.yml` per (PR, SSOT version) and consumed downstream via `docker pull` | No upstream provides FA3-included transformers |
 | vllm | self-hosted GPU | Yes (CUDA) | `vllm/vllm-openai:<version>` (Docker Hub) | Canonical upstream exists; project source bind-mounted at runtime |
 | tensorrt | self-hosted GPU | Yes (CUDA) | `nvcr.io/nvidia/tensorrt-llm/release:<version>` (NGC) | Canonical upstream exists; project source bind-mounted at runtime |
 
@@ -80,28 +85,47 @@ The principled rationale:
    plus FA2 (PyPI wheel) plus FA3 (compiled from source) plus accelerate /
    bitsandbytes / calflops / sentencepiece / einops pre-installed.
 
-3. **Image freshness vs main.** PR-time CI builds the transformers image
-   inline using `docker/setup-buildx-action@v4` + `docker/build-push-action@v7`
-   with two cache layers: `cache-from` opportunistically warm-hits
-   `ghcr.io/<repo>/transformers:latest` (kept fresh by release-time
-   `docker-publish.yml`) and `cache-to` writes a per-version GHA scope so
-   re-runs of the same SSOT version reuse FA3 + apt + uv layers. Cold builds
-   on a brand-new SSOT version still pay the FA3 compile (~30 min with
-   `INSTALL_FA3=true`; CI uses `INSTALL_FA3=false` for miner + introspector
-   passes since they don't need the kernel). Warm rebuilds are a few minutes.
+3. **Build once, consume many.** Engine Image Build is the single producer
+   of the transformers image; downstream workflows pull rather than rebuild.
+   CI builds the same production-equivalent image users get (`INSTALL_FA3`
+   defaults to `true` and is not overridden in any workflow). Cold builds
+   on a brand-new SSOT version still pay the FA3 compile (~30-60 min); warm
+   rebuilds reuse the GHA scope cache + the canonical `:latest` registry
+   cache and finish in a few minutes. The previous shape — engine-invariants
+   and engine-schemas each running their own buildx step against the same
+   per-version GHA scope — was prone to cache-write contention and observed
+   to deadlock at PR time on multi-GB layer writes.
 
-4. **PR-time inline build, merge-time publish.** When Renovate bumps a
-   transformers version, we do NOT publish a per-version image at PR time —
-   the PR-time validation contract is "the inline build must succeed."
-   Publish-on-merge (path-filtered on `docker/Dockerfile.transformers` and
-   `engine_versions/transformers.yaml`) keeps GHCR's `:latest` and
-   `:transformers-<library-version>` tags fresh after each merge that
-   changes the image inputs. This closes the docs-vs-runtime drift gap for
-   external `docker pull` users (the mined corpus + generated docs at HEAD
-   describe the same library version that `:latest` ships) and keeps the
-   `cache-from :latest` warm-hit rate high for subsequent Renovate cycles.
-   Release-time `docker-publish.yml` continues to publish `:v<pkg-version>`
-   on each release tag.
+## CI pipeline ordering
+
+When Renovate (or a maintainer) bumps `engine_versions/transformers.yaml` or
+`docker/Dockerfile.transformers`, the pipeline fires sequentially:
+
+1. **Engine Image Build** (`engine-image-build.yml`) — builds the transformers
+   image once. On PR, pushes to a per-version tag in the
+   `transformers-cache` GHCR repo (`ghcr.io/<repo>/transformers-cache:transformers-<VERSION>`).
+   On push to `main`, also pushes `:latest` and `:transformers-<VERSION>` to
+   the canonical `ghcr.io/<repo>/transformers` repo so external `docker pull`
+   users and the next PR cycle's `cache-from :latest` both stay fresh.
+2. **Engine Schemas — transformers** (`engine-schemas-transformers.yml`) —
+   triggered on Engine Image Build's `success`. Pulls the just-built image,
+   runs schema discovery, writes back the discovered JSON + curation digest.
+3. **Engine Invariants — transformers** (`engine-invariants-transformers.yml`) —
+   triggered on Engine Image Build's `success`. Pulls the same image, runs
+   the miner + vendor + invariants digest, rebases against schemas's
+   writeback before pushing its own commit.
+
+`engine-invariants.yml` and `engine-schemas.yml` retain only the vllm + tensorrt
+cells. Those engines pull upstream images directly and don't depend on
+Engine Image Build, so they keep their original `pull_request: paths`
+trigger.
+
+A weekly scheduled run of Engine Image Build (Monday 05:37 UTC) rebuilds
+the image from scratch with `--no-cache`. If the resulting digest differs
+from the cached `:latest`, that surfaces external dependency drift (apt
+repo, PyPI wheel re-publish, base image silent update) that layer caching
+alone wouldn't catch. Release-time `docker-publish.yml` continues to
+publish `:v<pkg-version>` on each release tag.
 
 ## Running tests
 

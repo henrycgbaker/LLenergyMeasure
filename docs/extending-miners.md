@@ -389,21 +389,33 @@ def test_landmark_checks_raise_on_missing():
 
 ## Step 7: Add to CI
 
-1. Add a per-engine job to `engine-invariants.yml` mirroring the existing `invariants-transformers` / `invariants-vllm` / `invariants-tensorrt` jobs. The job runs probe → mine → vendor-replay → doc-gen → atomic-writeback inline; copying one of the existing jobs and swapping the engine name + module paths is the fastest path.
+1. Decide the engine's CI shape:
+   - **Upstream image consumer** (vllm / tensorrt pattern) — add a per-engine
+     job to `engine-invariants.yml` and `engine-schemas.yml` mirroring the
+     existing `invariants-vllm` / `schemas-vllm` (or `*-tensorrt`) jobs. The
+     job pulls the upstream canonical image, then runs probe → mine →
+     vendor-replay → doc-gen → atomic-writeback inline.
+   - **First-party image (transformers pattern)** — split the build out into
+     a workflow modelled on `engine-image-build.yml` (single-source build),
+     and create `engine-invariants-<engine>.yml` + `engine-schemas-<engine>.yml`
+     as `workflow_run`-gated downstream consumers that pull the resulting
+     image. This pattern is needed when no canonical upstream image exists
+     and a heavy build (e.g. from-source kernel compile) shouldn't repeat
+     across the schemas + invariants concerns.
 
 2. Set the runner: every engine miner runs inside its own Docker image
-   (no host extras exist — see [development.md](development.md)). Add the
-   new engine's image to `docker/Dockerfile.<engine>`, build it from the
-   SSOT in `engine_versions/<engine>.yaml`, and mirror one of the existing
-   per-engine jobs in `engine-invariants.yml` — self-hosted GPU runner
-   inside `llenergymeasure:<engine>-${VER}`. Use `invariants-vllm` as the
-   template for engines whose miners need a GPU only for `import`-time
-   reasons; use `invariants-tensorrt` as the template for engines that
-   require CUDA-aware imports (e.g. NGC-derived bases).
+   (no host extras exist — see [development.md](development.md)). For the
+   upstream-image pattern, mirror `invariants-vllm` as the template for
+   engines whose miners need a GPU only for `import`-time reasons; use
+   `invariants-tensorrt` as the template for engines that require
+   CUDA-aware imports (e.g. NGC-derived bases). For the first-party-image
+   pattern, mirror the `engine-image-build.yml` + paired downstream files.
 
 3. The vendor-replay step runs inside the engine's container in the same job as the miner — no separate vendor workflow to update.
 
-4. Add a Renovate `packageRule` so library bumps trigger `engine-invariants.yml` via the `engine_versions/{engine}.yaml` path filter.
+4. Add a Renovate `packageRule` so library bumps trigger the appropriate
+   workflow via the `engine_versions/{engine}.yaml` path filter (or, for
+   the first-party-image pattern, via `engine-image-build.yml`'s filter).
 
 ---
 
@@ -525,7 +537,7 @@ Concrete scenario: a refactor in `_pydantic_lift.py` changes how it walks `Field
 
 **Mitigation: the proposed-vs-vendored YAML pair (the trust seam).**
 
-`engine-invariants.yml` mines the proposed corpus into `configs/engine_invariants/{engine}.proposed.yaml` and then vendor-replays it into `configs/engine_invariants/{engine}.vendored.yaml` in the same job. Both YAMLs land in one atomic commit-back to the PR branch, and the per-pipeline diff comment includes both diffs.
+The engine-invariants pipeline (`engine-invariants.yml` for vllm + tensorrt, `engine-invariants-transformers.yml` for transformers) mines the proposed corpus into `configs/engine_invariants/{engine}.proposed.yaml` and then vendor-replays it into `configs/engine_invariants/{engine}.vendored.yaml` in the same job. Both YAMLs land in one atomic commit-back to the PR branch, and the per-pipeline diff comment includes both diffs.
 
 Because the proposed-corpus diff is emitted alongside the vendored diff, a miner refactor that silently drops 18 rules shows up as 18 deletions in the proposed-corpus diff - a maintainer reading the PR notices the regression even when the vendor gate's verdict on the surviving rules is green.
 

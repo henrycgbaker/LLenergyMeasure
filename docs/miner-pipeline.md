@@ -422,26 +422,27 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │  (library.current_version; Dockerfile ARG default is derived at   │
   │   build time via --build-arg from the SSOT)                       │
   │               │                                                   │
-  │     ┌─────────┴──────────────┐                                    │
-  │     ▼                        ▼                                    │
-  │  engine-invariants.yml   engine-schemas.yml                       │
-  │  (per-engine matrix:     (engine schemas:                         │
-  │   probe + mine + vendor)  introspect Pydantic configs)            │
-  │                                                                   │
-  │  Path filters fire both workflows in parallel on the Renovate     │
-  │  PR. Each writes back to the PR branch independently.             │
+  │  Per-engine workflow trigger shape:                                │
+  │   - vllm + tensorrt: engine-invariants.yml + engine-schemas.yml   │
+  │     fire in parallel via pull_request: paths.                      │
+  │   - transformers: engine-image-build.yml fires first (single       │
+  │     pre-build of the Docker image), then engine-schemas-           │
+  │     transformers.yml + engine-invariants-transformers.yml fire     │
+  │     via workflow_run on its success (sequential downstream).       │
+  │     See docs/development.md "CI pipeline ordering" for detail.     │
   │               │                                                   │
-  │  ──────────── engine-invariants.yml per-engine job ────────────   │
+  │  ──────────── engine-invariants per-engine job ────────────────   │
   │         ┌─────────────────┬────────────────────┐                  │
   │         ▼                 ▼                    ▼                  │
-  │  Self-hosted GPU    Self-hosted GPU      Self-hosted GPU          │
-  │  inside llenergy-   inside llenergy-     inside llenergy-         │
-  │  measure:           measure:vllm-${VER}  measure:tensorrt-${VER}  │
-  │  transformers-${V}  - vLLM static        - TRT-LLM static         │
-  │  - transformers     - vLLM dynamic         miner (CUDA-aware      │
-  │    static miner     (Docker isolates       import required)       │
-  │  - transformers     from cross-engine                             │
-  │    dynamic miner    constraints; #437)                            │
+  │  GH-hosted ubuntu-  Self-hosted GPU      Self-hosted GPU          │
+  │  latest pulling     inside llenergy-     inside llenergy-         │
+  │  pre-built image    measure:vllm-${VER}  measure:tensorrt-${VER}  │
+  │  llenergymeasure:   - vLLM static        - TRT-LLM static         │
+  │  transformers-${V}  - vLLM dynamic         miner (CUDA-aware      │
+  │  - transformers     (Docker isolates       import required)       │
+  │    static miner     from cross-engine                             │
+  │  - transformers     constraints; #437)                            │
+  │    dynamic miner                                                  │
   │         │                 │                    │                  │
   │         └─────────────────┴────────────────────┘                  │
   │                       ▼                                           │
@@ -460,7 +461,7 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │      vendored.yaml, the digest doc, and engine_versions/          │
   │      {engine}.compat.json. Pushed with --force-with-lease.        │
   │                       │                                           │
-  │  ─────────────── engine-schemas.yml (parallel) ────────────       │
+  │  ─────────────── engine-schemas (per-engine) ──────────────       │
   │                       ▼                                           │
   │  scripts/engine_introspectors introspects engine config classes   │
   │  inside Docker, regenerates discovered_schemas/{engine}.json,     │

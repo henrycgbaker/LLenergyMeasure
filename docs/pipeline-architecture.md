@@ -2,9 +2,18 @@
 
 This doc is the chain-diagram reference for the engine-coupling pipeline. SSOT-driven Renovate cycles flow through these stages: trigger, two per-concern CI workflows, vendored artefacts, and the human curation checkpoint before merge.
 
+> **Per-engine variation.** The diagram below is the vllm + tensorrt shape:
+> two parallel per-concern workflows with `wait-on-check-action` sibling
+> coordination. Transformers takes a sequential variant (`engine-image-build.yml`
+> builds the image once → `engine-schemas-transformers.yml` then
+> `engine-invariants-transformers.yml` fire via `workflow_run`). The
+> sequence is described in detail in
+> [`docs/development.md` — CI pipeline ordering](development.md#ci-pipeline-ordering);
+> the diagram below applies to vllm + tensorrt only.
+
 ```
 ================================================================================
-LLenergyMeasure Engine-Coupling Pipeline
+LLenergyMeasure Engine-Coupling Pipeline (vllm + tensorrt)
 Per-concern workflows (engine-invariants + engine-schemas) with sibling
 coordination via wait-on-check-action.
 ================================================================================
