@@ -64,7 +64,11 @@ jobs:
   schemas-transformers:
     if: github.event_name != 'workflow_dispatch' || inputs.engine == 'transformers' || inputs.engine == 'all'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 90 min covers a cold FA3 from-source compile (~30-60 min) plus the
+    # discovery + writeback steps. Warm cache hits finish in minutes.
+    # Once the build/mining split lands, this drops back to 30 since the
+    # discovery-only path runs against a pre-built image.
+    timeout-minutes: 90
     steps:
       - name: Mint llem-ci-bot App token
         # Short-lived (~1 hour) GitHub App token. Events it produces are
