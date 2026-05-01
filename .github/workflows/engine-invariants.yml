@@ -73,11 +73,12 @@ jobs:
   invariants-transformers:
     if: github.event_name != 'workflow_dispatch' || inputs.engine == 'transformers' || inputs.engine == 'all'
     runs-on: ubuntu-latest
-    # 90 min covers a cold FA3 from-source compile (~30-60 min) plus the
-    # mining + vendor + writeback steps. Warm cache hits finish in minutes.
-    # Once the build/mining split lands, this drops back to 30 since the
+    # 150 min covers a cold FA3 from-source compile under MAX_JOBS=2
+    # (~85 min on ubuntu-latest's 4 vCPU runner) plus the mining + vendor
+    # + writeback steps (~15 min). Warm cache hits finish in minutes. Once
+    # the build/mining split lands, this drops back to 30 since the
     # mining-only path runs against a pre-built image.
-    timeout-minutes: 90
+    timeout-minutes: 150
     steps:
       - name: Mint llem-ci-bot App token
         # Short-lived (~1 hour) GitHub App token. Events it produces are
