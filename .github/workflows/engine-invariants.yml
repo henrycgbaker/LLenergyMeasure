@@ -80,7 +80,7 @@ jobs:
         # workflow still runs read-only for external contributors.
         id: app-token
         if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -321,7 +321,7 @@ jobs:
 
       - name: Upload diff artefact
         if: steps.probe.outputs.verdict == 'pass'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: engine-invariants-diff-transformers
           path: |
@@ -395,7 +395,7 @@ jobs:
         # appear. There is no CI guard against this drift — keep them
         # in sync by hand.
         if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
-        uses: lewagon/wait-on-check-action@v1.3.4
+        uses: lewagon/wait-on-check-action@v1.7.0
         with:
           check-name: 'schemas-transformers'
           ref: ${{ github.event.pull_request.head.sha }}
@@ -457,7 +457,7 @@ jobs:
       - name: Mint llem-ci-bot App token
         id: app-token
         if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -509,7 +509,7 @@ jobs:
         # secret presence so external contributors / unconfigured forks
         # don't fail; missing secret silently skips this step.
         if: steps.dockerhub_auth.outputs.available == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -731,7 +731,7 @@ jobs:
 
       - name: Upload diff artefact
         if: steps.probe.outputs.verdict == 'pass'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: engine-invariants-diff-vllm
           path: |
@@ -792,7 +792,7 @@ jobs:
         # in engine-schemas.yml. See the transformers wait block above
         # for full ordering rationale.
         if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
-        uses: lewagon/wait-on-check-action@v1.3.4
+        uses: lewagon/wait-on-check-action@v1.7.0
         with:
           check-name: 'schemas-vllm'
           ref: ${{ github.event.pull_request.head.sha }}
@@ -859,7 +859,7 @@ jobs:
       - name: Mint llem-ci-bot App token
         id: app-token
         if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -1124,7 +1124,7 @@ jobs:
 
       - name: Upload diff artefact
         if: steps.probe.outputs.verdict == 'pass'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: engine-invariants-diff-tensorrt
           path: |
@@ -1185,7 +1185,7 @@ jobs:
         # in engine-schemas.yml. See the transformers wait block above
         # for full ordering rationale.
         if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
-        uses: lewagon/wait-on-check-action@v1.3.4
+        uses: lewagon/wait-on-check-action@v1.7.0
         with:
           check-name: 'schemas-tensorrt'
           ref: ${{ github.event.pull_request.head.sha }}
