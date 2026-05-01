@@ -125,7 +125,9 @@ jobs:
         # the two cannot drift. Layer cache makes the FROM step a no-op
         # when the upstream torch/transformers tag is unchanged. INSTALL_FA3
         # is not overridden — Dockerfile default is true so CI exercises the
-        # same production-equivalent image users get.
+        # same production-equivalent image users get. MAX_JOBS=2 caps
+        # parallel nvcc workers (Dockerfile default 32 OOM-kills 16 GB
+        # ubuntu-latest runners during FA3 compile).
         run: |
           IMAGE="${{ steps.version.outputs.image }}"
           if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
@@ -133,6 +135,7 @@ jobs:
               -f docker/Dockerfile.transformers \
               -t "$IMAGE" \
               --build-arg TRANSFORMERS_VERSION="${{ steps.version.outputs.version }}" \
+              --build-arg MAX_JOBS=2 \
               .
           else
             echo "Reusing cached $IMAGE."

@@ -51,11 +51,17 @@ jobs:
         # Default `INSTALL_FA3=true` (set in Dockerfile.transformers) — this
         # check exercises the production-equivalent image, including the
         # from-source FA3 build path.
+        # MAX_JOBS=2 caps parallel nvcc workers — Dockerfile default 32
+        # assumes ~128 GB RAM headroom; ubuntu-latest runners have 16 GB
+        # and OOM-kill the runner above ~4 parallel workers. 2 keeps peak
+        # memory under 8 GB, well within the runner's budget.
         uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile.transformers
           target: runtime
           push: false
+          build-args: |
+            MAX_JOBS=2
           cache-from: |
             type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/transformers:latest
