@@ -64,12 +64,23 @@ concurrency:
 jobs:
   build-transformers:
     runs-on: ubuntu-latest
-    # Cold FA3 build is ~60 min on the GH-hosted runner; +30 min headroom.
-    timeout-minutes: 90
+    # Cold FA3 build under MAX_JOBS=2 (memory-fitting cap on the runner) is
+    # ~85 min; +65 min headroom for pull/push and slow links.
+    timeout-minutes: 150
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Free disk space
+        # Cold FA3 from-source compile + transformers + accelerate +
+        # bitsandbytes intermediate files exceed the ubuntu-latest runner's
+        # ~14 GB free space. Removing pre-installed dotnet/android/ghc/CodeQL
+        # frees ~30-50 GB, enough headroom for the build.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h /
 
       - name: Resolve transformers version from SSOT
         id: version
@@ -127,9 +138,14 @@ jobs:
           no-cache: ${{ steps.targets.outputs.no_cache }}
           # SSOT-driven build arg. INSTALL_FA3 deliberately NOT overridden
           # here — the Dockerfile defaults to true, so CI builds the same
-          # production-equivalent image users get.
+          # production-equivalent image users get. MAX_JOBS=2 caps parallel
+          # nvcc workers — Dockerfile default 32 assumes ~128 GB RAM headroom;
+          # ubuntu-latest runners have 16 GB and OOM-kill the runner above
+          # ~4 parallel workers. 2 keeps peak memory under 8 GB, well within
+          # the runner's budget.
           build-args: |
             TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
+            MAX_JOBS=2
           cache-from: |
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
