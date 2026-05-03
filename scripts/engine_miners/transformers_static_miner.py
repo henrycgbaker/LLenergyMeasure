@@ -67,6 +67,7 @@ from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.
     find_class,
     find_method,
     first_string_arg,
+    render_binop_concat_template,
 )
 
 # Why we DON'T import _base's detector classes (ConditionalRaiseDetector,
@@ -592,9 +593,12 @@ def _detect_raise(stmt: ast.stmt) -> DetectedBody | None:
         msg = first_string_arg(stmt.exc)
         if msg is None:
             # Sometimes the message is a concatenation: ``msg_prefix + "..."``.
+            # render_binop_concat_template renders Constants verbatim and
+            # self.X as {X} placeholders; returns None if any operand isn't
+            # cleanly renderable (preferable to leaking literal source).
             for arg in stmt.exc.args:
                 if isinstance(arg, ast.BinOp) and isinstance(arg.op, ast.Add):
-                    msg = ast.unparse(arg)
+                    msg = render_binop_concat_template(arg)
                     break
     return DetectedBody(
         severity="error",
@@ -689,7 +693,18 @@ def _detect_minor_issues(stmt: ast.stmt) -> DetectedBody | None:
         key = target.slice.value
     msg: str | None = None
     if isinstance(stmt.value, ast.Call):
-        msg = ast.unparse(stmt.value)
+        # ``"literal".format(...)`` shape: extract the LHS template literal.
+        # Other call shapes (``format_msg(self.x)``, etc.) need scope
+        # resolution unavailable here; emit None rather than leak literal
+        # Python source — vendor-CI substring matching fails either way and
+        # downstream consumers tolerate a missing template.
+        if (
+            isinstance(stmt.value.func, ast.Attribute)
+            and stmt.value.func.attr == "format"
+            and isinstance(stmt.value.func.value, ast.Constant)
+            and isinstance(stmt.value.func.value.value, str)
+        ):
+            msg = stmt.value.func.value.value
     elif isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
         msg = stmt.value.value
     return DetectedBody(

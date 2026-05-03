@@ -194,15 +194,18 @@ def first_string_arg(call: ast.Call) -> str | None:
     """First string-like positional argument of a Call, or ``None``.
 
     Returns a substitution-template string for the corpus's
-    ``message_template`` field. Three input shapes:
+    ``message_template`` field. Recognised input shapes:
 
     - ``ast.Constant(str)`` — returned as-is.
     - ``ast.JoinedStr`` (f-string) — interpolations rendered to ``{name}``
       placeholders matching the runtime substitution vocabulary; ``self.X``
-      collapses to ``{X}``. Avoids returning the literal Python source
-      (``f"..."``) which breaks vendor-CI substring matching against the
-      live library's rendered string.
-    - ``"...".format(...)`` — unparsed source (unchanged from prior behaviour).
+      collapses to ``{X}``.
+    - ``"literal {x}".format(...)`` — the LHS literal returned as the template.
+      Variable-template forms (``template_var.format(...)``) need scope
+      resolution unavailable at this layer; they fall through to ``None``.
+
+    All three avoid returning literal Python source — vendor-CI substring
+    matching against the live library's rendered string fails on source.
     """
     for arg in call.args:
         if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
@@ -213,8 +216,10 @@ def first_string_arg(call: ast.Call) -> str | None:
             isinstance(arg, ast.Call)
             and isinstance(arg.func, ast.Attribute)
             and arg.func.attr == "format"
+            and isinstance(arg.func.value, ast.Constant)
+            and isinstance(arg.func.value.value, str)
         ):
-            return ast.unparse(arg)
+            return arg.func.value.value
     return None
 
 
@@ -240,6 +245,34 @@ def _render_joinedstr_template(node: ast.JoinedStr) -> str:
             else:
                 parts.append(f"{{{ast.unparse(inner)}}}")
     return "".join(parts)
+
+
+def render_binop_concat_template(node: ast.expr) -> str | None:
+    """Render a ``+``-concatenation AST to a substitution-template string.
+
+    Walks an ``ast.BinOp`` Add chain (or any leaf operand): ``Constant(str)``
+    parts kept verbatim; ``self.X`` and ``str(self.X)`` / ``repr(self.X)``
+    render as ``{X}`` placeholders. Returns ``None`` if any operand can't be
+    rendered cleanly — preferable to leaking literal Python source via
+    ``ast.unparse``, which breaks vendor-CI substring matching.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "self"
+    ):
+        return f"{{{node.attr}}}"
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+        if node.func.id in ("str", "repr") and len(node.args) == 1:
+            return render_binop_concat_template(node.args[0])
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = render_binop_concat_template(node.left)
+        right = render_binop_concat_template(node.right)
+        if left is not None and right is not None:
+            return left + right
+    return None
 
 
 def extract_condition_fields(condition: ast.expr) -> set[str]:

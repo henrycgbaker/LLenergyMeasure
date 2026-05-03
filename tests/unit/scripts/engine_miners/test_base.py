@@ -41,6 +41,7 @@ from scripts.engine_miners._base import (  # noqa: E402
     find_class,
     find_method,
     first_string_arg,
+    render_binop_concat_template,
     resolve_local_assign,
 )
 
@@ -131,11 +132,49 @@ def test_first_string_arg_fstring_no_python_source_leak() -> None:
     assert "self.temperature" not in out
 
 
-def test_first_string_arg_format_call() -> None:
+def test_first_string_arg_format_call_literal_template() -> None:
+    """``"literal {x}".format(...)`` — extract the LHS template, drop the
+    .format() call source. Regression for the third bug pattern in #441's
+    expanded scope: prior behaviour returned the entire unparsed call source
+    (``'"val={v}".format(v=1)'``)."""
     call = _parse_expr('logger.warning("val={v}".format(v=1))')
     assert isinstance(call, ast.Call)
-    out = first_string_arg(call)
-    assert out is not None and "format" in out
+    assert first_string_arg(call) == "val={v}"
+
+
+def test_first_string_arg_format_call_variable_template_returns_none() -> None:
+    """Variable-resolved templates (e.g. ``msg_template.format(...)``) need
+    scope resolution that's out of reach at this AST layer. Return ``None``
+    rather than leaking the literal ``msg_template.format(...)`` source."""
+    call = _parse_expr("logger.warning(msg_template.format(v=1))")
+    assert isinstance(call, ast.Call)
+    assert first_string_arg(call) is None
+
+
+def test_render_binop_concat_template_simple() -> None:
+    """``"prefix " + ", got " + str(self.x)`` → rendered concatenation."""
+    expr = _parse_expr('"value > 0" + ", got " + str(self.temperature)')
+    assert render_binop_concat_template(expr) == "value > 0, got {temperature}"
+
+
+def test_render_binop_concat_template_self_attribute() -> None:
+    """Bare ``self.X`` operands collapse to ``{X}``."""
+    expr = _parse_expr('"got " + self.value')
+    assert render_binop_concat_template(expr) == "got {value}"
+
+
+def test_render_binop_concat_template_repr_call() -> None:
+    """``repr(self.X)`` and ``str(self.X)`` both render as ``{X}``."""
+    expr = _parse_expr('"got " + repr(self.config)')
+    assert render_binop_concat_template(expr) == "got {config}"
+
+
+def test_render_binop_concat_template_returns_none_on_unrenderable() -> None:
+    """Operands without a clean placeholder mapping (e.g. external function
+    calls, attribute chains beyond ``self.X``) cause the whole render to
+    return ``None`` rather than leak literal source."""
+    expr = _parse_expr('"got " + format_helper(x, y)')
+    assert render_binop_concat_template(expr) is None
 
 
 def test_extract_condition_fields_simple() -> None:
