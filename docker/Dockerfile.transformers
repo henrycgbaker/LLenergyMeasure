@@ -40,17 +40,11 @@ ENV TORCH_CUDA_ARCH_LIST="8.0;9.0+PTX"
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system flash-attn --no-build-isolation
 
-# FA3: build hopper extensions from source (produces flash_attn_interface + flash_attn_3_cuda)
-# Two parallelism knobs control build wall-clock — they multiply, not substitute:
-#   MAX_JOBS    — ninja `-j`, number of parallel nvcc invocations (default 32, ~128 GB peak).
-#   NVCC_THREADS — `--threads N` per nvcc invocation (flash-attention/hopper/setup.py:373
-#                  reads this env var with default 2 — the bottleneck on prior builds where
-#                  MAX_JOBS=16 produced only ~2 active cc1plus workers because each nvcc
-#                  was internally capped at 2 threads). Set explicitly to take effect.
-# True effective parallelism = MAX_JOBS × NVCC_THREADS bounded by host CPUs and kernel
-# dependency graph. Override either with --build-arg for constrained hosts.
-# Set via ENV so the RUN command text stays stable (preserving build cache keys).
-# Skipped when INSTALL_FA3=false (e.g. CI smoke tests).
+# FA3: build hopper extensions from source (produces flash_attn_interface + flash_attn_3_cuda).
+# MAX_JOBS = ninja -j (parallel nvcc invocations).
+# NVCC_THREADS = threads per nvcc; flash-attention/hopper/setup.py defaults to 2,
+# which silently caps total parallelism even at high MAX_JOBS — set explicitly.
+# Skipped when INSTALL_FA3=false.
 ARG MAX_JOBS=32
 ARG NVCC_THREADS=4
 ENV MAX_JOBS=${MAX_JOBS}

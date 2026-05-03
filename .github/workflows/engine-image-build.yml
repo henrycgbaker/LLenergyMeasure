@@ -59,22 +59,16 @@ permissions:
 
 concurrency:
   group: engine-image-build-${{ github.event_name }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  # FA3 cold-compile takes 60+ min; cancel-in-progress on force-push would
+  # waste accumulated cache layers AND orphan the workflow_run-gated
+  # downstream cells (no successful upstream run for them to chain off).
+  cancel-in-progress: false
 
 jobs:
   build-transformers:
     runs-on: self-hosted
-    # Cold FA3 build under MAX_JOBS=16 + NVCC_THREADS=4 on self-hosted
-    # ds01-gpu (528 GB RAM, 128 vCPUs, 1.1 TB free disk) is estimated
-    # ~15-25 min. 90-min cap gives generous headroom for the empirical
-    # uncertainty band on the parallelism bump.
-    # Build-history archaeology (preserved for context):
-    #   MAX_JOBS=2 + 150-min on ubuntu-latest: cancelled at 154 min (run 25220189067).
-    #   MAX_JOBS=3 + 180-min on ubuntu-latest: OOM-kill at 1h 5m (run 25278053309).
-    #   MAX_JOBS=16 + 60-min on self-hosted: cancelled at 60 min (run 25280816835)
-    #     because flash-attention/hopper reads NVCC_THREADS (default 2), so
-    #     effective parallelism was ~2 not 16. Fixed by setting NVCC_THREADS
-    #     explicitly in the build-args above.
+    # 90-min cap chosen for headroom on cold FA3 builds (~15-70 min observed
+    # on ds01-gpu depending on first-run vs cached layers).
     timeout-minutes: 90
 
     steps:
