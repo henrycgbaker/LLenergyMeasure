@@ -110,6 +110,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import difflib
+import logging
 import os
 import subprocess
 import sys
@@ -603,19 +604,31 @@ def _now_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+_log = logging.getLogger(__name__)
+
+
 def _load_prior_added_at_map(corpus_path: Path) -> dict[bytes, str]:
     """Read the prior canonical corpus and build ``{fingerprint: added_at}``.
 
     Returns empty dict if the corpus doesn't exist (first build) or fails
     to parse. Per-rule ``added_at`` records when the rule was first
     discovered; preserving it across re-mines avoids spurious diff churn
-    on every Renovate-driven rebuild.
+    on every Renovate-driven rebuild. A parse failure on an existing
+    corpus warns then falls open: dropping every ``added_at`` because of
+    a corrupt prior would itself produce the noise diff this is meant to
+    prevent, so the operator must see the warning.
     """
     if not corpus_path.exists():
         return {}
     try:
         prior = yaml.safe_load(corpus_path.read_text())
-    except (yaml.YAMLError, OSError):
+    except (yaml.YAMLError, OSError) as exc:
+        _log.warning(
+            "Could not read prior corpus at %s for added_at preservation: %s. "
+            "Falling open — every rule will be stamped with today's date.",
+            corpus_path,
+            exc,
+        )
         return {}
     if not isinstance(prior, dict):
         return {}

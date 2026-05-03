@@ -67,6 +67,7 @@ from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.
     find_class,
     find_method,
     first_string_arg,
+    format_call_template,
     render_binop_concat_template,
 )
 
@@ -693,18 +694,7 @@ def _detect_minor_issues(stmt: ast.stmt) -> DetectedBody | None:
         key = target.slice.value
     msg: str | None = None
     if isinstance(stmt.value, ast.Call):
-        # ``"literal".format(...)`` shape: extract the LHS template literal.
-        # Other call shapes (``format_msg(self.x)``, etc.) need scope
-        # resolution unavailable here; emit None rather than leak literal
-        # Python source — vendor-CI substring matching fails either way and
-        # downstream consumers tolerate a missing template.
-        if (
-            isinstance(stmt.value.func, ast.Attribute)
-            and stmt.value.func.attr == "format"
-            and isinstance(stmt.value.func.value, ast.Constant)
-            and isinstance(stmt.value.func.value.value, str)
-        ):
-            msg = stmt.value.func.value.value
+        msg = format_call_template(stmt.value)
     elif isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
         msg = stmt.value.value
     return DetectedBody(

@@ -211,19 +211,33 @@ def first_string_arg(call: ast.Call) -> str | None:
         if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
             return arg.value
         if isinstance(arg, ast.JoinedStr):
-            return _render_joinedstr_template(arg)
-        if (
-            isinstance(arg, ast.Call)
-            and isinstance(arg.func, ast.Attribute)
-            and arg.func.attr == "format"
-            and isinstance(arg.func.value, ast.Constant)
-            and isinstance(arg.func.value.value, str)
-        ):
-            return arg.func.value.value
+            return render_joinedstr_template(arg)
+        template = format_call_template(arg)
+        if template is not None:
+            return template
     return None
 
 
-def _render_joinedstr_template(node: ast.JoinedStr) -> str:
+def format_call_template(node: ast.expr) -> str | None:
+    """If ``node`` is ``"literal".format(...)``, return the LHS template literal.
+
+    Returns ``None`` for any other expression shape, including variable-template
+    forms (``template_var.format(...)``) that would need scope resolution to
+    render. Shared by :func:`first_string_arg` and the minor-issues-dict-assign
+    detectors so the "no source-leak" policy stays in one place.
+    """
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "format"
+        and isinstance(node.func.value, ast.Constant)
+        and isinstance(node.func.value.value, str)
+    ):
+        return node.func.value.value
+    return None
+
+
+def render_joinedstr_template(node: ast.JoinedStr) -> str:
     """Render an f-string AST to a substitution-template string.
 
     ``FormattedValue`` nodes become ``{name}`` placeholders; ``self.X``
@@ -484,7 +498,7 @@ class MinorIssuesDictAssignDetector:
             key = target.slice.value
         msg: str | None = None
         if isinstance(stmt.value, ast.Call):
-            msg = ast.unparse(stmt.value)
+            msg = format_call_template(stmt.value)
         elif isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
             msg = stmt.value.value
         return DetectedPattern(

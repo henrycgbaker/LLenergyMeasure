@@ -121,8 +121,8 @@ def test_first_string_arg_fstring_multiple_interpolations() -> None:
 
 
 def test_first_string_arg_fstring_no_python_source_leak() -> None:
-    """Regression for #441: output must not contain literal Python source
-    artefacts (leading ``f"``, ``self.`` for self attributes)."""
+    """Output must not contain literal Python source artefacts (leading
+    ``f"``, ``self.`` for self attributes)."""
     call = _parse_expr('ValueError(f"temperature={self.temperature}")')
     assert isinstance(call, ast.Call)
     out = first_string_arg(call)
@@ -133,10 +133,8 @@ def test_first_string_arg_fstring_no_python_source_leak() -> None:
 
 
 def test_first_string_arg_format_call_literal_template() -> None:
-    """``"literal {x}".format(...)`` — extract the LHS template, drop the
-    .format() call source. Regression for the third bug pattern in #441's
-    expanded scope: prior behaviour returned the entire unparsed call source
-    (``'"val={v}".format(v=1)'``)."""
+    """``"literal {x}".format(...)`` — extract the LHS template literal
+    rather than returning the unparsed call source."""
     call = _parse_expr('logger.warning("val={v}".format(v=1))')
     assert isinstance(call, ast.Call)
     assert first_string_arg(call) == "val={v}"

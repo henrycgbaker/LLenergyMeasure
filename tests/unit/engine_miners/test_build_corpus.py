@@ -574,8 +574,8 @@ class TestAddedAtPreservation:
         """Re-running the merger after a prior canonical exists keeps each
         rule's original ``added_at`` instead of stamping today's date.
 
-        Regression for #499: prior behaviour overwrote ``added_at`` on every
-        re-mine, producing noise diffs on every Renovate-driven rebuild.
+        Stops Renovate-driven rebuilds from producing noise diffs that
+        flip ``added_at`` on every rule even when content is unchanged.
         """
         staging = tmp_path / "_staging"
 
