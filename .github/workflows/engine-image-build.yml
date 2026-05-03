@@ -64,9 +64,10 @@ concurrency:
 jobs:
   build-transformers:
     runs-on: ubuntu-latest
-    # Cold FA3 build under MAX_JOBS=2 (memory-fitting cap on the runner) is
-    # ~85 min; +65 min headroom for pull/push and slow links.
-    timeout-minutes: 150
+    # Cold FA3 build under MAX_JOBS=3 (memory-fitting cap on the runner) is
+    # ~55-65 min estimated; 180 min gives generous headroom for pull/push,
+    # slow links, and the empirical-uncertainty band on the cap bump.
+    timeout-minutes: 180
 
     steps:
       - name: Checkout
@@ -138,14 +139,16 @@ jobs:
           no-cache: ${{ steps.targets.outputs.no_cache }}
           # SSOT-driven build arg. INSTALL_FA3 deliberately NOT overridden
           # here — the Dockerfile defaults to true, so CI builds the same
-          # production-equivalent image users get. MAX_JOBS=2 caps parallel
+          # production-equivalent image users get. MAX_JOBS caps parallel
           # nvcc workers — Dockerfile default 32 assumes ~128 GB RAM headroom;
           # ubuntu-latest runners have 16 GB and OOM-kill the runner above
-          # ~4 parallel workers. 2 keeps peak memory under 8 GB, well within
-          # the runner's budget.
+          # ~4 parallel workers. 3 puts peak memory near ~12 GB, leaving ~4 GB
+          # headroom on the runner. (MAX_JOBS=2 fit memory but missed the
+          # 150-min timeout at ~85 min build + pull/push overhead — see
+          # PR #514 run 25220189067, cancelled at 154 min.)
           build-args: |
             TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
-            MAX_JOBS=2
+            MAX_JOBS=3
           cache-from: |
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
