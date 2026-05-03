@@ -193,22 +193,99 @@ def call_func_path(call: ast.Call) -> list[str] | None:
 def first_string_arg(call: ast.Call) -> str | None:
     """First string-like positional argument of a Call, or ``None``.
 
-    Returns the raw string for ``ast.Constant``, ``ast.unparse`` output for
-    f-strings (``ast.JoinedStr``) and ``"...".format(...)`` expressions —
-    these are the three message-template shapes observed in the 2026-04-22
-    AST-scan PoC across transformers / vLLM / TRT-LLM.
+    Returns a substitution-template string for the corpus's
+    ``message_template`` field. Recognised input shapes:
+
+    - ``ast.Constant(str)`` — returned as-is.
+    - ``ast.JoinedStr`` (f-string) — interpolations rendered to ``{name}``
+      placeholders matching the runtime substitution vocabulary; ``self.X``
+      collapses to ``{X}``.
+    - ``"literal {x}".format(...)`` — the LHS literal returned as the template.
+      Variable-template forms (``template_var.format(...)``) need scope
+      resolution unavailable at this layer; they fall through to ``None``.
+
+    All three avoid returning literal Python source — vendor-CI substring
+    matching against the live library's rendered string fails on source.
     """
     for arg in call.args:
         if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
             return arg.value
         if isinstance(arg, ast.JoinedStr):
-            return ast.unparse(arg)
-        if (
-            isinstance(arg, ast.Call)
-            and isinstance(arg.func, ast.Attribute)
-            and arg.func.attr == "format"
-        ):
-            return ast.unparse(arg)
+            return render_joinedstr_template(arg)
+        template = format_call_template(arg)
+        if template is not None:
+            return template
+    return None
+
+
+def format_call_template(node: ast.expr) -> str | None:
+    """If ``node`` is ``"literal".format(...)``, return the LHS template literal.
+
+    Returns ``None`` for any other expression shape, including variable-template
+    forms (``template_var.format(...)``) that would need scope resolution to
+    render. Shared by :func:`first_string_arg` and the minor-issues-dict-assign
+    detectors so the "no source-leak" policy stays in one place.
+    """
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "format"
+        and isinstance(node.func.value, ast.Constant)
+        and isinstance(node.func.value.value, str)
+    ):
+        return node.func.value.value
+    return None
+
+
+def render_joinedstr_template(node: ast.JoinedStr) -> str:
+    """Render an f-string AST to a substitution-template string.
+
+    ``FormattedValue`` nodes become ``{name}`` placeholders; ``self.X``
+    collapses to ``{X}``, other expressions use the unparsed source as the
+    placeholder name. ``Constant`` parts kept verbatim.
+    """
+    parts: list[str] = []
+    for value in node.values:
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            parts.append(value.value)
+        elif isinstance(value, ast.FormattedValue):
+            inner = value.value
+            if (
+                isinstance(inner, ast.Attribute)
+                and isinstance(inner.value, ast.Name)
+                and inner.value.id == "self"
+            ):
+                parts.append(f"{{{inner.attr}}}")
+            else:
+                parts.append(f"{{{ast.unparse(inner)}}}")
+    return "".join(parts)
+
+
+def render_binop_concat_template(node: ast.expr) -> str | None:
+    """Render a ``+``-concatenation AST to a substitution-template string.
+
+    Walks an ``ast.BinOp`` Add chain (or any leaf operand): ``Constant(str)``
+    parts kept verbatim; ``self.X`` and ``str(self.X)`` / ``repr(self.X)``
+    render as ``{X}`` placeholders. Returns ``None`` if any operand can't be
+    rendered cleanly — preferable to leaking literal Python source via
+    ``ast.unparse``, which breaks vendor-CI substring matching.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "self"
+    ):
+        return f"{{{node.attr}}}"
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+        if node.func.id in ("str", "repr") and len(node.args) == 1:
+            return render_binop_concat_template(node.args[0])
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = render_binop_concat_template(node.left)
+        right = render_binop_concat_template(node.right)
+        if left is not None and right is not None:
+            return left + right
     return None
 
 
@@ -421,7 +498,7 @@ class MinorIssuesDictAssignDetector:
             key = target.slice.value
         msg: str | None = None
         if isinstance(stmt.value, ast.Call):
-            msg = ast.unparse(stmt.value)
+            msg = format_call_template(stmt.value)
         elif isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
             msg = stmt.value.value
         return DetectedPattern(
