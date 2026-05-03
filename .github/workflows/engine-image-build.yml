@@ -64,15 +64,18 @@ concurrency:
 jobs:
   build-transformers:
     runs-on: self-hosted
-    # Cold FA3 build under MAX_JOBS=16 on the self-hosted runner (ds01-gpu;
-    # 528 GB RAM, 128 vCPUs, 1.1 TB free disk) is estimated ~15-20 min.
-    # 60-min cap gives 3x headroom for pull/push and slow links.
-    # Phase 1 history (preserved for context): MAX_JOBS=2 + 150-min timeout
-    # missed the budget at 154 min on ubuntu-latest (run 25220189067);
-    # MAX_JOBS=3 + 180-min OOM-killed the runner at 1h 5m (run 25278053309).
-    # Both confirmed standard ubuntu-latest's 16 GB RAM ceiling can't fit
-    # cold FA3, triggering the documented Phase 2 self-hosted pivot.
-    timeout-minutes: 60
+    # Cold FA3 build under MAX_JOBS=16 + NVCC_THREADS=4 on self-hosted
+    # ds01-gpu (528 GB RAM, 128 vCPUs, 1.1 TB free disk) is estimated
+    # ~15-25 min. 90-min cap gives generous headroom for the empirical
+    # uncertainty band on the parallelism bump.
+    # Build-history archaeology (preserved for context):
+    #   MAX_JOBS=2 + 150-min on ubuntu-latest: cancelled at 154 min (run 25220189067).
+    #   MAX_JOBS=3 + 180-min on ubuntu-latest: OOM-kill at 1h 5m (run 25278053309).
+    #   MAX_JOBS=16 + 60-min on self-hosted: cancelled at 60 min (run 25280816835)
+    #     because flash-attention/hopper reads NVCC_THREADS (default 2), so
+    #     effective parallelism was ~2 not 16. Fixed by setting NVCC_THREADS
+    #     explicitly in the build-args above.
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
@@ -134,15 +137,17 @@ jobs:
           no-cache: ${{ steps.targets.outputs.no_cache }}
           # SSOT-driven build arg. INSTALL_FA3 deliberately NOT overridden
           # here — the Dockerfile defaults to true, so CI builds the same
-          # production-equivalent image users get. MAX_JOBS caps parallel
-          # nvcc workers; each worker peaks ~4 GB during FA3 template
-          # instantiation. On self-hosted ds01-gpu (528 GB RAM) MAX_JOBS=16
-          # gives ~64 GB peak, leaving ~460 GB headroom for the runner host's
-          # other workloads. Dockerfile default of 32 (~128 GB peak) would
-          # also fit but is unnecessarily aggressive.
+          # production-equivalent image users get. Two parallelism knobs
+          # multiply: MAX_JOBS caps parallel nvcc invocations (ninja -j);
+          # NVCC_THREADS caps threads per nvcc call. flash-attention/hopper
+          # reads NVCC_THREADS with default 2 — the prior 60-min build used
+          # only ~2 cc1plus workers despite MAX_JOBS=16 because the nvcc
+          # internal cap dominated. NVCC_THREADS=4 + MAX_JOBS=16 gives up to
+          # ~64 effective workers on the 128-vCPU / 528 GB host.
           build-args: |
             TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
             MAX_JOBS=16
+            NVCC_THREADS=4
           cache-from: |
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
