@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: transformers
 engine_version: 4.57.3
-mined_at: '2026-04-29T23:05:01+02:00'
+mined_at: '2026-05-03T15:29:06+02:00'
 rules:
 - id: transformers_beam_search_num_beams_eq_1
   engine: transformers
@@ -988,8 +988,8 @@ rules:
     outcome: error
     emission_channel: none
     normalised_fields: []
-  message_template: f'You provided `compile_config` as an instance of {type(self.compile_config)}, but
-    it must be an instance of `CompileConfig`.'
+  message_template: You provided `compile_config` as an instance of {type(self.compile_config)}, but it
+    must be an instance of `CompileConfig`.
   references:
   - transformers/generation/configuration_utils.py:561 (transformers.GenerationConfig.validate)
   added_by: static_miner
@@ -1193,8 +1193,8 @@ rules:
     outcome: error
     emission_channel: none
     normalised_fields: []
-  message_template: f'Greedy methods without beam search do not support `num_return_sequences` different
-    than 1 (got {self.num_return_sequences}).'
+  message_template: Greedy methods without beam search do not support `num_return_sequences` different
+    than 1 (got {num_return_sequences}).
   references:
   - transformers/generation/configuration_utils.py:618 (transformers.GenerationConfig.validate)
   added_by: static_miner
