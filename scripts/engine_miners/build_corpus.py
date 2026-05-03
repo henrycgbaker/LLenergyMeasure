@@ -603,6 +603,50 @@ def _now_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _load_prior_added_at_map(corpus_path: Path) -> dict[bytes, str]:
+    """Read the prior canonical corpus and build ``{fingerprint: added_at}``.
+
+    Returns empty dict if the corpus doesn't exist (first build) or fails
+    to parse. Per-rule ``added_at`` records when the rule was first
+    discovered; preserving it across re-mines avoids spurious diff churn
+    on every Renovate-driven rebuild.
+    """
+    if not corpus_path.exists():
+        return {}
+    try:
+        prior = yaml.safe_load(corpus_path.read_text())
+    except (yaml.YAMLError, OSError):
+        return {}
+    if not isinstance(prior, dict):
+        return {}
+    rules = prior.get("rules") or []
+    out: dict[bytes, str] = {}
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        added_at = rule.get("added_at")
+        if not added_at:
+            continue
+        out[fingerprint_rule(rule)] = str(added_at)
+    return out
+
+
+def _preserve_added_at(rules: list[dict[str, Any]], prior: dict[bytes, str]) -> None:
+    """Restore each rule's prior ``added_at`` if its fingerprint matches.
+
+    Mutates ``rules`` in place. Rules without a fingerprint match keep
+    their current (today's-date) value. Fingerprint excludes ``id`` and
+    ``message_template`` (see :func:`fingerprint_rule`), so renames or
+    template-rendering changes don't reset the discovery date.
+    """
+    if not prior:
+        return
+    for rule in rules:
+        prior_added = prior.get(fingerprint_rule(rule))
+        if prior_added:
+            rule["added_at"] = prior_added
+
+
 # ---------------------------------------------------------------------------
 # Vendor validation gate
 # ---------------------------------------------------------------------------
@@ -853,6 +897,13 @@ def build_corpus_text_and_outcome(
     envelopes = [_load_staging(p) for p in paths]
     candidates, envelope = merge_staging(envelopes)
     candidates_count = len(candidates)
+
+    # Preserve added_at across re-mines: rules whose fingerprint matches a
+    # prior canonical-corpus entry keep their original discovery date
+    # instead of being stamped with today's anchor. Stops every Renovate-
+    # driven rebuild from producing a noise diff on every rule.
+    prior_added_at = _load_prior_added_at_map(_canonical_path(corpus_root, engine))
+    _preserve_added_at(candidates, prior_added_at)
 
     if skip_validation:
         # Still write the merged-candidates staging file so reviewers can

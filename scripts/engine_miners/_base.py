@@ -193,16 +193,22 @@ def call_func_path(call: ast.Call) -> list[str] | None:
 def first_string_arg(call: ast.Call) -> str | None:
     """First string-like positional argument of a Call, or ``None``.
 
-    Returns the raw string for ``ast.Constant``, ``ast.unparse`` output for
-    f-strings (``ast.JoinedStr``) and ``"...".format(...)`` expressions —
-    these are the three message-template shapes observed in the 2026-04-22
-    AST-scan PoC across transformers / vLLM / TRT-LLM.
+    Returns a substitution-template string for the corpus's
+    ``message_template`` field. Three input shapes:
+
+    - ``ast.Constant(str)`` — returned as-is.
+    - ``ast.JoinedStr`` (f-string) — interpolations rendered to ``{name}``
+      placeholders matching the runtime substitution vocabulary; ``self.X``
+      collapses to ``{X}``. Avoids returning the literal Python source
+      (``f"..."``) which breaks vendor-CI substring matching against the
+      live library's rendered string.
+    - ``"...".format(...)`` — unparsed source (unchanged from prior behaviour).
     """
     for arg in call.args:
         if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
             return arg.value
         if isinstance(arg, ast.JoinedStr):
-            return ast.unparse(arg)
+            return _render_joinedstr_template(arg)
         if (
             isinstance(arg, ast.Call)
             and isinstance(arg.func, ast.Attribute)
@@ -210,6 +216,30 @@ def first_string_arg(call: ast.Call) -> str | None:
         ):
             return ast.unparse(arg)
     return None
+
+
+def _render_joinedstr_template(node: ast.JoinedStr) -> str:
+    """Render an f-string AST to a substitution-template string.
+
+    ``FormattedValue`` nodes become ``{name}`` placeholders; ``self.X``
+    collapses to ``{X}``, other expressions use the unparsed source as the
+    placeholder name. ``Constant`` parts kept verbatim.
+    """
+    parts: list[str] = []
+    for value in node.values:
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            parts.append(value.value)
+        elif isinstance(value, ast.FormattedValue):
+            inner = value.value
+            if (
+                isinstance(inner, ast.Attribute)
+                and isinstance(inner.value, ast.Name)
+                and inner.value.id == "self"
+            ):
+                parts.append(f"{{{inner.attr}}}")
+            else:
+                parts.append(f"{{{ast.unparse(inner)}}}")
+    return "".join(parts)
 
 
 def extract_condition_fields(condition: ast.expr) -> set[str]:

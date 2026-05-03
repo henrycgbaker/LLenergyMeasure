@@ -92,11 +92,43 @@ def test_first_string_arg_constant() -> None:
     assert first_string_arg(call) == "hello"
 
 
-def test_first_string_arg_fstring() -> None:
-    call = _parse_expr('logger.warning(f"value is {x}")')
+def test_first_string_arg_fstring_self_attribute() -> None:
+    """``self.X`` interpolations collapse to ``{X}`` (matches runtime
+    substitution vocabulary for ``message_template``)."""
+    call = _parse_expr('logger.warning(f"value must be > 0, got {self.temperature}")')
     assert isinstance(call, ast.Call)
     out = first_string_arg(call)
-    assert out is not None and "x" in out
+    assert out == "value must be > 0, got {temperature}"
+
+
+def test_first_string_arg_fstring_local_variable() -> None:
+    """Non-``self`` interpolations preserve the unparsed expression as the
+    placeholder name."""
+    call = _parse_expr('logger.warning(f"value is {x}")')
+    assert isinstance(call, ast.Call)
+    assert first_string_arg(call) == "value is {x}"
+
+
+def test_first_string_arg_fstring_multiple_interpolations() -> None:
+    call = _parse_expr(
+        'logger.warning(f"max_batch_size [{self.max_batch_size}] '
+        'exceeds [{self.build_config.max_batch_size}]")'
+    )
+    assert isinstance(call, ast.Call)
+    out = first_string_arg(call)
+    assert out == ("max_batch_size [{max_batch_size}] exceeds [{self.build_config.max_batch_size}]")
+
+
+def test_first_string_arg_fstring_no_python_source_leak() -> None:
+    """Regression for #441: output must not contain literal Python source
+    artefacts (leading ``f"``, ``self.`` for self attributes)."""
+    call = _parse_expr('ValueError(f"temperature={self.temperature}")')
+    assert isinstance(call, ast.Call)
+    out = first_string_arg(call)
+    assert out is not None
+    assert not out.startswith('f"')
+    assert not out.startswith("f'")
+    assert "self.temperature" not in out
 
 
 def test_first_string_arg_format_call() -> None:
