@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: transformers
 engine_version: 4.57.3
-mined_at: '2026-05-03T15:29:06+02:00'
+mined_at: '2026-05-03T15:44:25+02:00'
 rules:
 - id: transformers_beam_search_num_beams_eq_1
   engine: transformers
@@ -185,7 +185,7 @@ rules:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: single_beam_wrong_parameter_msg.format(flag_name='early_stopping', flag_value=self.early_stopping)
+  message_template: null
   references:
   - transformers/generation/configuration_utils.py:606 (transformers.GenerationConfig.validate)
   added_by: static_miner
@@ -217,7 +217,7 @@ rules:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: greedy_wrong_parameter_msg.format(flag_name='epsilon_cutoff', flag_value=self.epsilon_cutoff)
+  message_template: null
   references:
   - transformers/generation/configuration_utils.py:591 (transformers.GenerationConfig.validate)
   added_by: static_miner
@@ -249,7 +249,7 @@ rules:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: greedy_wrong_parameter_msg.format(flag_name='eta_cutoff', flag_value=self.eta_cutoff)
+  message_template: null
   references:
   - transformers/generation/configuration_utils.py:595 (transformers.GenerationConfig.validate)
   added_by: static_miner
