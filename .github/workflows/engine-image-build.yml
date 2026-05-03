@@ -63,25 +63,20 @@ concurrency:
 
 jobs:
   build-transformers:
-    runs-on: ubuntu-latest
-    # Cold FA3 build under MAX_JOBS=3 (memory-fitting cap on the runner) is
-    # ~55-65 min estimated; 180 min gives generous headroom for pull/push,
-    # slow links, and the empirical-uncertainty band on the cap bump.
-    timeout-minutes: 180
+    runs-on: self-hosted
+    # Cold FA3 build under MAX_JOBS=16 on the self-hosted runner (ds01-gpu;
+    # 528 GB RAM, 128 vCPUs, 1.1 TB free disk) is estimated ~15-20 min.
+    # 60-min cap gives 3x headroom for pull/push and slow links.
+    # Phase 1 history (preserved for context): MAX_JOBS=2 + 150-min timeout
+    # missed the budget at 154 min on ubuntu-latest (run 25220189067);
+    # MAX_JOBS=3 + 180-min OOM-killed the runner at 1h 5m (run 25278053309).
+    # Both confirmed standard ubuntu-latest's 16 GB RAM ceiling can't fit
+    # cold FA3, triggering the documented Phase 2 self-hosted pivot.
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Free disk space
-        # Cold FA3 from-source compile + transformers + accelerate +
-        # bitsandbytes intermediate files exceed the ubuntu-latest runner's
-        # ~14 GB free space. Removing pre-installed dotnet/android/ghc/CodeQL
-        # frees ~30-50 GB, enough headroom for the build.
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          df -h /
 
       - name: Resolve transformers version from SSOT
         id: version
@@ -140,15 +135,14 @@ jobs:
           # SSOT-driven build arg. INSTALL_FA3 deliberately NOT overridden
           # here — the Dockerfile defaults to true, so CI builds the same
           # production-equivalent image users get. MAX_JOBS caps parallel
-          # nvcc workers — Dockerfile default 32 assumes ~128 GB RAM headroom;
-          # ubuntu-latest runners have 16 GB and OOM-kill the runner above
-          # ~4 parallel workers. 3 puts peak memory near ~12 GB, leaving ~4 GB
-          # headroom on the runner. (MAX_JOBS=2 fit memory but missed the
-          # 150-min timeout at ~85 min build + pull/push overhead — see
-          # PR #514 run 25220189067, cancelled at 154 min.)
+          # nvcc workers; each worker peaks ~4 GB during FA3 template
+          # instantiation. On self-hosted ds01-gpu (528 GB RAM) MAX_JOBS=16
+          # gives ~64 GB peak, leaving ~460 GB headroom for the runner host's
+          # other workloads. Dockerfile default of 32 (~128 GB peak) would
+          # also fit but is unnecessarily aggressive.
           build-args: |
             TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
-            MAX_JOBS=3
+            MAX_JOBS=16
           cache-from: |
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
