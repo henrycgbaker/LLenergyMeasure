@@ -1,4 +1,4 @@
-name: Engine Schemas — Probe + Discover
+name: Update engine schemas
 
 # Per-concern workflow for the engine-schemas layer. Each per-engine job
 # probes the introspector module's landmarks, discovers parameter schemas
@@ -9,11 +9,11 @@ name: Engine Schemas — Probe + Discover
 # `if:` gating rather than file proliferation. One workflow file covers all
 # three engines:
 #
-#   transformers : workflow_run-gated on Engine Image Push (transformers),
-#                  which itself chains off Engine Image Build success. The
+#   transformers : workflow_run-gated on Publish engine image (transformers),
+#                  which itself chains off Build engine image success. The
 #                  heavy first-party Docker build happens once in
-#                  engine-image-build.yml (cache export only) and is
-#                  republished as a runtime image by engine-image-push.yml;
+#                  build-engine-image.yml (cache export only) and is
+#                  republished as a runtime image by publish-engine-image.yml;
 #                  this job pulls that runtime image and runs probe +
 #                  discover + writeback.
 #   vllm         : pull_request: paths-gated. Pulls upstream
@@ -42,6 +42,25 @@ name: Engine Schemas — Probe + Discover
 #   stable across the workflow's own commit-back, so re-runs on unchanged
 #   source emit byte-identical JSON. This determinism is THE prevention
 #   against the synchronize-loop the watchdog catches.
+#
+# Documented gap (issue #515 vs trigger-asymmetry):
+#
+# The transformers cell is gated workflow_run + workflow_dispatch only
+# (NOT pull_request). PR edits to this workflow file therefore exercise
+# the vllm + tensorrt cells (via the dorny filter) but NOT the
+# transformers cell on PR-time. Transformers gets re-tested by the
+# workflow_run chain after publish-engine-image succeeds — so workflow
+# changes are validated against the transformers cell on the next
+# Build → Push cycle, not within the same PR.
+#
+# This is by design: the transformers cell needs the freshly-built
+# runtime image (transformers-cache:transformers-VER), which only
+# exists after publish-engine-image succeeds. PR-time transformers
+# testing without a real image would be a half-test.
+#
+# The actionlint job in ci.yml provides shape-validation coverage for
+# the transformers cell at PR time, so YAML-level regressions are
+# caught immediately.
 
 on:
   pull_request:
@@ -56,7 +75,7 @@ on:
     # Chain off the PUSH workflow (which only fires after a successful
     # build), not the build directly: schemas-transformers needs to pull
     # the runtime image from GHCR, which doesn't exist until push lands.
-    workflows: ["Engine Image Push (transformers)"]
+    workflows: ["Publish engine image (transformers)"]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -83,13 +102,57 @@ concurrency:
   # workflow_run.head_sha distinguishes per-PR runs for the transformers
   # cell; pull_request runs use github.head_ref. Combine both so the group
   # string stays stable across trigger sources.
-  group: engine-schemas-${{ github.event.workflow_run.head_branch || github.event.workflow_run.head_sha || github.head_ref || github.ref }}
-  cancel-in-progress: true
+  group: update-engine-schemas-${{ github.event.workflow_run.head_branch || github.event.workflow_run.head_sha || github.head_ref || github.ref }}
+  cancel-in-progress: false   # writeback target: never cancel mid-flight
 
 env:
   SCHEMAS_DIR: src/llenergymeasure/config/discovered_schemas
 
 jobs:
+  filter:
+    # Per-engine isolation. On pull_request, dorny/paths-filter sets one
+    # output per engine based on which engine-specific paths changed.
+    # Each engine cell gates `if: needs.filter.outputs.<engine> == 'true'`.
+    # Skipped on workflow_run / workflow_dispatch — those gate via event-
+    # name + dispatch inputs as before.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      transformers: ${{ steps.changes.outputs.transformers }}
+      vllm: ${{ steps.changes.outputs.vllm }}
+      tensorrt: ${{ steps.changes.outputs.tensorrt }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          # Each engine filter MUST include this workflow file + the
+          # dedup helper so workflow-level changes self-test all engines
+          # (issue #515).
+          filters: |
+            transformers:
+              - 'engine_versions/transformers.yaml'
+              - 'docker/Dockerfile.transformers'
+              - 'scripts/engine_introspectors/transformers_*.py'
+              - 'scripts/engine_introspectors/_*.py'
+              - 'src/llenergymeasure/config/discovered_schemas/transformers.json'
+              - '.github/workflows/update-engine-schemas.yml'
+              - 'scripts/ci/upsert_pr_comment.sh'
+            vllm:
+              - 'engine_versions/vllm.yaml'
+              - 'scripts/engine_introspectors/vllm_*.py'
+              - 'scripts/engine_introspectors/_*.py'
+              - 'src/llenergymeasure/config/discovered_schemas/vllm.json'
+              - '.github/workflows/update-engine-schemas.yml'
+              - 'scripts/ci/upsert_pr_comment.sh'
+            tensorrt:
+              - 'engine_versions/tensorrt.yaml'
+              - 'scripts/engine_introspectors/tensorrt_*.py'
+              - 'scripts/engine_introspectors/_*.py'
+              - 'src/llenergymeasure/config/discovered_schemas/tensorrt.json'
+              - '.github/workflows/update-engine-schemas.yml'
+              - 'scripts/ci/upsert_pr_comment.sh'
+
   schemas-transformers:
     # Selected on workflow_run (Engine Image Push success) or
     # workflow_dispatch with engine=transformers/all. Skipped on
@@ -101,6 +164,8 @@ jobs:
       || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'transformers' || inputs.engine == 'all'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - name: Mint llem-ci-bot App token
         # Short-lived (~1 hour) GitHub App token. Events it produces are
@@ -116,7 +181,7 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - name: Checkout PR head
+      - name: Checkout PR branch
         # workflow_run runs on the default branch by default. Explicitly
         # check out the head SHA of the run that triggered us so the
         # discover + writeback operate on the right code. workflow_dispatch
@@ -170,7 +235,11 @@ jobs:
           else
             UPSTREAM="ghcr.io/${{ github.repository }}/transformers:transformers-${{ steps.version.outputs.version }}"
           fi
-          docker pull "$UPSTREAM"
+          if ! docker image inspect "$UPSTREAM" >/dev/null 2>&1; then
+            docker pull "$UPSTREAM"
+          else
+            echo "Image $UPSTREAM already cached locally; skipping pull."
+          fi
           docker tag "$UPSTREAM" "${{ steps.version.outputs.image }}"
 
       - name: Compute stable discovery anchor
@@ -228,7 +297,7 @@ jobs:
         run: |
           docker run --rm \
             -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
-            -e PYTHONDONTWRITEBYTECODE=1 \
+            -e PYTHONDONTWRITEBYTECODE \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
             --entrypoint python3 \
@@ -253,7 +322,7 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         run: uv sync --dev
 
-      - name: Regenerate curation digest
+      - name: Regenerate schemas digest
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           uv run python scripts/generate_curation_doc.py --engine transformers
@@ -303,9 +372,12 @@ jobs:
         if: steps.probe.outputs.verdict == 'fail' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-transformers-probe-blocked"
+          REPO: ${{ github.repository }}
         run: |
-          PR_NUMBER="${{ steps.pr.outputs.number }}"
           {
+            echo "<!-- ${MARKER} -->"
             echo "## Engine schemas — transformers (probe-blocked)"
             echo
             echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
@@ -322,8 +394,8 @@ jobs:
             echo "- **Run \`@llem-ci-bot /approve-reuse transformers schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
             echo
             echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
-          } | gh pr comment "$PR_NUMBER" --body-file -
-          gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
+          } | scripts/ci/upsert_pr_comment.sh
+          gh pr edit "$PR" --add-label "probe-blocked" 2>/dev/null || true
 
       - name: Upload diff artefact
         if: steps.probe.outputs.verdict == 'pass'
@@ -336,12 +408,28 @@ jobs:
             /tmp/engine-schemas-diff/transformers.summary.md
             ${{ env.SCHEMAS_DIR }}/transformers.json
 
-      - name: Post per-pipeline comment (suppress on empty)
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.pr.outputs.number != ''
+      - name: Post per-pipeline comment
+        if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-transformers-diff"
+          REPO: ${{ github.repository }}
         run: |
-          gh pr comment "${{ steps.pr.outputs.number }}" --body-file /tmp/engine-schemas-diff/transformers.summary.md
+          {
+            echo "<!-- ${MARKER} -->"
+            cat /tmp/engine-schemas-diff/transformers.summary.md
+          } | scripts/ci/upsert_pr_comment.sh
+
+      - name: Clean up stale probe-blocked comment (probe now passes)
+        if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-transformers-probe-blocked"
+          REPO: ${{ github.repository }}
+          MODE: delete
+        run: scripts/ci/upsert_pr_comment.sh
 
       - name: Apply per-pipeline label
         if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
@@ -398,11 +486,18 @@ jobs:
           exit 1
 
   schemas-vllm:
+    needs: filter
     if: >-
-      github.event_name == 'pull_request'
-      || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'vllm' || inputs.engine == 'all'))
+      always()
+      && (
+        (github.event_name == 'pull_request' && needs.filter.result == 'success' && needs.filter.outputs.vllm == 'true')
+        || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'vllm' || inputs.engine == 'all'))
+      )
     runs-on: self-hosted
     timeout-minutes: 60
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: "/repo/src:/repo"
     steps:
       - name: Mint llem-ci-bot App token
         id: app-token
@@ -472,7 +567,11 @@ jobs:
         # overlay image.
         run: |
           UPSTREAM="vllm/vllm-openai:v${{ steps.version.outputs.version }}"
-          docker pull "$UPSTREAM"
+          if ! docker image inspect "$UPSTREAM" >/dev/null 2>&1; then
+            docker pull "$UPSTREAM"
+          else
+            echo "Image $UPSTREAM already cached locally; skipping pull."
+          fi
           docker tag "$UPSTREAM" "${{ steps.version.outputs.image }}"
 
       - name: Compute stable discovery anchor
@@ -502,8 +601,8 @@ jobs:
             -v "${{ github.workspace }}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
-            -e PYTHONPATH=/repo/src:/repo \
-            -e PYTHONDONTWRITEBYTECODE=1 \
+            -e PYTHONPATH \
+            -e PYTHONDONTWRITEBYTECODE \
             --entrypoint python3 \
             "$IMAGE" \
             -m scripts._probe --engine vllm --producer schemas \
@@ -538,8 +637,8 @@ jobs:
         run: |
           docker run --rm --gpus all \
             -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
-            -e PYTHONDONTWRITEBYTECODE=1 \
-            -e PYTHONPATH=/repo/src:/repo \
+            -e PYTHONDONTWRITEBYTECODE \
+            -e PYTHONPATH \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
             --entrypoint python3 \
@@ -570,7 +669,7 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         run: uv sync --dev
 
-      - name: Regenerate curation digest
+      - name: Regenerate schemas digest
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           uv run python scripts/generate_curation_doc.py --engine vllm
@@ -617,15 +716,15 @@ jobs:
           } > /tmp/engine-schemas-diff/vllm.summary.md
 
       - name: Probe-fail comment (skip downstream)
-        if: steps.probe.outputs.verdict == 'fail' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        if: steps.probe.outputs.verdict == 'fail' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-vllm-probe-blocked"
+          REPO: ${{ github.repository }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
           {
+            echo "<!-- ${MARKER} -->"
             echo "## Engine schemas — vllm (probe-blocked)"
             echo
             echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
@@ -642,8 +741,8 @@ jobs:
             echo "- **Run \`@llem-ci-bot /approve-reuse vllm schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
             echo
             echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
-          } | gh pr comment "$PR_NUMBER" --body-file -
-          gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
+          } | scripts/ci/upsert_pr_comment.sh
+          gh pr edit "$PR" --add-label "probe-blocked" 2>/dev/null || true
 
       - name: Upload diff artefact
         if: steps.probe.outputs.verdict == 'pass'
@@ -656,16 +755,28 @@ jobs:
             /tmp/engine-schemas-diff/vllm.summary.md
             ${{ env.SCHEMAS_DIR }}/vllm.json
 
-      - name: Post per-pipeline comment (suppress on empty)
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+      - name: Post per-pipeline comment
+        if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-vllm-diff"
+          REPO: ${{ github.repository }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
-          gh pr comment "$PR_NUMBER" --body-file /tmp/engine-schemas-diff/vllm.summary.md
+          {
+            echo "<!-- ${MARKER} -->"
+            cat /tmp/engine-schemas-diff/vllm.summary.md
+          } | scripts/ci/upsert_pr_comment.sh
+
+      - name: Clean up stale probe-blocked comment (probe now passes)
+        if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-vllm-probe-blocked"
+          REPO: ${{ github.repository }}
+          MODE: delete
+        run: scripts/ci/upsert_pr_comment.sh
 
       - name: Apply per-pipeline label
         if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
@@ -739,11 +850,19 @@ jobs:
     # steps bind-mount a host-side tarball extraction rather than
     # introspecting the installed NGC package, decoupling source
     # resolution from NGC image internals.
+    needs: filter
     if: >-
-      github.event_name == 'pull_request'
-      || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'tensorrt' || inputs.engine == 'all'))
+      always()
+      && (
+        (github.event_name == 'pull_request' && needs.filter.result == 'success' && needs.filter.outputs.tensorrt == 'true')
+        || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'tensorrt' || inputs.engine == 'all'))
+      )
     runs-on: self-hosted
     timeout-minutes: 60
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: "/repo/src:/repo"
+      LD_LIBRARY_PATH: "/usr/local/cuda/compat/lib.real:/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib"
     steps:
       - name: Mint llem-ci-bot App token
         id: app-token
@@ -786,7 +905,11 @@ jobs:
         # via PYTHONPATH rather than baked into a first-party overlay.
         run: |
           UPSTREAM="nvcr.io/nvidia/tensorrt-llm/release:${{ steps.version.outputs.version }}"
-          docker pull "$UPSTREAM"
+          if ! docker image inspect "$UPSTREAM" >/dev/null 2>&1; then
+            docker pull "$UPSTREAM"
+          else
+            echo "Image $UPSTREAM already cached locally; skipping pull."
+          fi
           docker tag "$UPSTREAM" "${{ steps.version.outputs.image }}"
 
       - name: Compute stable discovery anchor
@@ -838,9 +961,9 @@ jobs:
         run: |
           mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
-            -e LD_LIBRARY_PATH="/usr/local/cuda/compat/lib.real:/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib" \
-            -e PYTHONPATH=/repo/src:/repo \
-            -e PYTHONDONTWRITEBYTECODE=1 \
+            -e LD_LIBRARY_PATH \
+            -e PYTHONPATH \
+            -e PYTHONDONTWRITEBYTECODE \
             -v "${{ github.workspace }}:/repo" \
             -v "/tmp/trt-llm-${VER}:/tmp/trt-llm-${VER}:ro" \
             -v /tmp/llem-probe-out:/llem-probe-out:rw \
@@ -879,10 +1002,10 @@ jobs:
           TRTLLM_VER: ${{ steps.version.outputs.version }}
         run: |
           docker run --rm --gpus all \
-            -e LD_LIBRARY_PATH="/usr/local/cuda/compat/lib.real:/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib" \
+            -e LD_LIBRARY_PATH \
             -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
-            -e PYTHONDONTWRITEBYTECODE=1 \
-            -e PYTHONPATH=/repo/src:/repo \
+            -e PYTHONDONTWRITEBYTECODE \
+            -e PYTHONPATH \
             -v "${{ github.workspace }}:/repo" \
             -v "/tmp/trt-llm-${TRTLLM_VER}:/tmp/trt-llm-${TRTLLM_VER}:ro" \
             -w /repo \
@@ -912,7 +1035,7 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         run: uv sync --dev
 
-      - name: Regenerate curation digest
+      - name: Regenerate schemas digest
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           uv run python scripts/generate_curation_doc.py --engine tensorrt
@@ -959,15 +1082,15 @@ jobs:
           } > /tmp/engine-schemas-diff/tensorrt.summary.md
 
       - name: Probe-fail comment (skip downstream)
-        if: steps.probe.outputs.verdict == 'fail' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        if: steps.probe.outputs.verdict == 'fail' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-tensorrt-probe-blocked"
+          REPO: ${{ github.repository }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
           {
+            echo "<!-- ${MARKER} -->"
             echo "## Engine schemas — tensorrt (probe-blocked)"
             echo
             echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
@@ -984,8 +1107,8 @@ jobs:
             echo "- **Run \`@llem-ci-bot /approve-reuse tensorrt schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
             echo
             echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
-          } | gh pr comment "$PR_NUMBER" --body-file -
-          gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
+          } | scripts/ci/upsert_pr_comment.sh
+          gh pr edit "$PR" --add-label "probe-blocked" 2>/dev/null || true
 
       - name: Upload diff artefact
         if: steps.probe.outputs.verdict == 'pass'
@@ -998,16 +1121,28 @@ jobs:
             /tmp/engine-schemas-diff/tensorrt.summary.md
             ${{ env.SCHEMAS_DIR }}/tensorrt.json
 
-      - name: Post per-pipeline comment (suppress on empty)
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+      - name: Post per-pipeline comment
+        if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-tensorrt-diff"
+          REPO: ${{ github.repository }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
-          gh pr comment "$PR_NUMBER" --body-file /tmp/engine-schemas-diff/tensorrt.summary.md
+          {
+            echo "<!-- ${MARKER} -->"
+            cat /tmp/engine-schemas-diff/tensorrt.summary.md
+          } | scripts/ci/upsert_pr_comment.sh
+
+      - name: Clean up stale probe-blocked comment (probe now passes)
+        if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-tensorrt-probe-blocked"
+          REPO: ${{ github.repository }}
+          MODE: delete
+        run: scripts/ci/upsert_pr_comment.sh
 
       - name: Apply per-pipeline label
         if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')

@@ -1,4 +1,4 @@
-name: Engine Image Build (transformers)
+name: Build engine image (transformers)
 
 # Builds the transformers engine image and exports its layer cache to GHCR.
 # Does NOT push a runtime image — that is the engine-image-push.yml workflow's
@@ -7,13 +7,13 @@ name: Engine Image Build (transformers)
 # Pipeline ordering:
 #
 #   Renovate / maintainer PR
-#     |- engine-image-build.yml  (this file)  → publishes :transformers-<VERSION>-buildcache
+#     |- build-engine-image.yml  (this file)    → publishes :transformers-<VERSION>-buildcache
 #     |  V (workflow_run: completed, conclusion=success, event in [push, schedule])
-#     |- engine-image-push.yml                → pulls cache, pushes :latest + :transformers-<VERSION>
+#     |- publish-engine-image.yml               → pulls cache, pushes :latest + :transformers-<VERSION>
 #     |  V (workflow_run: completed, conclusion=success)
-#     |- engine-schemas.yml :: schemas-transformers job
+#     |- update-engine-schemas.yml :: schemas-transformers job
 #     |  V
-#     |- engine-invariants.yml :: invariants-transformers job
+#     |- update-engine-invariants.yml :: invariants-transformers job
 #
 # Why split build from push:
 #   The previous shape ran build + push in a single buildx step. When the
@@ -34,13 +34,13 @@ on:
     paths:
       - "engine_versions/transformers.yaml"
       - "docker/Dockerfile.transformers"
-      - ".github/workflows/engine-image-build.yml"
+      - ".github/workflows/build-engine-image.yml"
   push:
     branches: [main]
     paths:
       - "engine_versions/transformers.yaml"
       - "docker/Dockerfile.transformers"
-      - ".github/workflows/engine-image-build.yml"
+      - ".github/workflows/build-engine-image.yml"
   schedule:
     # Weekly Monday 05:37 UTC — drift detection from-scratch rebuild.
     - cron: "37 5 * * 1"

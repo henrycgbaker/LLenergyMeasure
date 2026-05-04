@@ -422,16 +422,16 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │  (library.current_version; Dockerfile ARG default is derived at   │
   │   build time via --build-arg from the SSOT)                       │
   │               │                                                   │
-  │  Per-engine trigger shape (within a single engine-invariants.yml  │
-  │  + engine-schemas.yml pair, gated by per-job `if:` clauses):       │
-  │   - vllm + tensorrt: invariants-vllm / schemas-vllm /              │
-  │     invariants-tensorrt / schemas-tensorrt fire in parallel via    │
-  │     pull_request: paths.                                            │
-  │   - transformers: engine-image-build.yml fires first (build +      │
-  │     cache export, no runtime push), then engine-image-push.yml     │
-  │     publishes runtime tags via workflow_run, then invariants-      │
-  │     transformers + schemas-transformers (in the same two workflow  │
-  │     files) fire via workflow_run on the push's success.            │
+  │  Per-engine trigger shape (within a single update-engine-invariants.yml  │
+  │  + update-engine-schemas.yml pair, gated by per-job `if:` clauses):      │
+  │   - vllm + tensorrt: invariants-vllm / schemas-vllm /                    │
+  │     invariants-tensorrt / schemas-tensorrt fire in parallel via          │
+  │     pull_request: paths.                                                  │
+  │   - transformers: build-engine-image.yml fires first (build +            │
+  │     cache export, no runtime push), then publish-engine-image.yml        │
+  │     publishes runtime tags via workflow_run, then invariants-            │
+  │     transformers + schemas-transformers (in the same two workflow        │
+  │     files) fire via workflow_run on the push's success.                  │
   │     See docs/development.md "CI pipeline ordering" for detail.     │
   │               │                                                   │
   │  ──────────── engine-invariants per-engine job ────────────────   │
@@ -539,8 +539,8 @@ The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transforme
 
 **What this proved empirically (carries over to the merged workflow):**
 
-- **Path-filter-driven fan-out fires on a single Renovate-authored bump.** No actor-gate intervention; path filters alone are sufficient. Same property holds for `engine-invariants.yml`.
-- **Stage 1 → Stage 2 chain validation works as designed.** The historical `auto-mine.yml` writeback at `96d811fb` re-fired the historical `invariant-miner.yml` at `fb473a22` against the new YAML. The trust seam (YAML diff visible to reviewers before JSON gate runs) was exercised end-to-end. The merged `engine-invariants.yml` preserves the trust seam in-process: the proposed-corpus diff is emitted before the vendor-replay's verdict lands in the same commit.
+- **Path-filter-driven fan-out fires on a single Renovate-authored bump.** No actor-gate intervention; path filters alone are sufficient. Same property holds for `update-engine-invariants.yml`.
+- **Stage 1 → Stage 2 chain validation works as designed.** The historical `auto-mine.yml` writeback at `96d811fb` re-fired the historical `invariant-miner.yml` at `fb473a22` against the new YAML. The trust seam (YAML diff visible to reviewers before JSON gate runs) was exercised end-to-end. The merged `update-engine-invariants.yml` preserves the trust seam in-process: the proposed-corpus diff is emitted before the vendor-replay's verdict lands in the same commit.
 - **App-token + `--force-with-lease` writebacks succeed** without recursion-guard issues.
 - **Determinism holds.** Of the ~14 bot comments posted across the cycle, 8 were "No changes" after subsequent runs - proving the `LLENERGY_*_FROZEN_AT` env-var contracts produce reproducible outputs once the corpus has converged.
 - **Self-hosted GPU runner serialisation is observable.** The vLLM vendor gate (`75d4c0c1`) was queued behind vendor-tensorrt and arrived after the transformers chain had already converged.

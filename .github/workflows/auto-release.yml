@@ -1,5 +1,9 @@
 name: Auto Release
 
+# This workflow has no PR-time `paths:` trigger (it's pull_request: closed-only),
+# so edits can't self-test at runtime. Shape validation happens at PR time via
+# the actionlint job in ci.yml.
+#
 # Automated release pipeline for PRs merged with the 'release' label.
 #
 # Flow:

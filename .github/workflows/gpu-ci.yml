@@ -16,6 +16,10 @@ on:
   workflow_dispatch:
   workflow_call:
   pull_request:
+    # Intentionally NOT paths-filtered: gating happens via the 'gpu-ci'
+    # PR label (see job `if:`). Path-filtering would block label-only
+    # re-runs on already-pushed commits. Edits to this file get
+    # shape-validated at PR time by the actionlint job in ci.yml.
     types: [labeled, synchronize]
 
 permissions:

@@ -155,7 +155,7 @@ chain.
 
 Only Transformers has a project Dockerfile, so it is the only engine with a
 GHCR cache. The image declares `cache_from` pointing at the published GHCR
-tags; the `Engine Image Build (transformers)` workflow populates the cache via
+tags; the `Build engine image (transformers)` workflow populates the cache via
 `docker/build-push-action`, exporting intermediate layers to
 `ghcr.io/henrycgbaker/llenergymeasure/transformers:latest` (rolling) and
 `:transformers-<VERSION>` (immutable per SSOT version, written on push to
@@ -214,9 +214,9 @@ separate answers:
 
 | Ref | Kind | Written by | Consumed by |
 |---|---|---|---|
-| `transformers-cache:transformers-<VER>-buildcache` | BuildKit cache manifest (`mode=max`, intermediate layer metadata — **not a runnable image**) | `engine-image-build.yml` on every successful build (PR, main, schedule, dispatch) | Future `docker build` invocations as `cache-from` |
-| `transformers-cache:transformers-<VER>` | Runnable PR-time runtime image | `engine-image-push.yml` when parent build was a `pull_request` | `engine-invariants.yml` + `engine-schemas.yml` for PR-time validation against the PR's Dockerfile |
-| `transformers:transformers-<VER>` + `transformers:latest` | Runnable canonical runtime image | `engine-image-push.yml` when parent build was a push to `main`, a schedule, or a `workflow_dispatch` | End users (`docker pull`), `make docker-pull`, main-branch invariants/schemas, downstream Renovate consumers |
+| `transformers-cache:transformers-<VER>-buildcache` | BuildKit cache manifest (`mode=max`, intermediate layer metadata — **not a runnable image**) | `build-engine-image.yml` on every successful build (PR, main, schedule, dispatch) | Future `docker build` invocations as `cache-from` |
+| `transformers-cache:transformers-<VER>` | Runnable PR-time runtime image | `publish-engine-image.yml` when parent build was a `pull_request` | `update-engine-invariants.yml` + `update-engine-schemas.yml` for PR-time validation against the PR's Dockerfile |
+| `transformers:transformers-<VER>` + `transformers:latest` | Runnable canonical runtime image | `publish-engine-image.yml` when parent build was a push to `main`, a schedule, or a `workflow_dispatch` | End users (`docker pull`), `make docker-pull`, main-branch invariants/schemas, downstream Renovate consumers |
 
 The three axes encoded:
 
@@ -242,12 +242,12 @@ Why not collapse them? Two tempting simplifications both lose value:
 
 Pipeline mechanics:
 
-- `engine-image-build.yml` runs `build-push-action` with `cache-from` /
+- `build-engine-image.yml` runs `build-push-action` with `cache-from` /
   `cache-to` pointing at the buildcache ref. Builds run on every PR, push to
   `main`, schedule, and dispatch. `push: false` — this workflow only exports
   cache, never publishes runnable images.
-- `engine-image-push.yml` is `workflow_run`-triggered on successful
-  `engine-image-build.yml`. It rebuilds (warming off the just-exported
+- `publish-engine-image.yml` is `workflow_run`-triggered on successful
+  `build-engine-image.yml`. It rebuilds (warming off the just-exported
   buildcache, so it's seconds), tags per parent-event (PR → cache repo;
   main / schedule / dispatch → canonical repo), and pushes. The build/push
   split exists so a registry permission failure during push doesn't burn

@@ -30,11 +30,12 @@ env:
 
 jobs:
   filter:
-    if: github.event_name != 'workflow_dispatch'
+    # Always runs (including on workflow_dispatch). Cost is trivial; downstream jobs depend on its outputs.
     runs-on: ubuntu-latest
     outputs:
       src: ${{ steps.changes.outputs.src }}
       docker: ${{ steps.changes.outputs.docker }}
+      workflows: ${{ steps.changes.outputs.workflows }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v4
@@ -47,10 +48,13 @@ jobs:
               - 'tests/**'
               - 'pyproject.toml'
               - 'uv.lock'
+              - '.github/workflows/ci.yml'
             docker:
               - 'docker/**'
               - '.dockerignore'
               - 'pyproject.toml'
+            workflows:
+              - '.github/workflows/**'
 
   lint:
     if: >-
@@ -181,6 +185,23 @@ jobs:
           uv run python scripts/generate_curation_doc.py > /dev/null
       - name: Check Pydantic-discovered schema alignment
         run: uv run python scripts/check_pydantic_matches_discovered.py > /dev/null
+
+  actionlint:
+    needs: filter
+    if: >-
+      always()
+      && (
+        (github.event_name == 'pull_request' && needs.filter.outputs.workflows == 'true')
+        || github.event_name == 'workflow_dispatch'
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run actionlint
+        uses: reviewdog/action-actionlint@v1
+        with:
+          reporter: github-pr-review
+          fail_on_error: true
 
   schema-version-check:
     needs: filter

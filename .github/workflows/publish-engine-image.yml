@@ -1,8 +1,14 @@
-name: Engine Image Push (transformers)
+name: Publish engine image (transformers)
 
 # Publishes the transformers runtime image to GHCR using the layer cache
-# that engine-image-build.yml already exported. Triggered by workflow_run
-# on engine-image-build success.
+# that build-engine-image.yml already exported. Triggered by workflow_run
+# on build-engine-image success.
+#
+# `workflow_run:` triggers do not support a `paths:` filter (per the
+# GitHub Actions spec). Per-path gating happens upstream in
+# build-engine-image.yml. Edits to this file get shape-validated at PR
+# time by the `actionlint` job in ci.yml (which runs on any
+# `.github/workflows/**` change).
 #
 # Why this is a separate workflow:
 #   Build + push were previously coupled — when push failed (GHCR perms,
@@ -23,7 +29,7 @@ name: Engine Image Push (transformers)
 
 on:
   workflow_run:
-    workflows: ["Engine Image Build (transformers)"]
+    workflows: ["Build engine image (transformers)"]
     types: [completed]
   workflow_dispatch:
     # Ad-hoc trigger for debugging or one-off pushes. Pushes to the
