@@ -35,6 +35,7 @@ module unimportable, SSOT malformed).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import hashlib
 import importlib
@@ -42,6 +43,7 @@ import inspect
 import json
 import os
 import sys
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from types import ModuleType
@@ -357,7 +359,51 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Skip updating engine_versions/{engine}.compat.json (useful for CI dry-runs).",
     )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help=(
+            "Path to write the ProbeReport JSON. When set, JSON goes to this file "
+            "atomically (write to .tmp, fsync, rename) and stdout stays clean. When "
+            "absent, JSON is written to stdout (legacy behaviour). Use --output in "
+            "CI when the engine library may write to stdout at import time (e.g. "
+            "tensorrt-llm's logger), which would otherwise pollute the captured JSON."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def _write_report_to_file(path: Path, report: ProbeReport) -> None:
+    """Atomically write *report* as JSON to *path*.
+
+    Uses ``tempfile.mkstemp`` for a collision-free temp file in the parent
+    directory, fsyncs before ``os.replace`` so the rename only commits a
+    durable file (matters on power loss / hard reboot), and cleans up the
+    temp file on any failure so retries never trip over orphaned ``.tmp``
+    files. Parent directory is created if missing.
+
+    The output is chmod'd to 0644. ``tempfile.mkstemp`` defaults to 0600
+    (owner-only) for security, but CI invokes the probe inside a Docker
+    container running as root and reads the result on the host via a bind
+    mount. Without 0644 the non-root host runner user gets ``Permission
+    denied`` when opening the JSON. PoC reproduces the bug with mkstemp's
+    default mode and verifies the fix; see local-engine-build-test.sh.
+    """
+    payload = json.dumps(asdict(report), indent=2, sort_keys=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=path.stem, suffix=".tmp")
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            f.write(payload)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp_path, 0o644)
+        os.replace(tmp_path, path)
+    except Exception:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+        raise
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -367,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
     except (FileNotFoundError, KeyError, ImportError, AttributeError, TypeError, ValueError) as exc:
         # Infrastructure failure: SSOT missing / malformed / producer
         # module unimportable / LANDMARKS missing or malformed. Distinct
-        # from a fail-verdict probe (which writes JSON to stdout).
+        # from a fail-verdict probe (which writes JSON to stdout/file).
         print(json.dumps({"error": type(exc).__name__, "message": str(exc)}), file=sys.stderr)
         return 2
 
@@ -381,7 +427,17 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
 
-    print(json.dumps(asdict(report), indent=2, sort_keys=True))
+    if args.output is not None:
+        try:
+            _write_report_to_file(args.output, report)
+        except OSError as exc:
+            print(
+                json.dumps({"error": "OutputWriteFailed", "message": str(exc)}),
+                file=sys.stderr,
+            )
+            return 2
+    else:
+        print(json.dumps(asdict(report), indent=2, sort_keys=True))
     return 0
 
 

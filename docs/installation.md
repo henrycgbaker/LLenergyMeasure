@@ -153,11 +153,16 @@ chain.
 > no compilation. Building from source is for contributors and for hosts where
 > you've modified `src/llenergymeasure/`.
 
-Every engine image declares `cache_from` entries pointing at the published GHCR tags.
-CI populates the cache on each release with `cache-to=type=registry,mode=max`, which
-exports intermediate layers to `ghcr.io/henrycgbaker/llenergymeasure/{engine}:latest`
-(and the immutable `:v${LLEM_PKG_VERSION}` tag). For Transformers this lets fresh
-machines skip the ~30-min flash-attn FA3 Hopper compile.
+Only Transformers has a project Dockerfile, so it is the only engine with a
+GHCR cache. The image declares `cache_from` pointing at the published GHCR
+tags; the `Engine Image Build (transformers)` workflow populates the cache via
+`docker/build-push-action`, exporting intermediate layers to
+`ghcr.io/henrycgbaker/llenergymeasure/transformers:latest` (rolling) and
+`:transformers-<VERSION>` (immutable per SSOT version, written on push to
+`main`). This lets fresh machines skip the ~30-min flash-attn FA3 Hopper
+compile. vLLM and TensorRT-LLM are pulled from upstream images
+(`vllm/vllm-openai`, `nvcr.io/nvidia/tensorrt-llm/release`) and need no
+project-side cache.
 
 Measured on `ds01` (AMD EPYC 7742, 128 cores, 504 GB RAM — Docker 27.0.3 / Buildx
 v0.32.1 / llenergymeasure 0.9.0):
@@ -175,20 +180,20 @@ machines cold builds scale roughly with `MAX_JOBS` (FA3 compile is CPU-bound).
   first-ever build.
 - **First GHCR pull** — fresh builder, `cache_from` populated. What a new
   contributor gets after `make docker-builder-setup`.
-- **Warm local rebuild** — second and subsequent local builds. Stable layers
-  (FA3, base deps) sit before `COPY src/` in the Dockerfiles, so source-only
-  edits typically rebuild in seconds for all three engines.
+- **Warm local rebuild** — second and subsequent local builds. The transformers
+  image is a kernel substrate (FA3 + engine deps + runtime deps); the
+  llenergymeasure project source is bind-mounted at runtime, never baked in.
+  Source-only edits never invalidate any image layer for any engine.
 
-**Why does the GHCR cache only help Transformers?** The vLLM and TensorRT-LLM
-images are thin layers (`COPY src/` + one `pip install`) on top of heavy
-upstream bases (`vllm/vllm-openai`, `nvcr.io/nvidia/tensorrt-llm/release`).
-The dominant cost on a fresh machine is pulling that upstream base from Docker
-Hub / NGC, which BuildKit's `cache_from` cannot accelerate — only layers from
-*our* Dockerfile are eligible. Our own steps add ~30 s on top, so even a perfect
-cache hit caps the saving at ~30 s. The cache is still wired up (and works for
-`:v${LLEM_PKG_VERSION}`-pinned rebuilds within a release) but the architecture
-limits its impact for these two engines. Transformers benefits because the FA3
-compile is in our Dockerfile, ahead of `COPY src/`, so it gets cached.
+**Why does the GHCR cache only help Transformers?** vLLM and TensorRT-LLM use
+upstream images directly (`vllm/vllm-openai`, `nvcr.io/nvidia/tensorrt-llm/release`)
+with no first-party overlay. The dominant cost on a fresh machine is pulling
+the upstream base from Docker Hub / NGC, which our GHCR cache cannot accelerate
+— there is no first-party Dockerfile to cache. Transformers does have a
+first-party Dockerfile (`docker/Dockerfile.transformers`) because no upstream
+provides an FA3-included transformers image, and the FA3 compile is the
+load-bearing layer that the GHCR cache makes a single-digit-minute pull
+instead of a ~30-min cold compile.
 
 Once the upstream base is in local Docker storage (after the first build),
 subsequent rebuilds for vLLM/TRT are seconds — the slow part doesn't repeat.
@@ -203,23 +208,61 @@ docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0  # pull TensorRT-LLM upst
 
 **How the cache pipeline is wired:**
 
-- CI's `docker-publish.yml` runs `build-push-action` with
-  `cache-to=type=registry,...,mode=max` on each release, exporting the full layer
-  graph (including FA3 intermediates) to two refs:
-  `ghcr.io/henrycgbaker/llenergymeasure/{engine}:v${LLEM_PKG_VERSION}` (immutable
-  per release) and `:latest` (rolling).
-- `docker-compose.yml` declares `cache_from: [:v${LLEM_PKG_VERSION}, :latest]`
-  for every engine — version-pinned first (best layer match within a release),
-  rolling-latest as fallback.
-- `make docker-builder-setup` provisions a `docker-container` BuildKit driver
-  with a 200 GiB GC limit; the default `docker` driver cannot import registry
-  caches at all.
+The transformers image is published under three GHCR refs, each serving a
+distinct consumer. The split exists because three orthogonal questions need
+separate answers:
+
+| Ref | Kind | Written by | Consumed by |
+|---|---|---|---|
+| `transformers-cache:transformers-<VER>-buildcache` | BuildKit cache manifest (`mode=max`, intermediate layer metadata — **not a runnable image**) | `engine-image-build.yml` on every successful build (PR, main, schedule, dispatch) | Future `docker build` invocations as `cache-from` |
+| `transformers-cache:transformers-<VER>` | Runnable PR-time runtime image | `engine-image-push.yml` when parent build was a `pull_request` | `engine-invariants.yml` + `engine-schemas.yml` for PR-time validation against the PR's Dockerfile |
+| `transformers:transformers-<VER>` + `transformers:latest` | Runnable canonical runtime image | `engine-image-push.yml` when parent build was a push to `main`, a schedule, or a `workflow_dispatch` | End users (`docker pull`), `make docker-pull`, main-branch invariants/schemas, downstream Renovate consumers |
+
+The three axes encoded:
+
+1. **`-buildcache` suffix** distinguishes "BuildKit cache metadata" from
+   "runnable image". Cache uses `mode=max` so intermediate layers (most
+   importantly the ~30-min FA3 compile) are reusable across subsequent
+   builds; it cannot be `docker run`'d.
+2. **`transformers-cache` repo vs `transformers` repo** distinguishes
+   "built from a PR branch" from "built from `main` (vetted)". Only the
+   canonical repo serves end users, so a PR build can never accidentally
+   claim `:latest`.
+3. **Tag (`:latest` vs `:transformers-<VER>`)** within the canonical repo
+   is the standard rolling-vs-immutable convention.
+
+Why not collapse them? Two tempting simplifications both lose value:
+
+- *Use `type=inline` cache (cache embedded in runtime image manifest, one
+  ref).* Drops `mode=max` intermediate-layer caching; second-build FA3 would
+  recompile.
+- *Drop the PR-time runtime image, validate against `:latest` only.* PR
+  changes to `Dockerfile.transformers` itself would go unvalidated until
+  after merge.
+
+Pipeline mechanics:
+
+- `engine-image-build.yml` runs `build-push-action` with `cache-from` /
+  `cache-to` pointing at the buildcache ref. Builds run on every PR, push to
+  `main`, schedule, and dispatch. `push: false` — this workflow only exports
+  cache, never publishes runnable images.
+- `engine-image-push.yml` is `workflow_run`-triggered on successful
+  `engine-image-build.yml`. It rebuilds (warming off the just-exported
+  buildcache, so it's seconds), tags per parent-event (PR → cache repo;
+  main / schedule / dispatch → canonical repo), and pushes. The build/push
+  split exists so a registry permission failure during push doesn't burn
+  the FA3 compile; the cache survives independently.
+- `docker-compose.yml` declares `cache_from: [:transformers-<VERSION>,
+  :latest]` for the transformers engine — version-pinned first (best layer
+  match within a release), rolling-latest as fallback. vllm and tensorrt
+  have no first-party `cache_from` chain (they pull upstream directly).
+- `make docker-builder-setup` provisions a `docker-container` BuildKit
+  driver with a 200 GiB GC limit; the default `docker` driver cannot import
+  registry caches at all.
 - The Transformers FA3 compile (the only layer where caching is load-bearing)
-  exceeds GitHub-hosted runner capacity (4 cores / 16 GB), so the seed step is
-  manual: `make docker-seed-transformers` from a host with ≥32 cores and
-  `docker login ghcr.io` (`write:packages`). After the seed, CI rebuilds warm
-  off `:latest` for every subsequent release.
-- Pulling the cache is unauthenticated for public packages.
+  runs on a self-hosted runner with sufficient cores + memory; CI rebuilds
+  warm off the buildcache ref for every subsequent SSOT bump.
+- Pulling any of the three refs is unauthenticated for public packages.
 
 **How to tell if the cache actually warmed:** `make docker-build-{engine}` runs the build
 under `BUILDKIT_PROGRESS=plain` and emits a one-line summary when it finishes:

@@ -235,6 +235,79 @@ def test_probe_writes_compat_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     assert cache["invariants"]["fingerprint"]
 
 
+def test_probe_output_flag_writes_to_file_keeps_stdout_clean(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--output PATH`` writes the JSON to a file and prints nothing to stdout.
+
+    Required for engines whose libraries log to stdout at import time
+    (tensorrt-llm's custom logger), which would otherwise pollute the
+    captured JSON when CI redirects stdout to a file.
+    """
+    _redirect_compat_dir(monkeypatch, tmp_path)
+    _install_synthetic_producer(
+        monkeypatch,
+        engine="transformers",
+        producer="invariants",
+        landmarks=("json.JSONDecodeError",),
+    )
+
+    out = tmp_path / "probe-out" / "report.json"
+    rc = _probe.main(["--engine", "transformers", "--producer", "invariants", "--output", str(out)])
+    assert rc == 0
+
+    assert out.is_file(), "Probe should write JSON to --output path"
+    captured = capsys.readouterr()
+    assert captured.out == "", "stdout should be empty when --output is set"
+
+    # Mode 0644 — readable by the host runner user when the probe is invoked
+    # from inside a Docker container running as root via a bind mount.
+    # `tempfile.mkstemp` defaults to 0600 which would block host reads.
+    assert out.stat().st_mode & 0o777 == 0o644, "output must be 0644 for host bind-mount reads"
+
+    payload = json.loads(out.read_text())
+    assert payload["engine"] == "transformers"
+    assert payload["verdict"] == "pass"
+
+
+def test_probe_atomic_output_rename_failure_leaves_destination_intact(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A crash at the ``os.replace`` step must NOT leave a partial JSON at
+    the destination AND must clean up the temp file (no orphan ``.tmp``)."""
+    import os as _os
+
+    out = tmp_path / "report.json"
+    out.write_text("STALE", encoding="utf-8")  # pre-existing content
+
+    # Force the rename step to fail. The temp file should still be cleaned
+    # up (no orphan ``.tmp`` left in the directory) and the destination
+    # should still contain its original content.
+    def boom(src: str, dst: str) -> None:
+        raise OSError("simulated rename failure")
+
+    monkeypatch.setattr(_os, "replace", boom)
+
+    report = _probe.ProbeReport(
+        engine="transformers",
+        producer="invariants",
+        verdict="pass",
+        library_version="9.9.9",
+        version_inside_envelope=True,
+        fingerprint="deadbeef",
+        fingerprint_drift=[],
+        landmarks_missing=[],
+        ran_at="2026-05-04T00:00:00+00:00",
+    )
+    with pytest.raises(OSError, match="simulated rename failure"):
+        _probe._write_report_to_file(out, report)
+
+    # Destination unchanged (the rename never happened)
+    assert out.read_text() == "STALE"
+    # No orphan ``.tmp`` files left behind in the parent directory
+    assert not list(tmp_path.glob("*.tmp")), "tempfile cleanup must remove .tmp on failure"
+
+
 def test_probe_ssot_missing_returns_infra_error(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

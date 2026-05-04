@@ -48,8 +48,93 @@ docker run --rm \
 
 Replace `transformers` with `vllm` or `tensorrt` (and add `--gpus all` for
 those two — they need a CUDA device) for the other engines. The automated
-path is `engine-invariants.yml` and `engine-schemas.yml` in `.github/workflows/`;
-both follow this same pattern across all three engines.
+path is three workflow files in `.github/workflows/`: `engine-image-build.yml`
+(builds the transformers image once per SSOT version), and
+`engine-schemas.yml` + `engine-invariants.yml` (one workflow per pipeline,
+each covering all three engines via per-job `if:` gating on the trigger
+source). See "CI pipeline ordering" below for the full sequence.
+
+## Engine image strategy
+
+Per-engine choices about runner type and image source are deliberately
+asymmetric:
+
+| Engine | CI runner | GPU required | Image source | Why |
+|---|---|---|---|---|
+| transformers | `ubuntu-latest` (GH-hosted) | No | First-party `docker/Dockerfile.transformers`, built once by `engine-image-build.yml` per (PR, SSOT version) and consumed downstream via `docker pull` | No upstream provides FA3-included transformers |
+| vllm | self-hosted GPU | Yes (CUDA) | `vllm/vllm-openai:<version>` (Docker Hub) | Canonical upstream exists; project source bind-mounted at runtime |
+| tensorrt | self-hosted GPU | Yes (CUDA) | `nvcr.io/nvidia/tensorrt-llm/release:<version>` (NGC) | Canonical upstream exists; project source bind-mounted at runtime |
+
+The principled rationale:
+
+1. **vllm and tensorrt use upstream because canonical upstream exists.** Both
+   publish per-version images at stable refs that already include the engine
+   library plus its CUDA / torch substrate. Our project's value-add (the
+   `llenergymeasure` package + miner / introspector scripts) is bind-mounted
+   at `/app` with `PYTHONPATH=/app/src:/app -w /app` rather than baked into a
+   custom overlay. No first-party Dockerfile means no version drift between
+   our image and upstream's release cadence.
+
+2. **transformers needs a first-party image because no upstream provides
+   FA3-included transformers.** `pytorch/pytorch:2.5-cuda12.4-cudnn9-runtime`
+   has the CUDA + torch substrate but no transformers; `huggingface/transformers-pytorch-gpu`
+   has transformers but no FA3 (the hopper-extension build is niche and
+   compiled from source). `docker/Dockerfile.transformers` ships transformers
+   plus FA2 (PyPI wheel) plus FA3 (compiled from source) plus accelerate /
+   bitsandbytes / calflops / sentencepiece / einops pre-installed, plus
+   llenergymeasure's runtime non-engine deps (pydantic, typer, pyyaml,
+   platformdirs, nvidia-ml-py, numpy, pyarrow, tqdm, rich, python-dotenv,
+   filelock). The llenergymeasure package itself is NOT installed into the
+   image — it is bind-mounted at runtime via `-v <repo>:/llem-src` +
+   `PYTHONPATH=/llem-src`, identically to the vllm + tensorrt cells. This
+   keeps image rebuilds dependent only on the engine substrate, not on
+   project source edits, so `src/` changes never invalidate the FA3 layer.
+
+3. **Build once, consume many.** Engine Image Build is the single producer
+   of the transformers image; downstream workflows pull rather than rebuild.
+   CI builds the same production-equivalent image users get (`INSTALL_FA3`
+   defaults to `true` and is not overridden in any workflow). Cold builds
+   on a brand-new SSOT version still pay the FA3 compile (~30-60 min); warm
+   rebuilds reuse the GHA scope cache + the canonical `:latest` registry
+   cache and finish in a few minutes. The previous shape — engine-invariants
+   and engine-schemas each running their own buildx step against the same
+   per-version GHA scope — was prone to cache-write contention and observed
+   to deadlock at PR time on multi-GB layer writes.
+
+## CI pipeline ordering
+
+The transformers engine image flows through four workflows in sequence:
+
+```
+engine-image-build.yml   →   engine-image-push.yml   →   engine-schemas.yml :: schemas-transformers
+                                                     →   engine-invariants.yml :: invariants-transformers
+```
+
+Each step chains via `workflow_run: completed` with `conclusion == 'success'` gating.
+
+There is one workflow file per pipeline concern (build, push, schemas, invariants). schemas + invariants cover all three engines; the per-engine asymmetry — transformers needs a pre-built first-party image, vllm and tensorrt pull upstream images directly — is contained inside each workflow via multi-trigger + per-job `if:` gating, not via file proliferation.
+
+When Renovate (or a maintainer) bumps `engine_versions/transformers.yaml` or `docker/Dockerfile.transformers`, the pipeline fires sequentially:
+
+1. **Engine Image Build** (`engine-image-build.yml`) — builds the transformers image. Exports the layer cache to `ghcr.io/<repo>/transformers-cache:transformers-<VERSION>-buildcache` via `cache-to: type=registry,mode=max`. **Does NOT push a runtime image.** PR builds and main builds both contribute to the cache (per-version content is deterministic given the cache-stable Dockerfile).
+2. **Engine Image Push** (`engine-image-push.yml`) — `workflow_run`-triggered on Engine Image Build's `success`. Tag selection per parent event:
+   - `push` to main / `schedule` → canonical `transformers:latest` + `transformers:transformers-<VERSION>` (vetted main code only writes these)
+   - `pull_request` → `transformers-cache:transformers-<VERSION>` (PR-time runtime image — exists for the downstream chain to pull, but never claims `:latest`)
+   - direct `workflow_dispatch` → canonical tags (ad-hoc recovery path)
+
+   Pulls the layer cache from `:transformers-<VERSION>-buildcache` so the rebuild is essentially free (every layer cache-hits) — only the registry push step actually does network work. Skipped only when the parent run was a `workflow_dispatch` of the BUILD workflow (the build-only ad-hoc test path).
+3. **Engine Schemas — transformers** (`schemas-transformers` job in `engine-schemas.yml`) — `workflow_run`-triggered on Engine Image Push's `success`. Pulls the just-pushed runtime image (canonical or PR-time depending on the trigger that started the chain), runs schema discovery, writes back the discovered JSON + curation digest.
+4. **Engine Invariants — transformers** (`invariants-transformers` job in `engine-invariants.yml`) — same trigger and ordering. Pulls the same image, runs the miner + vendor + invariants digest, rebases against schemas's writeback before pushing its own commit.
+
+Why split build from push:
+- **Push failures don't burn the FA3 compile.** A GHCR permission misconfig, transient registry outage, or rate-limit on the push step previously meant re-running ~50 min of cold compile; now the push retry runs in seconds against the durable cache.
+- **PR builds never publish canonical runtime tags.** End users pulling `:latest` always get vetted main code. PR-time runtime images do exist (in the cache repo) — they're necessary so the downstream chain can validate the new Dockerfile — but they're tagged distinctly from canonical.
+- **Cleaner observability.** Build duration vs push duration are separately measurable — when the pipeline slows, we see which stage to debug.
+- **Ad-hoc recovery path.** If the runtime tag is corrupted or misconfigured, `gh workflow run engine-image-push.yml --ref main` rebuilds-from-cache + pushes without redoing the FA3 compile.
+
+When Renovate (or a maintainer) bumps `engine_versions/vllm.yaml` or `engine_versions/tensorrt.yaml`, the corresponding `invariants-vllm` / `invariants-tensorrt` / `schemas-vllm` / `schemas-tensorrt` jobs fire on `pull_request: paths` and pull upstream images directly (no first-party build).
+
+A weekly scheduled run of Engine Image Build (Monday 05:37 UTC) rebuilds the image from scratch with `--no-cache`. If the resulting layer cache diverges from the prior `:transformers-<VERSION>-buildcache`, that surfaces external dependency drift (apt repo, PyPI wheel re-publish, base image silent update) that layer caching alone wouldn't catch. The corresponding push then publishes the new digest to `:latest`.
 
 ## Running tests
 

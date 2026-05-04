@@ -41,6 +41,7 @@ from scripts.engine_miners._base import (  # noqa: E402
     find_class,
     find_method,
     first_string_arg,
+    render_binop_concat_template,
     resolve_local_assign,
 )
 
@@ -92,18 +93,86 @@ def test_first_string_arg_constant() -> None:
     assert first_string_arg(call) == "hello"
 
 
-def test_first_string_arg_fstring() -> None:
+def test_first_string_arg_fstring_self_attribute() -> None:
+    """``self.X`` interpolations collapse to ``{X}`` (matches runtime
+    substitution vocabulary for ``message_template``)."""
+    call = _parse_expr('logger.warning(f"value must be > 0, got {self.temperature}")')
+    assert isinstance(call, ast.Call)
+    out = first_string_arg(call)
+    assert out == "value must be > 0, got {temperature}"
+
+
+def test_first_string_arg_fstring_local_variable() -> None:
+    """Non-``self`` interpolations preserve the unparsed expression as the
+    placeholder name."""
     call = _parse_expr('logger.warning(f"value is {x}")')
     assert isinstance(call, ast.Call)
-    out = first_string_arg(call)
-    assert out is not None and "x" in out
+    assert first_string_arg(call) == "value is {x}"
 
 
-def test_first_string_arg_format_call() -> None:
-    call = _parse_expr('logger.warning("val={v}".format(v=1))')
+def test_first_string_arg_fstring_multiple_interpolations() -> None:
+    call = _parse_expr(
+        'logger.warning(f"max_batch_size [{self.max_batch_size}] '
+        'exceeds [{self.build_config.max_batch_size}]")'
+    )
     assert isinstance(call, ast.Call)
     out = first_string_arg(call)
-    assert out is not None and "format" in out
+    assert out == ("max_batch_size [{max_batch_size}] exceeds [{self.build_config.max_batch_size}]")
+
+
+def test_first_string_arg_fstring_no_python_source_leak() -> None:
+    """Output must not contain literal Python source artefacts (leading
+    ``f"``, ``self.`` for self attributes)."""
+    call = _parse_expr('ValueError(f"temperature={self.temperature}")')
+    assert isinstance(call, ast.Call)
+    out = first_string_arg(call)
+    assert out is not None
+    assert not out.startswith('f"')
+    assert not out.startswith("f'")
+    assert "self.temperature" not in out
+
+
+def test_first_string_arg_format_call_literal_template() -> None:
+    """``"literal {x}".format(...)`` — extract the LHS template literal
+    rather than returning the unparsed call source."""
+    call = _parse_expr('logger.warning("val={v}".format(v=1))')
+    assert isinstance(call, ast.Call)
+    assert first_string_arg(call) == "val={v}"
+
+
+def test_first_string_arg_format_call_variable_template_returns_none() -> None:
+    """Variable-resolved templates (e.g. ``msg_template.format(...)``) need
+    scope resolution that's out of reach at this AST layer. Return ``None``
+    rather than leaking the literal ``msg_template.format(...)`` source."""
+    call = _parse_expr("logger.warning(msg_template.format(v=1))")
+    assert isinstance(call, ast.Call)
+    assert first_string_arg(call) is None
+
+
+def test_render_binop_concat_template_simple() -> None:
+    """``"prefix " + ", got " + str(self.x)`` → rendered concatenation."""
+    expr = _parse_expr('"value > 0" + ", got " + str(self.temperature)')
+    assert render_binop_concat_template(expr) == "value > 0, got {temperature}"
+
+
+def test_render_binop_concat_template_self_attribute() -> None:
+    """Bare ``self.X`` operands collapse to ``{X}``."""
+    expr = _parse_expr('"got " + self.value')
+    assert render_binop_concat_template(expr) == "got {value}"
+
+
+def test_render_binop_concat_template_repr_call() -> None:
+    """``repr(self.X)`` and ``str(self.X)`` both render as ``{X}``."""
+    expr = _parse_expr('"got " + repr(self.config)')
+    assert render_binop_concat_template(expr) == "got {config}"
+
+
+def test_render_binop_concat_template_returns_none_on_unrenderable() -> None:
+    """Operands without a clean placeholder mapping (e.g. external function
+    calls, attribute chains beyond ``self.X``) cause the whole render to
+    return ``None`` rather than leak literal source."""
+    expr = _parse_expr('"got " + format_helper(x, y)')
+    assert render_binop_concat_template(expr) is None
 
 
 def test_extract_condition_fields_simple() -> None:
