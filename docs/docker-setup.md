@@ -519,8 +519,10 @@ regenerated. This happens automatically via the
 [Parameter Discovery Pipeline](schema-refresh.md): `engine-schemas.yml`
 covers all three engines via per-job `if:` gating — the vllm + tensorrt
 cells fire on `pull_request: paths`; the transformers cell fires via
-`workflow_run` after `engine-image-build.yml` completes. For manual bumps,
-run:
+`workflow_run` after `engine-image-push.yml` completes (which itself
+chains off `engine-image-build.yml` via workflow_run — the build/push
+split exists so push failures don't burn the FA3 compile). For manual
+bumps, run:
 
 ```bash
 ./scripts/refresh_discovered_schemas.sh <engine>

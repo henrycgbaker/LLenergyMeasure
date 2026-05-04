@@ -117,14 +117,20 @@ There is one workflow file per pipeline concern (build, push, schemas, invariant
 When Renovate (or a maintainer) bumps `engine_versions/transformers.yaml` or `docker/Dockerfile.transformers`, the pipeline fires sequentially:
 
 1. **Engine Image Build** (`engine-image-build.yml`) — builds the transformers image. Exports the layer cache to `ghcr.io/<repo>/transformers-cache:transformers-<VERSION>-buildcache` via `cache-to: type=registry,mode=max`. **Does NOT push a runtime image.** PR builds and main builds both contribute to the cache (per-version content is deterministic given the cache-stable Dockerfile).
-2. **Engine Image Push** (`engine-image-push.yml`) — `workflow_run`-triggered on Engine Image Build's `success`. Only fires for `push` (to main) or `schedule` events — PR builds skip this step. Pulls the layer cache from `:transformers-<VERSION>-buildcache`, rebuilds (essentially free — every layer cache-hits) and pushes runtime tags `:latest` + `:transformers-<VERSION>` to the canonical `ghcr.io/<repo>/transformers` repo.
-3. **Engine Schemas — transformers** (`schemas-transformers` job in `engine-schemas.yml`) — `workflow_run`-triggered on Engine Image Push's `success`. Pulls the just-published runtime image, runs schema discovery, writes back the discovered JSON + curation digest.
+2. **Engine Image Push** (`engine-image-push.yml`) — `workflow_run`-triggered on Engine Image Build's `success`. Tag selection per parent event:
+   - `push` to main / `schedule` → canonical `transformers:latest` + `transformers:transformers-<VERSION>` (vetted main code only writes these)
+   - `pull_request` → `transformers-cache:transformers-<VERSION>` (PR-time runtime image — exists for the downstream chain to pull, but never claims `:latest`)
+   - direct `workflow_dispatch` → canonical tags (ad-hoc recovery path)
+
+   Pulls the layer cache from `:transformers-<VERSION>-buildcache` so the rebuild is essentially free (every layer cache-hits) — only the registry push step actually does network work. Skipped only when the parent run was a `workflow_dispatch` of the BUILD workflow (the build-only ad-hoc test path).
+3. **Engine Schemas — transformers** (`schemas-transformers` job in `engine-schemas.yml`) — `workflow_run`-triggered on Engine Image Push's `success`. Pulls the just-pushed runtime image (canonical or PR-time depending on the trigger that started the chain), runs schema discovery, writes back the discovered JSON + curation digest.
 4. **Engine Invariants — transformers** (`invariants-transformers` job in `engine-invariants.yml`) — same trigger and ordering. Pulls the same image, runs the miner + vendor + invariants digest, rebases against schemas's writeback before pushing its own commit.
 
 Why split build from push:
 - **Push failures don't burn the FA3 compile.** A GHCR permission misconfig, transient registry outage, or rate-limit on the push step previously meant re-running ~50 min of cold compile; now the push retry runs in seconds against the durable cache.
-- **PR builds never publish runtime tags.** End users pulling `:latest` always get vetted main code; PR images live in the cache repo only as cache, not as runnable runtime tags.
+- **PR builds never publish canonical runtime tags.** End users pulling `:latest` always get vetted main code. PR-time runtime images do exist (in the cache repo) — they're necessary so the downstream chain can validate the new Dockerfile — but they're tagged distinctly from canonical.
 - **Cleaner observability.** Build duration vs push duration are separately measurable — when the pipeline slows, we see which stage to debug.
+- **Ad-hoc recovery path.** If the runtime tag is corrupted or misconfigured, `gh workflow run engine-image-push.yml --ref main` rebuilds-from-cache + pushes without redoing the FA3 compile.
 
 When Renovate (or a maintainer) bumps `engine_versions/vllm.yaml` or `engine_versions/tensorrt.yaml`, the corresponding `invariants-vllm` / `invariants-tensorrt` / `schemas-vllm` / `schemas-tensorrt` jobs fire on `pull_request: paths` and pull upstream images directly (no first-party build).
 

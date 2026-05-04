@@ -396,12 +396,13 @@ def test_landmark_checks_raise_on_missing():
      job pulls the upstream canonical image, then runs probe → mine →
      vendor-replay → doc-gen → atomic-writeback inline.
    - **First-party image (transformers pattern)** — split the build out into
-     a workflow modelled on `engine-image-build.yml` (single-source build),
-     and create `engine-invariants-<engine>.yml` + `engine-schemas-<engine>.yml`
-     as `workflow_run`-gated downstream consumers that pull the resulting
-     image. This pattern is needed when no canonical upstream image exists
-     and a heavy build (e.g. from-source kernel compile) shouldn't repeat
-     across the schemas + invariants concerns.
+     a pair of workflows modelled on `engine-image-build.yml` (build + cache
+     export, no runtime push) and `engine-image-push.yml` (workflow_run-
+     triggered, pulls cache + pushes runtime tags per parent event). The
+     transformers cells in `engine-invariants.yml` + `engine-schemas.yml`
+     then chain off Engine Image Push success via `workflow_run`. The
+     build/push split exists so push failures don't cost a full rebuild
+     of the heavy from-source compile (e.g. ~30 min FA3 compile) on retry.
 
 2. Set the runner: every engine miner runs inside its own Docker image
    (no host extras exist — see [development.md](development.md)). For the
@@ -409,13 +410,16 @@ def test_landmark_checks_raise_on_missing():
    engines whose miners need a GPU only for `import`-time reasons; use
    `invariants-tensorrt` as the template for engines that require
    CUDA-aware imports (e.g. NGC-derived bases). For the first-party-image
-   pattern, mirror the `engine-image-build.yml` + paired downstream files.
+   pattern, mirror `engine-image-build.yml` + `engine-image-push.yml` + the
+   workflow_run-gated cell pair in engine-invariants.yml / engine-schemas.yml.
 
 3. The vendor-replay step runs inside the engine's container in the same job as the miner — no separate vendor workflow to update.
 
 4. Add a Renovate `packageRule` so library bumps trigger the appropriate
    workflow via the `engine_versions/{engine}.yaml` path filter (or, for
-   the first-party-image pattern, via `engine-image-build.yml`'s filter).
+   the first-party-image pattern, via `engine-image-build.yml`'s filter —
+   downstream `engine-image-push.yml` and the workflow_run-gated cells fire
+   automatically on its success).
 
 ---
 

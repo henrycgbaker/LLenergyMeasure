@@ -5,12 +5,13 @@ This doc is the chain-diagram reference for the engine-coupling pipeline. SSOT-d
 > **Per-engine variation.** The diagram below is the vllm + tensorrt shape:
 > the `invariants-vllm` / `schemas-vllm` (and `-tensorrt`) jobs in
 > `engine-invariants.yml` + `engine-schemas.yml` fire on `pull_request: paths`
-> with `wait-on-check-action` sibling coordination. Transformers takes a
-> sequential variant: `engine-image-build.yml` builds the image once, then
-> the `schemas-transformers` and `invariants-transformers` jobs (in the same
-> two workflow files) fire via `workflow_run`. Per-job `if:` clauses select
-> the correct cell for each trigger source. The sequence is described in
-> detail in
+> with sibling coordination via inline `gh api` polling. Transformers takes a
+> sequential variant: `engine-image-build.yml` builds the image (cache export
+> only, no runtime push), `engine-image-push.yml` then fires via `workflow_run`
+> and publishes runtime tags, and on its success the `schemas-transformers`
+> and `invariants-transformers` jobs (in the same two workflow files) fire
+> via `workflow_run`. Per-job `if:` clauses select the correct cell for each
+> trigger source. The sequence is described in detail in
 > [`docs/development.md` — CI pipeline ordering](development.md#ci-pipeline-ordering);
 > the diagram below applies to vllm + tensorrt only.
 

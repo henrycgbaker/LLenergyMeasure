@@ -25,9 +25,10 @@ e.g. engine_versions/vllm.yaml current_version: 0.7.3 -> 0.8.0
                       v
 For vllm + tensorrt: schemas-vllm / schemas-tensorrt jobs in
                      engine-schemas.yml auto-fire on pull_request
-For transformers: engine-image-build.yml builds the image once, then
-                  the schemas-transformers job in engine-schemas.yml
-                  fires via workflow_run
+For transformers: engine-image-build.yml builds the image, then
+                  engine-image-push.yml publishes it (chained via
+                  workflow_run), then the schemas-transformers job in
+                  engine-schemas.yml fires via workflow_run on push
                       |
                       v
 +------------------------------------------+
@@ -63,11 +64,14 @@ Maintainer reviews PR:
      `engine-schemas.yml` auto-fire on the self-hosted GPU runner
      (path-filtered on `engine_versions/vllm.yaml` /
      `engine_versions/tensorrt.yaml`).
-   - **transformers**: `engine-image-build.yml` fires first (rebuilds the
-     transformers Docker image once per (PR, SSOT version) and pushes it
-     to a per-PR cache repo); on success, the `schemas-transformers` job
-     in `engine-schemas.yml` fires via `workflow_run`, pulls the just-built
-     image, and runs discovery against it.
+   - **transformers**: `engine-image-build.yml` fires first (builds the
+     transformers Docker image and exports the layer cache to
+     `:transformers-<VER>-buildcache`); on success, `engine-image-push.yml`
+     fires via `workflow_run` and pushes the runtime image (canonical tags
+     for main/schedule, PR-time tag on `transformers-cache` for PR builds).
+     On push success, the `schemas-transformers` job in `engine-schemas.yml`
+     fires via `workflow_run`, pulls the just-pushed image, and runs
+     discovery against it.
 3. The workflow runs `./scripts/refresh_discovered_schemas.sh <engine>`
    (or the equivalent steps inline) inside the engine's image.
 4. After discovery, `scripts/diff_discovered_schemas.py` classifies changes as safe or
@@ -97,7 +101,8 @@ On failure, the developer can either:
 - Trigger remotely: `gh workflow run engine-schemas.yml --field engine=<engine> --field pr_number=<N>`
   (for transformers, run `engine-image-build.yml` instead — the
   `schemas-transformers` job in `engine-schemas.yml` is `workflow_run`-gated
-  and re-fires automatically once the build run completes)
+  on Engine Image Push success, which itself chains off Engine Image Build,
+  so the chain re-fires automatically once the build completes)
 
 ### Manual Refresh (workflow_dispatch)
 
@@ -109,8 +114,9 @@ gh workflow run engine-schemas.yml \
   --field engine=vllm \
   --field pr_number=123
 
-# transformers: trigger Engine Image Build (downstream schemas + invariants
-# fire automatically on its success via workflow_run)
+# transformers: trigger Engine Image Build. Engine Image Push fires on
+# its success (workflow_run); schemas-transformers + invariants-transformers
+# then fire on the push's success (also workflow_run).
 gh workflow run engine-image-build.yml
 ```
 
