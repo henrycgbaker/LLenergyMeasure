@@ -102,13 +102,57 @@ concurrency:
   # workflow_run.head_sha distinguishes per-PR runs for the transformers
   # cell; pull_request runs use github.head_ref. Combine both so the group
   # string stays stable across trigger sources.
-  group: engine-schemas-${{ github.event.workflow_run.head_branch || github.event.workflow_run.head_sha || github.head_ref || github.ref }}
-  cancel-in-progress: true
+  group: update-engine-schemas-${{ github.event.workflow_run.head_branch || github.event.workflow_run.head_sha || github.head_ref || github.ref }}
+  cancel-in-progress: false   # writeback target: never cancel mid-flight
 
 env:
   SCHEMAS_DIR: src/llenergymeasure/config/discovered_schemas
 
 jobs:
+  filter:
+    # Per-engine isolation. On pull_request, dorny/paths-filter sets one
+    # output per engine based on which engine-specific paths changed.
+    # Each engine cell gates `if: needs.filter.outputs.<engine> == 'true'`.
+    # Skipped on workflow_run / workflow_dispatch — those gate via event-
+    # name + dispatch inputs as before.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      transformers: ${{ steps.changes.outputs.transformers }}
+      vllm: ${{ steps.changes.outputs.vllm }}
+      tensorrt: ${{ steps.changes.outputs.tensorrt }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          # Each engine filter MUST include this workflow file + the
+          # dedup helper so workflow-level changes self-test all engines
+          # (issue #515).
+          filters: |
+            transformers:
+              - 'engine_versions/transformers.yaml'
+              - 'docker/Dockerfile.transformers'
+              - 'scripts/engine_introspectors/transformers_*.py'
+              - 'scripts/engine_introspectors/_*.py'
+              - 'src/llenergymeasure/config/discovered_schemas/transformers.json'
+              - '.github/workflows/update-engine-schemas.yml'
+              - 'scripts/ci/upsert_pr_comment.sh'
+            vllm:
+              - 'engine_versions/vllm.yaml'
+              - 'scripts/engine_introspectors/vllm_*.py'
+              - 'scripts/engine_introspectors/_*.py'
+              - 'src/llenergymeasure/config/discovered_schemas/vllm.json'
+              - '.github/workflows/update-engine-schemas.yml'
+              - 'scripts/ci/upsert_pr_comment.sh'
+            tensorrt:
+              - 'engine_versions/tensorrt.yaml'
+              - 'scripts/engine_introspectors/tensorrt_*.py'
+              - 'scripts/engine_introspectors/_*.py'
+              - 'src/llenergymeasure/config/discovered_schemas/tensorrt.json'
+              - '.github/workflows/update-engine-schemas.yml'
+              - 'scripts/ci/upsert_pr_comment.sh'
+
   schemas-transformers:
     # Selected on workflow_run (Engine Image Push success) or
     # workflow_dispatch with engine=transformers/all. Skipped on
@@ -417,9 +461,13 @@ jobs:
           exit 1
 
   schemas-vllm:
+    needs: filter
     if: >-
-      github.event_name == 'pull_request'
-      || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'vllm' || inputs.engine == 'all'))
+      always()
+      && (
+        (github.event_name == 'pull_request' && needs.filter.result == 'success' && needs.filter.outputs.vllm == 'true')
+        || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'vllm' || inputs.engine == 'all'))
+      )
     runs-on: self-hosted
     timeout-minutes: 60
     steps:
@@ -758,9 +806,13 @@ jobs:
     # steps bind-mount a host-side tarball extraction rather than
     # introspecting the installed NGC package, decoupling source
     # resolution from NGC image internals.
+    needs: filter
     if: >-
-      github.event_name == 'pull_request'
-      || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'tensorrt' || inputs.engine == 'all'))
+      always()
+      && (
+        (github.event_name == 'pull_request' && needs.filter.result == 'success' && needs.filter.outputs.tensorrt == 'true')
+        || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'tensorrt' || inputs.engine == 'all'))
+      )
     runs-on: self-hosted
     timeout-minutes: 60
     steps:
