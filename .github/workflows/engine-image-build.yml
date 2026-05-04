@@ -129,23 +129,16 @@ jobs:
           tags: ${{ steps.targets.outputs.tags }}
           push: ${{ steps.targets.outputs.push }}
           no-cache: ${{ steps.targets.outputs.no_cache }}
-          # SSOT-driven build arg. INSTALL_FA3 deliberately NOT overridden
-          # here — the Dockerfile defaults to true, so CI builds the same
-          # production-equivalent image users get. Two parallelism knobs
-          # multiply: MAX_JOBS caps parallel nvcc invocations (ninja -j);
-          # NVCC_THREADS caps threads per nvcc call. flash-attention/hopper
-          # reads NVCC_THREADS with default 2 — a prior 60-min build used
-          # only ~2 cc1plus workers despite a high MAX_JOBS because the nvcc
-          # internal cap dominated. MAX_JOBS=32 × NVCC_THREADS=4 = 128
-          # effective workers, one per vCPU on the 128-vCPU / 528 GB self-
-          # hosted runner — the saturation point. The earlier MAX_JOBS=16
-          # cap left half the cores idle (49-min cold build observed); the
-          # 528 GB RAM headroom comfortably absorbs the ~128 GB peak that
-          # MAX_JOBS=32 produces.
+          # SSOT-driven build arg only. INSTALL_FA3 / MAX_JOBS / NVCC_THREADS
+          # are pinned in docker/Dockerfile.transformers (32 / 4 — saturates
+          # the 128-vCPU self-hosted runner) and DELIBERATELY NOT passed as
+          # build-args here. Build-args participate in BuildKit's layer-hash,
+          # so varying them across CI iterations invalidates the FA3 layer
+          # cache (~30 min recompile per change). With the parallelism knobs
+          # pinned in the Dockerfile, the layer hash is stable across runs
+          # and the FA3 layer cache-hits reliably from prior builds.
           build-args: |
             TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
-            MAX_JOBS=32
-            NVCC_THREADS=4
           cache-from: |
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
