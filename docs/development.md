@@ -48,9 +48,9 @@ docker run --rm \
 
 Replace `transformers` with `vllm` or `tensorrt` (and add `--gpus all` for
 those two — they need a CUDA device) for the other engines. The automated
-path is three workflow files in `.github/workflows/`: `engine-image-build.yml`
+path is three workflow files in `.github/workflows/`: `build-engine-image.yml`
 (builds the transformers image once per SSOT version), and
-`engine-schemas.yml` + `engine-invariants.yml` (one workflow per pipeline,
+`update-engine-schemas.yml` + `update-engine-invariants.yml` (one workflow per pipeline,
 each covering all three engines via per-job `if:` gating on the trigger
 source). See "CI pipeline ordering" below for the full sequence.
 
@@ -61,7 +61,7 @@ asymmetric:
 
 | Engine | CI runner | GPU required | Image source | Why |
 |---|---|---|---|---|
-| transformers | `ubuntu-latest` (GH-hosted) | No | First-party `docker/Dockerfile.transformers`, built once by `engine-image-build.yml` per (PR, SSOT version) and consumed downstream via `docker pull` | No upstream provides FA3-included transformers |
+| transformers | `ubuntu-latest` (GH-hosted) | No | First-party `docker/Dockerfile.transformers`, built once by `build-engine-image.yml` per (PR, SSOT version) and consumed downstream via `docker pull` | No upstream provides FA3-included transformers |
 | vllm | self-hosted GPU | Yes (CUDA) | `vllm/vllm-openai:<version>` (Docker Hub) | Canonical upstream exists; project source bind-mounted at runtime |
 | tensorrt | self-hosted GPU | Yes (CUDA) | `nvcr.io/nvidia/tensorrt-llm/release:<version>` (NGC) | Canonical upstream exists; project source bind-mounted at runtime |
 
@@ -90,7 +90,7 @@ The principled rationale:
    keeps image rebuilds dependent only on the engine substrate, not on
    project source edits, so `src/` changes never invalidate the FA3 layer.
 
-3. **Build once, consume many.** Engine Image Build is the single producer
+3. **Build once, consume many.** Build engine image is the single producer
    of the transformers image; downstream workflows pull rather than rebuild.
    CI builds the same production-equivalent image users get (`INSTALL_FA3`
    defaults to `true` and is not overridden in any workflow). Cold builds
@@ -106,8 +106,8 @@ The principled rationale:
 The transformers engine image flows through four workflows in sequence:
 
 ```
-engine-image-build.yml   →   engine-image-push.yml   →   engine-schemas.yml :: schemas-transformers
-                                                     →   engine-invariants.yml :: invariants-transformers
+build-engine-image.yml   →   publish-engine-image.yml   →   update-engine-schemas.yml :: schemas-transformers
+                                                       →   update-engine-invariants.yml :: invariants-transformers
 ```
 
 Each step chains via `workflow_run: completed` with `conclusion == 'success'` gating.
@@ -116,25 +116,25 @@ There is one workflow file per pipeline concern (build, push, schemas, invariant
 
 When Renovate (or a maintainer) bumps `engine_versions/transformers.yaml` or `docker/Dockerfile.transformers`, the pipeline fires sequentially:
 
-1. **Engine Image Build** (`engine-image-build.yml`) — builds the transformers image. Exports the layer cache to `ghcr.io/<repo>/transformers-cache:transformers-<VERSION>-buildcache` via `cache-to: type=registry,mode=max`. **Does NOT push a runtime image.** PR builds and main builds both contribute to the cache (per-version content is deterministic given the cache-stable Dockerfile).
-2. **Engine Image Push** (`engine-image-push.yml`) — `workflow_run`-triggered on Engine Image Build's `success`. Tag selection per parent event:
+1. **Build engine image** (`build-engine-image.yml`) — builds the transformers image. Exports the layer cache to `ghcr.io/<repo>/transformers-cache:transformers-<VERSION>-buildcache` via `cache-to: type=registry,mode=max`. **Does NOT push a runtime image.** PR builds and main builds both contribute to the cache (per-version content is deterministic given the cache-stable Dockerfile).
+2. **Publish engine image** (`publish-engine-image.yml`) — `workflow_run`-triggered on Build engine image's `success`. Tag selection per parent event:
    - `push` to main / `schedule` → canonical `transformers:latest` + `transformers:transformers-<VERSION>` (vetted main code only writes these)
    - `pull_request` → `transformers-cache:transformers-<VERSION>` (PR-time runtime image — exists for the downstream chain to pull, but never claims `:latest`)
    - direct `workflow_dispatch` → canonical tags (ad-hoc recovery path)
 
    Pulls the layer cache from `:transformers-<VERSION>-buildcache` so the rebuild is essentially free (every layer cache-hits) — only the registry push step actually does network work. Skipped only when the parent run was a `workflow_dispatch` of the BUILD workflow (the build-only ad-hoc test path).
-3. **Engine Schemas — transformers** (`schemas-transformers` job in `engine-schemas.yml`) — `workflow_run`-triggered on Engine Image Push's `success`. Pulls the just-pushed runtime image (canonical or PR-time depending on the trigger that started the chain), runs schema discovery, writes back the discovered JSON + curation digest.
-4. **Engine Invariants — transformers** (`invariants-transformers` job in `engine-invariants.yml`) — same trigger and ordering. Pulls the same image, runs the miner + vendor + invariants digest, rebases against schemas's writeback before pushing its own commit.
+3. **Update engine schemas — transformers** (`schemas-transformers` job in `update-engine-schemas.yml`) — `workflow_run`-triggered on Publish engine image's `success`. Pulls the just-pushed runtime image (canonical or PR-time depending on the trigger that started the chain), runs schema discovery, writes back the discovered JSON + curation digest.
+4. **Update engine invariants — transformers** (`invariants-transformers` job in `update-engine-invariants.yml`) — same trigger and ordering. Pulls the same image, runs the miner + vendor + invariants digest, rebases against schemas's writeback before pushing its own commit.
 
 Why split build from push:
 - **Push failures don't burn the FA3 compile.** A GHCR permission misconfig, transient registry outage, or rate-limit on the push step previously meant re-running ~50 min of cold compile; now the push retry runs in seconds against the durable cache.
 - **PR builds never publish canonical runtime tags.** End users pulling `:latest` always get vetted main code. PR-time runtime images do exist (in the cache repo) — they're necessary so the downstream chain can validate the new Dockerfile — but they're tagged distinctly from canonical.
 - **Cleaner observability.** Build duration vs push duration are separately measurable — when the pipeline slows, we see which stage to debug.
-- **Ad-hoc recovery path.** If the runtime tag is corrupted or misconfigured, `gh workflow run engine-image-push.yml --ref main` rebuilds-from-cache + pushes without redoing the FA3 compile.
+- **Ad-hoc recovery path.** If the runtime tag is corrupted or misconfigured, `gh workflow run publish-engine-image.yml --ref main` rebuilds-from-cache + pushes without redoing the FA3 compile.
 
 When Renovate (or a maintainer) bumps `engine_versions/vllm.yaml` or `engine_versions/tensorrt.yaml`, the corresponding `invariants-vllm` / `invariants-tensorrt` / `schemas-vllm` / `schemas-tensorrt` jobs fire on `pull_request: paths` and pull upstream images directly (no first-party build).
 
-A weekly scheduled run of Engine Image Build (Monday 05:37 UTC) rebuilds the image from scratch with `--no-cache`. If the resulting layer cache diverges from the prior `:transformers-<VERSION>-buildcache`, that surfaces external dependency drift (apt repo, PyPI wheel re-publish, base image silent update) that layer caching alone wouldn't catch. The corresponding push then publishes the new digest to `:latest`.
+A weekly scheduled run of Build engine image (Monday 05:37 UTC) rebuilds the image from scratch with `--no-cache`. If the resulting layer cache diverges from the prior `:transformers-<VERSION>-buildcache`, that surfaces external dependency drift (apt repo, PyPI wheel re-publish, base image silent update) that layer caching alone wouldn't catch. The corresponding push then publishes the new digest to `:latest`.
 
 ## Running tests
 

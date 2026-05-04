@@ -4,10 +4,10 @@ This doc is the chain-diagram reference for the engine-coupling pipeline. SSOT-d
 
 > **Per-engine variation.** The diagram below is the vllm + tensorrt shape:
 > the `invariants-vllm` / `schemas-vllm` (and `-tensorrt`) jobs in
-> `engine-invariants.yml` + `engine-schemas.yml` fire on `pull_request: paths`
+> `update-engine-invariants.yml` + `update-engine-schemas.yml` fire on `pull_request: paths`
 > with sibling coordination via inline `gh api` polling. Transformers takes a
-> sequential variant: `engine-image-build.yml` builds the image (cache export
-> only, no runtime push), `engine-image-push.yml` then fires via `workflow_run`
+> sequential variant: `build-engine-image.yml` builds the image (cache export
+> only, no runtime push), `publish-engine-image.yml` then fires via `workflow_run`
 > and publishes runtime tags, and on its success the `schemas-transformers`
 > and `invariants-transformers` jobs (in the same two workflow files) fire
 > via `workflow_run`. Per-job `if:` clauses select the correct cell for each
@@ -42,7 +42,7 @@ LEGEND:  [auto]    fully automated, no human action
    ┌────────────────────────────┴─────────────────────────────┐
    ▼                                                           ▼
 ┌──────────────────────────────┐         ┌──────────────────────────────┐
-│  engine-invariants.yml       │         │  engine-schemas.yml          │
+│  update-engine-invariants.yml│         │  update-engine-schemas.yml   │
 │  (per-engine matrix)         │         │  (engines matrix)            │
 │  Layers over: invariant-     │         │  Layers over: parameter-     │
 │   miner + invalidity-miner + │         │   discovery + typed-schema-  │
