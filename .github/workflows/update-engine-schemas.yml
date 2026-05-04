@@ -164,6 +164,8 @@ jobs:
       || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'transformers' || inputs.engine == 'all'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - name: Mint llem-ci-bot App token
         # Short-lived (~1 hour) GitHub App token. Events it produces are
@@ -291,7 +293,7 @@ jobs:
         run: |
           docker run --rm \
             -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
-            -e PYTHONDONTWRITEBYTECODE=1 \
+            -e PYTHONDONTWRITEBYTECODE \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
             --entrypoint python3 \
@@ -470,6 +472,9 @@ jobs:
       )
     runs-on: self-hosted
     timeout-minutes: 60
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: "/repo/src:/repo"
     steps:
       - name: Mint llem-ci-bot App token
         id: app-token
@@ -569,8 +574,8 @@ jobs:
             -v "${{ github.workspace }}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
-            -e PYTHONPATH=/repo/src:/repo \
-            -e PYTHONDONTWRITEBYTECODE=1 \
+            -e PYTHONPATH \
+            -e PYTHONDONTWRITEBYTECODE \
             --entrypoint python3 \
             "$IMAGE" \
             -m scripts._probe --engine vllm --producer schemas \
@@ -605,8 +610,8 @@ jobs:
         run: |
           docker run --rm --gpus all \
             -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
-            -e PYTHONDONTWRITEBYTECODE=1 \
-            -e PYTHONPATH=/repo/src:/repo \
+            -e PYTHONDONTWRITEBYTECODE \
+            -e PYTHONPATH \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
             --entrypoint python3 \
@@ -815,6 +820,10 @@ jobs:
       )
     runs-on: self-hosted
     timeout-minutes: 60
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: "/repo/src:/repo"
+      LD_LIBRARY_PATH: "/usr/local/cuda/compat/lib.real:/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib"
     steps:
       - name: Mint llem-ci-bot App token
         id: app-token
@@ -909,9 +918,9 @@ jobs:
         run: |
           mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
-            -e LD_LIBRARY_PATH="/usr/local/cuda/compat/lib.real:/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib" \
-            -e PYTHONPATH=/repo/src:/repo \
-            -e PYTHONDONTWRITEBYTECODE=1 \
+            -e LD_LIBRARY_PATH \
+            -e PYTHONPATH \
+            -e PYTHONDONTWRITEBYTECODE \
             -v "${{ github.workspace }}:/repo" \
             -v "/tmp/trt-llm-${VER}:/tmp/trt-llm-${VER}:ro" \
             -v /tmp/llem-probe-out:/llem-probe-out:rw \
@@ -950,10 +959,10 @@ jobs:
           TRTLLM_VER: ${{ steps.version.outputs.version }}
         run: |
           docker run --rm --gpus all \
-            -e LD_LIBRARY_PATH="/usr/local/cuda/compat/lib.real:/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib" \
+            -e LD_LIBRARY_PATH \
             -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
-            -e PYTHONDONTWRITEBYTECODE=1 \
-            -e PYTHONPATH=/repo/src:/repo \
+            -e PYTHONDONTWRITEBYTECODE \
+            -e PYTHONPATH \
             -v "${{ github.workspace }}:/repo" \
             -v "/tmp/trt-llm-${TRTLLM_VER}:/tmp/trt-llm-${TRTLLM_VER}:ro" \
             -w /repo \
