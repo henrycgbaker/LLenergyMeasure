@@ -47,6 +47,10 @@ ARG INSTALL_FA3
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 ENV TORCH_CUDA_ARCH_LIST="8.0;9.0+PTX"
 
+# Make apt resilient to transient Ubuntu mirror flakes (3 build failures
+# in 6 hours on 2026-05-04 were all archive.ubuntu.com transient errors).
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+
 # FA2: install from PyPI (cache mount persists compiled wheel across rebuilds)
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system flash-attn --no-build-isolation
@@ -90,6 +94,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Suppress hardlink warnings when cache mount is on a different filesystem
 ENV UV_LINK_MODE=copy
+
+# Same apt-retry resilience as the builder stage (separate stage = separate apt config).
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
 
 # Required for torch.compile (inductor JIT-compiles Triton kernels via C/C++ compiler)
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
