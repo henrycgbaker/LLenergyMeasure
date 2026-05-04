@@ -181,7 +181,7 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - name: Checkout PR head
+      - name: Checkout PR branch
         # workflow_run runs on the default branch by default. Explicitly
         # check out the head SHA of the run that triggered us so the
         # discover + writeback operate on the right code. workflow_dispatch
@@ -322,7 +322,7 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         run: uv sync --dev
 
-      - name: Regenerate curation digest
+      - name: Regenerate schemas digest
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           uv run python scripts/generate_curation_doc.py --engine transformers
@@ -669,7 +669,7 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         run: uv sync --dev
 
-      - name: Regenerate curation digest
+      - name: Regenerate schemas digest
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           uv run python scripts/generate_curation_doc.py --engine vllm
@@ -1035,7 +1035,7 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         run: uv sync --dev
 
-      - name: Regenerate curation digest
+      - name: Regenerate schemas digest
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           uv run python scripts/generate_curation_doc.py --engine tensorrt
