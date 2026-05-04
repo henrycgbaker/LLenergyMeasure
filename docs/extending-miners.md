@@ -408,8 +408,12 @@ def test_landmark_checks_raise_on_missing():
    (no host extras exist — see [development.md](development.md)). For the
    upstream-image pattern, mirror `invariants-vllm` as the template for
    engines whose miners need a GPU only for `import`-time reasons; use
-   `invariants-tensorrt` as the template for engines that require
-   CUDA-aware imports (e.g. NGC-derived bases). For the first-party-image
+   `invariants-tensorrt` as the template for engines whose Python source
+   layout shifts across image releases, that bundle source in non-
+   introspectable ways (NGC-derived bases), or that require CUDA-aware
+   imports: the cell downloads the upstream release tarball on the runner
+   host and bind-mounts it into the container at a stable path, decoupling
+   source resolution from the image's internals. For the first-party-image
    pattern, mirror `engine-image-build.yml` + `engine-image-push.yml` + the
    workflow_run-gated cell pair in engine-invariants.yml / engine-schemas.yml.
 

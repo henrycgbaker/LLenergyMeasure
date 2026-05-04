@@ -579,7 +579,7 @@ mining stage must run in the matching container.
 |--------|-------|-----------|
 | Self-hosted GPU | `llenergymeasure:transformers-${VER}` | transformers static + dynamic miners |
 | Self-hosted GPU | `llenergymeasure:vllm-${VER}` | vLLM static + dynamic miners. Docker isolates the miner against vLLM's own published torch/vllm combo (#437). |
-| Self-hosted GPU | `llenergymeasure:tensorrt-${VER}` | TRT-LLM static miner (CUDA-aware `import tensorrt_llm`). The NGC-derived image carries the `tensorrt_llm` Python source as part of the installed package; the workflow symlinks it into the miner's expected default path before invoking `build_corpus`. |
+| Self-hosted GPU | `llenergymeasure:tensorrt-${VER}` | TRT-LLM static miner. The miner reads `tensorrt_llm` source files from `/tmp/trt-llm-${VER}/`; the workflow downloads the canonical GitHub release tarball on the runner host and bind-mounts it into the container at the same path. Decouples source resolution from NGC's package layout (which has churned across releases). The probe step also reads from the tarball-mounted path; CUDA is only required if the probe needs to import `tensorrt_llm` itself (the static miner does not). |
 
 The single-tier model mirrors the project's broader principle that
 engine-touching activity runs inside the same image the user's

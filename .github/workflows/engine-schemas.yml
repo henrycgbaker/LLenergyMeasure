@@ -9,13 +9,16 @@ name: Engine Schemas — Probe + Discover
 # `if:` gating rather than file proliferation. One workflow file covers all
 # three engines:
 #
-#   transformers : workflow_run-gated on Engine Image Build (transformers).
-#                  The heavy first-party Docker build happens once in
-#                  engine-image-build.yml; this job pulls the resulting
-#                  image and runs probe + discover + writeback.
+#   transformers : workflow_run-gated on Engine Image Push (transformers),
+#                  which itself chains off Engine Image Build success. The
+#                  heavy first-party Docker build happens once in
+#                  engine-image-build.yml (cache export only) and is
+#                  republished as a runtime image by engine-image-push.yml;
+#                  this job pulls that runtime image and runs probe +
+#                  discover + writeback.
 #   vllm         : pull_request: paths-gated. Pulls upstream
 #                  vllm/vllm-openai:v${VER} directly (no first-party build)
-#                  so it doesn't depend on engine-image-build.yml.
+#                  so it doesn't depend on the build/push pipeline.
 #   tensorrt     : pull_request: paths-gated. Pulls upstream
 #                  nvcr.io/nvidia/tensorrt-llm/release:${VER} directly.
 #
@@ -88,10 +91,11 @@ env:
 
 jobs:
   schemas-transformers:
-    # Selected on workflow_run (Engine Image Build success) or
+    # Selected on workflow_run (Engine Image Push success) or
     # workflow_dispatch with engine=transformers/all. Skipped on
-    # pull_request: the transformers cell needs the pre-built image,
-    # which engine-image-build.yml produces first.
+    # pull_request: the transformers cell needs the pre-built runtime
+    # image, which engine-image-push.yml produces after engine-image-
+    # build.yml exports the cache.
     if: >-
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
       || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'transformers' || inputs.engine == 'all'))
@@ -192,14 +196,16 @@ jobs:
         env:
           IMAGE: ${{ steps.version.outputs.image }}
         run: |
+          mkdir -p /tmp/llem-probe-out
           docker run --rm \
             -v "${{ github.workspace }}:/repo" \
+            -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
             --entrypoint python3 \
             "$IMAGE" \
             -m scripts._probe --engine transformers --producer schemas \
-            > /tmp/probe-transformers.json
-          VERDICT=$(jq -r '.verdict' /tmp/probe-transformers.json)
+              --output /llem-probe-out/probe-transformers.json
+          VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-transformers.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
 
       - name: Save current schema for diffing
@@ -306,7 +312,7 @@ jobs:
             echo
             echo "**Missing landmarks:**"
             echo
-            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-transformers.json
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/llem-probe-out/probe-transformers.json
             echo
             echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
             echo
@@ -491,16 +497,18 @@ jobs:
         env:
           IMAGE: ${{ steps.version.outputs.image }}
         run: |
+          mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
             -v "${{ github.workspace }}:/repo" \
+            -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
             -e PYTHONPATH=/repo/src:/repo \
             -e PYTHONDONTWRITEBYTECODE=1 \
             --entrypoint python3 \
             "$IMAGE" \
             -m scripts._probe --engine vllm --producer schemas \
-            > /tmp/probe-vllm.json
-          VERDICT=$(jq -r '.verdict' /tmp/probe-vllm.json)
+              --output /llem-probe-out/probe-vllm.json
+          VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-vllm.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
 
       - name: Fix container-written file ownership (probe cache)
@@ -624,7 +632,7 @@ jobs:
             echo
             echo "**Missing landmarks:**"
             echo
-            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-vllm.json
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/llem-probe-out/probe-vllm.json
             echo
             echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
             echo
@@ -725,11 +733,12 @@ jobs:
           exit 1
 
   schemas-tensorrt:
-    # tensorrt symlink trick (#472) doesn't resolve the package source
-    # inside NGC; both __file__.parent and __path__[0] return non-
-    # directory paths. Tracked separately; #500 explores option-b
-    # source-tarball extraction. Mark non-blocking until that lands.
-    continue-on-error: true
+    # tensorrt static introspector reads source files from
+    # /tmp/trt-llm-${VER}/ for the same reasons as invariants-tensorrt
+    # (see that cell's comment, and #472 / #500). The probe + discover
+    # steps bind-mount a host-side tarball extraction rather than
+    # introspecting the installed NGC package, decoupling source
+    # resolution from NGC image internals.
     if: >-
       github.event_name == 'pull_request'
       || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'tensorrt' || inputs.engine == 'all'))
@@ -797,36 +806,50 @@ jobs:
           fi
           echo "date=${DATE}" >> "$GITHUB_OUTPUT"
 
+      - name: Fetch tensorrt-llm source tarball (host)
+        # Static introspector reads source from /tmp/trt-llm-${VER}/ for
+        # the same reasons as invariants-tensorrt — see that cell's
+        # comment. Skip the fetch when the tree is already extracted at
+        # this version (sibling invariants-tensorrt cell or a prior re-run
+        # of this PR may have populated it on the self-hosted runner).
+        env:
+          VER: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          DEST="/tmp/trt-llm-${VER}"
+          if [[ -d "${DEST}/tensorrt_llm" ]]; then
+            echo "Source tree already present at ${DEST}; skipping fetch."
+            exit 0
+          fi
+          mkdir -p "${DEST}"
+          curl -fsSL "https://github.com/NVIDIA/TensorRT-LLM/archive/refs/tags/v${VER}.tar.gz" \
+            | tar -xz -C "${DEST}" --strip-components=1
+          test -d "${DEST}/tensorrt_llm"
+
       - name: Probe — landmark resolution check (in container)
         id: probe
         env:
           IMAGE: ${{ steps.version.outputs.image }}
-        # The NGC image ships the tensorrt_llm package source as part of
-        # the installed package; the introspector mirrors the static
-        # miner's expectation of finding sources under
-        # /tmp/trt-llm-${VER}/tensorrt_llm. LD_LIBRARY_PATH override so
-        # libtensorrt_llm.so finds bundled CUDA compat libs.
+          VER: ${{ steps.version.outputs.version }}
+        # Source tree is on the host at /tmp/trt-llm-${VER}/ (extracted in
+        # the previous step) and bind-mounted into the container at the
+        # same path. LD_LIBRARY_PATH override so libtensorrt_llm.so finds
+        # bundled CUDA compat libs.
         run: |
+          mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
             -e LD_LIBRARY_PATH="/usr/local/cuda/compat/lib.real:/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib" \
             -e PYTHONPATH=/repo/src:/repo \
             -e PYTHONDONTWRITEBYTECODE=1 \
             -v "${{ github.workspace }}:/repo" \
+            -v "/tmp/trt-llm-${VER}:/tmp/trt-llm-${VER}:ro" \
+            -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
-            --entrypoint bash \
+            --entrypoint python3 \
             "$IMAGE" \
-            -c "
-              set -euo pipefail
-              SRC=\$(python3 -c 'import tensorrt_llm; print(list(tensorrt_llm.__path__)[0])')
-              if [[ -z \"\$SRC\" || ! -d \"\$SRC\" ]]; then
-                echo 'Could not locate installed tensorrt_llm package source' >&2
-                exit 1
-              fi
-              mkdir -p /tmp/trt-llm-${{ steps.version.outputs.version }}
-              ln -sfn \"\$SRC\" /tmp/trt-llm-${{ steps.version.outputs.version }}/tensorrt_llm
-              python3 -m scripts._probe --engine tensorrt --producer schemas
-            " > /tmp/probe-tensorrt.json
-          VERDICT=$(jq -r '.verdict' /tmp/probe-tensorrt.json)
+            -m scripts._probe --engine tensorrt --producer schemas \
+              --output /llem-probe-out/probe-tensorrt.json
+          VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-tensorrt.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
 
       - name: Fix container-written file ownership (probe cache)
@@ -861,19 +884,14 @@ jobs:
             -e PYTHONDONTWRITEBYTECODE=1 \
             -e PYTHONPATH=/repo/src:/repo \
             -v "${{ github.workspace }}:/repo" \
+            -v "/tmp/trt-llm-${TRTLLM_VER}:/tmp/trt-llm-${TRTLLM_VER}:ro" \
             -w /repo \
-            --entrypoint bash \
+            --entrypoint python3 \
             "$IMAGE" \
-            -c "
-              set -euo pipefail
-              SRC=\$(python3 -c 'import tensorrt_llm; print(list(tensorrt_llm.__path__)[0])')
-              mkdir -p /tmp/trt-llm-${TRTLLM_VER}
-              ln -sfn \"\$SRC\" /tmp/trt-llm-${TRTLLM_VER}/tensorrt_llm
-              python3 -m scripts.engine_introspectors \
-                --engine tensorrt \
-                --image-ref '${IMAGE}' \
-                --output '${SCHEMAS_DIR}/tensorrt.json'
-            "
+            -m scripts.engine_introspectors \
+              --engine tensorrt \
+              --image-ref "${IMAGE}" \
+              --output "${SCHEMAS_DIR}/tensorrt.json"
 
       - name: Fix container-written file ownership (discover)
         if: always()
@@ -956,7 +974,7 @@ jobs:
             echo
             echo "**Missing landmarks:**"
             echo
-            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-tensorrt.json
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/llem-probe-out/probe-tensorrt.json
             echo
             echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
             echo

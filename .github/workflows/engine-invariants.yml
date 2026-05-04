@@ -9,13 +9,16 @@ name: Engine Invariants — Probe + Mine + Vendor
 # `if:` gating rather than file proliferation. One workflow file covers all
 # three engines:
 #
-#   transformers : workflow_run-gated on Engine Image Build (transformers).
-#                  The heavy first-party Docker build happens once in
-#                  engine-image-build.yml; this job pulls the resulting
-#                  image and runs probe + mine + vendor + writeback.
+#   transformers : workflow_run-gated on Engine Image Push (transformers),
+#                  which itself chains off Engine Image Build success. The
+#                  heavy first-party Docker build happens once in
+#                  engine-image-build.yml (cache export only) and is
+#                  republished as a runtime image by engine-image-push.yml;
+#                  this job pulls that runtime image and runs probe + mine
+#                  + vendor + writeback.
 #   vllm         : pull_request: paths-gated. Pulls upstream
 #                  vllm/vllm-openai:v${VER} directly (no first-party build)
-#                  so it doesn't depend on engine-image-build.yml.
+#                  so it doesn't depend on the build/push pipeline.
 #   tensorrt     : pull_request: paths-gated. Pulls upstream
 #                  nvcr.io/nvidia/tensorrt-llm/release:${VER} directly.
 #
@@ -92,10 +95,11 @@ env:
 
 jobs:
   invariants-transformers:
-    # Selected on workflow_run (Engine Image Build success) or
+    # Selected on workflow_run (Engine Image Push success) or
     # workflow_dispatch with engine=transformers/all. Skipped on
-    # pull_request: the transformers cell needs the pre-built image,
-    # which engine-image-build.yml produces first.
+    # pull_request: the transformers cell needs the pre-built runtime
+    # image, which engine-image-push.yml produces after engine-image-
+    # build.yml exports the cache.
     if: >-
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
       || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'transformers' || inputs.engine == 'all'))
@@ -215,14 +219,16 @@ jobs:
         env:
           IMAGE: ${{ steps.version.outputs.image }}
         run: |
+          mkdir -p /tmp/llem-probe-out
           docker run --rm \
             -v "${{ github.workspace }}:/repo" \
+            -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
             --entrypoint python3 \
             "$IMAGE" \
             -m scripts._probe --engine transformers --producer invariants \
-            > /tmp/probe-transformers.json
-          VERDICT=$(jq -r '.verdict' /tmp/probe-transformers.json)
+              --output /llem-probe-out/probe-transformers.json
+          VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-transformers.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
 
       - name: Save current YAMLs for diffing
@@ -355,7 +361,7 @@ jobs:
             echo
             echo "**Missing landmarks:**"
             echo
-            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-transformers.json
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/llem-probe-out/probe-transformers.json
             echo
             echo "**Downstream mine + vendor steps were skipped.** No corpus changes were committed against this PR."
             echo
@@ -559,16 +565,18 @@ jobs:
         env:
           IMAGE: ${{ steps.version.outputs.image }}
         run: |
+          mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
             -v "${{ github.workspace }}:/repo" \
+            -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
             -e PYTHONPATH=/repo/src:/repo \
             -e PYTHONDONTWRITEBYTECODE=1 \
             --entrypoint python3 \
             "$IMAGE" \
             -m scripts._probe --engine vllm --producer invariants \
-            > /tmp/probe-vllm.json
-          VERDICT=$(jq -r '.verdict' /tmp/probe-vllm.json)
+              --output /llem-probe-out/probe-vllm.json
+          VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-vllm.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
 
       - name: Fix container-written file ownership (probe cache)
@@ -719,7 +727,7 @@ jobs:
             echo
             echo "**Missing landmarks:**"
             echo
-            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-vllm.json
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/llem-probe-out/probe-vllm.json
             echo
             echo "**Downstream mine + vendor steps were skipped.** No corpus changes were committed against this PR."
             echo
@@ -791,15 +799,42 @@ jobs:
           fi
 
       - name: Wait for sibling pipeline to complete
-        # CONTRACT: check-name below must match the schemas-vllm JOB ID
+        # CONTRACT: SIBLING_CHECK_NAME must match the schemas-vllm JOB ID
         # in engine-schemas.yml. See the transformers wait block above
         # for full ordering rationale.
+        #
+        # Inline gh-api poll rather than lewagon/wait-on-check-action because
+        # the latter calls actions/setup-ruby internally, which fails on the
+        # self-hosted runner (no Ruby pre-installed; the action's runner-image
+        # detection treats self-hosted Linux as unsupported).
         if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          check-name: 'schemas-vllm'
-          ref: ${{ github.event.pull_request.head.sha }}
-          repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          SIBLING_CHECK_NAME: schemas-vllm
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 1800 ))  # 30-min cap
+          while (( $(date +%s) < deadline )); do
+            # Server-side filter by check_name + per_page=1 keeps the response
+            # small even when the SHA accumulates many check-runs.
+            row=$(gh api "repos/${{ github.repository }}/commits/${HEAD_SHA}/check-runs?check_name=${SIBLING_CHECK_NAME}&per_page=1" \
+              --jq '.check_runs[0] | {status, conclusion}')
+            status=$(echo "${row}" | jq -r '.status // "unknown"')
+            conclusion=$(echo "${row}" | jq -r '.conclusion // "null"')
+            echo "sibling ${SIBLING_CHECK_NAME}: status=${status} conclusion=${conclusion}"
+            # `neutral` is GitHub's "completed but neither pass nor fail" — treat
+            # as non-blocking (sibling didn't have anything to say either way).
+            case "${conclusion}" in
+              success|skipped|neutral) exit 0 ;;
+              failure|cancelled|timed_out|action_required|stale)
+                echo "::error::Sibling ${SIBLING_CHECK_NAME} concluded with ${conclusion}" >&2
+                exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::Timeout (30 min) waiting for sibling ${SIBLING_CHECK_NAME}" >&2
+          exit 1
 
       - name: Atomic writeback
         if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -850,11 +885,13 @@ jobs:
           exit 1
 
   invariants-tensorrt:
-    # tensorrt symlink trick (#472) doesn't resolve the package source
-    # inside NGC; both __file__.parent and __path__[0] return non-
-    # directory paths. Tracked separately; #500 explores option-b
-    # source-tarball extraction. Mark non-blocking until that lands.
-    continue-on-error: true
+    # tensorrt static miner reads source files from /tmp/trt-llm-${VER}/.
+    # Earlier shapes resolved this from the installed NGC package via
+    # tensorrt_llm.__file__ / __path__[0]; both broke as NGC's package
+    # internals churned (#472, #500). The miner doesn't need the install
+    # — it only needs source files — so we now download the canonical
+    # GitHub release tarball on the runner host and bind-mount it into
+    # the container. Decouples source resolution from NGC image internals.
     if: >-
       github.event_name == 'pull_request'
       || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'tensorrt' || inputs.engine == 'all'))
@@ -931,37 +968,55 @@ jobs:
           echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
           echo "date=${DATE}" >> "$GITHUB_OUTPUT"
 
+      - name: Fetch tensorrt-llm source tarball (host)
+        # Static miner reads source from /tmp/trt-llm-${VER}/tensorrt_llm/;
+        # we fetch from the GitHub tag rather than introspect the NGC
+        # package because NGC's package layout has churned repeatedly
+        # (#472, #500). On the self-hosted runner /tmp persists across
+        # jobs, so skip the fetch when the tree is already extracted at
+        # this version (sibling schemas-tensorrt cell or a prior re-run
+        # of this PR may have populated it).
+        env:
+          VER: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          DEST="/tmp/trt-llm-${VER}"
+          if [[ -d "${DEST}/tensorrt_llm" ]]; then
+            echo "Source tree already present at ${DEST}; skipping fetch."
+            exit 0
+          fi
+          mkdir -p "${DEST}"
+          curl -fsSL "https://github.com/NVIDIA/TensorRT-LLM/archive/refs/tags/v${VER}.tar.gz" \
+            | tar -xz -C "${DEST}" --strip-components=1
+          test -d "${DEST}/tensorrt_llm"
+
       - name: Probe — landmark resolution check (in container)
         id: probe
         env:
           IMAGE: ${{ steps.version.outputs.image }}
-        # The NGC image ships the tensorrt_llm package source as part of
-        # the installed package; the static miner expects it at
-        # /tmp/trt-llm-${VER}/tensorrt_llm. Symlink before probe so
-        # _read_landmarks resolves correctly. LD_LIBRARY_PATH override
-        # so libtensorrt_llm.so finds bundled CUDA compat libs on hosts
-        # whose driver predates the NGC image's CUDA target.
+          VER: ${{ steps.version.outputs.version }}
+        # Source tree is on the host at /tmp/trt-llm-${VER}/ (extracted in
+        # the previous step) and bind-mounted into the container at the
+        # same path. The probe imports the producer module, which reads
+        # source files via the canonical _DEFAULT_SOURCE_ROOT path.
+        # LD_LIBRARY_PATH override so libtensorrt_llm.so finds bundled CUDA
+        # compat libs on hosts whose driver predates the NGC image's CUDA
+        # target.
         run: |
+          mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
             -e LD_LIBRARY_PATH="/usr/local/cuda/compat/lib.real:/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib" \
             -e PYTHONPATH=/repo/src:/repo \
             -e PYTHONDONTWRITEBYTECODE=1 \
             -v "${{ github.workspace }}:/repo" \
+            -v "/tmp/trt-llm-${VER}:/tmp/trt-llm-${VER}:ro" \
+            -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
-            --entrypoint bash \
+            --entrypoint python3 \
             "$IMAGE" \
-            -c "
-              set -euo pipefail
-              SRC=\$(python3 -c 'import tensorrt_llm; print(list(tensorrt_llm.__path__)[0])')
-              if [[ -z \"\$SRC\" || ! -d \"\$SRC\" ]]; then
-                echo 'Could not locate installed tensorrt_llm package source' >&2
-                exit 1
-              fi
-              mkdir -p /tmp/trt-llm-${{ steps.version.outputs.version }}
-              ln -sfn \"\$SRC\" /tmp/trt-llm-${{ steps.version.outputs.version }}/tensorrt_llm
-              python3 -m scripts._probe --engine tensorrt --producer invariants
-            " > /tmp/probe-tensorrt.json
-          VERDICT=$(jq -r '.verdict' /tmp/probe-tensorrt.json)
+            -m scripts._probe --engine tensorrt --producer invariants \
+              --output /llem-probe-out/probe-tensorrt.json
+          VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-tensorrt.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
 
       - name: Fix container-written file ownership (probe cache)
@@ -1000,14 +1055,12 @@ jobs:
             -e PYTHONDONTWRITEBYTECODE=1 \
             -e PYTHONPATH=/repo/src:/repo \
             -v "${{ github.workspace }}:/repo" \
+            -v "/tmp/trt-llm-${TRTLLM_VER}:/tmp/trt-llm-${TRTLLM_VER}:ro" \
             -w /repo \
             --entrypoint bash \
             "$IMAGE" \
             -c "
               set -euo pipefail
-              SRC=\$(python3 -c 'import tensorrt_llm; print(list(tensorrt_llm.__path__)[0])')
-              mkdir -p /tmp/trt-llm-${TRTLLM_VER}
-              ln -sfn \"\$SRC\" /tmp/trt-llm-${TRTLLM_VER}/tensorrt_llm
               python3 -m scripts.engine_miners.build_corpus --engine tensorrt
               python3 scripts/vendor_rules.py \
                 --engine tensorrt \
@@ -1114,7 +1167,7 @@ jobs:
             echo
             echo "**Missing landmarks:**"
             echo
-            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/probe-tensorrt.json
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/llem-probe-out/probe-tensorrt.json
             echo
             echo "**Downstream mine + vendor steps were skipped.** No corpus changes were committed against this PR."
             echo
@@ -1186,15 +1239,38 @@ jobs:
           fi
 
       - name: Wait for sibling pipeline to complete
-        # CONTRACT: check-name below must match the schemas-tensorrt JOB ID
-        # in engine-schemas.yml. See the transformers wait block above
-        # for full ordering rationale.
+        # CONTRACT: SIBLING_CHECK_NAME must match the schemas-tensorrt JOB
+        # ID in engine-schemas.yml. See the transformers wait block above
+        # for full ordering rationale. See invariants-vllm above for the
+        # rationale on inline bash polling vs lewagon/wait-on-check-action.
         if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          check-name: 'schemas-tensorrt'
-          ref: ${{ github.event.pull_request.head.sha }}
-          repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          SIBLING_CHECK_NAME: schemas-tensorrt
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 1800 ))  # 30-min cap
+          while (( $(date +%s) < deadline )); do
+            # Server-side filter by check_name + per_page=1 keeps the response
+            # small even when the SHA accumulates many check-runs.
+            row=$(gh api "repos/${{ github.repository }}/commits/${HEAD_SHA}/check-runs?check_name=${SIBLING_CHECK_NAME}&per_page=1" \
+              --jq '.check_runs[0] | {status, conclusion}')
+            status=$(echo "${row}" | jq -r '.status // "unknown"')
+            conclusion=$(echo "${row}" | jq -r '.conclusion // "null"')
+            echo "sibling ${SIBLING_CHECK_NAME}: status=${status} conclusion=${conclusion}"
+            # `neutral` is GitHub's "completed but neither pass nor fail" — treat
+            # as non-blocking (sibling didn't have anything to say either way).
+            case "${conclusion}" in
+              success|skipped|neutral) exit 0 ;;
+              failure|cancelled|timed_out|action_required|stale)
+                echo "::error::Sibling ${SIBLING_CHECK_NAME} concluded with ${conclusion}" >&2
+                exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::Timeout (30 min) waiting for sibling ${SIBLING_CHECK_NAME}" >&2
+          exit 1
 
       - name: Atomic writeback
         if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
