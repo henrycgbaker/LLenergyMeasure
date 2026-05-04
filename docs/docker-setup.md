@@ -515,10 +515,14 @@ llem run experiment.yaml --skip-preflight
 
 ## Keeping Engine Schemas Fresh
 
-When you update an engine version (by bumping the `ARG` in a Dockerfile), the
-vendored parameter schemas must be regenerated. This happens automatically via
-the [Parameter Discovery Pipeline](schema-refresh.md) (`engine-schemas.yml` workflow)
-for Renovate-managed bumps. For manual bumps, run:
+When you update an engine version (by bumping the SSOT in
+`engine_versions/<engine>.yaml`), the vendored parameter schemas must be
+regenerated. This happens automatically via the
+[Parameter Discovery Pipeline](schema-refresh.md): `engine-schemas.yml`
+covers all three engines via per-job `if:` gating — the vllm + tensorrt
+cells fire on `pull_request: paths`; the transformers cell fires via
+`workflow_run` after `engine-image-build.yml` completes. For manual bumps,
+run:
 
 ```bash
 ./scripts/refresh_discovered_schemas.sh <engine>

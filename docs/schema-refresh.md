@@ -19,12 +19,15 @@ Renovate detects new tag on Docker Hub / NGC / PyPI
 (checks weekly, waits 3 days for stability)
                       |
                       v
-Renovate opens PR bumping ARG in Dockerfile
-e.g. ARG VLLM_VERSION=v0.7.3 -> v0.8.0
+Renovate opens PR bumping the SSOT
+e.g. engine_versions/vllm.yaml current_version: 0.7.3 -> 0.8.0
                       |
                       v
-engine-schemas.yml auto-fires
-(guarded: only for Renovate-bot PRs touching Dockerfiles)
+For vllm + tensorrt: schemas-vllm / schemas-tensorrt jobs in
+                     engine-schemas.yml auto-fire on pull_request
+For transformers: engine-image-build.yml builds the image once, then
+                  the schemas-transformers job in engine-schemas.yml
+                  fires via workflow_run
                       |
                       v
 +------------------------------------------+
@@ -51,14 +54,22 @@ Maintainer reviews PR:
 
 ### Automated Flow (Renovate PRs)
 
-1. **Renovate** monitors `docker/Dockerfile.*` for upstream version bumps:
-   Docker Hub image tags (vLLM), NGC image tags (TensorRT-LLM), and PyPI
-   package versions via `customManagers` regex (transformers). Weekly schedule,
+1. **Renovate** monitors the SSOT files (`engine_versions/<engine>.yaml`)
+   for upstream version bumps: Docker Hub image tags (vLLM), NGC image tags
+   (TensorRT-LLM), and PyPI package versions (transformers). Weekly schedule,
    3-day stability window before opening a PR.
-2. When Renovate opens a PR, **engine-schemas.yml** auto-fires on the
-   self-hosted GPU runner.
-3. The workflow determines which engine(s) changed by inspecting the modified
-   Dockerfile paths, then runs `./scripts/refresh_discovered_schemas.sh <engine>`.
+2. When Renovate opens a PR:
+   - **vllm + tensorrt**: the `schemas-vllm` / `schemas-tensorrt` jobs in
+     `engine-schemas.yml` auto-fire on the self-hosted GPU runner
+     (path-filtered on `engine_versions/vllm.yaml` /
+     `engine_versions/tensorrt.yaml`).
+   - **transformers**: `engine-image-build.yml` fires first (rebuilds the
+     transformers Docker image once per (PR, SSOT version) and pushes it
+     to a per-PR cache repo); on success, the `schemas-transformers` job
+     in `engine-schemas.yml` fires via `workflow_run`, pulls the just-built
+     image, and runs discovery against it.
+3. The workflow runs `./scripts/refresh_discovered_schemas.sh <engine>`
+   (or the equivalent steps inline) inside the engine's image.
 4. After discovery, `scripts/diff_discovered_schemas.py` classifies changes as safe or
    breaking, commits the updated schema to the PR branch, posts a diff comment,
    and applies a label (`schema-safe` or `schema-breaking`).
@@ -84,15 +95,23 @@ Compares ARG version in Dockerfile vs engine_version in schema JSON
 On failure, the developer can either:
 - Run locally: `./scripts/refresh_discovered_schemas.sh <engine>`
 - Trigger remotely: `gh workflow run engine-schemas.yml --field engine=<engine> --field pr_number=<N>`
+  (for transformers, run `engine-image-build.yml` instead — the
+  `schemas-transformers` job in `engine-schemas.yml` is `workflow_run`-gated
+  and re-fires automatically once the build run completes)
 
 ### Manual Refresh (workflow_dispatch)
 
 For ad-hoc refreshes outside the Renovate flow:
 
 ```bash
+# vllm or tensorrt
 gh workflow run engine-schemas.yml \
   --field engine=vllm \
   --field pr_number=123
+
+# transformers: trigger Engine Image Build (downstream schemas + invariants
+# fire automatically on its success via workflow_run)
+gh workflow run engine-image-build.yml
 ```
 
 ---

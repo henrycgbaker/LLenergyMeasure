@@ -40,13 +40,15 @@ ENV TORCH_CUDA_ARCH_LIST="8.0;9.0+PTX"
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system flash-attn --no-build-isolation
 
-# FA3: build hopper extensions from source (produces flash_attn_interface + flash_attn_3_cuda)
-# MAX_JOBS controls parallel nvcc processes (ninja -j). Default 32 balances speed vs memory
-# (~128 GB peak). Override with --build-arg MAX_JOBS=N for constrained hosts.
-# Set via ENV so the RUN command text stays stable (preserving build cache keys).
-# Skipped when INSTALL_FA3=false (e.g. CI smoke tests).
+# FA3: build hopper extensions from source (produces flash_attn_interface + flash_attn_3_cuda).
+# MAX_JOBS = ninja -j (parallel nvcc invocations).
+# NVCC_THREADS = threads per nvcc; flash-attention/hopper/setup.py defaults to 2,
+# which silently caps total parallelism even at high MAX_JOBS — set explicitly.
+# Skipped when INSTALL_FA3=false.
 ARG MAX_JOBS=32
+ARG NVCC_THREADS=4
 ENV MAX_JOBS=${MAX_JOBS}
+ENV NVCC_THREADS=${NVCC_THREADS}
 RUN --mount=type=cache,target=/root/.cache/pip \
     if [ "$INSTALL_FA3" = "true" ]; then \
         apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* && \

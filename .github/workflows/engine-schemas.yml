@@ -5,15 +5,33 @@ name: Engine Schemas — Probe + Discover
 # inside the SSOT-driven Docker image, regenerates the curation digest doc,
 # and atomically commits artefacts back to the PR branch.
 #
-# Per-engine runner choice — all engines run inside their Docker image:
-#   transformers : ubuntu-latest GH-hosted runner; introspector runs inside
-#                  llenergymeasure:transformers-${VER} (no GPU needed).
+# Trigger asymmetry across engines is expressed via multi-trigger + per-job
+# `if:` gating rather than file proliferation. One workflow file covers all
+# three engines:
+#
+#   transformers : workflow_run-gated on Engine Image Build (transformers).
+#                  The heavy first-party Docker build happens once in
+#                  engine-image-build.yml; this job pulls the resulting
+#                  image and runs probe + discover + writeback.
+#   vllm         : pull_request: paths-gated. Pulls upstream
+#                  vllm/vllm-openai:v${VER} directly (no first-party build)
+#                  so it doesn't depend on engine-image-build.yml.
+#   tensorrt     : pull_request: paths-gated. Pulls upstream
+#                  nvcr.io/nvidia/tensorrt-llm/release:${VER} directly.
+#
+# Per-engine runner choice:
+#   transformers : ubuntu-latest (CPU). transformers introspector is CPU-safe.
 #   vllm         : self-hosted GPU runner inside llenergymeasure:vllm-${VER}
 #                  (the host uv.lock used to break vllm's torch via tensorrt-
 #                  llm 0.21.0's transitive constraints; engines now run
 #                  exclusively in their own image — see #437, #464).
 #   tensorrt     : self-hosted GPU runner inside llenergymeasure:tensorrt-
 #                  ${VER}; TRT-LLM 0.21.0 loads CUDA bindings on import.
+#
+# Pipeline ordering: Build → Schemas → Invariants. Schemas writes back
+# first; invariants rebases against schemas's commit. Schemas no longer
+# needs to wait for invariants (the previous parallel-rebuild shape made
+# the cross-wait necessary; sequential ordering removes it).
 #
 # Determinism contract:
 #   The LLENERGY_DISCOVERY_FROZEN_AT env var is set from the author date
@@ -26,10 +44,14 @@ on:
   pull_request:
     types: [opened, synchronize]
     paths:
-      - "engine_versions/*.yaml"
-      - "docker/Dockerfile.*"
+      - "engine_versions/vllm.yaml"
+      - "engine_versions/tensorrt.yaml"
       - "scripts/engine_introspectors/**"
       - "src/llenergymeasure/config/discovered_schemas/**"
+      - ".github/workflows/engine-schemas.yml"
+  workflow_run:
+    workflows: ["Engine Image Build (transformers)"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       engine:
@@ -49,9 +71,13 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  packages: read
 
 concurrency:
-  group: engine-schemas-${{ github.head_ref || github.ref }}
+  # workflow_run.head_sha distinguishes per-PR runs for the transformers
+  # cell; pull_request runs use github.head_ref. Combine both so the group
+  # string stays stable across trigger sources.
+  group: engine-schemas-${{ github.event.workflow_run.head_branch || github.event.workflow_run.head_sha || github.head_ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -59,7 +85,13 @@ env:
 
 jobs:
   schemas-transformers:
-    if: github.event_name != 'workflow_dispatch' || inputs.engine == 'transformers' || inputs.engine == 'all'
+    # Selected on workflow_run (Engine Image Build success) or
+    # workflow_dispatch with engine=transformers/all. Skipped on
+    # pull_request: the transformers cell needs the pre-built image,
+    # which engine-image-build.yml produces first.
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'transformers' || inputs.engine == 'all'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -67,19 +99,24 @@ jobs:
         # Short-lived (~1 hour) GitHub App token. Events it produces are
         # NOT subject to the default GITHUB_TOKEN recursive-workflow guard,
         # so the commit-back below can legitimately retrigger downstream
-        # CI. Skipped on fork PRs (secrets are not exposed there) so the
-        # workflow still runs read-only for external contributors.
+        # CI. Skipped on fork PRs (secrets are not exposed in workflow_run
+        # contexts triggered from forks) so the workflow still runs read-
+        # only for external contributors.
         id: app-token
-        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - name: Checkout PR branch
+      - name: Checkout PR head
+        # workflow_run runs on the default branch by default. Explicitly
+        # check out the head SHA of the run that triggered us so the
+        # discover + writeback operate on the right code. workflow_dispatch
+        # falls back to github.ref.
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.head_ref || github.ref }}
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
@@ -94,32 +131,43 @@ jobs:
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "image=llenergymeasure:transformers-${VER}" >> "$GITHUB_OUTPUT"
 
-      - name: Build or reuse transformers image
-        # SSOT is the canonical version; the Dockerfile ARG default is a
-        # local-build fallback. CI passes the SSOT value at build time so
-        # the two cannot drift. INSTALL_FA3=false keeps the build fast
-        # (FA3 from-source is ~1h); discovery doesn't need flash-attn.
+      - name: Resolve PR number (for comments + labels + writeback)
+        id: pr
         run: |
-          IMAGE="${{ steps.version.outputs.image }}"
-          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
-            docker build \
-              -f docker/Dockerfile.transformers \
-              -t "$IMAGE" \
-              --build-arg TRANSFORMERS_VERSION="${{ steps.version.outputs.version }}" \
-              --build-arg INSTALL_FA3=false \
-              .
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number }}"
+            HEAD_REPO="${{ github.event.workflow_run.head_repository.full_name }}"
           else
-            echo "Reusing cached $IMAGE."
+            PR_NUMBER="${{ inputs.pr_number }}"
+            HEAD_REPO="${{ github.repository }}"
           fi
+          if [[ -n "$PR_NUMBER" ]]; then
+            echo "number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "head_repo=${HEAD_REPO}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=" >> "$GITHUB_OUTPUT"
+            echo "head_repo=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to GHCR (read-only, for image pull)
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull pre-built transformers image and tag locally
+        run: |
+          if [ "${{ github.event.workflow_run.event }}" = "pull_request" ]; then
+            UPSTREAM="ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}"
+          else
+            UPSTREAM="ghcr.io/${{ github.repository }}/transformers:transformers-${{ steps.version.outputs.version }}"
+          fi
+          docker pull "$UPSTREAM"
+          docker tag "$UPSTREAM" "${{ steps.version.outputs.image }}"
 
       - name: Compute stable discovery anchor
         id: anchor
-        # Pin the discovered_at field to the author date of the most recent
-        # commit touching any INPUT path. Stable across the workflow's own
-        # commit-back (which only touches OUTPUT paths), so re-runs on
-        # unchanged source emit byte-identical envelopes. Without this,
-        # every re-run emits a fresh wallclock timestamp, git diff picks
-        # it up, the commit-back fires, and the synchronize loops.
         run: |
           PATHS=(
             "engine_versions/transformers.yaml"
@@ -243,14 +291,11 @@ jobs:
           } > /tmp/engine-schemas-diff/transformers.summary.md
 
       - name: Probe-fail comment (skip downstream)
-        if: steps.probe.outputs.verdict == 'fail' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        if: steps.probe.outputs.verdict == 'fail' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
+          PR_NUMBER="${{ steps.pr.outputs.number }}"
           {
             echo "## Engine schemas — transformers (probe-blocked)"
             echo
@@ -283,25 +328,18 @@ jobs:
             ${{ env.SCHEMAS_DIR }}/transformers.json
 
       - name: Post per-pipeline comment (suppress on empty)
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
-          gh pr comment "$PR_NUMBER" --body-file /tmp/engine-schemas-diff/transformers.summary.md
+          gh pr comment "${{ steps.pr.outputs.number }}" --body-file /tmp/engine-schemas-diff/transformers.summary.md
 
       - name: Apply per-pipeline label
-        if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
+          PR_NUMBER="${{ steps.pr.outputs.number }}"
           for L in schemas-changed schemas-breaking schemas-safe probe-blocked; do
             gh pr edit "$PR_NUMBER" --remove-label "$L" 2>/dev/null || true
           done
@@ -312,13 +350,13 @@ jobs:
           esac
 
       - name: Atomic writeback
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        # Schemas writes back first (sequential ordering Build → Schemas →
+        # Invariants); invariants rebases against this commit when it
+        # runs. No cross-wait required.
+        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && steps.pr.outputs.number != '' && steps.pr.outputs.head_repo == github.repository
         run: |
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
-
-          # Pull in any sibling-pipeline writeback that landed first.
-          git pull --rebase --autostash
 
           git add \
             "${SCHEMAS_DIR}/transformers.json" \
@@ -333,14 +371,11 @@ jobs:
           git push --force-with-lease
 
       - name: Apply cross-pipeline rollup label
-        if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
+          PR_NUMBER="${{ steps.pr.outputs.number }}"
           if [[ "${{ steps.diff.outputs.classification }}" != "breaking" ]]; then
             gh pr edit "$PR_NUMBER" --add-label "safe-bump" 2>/dev/null || true
           else
@@ -348,18 +383,15 @@ jobs:
           fi
 
       - name: Probe-fail gate (red CI)
-        # Probe-fail must show as a red CI check: PRs cannot merge with a
-        # stale corpus. The probe-blocked comment above explains how to
-        # resolve (/approve-reuse to widen the SSOT envelope, or landmark
-        # patch); this gate makes that resolution mandatory rather than
-        # advisory.
         if: steps.probe.outputs.verdict == 'fail'
         run: |
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
           exit 1
 
   schemas-vllm:
-    if: github.event_name != 'workflow_dispatch' || inputs.engine == 'vllm' || inputs.engine == 'all'
+    if: >-
+      github.event_name == 'pull_request'
+      || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'vllm' || inputs.engine == 'all'))
     runs-on: self-hosted
     timeout-minutes: 60
     steps:
@@ -695,7 +727,9 @@ jobs:
     # directory paths. Tracked separately; #500 explores option-b
     # source-tarball extraction. Mark non-blocking until that lands.
     continue-on-error: true
-    if: github.event_name != 'workflow_dispatch' || inputs.engine == 'tensorrt' || inputs.engine == 'all'
+    if: >-
+      github.event_name == 'pull_request'
+      || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'tensorrt' || inputs.engine == 'all'))
     runs-on: self-hosted
     timeout-minutes: 60
     steps:

@@ -154,17 +154,21 @@ The invariant miner pipeline lives in `scripts/engine_miners/` - it is a build-t
   (Dockerfile ARG default is derived at build time from the SSOT)
                │
                ▼
-  engine-invariants.yml fires (probe + mine + vendor)
+  Engine-invariants pipeline fires (probe + mine + vendor)
                │
-               ├──► transformers job runs on GH-hosted ubuntu-latest
-               │    (uv sync; CPU-safe import).
+               ├──► transformers: engine-image-build.yml builds the
+               │    image once, then the invariants-transformers job in
+               │    engine-invariants.yml fires via workflow_run on
+               │    GH-hosted ubuntu-latest.
                │
-               ├──► vLLM job runs inside llenergymeasure:vllm-${VER} on
-               │    a self-hosted GPU runner (Docker isolates from the
-               │    unified uv.lock; see #437/#464).
+               ├──► vLLM: engine-invariants.yml runs inside
+               │    llenergymeasure:vllm-${VER} on a self-hosted GPU
+               │    runner (Docker isolates from the unified uv.lock;
+               │    see #437/#464).
                │
-               ├──► TRT-LLM job runs inside llenergymeasure:tensorrt-${VER}
-               │    on a self-hosted GPU runner (CUDA-aware import).
+               ├──► TRT-LLM: engine-invariants.yml runs inside
+               │    llenergymeasure:tensorrt-${VER} on a self-hosted GPU
+               │    runner (CUDA-aware import).
                │
                ▼
   Per-engine step sequence inside one job:

@@ -1,0 +1,160 @@
+name: Engine Image Build (transformers)
+
+# Single-source-of-truth build for the transformers engine Docker image.
+# Replaces the previous parallel-rebuild antipattern where engine-invariants
+# and engine-schemas each ran their own buildx step against the same SSOT
+# version, contending on the per-version GHA cache scope. PR-time runs were
+# observed to deadlock on multi-GB layer cache writes.
+#
+# Pipeline ordering:
+#
+#   Renovate / maintainer PR
+#     |- engine-image-build.yml  (this file)
+#     |  |- on PR: builds + pushes to ghcr.io/<repo>/transformers-cache:transformers-<VERSION>
+#     |  |  (per-PR cache-only repo; never collides with :latest)
+#     |  |- on push to main / schedule: also pushes :latest + :transformers-<VERSION>
+#     |  |  to the canonical ghcr.io/<repo>/transformers repo
+#     |  V
+#     |- engine-schemas.yml :: schemas-transformers job  (workflow_run: completed)
+#     |  V
+#     |- engine-invariants.yml :: invariants-transformers job  (workflow_run: completed)
+#
+# Downstream workflows pull this image rather than rebuilding it. The heavy
+# build cost (FA3 from-source compile, ~30-60 min cold) happens once per
+# (PR, SSOT version), and the schemas + invariants jobs become probe + mine
+# only.
+#
+# Drift detection: weekly schedule fires with a from-scratch rebuild
+# (`--no-cache`). If the resulting image digest differs from `:latest`, that
+# surfaces external dependency drift (apt repo, PyPI wheel re-publish, base
+# image silent update) that layer caching alone wouldn't catch.
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - "engine_versions/transformers.yaml"
+      - "docker/Dockerfile.transformers"
+      - ".github/workflows/engine-image-build.yml"
+  push:
+    branches: [main]
+    paths:
+      - "engine_versions/transformers.yaml"
+      - "docker/Dockerfile.transformers"
+      - ".github/workflows/engine-image-build.yml"
+  schedule:
+    # Weekly Monday 05:37 UTC — drift detection from-scratch rebuild.
+    - cron: "37 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      no_cache:
+        description: "Force --no-cache rebuild (drift detection)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: engine-image-build-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  # FA3 cold-compile takes 60+ min; cancel-in-progress on force-push would
+  # waste accumulated cache layers AND orphan the workflow_run-gated
+  # downstream cells (no successful upstream run for them to chain off).
+  cancel-in-progress: false
+
+jobs:
+  build-transformers:
+    runs-on: self-hosted
+    # 90-min cap chosen for headroom on cold FA3 builds (~15-70 min observed
+    # on ds01-gpu depending on first-run vs cached layers).
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve transformers version from SSOT
+        id: version
+        run: |
+          VER=$(yq '.library.current_version' engine_versions/transformers.yaml)
+          if [[ -z "$VER" || "$VER" == "null" ]]; then
+            echo "Could not resolve transformers version from engine_versions/transformers.yaml" >&2
+            exit 1
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine cache + tag targets
+        id: targets
+        # PR builds push to a separate cache-only repo so they don't
+        # pollute :latest. Merge + schedule builds publish :latest +
+        # :transformers-<VERSION> to the canonical repo. workflow_dispatch
+        # respects the no_cache input for ad-hoc drift detection.
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "push=true" >> "$GITHUB_OUTPUT"
+            echo "tags=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "no_cache=false" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "push=true" >> "$GITHUB_OUTPUT"
+            echo "tags=ghcr.io/${{ github.repository }}/transformers:latest,ghcr.io/${{ github.repository }}/transformers:transformers-${{ steps.version.outputs.version }}" >> "$GITHUB_OUTPUT"
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              echo "no_cache=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "no_cache=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "push=false" >> "$GITHUB_OUTPUT"
+            echo "tags=transformers-build:test" >> "$GITHUB_OUTPUT"
+            echo "no_cache=${{ inputs.no_cache }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build (and push) transformers image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile.transformers
+          target: runtime
+          tags: ${{ steps.targets.outputs.tags }}
+          push: ${{ steps.targets.outputs.push }}
+          no-cache: ${{ steps.targets.outputs.no_cache }}
+          # SSOT-driven build arg. INSTALL_FA3 deliberately NOT overridden
+          # here — the Dockerfile defaults to true, so CI builds the same
+          # production-equivalent image users get. Two parallelism knobs
+          # multiply: MAX_JOBS caps parallel nvcc invocations (ninja -j);
+          # NVCC_THREADS caps threads per nvcc call. flash-attention/hopper
+          # reads NVCC_THREADS with default 2 — the prior 60-min build used
+          # only ~2 cc1plus workers despite MAX_JOBS=16 because the nvcc
+          # internal cap dominated. NVCC_THREADS=4 + MAX_JOBS=16 gives up to
+          # ~64 effective workers on the 128-vCPU / 528 GB host.
+          build-args: |
+            TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
+            MAX_JOBS=16
+            NVCC_THREADS=4
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
+            type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
+            type=gha,scope=transformers-${{ steps.version.outputs.version }}
+          cache-to: type=gha,mode=max,scope=transformers-${{ steps.version.outputs.version }}
+
+      - name: Emit image digest summary
+        run: |
+          {
+            echo "## Engine image build"
+            echo
+            echo "- Trigger: \`${{ github.event_name }}\`"
+            echo "- Transformers version: \`${{ steps.version.outputs.version }}\`"
+            echo "- Tags pushed: \`${{ steps.targets.outputs.tags }}\`"
+            echo "- Cache from-scratch: \`${{ steps.targets.outputs.no_cache }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
