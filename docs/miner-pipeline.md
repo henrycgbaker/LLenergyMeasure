@@ -427,10 +427,11 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │   - vllm + tensorrt: invariants-vllm / schemas-vllm /              │
   │     invariants-tensorrt / schemas-tensorrt fire in parallel via    │
   │     pull_request: paths.                                            │
-  │   - transformers: engine-image-build.yml fires first (single       │
-  │     pre-build of the Docker image), then invariants-transformers   │
-  │     + schemas-transformers (in the same two workflow files) fire   │
-  │     via workflow_run on its success (sequential downstream).       │
+  │   - transformers: engine-image-build.yml fires first (build +      │
+  │     cache export, no runtime push), then engine-image-push.yml     │
+  │     publishes runtime tags via workflow_run, then invariants-      │
+  │     transformers + schemas-transformers (in the same two workflow  │
+  │     files) fire via workflow_run on the push's success.            │
   │     See docs/development.md "CI pipeline ordering" for detail.     │
   │               │                                                   │
   │  ──────────── engine-invariants per-engine job ────────────────   │

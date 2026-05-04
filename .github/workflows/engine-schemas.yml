@@ -50,7 +50,10 @@ on:
       - "src/llenergymeasure/config/discovered_schemas/**"
       - ".github/workflows/engine-schemas.yml"
   workflow_run:
-    workflows: ["Engine Image Build (transformers)"]
+    # Chain off the PUSH workflow (which only fires after a successful
+    # build), not the build directly: schemas-transformers needs to pull
+    # the runtime image from GHCR, which doesn't exist until push lands.
+    workflows: ["Engine Image Push (transformers)"]
     types: [completed]
   workflow_dispatch:
     inputs:

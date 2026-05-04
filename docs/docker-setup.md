@@ -391,14 +391,18 @@ behaviour. No additional setup is needed when SGLang ships.
 ### Layer cache sharing via GHCR registry
 
 See [installation.md — Fast rebuilds and first-pull cost](installation.md#fast-rebuilds-and-first-pull-cost)
-for the user-facing walkthrough (mechanism, sizes, authentication, offline fallback).
+for the user-facing walkthrough (mechanism, sizes, authentication, offline fallback)
+and the three-ref breakdown of what the build/push pipeline publishes
+(`-buildcache` ref, PR-time `transformers-cache:VER` ref, canonical
+`transformers:VER`/`transformers:latest`).
 
 Operator notes:
 
-- `cache-to` pushes only to `:latest` (never to immutable version tags), so
-  storage growth is bounded by image drift between releases.
+- `cache-to` writes only to the `:transformers-<VER>-buildcache` ref (separate
+  from any runnable image), so storage growth is bounded by SSOT version drift.
 - Inspect what's cached on the active builder: `docker buildx du --builder llem-builder`.
 - If the cache is corrupt, recreate it with `make docker-builder-rm && make docker-builder-setup`.
+  The remote buildcache ref will repopulate on the next CI build.
 
 ### Image labels
 
@@ -519,8 +523,10 @@ regenerated. This happens automatically via the
 [Parameter Discovery Pipeline](schema-refresh.md): `engine-schemas.yml`
 covers all three engines via per-job `if:` gating — the vllm + tensorrt
 cells fire on `pull_request: paths`; the transformers cell fires via
-`workflow_run` after `engine-image-build.yml` completes. For manual bumps,
-run:
+`workflow_run` after `engine-image-push.yml` completes (which itself
+chains off `engine-image-build.yml` via workflow_run — the build/push
+split exists so push failures don't burn the FA3 compile). For manual
+bumps, run:
 
 ```bash
 ./scripts/refresh_discovered_schemas.sh <engine>
