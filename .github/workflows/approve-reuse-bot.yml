@@ -1,5 +1,9 @@
 name: Approve Reuse — Slash Command Bot
 
+# This workflow has no PR-time `paths:` trigger (it's issue_comment-only),
+# so edits can't self-test at runtime. Shape validation happens at PR time
+# via the actionlint job in ci.yml.
+#
 # Listens for /approve-reuse <engine> <producer> slash commands posted as
 # PR comments. When the commenter has write/maintain/admin permission on
 # this repo, the bot widens the SSOT's miner_pins SpecifierSet for the
