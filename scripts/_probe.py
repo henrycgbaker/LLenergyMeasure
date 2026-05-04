@@ -35,6 +35,7 @@ module unimportable, SSOT malformed).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import hashlib
 import importlib
@@ -42,6 +43,7 @@ import inspect
 import json
 import os
 import sys
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from types import ModuleType
@@ -375,14 +377,25 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def _write_report_to_file(path: Path, report: ProbeReport) -> None:
     """Atomically write *report* as JSON to *path*.
 
-    Atomic via temp-file + rename so a partial write can never appear at
-    ``path``. Parent directory created if missing.
+    Uses ``tempfile.mkstemp`` for a collision-free temp file in the parent
+    directory, fsyncs before ``os.replace`` so the rename only commits a
+    durable file (matters on power loss / hard reboot), and cleans up the
+    temp file on any failure so retries never trip over orphaned ``.tmp``
+    files. Parent directory is created if missing.
     """
     payload = json.dumps(asdict(report), indent=2, sort_keys=True)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(payload, encoding="utf-8")
-    tmp.replace(path)
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=path.stem, suffix=".tmp")
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            f.write(payload)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    except Exception:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+        raise
 
 
 def main(argv: list[str] | None = None) -> int:

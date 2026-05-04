@@ -808,13 +808,17 @@ jobs:
           set -euo pipefail
           deadline=$(( $(date +%s) + 1800 ))  # 30-min cap
           while (( $(date +%s) < deadline )); do
-            row=$(gh api "repos/${{ github.repository }}/commits/${HEAD_SHA}/check-runs" \
-              --paginate --jq ".check_runs[] | select(.name == \"${SIBLING_CHECK_NAME}\") | {status, conclusion}" | head -n 1)
+            # Server-side filter by check_name + per_page=1 keeps the response
+            # small even when the SHA accumulates many check-runs.
+            row=$(gh api "repos/${{ github.repository }}/commits/${HEAD_SHA}/check-runs?check_name=${SIBLING_CHECK_NAME}&per_page=1" \
+              --jq '.check_runs[0] | {status, conclusion}')
             status=$(echo "${row}" | jq -r '.status // "unknown"')
             conclusion=$(echo "${row}" | jq -r '.conclusion // "null"')
             echo "sibling ${SIBLING_CHECK_NAME}: status=${status} conclusion=${conclusion}"
+            # `neutral` is GitHub's "completed but neither pass nor fail" — treat
+            # as non-blocking (sibling didn't have anything to say either way).
             case "${conclusion}" in
-              success|skipped) exit 0 ;;
+              success|skipped|neutral) exit 0 ;;
               failure|cancelled|timed_out|action_required|stale)
                 echo "::error::Sibling ${SIBLING_CHECK_NAME} concluded with ${conclusion}" >&2
                 exit 1 ;;
@@ -1240,13 +1244,17 @@ jobs:
           set -euo pipefail
           deadline=$(( $(date +%s) + 1800 ))  # 30-min cap
           while (( $(date +%s) < deadline )); do
-            row=$(gh api "repos/${{ github.repository }}/commits/${HEAD_SHA}/check-runs" \
-              --paginate --jq ".check_runs[] | select(.name == \"${SIBLING_CHECK_NAME}\") | {status, conclusion}" | head -n 1)
+            # Server-side filter by check_name + per_page=1 keeps the response
+            # small even when the SHA accumulates many check-runs.
+            row=$(gh api "repos/${{ github.repository }}/commits/${HEAD_SHA}/check-runs?check_name=${SIBLING_CHECK_NAME}&per_page=1" \
+              --jq '.check_runs[0] | {status, conclusion}')
             status=$(echo "${row}" | jq -r '.status // "unknown"')
             conclusion=$(echo "${row}" | jq -r '.conclusion // "null"')
             echo "sibling ${SIBLING_CHECK_NAME}: status=${status} conclusion=${conclusion}"
+            # `neutral` is GitHub's "completed but neither pass nor fail" — treat
+            # as non-blocking (sibling didn't have anything to say either way).
             case "${conclusion}" in
-              success|skipped) exit 0 ;;
+              success|skipped|neutral) exit 0 ;;
               failure|cancelled|timed_out|action_required|stale)
                 echo "::error::Sibling ${SIBLING_CHECK_NAME} concluded with ${conclusion}" >&2
                 exit 1 ;;

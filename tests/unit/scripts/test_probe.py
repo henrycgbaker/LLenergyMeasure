@@ -265,21 +265,23 @@ def test_probe_output_flag_writes_to_file_keeps_stdout_clean(
     assert payload["verdict"] == "pass"
 
 
-def test_probe_atomic_output_write_no_partial_file_on_crash(
+def test_probe_atomic_output_rename_failure_leaves_destination_intact(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """``--output`` write must be atomic (tempfile + rename) so a crashed
-    write never leaves a partial JSON at the destination path."""
+    """A crash at the ``os.replace`` step must NOT leave a partial JSON at
+    the destination AND must clean up the temp file (no orphan ``.tmp``)."""
+    import os as _os
+
     out = tmp_path / "report.json"
     out.write_text("STALE", encoding="utf-8")  # pre-existing content
 
-    # Force the rename step to fail; the .tmp leaves no partial at destination
-    real_replace = Path.replace
-
-    def boom(self: Path, target: Path) -> Path:
+    # Force the rename step to fail. The temp file should still be cleaned
+    # up (no orphan ``.tmp`` left in the directory) and the destination
+    # should still contain its original content.
+    def boom(src: str, dst: str) -> None:
         raise OSError("simulated rename failure")
 
-    monkeypatch.setattr(Path, "replace", boom)
+    monkeypatch.setattr(_os, "replace", boom)
 
     report = _probe.ProbeReport(
         engine="transformers",
@@ -295,9 +297,10 @@ def test_probe_atomic_output_write_no_partial_file_on_crash(
     with pytest.raises(OSError, match="simulated rename failure"):
         _probe._write_report_to_file(out, report)
 
-    monkeypatch.setattr(Path, "replace", real_replace)
-    # Original file remained untouched (rename never happened)
+    # Destination unchanged (the rename never happened)
     assert out.read_text() == "STALE"
+    # No orphan ``.tmp`` files left behind in the parent directory
+    assert not list(tmp_path.glob("*.tmp")), "tempfile cleanup must remove .tmp on failure"
 
 
 def test_probe_ssot_missing_returns_infra_error(
