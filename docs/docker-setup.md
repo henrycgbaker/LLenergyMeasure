@@ -391,14 +391,18 @@ behaviour. No additional setup is needed when SGLang ships.
 ### Layer cache sharing via GHCR registry
 
 See [installation.md — Fast rebuilds and first-pull cost](installation.md#fast-rebuilds-and-first-pull-cost)
-for the user-facing walkthrough (mechanism, sizes, authentication, offline fallback).
+for the user-facing walkthrough (mechanism, sizes, authentication, offline fallback)
+and the three-ref breakdown of what the build/push pipeline publishes
+(`-buildcache` ref, PR-time `transformers-cache:VER` ref, canonical
+`transformers:VER`/`transformers:latest`).
 
 Operator notes:
 
-- `cache-to` pushes only to `:latest` (never to immutable version tags), so
-  storage growth is bounded by image drift between releases.
+- `cache-to` writes only to the `:transformers-<VER>-buildcache` ref (separate
+  from any runnable image), so storage growth is bounded by SSOT version drift.
 - Inspect what's cached on the active builder: `docker buildx du --builder llem-builder`.
 - If the cache is corrupt, recreate it with `make docker-builder-rm && make docker-builder-setup`.
+  The remote buildcache ref will repopulate on the next CI build.
 
 ### Image labels
 
