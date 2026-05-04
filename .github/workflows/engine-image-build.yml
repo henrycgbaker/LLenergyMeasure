@@ -134,13 +134,17 @@ jobs:
           # production-equivalent image users get. Two parallelism knobs
           # multiply: MAX_JOBS caps parallel nvcc invocations (ninja -j);
           # NVCC_THREADS caps threads per nvcc call. flash-attention/hopper
-          # reads NVCC_THREADS with default 2 — the prior 60-min build used
-          # only ~2 cc1plus workers despite MAX_JOBS=16 because the nvcc
-          # internal cap dominated. NVCC_THREADS=4 + MAX_JOBS=16 gives up to
-          # ~64 effective workers on the 128-vCPU / 528 GB host.
+          # reads NVCC_THREADS with default 2 — a prior 60-min build used
+          # only ~2 cc1plus workers despite a high MAX_JOBS because the nvcc
+          # internal cap dominated. MAX_JOBS=32 × NVCC_THREADS=4 = 128
+          # effective workers, one per vCPU on the 128-vCPU / 528 GB self-
+          # hosted runner — the saturation point. The earlier MAX_JOBS=16
+          # cap left half the cores idle (49-min cold build observed); the
+          # 528 GB RAM headroom comfortably absorbs the ~128 GB peak that
+          # MAX_JOBS=32 produces.
           build-args: |
             TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
-            MAX_JOBS=16
+            MAX_JOBS=32
             NVCC_THREADS=4
           cache-from: |
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
