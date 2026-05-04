@@ -139,11 +139,21 @@ jobs:
           # and the FA3 layer cache-hits reliably from prior builds.
           build-args: |
             TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
+          # cache-from: registry-mode reads from a separate cache-only ref
+          # (not the runtime image) where mode=max metadata for ALL
+          # intermediate layers lives. That gives us cache hits on the FA3
+          # builder layer + the runtime install layers — which the runtime
+          # image's content-addressable manifest alone cannot provide.
+          # GHA cache mode dropped: a prior run (25329040682) spent ~45 min
+          # uploading 7-8 GB to GitHub Actions Cache. Registry-mode export
+          # is much faster (just metadata + dedup-aware layer push) AND
+          # works on workflow_dispatch where push: false skips the runtime
+          # image (the cache ref is independent of the runtime tag).
           cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
-            type=gha,scope=transformers-${{ steps.version.outputs.version }}
-          cache-to: type=gha,mode=max,scope=transformers-${{ steps.version.outputs.version }}
+          cache-to: type=registry,mode=max,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache
 
       - name: Emit image digest summary
         run: |
