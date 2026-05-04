@@ -407,9 +407,13 @@ def test_landmark_checks_raise_on_missing():
    (no host extras exist — see [development.md](development.md)). For the
    upstream-image pattern, mirror `invariants-vllm` as the template for
    engines whose miners need a GPU only for `import`-time reasons; use
-   `invariants-tensorrt` as the template for engines that require
-   CUDA-aware imports (e.g. NGC-derived bases). For the first-party-image
-   pattern, mirror the `engine-image-build.yml` + paired downstream files.
+   `invariants-tensorrt` as the template for engines whose Python source
+   layout shifts across image releases or that bundle source in non-
+   introspectable ways (NGC-derived bases): the cell downloads the upstream
+   release tarball on the runner host and bind-mounts it into the container
+   at a stable path, decoupling source resolution from the image's internals.
+   For the first-party-image pattern, mirror the `engine-image-build.yml` +
+   paired downstream files.
 
 3. The vendor-replay step runs inside the engine's container in the same job as the miner — no separate vendor workflow to update.
 
