@@ -67,19 +67,6 @@
       "rangeStrategy": "replace"
     },
     {
-      "description": "Major engine-library bumps require explicit dashboard approval — never auto-PR. Reproducibility-critical: a major version is rarely API-compatible with the previous and demands measurement-result re-baselining.",
-      "matchPackageNames": [
-        "transformers",
-        "vllm",
-        "tensorrt-llm",
-        "vllm/vllm-openai",
-        "nvcr.io/nvidia/tensorrt-llm/release",
-        "pytorch/pytorch"
-      ],
-      "matchUpdateTypes": ["major"],
-      "dependencyDashboardApproval": true
-    },
-    {
       "description": "Only auto-PR when Mend merge-confidence signal is high or very-high. Filters out releases that other repos have flagged as unstable via CI / revert patterns.",
       "matchPackageNames": [
         "transformers",
