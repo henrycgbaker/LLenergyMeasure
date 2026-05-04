@@ -372,9 +372,12 @@ jobs:
         if: steps.probe.outputs.verdict == 'fail' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-transformers-probe-blocked"
+          REPO: ${{ github.repository }}
         run: |
-          PR_NUMBER="${{ steps.pr.outputs.number }}"
           {
+            echo "<!-- ${MARKER} -->"
             echo "## Engine schemas — transformers (probe-blocked)"
             echo
             echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
@@ -391,8 +394,8 @@ jobs:
             echo "- **Run \`@llem-ci-bot /approve-reuse transformers schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
             echo
             echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
-          } | gh pr comment "$PR_NUMBER" --body-file -
-          gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
+          } | scripts/ci/upsert_pr_comment.sh
+          gh pr edit "$PR" --add-label "probe-blocked" 2>/dev/null || true
 
       - name: Upload diff artefact
         if: steps.probe.outputs.verdict == 'pass'
@@ -405,12 +408,28 @@ jobs:
             /tmp/engine-schemas-diff/transformers.summary.md
             ${{ env.SCHEMAS_DIR }}/transformers.json
 
-      - name: Post per-pipeline comment (suppress on empty)
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.pr.outputs.number != ''
+      - name: Post per-pipeline comment
+        if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-transformers-diff"
+          REPO: ${{ github.repository }}
         run: |
-          gh pr comment "${{ steps.pr.outputs.number }}" --body-file /tmp/engine-schemas-diff/transformers.summary.md
+          {
+            echo "<!-- ${MARKER} -->"
+            cat /tmp/engine-schemas-diff/transformers.summary.md
+          } | scripts/ci/upsert_pr_comment.sh
+
+      - name: Clean up stale probe-blocked comment (probe now passes)
+        if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-transformers-probe-blocked"
+          REPO: ${{ github.repository }}
+          MODE: delete
+        run: scripts/ci/upsert_pr_comment.sh
 
       - name: Apply per-pipeline label
         if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
@@ -697,15 +716,15 @@ jobs:
           } > /tmp/engine-schemas-diff/vllm.summary.md
 
       - name: Probe-fail comment (skip downstream)
-        if: steps.probe.outputs.verdict == 'fail' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        if: steps.probe.outputs.verdict == 'fail' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-vllm-probe-blocked"
+          REPO: ${{ github.repository }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
           {
+            echo "<!-- ${MARKER} -->"
             echo "## Engine schemas — vllm (probe-blocked)"
             echo
             echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
@@ -722,8 +741,8 @@ jobs:
             echo "- **Run \`@llem-ci-bot /approve-reuse vllm schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
             echo
             echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
-          } | gh pr comment "$PR_NUMBER" --body-file -
-          gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
+          } | scripts/ci/upsert_pr_comment.sh
+          gh pr edit "$PR" --add-label "probe-blocked" 2>/dev/null || true
 
       - name: Upload diff artefact
         if: steps.probe.outputs.verdict == 'pass'
@@ -736,16 +755,28 @@ jobs:
             /tmp/engine-schemas-diff/vllm.summary.md
             ${{ env.SCHEMAS_DIR }}/vllm.json
 
-      - name: Post per-pipeline comment (suppress on empty)
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+      - name: Post per-pipeline comment
+        if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-vllm-diff"
+          REPO: ${{ github.repository }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
-          gh pr comment "$PR_NUMBER" --body-file /tmp/engine-schemas-diff/vllm.summary.md
+          {
+            echo "<!-- ${MARKER} -->"
+            cat /tmp/engine-schemas-diff/vllm.summary.md
+          } | scripts/ci/upsert_pr_comment.sh
+
+      - name: Clean up stale probe-blocked comment (probe now passes)
+        if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-vllm-probe-blocked"
+          REPO: ${{ github.repository }}
+          MODE: delete
+        run: scripts/ci/upsert_pr_comment.sh
 
       - name: Apply per-pipeline label
         if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
@@ -1051,15 +1082,15 @@ jobs:
           } > /tmp/engine-schemas-diff/tensorrt.summary.md
 
       - name: Probe-fail comment (skip downstream)
-        if: steps.probe.outputs.verdict == 'fail' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+        if: steps.probe.outputs.verdict == 'fail' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-tensorrt-probe-blocked"
+          REPO: ${{ github.repository }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
           {
+            echo "<!-- ${MARKER} -->"
             echo "## Engine schemas — tensorrt (probe-blocked)"
             echo
             echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
@@ -1076,8 +1107,8 @@ jobs:
             echo "- **Run \`@llem-ci-bot /approve-reuse tensorrt schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
             echo
             echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
-          } | gh pr comment "$PR_NUMBER" --body-file -
-          gh pr edit "$PR_NUMBER" --add-label "probe-blocked" 2>/dev/null || true
+          } | scripts/ci/upsert_pr_comment.sh
+          gh pr edit "$PR" --add-label "probe-blocked" 2>/dev/null || true
 
       - name: Upload diff artefact
         if: steps.probe.outputs.verdict == 'pass'
@@ -1090,16 +1121,28 @@ jobs:
             /tmp/engine-schemas-diff/tensorrt.summary.md
             ${{ env.SCHEMAS_DIR }}/tensorrt.json
 
-      - name: Post per-pipeline comment (suppress on empty)
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && (github.event_name == 'pull_request' || inputs.pr_number != '')
+      - name: Post per-pipeline comment
+        if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-tensorrt-diff"
+          REPO: ${{ github.repository }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            exit 0
-          fi
-          gh pr comment "$PR_NUMBER" --body-file /tmp/engine-schemas-diff/tensorrt.summary.md
+          {
+            echo "<!-- ${MARKER} -->"
+            cat /tmp/engine-schemas-diff/tensorrt.summary.md
+          } | scripts/ci/upsert_pr_comment.sh
+
+      - name: Clean up stale probe-blocked comment (probe now passes)
+        if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MARKER: "bot-id: schemas-tensorrt-probe-blocked"
+          REPO: ${{ github.repository }}
+          MODE: delete
+        run: scripts/ci/upsert_pr_comment.sh
 
       - name: Apply per-pipeline label
         if: steps.probe.outputs.verdict == 'pass' && (github.event_name == 'pull_request' || inputs.pr_number != '')
