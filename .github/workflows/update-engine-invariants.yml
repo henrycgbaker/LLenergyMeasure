@@ -1,4 +1,4 @@
-name: Engine Invariants — Probe + Mine + Vendor
+name: Update engine invariants
 
 # Per-concern workflow for the engine-invariants layer. Each per-engine job
 # probes the producer module's landmarks, mines the rules corpus, vendor-
@@ -9,11 +9,11 @@ name: Engine Invariants — Probe + Mine + Vendor
 # `if:` gating rather than file proliferation. One workflow file covers all
 # three engines:
 #
-#   transformers : workflow_run-gated on Engine Image Push (transformers),
-#                  which itself chains off Engine Image Build success. The
+#   transformers : workflow_run-gated on Publish engine image (transformers),
+#                  which itself chains off Build engine image success. The
 #                  heavy first-party Docker build happens once in
-#                  engine-image-build.yml (cache export only) and is
-#                  republished as a runtime image by engine-image-push.yml;
+#                  build-engine-image.yml (cache export only) and is
+#                  republished as a runtime image by publish-engine-image.yml;
 #                  this job pulls that runtime image and runs probe + mine
 #                  + vendor + writeback.
 #   vllm         : pull_request: paths-gated. Pulls upstream
@@ -42,6 +42,25 @@ name: Engine Invariants — Probe + Mine + Vendor
 #   commit-back (which only touches OUTPUT paths), so re-runs on unchanged
 #   source emit byte-identical YAML. This determinism is THE prevention
 #   against the synchronize-loop the watchdog catches.
+#
+# Documented gap (issue #515 vs trigger-asymmetry):
+#
+# The transformers cell is gated workflow_run + workflow_dispatch only
+# (NOT pull_request). PR edits to this workflow file therefore exercise
+# the vllm + tensorrt cells (via the dorny filter) but NOT the
+# transformers cell on PR-time. Transformers gets re-tested by the
+# workflow_run chain after publish-engine-image succeeds — so workflow
+# changes are validated against the transformers cell on the next
+# Build → Push cycle, not within the same PR.
+#
+# This is by design: the transformers cell needs the freshly-built
+# runtime image (transformers-cache:transformers-VER), which only
+# exists after publish-engine-image succeeds. PR-time transformers
+# testing without a real image would be a half-test.
+#
+# The actionlint job in ci.yml provides shape-validation coverage for
+# the transformers cell at PR time, so YAML-level regressions are
+# caught immediately.
 
 on:
   pull_request:
@@ -60,7 +79,7 @@ on:
     # build), not the build directly: invariants-transformers needs to
     # pull the runtime image from GHCR, which doesn't exist until push
     # lands.
-    workflows: ["Engine Image Push (transformers)"]
+    workflows: ["Publish engine image (transformers)"]
     types: [completed]
   workflow_dispatch:
     inputs:
