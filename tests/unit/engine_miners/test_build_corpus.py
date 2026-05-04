@@ -524,6 +524,82 @@ class TestLoaderRoundTrip:
 
 
 # ---------------------------------------------------------------------------
+# added_at preservation across re-mines
+# ---------------------------------------------------------------------------
+
+
+class TestAddedAtPreservation:
+    def test_load_prior_added_at_map_missing_corpus(self, tmp_path: Path) -> None:
+        out = build_corpus._load_prior_added_at_map(tmp_path / "missing.yaml")
+        assert out == {}
+
+    def test_load_prior_added_at_map_invalid_yaml(self, tmp_path: Path) -> None:
+        path = tmp_path / "broken.yaml"
+        path.write_text("not: valid: yaml: [")
+        out = build_corpus._load_prior_added_at_map(path)
+        assert out == {}
+
+    def test_load_prior_added_at_map_extracts_fingerprint_to_date(self, tmp_path: Path) -> None:
+        rule = _ast_rule()
+        rule["added_at"] = "2026-04-01"
+        path = tmp_path / "prior.yaml"
+        path.write_text(yaml.safe_dump(_envelope([rule]), sort_keys=False))
+        out = build_corpus._load_prior_added_at_map(path)
+        fp = build_corpus.fingerprint_rule(rule)
+        assert out == {fp: "2026-04-01"}
+
+    def test_preserve_added_at_restores_matching_fingerprint(self) -> None:
+        rule = _ast_rule()
+        rule["added_at"] = "2026-04-30"
+        prior = {build_corpus.fingerprint_rule(rule): "2026-04-01"}
+        build_corpus._preserve_added_at([rule], prior)
+        assert rule["added_at"] == "2026-04-01"
+
+    def test_preserve_added_at_keeps_today_when_no_match(self) -> None:
+        rule = _ast_rule()
+        rule["added_at"] = "2026-04-30"
+        # Different fingerprint in prior — no match expected.
+        other = _ast_rule(fields={"transformers.sampling.top_p": {"<": 0.0}})
+        prior = {build_corpus.fingerprint_rule(other): "2026-04-01"}
+        build_corpus._preserve_added_at([rule], prior)
+        assert rule["added_at"] == "2026-04-30"
+
+    def test_preserve_added_at_no_op_when_prior_empty(self) -> None:
+        rule = _ast_rule()
+        rule["added_at"] = "2026-04-30"
+        build_corpus._preserve_added_at([rule], {})
+        assert rule["added_at"] == "2026-04-30"
+
+    def test_e2e_added_at_preserved_across_remine(self, tmp_path: Path) -> None:
+        """Re-running the merger after a prior canonical exists keeps each
+        rule's original ``added_at`` instead of stamping today's date.
+
+        Stops Renovate-driven rebuilds from producing noise diffs that
+        flip ``added_at`` on every rule even when content is unchanged.
+        """
+        staging = tmp_path / "_staging"
+
+        # First run: produce canonical with added_at "2026-04-01".
+        first_rule = _ast_rule()
+        first_rule["added_at"] = "2026-04-01"
+        _write_staging(staging, "transformers_static_miner.yaml", _envelope([first_rule]))
+        build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
+
+        prior_path = tmp_path / "transformers.proposed.yaml"
+        prior = yaml.safe_load(prior_path.read_text())
+        assert prior["rules"][0]["added_at"] == "2026-04-01"
+
+        # Second run: re-stage with same fingerprint but today's date.
+        second_rule = _ast_rule()
+        second_rule["added_at"] = "2026-05-03"
+        _write_staging(staging, "transformers_static_miner.yaml", _envelope([second_rule]))
+        build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
+
+        rebuilt = yaml.safe_load(prior_path.read_text())
+        assert rebuilt["rules"][0]["added_at"] == "2026-04-01"
+
+
+# ---------------------------------------------------------------------------
 # Vendor-validation gate
 # ---------------------------------------------------------------------------
 

@@ -67,6 +67,8 @@ from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.
     find_class,
     find_method,
     first_string_arg,
+    format_call_template,
+    render_binop_concat_template,
 )
 
 # Why we DON'T import _base's detector classes (ConditionalRaiseDetector,
@@ -592,9 +594,12 @@ def _detect_raise(stmt: ast.stmt) -> DetectedBody | None:
         msg = first_string_arg(stmt.exc)
         if msg is None:
             # Sometimes the message is a concatenation: ``msg_prefix + "..."``.
+            # render_binop_concat_template renders Constants verbatim and
+            # self.X as {X} placeholders; returns None if any operand isn't
+            # cleanly renderable (preferable to leaking literal source).
             for arg in stmt.exc.args:
                 if isinstance(arg, ast.BinOp) and isinstance(arg.op, ast.Add):
-                    msg = ast.unparse(arg)
+                    msg = render_binop_concat_template(arg)
                     break
     return DetectedBody(
         severity="error",
@@ -689,7 +694,7 @@ def _detect_minor_issues(stmt: ast.stmt) -> DetectedBody | None:
         key = target.slice.value
     msg: str | None = None
     if isinstance(stmt.value, ast.Call):
-        msg = ast.unparse(stmt.value)
+        msg = format_call_template(stmt.value)
     elif isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
         msg = stmt.value.value
     return DetectedBody(
