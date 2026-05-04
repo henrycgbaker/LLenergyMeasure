@@ -58,7 +58,7 @@ jobs:
         # guard, so the SSOT commit-back below can legitimately retrigger
         # downstream engine-invariants / engine-schemas runs.
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
