@@ -357,7 +357,32 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Skip updating engine_versions/{engine}.compat.json (useful for CI dry-runs).",
     )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help=(
+            "Path to write the ProbeReport JSON. When set, JSON goes to this file "
+            "atomically (write to .tmp, fsync, rename) and stdout stays clean. When "
+            "absent, JSON is written to stdout (legacy behaviour). Use --output in "
+            "CI when the engine library may write to stdout at import time (e.g. "
+            "tensorrt-llm's logger), which would otherwise pollute the captured JSON."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def _write_report_to_file(path: Path, report: ProbeReport) -> None:
+    """Atomically write *report* as JSON to *path*.
+
+    Atomic via temp-file + rename so a partial write can never appear at
+    ``path``. Parent directory created if missing.
+    """
+    payload = json.dumps(asdict(report), indent=2, sort_keys=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(payload, encoding="utf-8")
+    tmp.replace(path)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -367,7 +392,7 @@ def main(argv: list[str] | None = None) -> int:
     except (FileNotFoundError, KeyError, ImportError, AttributeError, TypeError, ValueError) as exc:
         # Infrastructure failure: SSOT missing / malformed / producer
         # module unimportable / LANDMARKS missing or malformed. Distinct
-        # from a fail-verdict probe (which writes JSON to stdout).
+        # from a fail-verdict probe (which writes JSON to stdout/file).
         print(json.dumps({"error": type(exc).__name__, "message": str(exc)}), file=sys.stderr)
         return 2
 
@@ -381,7 +406,17 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
 
-    print(json.dumps(asdict(report), indent=2, sort_keys=True))
+    if args.output is not None:
+        try:
+            _write_report_to_file(args.output, report)
+        except OSError as exc:
+            print(
+                json.dumps({"error": "OutputWriteFailed", "message": str(exc)}),
+                file=sys.stderr,
+            )
+            return 2
+    else:
+        print(json.dumps(asdict(report), indent=2, sort_keys=True))
     return 0
 
 
