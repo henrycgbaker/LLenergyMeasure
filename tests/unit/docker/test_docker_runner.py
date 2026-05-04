@@ -883,15 +883,17 @@ class TestExtraMounts:
         assert "/host/b:/container/b" in cmd
 
     def test_no_extra_mounts_no_extra_volumes(self, tmp_path):
-        """Without extra_mounts, only the exchange_dir -v mount is present."""
+        """Without extra_mounts, two -v flags are present: exchange dir + llem-src."""
         config = make_config()
         runner = DockerRunner(image=IMAGE)
         cmd = self._build_cmd(config, tmp_path, runner)
 
-        # Only one -v flag: the exchange dir
+        # Two -v flags: the exchange dir + the llem-src bind mount (all engines
+        # now use mount-based dispatch — see docker_runner._build_docker_cmd).
         v_count = cmd.count("-v")
-        assert v_count == 1
+        assert v_count == 2
         assert f"/tmp/llem-test:{CONTAINER_EXCHANGE_DIR}" in cmd
+        assert any(arg.endswith(":/llem-src:ro") for arg in cmd)
 
     def test_tensorrt_auto_cache_mount(self, tmp_path):
         """TRT-LLM engine auto-mounts ~/.cache/trt-llm:/root/.cache/trt-llm."""
@@ -946,9 +948,9 @@ class TestExtraMounts:
 
 
 class TestEntrypointPerEngine:
-    """The mount-pivot dispatch sets --entrypoint based on (engine, tp_size).
+    """All engines now use mount-based dispatch with --entrypoint set per tp_size.
 
-    - transformers (any tp): no --entrypoint override (legacy shape).
+    - transformers (any tp): --entrypoint python3.
     - vllm (any tp): --entrypoint python3.
     - tensorrt with tp<=1: --entrypoint python3.
     - tensorrt with tp>1: --entrypoint mpirun.
@@ -966,7 +968,7 @@ class TestEntrypointPerEngine:
     @pytest.mark.parametrize(
         "engine,tp_size,expected_entrypoint",
         [
-            (Engine.TRANSFORMERS, 1, None),
+            (Engine.TRANSFORMERS, 1, "python3"),
             (Engine.VLLM, 1, "python3"),
             (Engine.TENSORRT, 1, "python3"),
             (Engine.TENSORRT, 2, "mpirun"),

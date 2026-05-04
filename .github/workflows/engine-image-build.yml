@@ -129,24 +129,31 @@ jobs:
           tags: ${{ steps.targets.outputs.tags }}
           push: ${{ steps.targets.outputs.push }}
           no-cache: ${{ steps.targets.outputs.no_cache }}
-          # SSOT-driven build arg. INSTALL_FA3 deliberately NOT overridden
-          # here — the Dockerfile defaults to true, so CI builds the same
-          # production-equivalent image users get. Two parallelism knobs
-          # multiply: MAX_JOBS caps parallel nvcc invocations (ninja -j);
-          # NVCC_THREADS caps threads per nvcc call. flash-attention/hopper
-          # reads NVCC_THREADS with default 2 — the prior 60-min build used
-          # only ~2 cc1plus workers despite MAX_JOBS=16 because the nvcc
-          # internal cap dominated. NVCC_THREADS=4 + MAX_JOBS=16 gives up to
-          # ~64 effective workers on the 128-vCPU / 528 GB host.
+          # SSOT-driven build arg only. INSTALL_FA3 / MAX_JOBS / NVCC_THREADS
+          # are pinned in docker/Dockerfile.transformers (32 / 4 — saturates
+          # the 128-vCPU self-hosted runner) and DELIBERATELY NOT passed as
+          # build-args here. Build-args participate in BuildKit's layer-hash,
+          # so varying them across CI iterations invalidates the FA3 layer
+          # cache (~30 min recompile per change). With the parallelism knobs
+          # pinned in the Dockerfile, the layer hash is stable across runs
+          # and the FA3 layer cache-hits reliably from prior builds.
           build-args: |
             TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
-            MAX_JOBS=16
-            NVCC_THREADS=4
+          # cache-from: registry-mode reads from a separate cache-only ref
+          # (not the runtime image) where mode=max metadata for ALL
+          # intermediate layers lives. That gives us cache hits on the FA3
+          # builder layer + the runtime install layers — which the runtime
+          # image's content-addressable manifest alone cannot provide.
+          # GHA cache mode dropped: a prior run (25329040682) spent ~45 min
+          # uploading 7-8 GB to GitHub Actions Cache. Registry-mode export
+          # is much faster (just metadata + dedup-aware layer push) AND
+          # works on workflow_dispatch where push: false skips the runtime
+          # image (the cache ref is independent of the runtime tag).
           cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
-            type=gha,scope=transformers-${{ steps.version.outputs.version }}
-          cache-to: type=gha,mode=max,scope=transformers-${{ steps.version.outputs.version }}
+          cache-to: type=registry,mode=max,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache
 
       - name: Emit image digest summary
         run: |
