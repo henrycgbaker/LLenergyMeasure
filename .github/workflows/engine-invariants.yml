@@ -930,23 +930,26 @@ jobs:
           echo "date=${DATE}" >> "$GITHUB_OUTPUT"
 
       - name: Fetch tensorrt-llm source tarball (host)
-        # Download the canonical GitHub release tarball for the SSOT-pinned
-        # version and extract it under /tmp/trt-llm-${VER}/. The static
-        # miner reads source files from /tmp/trt-llm-${VER}/tensorrt_llm/.
-        # The tarball location is bind-mounted into the container in the
-        # probe + mine steps below, decoupling source resolution from
-        # whatever the NGC image happens to expose via Python introspection.
+        # Static miner reads source from /tmp/trt-llm-${VER}/tensorrt_llm/;
+        # we fetch from the GitHub tag rather than introspect the NGC
+        # package because NGC's package layout has churned repeatedly
+        # (#472, #500). On the self-hosted runner /tmp persists across
+        # jobs, so skip the fetch when the tree is already extracted at
+        # this version (sibling schemas-tensorrt cell or a prior re-run
+        # of this PR may have populated it).
         env:
           VER: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          rm -rf "/tmp/trt-llm-${VER}"
-          mkdir -p "/tmp/trt-llm-${VER}"
-          curl -fsSL -o "/tmp/trt-llm-src-${VER}.tar.gz" \
-            "https://github.com/NVIDIA/TensorRT-LLM/archive/refs/tags/v${VER}.tar.gz"
-          tar -xzf "/tmp/trt-llm-src-${VER}.tar.gz" -C "/tmp/trt-llm-${VER}" --strip-components=1
-          rm "/tmp/trt-llm-src-${VER}.tar.gz"
-          test -d "/tmp/trt-llm-${VER}/tensorrt_llm"
+          DEST="/tmp/trt-llm-${VER}"
+          if [[ -d "${DEST}/tensorrt_llm" ]]; then
+            echo "Source tree already present at ${DEST}; skipping fetch."
+            exit 0
+          fi
+          mkdir -p "${DEST}"
+          curl -fsSL "https://github.com/NVIDIA/TensorRT-LLM/archive/refs/tags/v${VER}.tar.gz" \
+            | tar -xz -C "${DEST}" --strip-components=1
+          test -d "${DEST}/tensorrt_llm"
 
       - name: Probe — landmark resolution check (in container)
         id: probe

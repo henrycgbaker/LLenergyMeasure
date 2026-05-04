@@ -796,24 +796,24 @@ jobs:
           echo "date=${DATE}" >> "$GITHUB_OUTPUT"
 
       - name: Fetch tensorrt-llm source tarball (host)
-        # Download the canonical GitHub release tarball for the SSOT-pinned
-        # version and extract it under /tmp/trt-llm-${VER}/. The static
-        # introspector reads source files from the same path the static
-        # miner does. The tarball location is bind-mounted into the
-        # container in the probe + discover steps below, decoupling source
-        # resolution from whatever the NGC image happens to expose via
-        # Python introspection.
+        # Static introspector reads source from /tmp/trt-llm-${VER}/ for
+        # the same reasons as invariants-tensorrt — see that cell's
+        # comment. Skip the fetch when the tree is already extracted at
+        # this version (sibling invariants-tensorrt cell or a prior re-run
+        # of this PR may have populated it on the self-hosted runner).
         env:
           VER: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          rm -rf "/tmp/trt-llm-${VER}"
-          mkdir -p "/tmp/trt-llm-${VER}"
-          curl -fsSL -o "/tmp/trt-llm-src-${VER}.tar.gz" \
-            "https://github.com/NVIDIA/TensorRT-LLM/archive/refs/tags/v${VER}.tar.gz"
-          tar -xzf "/tmp/trt-llm-src-${VER}.tar.gz" -C "/tmp/trt-llm-${VER}" --strip-components=1
-          rm "/tmp/trt-llm-src-${VER}.tar.gz"
-          test -d "/tmp/trt-llm-${VER}/tensorrt_llm"
+          DEST="/tmp/trt-llm-${VER}"
+          if [[ -d "${DEST}/tensorrt_llm" ]]; then
+            echo "Source tree already present at ${DEST}; skipping fetch."
+            exit 0
+          fi
+          mkdir -p "${DEST}"
+          curl -fsSL "https://github.com/NVIDIA/TensorRT-LLM/archive/refs/tags/v${VER}.tar.gz" \
+            | tar -xz -C "${DEST}" --strip-components=1
+          test -d "${DEST}/tensorrt_llm"
 
       - name: Probe — landmark resolution check (in container)
         id: probe
