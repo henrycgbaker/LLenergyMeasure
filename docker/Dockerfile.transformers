@@ -64,9 +64,19 @@ ARG MAX_JOBS=32
 ARG NVCC_THREADS=4
 ENV MAX_JOBS=${MAX_JOBS}
 ENV NVCC_THREADS=${NVCC_THREADS}
+# apt cache mounts persist /var/cache/apt + /var/lib/apt/lists between
+# builds on the same BuildKit instance — subsequent builds reuse the
+# fetched .deb packages and Packages metadata without hitting the mirror.
+# Eliminates the dominant build-flake mode (Ubuntu archive intermittently
+# returning incomplete or malformed package lists). The trailing
+# `rm -rf /var/lib/apt/lists/*` is a no-op when the cache mount is in
+# place — it scrubs the in-image copy after the install layer commits,
+# but the mount-backed cache survives.
 RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     if [ "$INSTALL_FA3" = "true" ]; then \
-        apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* && \
+        apt-get update && apt-get install -y --no-install-recommends git && \
         git clone --depth 1 --branch ${FLASH_ATTN_VERSION} https://github.com/Dao-AILab/flash-attention.git /tmp/flash-attention && \
         pip install /tmp/flash-attention/hopper --no-build-isolation && \
         rm -rf /tmp/flash-attention; \
@@ -95,12 +105,15 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Suppress hardlink warnings when cache mount is on a different filesystem
 ENV UV_LINK_MODE=copy
 
-# Same apt-retry resilience as the builder stage (separate stage = separate apt config).
+# Same apt-retry + cache-mount resilience as the builder stage. Cache mounts
+# persist /var/cache/apt + /var/lib/apt/lists across builds — subsequent
+# builds reuse cached .debs and metadata, avoiding mirror-flake exposure.
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
 
 # Required for torch.compile (inductor JIT-compiles Triton kernels via C/C++ compiler)
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
-    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends build-essential
 
 # Copy compiled flash-attn from builder (package dir + dist-info + CUDA extensions)
 COPY --from=builder /flash-attn-staging/ /opt/conda/lib/python3.11/site-packages/
