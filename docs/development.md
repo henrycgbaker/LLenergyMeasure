@@ -81,7 +81,14 @@ The principled rationale:
    has transformers but no FA3 (the hopper-extension build is niche and
    compiled from source). `docker/Dockerfile.transformers` ships transformers
    plus FA2 (PyPI wheel) plus FA3 (compiled from source) plus accelerate /
-   bitsandbytes / calflops / sentencepiece / einops pre-installed.
+   bitsandbytes / calflops / sentencepiece / einops pre-installed, plus
+   llenergymeasure's runtime non-engine deps (pydantic, typer, pyyaml,
+   platformdirs, nvidia-ml-py, numpy, pyarrow, tqdm, rich, python-dotenv,
+   filelock). The llenergymeasure package itself is NOT installed into the
+   image — it is bind-mounted at runtime via `-v <repo>:/llem-src` +
+   `PYTHONPATH=/llem-src`, identically to the vllm + tensorrt cells. This
+   keeps image rebuilds dependent only on the engine substrate, not on
+   project source edits, so `src/` changes never invalidate the FA3 layer.
 
 3. **Build once, consume many.** Engine Image Build is the single producer
    of the transformers image; downstream workflows pull rather than rebuild.
