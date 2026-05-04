@@ -260,6 +260,11 @@ def test_probe_output_flag_writes_to_file_keeps_stdout_clean(
     captured = capsys.readouterr()
     assert captured.out == "", "stdout should be empty when --output is set"
 
+    # Mode 0644 — readable by the host runner user when the probe is invoked
+    # from inside a Docker container running as root via a bind mount.
+    # `tempfile.mkstemp` defaults to 0600 which would block host reads.
+    assert out.stat().st_mode & 0o777 == 0o644, "output must be 0644 for host bind-mount reads"
+
     payload = json.loads(out.read_text())
     assert payload["engine"] == "transformers"
     assert payload["verdict"] == "pass"

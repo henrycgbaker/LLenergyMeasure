@@ -382,6 +382,13 @@ def _write_report_to_file(path: Path, report: ProbeReport) -> None:
     durable file (matters on power loss / hard reboot), and cleans up the
     temp file on any failure so retries never trip over orphaned ``.tmp``
     files. Parent directory is created if missing.
+
+    The output is chmod'd to 0644. ``tempfile.mkstemp`` defaults to 0600
+    (owner-only) for security, but CI invokes the probe inside a Docker
+    container running as root and reads the result on the host via a bind
+    mount. Without 0644 the non-root host runner user gets ``Permission
+    denied`` when opening the JSON. PoC reproduces the bug with mkstemp's
+    default mode and verifies the fix; see local-engine-build-test.sh.
     """
     payload = json.dumps(asdict(report), indent=2, sort_keys=True)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -391,6 +398,7 @@ def _write_report_to_file(path: Path, report: ProbeReport) -> None:
             f.write(payload)
             f.flush()
             os.fsync(f.fileno())
+        os.chmod(tmp_path, 0o644)
         os.replace(tmp_path, path)
     except Exception:
         with contextlib.suppress(OSError):
