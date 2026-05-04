@@ -106,13 +106,69 @@ concurrency:
   # workflow_run.head_sha distinguishes per-PR runs for the transformers
   # cell; pull_request runs use github.head_ref. Combine both so the group
   # string stays stable across trigger sources.
-  group: engine-invariants-${{ github.event.workflow_run.head_branch || github.event.workflow_run.head_sha || github.head_ref || github.ref }}
-  cancel-in-progress: true
+  group: update-engine-invariants-${{ github.event.workflow_run.head_branch || github.event.workflow_run.head_sha || github.head_ref || github.ref }}
+  cancel-in-progress: false   # writeback target: never cancel mid-flight
 
 env:
   CORPUS_DIR: configs/engine_invariants
 
 jobs:
+  filter:
+    # Per-engine isolation. On pull_request, dorny/paths-filter sets one
+    # output per engine based on which engine-specific paths changed.
+    # Each engine cell gates `if: needs.filter.outputs.<engine> == 'true'`.
+    # Skipped on workflow_run / workflow_dispatch — those gate via event-
+    # name + dispatch inputs as before.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      transformers: ${{ steps.changes.outputs.transformers }}
+      vllm: ${{ steps.changes.outputs.vllm }}
+      tensorrt: ${{ steps.changes.outputs.tensorrt }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          # Each engine filter MUST include this workflow file + the
+          # dedup helper so workflow-level changes self-test all engines
+          # (issue #515).
+          filters: |
+            transformers:
+              - 'engine_versions/transformers.yaml'
+              - 'docker/Dockerfile.transformers'
+              - 'scripts/engine_miners/transformers_*.py'
+              - 'scripts/engine_miners/_*.py'
+              - 'scripts/engine_miners/build_corpus.py'
+              - 'scripts/vendor_rules.py'
+              - 'scripts/_invariant_vendor_common.py'
+              - 'scripts/refresh_invariant_rules.sh'
+              - 'configs/engine_invariants/transformers.*.yaml'
+              - '.github/workflows/update-engine-invariants.yml'
+              - 'scripts/ci/upsert_pr_comment.sh'
+            vllm:
+              - 'engine_versions/vllm.yaml'
+              - 'scripts/engine_miners/vllm_*.py'
+              - 'scripts/engine_miners/_*.py'
+              - 'scripts/engine_miners/build_corpus.py'
+              - 'scripts/vendor_rules.py'
+              - 'scripts/_invariant_vendor_common.py'
+              - 'scripts/refresh_invariant_rules.sh'
+              - 'configs/engine_invariants/vllm.*.yaml'
+              - '.github/workflows/update-engine-invariants.yml'
+              - 'scripts/ci/upsert_pr_comment.sh'
+            tensorrt:
+              - 'engine_versions/tensorrt.yaml'
+              - 'scripts/engine_miners/tensorrt_*.py'
+              - 'scripts/engine_miners/_*.py'
+              - 'scripts/engine_miners/build_corpus.py'
+              - 'scripts/vendor_rules.py'
+              - 'scripts/_invariant_vendor_common.py'
+              - 'scripts/refresh_invariant_rules.sh'
+              - 'configs/engine_invariants/tensorrt.*.yaml'
+              - '.github/workflows/update-engine-invariants.yml'
+              - 'scripts/ci/upsert_pr_comment.sh'
+
   invariants-transformers:
     # Selected on workflow_run (Engine Image Push success) or
     # workflow_dispatch with engine=transformers/all. Skipped on
@@ -476,9 +532,13 @@ jobs:
           exit 1
 
   invariants-vllm:
+    needs: filter
     if: >-
-      github.event_name == 'pull_request'
-      || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'vllm' || inputs.engine == 'all'))
+      always()
+      && (
+        (github.event_name == 'pull_request' && needs.filter.result == 'success' && needs.filter.outputs.vllm == 'true')
+        || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'vllm' || inputs.engine == 'all'))
+      )
     runs-on: self-hosted
     timeout-minutes: 60
     steps:
@@ -911,9 +971,13 @@ jobs:
     # — it only needs source files — so we now download the canonical
     # GitHub release tarball on the runner host and bind-mount it into
     # the container. Decouples source resolution from NGC image internals.
+    needs: filter
     if: >-
-      github.event_name == 'pull_request'
-      || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'tensorrt' || inputs.engine == 'all'))
+      always()
+      && (
+        (github.event_name == 'pull_request' && needs.filter.result == 'success' && needs.filter.outputs.tensorrt == 'true')
+        || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'tensorrt' || inputs.engine == 'all'))
+      )
     runs-on: self-hosted
     timeout-minutes: 60
     steps:
