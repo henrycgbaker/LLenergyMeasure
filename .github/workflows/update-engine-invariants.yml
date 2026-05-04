@@ -418,7 +418,8 @@ jobs:
                 echo "### Proposed corpus diff"
                 echo
                 echo '```diff'
-                diff -u /tmp/engine-invariants-diff/transformers.proposed.old.yaml \
+                diff -u --label transformers.proposed.yaml --label transformers.proposed.yaml \
+                        /tmp/engine-invariants-diff/transformers.proposed.old.yaml \
                         "${CORPUS_DIR}/transformers.proposed.yaml" | head -n 200 || true
                 echo '```'
                 echo
@@ -811,7 +812,8 @@ jobs:
                 echo "### Proposed corpus diff"
                 echo
                 echo '```diff'
-                diff -u /tmp/engine-invariants-diff/vllm.proposed.old.yaml \
+                diff -u --label vllm.proposed.yaml --label vllm.proposed.yaml \
+                        /tmp/engine-invariants-diff/vllm.proposed.old.yaml \
                         "${CORPUS_DIR}/vllm.proposed.yaml" | head -n 200 || true
                 echo '```'
                 echo
@@ -1275,7 +1277,8 @@ jobs:
                 echo "### Proposed corpus diff"
                 echo
                 echo '```diff'
-                diff -u /tmp/engine-invariants-diff/tensorrt.proposed.old.yaml \
+                diff -u --label tensorrt.proposed.yaml --label tensorrt.proposed.yaml \
+                        /tmp/engine-invariants-diff/tensorrt.proposed.old.yaml \
                         "${CORPUS_DIR}/tensorrt.proposed.yaml" | head -n 200 || true
                 echo '```'
                 echo
