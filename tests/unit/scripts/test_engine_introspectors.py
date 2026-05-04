@@ -190,3 +190,49 @@ def test_make_envelope_fills_required_keys() -> None:
 def test_schema_version_is_semver_with_major_one() -> None:
     major = int(_common.SCHEMA_VERSION.split(".")[0])
     assert major == 1, "ships schema_version 1.x; bumping major requires loader update"
+
+
+# ---------------------------------------------------------------------------
+# Per-engine LANDMARKS contracts
+# ---------------------------------------------------------------------------
+#
+# The probe primitive (``scripts._probe``) reads ``LANDMARKS`` from each
+# producer module and resolves every dotted path against the installed
+# library; a single missing landmark flips the probe verdict to ``fail``
+# and skips downstream discovery. These tests exercise the same
+# resolution logic for the transformers introspector so a landmark-name
+# drift in upstream transformers is caught at unit-test time rather than
+# only on the next probe run.
+
+
+def test_transformers_introspector_landmarks_resolve() -> None:
+    pytest.importorskip("transformers")
+    import importlib
+
+    from scripts.engine_introspectors import transformers_introspector
+
+    landmarks = transformers_introspector.LANDMARKS
+    assert isinstance(landmarks, tuple) and landmarks, "LANDMARKS must be a non-empty tuple"
+
+    missing: list[str] = []
+    for landmark in landmarks:
+        parts = landmark.split(".")
+        module = None
+        module_idx = 0
+        for split in range(len(parts), 0, -1):
+            try:
+                module = importlib.import_module(".".join(parts[:split]))
+                module_idx = split
+                break
+            except ImportError:
+                continue
+        if module is None:
+            missing.append(landmark)
+            continue
+        try:
+            obj: object = module
+            for attr in parts[module_idx:]:
+                obj = getattr(obj, attr)
+        except AttributeError:
+            missing.append(landmark)
+    assert not missing, f"Unresolvable transformers landmarks: {missing}"
