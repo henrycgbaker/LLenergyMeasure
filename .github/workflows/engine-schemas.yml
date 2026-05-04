@@ -9,13 +9,16 @@ name: Engine Schemas — Probe + Discover
 # `if:` gating rather than file proliferation. One workflow file covers all
 # three engines:
 #
-#   transformers : workflow_run-gated on Engine Image Build (transformers).
-#                  The heavy first-party Docker build happens once in
-#                  engine-image-build.yml; this job pulls the resulting
-#                  image and runs probe + discover + writeback.
+#   transformers : workflow_run-gated on Engine Image Push (transformers),
+#                  which itself chains off Engine Image Build success. The
+#                  heavy first-party Docker build happens once in
+#                  engine-image-build.yml (cache export only) and is
+#                  republished as a runtime image by engine-image-push.yml;
+#                  this job pulls that runtime image and runs probe +
+#                  discover + writeback.
 #   vllm         : pull_request: paths-gated. Pulls upstream
 #                  vllm/vllm-openai:v${VER} directly (no first-party build)
-#                  so it doesn't depend on engine-image-build.yml.
+#                  so it doesn't depend on the build/push pipeline.
 #   tensorrt     : pull_request: paths-gated. Pulls upstream
 #                  nvcr.io/nvidia/tensorrt-llm/release:${VER} directly.
 #
@@ -50,7 +53,10 @@ on:
       - "src/llenergymeasure/config/discovered_schemas/**"
       - ".github/workflows/engine-schemas.yml"
   workflow_run:
-    workflows: ["Engine Image Build (transformers)"]
+    # Chain off the PUSH workflow (which only fires after a successful
+    # build), not the build directly: schemas-transformers needs to pull
+    # the runtime image from GHCR, which doesn't exist until push lands.
+    workflows: ["Engine Image Push (transformers)"]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -85,10 +91,11 @@ env:
 
 jobs:
   schemas-transformers:
-    # Selected on workflow_run (Engine Image Build success) or
+    # Selected on workflow_run (Engine Image Push success) or
     # workflow_dispatch with engine=transformers/all. Skipped on
-    # pull_request: the transformers cell needs the pre-built image,
-    # which engine-image-build.yml produces first.
+    # pull_request: the transformers cell needs the pre-built runtime
+    # image, which engine-image-push.yml produces after engine-image-
+    # build.yml exports the cache.
     if: >-
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
       || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'transformers' || inputs.engine == 'all'))

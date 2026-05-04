@@ -1,33 +1,32 @@
 name: Engine Image Build (transformers)
 
-# Single-source-of-truth build for the transformers engine Docker image.
-# Replaces the previous parallel-rebuild antipattern where engine-invariants
-# and engine-schemas each ran their own buildx step against the same SSOT
-# version, contending on the per-version GHA cache scope. PR-time runs were
-# observed to deadlock on multi-GB layer cache writes.
+# Builds the transformers engine image and exports its layer cache to GHCR.
+# Does NOT push a runtime image — that is the engine-image-push.yml workflow's
+# responsibility, chained via workflow_run on this workflow's success.
 #
 # Pipeline ordering:
 #
 #   Renovate / maintainer PR
-#     |- engine-image-build.yml  (this file)
-#     |  |- on PR: builds + pushes to ghcr.io/<repo>/transformers-cache:transformers-<VERSION>
-#     |  |  (per-PR cache-only repo; never collides with :latest)
-#     |  |- on push to main / schedule: also pushes :latest + :transformers-<VERSION>
-#     |  |  to the canonical ghcr.io/<repo>/transformers repo
+#     |- engine-image-build.yml  (this file)  → publishes :transformers-<VERSION>-buildcache
+#     |  V (workflow_run: completed, conclusion=success, event in [push, schedule])
+#     |- engine-image-push.yml                → pulls cache, pushes :latest + :transformers-<VERSION>
+#     |  V (workflow_run: completed, conclusion=success)
+#     |- engine-schemas.yml :: schemas-transformers job
 #     |  V
-#     |- engine-schemas.yml :: schemas-transformers job  (workflow_run: completed)
-#     |  V
-#     |- engine-invariants.yml :: invariants-transformers job  (workflow_run: completed)
+#     |- engine-invariants.yml :: invariants-transformers job
 #
-# Downstream workflows pull this image rather than rebuilding it. The heavy
-# build cost (FA3 from-source compile, ~30-60 min cold) happens once per
-# (PR, SSOT version), and the schemas + invariants jobs become probe + mine
-# only.
+# Why split build from push:
+#   The previous shape ran build + push in a single buildx step. When the
+#   push step failed (GHCR permissions, registry rate-limits, transient
+#   outages), the entire ~50-min FA3 compile had to re-run on retry. Split
+#   means push failures only re-run the seconds-long push, not the build.
+#   The cache export to :<VERSION>-buildcache is the durable artifact;
+#   the push workflow just consumes it.
 #
-# Drift detection: weekly schedule fires with a from-scratch rebuild
-# (`--no-cache`). If the resulting image digest differs from `:latest`, that
-# surfaces external dependency drift (apt repo, PyPI wheel re-publish, base
-# image silent update) that layer caching alone wouldn't catch.
+# Drift detection: weekly schedule fires with --no-cache. If the resulting
+# layer cache diverges from the prior :<VERSION>-buildcache, that surfaces
+# external dependency drift (apt repo, PyPI wheel re-publish, base image
+# silent update) that layer caching alone wouldn't catch.
 
 on:
   pull_request:
@@ -70,6 +69,8 @@ jobs:
     # 90-min cap chosen for headroom on cold FA3 builds (~15-70 min observed
     # on ds01-gpu depending on first-run vs cached layers).
     timeout-minutes: 90
+    outputs:
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Checkout
@@ -89,72 +90,73 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
+        # Need write access to push the layer cache to the buildcache ref;
+        # read-only would suffice for cache-from but we always do cache-to.
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Determine cache + tag targets
+      - name: Determine cache + no-cache flag
         id: targets
-        # PR builds push to a separate cache-only repo so they don't
-        # pollute :latest. Merge + schedule builds publish :latest +
-        # :transformers-<VERSION> to the canonical repo. workflow_dispatch
-        # respects the no_cache input for ad-hoc drift detection.
+        # Build never pushes a runtime image — engine-image-push.yml does
+        # that. We only push the layer cache here (cache-to). The schedule
+        # event uses --no-cache for drift detection; everything else uses
+        # the existing buildcache. workflow_dispatch optionally honours
+        # the no_cache input.
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "push=true" >> "$GITHUB_OUTPUT"
-            echo "tags=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}" >> "$GITHUB_OUTPUT"
-            echo "no_cache=false" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "push=true" >> "$GITHUB_OUTPUT"
-            echo "tags=ghcr.io/${{ github.repository }}/transformers:latest,ghcr.io/${{ github.repository }}/transformers:transformers-${{ steps.version.outputs.version }}" >> "$GITHUB_OUTPUT"
-            if [ "${{ github.event_name }}" = "schedule" ]; then
-              echo "no_cache=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "no_cache=false" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            echo "push=false" >> "$GITHUB_OUTPUT"
-            echo "tags=transformers-build:test" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "no_cache=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "no_cache=${{ inputs.no_cache }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "no_cache=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build (and push) transformers image
+      - name: Build transformers image (cache export only, no runtime push)
         uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile.transformers
           target: runtime
-          tags: ${{ steps.targets.outputs.tags }}
-          push: ${{ steps.targets.outputs.push }}
+          # Local-only tag: the runtime image is materialised in the
+          # builder's cache for engine-image-push.yml to pull from. Never
+          # pushed to a registry by this workflow.
+          tags: transformers-build:local
+          push: false
           no-cache: ${{ steps.targets.outputs.no_cache }}
-          # SSOT-driven build arg. INSTALL_FA3 deliberately NOT overridden
-          # here — the Dockerfile defaults to true, so CI builds the same
-          # production-equivalent image users get. Two parallelism knobs
-          # multiply: MAX_JOBS caps parallel nvcc invocations (ninja -j);
-          # NVCC_THREADS caps threads per nvcc call. flash-attention/hopper
-          # reads NVCC_THREADS with default 2 — the prior 60-min build used
-          # only ~2 cc1plus workers despite MAX_JOBS=16 because the nvcc
-          # internal cap dominated. NVCC_THREADS=4 + MAX_JOBS=16 gives up to
-          # ~64 effective workers on the 128-vCPU / 528 GB host.
+          # SSOT-driven build arg only. INSTALL_FA3 / MAX_JOBS / NVCC_THREADS
+          # are pinned in docker/Dockerfile.transformers (32 / 4 — saturates
+          # the 128-vCPU self-hosted runner) and DELIBERATELY NOT passed as
+          # build-args here (build-args participate in BuildKit's layer-hash;
+          # varying them across runs invalidates the FA3 layer).
           build-args: |
             TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
-            MAX_JOBS=16
-            NVCC_THREADS=4
+          # cache-from prefers the buildcache ref (mode=max metadata for
+          # ALL intermediate layers including FA3 builder); falls back to
+          # the runtime image tags so existing :latest / :<VER> images on
+          # GHCR can still seed the layer cache after a cache eviction.
           cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
-            type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
-            type=gha,scope=transformers-${{ steps.version.outputs.version }}
-          cache-to: type=gha,mode=max,scope=transformers-${{ steps.version.outputs.version }}
+            type=registry,ref=ghcr.io/${{ github.repository }}/transformers:transformers-${{ steps.version.outputs.version }}
+          # cache-to: registry-mode mode=max writes a separate cache manifest
+          # at :<VER>-buildcache containing all intermediate layer metadata.
+          # PR builds AND main builds both contribute to this cache (per-
+          # version content is deterministic given the cache-stable
+          # Dockerfile, so PR overwrites are benign).
+          cache-to: type=registry,mode=max,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache
 
-      - name: Emit image digest summary
+      - name: Emit build summary
         run: |
           {
             echo "## Engine image build"
             echo
             echo "- Trigger: \`${{ github.event_name }}\`"
             echo "- Transformers version: \`${{ steps.version.outputs.version }}\`"
-            echo "- Tags pushed: \`${{ steps.targets.outputs.tags }}\`"
-            echo "- Cache from-scratch: \`${{ steps.targets.outputs.no_cache }}\`"
+            echo "- Buildcache ref: \`ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache\`"
+            echo "- No-cache rebuild: \`${{ steps.targets.outputs.no_cache }}\`"
+            echo
+            echo "Runtime push is handled by \`engine-image-push.yml\` (workflow_run-triggered on this workflow's success when event is push or schedule)."
           } >> "$GITHUB_STEP_SUMMARY"

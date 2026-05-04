@@ -1,16 +1,27 @@
 # syntax=docker/dockerfile:1
 # ============================================================
-# Transformers engine — llenergymeasure on PyTorch base image
+# Transformers engine substrate on PyTorch base image
 # ============================================================
-# Uses pytorch/pytorch as the tensor substrate, then installs llenergymeasure
-# with the HuggingFace Transformers engine on top.
-# CUDA and PyTorch compatibility is guaranteed by the upstream image.
+# Uses pytorch/pytorch as the tensor substrate, then layers the HuggingFace
+# Transformers engine substrate (transformers + FA2 + FA3 + accelerate +
+# bitsandbytes + calflops + sentencepiece + einops) plus llenergymeasure's
+# runtime non-engine deps on top. CUDA and PyTorch compatibility is
+# guaranteed by the upstream image.
+#
+# The llenergymeasure package itself is NOT installed into this image. The
+# project source is bind-mounted at runtime by the caller — see the engine-
+# invariants/engine-schemas workflows and docs/development.md for the canonical
+# `docker run -v $(pwd):/llem-src -e PYTHONPATH=/llem-src --entrypoint python3`
+# pattern. Symmetric with the vllm + tensorrt cells, which mount the same way
+# against upstream-direct images. This makes image rebuilds depend only on the
+# engine substrate, not on project source edits.
 #
 # Usage:
 #   docker build -f docker/Dockerfile.transformers -t llenergymeasure-transformers .
 #
 # Version pin policy: update PYTORCH_VERSION on each milestone release.
 # Must be compatible with pyproject.toml torch>=2.5 / transformers>=4.49 constraints.
+# TRANSFORMERS_VERSION comes from engine_versions/transformers.yaml SSOT.
 # ============================================================
 ARG PYTORCH_VERSION=2.5.1-cuda12.4-cudnn9-runtime
 ARG PYTORCH_DEVEL_VERSION=2.5.1-cuda12.4-cudnn9-devel
@@ -36,6 +47,10 @@ ARG INSTALL_FA3
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 ENV TORCH_CUDA_ARCH_LIST="8.0;9.0+PTX"
 
+# Make apt resilient to transient Ubuntu mirror flakes (3 build failures
+# in 6 hours on 2026-05-04 were all archive.ubuntu.com transient errors).
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+
 # FA2: install from PyPI (cache mount persists compiled wheel across rebuilds)
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system flash-attn --no-build-isolation
@@ -49,9 +64,19 @@ ARG MAX_JOBS=32
 ARG NVCC_THREADS=4
 ENV MAX_JOBS=${MAX_JOBS}
 ENV NVCC_THREADS=${NVCC_THREADS}
+# apt cache mounts persist /var/cache/apt + /var/lib/apt/lists between
+# builds on the same BuildKit instance — subsequent builds reuse the
+# fetched .deb packages and Packages metadata without hitting the mirror.
+# Eliminates the dominant build-flake mode (Ubuntu archive intermittently
+# returning incomplete or malformed package lists). The trailing
+# `rm -rf /var/lib/apt/lists/*` is a no-op when the cache mount is in
+# place — it scrubs the in-image copy after the install layer commits,
+# but the mount-backed cache survives.
 RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     if [ "$INSTALL_FA3" = "true" ]; then \
-        apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* && \
+        apt-get update && apt-get install -y --no-install-recommends git && \
         git clone --depth 1 --branch ${FLASH_ATTN_VERSION} https://github.com/Dao-AILab/flash-attention.git /tmp/flash-attention && \
         pip install /tmp/flash-attention/hopper --no-build-isolation && \
         rm -rf /tmp/flash-attention; \
@@ -80,49 +105,57 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Suppress hardlink warnings when cache mount is on a different filesystem
 ENV UV_LINK_MODE=copy
 
+# Same apt-retry + cache-mount resilience as the builder stage. Cache mounts
+# persist /var/cache/apt + /var/lib/apt/lists across builds — subsequent
+# builds reuse cached .debs and metadata, avoiding mirror-flake exposure.
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+
 # Required for torch.compile (inductor JIT-compiles Triton kernels via C/C++ compiler)
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
-    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends build-essential
 
 # Copy compiled flash-attn from builder (package dir + dist-info + CUDA extensions)
 COPY --from=builder /flash-attn-staging/ /opt/conda/lib/python3.11/site-packages/
 
 WORKDIR /app
 
-# Install llenergymeasure from source plus the transformers engine deps inline.
+# Install the transformers engine substrate plus llenergymeasure's runtime
+# non-engine deps. The project source itself is NOT installed — it is bind-
+# mounted at runtime via PYTHONPATH (see header).
+#
 # Engine deps (transformers/accelerate/bitsandbytes/calflops + sentencepiece/einops)
-# are declared HERE rather than via a host-side pyproject extra: the engine
-# runs only inside this image, so its dependency list belongs in the image's
-# install spec, not in a host extra that nothing else uses.
-# Bind mounts: pyproject.toml/uv.lock/README.md are build-only (not needed at runtime).
-# Cache mount: uv reuses cached wheels across rebuilds without bloating the image.
-COPY src/ ./src/
+# belong in the image because the engine runs only inside this image.
+#
+# Project runtime deps (pydantic, typer, pyyaml, platformdirs, nvidia-ml-py,
+# numpy, pyarrow, tqdm, rich, python-dotenv, filelock) are baked in here
+# because the upstream pytorch/pytorch base does not bring them transitively
+# and the project is no longer pip-installed into this image.
 ARG TRANSFORMERS_VERSION
-RUN --mount=type=bind,source=pyproject.toml,target=/app/pyproject.toml \
-    --mount=type=bind,source=uv.lock,target=/app/uv.lock \
-    --mount=type=bind,source=README.md,target=/app/README.md \
-    --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system "." \
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system \
         "transformers==${TRANSFORMERS_VERSION}" \
         "accelerate>=1.4" \
         "bitsandbytes>=0.45" \
         "calflops>=0.2" \
-        sentencepiece einops
+        sentencepiece einops \
+        "pydantic>=2.0" \
+        "typer>=0.9" \
+        "pyyaml>=6.0" \
+        "platformdirs>=3.0" \
+        "nvidia-ml-py>=12.0" \
+        "numpy>=1.24" \
+        "pyarrow>=14.0" \
+        "tqdm>=4.66" \
+        "rich>=13.0" \
+        "python-dotenv>=1.0" \
+        filelock
 
 # HuggingFace cache — writable for non-root users
 ENV HF_HOME=/app/.cache/huggingface
 RUN mkdir -p /app/.cache/huggingface && chmod 777 /app/.cache/huggingface
 
-# Host/container schema handshake labels (see infra/version_handshake.py).
-# LLEM_PKG_VERSION is the llenergymeasure release; LLEM_EXPCONF_SCHEMA_FINGERPRINT
-# is a SHA-256 of ExperimentConfig.model_json_schema() at build time.
-ARG LLEM_PKG_VERSION=dev
-ARG LLEM_EXPCONF_SCHEMA_FINGERPRINT=unknown
-LABEL org.opencontainers.image.version="${LLEM_PKG_VERSION}"
 LABEL org.opencontainers.image.source="https://github.com/henrycgbaker/llenergymeasure"
-LABEL llem.expconf.schema.fingerprint="${LLEM_EXPCONF_SCHEMA_FINGERPRINT}"
-
-CMD ["python3", "-m", "llenergymeasure.entrypoints.container"]
 
 # Dev stage — adds development tools for local iteration
 FROM runtime AS dev

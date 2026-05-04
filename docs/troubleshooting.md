@@ -285,9 +285,10 @@ of likelihood:
 (b) You are on a fresh buildx builder with no local cache (this is normal
     on the very first build — first-pull cost is paid once).
 (c) You are offline or GHCR is unreachable.
-(d) Your `LLEM_PKG_VERSION` does not match any published tag (cache_from
-    resolves to `:v${LLEM_PKG_VERSION}` and falls through to `:latest` —
-    if neither has usable layers, BuildKit silently cold-builds).
+(d) Your `TRANSFORMERS_VERSION` (from `engine_versions/transformers.yaml`)
+    does not match any published cache tag (`cache_from` resolves to
+    `:transformers-<VERSION>` and falls through to `:latest` — if neither has
+    usable layers, BuildKit silently cold-builds).
 
 The full BuildKit log for the most recent attempt is at
 `/tmp/llem-build-{engine}.log` — grep it for `importing cache manifest` to
@@ -304,9 +305,9 @@ see whether the registry was even reached.
    the registry.
 2. Verify network: `curl -I https://ghcr.io/v2/henrycgbaker/llenergymeasure/transformers/manifests/latest`
    should return 200 or 401 (both fine; 000/timeout means no connectivity).
-3. If you recently bumped version but CI hasn't published yet, fall back to
-   `:latest` by unsetting `LLEM_PKG_VERSION` for the build:
-   `LLEM_PKG_VERSION= docker compose build transformers`.
+3. If you recently bumped the SSOT version but CI hasn't published the
+   per-version tag yet, fall back to `:latest` (which the cache_from chain
+   already lists as a fallback). No env-var override needed.
 4. If the cache is corrupt, recreate the builder:
    `make docker-builder-rm && make docker-builder-setup`. Note this discards
    all local layer cache; the first subsequent build will repopulate from
@@ -339,17 +340,24 @@ The container will reject ExperimentConfig fields added on the host after
 the image was built.
 ```
 
-Or, without the handshake catching it first, a container stack trace full of
-`extra_forbidden` Pydantic errors (often with URLs mixing
-`errors.pydantic.dev/2.10/…` and `errors.pydantic.dev/2.12/…`, a second tell
-for version skew).
+A container stack trace full of `extra_forbidden` Pydantic errors (often with
+URLs mixing `errors.pydantic.dev/2.10/…` and `errors.pydantic.dev/2.12/…`, a
+tell for version skew).
 
-**Cause:** the host's `ExperimentConfig` (or a nested model like
-`BaselineConfig`, `WarmupConfig`, etc.) gained fields after the Docker image
-was built. `llem` stamps every image at build time with a
-`llem.expconf.schema.fingerprint` label computed from
-`ExperimentConfig.model_json_schema()`. `StudyRunner._prepare_images` compares
-that label against the host fingerprint before any experiment starts.
+> **Legacy: the schema-fingerprint handshake no longer catches this.** Earlier
+> versions of `llem` stamped each image with an `llem.expconf.schema.fingerprint`
+> label and `StudyRunner._prepare_images` compared it to the host fingerprint
+> before any experiment ran. Once images stopped baking the project source (it
+> is bind-mounted at runtime), the handshake became structurally redundant: the
+> in-container source always equals the host source. The label is no longer
+> set on any engine image; `llem doctor` reports `UNVERIFIED` and does not
+> block. The dead `version_handshake.py` plumbing is tracked for removal in a
+> follow-up issue.
+
+**Cause:** all three engines now bind-mount the host project source at
+runtime, so a Pydantic-shape error here means the engine library inside the
+image is at a version that no longer matches what the host code expects (e.g.
+the SSOT bumped transformers but the local image is still on an older tag).
 
 **Fix:** rebuild or repull the affected engine image. One of:
 
@@ -360,21 +368,11 @@ docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0  # repull TensorRT-LLM up
 make docker-pull                                        # pull the newest published Transformers tag
 ```
 
-The vLLM and TensorRT-LLM images bind-mount host source at run time and so
-should not skew on a host-source-only edit; if you see a fingerprint
-mismatch on those, the local image is genuinely stale (e.g. an older
-upstream tag) and needs repulling.
-
-Verify with:
+Verify the image actually changed by inspecting the digest:
 
 ```bash
-llem doctor                      # exits 1 on mismatch, 0 when every engine is OK
+docker image inspect llenergymeasure:transformers --format '{{.Id}}'
 ```
-
-**Bypass (last resort):** set `LLEM_SKIP_IMAGE_CHECK=1` to skip the handshake.
-Only safe when you're confident the new field is optional and the container
-silently ignores it. The container will still hard-fail on any required field
-it doesn't know about.
 
 ---
 

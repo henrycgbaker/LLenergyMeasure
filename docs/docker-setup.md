@@ -391,31 +391,26 @@ behaviour. No additional setup is needed when SGLang ships.
 ### Layer cache sharing via GHCR registry
 
 See [installation.md — Fast rebuilds and first-pull cost](installation.md#fast-rebuilds-and-first-pull-cost)
-for the user-facing walkthrough (mechanism, sizes, authentication, offline fallback).
+for the user-facing walkthrough (mechanism, sizes, authentication, offline fallback)
+and the three-ref breakdown of what the build/push pipeline publishes
+(`-buildcache` ref, PR-time `transformers-cache:VER` ref, canonical
+`transformers:VER`/`transformers:latest`).
 
 Operator notes:
 
-- `cache-to` pushes only to `:latest` (never to immutable version tags), so
-  storage growth is bounded by image drift between releases.
+- `cache-to` writes only to the `:transformers-<VER>-buildcache` ref (separate
+  from any runnable image), so storage growth is bounded by SSOT version drift.
 - Inspect what's cached on the active builder: `docker buildx du --builder llem-builder`.
 - If the cache is corrupt, recreate it with `make docker-builder-rm && make docker-builder-setup`.
+  The remote buildcache ref will repopulate on the next CI build.
 
-### Image labels and versioning
+### Image labels
 
-Every engine image is stamped at build time with OCI labels that llem reads at
-study start-up to detect host/container schema skew:
+`docker/Dockerfile.transformers` stamps a single OCI label:
 
-| Label | Source | Purpose |
-|-------|--------|---------|
-| `org.opencontainers.image.version` | `LLEM_PKG_VERSION` build-arg (from `_version.py`) | Human-readable llenergymeasure release baked into the image |
-| `org.opencontainers.image.source` | Dockerfile | Points at the GitHub repository |
-| `llem.expconf.schema.fingerprint` | `LLEM_EXPCONF_SCHEMA_FINGERPRINT` build-arg | SHA-256 of `ExperimentConfig.model_json_schema()`; the blocking signal for schema skew |
-
-The package version is *not* what catches skew during dev: phase PRs don't
-touch `_version.py`, so both host and image report the same version through
-an entire milestone of schema churn. The fingerprint is the blocking signal —
-it changes whenever any `ExperimentConfig` field (or nested model) is added,
-renamed, or restructured.
+| Label | Purpose |
+|-------|---------|
+| `org.opencontainers.image.source` | Points at the GitHub repository |
 
 Inspect the labels on a local image:
 
@@ -424,9 +419,16 @@ docker image inspect llenergymeasure:transformers \
     --format '{{json .Config.Labels}}' | python3 -m json.tool
 ```
 
-`Makefile` and `.github/workflows/docker-publish.yml` both call
-`scripts/compute_expconf_fingerprint.py` so locally-built and CI-published
-images carry identical fingerprints.
+> **Legacy: schema-fingerprint handshake.** Earlier versions stamped
+> `org.opencontainers.image.version` and `llem.expconf.schema.fingerprint`
+> labels at build time so `llem doctor` could detect host/container schema
+> skew via `StudyRunner._prepare_images`. Once the image stopped baking the
+> project source (the project is bind-mounted at runtime — see
+> `docs/development.md`), the bound-in source always matches the host source,
+> so the handshake became structurally redundant. The labels are no longer
+> set on any engine image; `llem doctor` reports `UNVERIFIED` for all engines
+> and does not block. Removing the dead `version_handshake.py` code is
+> tracked separately.
 
 See [troubleshooting.md](troubleshooting.md#schema-skew-between-host-and-docker-image)
 for the remediation flow when a mismatch is reported.
@@ -521,8 +523,10 @@ regenerated. This happens automatically via the
 [Parameter Discovery Pipeline](schema-refresh.md): `engine-schemas.yml`
 covers all three engines via per-job `if:` gating — the vllm + tensorrt
 cells fire on `pull_request: paths`; the transformers cell fires via
-`workflow_run` after `engine-image-build.yml` completes. For manual bumps,
-run:
+`workflow_run` after `engine-image-push.yml` completes (which itself
+chains off `engine-image-build.yml` via workflow_run — the build/push
+split exists so push failures don't burn the FA3 compile). For manual
+bumps, run:
 
 ```bash
 ./scripts/refresh_discovered_schemas.sh <engine>
