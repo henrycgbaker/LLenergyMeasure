@@ -235,7 +235,11 @@ jobs:
           else
             UPSTREAM="ghcr.io/${{ github.repository }}/transformers:transformers-${{ steps.version.outputs.version }}"
           fi
-          docker pull "$UPSTREAM"
+          if ! docker image inspect "$UPSTREAM" >/dev/null 2>&1; then
+            docker pull "$UPSTREAM"
+          else
+            echo "Image $UPSTREAM already cached locally; skipping pull."
+          fi
           docker tag "$UPSTREAM" "${{ steps.version.outputs.image }}"
 
       - name: Compute stable discovery anchor
@@ -544,7 +548,11 @@ jobs:
         # overlay image.
         run: |
           UPSTREAM="vllm/vllm-openai:v${{ steps.version.outputs.version }}"
-          docker pull "$UPSTREAM"
+          if ! docker image inspect "$UPSTREAM" >/dev/null 2>&1; then
+            docker pull "$UPSTREAM"
+          else
+            echo "Image $UPSTREAM already cached locally; skipping pull."
+          fi
           docker tag "$UPSTREAM" "${{ steps.version.outputs.image }}"
 
       - name: Compute stable discovery anchor
@@ -866,7 +874,11 @@ jobs:
         # via PYTHONPATH rather than baked into a first-party overlay.
         run: |
           UPSTREAM="nvcr.io/nvidia/tensorrt-llm/release:${{ steps.version.outputs.version }}"
-          docker pull "$UPSTREAM"
+          if ! docker image inspect "$UPSTREAM" >/dev/null 2>&1; then
+            docker pull "$UPSTREAM"
+          else
+            echo "Image $UPSTREAM already cached locally; skipping pull."
+          fi
           docker tag "$UPSTREAM" "${{ steps.version.outputs.image }}"
 
       - name: Compute stable discovery anchor
