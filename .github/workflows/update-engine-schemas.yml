@@ -99,10 +99,12 @@ permissions:
   packages: read
 
 concurrency:
-  # workflow_run.head_sha distinguishes per-PR runs for the transformers
-  # cell; pull_request runs use github.head_ref. Combine both so the group
-  # string stays stable across trigger sources.
-  group: update-engine-schemas-${{ github.event.workflow_run.head_branch || github.event.workflow_run.head_sha || github.head_ref || github.ref }}
+  # Shared with update-engine-invariants.yml. See that file's concurrency
+  # block for full rationale (#505): one group serialises both writeback
+  # workflows on a single PR head; the writeback step's
+  # `git pull --rebase --autostash` absorbs the queued sibling's commit
+  # on dequeue.
+  group: engine-coupling-${{ github.event.workflow_run.head_branch || github.event.workflow_run.head_sha || github.head_ref || github.ref }}
   cancel-in-progress: false   # writeback target: never cancel mid-flight
 
 env:
@@ -276,6 +278,27 @@ jobs:
               --output /llem-probe-out/probe-transformers.json
           VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-transformers.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
+
+      - name: Update last_probe in SSOT
+        # Mutate engine_versions/transformers.yaml's last_probe block from
+        # the just-emitted ProbeReport. Runs whenever the probe step
+        # produced output (pass or fail) so the SSOT records the verdict
+        # + fingerprint each run. Atomic writeback (below) commits the
+        # SSOT diff alongside the discovered-schema artefacts when the
+        # probe passes; on probe-fail the local edit is dropped with the
+        # workspace, but the in-job log captures the recorded verdict.
+        # #497.
+        if: always() && steps.probe.outcome == 'success'
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            -v /tmp/llem-probe-out:/llem-probe-out:ro \
+            -w /repo \
+            --entrypoint bash \
+            "$IMAGE" \
+            -c 'python3 scripts/update_last_probe.py --engine transformers < /llem-probe-out/probe-transformers.json'
 
       - name: Save current schema for diffing
         if: steps.probe.outputs.verdict == 'pass'
@@ -457,6 +480,7 @@ jobs:
 
           git add \
             "${SCHEMAS_DIR}/transformers.json" \
+            engine_versions/transformers.yaml \
             docs/generated/curation-transformers.md
 
           if git diff --cached --quiet; then
@@ -534,6 +558,28 @@ jobs:
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "image=llenergymeasure:vllm-${VER}" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve PR number (for comments + labels + writeback)
+        id: pr
+        # The vllm cell only fires on pull_request + workflow_dispatch.
+        # Capture PR number + head repo into step outputs so comment /
+        # label / writeback steps can gate on `steps.pr.outputs.number`
+        # uniformly with the transformers cell (#544).
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            HEAD_REPO="${{ github.event.pull_request.head.repo.full_name }}"
+          else
+            PR_NUMBER="${{ inputs.pr_number }}"
+            HEAD_REPO="${{ github.repository }}"
+          fi
+          if [[ -n "$PR_NUMBER" ]]; then
+            echo "number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "head_repo=${HEAD_REPO}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=" >> "$GITHUB_OUTPUT"
+            echo "head_repo=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Detect Docker Hub auth availability
         # `secrets.*` cannot be referenced from a step `if:`; capture
         # the token's presence into a step output via an env-bridge so
@@ -610,6 +656,25 @@ jobs:
               --output /llem-probe-out/probe-vllm.json
           VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-vllm.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
+
+      - name: Update last_probe in SSOT
+        # See schemas-transformers cell for rationale (#497). Runs in the
+        # vLLM image. `--user` keeps the rewritten engine_versions/vllm.yaml
+        # owned by the runner so subsequent host-side steps can read +
+        # commit it.
+        if: always() && steps.probe.outcome == 'success'
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+        run: |
+          docker run --rm \
+            --user $(id -u):$(id -g) \
+            -v "${{ github.workspace }}:/repo" \
+            -v /tmp/llem-probe-out:/llem-probe-out:ro \
+            -w /repo \
+            -e PYTHONPATH \
+            --entrypoint bash \
+            "$IMAGE" \
+            -c 'python3 scripts/update_last_probe.py --engine vllm < /llem-probe-out/probe-vllm.json'
 
       - name: Save current schema for diffing
         if: steps.probe.outputs.verdict == 'pass'
@@ -785,7 +850,7 @@ jobs:
           esac
 
       - name: Atomic writeback
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && steps.pr.outputs.number != '' && steps.pr.outputs.head_repo == github.repository
         run: |
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
@@ -795,6 +860,7 @@ jobs:
 
           git add \
             "${SCHEMAS_DIR}/vllm.json" \
+            engine_versions/vllm.yaml \
             docs/generated/curation-vllm.md
 
           if git diff --cached --quiet; then
@@ -884,6 +950,28 @@ jobs:
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "image=llenergymeasure:tensorrt-${VER}" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve PR number (for comments + labels + writeback)
+        id: pr
+        # The tensorrt cell only fires on pull_request + workflow_dispatch.
+        # Capture PR number + head repo into step outputs so comment /
+        # label / writeback steps can gate on `steps.pr.outputs.number`
+        # uniformly with the transformers cell (#544).
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            HEAD_REPO="${{ github.event.pull_request.head.repo.full_name }}"
+          else
+            PR_NUMBER="${{ inputs.pr_number }}"
+            HEAD_REPO="${{ github.repository }}"
+          fi
+          if [[ -n "$PR_NUMBER" ]]; then
+            echo "number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "head_repo=${HEAD_REPO}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=" >> "$GITHUB_OUTPUT"
+            echo "head_repo=" >> "$GITHUB_OUTPUT"
+          fi
+
       # Self-hosted runners must have nvcr.io credentials configured (see docs/development.md).
       - name: Pull TRT-LLM upstream image and tag locally
         # NGC publishes canonical TRT-LLM images at
@@ -971,6 +1059,26 @@ jobs:
               --output /llem-probe-out/probe-tensorrt.json
           VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-tensorrt.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
+
+      - name: Update last_probe in SSOT
+        # See schemas-transformers cell for rationale (#497). Runs in the
+        # TRT-LLM image; `--user` matches the surrounding discover step's
+        # pattern so the rewritten engine_versions/tensorrt.yaml stays
+        # runner-owned.
+        if: always() && steps.probe.outcome == 'success'
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+        run: |
+          docker run --rm \
+            --user $(id -u):$(id -g) \
+            -v "${{ github.workspace }}:/repo" \
+            -v /tmp/llem-probe-out:/llem-probe-out:ro \
+            -w /repo \
+            -e LD_LIBRARY_PATH \
+            -e PYTHONPATH \
+            --entrypoint bash \
+            "$IMAGE" \
+            -c 'python3 scripts/update_last_probe.py --engine tensorrt < /llem-probe-out/probe-tensorrt.json'
 
       - name: Save current schema for diffing
         if: steps.probe.outputs.verdict == 'pass'
@@ -1147,7 +1255,7 @@ jobs:
           esac
 
       - name: Atomic writeback
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && steps.pr.outputs.number != '' && steps.pr.outputs.head_repo == github.repository
         run: |
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
@@ -1157,6 +1265,7 @@ jobs:
 
           git add \
             "${SCHEMAS_DIR}/tensorrt.json" \
+            engine_versions/tensorrt.yaml \
             docs/generated/curation-tensorrt.md
 
           if git diff --cached --quiet; then
