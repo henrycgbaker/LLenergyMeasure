@@ -598,6 +598,7 @@ jobs:
         run: |
           mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
+            --user $(id -u):$(id -g) \
             -v "${{ github.workspace }}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
@@ -609,13 +610,6 @@ jobs:
               --output /llem-probe-out/probe-vllm.json
           VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-vllm.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
-
-      - name: Fix container-written file ownership (probe cache)
-        if: always()
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}":/workspace \
-            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
 
       - name: Save current schema for diffing
         if: steps.probe.outputs.verdict == 'pass'
@@ -636,6 +630,7 @@ jobs:
           ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
         run: |
           docker run --rm --gpus all \
+            --user $(id -u):$(id -g) \
             -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
             -e PYTHONPATH \
@@ -647,13 +642,6 @@ jobs:
               --engine vllm \
               --image-ref "${IMAGE}" \
               --output "${SCHEMAS_DIR}/vllm.json"
-
-      - name: Fix container-written file ownership (discover)
-        if: always()
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}":/workspace \
-            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
@@ -969,6 +957,7 @@ jobs:
         run: |
           mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
+            --user $(id -u):$(id -g) \
             -e LD_LIBRARY_PATH \
             -e PYTHONPATH \
             -e PYTHONDONTWRITEBYTECODE \
@@ -982,13 +971,6 @@ jobs:
               --output /llem-probe-out/probe-tensorrt.json
           VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-tensorrt.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
-
-      - name: Fix container-written file ownership (probe cache)
-        if: always()
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}":/workspace \
-            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
 
       - name: Save current schema for diffing
         if: steps.probe.outputs.verdict == 'pass'
@@ -1010,6 +992,7 @@ jobs:
           TRTLLM_VER: ${{ steps.version.outputs.version }}
         run: |
           docker run --rm --gpus all \
+            --user $(id -u):$(id -g) \
             -e LD_LIBRARY_PATH \
             -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
@@ -1023,13 +1006,6 @@ jobs:
               --engine tensorrt \
               --image-ref "${IMAGE}" \
               --output "${SCHEMAS_DIR}/tensorrt.json"
-
-      - name: Fix container-written file ownership (discover)
-        if: always()
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}":/workspace \
-            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'

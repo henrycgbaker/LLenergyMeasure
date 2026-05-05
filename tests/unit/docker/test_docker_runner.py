@@ -1354,3 +1354,70 @@ class TestVersionMismatchWarning:
             runner.run(config)
 
         assert not any("rebuild Docker images" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Test: mount-pivot — host package source bind-mounted into container (#511)
+# ---------------------------------------------------------------------------
+
+
+class TestMountPivot:
+    """Verify the host-package bind-mount + PYTHONPATH plumbing (PR #509).
+
+    All three engines run the in-container entrypoint by importing
+    llenergymeasure from a read-only bind-mount at ``/llem-src``, exposed via
+    ``PYTHONPATH``. ``PYTHONDONTWRITEBYTECODE`` keeps the container from
+    writing root-owned ``__pycache__`` into the bind-mounted source tree.
+    """
+
+    @staticmethod
+    def _build(engine_name: str, tmp_path) -> list[str]:
+        from llenergymeasure.config.engine_configs import TensorRTConfig
+
+        if engine_name == "tensorrt":
+            config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=1))
+        else:
+            config = make_config(engine=engine_name)
+        return DockerRunner(image=IMAGE)._build_docker_cmd(config, "abc123", "/tmp/llem-test")
+
+    @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
+    def test_llem_src_mount_triple_present(self, engine, tmp_path):
+        """Each engine's docker cmd contains the ``-v {pkg_parent}:/llem-src:ro`` triple."""
+        cmd = self._build(engine, tmp_path)
+        mount_args = [arg for arg in cmd if arg.endswith(":/llem-src:ro")]
+        assert len(mount_args) == 1
+        # The triple is ordered: -v {host}:{container}
+        mount_idx = cmd.index(mount_args[0])
+        assert cmd[mount_idx - 1] == "-v"
+
+    @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
+    def test_pythonpath_env_set(self, engine, tmp_path):
+        """``PYTHONPATH=/llem-src`` is passed via ``-e`` for each engine."""
+        cmd = self._build(engine, tmp_path)
+        assert "PYTHONPATH=/llem-src" in cmd
+        idx = cmd.index("PYTHONPATH=/llem-src")
+        assert cmd[idx - 1] == "-e"
+
+    @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
+    def test_pythondontwritebytecode_env_set(self, engine, tmp_path):
+        """``PYTHONDONTWRITEBYTECODE=1`` keeps __pycache__ out of the read-only mount."""
+        cmd = self._build(engine, tmp_path)
+        assert "PYTHONDONTWRITEBYTECODE=1" in cmd
+        idx = cmd.index("PYTHONDONTWRITEBYTECODE=1")
+        assert cmd[idx - 1] == "-e"
+
+    def test_resolve_package_parent_dir_contains_llenergymeasure(self):
+        """The helper points at the directory containing the ``llenergymeasure`` package."""
+        from llenergymeasure.infra.docker_runner import _resolve_package_parent_dir
+
+        pkg_parent = _resolve_package_parent_dir()
+        assert (pkg_parent / "llenergymeasure").is_dir()
+        assert (pkg_parent / "llenergymeasure" / "infra" / "docker_runner.py").is_file()
+
+    def test_mount_host_path_matches_resolver(self, tmp_path):
+        """The host side of the bind-mount equals ``_resolve_package_parent_dir()``."""
+        from llenergymeasure.infra.docker_runner import _resolve_package_parent_dir
+
+        cmd = self._build("transformers", tmp_path)
+        expected_mount = f"{_resolve_package_parent_dir()}:/llem-src:ro"
+        assert expected_mount in cmd

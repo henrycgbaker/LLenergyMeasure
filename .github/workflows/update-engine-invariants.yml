@@ -103,10 +103,16 @@ permissions:
   packages: read
 
 concurrency:
-  # workflow_run.head_sha distinguishes per-PR runs for the transformers
-  # cell; pull_request runs use github.head_ref. Combine both so the group
-  # string stays stable across trigger sources.
-  group: update-engine-invariants-${{ github.event.workflow_run.head_branch || github.event.workflow_run.head_sha || github.head_ref || github.ref }}
+  # Shared with update-engine-schemas.yml. Both workflows write back to
+  # the same PR head, and previously raced via a brittle "detect sibling
+  # + poll" mechanism (#505). Sharing one concurrency group across both
+  # files lets GitHub serialise them: when this workflow dequeues, the
+  # PR head may have advanced from the sibling's writeback, and the
+  # writeback step's `git pull --rebase --autostash` absorbs that delta
+  # before pushing. workflow_run.head_sha distinguishes per-PR runs for
+  # the transformers cell; pull_request runs use github.head_ref.
+  # Combine both so the group string stays stable across trigger sources.
+  group: engine-coupling-${{ github.event.workflow_run.head_branch || github.event.workflow_run.head_sha || github.head_ref || github.ref }}
   cancel-in-progress: false   # writeback target: never cancel mid-flight
 
 env:
@@ -679,6 +685,7 @@ jobs:
         run: |
           mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
+            --user $(id -u):$(id -g) \
             -v "${{ github.workspace }}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
@@ -690,13 +697,6 @@ jobs:
               --output /llem-probe-out/probe-vllm.json
           VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-vllm.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
-
-      - name: Fix container-written file ownership (probe cache)
-        if: always()
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}":/workspace \
-            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
 
       - name: Save current YAMLs for diffing
         if: steps.probe.outputs.verdict == 'pass'
@@ -720,6 +720,7 @@ jobs:
           ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
         run: |
           docker run --rm --gpus all \
+            --user $(id -u):$(id -g) \
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
             -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
@@ -738,13 +739,6 @@ jobs:
                 --vendor-commit '${ANCHOR_SHA}' \
                 --fail-on-divergence
             "
-
-      - name: Fix container-written file ownership (mine + vendor)
-        if: always()
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}":/workspace \
-            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
@@ -1151,6 +1145,7 @@ jobs:
         run: |
           mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
+            --user $(id -u):$(id -g) \
             -e LD_LIBRARY_PATH \
             -e PYTHONPATH \
             -e PYTHONDONTWRITEBYTECODE \
@@ -1164,13 +1159,6 @@ jobs:
               --output /llem-probe-out/probe-tensorrt.json
           VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-tensorrt.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
-
-      - name: Fix container-written file ownership (probe cache)
-        if: always()
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}":/workspace \
-            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
 
       - name: Save current YAMLs for diffing
         if: steps.probe.outputs.verdict == 'pass'
@@ -1195,6 +1183,7 @@ jobs:
           TRTLLM_VER: ${{ steps.version.outputs.version }}
         run: |
           docker run --rm --gpus all \
+            --user $(id -u):$(id -g) \
             -e LD_LIBRARY_PATH \
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
             -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
@@ -1215,13 +1204,6 @@ jobs:
                 --vendor-commit '${ANCHOR_SHA}' \
                 --fail-on-divergence
             "
-
-      - name: Fix container-written file ownership (mine + vendor)
-        if: always()
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}":/workspace \
-            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
