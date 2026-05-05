@@ -5,7 +5,7 @@
   "engine_commit_sha": null,
   "image_ref": "llenergymeasure:tensorrt-0.21.0",
   "base_image_ref": null,
-  "discovered_at": "2026-05-05T21:47:20+02:00",
+  "discovered_at": "2026-05-05T21:54:29+02:00",
   "discovery_method": "TrtLlmArgs.model_json_schema() + dataclasses.fields(SamplingParams)",
   "discovery_limitations": [
     {
