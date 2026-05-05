@@ -38,18 +38,15 @@ update-engine-{invariants,schemas}.yml transformers cells run:
   ▼
 [CI green/red. PR ready to merge when green.]
   │
-  │  PR merges to main (push event)
+  │  PR merges to main (push event with SSOT/Dockerfile change)
   ▼
-build-engine-image.yml fires again (push trigger; full cache hit; ~30s)
-  │
-  │  publish-engine-image.yml chains via workflow_run (push-only;
-  │  PR chains skip — nothing to promote yet)
-  ▼
-[Tag-copy promotion via `docker buildx imagetools create`:
- transformers-cache:transformers-<VER>  →  transformers:transformers-<VER>
-                                        →  transformers:latest
- NO rebuild — registry-side metadata op. Production image bit-identical
- to the one validated in CI before merge.]
+publish-engine-image.yml fires DIRECTLY on push (no rebuild):
+  Tag-copy via `docker buildx imagetools create`:
+    transformers-cache:transformers-<VER>  →  transformers:transformers-<VER>
+                                           →  transformers:latest
+  Registry-side metadata op only — seconds, no build infra.
+  Production image is bit-identical to the cache image validated
+  by CI on the PR that just merged.
 ```
 
 ### vllm + tensorrt PR-time CI flow (no rebuild; upstream-direct)
