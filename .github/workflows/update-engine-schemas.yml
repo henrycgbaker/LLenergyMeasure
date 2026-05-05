@@ -539,6 +539,17 @@ jobs:
           docker run --rm \
             -v "${{ github.workspace }}":/workspace \
             alpine sh -c "find /workspace -not -user $(id -u) -delete 2>/dev/null || true"
+      - name: Synthesize passwd/group for non-root container runs
+        # Self-hosted runner uses LDAP/SSSD for user resolution, so the
+        # runner UID is NOT in /etc/passwd on the host. Mounting the host's
+        # /etc/passwd into the container leaves getpwuid() failing inside
+        # (modelopt's import path raises KeyError). Generate a synthetic
+        # passwd entry for the runner UID + group, mounted into the container
+        # at /etc/passwd / /etc/group.
+        run: |
+          printf 'ciuser:x:%s:%s:CI runner:/tmp:/bin/sh\n' "$(id -u)" "$(id -g)" > /tmp/llem-passwd-synth
+          printf 'cigroup:x:%s:\n' "$(id -g)" > /tmp/llem-group-synth
+
 
       - name: Checkout PR branch
         uses: actions/checkout@v6
@@ -645,8 +656,8 @@ jobs:
           mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
             --user $(id -u):$(id -g) \
-            -v /etc/passwd:/etc/passwd:ro \
-            -v /etc/group:/etc/group:ro \
+            -v /tmp/llem-passwd-synth:/etc/passwd:ro \
+            -v /tmp/llem-group-synth:/etc/group:ro \
             -v "${{ github.workspace }}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
@@ -670,8 +681,8 @@ jobs:
         run: |
           docker run --rm \
             --user $(id -u):$(id -g) \
-            -v /etc/passwd:/etc/passwd:ro \
-            -v /etc/group:/etc/group:ro \
+            -v /tmp/llem-passwd-synth:/etc/passwd:ro \
+            -v /tmp/llem-group-synth:/etc/group:ro \
             -v "${{ github.workspace }}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:ro \
             -w /repo \
@@ -700,8 +711,8 @@ jobs:
         run: |
           docker run --rm --gpus all \
             --user $(id -u):$(id -g) \
-            -v /etc/passwd:/etc/passwd:ro \
-            -v /etc/group:/etc/group:ro \
+            -v /tmp/llem-passwd-synth:/etc/passwd:ro \
+            -v /tmp/llem-group-synth:/etc/group:ro \
             -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
             -e PYTHONPATH \
@@ -937,6 +948,17 @@ jobs:
           docker run --rm \
             -v "${{ github.workspace }}":/workspace \
             alpine sh -c "find /workspace -not -user $(id -u) -delete 2>/dev/null || true"
+      - name: Synthesize passwd/group for non-root container runs
+        # Self-hosted runner uses LDAP/SSSD for user resolution, so the
+        # runner UID is NOT in /etc/passwd on the host. Mounting the host's
+        # /etc/passwd into the container leaves getpwuid() failing inside
+        # (modelopt's import path raises KeyError). Generate a synthetic
+        # passwd entry for the runner UID + group, mounted into the container
+        # at /etc/passwd / /etc/group.
+        run: |
+          printf 'ciuser:x:%s:%s:CI runner:/tmp:/bin/sh\n' "$(id -u)" "$(id -g)" > /tmp/llem-passwd-synth
+          printf 'cigroup:x:%s:\n' "$(id -g)" > /tmp/llem-group-synth
+
 
       - name: Checkout PR branch
         uses: actions/checkout@v6
@@ -1052,8 +1074,8 @@ jobs:
           mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
             --user $(id -u):$(id -g) \
-            -v /etc/passwd:/etc/passwd:ro \
-            -v /etc/group:/etc/group:ro \
+            -v /tmp/llem-passwd-synth:/etc/passwd:ro \
+            -v /tmp/llem-group-synth:/etc/group:ro \
             -e LD_LIBRARY_PATH \
             -e PYTHONPATH \
             -e PYTHONDONTWRITEBYTECODE \
@@ -1079,8 +1101,8 @@ jobs:
         run: |
           docker run --rm \
             --user $(id -u):$(id -g) \
-            -v /etc/passwd:/etc/passwd:ro \
-            -v /etc/group:/etc/group:ro \
+            -v /tmp/llem-passwd-synth:/etc/passwd:ro \
+            -v /tmp/llem-group-synth:/etc/group:ro \
             -v "${{ github.workspace }}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:ro \
             -w /repo \
@@ -1111,8 +1133,8 @@ jobs:
         run: |
           docker run --rm --gpus all \
             --user $(id -u):$(id -g) \
-            -v /etc/passwd:/etc/passwd:ro \
-            -v /etc/group:/etc/group:ro \
+            -v /tmp/llem-passwd-synth:/etc/passwd:ro \
+            -v /tmp/llem-group-synth:/etc/group:ro \
             -e LD_LIBRARY_PATH \
             -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
