@@ -28,7 +28,7 @@ PR opens (touches transformers paths: SSOT, Dockerfile, miner code, etc.)
 [Build transformers runtime image; cache hits ~10-15 min, cold FA3 ~60-90 min]
 [Push to ghcr.io/<repo>/transformers-cache:transformers-<VER>]
   │
-  │  workflow_run chain fires (Build engine image (transformers) success)
+  │  workflow_run chain fires (Build engine image success)
   ▼
 update-engine-{invariants,schemas}.yml transformers cells run:
   pull transformers-cache image → probe → mine/introspect → vendor → writeback

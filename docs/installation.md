@@ -155,7 +155,7 @@ chain.
 
 Only Transformers has a project Dockerfile, so it is the only engine with a
 GHCR cache. The image declares `cache_from` pointing at the published GHCR
-tags; the `Build engine image (transformers)` workflow populates the cache via
+tags; the `Build engine image` workflow's `transformers` job populates the cache via
 `docker/build-push-action`, exporting intermediate layers to
 `ghcr.io/henrycgbaker/llenergymeasure/transformers:latest` (rolling) and
 `:transformers-<VERSION>` (immutable per SSOT version, written on push to
