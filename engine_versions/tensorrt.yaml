@@ -13,6 +13,12 @@ library:
 image:
   base_image_ref: "nvcr.io/nvidia/tensorrt-llm/release:0.21.0"
   llem_image_ref: null
+source_tarball:
+  # Template for the upstream release tarball. Workflow cells that need to
+  # mine TRT-LLM source files (the static miner + introspector) read it via
+  # `yq`, then substitute `{version}` with `library.current_version`. Single
+  # locus to update if NVIDIA changes their tag scheme. See #532.
+  url_template: "https://github.com/NVIDIA/TensorRT-LLM/archive/refs/tags/v{version}.tar.gz"
 miner_pins:
   static: ">=0.21.0,<0.22.0"
   dynamic: ">=0.21.0,<0.22.0"

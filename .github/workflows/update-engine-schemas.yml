@@ -932,9 +932,11 @@ jobs:
       - name: Fetch tensorrt-llm source tarball (host)
         # Static introspector reads source from /tmp/trt-llm-${VER}/ for
         # the same reasons as invariants-tensorrt — see that cell's
-        # comment. Skip the fetch when the tree is already extracted at
-        # this version (sibling invariants-tensorrt cell or a prior re-run
-        # of this PR may have populated it on the self-hosted runner).
+        # comment. URL template lives in `engine_versions/tensorrt.yaml`
+        # under `source_tarball.url_template` (#532). Skip the fetch when
+        # the tree is already extracted at this version (sibling
+        # invariants-tensorrt cell or a prior re-run of this PR may have
+        # populated it on the self-hosted runner).
         env:
           VER: ${{ steps.version.outputs.version }}
         run: |
@@ -944,8 +946,14 @@ jobs:
             echo "Source tree already present at ${DEST}; skipping fetch."
             exit 0
           fi
+          URL_TEMPLATE=$(yq '.source_tarball.url_template' engine_versions/tensorrt.yaml)
+          if [[ -z "$URL_TEMPLATE" || "$URL_TEMPLATE" == "null" ]]; then
+            echo "Could not resolve source_tarball.url_template from engine_versions/tensorrt.yaml" >&2
+            exit 1
+          fi
+          URL="${URL_TEMPLATE//\{version\}/${VER}}"
           mkdir -p "${DEST}"
-          curl -fsSL "https://github.com/NVIDIA/TensorRT-LLM/archive/refs/tags/v${VER}.tar.gz" \
+          curl -fsSL "${URL}" \
             | tar -xz -C "${DEST}" --strip-components=1
           test -d "${DEST}/tensorrt_llm"
 

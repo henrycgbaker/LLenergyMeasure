@@ -1109,10 +1109,13 @@ jobs:
         # Static miner reads source from /tmp/trt-llm-${VER}/tensorrt_llm/;
         # we fetch from the GitHub tag rather than introspect the NGC
         # package because NGC's package layout has churned repeatedly
-        # (#472, #500). On the self-hosted runner /tmp persists across
-        # jobs, so skip the fetch when the tree is already extracted at
-        # this version (sibling schemas-tensorrt cell or a prior re-run
-        # of this PR may have populated it).
+        # (#472, #500). The tarball URL template is sourced from the
+        # tensorrt SSOT (`source_tarball.url_template`) so a future
+        # tag-scheme change has a single locus (#532). On the self-hosted
+        # runner /tmp persists across jobs, so skip the fetch when the
+        # tree is already extracted at this version (sibling
+        # schemas-tensorrt cell or a prior re-run of this PR may have
+        # populated it).
         env:
           VER: ${{ steps.version.outputs.version }}
         run: |
@@ -1122,8 +1125,14 @@ jobs:
             echo "Source tree already present at ${DEST}; skipping fetch."
             exit 0
           fi
+          URL_TEMPLATE=$(yq '.source_tarball.url_template' engine_versions/tensorrt.yaml)
+          if [[ -z "$URL_TEMPLATE" || "$URL_TEMPLATE" == "null" ]]; then
+            echo "Could not resolve source_tarball.url_template from engine_versions/tensorrt.yaml" >&2
+            exit 1
+          fi
+          URL="${URL_TEMPLATE//\{version\}/${VER}}"
           mkdir -p "${DEST}"
-          curl -fsSL "https://github.com/NVIDIA/TensorRT-LLM/archive/refs/tags/v${VER}.tar.gz" \
+          curl -fsSL "${URL}" \
             | tar -xz -C "${DEST}" --strip-components=1
           test -d "${DEST}/tensorrt_llm"
 
