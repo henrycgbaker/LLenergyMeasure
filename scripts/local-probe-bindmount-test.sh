@@ -53,7 +53,6 @@ r = ProbeReport(
     engine='test', producer='invariants', verdict='pass',
     library_version='9.9.9', version_inside_envelope=True,
     fingerprint='deadbeef', fingerprint_drift=[], landmarks_missing=[],
-    ran_at='2026-05-04T00:00:00+00:00',
 )
 out = Path('/probe-out/probe-test.json')
 _write_report_to_file(out, r)

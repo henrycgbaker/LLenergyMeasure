@@ -24,12 +24,11 @@ miner_pins:
   dynamic: ">=0.17,<0.18"
   discovery: ">=0.17,<0.18"
 artefact_paths:
-  rules_corpus: configs/engine_invariants/vllm.proposed.yaml
-  vendored_rules: configs/engine_invariants/vllm.vendored.yaml
+  rules_corpus: src/llenergymeasure/config/engine_invariants/vllm.proposed.yaml
+  vendored_rules: src/llenergymeasure/config/engine_invariants/vllm.vendored.yaml
   discovered_schemas: src/llenergymeasure/config/discovered_schemas/vllm.json
 last_probe:
   verdict: unrun
   version_inside_envelope: null
   fingerprint: null
   fingerprint_drift: []
-  ran_at: null
