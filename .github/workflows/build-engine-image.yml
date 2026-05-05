@@ -29,16 +29,21 @@ name: Build engine image (transformers)
 # silent update) that layer caching alone wouldn't catch.
 
 on:
+  # Trigger paths cover the inputs that change the BUILT IMAGE: the
+  # Dockerfile (build recipe) and this workflow file (build flow). The
+  # SSOT YAML is intentionally NOT in the trigger paths — Renovate
+  # updates Dockerfile + SSOT in tandem when bumping current_version,
+  # so Dockerfile-path coverage catches every version bump. SSOT-only
+  # edits (artefact_paths, last_probe block, etc.) don't change the
+  # image and don't need a rebuild.
   pull_request:
     types: [opened, synchronize]
     paths:
-      - "engine_versions/transformers.yaml"
       - "docker/Dockerfile.transformers"
       - ".github/workflows/build-engine-image.yml"
   push:
     branches: [main]
     paths:
-      - "engine_versions/transformers.yaml"
       - "docker/Dockerfile.transformers"
       - ".github/workflows/build-engine-image.yml"
   schedule:

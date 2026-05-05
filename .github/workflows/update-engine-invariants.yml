@@ -579,8 +579,9 @@ jobs:
         # stale corpus. The probe-blocked comment above explains how to
         # resolve (/approve-reuse to widen the SSOT envelope, or landmark
         # patch); this gate makes that resolution mandatory rather than
-        # advisory.
-        if: steps.probe.outputs.verdict == 'fail'
+        # advisory. The 'skip-probe-gate' PR label bypasses this gate for
+        # known-drift cases (admin escalation; tracked in #547 etc.).
+        if: steps.probe.outputs.verdict == 'fail' && !contains(github.event.pull_request.labels.*.name, 'skip-probe-gate')
         run: |
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
           exit 1
@@ -1029,8 +1030,9 @@ jobs:
         # stale corpus. The probe-blocked comment above explains how to
         # resolve (/approve-reuse to widen the SSOT envelope, or landmark
         # patch); this gate makes that resolution mandatory rather than
-        # advisory.
-        if: steps.probe.outputs.verdict == 'fail'
+        # advisory. The 'skip-probe-gate' PR label bypasses this gate for
+        # known-drift cases (admin escalation; tracked in #547 etc.).
+        if: steps.probe.outputs.verdict == 'fail' && !contains(github.event.pull_request.labels.*.name, 'skip-probe-gate')
         run: |
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
           exit 1
@@ -1500,8 +1502,9 @@ jobs:
         # stale corpus. The probe-blocked comment above explains how to
         # resolve (/approve-reuse to widen the SSOT envelope, or landmark
         # patch); this gate makes that resolution mandatory rather than
-        # advisory.
-        if: steps.probe.outputs.verdict == 'fail'
+        # advisory. The 'skip-probe-gate' PR label bypasses this gate for
+        # known-drift cases (admin escalation; tracked in #547 etc.).
+        if: steps.probe.outputs.verdict == 'fail' && !contains(github.event.pull_request.labels.*.name, 'skip-probe-gate')
         run: |
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
           exit 1
