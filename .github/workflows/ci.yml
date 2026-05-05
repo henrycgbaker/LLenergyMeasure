@@ -205,7 +205,10 @@ jobs:
           # chat-style review comments per finding. Same lint coverage,
           # without the inline-comment spam every workflow edit produced.
           reporter: github-pr-check
-          fail_on_error: true
+          # Only fail CI on errors, not warnings. SC2046 etc. surface as
+          # annotations but don't gate. fail_on_error (deprecated) was
+          # gating on any finding.
+          fail_level: error
 
   schema-version-check:
     needs: filter
