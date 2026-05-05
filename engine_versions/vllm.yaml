@@ -28,7 +28,7 @@ artefact_paths:
   vendored_rules: src/llenergymeasure/config/engine_invariants/vllm.vendored.yaml
   discovered_schemas: src/llenergymeasure/config/discovered_schemas/vllm.json
 last_probe:
-  verdict: unrun
-  version_inside_envelope: null
-  fingerprint: null
+  verdict: pass
+  version_inside_envelope: false
+  fingerprint: "c162e9d8bd82bd20dede4fabfc6c2a08ae2c460989c12ade558c48310b4b6c1c"
   fingerprint_drift: []
