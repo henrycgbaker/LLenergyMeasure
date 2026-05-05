@@ -30,20 +30,20 @@ name: Build engine image (transformers)
 
 on:
   # Trigger paths cover the inputs that change the BUILT IMAGE: the
-  # Dockerfile (build recipe) and this workflow file (build flow). The
-  # SSOT YAML is intentionally NOT in the trigger paths — Renovate
-  # updates Dockerfile + SSOT in tandem when bumping current_version,
-  # so Dockerfile-path coverage catches every version bump. SSOT-only
-  # edits (artefact_paths, last_probe block, etc.) don't change the
-  # image and don't need a rebuild.
+  # SSOT YAML (Renovate-updated `library.current_version` flows into the
+  # build via the workflow's "Resolve transformers version from SSOT"
+  # step), the Dockerfile (build recipe), and this workflow file
+  # (build flow).
   pull_request:
     types: [opened, synchronize]
     paths:
+      - "engine_versions/transformers.yaml"
       - "docker/Dockerfile.transformers"
       - ".github/workflows/build-engine-image.yml"
   push:
     branches: [main]
     paths:
+      - "engine_versions/transformers.yaml"
       - "docker/Dockerfile.transformers"
       - ".github/workflows/build-engine-image.yml"
   schedule:
@@ -119,17 +119,21 @@ jobs:
             echo "no_cache=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build transformers image (cache export only, no runtime push)
+      - name: Build transformers image and push runtime tag for downstream cells
         uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile.transformers
           target: runtime
-          # Local-only tag: the runtime image is materialised in the
-          # builder's cache for engine-image-push.yml to pull from. Never
-          # pushed to a registry by this workflow.
-          tags: transformers-build:local
-          push: false
+          # Push the built runtime image to the transformers-cache repo on
+          # every event (PR + push). Downstream update-engine-{invariants,
+          # schemas} cells pull this tag to probe / mine / introspect
+          # against the actual built image. publish-engine-image.yml
+          # continues to mirror this image to the canonical
+          # transformers:<VER> + :latest tags on push events for
+          # production consumers.
+          tags: ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
+          push: true
           no-cache: ${{ steps.targets.outputs.no_cache }}
           # SSOT-driven build arg only. INSTALL_FA3 / MAX_JOBS / NVCC_THREADS
           # are pinned in docker/Dockerfile.transformers (32 / 4 — saturates

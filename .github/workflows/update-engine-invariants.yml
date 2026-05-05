@@ -75,11 +75,13 @@ on:
       - "configs/engine_invariants/**"
       - ".github/workflows/engine-invariants.yml"
   workflow_run:
-    # Chain off the PUSH workflow (which only fires after a successful
-    # build), not the build directly: invariants-transformers needs to
-    # pull the runtime image from GHCR, which doesn't exist until push
-    # lands.
-    workflows: ["Publish engine image (transformers)"]
+    # Chain off the BUILD workflow (which fires on PR + push). The
+    # transformers cell pulls the runtime image from the
+    # transformers-cache repo, which build-engine-image.yml pushes on
+    # every event. publish-engine-image.yml continues to mirror that to
+    # the production tag on push only — but downstream CI doesn't depend
+    # on that mirror, so we chain off build directly.
+    workflows: ["Build engine image (transformers)"]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -176,14 +178,20 @@ jobs:
               - 'scripts/ci/upsert_pr_comment.sh'
 
   transformers:
-    # Selected on workflow_run (Engine Image Push success) or
-    # workflow_dispatch with engine=transformers/all. Skipped on
-    # pull_request: the transformers cell needs the pre-built runtime
-    # image, which engine-image-push.yml produces after engine-image-
-    # build.yml exports the cache.
+    needs: filter
+    # Selected on workflow_run (Build engine image success — chain), on
+    # workflow_dispatch with engine=transformers/all, or directly on
+    # pull_request when filter detects transformers paths changed. The
+    # cell pulls the built runtime image from transformers-cache:<VER>
+    # (build-engine-image.yml pushes there on every event), so all three
+    # trigger shapes work the same way once the image is available.
     if: >-
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-      || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'transformers' || inputs.engine == 'all'))
+      always()
+      && (
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+        || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'transformers' || inputs.engine == 'all'))
+        || (github.event_name == 'pull_request' && needs.filter.result == 'success' && needs.filter.outputs.transformers == 'true')
+      )
     runs-on: ubuntu-latest
     # No build step here — pure probe + mine + vendor. 30 min is generous.
     timeout-minutes: 30
@@ -205,13 +213,13 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Checkout PR branch
-        # workflow_run runs on the default branch by default. Explicitly
-        # check out the head SHA of the run that triggered us so the mine
-        # + writeback operate on the right code. workflow_dispatch falls
-        # back to github.ref.
+        # workflow_run runs on the default branch by default; explicitly
+        # check out the head SHA of the upstream run. Direct pull_request
+        # event uses github.head_ref. workflow_dispatch falls back to
+        # github.ref.
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          ref: ${{ github.event.workflow_run.head_sha || github.head_ref || github.ref }}
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
@@ -229,13 +237,17 @@ jobs:
       - name: Resolve PR number (for comments + labels + writeback)
         id: pr
         # workflow_run.pull_requests is empty for cross-fork PRs; gracefully
-        # downgrade to no-comment / no-writeback in that case. Same-repo
-        # PRs and push events provide what we need. workflow_dispatch can
-        # supply pr_number via input.
+        # downgrade to no-comment / no-writeback in that case. Direct
+        # pull_request event uses github.event.pull_request.number.
+        # Same-repo workflow_run PRs provide what we need.
+        # workflow_dispatch can supply pr_number via input.
         run: |
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
             PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number }}"
             HEAD_REPO="${{ github.event.workflow_run.head_repository.full_name }}"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            HEAD_REPO="${{ github.event.pull_request.head.repo.full_name }}"
           else
             PR_NUMBER="${{ inputs.pr_number }}"
             HEAD_REPO="${{ github.repository }}"
@@ -256,16 +268,13 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull pre-built transformers image and tag locally
-        # PR-triggered upstream runs publish to the transformers-cache repo;
-        # push-triggered upstream runs publish to the canonical repo's
-        # per-version tag. Either way we re-tag to the local convenience
-        # tag the rest of this job consumes.
+        # build-engine-image.yml pushes the runtime image to the
+        # transformers-cache repo on every event (PR + push), so this
+        # cell always pulls from there. publish-engine-image.yml mirrors
+        # the cache image to the production transformers:<VER> tag for
+        # end users; downstream CI doesn't depend on that mirror.
         run: |
-          if [ "${{ github.event.workflow_run.event }}" = "pull_request" ]; then
-            UPSTREAM="ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}"
-          else
-            UPSTREAM="ghcr.io/${{ github.repository }}/transformers:transformers-${{ steps.version.outputs.version }}"
-          fi
+          UPSTREAM="ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}"
           if ! docker image inspect "$UPSTREAM" >/dev/null 2>&1; then
             docker pull "$UPSTREAM"
           else
@@ -579,9 +588,9 @@ jobs:
         # stale corpus. The probe-blocked comment above explains how to
         # resolve (/approve-reuse to widen the SSOT envelope, or landmark
         # patch); this gate makes that resolution mandatory rather than
-        # advisory. The 'skip-probe-gate' PR label bypasses this gate for
+        # advisory. The 'accept-probe-fail' PR label bypasses this gate for
         # known-drift cases (admin escalation; tracked in #547 etc.).
-        if: steps.probe.outputs.verdict == 'fail' && !contains(github.event.pull_request.labels.*.name, 'skip-probe-gate')
+        if: steps.probe.outputs.verdict == 'fail' && !contains(github.event.pull_request.labels.*.name, 'accept-probe-fail')
         run: |
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
           exit 1
@@ -743,7 +752,7 @@ jobs:
         run: |
           mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
-            --user $(id -u):$(id -g) \
+            --user "$(id -u):$(id -g)" \
             -v /tmp/llem-passwd-synth:/etc/passwd:ro \
             -v /tmp/llem-group-synth:/etc/group:ro \
             -v "${{ github.workspace }}:/repo" \
@@ -768,7 +777,7 @@ jobs:
           IMAGE: ${{ steps.version.outputs.image }}
         run: |
           docker run --rm \
-            --user $(id -u):$(id -g) \
+            --user "$(id -u):$(id -g)" \
             -v /tmp/llem-passwd-synth:/etc/passwd:ro \
             -v /tmp/llem-group-synth:/etc/group:ro \
             -v "${{ github.workspace }}:/repo" \
@@ -801,7 +810,7 @@ jobs:
           ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
         run: |
           docker run --rm --gpus all \
-            --user $(id -u):$(id -g) \
+            --user "$(id -u):$(id -g)" \
             -v /tmp/llem-passwd-synth:/etc/passwd:ro \
             -v /tmp/llem-group-synth:/etc/group:ro \
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
@@ -1030,9 +1039,9 @@ jobs:
         # stale corpus. The probe-blocked comment above explains how to
         # resolve (/approve-reuse to widen the SSOT envelope, or landmark
         # patch); this gate makes that resolution mandatory rather than
-        # advisory. The 'skip-probe-gate' PR label bypasses this gate for
+        # advisory. The 'accept-probe-fail' PR label bypasses this gate for
         # known-drift cases (admin escalation; tracked in #547 etc.).
-        if: steps.probe.outputs.verdict == 'fail' && !contains(github.event.pull_request.labels.*.name, 'skip-probe-gate')
+        if: steps.probe.outputs.verdict == 'fail' && !contains(github.event.pull_request.labels.*.name, 'accept-probe-fail')
         run: |
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
           exit 1
@@ -1212,7 +1221,7 @@ jobs:
         run: |
           mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
-            --user $(id -u):$(id -g) \
+            --user "$(id -u):$(id -g)" \
             -v /tmp/llem-passwd-synth:/etc/passwd:ro \
             -v /tmp/llem-group-synth:/etc/group:ro \
             -e LD_LIBRARY_PATH \
@@ -1239,7 +1248,7 @@ jobs:
           IMAGE: ${{ steps.version.outputs.image }}
         run: |
           docker run --rm \
-            --user $(id -u):$(id -g) \
+            --user "$(id -u):$(id -g)" \
             -v /tmp/llem-passwd-synth:/etc/passwd:ro \
             -v /tmp/llem-group-synth:/etc/group:ro \
             -v "${{ github.workspace }}:/repo" \
@@ -1274,7 +1283,7 @@ jobs:
           TRTLLM_VER: ${{ steps.version.outputs.version }}
         run: |
           docker run --rm --gpus all \
-            --user $(id -u):$(id -g) \
+            --user "$(id -u):$(id -g)" \
             -v /tmp/llem-passwd-synth:/etc/passwd:ro \
             -v /tmp/llem-group-synth:/etc/group:ro \
             -e LD_LIBRARY_PATH \
@@ -1502,9 +1511,9 @@ jobs:
         # stale corpus. The probe-blocked comment above explains how to
         # resolve (/approve-reuse to widen the SSOT envelope, or landmark
         # patch); this gate makes that resolution mandatory rather than
-        # advisory. The 'skip-probe-gate' PR label bypasses this gate for
+        # advisory. The 'accept-probe-fail' PR label bypasses this gate for
         # known-drift cases (admin escalation; tracked in #547 etc.).
-        if: steps.probe.outputs.verdict == 'fail' && !contains(github.event.pull_request.labels.*.name, 'skip-probe-gate')
+        if: steps.probe.outputs.verdict == 'fail' && !contains(github.event.pull_request.labels.*.name, 'accept-probe-fail')
         run: |
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
           exit 1
