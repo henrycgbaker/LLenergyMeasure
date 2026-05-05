@@ -732,6 +732,8 @@ jobs:
           mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
             --user $(id -u):$(id -g) \
+            -v /etc/passwd:/etc/passwd:ro \
+            -v /etc/group:/etc/group:ro \
             -v "${{ github.workspace }}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
@@ -755,6 +757,8 @@ jobs:
         run: |
           docker run --rm \
             --user $(id -u):$(id -g) \
+            -v /etc/passwd:/etc/passwd:ro \
+            -v /etc/group:/etc/group:ro \
             -v "${{ github.workspace }}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:ro \
             -w /repo \
@@ -786,6 +790,8 @@ jobs:
         run: |
           docker run --rm --gpus all \
             --user $(id -u):$(id -g) \
+            -v /etc/passwd:/etc/passwd:ro \
+            -v /etc/group:/etc/group:ro \
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
             -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
@@ -1183,6 +1189,8 @@ jobs:
           mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
             --user $(id -u):$(id -g) \
+            -v /etc/passwd:/etc/passwd:ro \
+            -v /etc/group:/etc/group:ro \
             -e LD_LIBRARY_PATH \
             -e PYTHONPATH \
             -e PYTHONDONTWRITEBYTECODE \
@@ -1208,6 +1216,8 @@ jobs:
         run: |
           docker run --rm \
             --user $(id -u):$(id -g) \
+            -v /etc/passwd:/etc/passwd:ro \
+            -v /etc/group:/etc/group:ro \
             -v "${{ github.workspace }}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:ro \
             -w /repo \
@@ -1241,6 +1251,8 @@ jobs:
         run: |
           docker run --rm --gpus all \
             --user $(id -u):$(id -g) \
+            -v /etc/passwd:/etc/passwd:ro \
+            -v /etc/group:/etc/group:ro \
             -e LD_LIBRARY_PATH \
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
             -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
