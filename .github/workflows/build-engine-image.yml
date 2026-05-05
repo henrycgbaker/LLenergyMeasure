@@ -67,7 +67,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-transformers:
+  # Job ID is the bare engine name so the PR check matrix renders as
+  # `Build engine image (transformers) / transformers`, matching the
+  # naming convention used by the update-engine-{invariants,schemas}
+  # pipelines (#553). Workflow `name:` carries the concern.
+  transformers:
     runs-on: self-hosted
     # 90-min cap chosen for headroom on cold FA3 builds (~15-70 min observed
     # on ds01-gpu depending on first-run vs cached layers).
@@ -141,11 +145,14 @@ jobs:
           build-args: |
             TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
           # cache-from prefers the buildcache ref (mode=max metadata for
-          # ALL intermediate layers including FA3 builder); falls back to
-          # the runtime image tags so existing :latest / :<VER> images on
-          # GHCR can still seed the layer cache after a cache eviction.
+          # ALL intermediate layers including FA3 builder); falls back
+          # successively to the runtime tag in transformers-cache (the
+          # image we push every PR — survives buildcache eviction) and
+          # finally to the published transformers tags (only present
+          # post-merge, when publish-engine-image.yml has tag-copied).
           cache-from: |
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache
+            type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers:transformers-${{ steps.version.outputs.version }}
           # cache-to: registry-mode mode=max writes a separate cache manifest

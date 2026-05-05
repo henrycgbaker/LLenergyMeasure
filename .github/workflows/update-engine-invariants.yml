@@ -197,6 +197,13 @@ jobs:
     timeout-minutes: 30
     env:
       PYTHONDONTWRITEBYTECODE: "1"
+      # Engine-only image; llenergymeasure is not installed inside the
+      # container — see refactor(docker): drop project install from
+      # transformers image. We expose the in-repo source via the bind
+      # mount + PYTHONPATH so build_corpus / vendor_rules can import
+      # llenergymeasure.* at runtime. Mirrors the contract used by the
+      # vllm and tensorrt cells below.
+      PYTHONPATH: "/repo/src:/repo"
     steps:
       - name: Mint llem-ci-bot App token
         # Short-lived (~1 hour) GitHub App token. Events it produces are
@@ -320,6 +327,7 @@ jobs:
             -v "${{ github.workspace }}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
+            -e PYTHONPATH \
             --entrypoint python3 \
             "$IMAGE" \
             -m scripts._probe --engine transformers --producer invariants \
@@ -344,6 +352,7 @@ jobs:
             -v "${{ github.workspace }}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:ro \
             -w /repo \
+            -e PYTHONPATH \
             --entrypoint bash \
             "$IMAGE" \
             -c 'python3 scripts/update_last_probe.py --engine transformers < /llem-probe-out/probe-transformers.json'
@@ -373,6 +382,7 @@ jobs:
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
             -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
+            -e PYTHONPATH \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
             --entrypoint bash \
