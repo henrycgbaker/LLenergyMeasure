@@ -1,4 +1,4 @@
-name: Build engine image (transformers)
+name: Build engine image
 
 # Builds the transformers engine image and exports its layer cache to GHCR.
 # Does NOT push a runtime image — that is the engine-image-push.yml workflow's
@@ -68,9 +68,10 @@ concurrency:
 
 jobs:
   # Job ID is the bare engine name so the PR check matrix renders as
-  # `Build engine image (transformers) / transformers`, matching the
-  # naming convention used by the update-engine-{invariants,schemas}
-  # pipelines (#553). Workflow `name:` carries the concern.
+  # `Build engine image / transformers`, matching the naming convention
+  # used by the update-engine-{invariants,schemas} pipelines (#553).
+  # Workflow `name:` carries the concern; the engine is encoded in the
+  # job ID, not the workflow name.
   transformers:
     runs-on: self-hosted
     # 90-min cap chosen for headroom on cold FA3 builds (~15-70 min observed

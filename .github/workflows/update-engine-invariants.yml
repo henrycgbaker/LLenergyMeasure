@@ -81,7 +81,7 @@ on:
     # every event. publish-engine-image.yml continues to mirror that to
     # the production tag on push only — but downstream CI doesn't depend
     # on that mirror, so we chain off build directly.
-    workflows: ["Build engine image (transformers)"]
+    workflows: ["Build engine image"]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -343,7 +343,6 @@ jobs:
         # SSOT diff alongside the corpus regen artefacts when the probe
         # passes; on probe-fail the local edit is dropped with the
         # workspace, but the in-job log captures the recorded verdict.
-        # #497.
         if: always() && steps.probe.outcome == 'success'
         env:
           IMAGE: ${{ steps.version.outputs.image }}
@@ -778,7 +777,7 @@ jobs:
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
 
       - name: Update last_probe in SSOT
-        # See invariants-transformers cell for rationale (#497). Runs in
+        # See invariants-transformers cell for rationale. Runs in
         # the vLLM image (which has yaml + packaging on python3's path).
         # `--user` keeps the rewritten engine_versions/vllm.yaml owned by
         # the runner so subsequent host-side steps can read + commit it.
@@ -1249,7 +1248,7 @@ jobs:
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
 
       - name: Update last_probe in SSOT
-        # See invariants-transformers cell for rationale (#497). Runs in
+        # See invariants-transformers cell for rationale. Runs in
         # the TRT-LLM image; `--user` matches the surrounding mine + vendor
         # step's pattern so the rewritten engine_versions/tensorrt.yaml
         # stays runner-owned.
