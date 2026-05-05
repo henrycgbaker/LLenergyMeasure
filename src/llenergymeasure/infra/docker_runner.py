@@ -71,6 +71,12 @@ _WATCHDOG_POLL_INTERVAL = 0.5
 # Sentinel for "budget disabled" in the deadline comparison.
 _NO_DEADLINE = float("inf")
 
+# Trailing post-image args invoking the in-container entrypoint module.
+# All engines route through the same Python entrypoint; for TP > 1 the mpirun
+# prefix is prepended so this list runs as mpirun's command. Centralised so
+# the entrypoint contract has a single source of truth.
+_ENTRYPOINT_MODULE_ARGS = ["-m", "llenergymeasure.entrypoints.container"]
+
 
 @contextmanager
 def _env_file(secrets: dict[str, str]) -> Iterator[Path | None]:
@@ -805,23 +811,15 @@ class DockerRunner:
 
         cmd.append(self.image)
 
-        # Post-image arguments. The entrypoint override means neither
-        # "mpirun" nor "python3" appears as a literal in the args list — the
-        # entrypoint already provides them. For TP > 1, the args supply
-        # mpirun's flags + the python3 invocation as mpirun's command.
-        if tp_size is not None and tp_size > 1:
-            cmd.extend(
-                [
-                    "-n",
-                    str(tp_size),
-                    "--allow-run-as-root",
-                    "python3",
-                    "-m",
-                    "llenergymeasure.entrypoints.container",
-                ]
-            )
-        else:
-            cmd.extend(["-m", "llenergymeasure.entrypoints.container"])
+        # Post-image arguments invoke the entrypoint module. For TP > 1 an
+        # mpirun prefix runs python3 as mpirun's command; otherwise python3
+        # is the container entrypoint and the module args follow directly.
+        mpi_prefix = (
+            ["-n", str(tp_size), "--allow-run-as-root", "python3"]
+            if tp_size and tp_size > 1
+            else []
+        )
+        cmd.extend([*mpi_prefix, *_ENTRYPOINT_MODULE_ARGS])
 
         return cmd
 

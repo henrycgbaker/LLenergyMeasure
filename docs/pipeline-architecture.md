@@ -2,18 +2,56 @@
 
 This doc is the chain-diagram reference for the engine-coupling pipeline. SSOT-driven Renovate cycles flow through these stages: trigger, two per-concern CI workflows, vendored artefacts, and the human curation checkpoint before merge.
 
-> **Per-engine variation.** The diagram below is the vllm + tensorrt shape:
-> the `invariants-vllm` / `schemas-vllm` (and `-tensorrt`) jobs in
-> `update-engine-invariants.yml` + `update-engine-schemas.yml` fire on `pull_request: paths`
-> with sibling coordination via inline `gh api` polling. Transformers takes a
-> sequential variant: `build-engine-image.yml` builds the image (cache export
-> only, no runtime push), `publish-engine-image.yml` then fires via `workflow_run`
-> and publishes runtime tags, and on its success the `schemas-transformers`
-> and `invariants-transformers` jobs (in the same two workflow files) fire
-> via `workflow_run`. Per-job `if:` clauses select the correct cell for each
-> trigger source. The sequence is described in detail in
-> [`docs/development.md` — CI pipeline ordering](development.md#ci-pipeline-ordering);
-> the diagram below applies to vllm + tensorrt only.
+## Asymmetric engine architecture (locked design choice)
+
+The three engines run different pipelines in CI for a load-bearing reason. **Don't undo this asymmetry without re-reading [`#518`](https://github.com/henrycgbaker/llenergymeasure/issues/518) — the conclusion has held across re-litigations 2026-04-30, 2026-05-01, and 2026-05-05.**
+
+| Engine | Image source | CI flow on PR |
+|---|---|---|
+| **transformers** | First-party `docker/Dockerfile.transformers` (FA3-included; no upstream provides this) | `build-engine-image` (rebuild) → `update-engine-{invariants,schemas}` (probe + mine/introspect) → [merge] → `publish-engine-image` (mirror to production tag) |
+| **vllm** | Upstream `vllm/vllm-openai:v<VER>` directly + bind-mount llem source | `update-engine-{invariants,schemas}` cells fire directly on `pull_request: paths` (no first-party build) |
+| **tensorrt** | Upstream `nvcr.io/nvidia/tensorrt-llm/release:<VER>` directly + bind-mount llem source | Same shape as vllm |
+
+**Why asymmetric.** vllm + tensorrt's upstream images empirically contain everything llem needs at runtime (PoC verified 2026-04-30: `pydantic`, `typer`, `pyarrow`, `rich`, `dotenv`, `pyyaml` all present transitively). Transformers' upstream images don't include FA3, which is non-negotiable for production-equivalent CI runs. So transformers gets a first-party Dockerfile; the others stay upstream-direct.
+
+**Drift safety.** The only argument for first-party-everywhere is "what if upstream drops a transitive dep llem needs?" The migration cost from upstream-direct → first-party is bounded (~1 day, well-defined recipe per `#518`). The actual cost of running first-party-everywhere is the FA3 build for two extra engines that don't need it.
+
+### Transformers PR-time CI flow (rebuild + probe/mine/introspect chain)
+
+```text
+PR opens (touches transformers paths: SSOT, Dockerfile, miner code, etc.)
+  │
+  │  build-engine-image.yml fires (paths trigger:
+  │  engine_versions/transformers.yaml, docker/Dockerfile.transformers,
+  │  .github/workflows/build-engine-image.yml)
+  ▼
+[Build transformers runtime image; cache hits ~10-15 min, cold FA3 ~60-90 min]
+[Push to ghcr.io/<repo>/transformers-cache:transformers-<VER>]
+  │
+  │  workflow_run chain fires (Build engine image success)
+  ▼
+update-engine-{invariants,schemas}.yml transformers cells run:
+  pull transformers-cache image → probe → mine/introspect → vendor → writeback
+  │
+  │  Probe-fail → CI red. The 'accept-probe-fail' PR label bypasses
+  │  the gate for known-drift cases (admin escalation; see #547).
+  ▼
+[CI green/red. PR ready to merge when green.]
+  │
+  │  PR merges to main (push event with SSOT/Dockerfile change)
+  ▼
+publish-engine-image.yml fires DIRECTLY on push (no rebuild):
+  Tag-copy via `docker buildx imagetools create`:
+    transformers-cache:transformers-<VER>  →  transformers:transformers-<VER>
+                                           →  transformers:latest
+  Registry-side metadata op only — seconds, no build infra.
+  Production image is bit-identical to the cache image validated
+  by CI on the PR that just merged.
+```
+
+### vllm + tensorrt PR-time CI flow (no rebuild; upstream-direct)
+
+The diagram below applies to vllm + tensorrt only — `update-engine-*.yml` cells fire directly on `pull_request: paths` (no `build-engine-image` chain). They pull the upstream image at the SSOT-pinned version, bind-mount llem source, and probe/mine/introspect inside the upstream container.
 
 ```
 ================================================================================

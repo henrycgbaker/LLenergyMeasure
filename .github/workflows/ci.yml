@@ -200,8 +200,15 @@ jobs:
       - name: Run actionlint
         uses: reviewdog/action-actionlint@v1
         with:
-          reporter: github-pr-review
-          fail_on_error: true
+          # github-pr-check posts findings as Check Run annotations
+          # (inline file annotations + check-run summary), NOT as
+          # chat-style review comments per finding. Same lint coverage,
+          # without the inline-comment spam every workflow edit produced.
+          reporter: github-pr-check
+          # Only fail CI on errors, not warnings. SC2046 etc. surface as
+          # annotations but don't gate. fail_on_error (deprecated) was
+          # gating on any finding.
+          fail_level: error
 
   schema-version-check:
     needs: filter
@@ -210,7 +217,11 @@ jobs:
       && needs.filter.outputs.docker == 'true'
       && !contains(github.event.pull_request.labels.*.name, 'renovate')
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [transformers, vllm, tensorrt]
     steps:
       - uses: actions/checkout@v6
-      - name: Check schema versions match Dockerfiles
-        run: python3 scripts/check_discovered_schema_versions.py
+      - name: Check ${{ matrix.engine }} schema version aligns with Dockerfile
+        run: python3 scripts/check_discovered_schema_versions.py --engine ${{ matrix.engine }}

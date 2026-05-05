@@ -101,7 +101,6 @@ def test_probe_pass_when_all_landmarks_resolve(
     assert report.engine == "transformers"
     assert report.producer == "invariants"
     assert report.fingerprint  # non-empty hex digest
-    assert report.ran_at  # ISO timestamp present
 
 
 def test_probe_fail_when_landmark_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -297,7 +296,6 @@ def test_probe_atomic_output_rename_failure_leaves_destination_intact(
         fingerprint="deadbeef",
         fingerprint_drift=[],
         landmarks_missing=[],
-        ran_at="2026-05-04T00:00:00+00:00",
     )
     with pytest.raises(OSError, match="simulated rename failure"):
         _probe._write_report_to_file(out, report)

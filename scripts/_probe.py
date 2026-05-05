@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import datetime as dt
 import hashlib
 import importlib
 import inspect
@@ -103,7 +102,6 @@ class ProbeReport:
     fingerprint: str
     fingerprint_drift: list[str] = field(default_factory=list)
     landmarks_missing: list[str] = field(default_factory=list)
-    ran_at: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +332,6 @@ def probe(*, engine: str, producer: ProducerKind) -> ProbeReport:
         fingerprint=fingerprint,
         fingerprint_drift=drift,
         landmarks_missing=missing,
-        ran_at=dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
     )
 
 

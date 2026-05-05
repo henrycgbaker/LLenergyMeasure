@@ -1,4 +1,4 @@
-name: Build engine image (transformers)
+name: Build engine image
 
 # Builds the transformers engine image and exports its layer cache to GHCR.
 # Does NOT push a runtime image — that is the engine-image-push.yml workflow's
@@ -29,14 +29,17 @@ name: Build engine image (transformers)
 # silent update) that layer caching alone wouldn't catch.
 
 on:
+  # Trigger paths cover the inputs that change the BUILT IMAGE: the
+  # SSOT YAML (Renovate-updated `library.current_version` flows into the
+  # build via the workflow's "Resolve transformers version from SSOT"
+  # step), the Dockerfile (build recipe), and this workflow file
+  # (build flow).
+  #
+  # NOT triggered on push to main: by then, the PR's build run has
+  # already pushed transformers-cache:<VER>. publish-engine-image.yml
+  # promotes that image via tag-copy on push, no rebuild needed.
   pull_request:
     types: [opened, synchronize]
-    paths:
-      - "engine_versions/transformers.yaml"
-      - "docker/Dockerfile.transformers"
-      - ".github/workflows/build-engine-image.yml"
-  push:
-    branches: [main]
     paths:
       - "engine_versions/transformers.yaml"
       - "docker/Dockerfile.transformers"
@@ -64,7 +67,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-transformers:
+  # Job ID is the bare engine name so the PR check matrix renders as
+  # `Build engine image / transformers`, matching the naming convention
+  # used by the update-engine-{invariants,schemas} pipelines (#553).
+  # Workflow `name:` carries the concern; the engine is encoded in the
+  # job ID, not the workflow name.
+  transformers:
     runs-on: self-hosted
     # 90-min cap chosen for headroom on cold FA3 builds (~15-70 min observed
     # on ds01-gpu depending on first-run vs cached layers).
@@ -114,17 +122,21 @@ jobs:
             echo "no_cache=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build transformers image (cache export only, no runtime push)
+      - name: Build transformers image and push runtime tag for downstream cells
         uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile.transformers
           target: runtime
-          # Local-only tag: the runtime image is materialised in the
-          # builder's cache for engine-image-push.yml to pull from. Never
-          # pushed to a registry by this workflow.
-          tags: transformers-build:local
-          push: false
+          # Push the built runtime image to the transformers-cache repo on
+          # every event (PR + push). Downstream update-engine-{invariants,
+          # schemas} cells pull this tag to probe / mine / introspect
+          # against the actual built image. publish-engine-image.yml
+          # continues to mirror this image to the canonical
+          # transformers:<VER> + :latest tags on push events for
+          # production consumers.
+          tags: ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
+          push: true
           no-cache: ${{ steps.targets.outputs.no_cache }}
           # SSOT-driven build arg only. INSTALL_FA3 / MAX_JOBS / NVCC_THREADS
           # are pinned in docker/Dockerfile.transformers (32 / 4 — saturates
@@ -134,11 +146,14 @@ jobs:
           build-args: |
             TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
           # cache-from prefers the buildcache ref (mode=max metadata for
-          # ALL intermediate layers including FA3 builder); falls back to
-          # the runtime image tags so existing :latest / :<VER> images on
-          # GHCR can still seed the layer cache after a cache eviction.
+          # ALL intermediate layers including FA3 builder); falls back
+          # successively to the runtime tag in transformers-cache (the
+          # image we push every PR — survives buildcache eviction) and
+          # finally to the published transformers tags (only present
+          # post-merge, when publish-engine-image.yml has tag-copied).
           cache-from: |
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache
+            type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers:transformers-${{ steps.version.outputs.version }}
           # cache-to: registry-mode mode=max writes a separate cache manifest

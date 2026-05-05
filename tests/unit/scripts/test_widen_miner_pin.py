@@ -45,7 +45,6 @@ last_probe:
   version_inside_envelope: null
   fingerprint: null
   fingerprint_drift: []
-  ran_at: null
 """
 
 

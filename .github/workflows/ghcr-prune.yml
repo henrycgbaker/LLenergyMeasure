@@ -1,0 +1,169 @@
+name: Prune GHCR transformers-cache images
+
+# Weekly retention sweep over the per-PR transformers-cache image tags
+# that build-engine-image.yml + publish-engine-image.yml leave behind on
+# GHCR. PR-time builds publish to
+# `ghcr.io/<owner>/<repo>/transformers-cache:transformers-<version>` (with
+# a separate `-buildcache` tag carrying buildx's layer cache), and these
+# accumulate over PR cycles. This workflow keeps the registry bounded:
+# every Monday at 06:00 UTC, delete versions older than 30 days that
+# aren't currently referenced by an open PR's HEAD SHA. Versions tagged
+# for live PR heads are skipped regardless of age.
+#
+# Triggers:
+#   schedule          : weekly cron, default 30-day retention.
+#   workflow_dispatch : ad-hoc with `retention_days` + `dry_run` overrides
+#                       so an operator can preview deletions without
+#                       committing to them.
+#
+# Closes #525.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Mondays 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: 'Delete versions older than N days'
+        required: false
+        default: '30'
+      dry_run:
+        description: 'Dry run (list candidates without deleting)'
+        type: boolean
+        default: false
+
+permissions:
+  packages: write
+  contents: read
+  pull-requests: read
+
+concurrency:
+  # Single in-flight sweep at a time; never cancel mid-sweep (a partial
+  # delete pass leaves the registry in a weird half-pruned state).
+  group: ghcr-prune
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: Prune transformers-cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PACKAGE_NAME: llenergymeasure%2Ftransformers-cache
+      RETENTION_DAYS: ${{ inputs.retention_days || '30' }}
+      DRY_RUN: ${{ inputs.dry_run || 'false' }}
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+
+      - name: List candidate versions to prune
+        id: candidates
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # GHCR API endpoint: user-owned packages live under
+          # /users/{owner}/packages/container/{package}/versions.
+          # Package name must be URL-encoded (forward-slashes become %2F).
+          OWNER="${{ github.repository_owner }}"
+          API="/users/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
+
+          # Cutoff: anything created before this ISO-8601 timestamp is a
+          # candidate for deletion. macOS-portable date(1) isn't needed
+          # here — runners are ubuntu-latest.
+          CUTOFF=$(date -u -d "${RETENTION_DAYS} days ago" +%Y-%m-%dT%H:%M:%SZ)
+          echo "Cutoff (UTC): ${CUTOFF}"
+
+          # Tags referenced by any open PR's HEAD SHA. A version's tag set
+          # may include `transformers-<version>` (engine-versioned) or
+          # `<version>-buildcache`, neither of which embeds a SHA — but
+          # PRs can also produce per-SHA tags via build-engine-image.yml.
+          # Track both PR HEAD SHAs and PR HEAD branch refs.
+          mapfile -t LIVE_SHAS < <(gh pr list --state open --json headRefOid --jq '.[].headRefOid')
+          printf 'Live PR HEAD SHAs: %s\n' "${LIVE_SHAS[*]:-<none>}"
+
+          # Page through versions; the API returns up to 100 per page.
+          page=1
+          delete_ids=()
+          while :; do
+            batch=$(gh api -X GET "${API}" -f per_page=100 -f page="${page}" \
+              --jq '.[] | {id, created_at, name, tags: (.metadata.container.tags // [])}')
+            if [[ -z "${batch}" ]]; then
+              break
+            fi
+
+            # Loop over each version JSON object on this page.
+            while IFS= read -r row; do
+              [[ -z "${row}" ]] && continue
+              ID=$(jq -r '.id' <<< "${row}")
+              CREATED=$(jq -r '.created_at' <<< "${row}")
+              TAGS=$(jq -r '.tags | join(",")' <<< "${row}")
+
+              # Older than cutoff?
+              if [[ "${CREATED}" > "${CUTOFF}" ]]; then
+                continue
+              fi
+
+              # Tag-overlap check: skip if any tag matches a live PR's
+              # HEAD SHA (whole-string match). The buildx-cache tag
+              # convention is `<sha>-buildcache`; the engine-version tag
+              # is `transformers-<version>`. We compare each tag against
+              # each live SHA.
+              skip=0
+              if [[ -n "${TAGS}" ]]; then
+                IFS=',' read -ra TAG_ARR <<< "${TAGS}"
+                for tag in "${TAG_ARR[@]}"; do
+                  for sha in "${LIVE_SHAS[@]}"; do
+                    [[ -z "${sha}" ]] && continue
+                    if [[ "${tag}" == "${sha}" || "${tag}" == "${sha}-buildcache" ]]; then
+                      skip=1
+                      break 2
+                    fi
+                  done
+                done
+              fi
+
+              if [[ ${skip} -eq 1 ]]; then
+                echo "Skip (live PR ref): id=${ID} created=${CREATED} tags=[${TAGS}]"
+                continue
+              fi
+
+              echo "Candidate: id=${ID} created=${CREATED} tags=[${TAGS}]"
+              delete_ids+=("${ID}")
+            done <<< "${batch}"
+
+            page=$((page + 1))
+          done
+
+          echo "count=${#delete_ids[@]}" >> "$GITHUB_OUTPUT"
+          # Newline-separated IDs into a multiline output for the next step.
+          {
+            echo "ids<<EOF"
+            for id in "${delete_ids[@]}"; do
+              echo "${id}"
+            done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Delete (or dry-run)
+        if: steps.candidates.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IDS: ${{ steps.candidates.outputs.ids }}
+        run: |
+          set -euo pipefail
+          OWNER="${{ github.repository_owner }}"
+          API="/users/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
+
+          if [[ "${DRY_RUN}" == "true" ]]; then
+            echo "DRY_RUN=true; would delete the following version IDs:"
+            echo "${IDS}"
+            exit 0
+          fi
+
+          while IFS= read -r ID; do
+            [[ -z "${ID}" ]] && continue
+            echo "Deleting version ${ID} ..."
+            gh api -X DELETE "${API}/${ID}"
+          done <<< "${IDS}"

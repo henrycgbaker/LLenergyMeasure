@@ -75,11 +75,13 @@ on:
       - "configs/engine_invariants/**"
       - ".github/workflows/engine-invariants.yml"
   workflow_run:
-    # Chain off the PUSH workflow (which only fires after a successful
-    # build), not the build directly: invariants-transformers needs to
-    # pull the runtime image from GHCR, which doesn't exist until push
-    # lands.
-    workflows: ["Publish engine image (transformers)"]
+    # Chain off the BUILD workflow (which fires on PR + push). The
+    # transformers cell pulls the runtime image from the
+    # transformers-cache repo, which build-engine-image.yml pushes on
+    # every event. publish-engine-image.yml continues to mirror that to
+    # the production tag on push only — but downstream CI doesn't depend
+    # on that mirror, so we chain off build directly.
+    workflows: ["Build engine image"]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -103,10 +105,16 @@ permissions:
   packages: read
 
 concurrency:
-  # workflow_run.head_sha distinguishes per-PR runs for the transformers
-  # cell; pull_request runs use github.head_ref. Combine both so the group
-  # string stays stable across trigger sources.
-  group: update-engine-invariants-${{ github.event.workflow_run.head_branch || github.event.workflow_run.head_sha || github.head_ref || github.ref }}
+  # Shared with update-engine-schemas.yml. Both workflows write back to
+  # the same PR head, and previously raced via a brittle "detect sibling
+  # + poll" mechanism (#505). Sharing one concurrency group across both
+  # files lets GitHub serialise them: when this workflow dequeues, the
+  # PR head may have advanced from the sibling's writeback, and the
+  # writeback step's `git pull --rebase --autostash` absorbs that delta
+  # before pushing. workflow_run.head_sha distinguishes per-PR runs for
+  # the transformers cell; pull_request runs use github.head_ref.
+  # Combine both so the group string stays stable across trigger sources.
+  group: engine-coupling-${{ github.event.workflow_run.head_branch || github.event.workflow_run.head_sha || github.head_ref || github.ref }}
   cancel-in-progress: false   # writeback target: never cancel mid-flight
 
 env:
@@ -169,20 +177,33 @@ jobs:
               - '.github/workflows/update-engine-invariants.yml'
               - 'scripts/ci/upsert_pr_comment.sh'
 
-  invariants-transformers:
-    # Selected on workflow_run (Engine Image Push success) or
-    # workflow_dispatch with engine=transformers/all. Skipped on
-    # pull_request: the transformers cell needs the pre-built runtime
-    # image, which engine-image-push.yml produces after engine-image-
-    # build.yml exports the cache.
+  transformers:
+    needs: filter
+    # Selected on workflow_run (Build engine image success — chain), on
+    # workflow_dispatch with engine=transformers/all, or directly on
+    # pull_request when filter detects transformers paths changed. The
+    # cell pulls the built runtime image from transformers-cache:<VER>
+    # (build-engine-image.yml pushes there on every event), so all three
+    # trigger shapes work the same way once the image is available.
     if: >-
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-      || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'transformers' || inputs.engine == 'all'))
+      always()
+      && (
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+        || (github.event_name == 'workflow_dispatch' && (inputs.engine == 'transformers' || inputs.engine == 'all'))
+        || (github.event_name == 'pull_request' && needs.filter.result == 'success' && needs.filter.outputs.transformers == 'true')
+      )
     runs-on: ubuntu-latest
     # No build step here — pure probe + mine + vendor. 30 min is generous.
     timeout-minutes: 30
     env:
       PYTHONDONTWRITEBYTECODE: "1"
+      # Engine-only image; llenergymeasure is not installed inside the
+      # container — see refactor(docker): drop project install from
+      # transformers image. We expose the in-repo source via the bind
+      # mount + PYTHONPATH so build_corpus / vendor_rules can import
+      # llenergymeasure.* at runtime. Mirrors the contract used by the
+      # vllm and tensorrt cells below.
+      PYTHONPATH: "/repo/src:/repo"
     steps:
       - name: Mint llem-ci-bot App token
         # Short-lived (~1 hour) GitHub App token. Events it produces are
@@ -199,13 +220,13 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Checkout PR branch
-        # workflow_run runs on the default branch by default. Explicitly
-        # check out the head SHA of the run that triggered us so the mine
-        # + writeback operate on the right code. workflow_dispatch falls
-        # back to github.ref.
+        # workflow_run runs on the default branch by default; explicitly
+        # check out the head SHA of the upstream run. Direct pull_request
+        # event uses github.head_ref. workflow_dispatch falls back to
+        # github.ref.
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          ref: ${{ github.event.workflow_run.head_sha || github.head_ref || github.ref }}
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
@@ -223,13 +244,17 @@ jobs:
       - name: Resolve PR number (for comments + labels + writeback)
         id: pr
         # workflow_run.pull_requests is empty for cross-fork PRs; gracefully
-        # downgrade to no-comment / no-writeback in that case. Same-repo
-        # PRs and push events provide what we need. workflow_dispatch can
-        # supply pr_number via input.
+        # downgrade to no-comment / no-writeback in that case. Direct
+        # pull_request event uses github.event.pull_request.number.
+        # Same-repo workflow_run PRs provide what we need.
+        # workflow_dispatch can supply pr_number via input.
         run: |
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
             PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number }}"
             HEAD_REPO="${{ github.event.workflow_run.head_repository.full_name }}"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            HEAD_REPO="${{ github.event.pull_request.head.repo.full_name }}"
           else
             PR_NUMBER="${{ inputs.pr_number }}"
             HEAD_REPO="${{ github.repository }}"
@@ -250,16 +275,13 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull pre-built transformers image and tag locally
-        # PR-triggered upstream runs publish to the transformers-cache repo;
-        # push-triggered upstream runs publish to the canonical repo's
-        # per-version tag. Either way we re-tag to the local convenience
-        # tag the rest of this job consumes.
+        # build-engine-image.yml pushes the runtime image to the
+        # transformers-cache repo on every event (PR + push), so this
+        # cell always pulls from there. publish-engine-image.yml mirrors
+        # the cache image to the production transformers:<VER> tag for
+        # end users; downstream CI doesn't depend on that mirror.
         run: |
-          if [ "${{ github.event.workflow_run.event }}" = "pull_request" ]; then
-            UPSTREAM="ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}"
-          else
-            UPSTREAM="ghcr.io/${{ github.repository }}/transformers:transformers-${{ steps.version.outputs.version }}"
-          fi
+          UPSTREAM="ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}"
           if ! docker image inspect "$UPSTREAM" >/dev/null 2>&1; then
             docker pull "$UPSTREAM"
           else
@@ -305,12 +327,34 @@ jobs:
             -v "${{ github.workspace }}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
+            -e PYTHONPATH \
             --entrypoint python3 \
             "$IMAGE" \
             -m scripts._probe --engine transformers --producer invariants \
               --output /llem-probe-out/probe-transformers.json
           VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-transformers.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
+
+      - name: Update last_probe in SSOT
+        # Mutate engine_versions/transformers.yaml's last_probe block from
+        # the just-emitted ProbeReport. Runs whenever the probe step
+        # produced output (pass or fail) so the SSOT records the verdict
+        # + fingerprint each run. Atomic writeback (below) commits the
+        # SSOT diff alongside the corpus regen artefacts when the probe
+        # passes; on probe-fail the local edit is dropped with the
+        # workspace, but the in-job log captures the recorded verdict.
+        if: always() && steps.probe.outcome == 'success'
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            -v /tmp/llem-probe-out:/llem-probe-out:ro \
+            -w /repo \
+            -e PYTHONPATH \
+            --entrypoint bash \
+            "$IMAGE" \
+            -c 'python3 scripts/update_last_probe.py --engine transformers < /llem-probe-out/probe-transformers.json'
 
       - name: Save current YAMLs for diffing
         if: steps.probe.outputs.verdict == 'pass'
@@ -337,6 +381,7 @@ jobs:
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
             -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
+            -e PYTHONPATH \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
             --entrypoint bash \
@@ -524,6 +569,7 @@ jobs:
           git add \
             "${CORPUS_DIR}/transformers.proposed.yaml" \
             "${CORPUS_DIR}/transformers.vendored.yaml" \
+            engine_versions/transformers.yaml \
             docs/generated/invariants-transformers.md
 
           if git diff --cached --quiet; then
@@ -551,13 +597,14 @@ jobs:
         # stale corpus. The probe-blocked comment above explains how to
         # resolve (/approve-reuse to widen the SSOT envelope, or landmark
         # patch); this gate makes that resolution mandatory rather than
-        # advisory.
-        if: steps.probe.outputs.verdict == 'fail'
+        # advisory. The 'accept-probe-fail' PR label bypasses this gate for
+        # known-drift cases (admin escalation; tracked in #547 etc.).
+        if: steps.probe.outputs.verdict == 'fail' && !contains(github.event.pull_request.labels.*.name, 'accept-probe-fail')
         run: |
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
           exit 1
 
-  invariants-vllm:
+  vllm:
     needs: filter
     if: >-
       always()
@@ -587,6 +634,17 @@ jobs:
           docker run --rm \
             -v "${{ github.workspace }}":/workspace \
             alpine sh -c "find /workspace -not -user $(id -u) -delete 2>/dev/null || true"
+      - name: Synthesize passwd/group for non-root container runs
+        # Self-hosted runner uses LDAP/SSSD for user resolution, so the
+        # runner UID is NOT in /etc/passwd on the host. Mounting the host's
+        # /etc/passwd into the container leaves getpwuid() failing inside
+        # (modelopt's import path raises KeyError). Generate a synthetic
+        # passwd entry for the runner UID + group, mounted into the container
+        # at /etc/passwd / /etc/group.
+        run: |
+          printf 'ciuser:x:%s:%s:CI runner:/tmp:/bin/sh\n' "$(id -u)" "$(id -g)" > /tmp/llem-passwd-synth
+          printf 'cigroup:x:%s:\n' "$(id -g)" > /tmp/llem-group-synth
+
 
       - name: Checkout PR branch
         uses: actions/checkout@v6
@@ -605,6 +663,30 @@ jobs:
           fi
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "image=llenergymeasure:vllm-${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve PR number (for comments + labels + writeback)
+        id: pr
+        # The vllm cell only fires on pull_request + workflow_dispatch.
+        # Capture PR number + head repo into step outputs so comment /
+        # label / writeback steps can gate on `steps.pr.outputs.number`
+        # uniformly with the transformers cell. Without this step those
+        # gates evaluated against an empty string and silently no-op'd
+        # (e.g. the probe-blocked comment never posted; #544).
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            HEAD_REPO="${{ github.event.pull_request.head.repo.full_name }}"
+          else
+            PR_NUMBER="${{ inputs.pr_number }}"
+            HEAD_REPO="${{ github.repository }}"
+          fi
+          if [[ -n "$PR_NUMBER" ]]; then
+            echo "number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "head_repo=${HEAD_REPO}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=" >> "$GITHUB_OUTPUT"
+            echo "head_repo=" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Detect Docker Hub auth availability
         # `secrets.*` cannot be referenced from a step `if:`; capture
@@ -679,6 +761,9 @@ jobs:
         run: |
           mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
+            --user "$(id -u):$(id -g)" \
+            -v /tmp/llem-passwd-synth:/etc/passwd:ro \
+            -v /tmp/llem-group-synth:/etc/group:ro \
             -v "${{ github.workspace }}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
@@ -691,12 +776,26 @@ jobs:
           VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-vllm.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
 
-      - name: Fix container-written file ownership (probe cache)
-        if: always()
+      - name: Update last_probe in SSOT
+        # See invariants-transformers cell for rationale. Runs in
+        # the vLLM image (which has yaml + packaging on python3's path).
+        # `--user` keeps the rewritten engine_versions/vllm.yaml owned by
+        # the runner so subsequent host-side steps can read + commit it.
+        if: always() && steps.probe.outcome == 'success'
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}":/workspace \
-            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
+            --user "$(id -u):$(id -g)" \
+            -v /tmp/llem-passwd-synth:/etc/passwd:ro \
+            -v /tmp/llem-group-synth:/etc/group:ro \
+            -v "${{ github.workspace }}:/repo" \
+            -v /tmp/llem-probe-out:/llem-probe-out:ro \
+            -w /repo \
+            -e PYTHONPATH \
+            --entrypoint bash \
+            "$IMAGE" \
+            -c 'python3 scripts/update_last_probe.py --engine vllm < /llem-probe-out/probe-vllm.json'
 
       - name: Save current YAMLs for diffing
         if: steps.probe.outputs.verdict == 'pass'
@@ -720,6 +819,9 @@ jobs:
           ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
         run: |
           docker run --rm --gpus all \
+            --user "$(id -u):$(id -g)" \
+            -v /tmp/llem-passwd-synth:/etc/passwd:ro \
+            -v /tmp/llem-group-synth:/etc/group:ro \
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
             -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
@@ -738,13 +840,6 @@ jobs:
                 --vendor-commit '${ANCHOR_SHA}' \
                 --fail-on-divergence
             "
-
-      - name: Fix container-written file ownership (mine + vendor)
-        if: always()
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}":/workspace \
-            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
@@ -906,63 +1001,12 @@ jobs:
             no-changes) ;;
           esac
 
-      - name: Detect sibling workflow run for this SHA
-        id: sibling
-        if: steps.probe.outputs.verdict == 'pass' && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          SIBLING_NAME="Engine Schemas — Probe + Discover"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          COUNT=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&per_page=50" \
-            --jq "[.workflow_runs[] | select(.name == \"${SIBLING_NAME}\")] | length")
-          if [[ "${COUNT}" -gt 0 ]]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Sibling workflow ${SIBLING_NAME} did not fire for this SHA; skipping wait."
-          fi
-
-      - name: Wait for sibling pipeline to complete
-        # CONTRACT: SIBLING_CHECK_NAME must match the schemas-vllm JOB ID
-        # in engine-schemas.yml. See the transformers wait block above
-        # for full ordering rationale.
-        #
-        # Inline gh-api poll rather than lewagon/wait-on-check-action because
-        # the latter calls actions/setup-ruby internally, which fails on the
-        # self-hosted runner (no Ruby pre-installed; the action's runner-image
-        # detection treats self-hosted Linux as unsupported).
-        if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-          SIBLING_CHECK_NAME: schemas-vllm
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          deadline=$(( $(date +%s) + 1800 ))  # 30-min cap
-          while (( $(date +%s) < deadline )); do
-            # Server-side filter by check_name + per_page=1 keeps the response
-            # small even when the SHA accumulates many check-runs.
-            row=$(gh api "repos/${{ github.repository }}/commits/${HEAD_SHA}/check-runs?check_name=${SIBLING_CHECK_NAME}&per_page=1" \
-              --jq '.check_runs[0] | {status, conclusion}')
-            status=$(echo "${row}" | jq -r '.status // "unknown"')
-            conclusion=$(echo "${row}" | jq -r '.conclusion // "null"')
-            echo "sibling ${SIBLING_CHECK_NAME}: status=${status} conclusion=${conclusion}"
-            # `neutral` is GitHub's "completed but neither pass nor fail" — treat
-            # as non-blocking (sibling didn't have anything to say either way).
-            case "${conclusion}" in
-              success|skipped|neutral) exit 0 ;;
-              failure|cancelled|timed_out|action_required|stale)
-                echo "::error::Sibling ${SIBLING_CHECK_NAME} concluded with ${conclusion}" >&2
-                exit 1 ;;
-            esac
-            sleep 15
-          done
-          echo "::error::Timeout (30 min) waiting for sibling ${SIBLING_CHECK_NAME}" >&2
-          exit 1
-
       - name: Atomic writeback
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        # Sibling serialisation is via the `engine-coupling-<ref>` shared
+        # concurrency group (see workflow header). When this job dequeues,
+        # `git pull --rebase --autostash` absorbs any sibling writeback
+        # that landed first.
+        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && steps.pr.outputs.number != '' && steps.pr.outputs.head_repo == github.repository
         run: |
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
@@ -973,6 +1017,7 @@ jobs:
           git add \
             "${CORPUS_DIR}/vllm.proposed.yaml" \
             "${CORPUS_DIR}/vllm.vendored.yaml" \
+            engine_versions/vllm.yaml \
             docs/generated/invariants-vllm.md
 
           if git diff --cached --quiet; then
@@ -1003,13 +1048,14 @@ jobs:
         # stale corpus. The probe-blocked comment above explains how to
         # resolve (/approve-reuse to widen the SSOT envelope, or landmark
         # patch); this gate makes that resolution mandatory rather than
-        # advisory.
-        if: steps.probe.outputs.verdict == 'fail'
+        # advisory. The 'accept-probe-fail' PR label bypasses this gate for
+        # known-drift cases (admin escalation; tracked in #547 etc.).
+        if: steps.probe.outputs.verdict == 'fail' && !contains(github.event.pull_request.labels.*.name, 'accept-probe-fail')
         run: |
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
           exit 1
 
-  invariants-tensorrt:
+  tensorrt:
     # tensorrt static miner reads source files from /tmp/trt-llm-${VER}/.
     # Earlier shapes resolved this from the installed NGC package via
     # tensorrt_llm.__file__ / __path__[0]; both broke as NGC's package
@@ -1044,6 +1090,17 @@ jobs:
           docker run --rm \
             -v "${{ github.workspace }}":/workspace \
             alpine sh -c "find /workspace -not -user $(id -u) -delete 2>/dev/null || true"
+      - name: Synthesize passwd/group for non-root container runs
+        # Self-hosted runner uses LDAP/SSSD for user resolution, so the
+        # runner UID is NOT in /etc/passwd on the host. Mounting the host's
+        # /etc/passwd into the container leaves getpwuid() failing inside
+        # (modelopt's import path raises KeyError). Generate a synthetic
+        # passwd entry for the runner UID + group, mounted into the container
+        # at /etc/passwd / /etc/group.
+        run: |
+          printf 'ciuser:x:%s:%s:CI runner:/tmp:/bin/sh\n' "$(id -u)" "$(id -g)" > /tmp/llem-passwd-synth
+          printf 'cigroup:x:%s:\n' "$(id -g)" > /tmp/llem-group-synth
+
 
       - name: Checkout PR branch
         uses: actions/checkout@v6
@@ -1062,6 +1119,28 @@ jobs:
           fi
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "image=llenergymeasure:tensorrt-${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve PR number (for comments + labels + writeback)
+        id: pr
+        # The tensorrt cell only fires on pull_request + workflow_dispatch.
+        # Capture PR number + head repo into step outputs so comment /
+        # label / writeback steps can gate on `steps.pr.outputs.number`
+        # uniformly with the transformers cell (#544).
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            HEAD_REPO="${{ github.event.pull_request.head.repo.full_name }}"
+          else
+            PR_NUMBER="${{ inputs.pr_number }}"
+            HEAD_REPO="${{ github.repository }}"
+          fi
+          if [[ -n "$PR_NUMBER" ]]; then
+            echo "number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "head_repo=${HEAD_REPO}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=" >> "$GITHUB_OUTPUT"
+            echo "head_repo=" >> "$GITHUB_OUTPUT"
+          fi
 
       # Self-hosted runners must have nvcr.io credentials configured (see docs/development.md).
       - name: Pull TRT-LLM upstream image and tag locally
@@ -1109,10 +1188,13 @@ jobs:
         # Static miner reads source from /tmp/trt-llm-${VER}/tensorrt_llm/;
         # we fetch from the GitHub tag rather than introspect the NGC
         # package because NGC's package layout has churned repeatedly
-        # (#472, #500). On the self-hosted runner /tmp persists across
-        # jobs, so skip the fetch when the tree is already extracted at
-        # this version (sibling schemas-tensorrt cell or a prior re-run
-        # of this PR may have populated it).
+        # (#472, #500). The tarball URL template is sourced from the
+        # tensorrt SSOT (`source_tarball.url_template`) so a future
+        # tag-scheme change has a single locus (#532). On the self-hosted
+        # runner /tmp persists across jobs, so skip the fetch when the
+        # tree is already extracted at this version (sibling
+        # schemas-tensorrt cell or a prior re-run of this PR may have
+        # populated it).
         env:
           VER: ${{ steps.version.outputs.version }}
         run: |
@@ -1122,8 +1204,14 @@ jobs:
             echo "Source tree already present at ${DEST}; skipping fetch."
             exit 0
           fi
+          URL_TEMPLATE=$(yq '.source_tarball.url_template' engine_versions/tensorrt.yaml)
+          if [[ -z "$URL_TEMPLATE" || "$URL_TEMPLATE" == "null" ]]; then
+            echo "Could not resolve source_tarball.url_template from engine_versions/tensorrt.yaml" >&2
+            exit 1
+          fi
+          URL="${URL_TEMPLATE//\{version\}/${VER}}"
           mkdir -p "${DEST}"
-          curl -fsSL "https://github.com/NVIDIA/TensorRT-LLM/archive/refs/tags/v${VER}.tar.gz" \
+          curl -fsSL "${URL}" \
             | tar -xz -C "${DEST}" --strip-components=1
           test -d "${DEST}/tensorrt_llm"
 
@@ -1142,6 +1230,9 @@ jobs:
         run: |
           mkdir -p /tmp/llem-probe-out
           docker run --rm --gpus all \
+            --user "$(id -u):$(id -g)" \
+            -v /tmp/llem-passwd-synth:/etc/passwd:ro \
+            -v /tmp/llem-group-synth:/etc/group:ro \
             -e LD_LIBRARY_PATH \
             -e PYTHONPATH \
             -e PYTHONDONTWRITEBYTECODE \
@@ -1156,12 +1247,27 @@ jobs:
           VERDICT=$(jq -r '.verdict' /tmp/llem-probe-out/probe-tensorrt.json)
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
 
-      - name: Fix container-written file ownership (probe cache)
-        if: always()
+      - name: Update last_probe in SSOT
+        # See invariants-transformers cell for rationale. Runs in
+        # the TRT-LLM image; `--user` matches the surrounding mine + vendor
+        # step's pattern so the rewritten engine_versions/tensorrt.yaml
+        # stays runner-owned.
+        if: always() && steps.probe.outcome == 'success'
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}":/workspace \
-            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
+            --user "$(id -u):$(id -g)" \
+            -v /tmp/llem-passwd-synth:/etc/passwd:ro \
+            -v /tmp/llem-group-synth:/etc/group:ro \
+            -v "${{ github.workspace }}:/repo" \
+            -v /tmp/llem-probe-out:/llem-probe-out:ro \
+            -w /repo \
+            -e LD_LIBRARY_PATH \
+            -e PYTHONPATH \
+            --entrypoint bash \
+            "$IMAGE" \
+            -c 'python3 scripts/update_last_probe.py --engine tensorrt < /llem-probe-out/probe-tensorrt.json'
 
       - name: Save current YAMLs for diffing
         if: steps.probe.outputs.verdict == 'pass'
@@ -1186,6 +1292,9 @@ jobs:
           TRTLLM_VER: ${{ steps.version.outputs.version }}
         run: |
           docker run --rm --gpus all \
+            --user "$(id -u):$(id -g)" \
+            -v /tmp/llem-passwd-synth:/etc/passwd:ro \
+            -v /tmp/llem-group-synth:/etc/group:ro \
             -e LD_LIBRARY_PATH \
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
             -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
@@ -1206,13 +1315,6 @@ jobs:
                 --vendor-commit '${ANCHOR_SHA}' \
                 --fail-on-divergence
             "
-
-      - name: Fix container-written file ownership (mine + vendor)
-        if: always()
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}":/workspace \
-            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
@@ -1371,59 +1473,12 @@ jobs:
             no-changes) ;;
           esac
 
-      - name: Detect sibling workflow run for this SHA
-        id: sibling
-        if: steps.probe.outputs.verdict == 'pass' && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          SIBLING_NAME="Engine Schemas — Probe + Discover"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          COUNT=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&per_page=50" \
-            --jq "[.workflow_runs[] | select(.name == \"${SIBLING_NAME}\")] | length")
-          if [[ "${COUNT}" -gt 0 ]]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Sibling workflow ${SIBLING_NAME} did not fire for this SHA; skipping wait."
-          fi
-
-      - name: Wait for sibling pipeline to complete
-        # CONTRACT: SIBLING_CHECK_NAME must match the schemas-tensorrt JOB
-        # ID in engine-schemas.yml. See the transformers wait block above
-        # for full ordering rationale. See invariants-vllm above for the
-        # rationale on inline bash polling vs lewagon/wait-on-check-action.
-        if: steps.probe.outputs.verdict == 'pass' && steps.sibling.outputs.exists == 'true'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-          SIBLING_CHECK_NAME: schemas-tensorrt
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          deadline=$(( $(date +%s) + 1800 ))  # 30-min cap
-          while (( $(date +%s) < deadline )); do
-            # Server-side filter by check_name + per_page=1 keeps the response
-            # small even when the SHA accumulates many check-runs.
-            row=$(gh api "repos/${{ github.repository }}/commits/${HEAD_SHA}/check-runs?check_name=${SIBLING_CHECK_NAME}&per_page=1" \
-              --jq '.check_runs[0] | {status, conclusion}')
-            status=$(echo "${row}" | jq -r '.status // "unknown"')
-            conclusion=$(echo "${row}" | jq -r '.conclusion // "null"')
-            echo "sibling ${SIBLING_CHECK_NAME}: status=${status} conclusion=${conclusion}"
-            # `neutral` is GitHub's "completed but neither pass nor fail" — treat
-            # as non-blocking (sibling didn't have anything to say either way).
-            case "${conclusion}" in
-              success|skipped|neutral) exit 0 ;;
-              failure|cancelled|timed_out|action_required|stale)
-                echo "::error::Sibling ${SIBLING_CHECK_NAME} concluded with ${conclusion}" >&2
-                exit 1 ;;
-            esac
-            sleep 15
-          done
-          echo "::error::Timeout (30 min) waiting for sibling ${SIBLING_CHECK_NAME}" >&2
-          exit 1
-
       - name: Atomic writeback
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        # Sibling serialisation is via the `engine-coupling-<ref>` shared
+        # concurrency group (see workflow header). When this job dequeues,
+        # `git pull --rebase --autostash` absorbs any sibling writeback
+        # that landed first.
+        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && steps.pr.outputs.number != '' && steps.pr.outputs.head_repo == github.repository
         run: |
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
@@ -1434,6 +1489,7 @@ jobs:
           git add \
             "${CORPUS_DIR}/tensorrt.proposed.yaml" \
             "${CORPUS_DIR}/tensorrt.vendored.yaml" \
+            engine_versions/tensorrt.yaml \
             docs/generated/invariants-tensorrt.md
 
           if git diff --cached --quiet; then
@@ -1464,8 +1520,9 @@ jobs:
         # stale corpus. The probe-blocked comment above explains how to
         # resolve (/approve-reuse to widen the SSOT envelope, or landmark
         # patch); this gate makes that resolution mandatory rather than
-        # advisory.
-        if: steps.probe.outputs.verdict == 'fail'
+        # advisory. The 'accept-probe-fail' PR label bypasses this gate for
+        # known-drift cases (admin escalation; tracked in #547 etc.).
+        if: steps.probe.outputs.verdict == 'fail' && !contains(github.event.pull_request.labels.*.name, 'accept-probe-fail')
         run: |
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
           exit 1

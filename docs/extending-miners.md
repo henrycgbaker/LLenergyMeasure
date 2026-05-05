@@ -24,7 +24,7 @@ Before writing any code, answer these questions:
 
 3. Does the engine constructor raise on invalid inputs, or silently normalise them? (Transformers and vLLM raise; TRT-LLM constructors are more permissive, so TRT-LLM has no dynamic miner.)
 
-4. What is the CUDA / import dependency? Can you `import enginelib` on a CPU-only host? (vLLM: yes on CPU-only with a non-GPU-enabled pip install; TRT-LLM: requires CUDA-aware container.)
+4. What is the CUDA / import dependency? Engines have no host install path — they are imported only inside their per-engine Docker images (see [development.md](development.md)). Within the engine container, can the miner `import enginelib` on the CPU phase of the build, or does the import require a live CUDA runtime? (vLLM: importable inside `llenergymeasure:vllm-${VER}` without GPU at probe time; TRT-LLM: requires CUDA-aware import even inside the NGC container.)
 
 5. What is a realistic post-vendor-CI rule count? (Transformers: 46; vLLM: 80-110; TRT-LLM: 20-28.) This helps plan the scope.
 
