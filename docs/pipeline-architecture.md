@@ -40,13 +40,16 @@ update-engine-{invariants,schemas}.yml transformers cells run:
   │
   │  PR merges to main (push event)
   ▼
-build-engine-image.yml fires again (push trigger; cache hits)
+build-engine-image.yml fires again (push trigger; full cache hit; ~30s)
   │
-  │  publish-engine-image.yml chains via workflow_run
-  │  (publish only fires on push event, NOT on pull_request)
+  │  publish-engine-image.yml chains via workflow_run (push-only;
+  │  PR chains skip — nothing to promote yet)
   ▼
-[Mirrors transformers-cache:transformers-<VER> to production tags
- transformers:<VER> + transformers:latest for end-user `pip install`]
+[Tag-copy promotion via `docker buildx imagetools create`:
+ transformers-cache:transformers-<VER>  →  transformers:transformers-<VER>
+                                        →  transformers:latest
+ NO rebuild — registry-side metadata op. Production image bit-identical
+ to the one validated in CI before merge.]
 ```
 
 ### vllm + tensorrt PR-time CI flow (no rebuild; upstream-direct)

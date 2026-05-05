@@ -86,57 +86,66 @@ jobs:
           fi
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
 
-      - name: Determine push tags per parent event
+      - name: Determine whether to promote (push to canonical) or no-op
         id: targets
-        # PR builds go to transformers-CACHE:transformers-<VER> (PR-time
-        # runtime image — exists so downstream cells can pull but never
-        # claims :latest). main / schedule / workflow_dispatch go to
-        # canonical transformers:latest + transformers:transformers-<VER>.
+        # build-engine-image.yml already pushes the runtime image to
+        # transformers-cache:<VER> on every event (PR + push). This
+        # workflow's job is to PROMOTE that image — by tag-copy, not
+        # rebuild — to the canonical production tags on main/schedule
+        # only. PR-event chains skip (cache image already exists; nothing
+        # to promote yet).
         run: |
           PARENT_EVENT='${{ github.event.workflow_run.event }}'
-          VER='${{ steps.version.outputs.version }}'
           if [[ "${{ github.event_name }}" == "workflow_dispatch" || "$PARENT_EVENT" == "push" || "$PARENT_EVENT" == "schedule" ]]; then
-            TAGS="ghcr.io/${{ github.repository }}/transformers:latest,ghcr.io/${{ github.repository }}/transformers:transformers-${VER}"
+            echo "promote=true" >> "$GITHUB_OUTPUT"
           else
-            # pull_request from the parent build
-            TAGS="ghcr.io/${{ github.repository }}/transformers-cache:transformers-${VER}"
+            echo "promote=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Parent event is ${PARENT_EVENT}; no production promotion required (build already published cache image)."
           fi
-          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
+        if: steps.targets.outputs.promote == 'true'
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
+        if: steps.targets.outputs.promote == 'true'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build (cache-only) and push runtime tags
-        # The build is essentially free — every layer cache-hits from the
-        # buildcache ref the parent workflow just exported. The image is
-        # re-tagged and pushed to the runtime tags chosen per parent event
-        # (canonical for main/schedule, cache repo for PR).
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/Dockerfile.transformers
-          target: runtime
-          push: true
-          tags: ${{ steps.targets.outputs.tags }}
-          build-args: |
-            TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
-          cache-from: |
-            type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache
-            type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
+      - name: Promote cache image to production tags via tag-copy
+        # `docker buildx imagetools create` is a registry-side metadata
+        # operation: creates new tag refs pointing at the existing image
+        # digest. No rebuild, no layer copy, no build infrastructure
+        # required. The promoted image is bit-identical to the one
+        # validated by update-engine-{invariants,schemas} on the PR
+        # cycle that just merged — exactly what we want for a production
+        # release.
+        if: steps.targets.outputs.promote == 'true'
+        env:
+          VER: ${{ steps.version.outputs.version }}
+          REPO: ghcr.io/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          SOURCE="${REPO}/transformers-cache:transformers-${VER}"
+          docker buildx imagetools create \
+            -t "${REPO}/transformers:transformers-${VER}" \
+            -t "${REPO}/transformers:latest" \
+            "$SOURCE"
 
-      - name: Emit push summary
+      - name: Emit promote summary
+        if: steps.targets.outputs.promote == 'true'
+        env:
+          VER: ${{ steps.version.outputs.version }}
         run: |
           {
-            echo "## Engine image push"
+            echo "## Engine image promotion"
             echo
             echo "- Parent run: \`${{ github.event.workflow_run.id }}\` (event: \`${{ github.event.workflow_run.event }}\`)"
-            echo "- Transformers version: \`${{ steps.version.outputs.version }}\`"
-            echo "- Tags pushed: \`${{ steps.targets.outputs.tags }}\`"
+            echo "- Transformers version: \`${VER}\`"
+            echo "- Source: \`transformers-cache:transformers-${VER}\`"
+            echo "- Promoted to: \`transformers:transformers-${VER}\` + \`transformers:latest\`"
+            echo "- Mechanism: \`docker buildx imagetools create\` (tag-copy; bit-identical promotion)"
           } >> "$GITHUB_STEP_SUMMARY"
