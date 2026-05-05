@@ -175,7 +175,7 @@ jobs:
               - '.github/workflows/update-engine-invariants.yml'
               - 'scripts/ci/upsert_pr_comment.sh'
 
-  invariants-transformers:
+  transformers:
     # Selected on workflow_run (Engine Image Push success) or
     # workflow_dispatch with engine=transformers/all. Skipped on
     # pull_request: the transformers cell needs the pre-built runtime
@@ -586,7 +586,7 @@ jobs:
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
           exit 1
 
-  invariants-vllm:
+  vllm:
     needs: filter
     if: >-
       always()
@@ -1037,7 +1037,7 @@ jobs:
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
           exit 1
 
-  invariants-tensorrt:
+  tensorrt:
     # tensorrt static miner reads source files from /tmp/trt-llm-${VER}/.
     # Earlier shapes resolved this from the installed NGC package via
     # tensorrt_llm.__file__ / __path__[0]; both broke as NGC's package

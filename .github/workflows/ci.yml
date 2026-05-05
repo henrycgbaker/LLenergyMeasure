@@ -214,7 +214,11 @@ jobs:
       && needs.filter.outputs.docker == 'true'
       && !contains(github.event.pull_request.labels.*.name, 'renovate')
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [transformers, vllm, tensorrt]
     steps:
       - uses: actions/checkout@v6
-      - name: Check schema versions match Dockerfiles
-        run: python3 scripts/check_discovered_schema_versions.py
+      - name: Check ${{ matrix.engine }} schema version aligns with Dockerfile
+        run: python3 scripts/check_discovered_schema_versions.py --engine ${{ matrix.engine }}

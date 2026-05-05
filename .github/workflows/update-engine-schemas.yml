@@ -155,7 +155,7 @@ jobs:
               - '.github/workflows/update-engine-schemas.yml'
               - 'scripts/ci/upsert_pr_comment.sh'
 
-  schemas-transformers:
+  transformers:
     # Selected on workflow_run (Engine Image Push success) or
     # workflow_dispatch with engine=transformers/all. Skipped on
     # pull_request: the transformers cell needs the pre-built runtime
@@ -511,7 +511,7 @@ jobs:
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
           exit 1
 
-  schemas-vllm:
+  vllm:
     needs: filter
     if: >-
       always()
@@ -917,7 +917,7 @@ jobs:
           echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
           exit 1
 
-  schemas-tensorrt:
+  tensorrt:
     # tensorrt static introspector reads source files from
     # /tmp/trt-llm-${VER}/ for the same reasons as invariants-tensorrt
     # (see that cell's comment, and #472 / #500). The probe + discover

@@ -11,14 +11,21 @@ Engines covered:
   - tensorrt
   - transformers
 
+Usage:
+    python scripts/check_discovered_schema_versions.py [--engine ENGINE]
+
+When ``--engine`` is omitted, all three engines are checked. The CI
+matrix in ``ci.yml`` runs one job per engine with ``--engine`` set.
+
 Exit codes:
-    0 = all versions match
+    0 = match (or all matches when no --engine)
     1 = mismatch detected
     2 = error (missing file, parse failure)
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -50,7 +57,7 @@ def _parse_schema_version(schema_path: Path) -> Any:
     return data.get("engine_version")
 
 
-def main(repo_root: Path | None = None) -> int:
+def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) -> int:
     root = repo_root or REPO_ROOT
     schema_dir = root / "src" / "llenergymeasure" / "config" / "discovered_schemas"
     ssot_dir = root / "engine_versions"
@@ -58,7 +65,7 @@ def main(repo_root: Path | None = None) -> int:
     errors: list[str] = []
     mismatches: list[str] = []
 
-    for engine in _ENGINES:
+    for engine in engines or _ENGINES:
         ssot_path = ssot_dir / f"{engine}.yaml"
         try:
             ssot_version = _ssot_current_version(ssot_path)
@@ -103,4 +110,12 @@ def main(repo_root: Path | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--engine",
+        choices=_ENGINES,
+        default=None,
+        help="Check only the named engine. Omit to check all three.",
+    )
+    args = parser.parse_args()
+    sys.exit(main(engines=(args.engine,) if args.engine else None))
