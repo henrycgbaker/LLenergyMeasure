@@ -26,7 +26,7 @@ artefact_paths:
   vendored_rules: src/llenergymeasure/config/engine_invariants/transformers.vendored.yaml
   discovered_schemas: src/llenergymeasure/config/discovered_schemas/transformers.json
 last_probe:
-  verdict: unrun
-  version_inside_envelope: null
-  fingerprint: null
+  verdict: pass
+  version_inside_envelope: false
+  fingerprint: "46664ddbff9a9c9df2974d9d5cbdbbe04ae093b874f50ee92a0cd1b0c4b83860"
   fingerprint_drift: []
