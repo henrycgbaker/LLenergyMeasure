@@ -633,7 +633,7 @@ def _parse_envelope(engine: str, raw_text: str) -> VendoredRules:
 # ---------------------------------------------------------------------------
 
 
-_DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parents[4] / "configs" / "engine_invariants"
+_DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parents[2] / "engines"
 
 
 class VendoredRulesLoader:
@@ -667,7 +667,7 @@ class VendoredRulesLoader:
         if cached is not None:
             return cached
 
-        yaml_path = self.corpus_root / f"{engine}.proposed.yaml"
+        yaml_path = self.corpus_root / engine / "invariants.proposed.yaml"
         try:
             yaml_text = yaml_path.read_text()
         except FileNotFoundError as exc:
@@ -702,12 +702,12 @@ class VendoredRulesLoader:
 def _try_load_vendored_yaml(corpus_root: Path, engine: str) -> dict[str, Any] | None:
     """Return parsed vendored-rules YAML for ``engine`` or ``None`` if absent.
 
-    Reads from ``{corpus_root}/{engine}.vendored.yaml``. Swallows YAML parse
+    Reads from ``{corpus_root}/{engine}/invariants.vendored.yaml``. Swallows YAML parse
     errors and rejects unsupported envelope versions to avoid breaking
     startup on a corrupt or future-schema commit-back — the vendor CI job
     will resurface the issue.
     """
-    path = corpus_root / f"{engine}.vendored.yaml"
+    path = corpus_root / engine / "invariants.vendored.yaml"
     try:
         raw = path.read_text()
     except FileNotFoundError:

@@ -57,8 +57,9 @@ rules:
 
 
 def _write_corpus(root: Path, engine: str, text: str) -> None:
-    root.mkdir(parents=True, exist_ok=True)
-    (root / f"{engine}.proposed.yaml").write_text(text)
+    engine_dir = root / engine
+    engine_dir.mkdir(parents=True, exist_ok=True)
+    (engine_dir / "invariants.proposed.yaml").write_text(text)
 
 
 def test_load_rules_returns_parsed_corpus(tmp_path: Path) -> None:

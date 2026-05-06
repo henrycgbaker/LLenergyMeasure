@@ -24,9 +24,9 @@ miner_pins:
   dynamic: ">=0.21.0,<0.22.0"
   discovery: ">=0.21.0,<0.22.0"
 artefact_paths:
-  rules_corpus: src/llenergymeasure/config/engine_invariants/tensorrt.proposed.yaml
-  vendored_rules: src/llenergymeasure/config/engine_invariants/tensorrt.vendored.yaml
-  discovered_schemas: src/llenergymeasure/config/discovered_schemas/tensorrt.json
+  rules_corpus: src/llenergymeasure/engines/tensorrt/invariants.proposed.yaml
+  vendored_rules: src/llenergymeasure/engines/tensorrt/invariants.vendored.yaml
+  discovered_schemas: src/llenergymeasure/engines/tensorrt/schema.discovered.json
 last_probe:
   verdict: pass
   version_inside_envelope: true

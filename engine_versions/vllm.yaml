@@ -24,9 +24,9 @@ miner_pins:
   dynamic: ">=0.17,<0.18"
   discovery: ">=0.17,<0.18"
 artefact_paths:
-  rules_corpus: src/llenergymeasure/config/engine_invariants/vllm.proposed.yaml
-  vendored_rules: src/llenergymeasure/config/engine_invariants/vllm.vendored.yaml
-  discovered_schemas: src/llenergymeasure/config/discovered_schemas/vllm.json
+  rules_corpus: src/llenergymeasure/engines/vllm/invariants.proposed.yaml
+  vendored_rules: src/llenergymeasure/engines/vllm/invariants.vendored.yaml
+  discovered_schemas: src/llenergymeasure/engines/vllm/schema.discovered.json
 last_probe:
   verdict: pass
   version_inside_envelope: false

@@ -29,7 +29,8 @@ SUPPORTED_MAJOR_VERSION = 1
 # (tests monkeypatch this to inject fake engines); derived from Engine SSOT.
 _KNOWN_ENGINES: tuple[str, ...] = tuple(Engine)
 
-_PACKAGE = "llenergymeasure.config.discovered_schemas"
+# Schema files are now co-located with each engine sub-package
+_SCHEMA_FILENAME = "schema.discovered.json"
 
 
 class UnsupportedSchemaVersionError(ValueError):
@@ -103,7 +104,8 @@ class SchemaLoader:
             return cached
 
         try:
-            raw_text = (resources.files(_PACKAGE) / f"{engine}.json").read_text()
+            engine_package = f"llenergymeasure.engines.{engine}"
+            raw_text = (resources.files(engine_package) / _SCHEMA_FILENAME).read_text()
         except FileNotFoundError as exc:
             raise FileNotFoundError(
                 f"Vendored schema for engine {engine!r} not found. "
