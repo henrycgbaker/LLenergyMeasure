@@ -52,17 +52,17 @@ jobs:
           cache-dependency-path: website/package-lock.json
 
       - name: Setup Python
-        # Stdlib-only; no extra deps to install. Used by
-        # scripts/generate_api_docs.py to introspect llenergymeasure
-        # docstrings and render the API reference markdown that the
-        # Docusaurus build then ingests.
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
+      - name: Install package
+        # Base install only — no GPU extras needed. Brings in pyyaml,
+        # pydantic, etc. so llenergymeasure is importable by the generator.
+        run: pip install -e .
+
       - name: Generate API reference
-        run: |
-          PYTHONPATH=src python scripts/generate_api_docs.py
+        run: python scripts/generate_api_docs.py
 
       - name: Install dependencies
         working-directory: website
