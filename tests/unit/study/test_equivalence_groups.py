@@ -28,7 +28,7 @@ class TestRoundTripSerialisation:
         groups = EquivalenceGroups(
             study_id="study_abc",
             dedup_mode="resolved",
-            vendored_rules_version="transformers:4.56.0@deadbee",
+            validated_invariants_version="transformers:4.56.0@deadbee",
             groups=[
                 PreRunGroup(
                     resolved_config_hash="sha256:abc",
@@ -58,7 +58,7 @@ class TestRoundTripSerialisation:
 
         assert loaded.study_id == "study_abc"
         assert loaded.dedup_mode == "resolved"
-        assert loaded.vendored_rules_version.startswith("transformers:")
+        assert loaded.validated_invariants_version.startswith("transformers:")
         assert len(loaded.groups) == 1
         assert loaded.groups[0].member_count == 2
         assert loaded.groups[0].would_dedup is True

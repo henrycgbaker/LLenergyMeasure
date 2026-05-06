@@ -1,7 +1,7 @@
 # Per-engine version-bundle SSOT for transformers.
 #
 # Renovate updates `library.current_version` on each upstream release;
-# every other artefact (Dockerfile ARG, miner pin reads, vendored gates)
+# every other artefact (Dockerfile ARG, miner pin reads, validation gates)
 # is derived from this file. See
 # `.product/designs/engine-coupling-architecture-2026-04-28.md` §4.
 #
@@ -22,8 +22,8 @@ miner_pins:
   dynamic: ">=4.56,<4.57"
   discovery: ">=4.56,<4.57"
 artefact_paths:
-  rules_corpus: src/llenergymeasure/engines/transformers/invariants.proposed.yaml
-  vendored_rules: src/llenergymeasure/engines/transformers/invariants.vendored.yaml
+  engine_invariants: src/llenergymeasure/engines/transformers/invariants.proposed.yaml
+  validated_invariants: src/llenergymeasure/engines/transformers/invariants.validated.yaml
   discovered_schemas: src/llenergymeasure/engines/transformers/schema.discovered.json
 last_probe:
   verdict: pass

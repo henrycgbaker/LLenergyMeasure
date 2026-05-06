@@ -1,6 +1,6 @@
 # Pipeline Architecture
 
-This doc is the chain-diagram reference for the engine-coupling pipeline. SSOT-driven Renovate cycles flow through these stages: trigger, two per-concern CI workflows, vendored artefacts, and the human curation checkpoint before merge.
+This doc is the chain-diagram reference for the engine-coupling pipeline. SSOT-driven Renovate cycles flow through these stages: trigger, two per-concern CI workflows, validated artefacts, and the human curation checkpoint before merge.
 
 ## Asymmetric engine architecture (locked design choice)
 
@@ -31,7 +31,7 @@ PR opens (touches transformers paths: SSOT, Dockerfile, miner code, etc.)
   │  workflow_run chain fires (Build engine image success)
   ▼
 update-engine-{invariants,schemas}.yml transformers cells run:
-  pull transformers-cache image → probe → mine/introspect → vendor → writeback
+  pull transformers-cache image → probe → mine/introspect → validate → writeback
   │
   │  Probe-fail → CI red. The 'accept-probe-fail' PR label bypasses
   │  the gate for known-drift cases (admin escalation; see #547).
@@ -84,7 +84,7 @@ LEGEND:  [auto]    fully automated, no human action
 │  (per-engine matrix)         │         │  (engines matrix)            │
 │  Layers over: invariant-     │         │  Layers over: parameter-     │
 │   miner + invalidity-miner + │         │   discovery + typed-schema-  │
-│   lift modules + vendor-CI   │         │   discovery                  │
+│   lift modules + validation-CI   │         │   discovery                  │
 │                              │         │                              │
 │  STEP 1 [auto]: PROBE (inline│         │  STEP 1 [auto]: PROBE (inline│
 │   `python -m scripts._probe  │         │   `python -m scripts._probe  │
@@ -98,10 +98,10 @@ LEGEND:  [auto]    fully automated, no human action
 │     /{engine}/invariants.proposed.yaml  │         │     config/discovered_       │
 │                              │         │     schemas/{engine}/schema.discovered.json    │
 │  STEP 3 [auto]: VENDOR-REPLAY│         │                              │
-│   vendor_rules.py + the      │         │  STEP 3 [auto]: DIFF vs HEAD │
+│   validate_invariants.py + the      │         │  STEP 3 [auto]: DIFF vs HEAD │
 │   compare_expected_vs_       │         │                              │
 │   observed contract from     │         │  STEP 4 [auto]: REGENERATE   │
-│   _invariant_vendor_common.py│         │   docs/generated/            │
+│   _invariant_validation_common.py│         │   docs/generated/            │
 │   replays kwargs_positive +  │         │     curation-{engine}.md     │
 │   kwargs_negative against    │         │   (Parameters section —      │
 │   live library; classifies   │         │    fact base for human       │
@@ -109,18 +109,18 @@ LEGEND:  [auto]    fully automated, no human action
 │   confirmed, negative_       │         │    behaviour preserved)      │
 │   confirmed, divergence)     │         │                              │
 │   → src/llenergymeasure/engines│         │  STEP 5 [auto]: COMMENT      │
-│     /{engine}/invariants.vendored.yaml  │         │   + LABEL (suppress on empty)│
+│     /{engine}/invariants.validated.yaml  │         │   + LABEL (suppress on empty)│
 │                              │         │                              │
 │  STEP 4 [auto]: DIFF vs HEAD │         │  ── if probe == fail ──      │
 │   for both proposed.yaml +   │         │  Post probe-fail comment     │
-│   vendored.yaml artefacts    │         │  with 3 routes (per §3 of    │
+│   validated.yaml artefacts    │         │  with 3 routes (per §3 of    │
 │                              │         │   the design doc: patch      │
 │  STEP 5 [auto]: REGENERATE   │         │   code / /approve-reuse /    │
 │   docs/generated/            │         │   escalate). Apply           │
 │     invariants-{engine}.md   │         │   probe-blocked label.       │
 │   (Invariants section — fact │         │   exit 0 (not CI failure)    │
 │   base; encompasses dormancy │         │                              │
-│   + invalidity + walker      │         │                              │
+│   + invalidity + miner      │         │                              │
 │   output + introspection +   │         │                              │
 │   runtime catch-all)         │         │                              │
 │                              │         │                              │
@@ -145,7 +145,7 @@ LEGEND:  [auto]    fully automated, no human action
               │     exits immediately)                                          │
               │  - LAST-FINISHING workflow performs ATOMIC WRITEBACK in-line:   │
               │     git add src/llenergymeasure/engines/{engine}/invariants.proposed.yaml    │
-              │             src/llenergymeasure/engines/{engine}/invariants.vendored.yaml    │
+              │             src/llenergymeasure/engines/{engine}/invariants.validated.yaml    │
               │             src/llenergymeasure/src/llenergymeasure/engines/      │
               │                  {engine}/schema.discovered.json                                  │
               │             docs/generated/curation-{engine}.md                 │
@@ -179,7 +179,7 @@ LEGEND:  [auto]    fully automated, no human action
    ╔═══════════════════════════════════════════════════════════════════╗
    ║              HUMAN CURATION CHECKPOINT [chk]                       ║
    ║   The only crossing of the human-as-final-checkpoint boundary (P6)║
-   ║   inside the otherwise-automated vendored half. Bots NEVER edit   ║
+   ║   inside the otherwise-automated validated half. Bots NEVER edit   ║
    ║   src/llenergymeasure/config/engine_configs.py.                    ║
    ║                                                                    ║
    ║   Dev consumes auto-generated digests:                             ║
@@ -189,7 +189,7 @@ LEGEND:  [auto]    fully automated, no human action
    ║     docs/generated/invariants-{engine}.md                          ║
    ║       Section 1: Invariants (corpus rules added/changed/removed,   ║
    ║                  classified by added_by; encompasses dormancy +    ║
-   ║                  invalidity + walker output + introspection +      ║
+   ║                  invalidity + miner output + introspection +      ║
    ║                  runtime catch-all)                                ║
    ║                                                                    ║
    ║   Dev manually edits engine_configs.py:                            ║
@@ -224,7 +224,7 @@ LEGEND:  [auto]    fully automated, no human action
                           └──────┬───────┘
                                  ▼
                    PR closes; engine version + all
-                   vendored artefacts + curated Pydantic
+                   validated artefacts + curated Pydantic
                    pinned together at this commit.
 
 ================================================================================
@@ -299,7 +299,7 @@ ADJACENT PIPELINES (independent of per-PR Renovate cycle)
         configs Pydantic distinguishes (resolved_config_hash differs)
         but engine collapses (observed_config_hash matches). Flagged
         as gap_detected: true -> dormancy signal.
-      - proposed_rule_id field is currently always None; consumer
+      - proposed_invariant_id field is currently always None; consumer
         deferred until a researcher hits a real gap_detected: true
         group and asks for tooling. Tracked in #405 + #474.
 ================================================================================

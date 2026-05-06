@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
+from llenergymeasure.config.engine_invariants.loader import Invariant
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.config.vendored_rules.loader import Rule
 from llenergymeasure.study.hashing import build_resolved_view, hash_config
 from llenergymeasure.study.library_resolution import (
     LibraryResolutionCycleError,
@@ -28,9 +28,9 @@ def _mk_rule(
     match_fields: dict,
     normalised_fields: list[str] | None = None,
     severity: str = "dormant",
-) -> Rule:
-    """Construct a minimal ``Rule`` for library-resolution mechanism tests."""
-    return Rule(
+) -> Invariant:
+    """Construct a minimal ``Invariant`` for library-resolution mechanism tests."""
+    return Invariant(
         id=rule_id,
         engine="transformers",
         library="transformers",
@@ -248,13 +248,13 @@ class TestDedupSweep:
         assert len(result.declared_resolved_hashes) == 2
 
     def test_integration_with_real_corpus(self):
-        # End-to-end with the actual vendored rules — the original motivating
+        # End-to-end with the actual validated invariants — the original motivating
         # example: do_sample x temperature = [T,F] x [0.5, 1.0, 1.5] -> 6 configs,
         # library-resolution mechanism collapses to 4 (1 greedy canonical + 3 sampling variants).
-        from llenergymeasure.config.vendored_rules.loader import VendoredRulesLoader
+        from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
 
-        loader = VendoredRulesLoader()
-        rules = loader.load_rules("transformers").rules
+        loader = EngineInvariantsLoader()
+        rules = loader.load_invariants("transformers").invariants
 
         configs = []
         for do_sample in (True, False):

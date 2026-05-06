@@ -61,12 +61,12 @@ class LibraryResolutionCycleError(FixpointError):
 class NonIdempotentRuleError(FixpointError):
     """A single rule changed state on second application."""
 
-    def __init__(self, rule_id: str, state_pass1: Any, state_pass2: Any) -> None:
+    def __init__(self, invariant_id: str, state_pass1: Any, state_pass2: Any) -> None:
         super().__init__(
-            f"Rule {rule_id!r} is non-idempotent: "
+            f"Invariant {invariant_id!r} is non-idempotent: "
             f"pass1 -> {state_pass1!r}, pass2 -> {state_pass2!r}"
         )
-        self.rule_id = rule_id
+        self.invariant_id = invariant_id
 
 
 class OrderDependentRuleError(FixpointError):
@@ -86,12 +86,12 @@ class OrderDependentRuleError(FixpointError):
 
 
 # ---------------------------------------------------------------------------
-# Rule representation
+# Invariant representation
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
-class _ProjectedRule:
+class _ProjectedInvariant:
     """Minimal shape the fixpoint test needs from a corpus rule."""
 
     id: str
@@ -188,9 +188,9 @@ def _evaluate(actual: Any, spec: Any) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def load_dormant_rules(corpus: dict[str, Any]) -> list[_ProjectedRule]:
-    """Return the ``_ProjectedRule`` view of every dormant rule in the corpus."""
-    rules: list[_ProjectedRule] = []
+def load_dormant_invariants(corpus: dict[str, Any]) -> list[_ProjectedInvariant]:
+    """Return the ``_ProjectedInvariant`` view of every dormant rule in the corpus."""
+    rules: list[_ProjectedInvariant] = []
     for raw in corpus.get("rules", []):
         if str(raw.get("severity", "")).lower() != "dormant":
             continue
@@ -202,7 +202,7 @@ def load_dormant_rules(corpus: dict[str, Any]) -> list[_ProjectedRule]:
             str(f) for f in (raw.get("expected_outcome") or {}).get("normalised_fields", [])
         )
         rules.append(
-            _ProjectedRule(
+            _ProjectedInvariant(
                 id=str(raw["id"]),
                 severity="dormant",
                 match_fields=dict(fields),
@@ -212,7 +212,7 @@ def load_dormant_rules(corpus: dict[str, Any]) -> list[_ProjectedRule]:
     return rules
 
 
-def construct_seed_states(rules: Iterable[_ProjectedRule]) -> list[dict[str, Any]]:
+def construct_seed_states(rules: Iterable[_ProjectedInvariant]) -> list[dict[str, Any]]:
     """One representative input state per rule, sufficient to activate its match.
 
     Builds the minimal state from each rule's match predicates — for each
@@ -270,7 +270,7 @@ def _value_satisfying(spec: Any) -> Any:
 
 def apply_to_fixpoint(
     state: dict[str, Any],
-    rules: list[_ProjectedRule],
+    rules: list[_ProjectedInvariant],
 ) -> tuple[dict[str, Any], list[str]]:
     """Apply rules in the given order repeatedly until the state stops changing.
 
@@ -293,7 +293,7 @@ def apply_to_fixpoint(
     raise LibraryResolutionCycleError([r.id for r in rules], current)
 
 
-def assert_idempotent(rule: _ProjectedRule, seed: dict[str, Any]) -> None:
+def assert_idempotent(rule: _ProjectedInvariant, seed: dict[str, Any]) -> None:
     """Confirm that applying ``rule`` twice is the same as applying it once."""
     if not rule.applies(seed):
         return
@@ -304,7 +304,7 @@ def assert_idempotent(rule: _ProjectedRule, seed: dict[str, Any]) -> None:
 
 
 def assert_shuffle_stable(
-    rules: list[_ProjectedRule],
+    rules: list[_ProjectedInvariant],
     seed: dict[str, Any],
     *,
     shuffle_count: int = _DEFAULT_SHUFFLE_COUNT,
@@ -335,16 +335,16 @@ def fixpoint_test_corpus(
 
     Raises on any failure. Returns silently on success.
     """
-    rules = load_dormant_rules(corpus)
-    if not rules:
+    invariants = load_dormant_invariants(corpus)
+    if not invariants:
         return
-    seeds = construct_seed_states(rules)
-    for rule, seed in zip(rules, seeds, strict=False):
-        assert_idempotent(rule, seed)
+    seeds = construct_seed_states(invariants)
+    for invariant, seed in zip(invariants, seeds, strict=False):
+        assert_idempotent(invariant, seed)
     # Shuffle stability runs against each seed — a single failure anywhere
-    # surfaces the corpus problem regardless of which rule triggered it.
+    # surfaces the corpus problem regardless of which invariant triggered it.
     for seed in seeds:
-        assert_shuffle_stable(rules, seed, shuffle_count=shuffle_count)
+        assert_shuffle_stable(invariants, seed, shuffle_count=shuffle_count)
 
 
 # ---------------------------------------------------------------------------
@@ -353,7 +353,7 @@ def fixpoint_test_corpus(
 #
 # Decision #12 of the invariant-miner adversarial review
 # (`.product/designs/adversarial-review-invariant-miner-2026-04-26.md`)
-# requires the vendor-CI gate to perform three checks on every rule:
+# requires the validation-CI gate to perform three checks on every rule:
 #
 #   positive_raises          - kwargs_positive must raise (or emit, if dormant)
 #   message_template_match   - raised message contains the template's static fragment
@@ -364,12 +364,12 @@ def fixpoint_test_corpus(
 # as "no constraint". The structural fixpoint below pins those checks in
 # place: it synthesises one malformed rule per check and asserts the gate
 # records exactly the matching divergence. If any of the three checks is
-# removed from ``vendor_rules.compute_gate_soundness_divergences``, the
+# removed from ``validate_invariants.compute_gate_soundness_divergences``, the
 # corresponding fixpoint case fails loudly.
 
 
 class GateSoundnessRegressionError(FixpointError):
-    """One of the three vendor-gate-soundness checks failed to fire.
+    """One of the three validation-gate-soundness checks failed to fire.
 
     Carries the check name + the divergences the gate actually produced
     so the failure message points directly at the missing check.
@@ -381,7 +381,7 @@ class GateSoundnessRegressionError(FixpointError):
             f"surface a divergence on a malformed rule designed to trip it. "
             f"Observed divergences: {observed_divergences!r}. "
             f"This indicates the gate has been weakened - restore the check "
-            f"in scripts/vendor_rules.compute_gate_soundness_divergences."
+            f"in scripts/validate_invariants.compute_gate_soundness_divergences."
         )
         self.check_name = check_name
         self.observed_divergences = observed_divergences
@@ -396,10 +396,10 @@ def synthesise_malformed_rule_cases() -> list[dict[str, Any]]:
     """
     # Imported here to avoid a circular path dependency:
     # ``_fixpoint_test`` is loaded eagerly by ``tests/integration/...``, and
-    # ``scripts._invariant_vendor_common`` is heavy. The deferred import keeps
+    # ``scripts._invariant_validation_common`` is heavy. The deferred import keeps
     # the module load cheap for the corpus-shuffle path.
-    from scripts._invariant_vendor_common import CaptureBuffers
-    from scripts.vendor_rules import (
+    from scripts._invariant_validation_common import CaptureBuffers
+    from scripts.validate_invariants import (
         CHECK_MESSAGE_TEMPLATE_MATCH,
         CHECK_NEGATIVE_DOES_NOT_RAISE,
         CHECK_POSITIVE_RAISES,
@@ -467,14 +467,14 @@ def synthesise_malformed_rule_cases() -> list[dict[str, Any]]:
 
 
 def assert_gate_soundness_fixpoint() -> None:
-    """Assert the vendor-CI gate's three soundness checks are all wired.
+    """Assert the validation-CI gate's three soundness checks are all wired.
 
     Synthesises one malformed rule per check, runs each through
-    :func:`scripts.vendor_rules.compute_gate_soundness_divergences`, and
+    :func:`scripts.validate_invariants.compute_gate_soundness_divergences`, and
     raises :class:`GateSoundnessRegressionError` if any check's divergence
     is missing.
     """
-    from scripts.vendor_rules import compute_gate_soundness_divergences
+    from scripts.validate_invariants import compute_gate_soundness_divergences
 
     for case in synthesise_malformed_rule_cases():
         divergences = compute_gate_soundness_divergences(case["rule"], case["pos"], case["neg"])

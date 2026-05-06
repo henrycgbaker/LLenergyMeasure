@@ -1,12 +1,12 @@
 """Unit tests for ``EnginePlugin.check_hardware`` across all three engines.
 
 The ``check_hardware`` seam is the host-GPU-dependent counterpart to the
-vendored-rules validator that runs at ``ExperimentConfig`` construction time.
+engine-invariants validator that runs at ``ExperimentConfig`` construction time.
 Tests here cover:
 
 - Static-method contract (``check_hardware`` callable without an instance).
-- Transformers / vLLM return ``[]`` (behavioural stubs; rules move to the
-  vendored corpus when their respective walkers ship).
+- Transformers / vLLM return ``[]`` (behavioural stubs; invariants move to the
+  engine-invariants corpus when their respective miners ship).
 - TensorRT's SM floor, FP8 gate, FP8 KV-cache gate, and multi-error collection.
 - Structural property: ``check_hardware`` and ``_build_llm_kwargs`` are
   independent code paths, so a T0 kwargs-build failure can no longer

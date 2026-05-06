@@ -4,9 +4,9 @@
 
 Library version: **0.21.0**  
 Mined at: 2026-05-06T20:35:47+02:00  
-Vendored at: 2026-05-06T20:35:47+02:00
+Validated at: 2026-05-06T20:35:47+02:00
 
-**Summary:** 3 proposed rules, 3 vendor-confirmed cases.
+**Summary:** 3 proposed invariants, 3 validation-confirmed cases.
 
 ## Invariants by extraction source
 

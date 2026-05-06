@@ -24,17 +24,17 @@ from scripts.engine_miners._fixpoint_test import (  # noqa: E402
     LibraryResolutionCycleError,
     NonIdempotentRuleError,
     OrderDependentRuleError,
-    _ProjectedRule,
+    _ProjectedInvariant,
     apply_to_fixpoint,
     assert_gate_soundness_fixpoint,
     assert_idempotent,
     assert_shuffle_stable,
     construct_seed_states,
     fixpoint_test_corpus,
-    load_dormant_rules,
+    load_dormant_invariants,
     synthesise_malformed_rule_cases,
 )
-from scripts.vendor_rules import (  # noqa: E402
+from scripts.validate_invariants import (  # noqa: E402
     CHECK_MESSAGE_TEMPLATE_MATCH,
     CHECK_NEGATIVE_DOES_NOT_RAISE,
     CHECK_POSITIVE_RAISES,
@@ -43,10 +43,10 @@ from scripts.vendor_rules import (  # noqa: E402
 
 
 def _rule(
-    rule_id: str, match_fields: dict[str, Any], normalised: tuple[str, ...]
-) -> _ProjectedRule:
-    return _ProjectedRule(
-        id=rule_id,
+    invariant_id: str, match_fields: dict[str, Any], normalised: tuple[str, ...]
+) -> _ProjectedInvariant:
+    return _ProjectedInvariant(
+        id=invariant_id,
         severity="dormant",
         match_fields=match_fields,
         normalised_fields=normalised,
@@ -97,7 +97,7 @@ class TestIdempotence:
         assert_idempotent(rule, seed)  # should not raise
 
     def test_non_idempotent_rule_raises(self) -> None:
-        class TogglingRule(_ProjectedRule):
+        class TogglingRule(_ProjectedInvariant):
             def apply(self, state: dict[str, Any]) -> dict[str, Any]:
                 next_state = dict(state)
                 next_state["x"] = next_state.get("x", 0) + 1
@@ -134,10 +134,10 @@ class TestShuffleStability:
 
     def test_cycle_detected(self) -> None:
         # Two rules where r_a sets x=1, r_b sets x=2, both always applicable.
-        class SetValue(_ProjectedRule):
-            def __init__(self, rule_id: str, value: int) -> None:
+        class SetValue(_ProjectedInvariant):
+            def __init__(self, invariant_id: str, value: int) -> None:
                 super().__init__(
-                    id=rule_id,
+                    id=invariant_id,
                     severity="dormant",
                     match_fields={},
                     normalised_fields=("x",),
@@ -164,7 +164,7 @@ class TestShuffleStability:
         # Order B: r2 then r1 -> r2 sets y=None, then r1 applies and sets x=0.
         # Make them non-commuting:
         # r1: if y=1 set x=99 (forever).  r2: if x is None set y=99 (forever).
-        class R1(_ProjectedRule):
+        class R1(_ProjectedInvariant):
             def applies(self, state: dict[str, Any]) -> bool:
                 return state.get("y") == 1 and state.get("x") != 99
 
@@ -173,7 +173,7 @@ class TestShuffleStability:
                 next_state["x"] = 99
                 return next_state
 
-        class R2(_ProjectedRule):
+        class R2(_ProjectedInvariant):
             def applies(self, state: dict[str, Any]) -> bool:
                 return state.get("x") is None and state.get("y") != 99
 
@@ -218,7 +218,7 @@ class TestCorpusIntegration:
 
     def test_load_dormant_rules_filters(self) -> None:
         corpus = {
-            "rules": [
+            "invariants": [
                 {
                     "id": "r_error",
                     "severity": "error",
@@ -233,7 +233,7 @@ class TestCorpusIntegration:
                 },
             ]
         }
-        rules = load_dormant_rules(corpus)
+        rules = load_dormant_invariants(corpus)
         assert len(rules) == 1
         assert rules[0].id == "r_dormant"
 
@@ -281,22 +281,22 @@ class TestGateSoundnessFixpoint:
         divergences = compute_gate_soundness_divergences(case["rule"], case["pos"], case["neg"])
 
         check_names = [d.check_failed for d in divergences]
-        rule_id = case["rule"]["id"]
+        invariant_id = case["rule"]["id"]
         assert expected_check in check_names, (
             f"Expected gate to record check_failed={expected_check!r} for "
-            f"rule {rule_id!r}; got {check_names!r}"
+            f"rule {invariant_id!r}; got {check_names!r}"
         )
 
     def test_assert_gate_soundness_fixpoint_passes_on_real_gate(self) -> None:
         """The single entry-point used by CI integration runs cleanly."""
-        # Should not raise - all three checks are wired in vendor_rules.py.
+        # Should not raise - all three checks are wired in validate_invariants.py.
         assert_gate_soundness_fixpoint()
 
     def test_regression_error_fires_when_check_is_disabled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """If a check is removed, ``assert_gate_soundness_fixpoint`` must fail-loud."""
-        from scripts import vendor_rules as vr
+        from scripts import validate_invariants as vr
         from scripts.engine_miners import _fixpoint_test as fpm
 
         # Snapshot the real gate before patching so the stub doesn't
@@ -311,7 +311,7 @@ class TestGateSoundnessFixpoint:
             ]
 
         # The fixpoint function imports ``compute_gate_soundness_divergences``
-        # lazily from ``scripts.vendor_rules``, so patching the module
+        # lazily from ``scripts.validate_invariants``, so patching the module
         # attribute is sufficient.
         monkeypatch.setattr(vr, "compute_gate_soundness_divergences", stripped_gate)
 

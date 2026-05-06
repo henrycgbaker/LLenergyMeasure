@@ -3,7 +3,7 @@
 Walks ``SamplingParams._verify_args`` / ``__post_init__`` /
 ``_verify_greedy_sampling``, ``StructuredOutputsParams.__post_init__`` and
 the ``vllm.config.*`` validator methods listed in the design, emitting one
-:class:`RuleCandidate` per ``if cond: raise ...`` and ``if cond: self.x = y``
+:class:`InvariantCandidate` per ``if cond: raise ...`` and ``if cond: self.x = y``
 shape it can structurally translate.
 
 Why a fresh static miner rather than reusing ``transformers_static_miner``
@@ -19,7 +19,7 @@ the AST primitives in ``_base.py`` (``find_class``, ``find_method``,
 Recall first
 ------------
 The miner errs toward emitting candidates with conservative kwargs;
-vendor-CI prunes any rule that doesn't actually fire against the live
+validation-CI prunes any invariant that doesn't actually fire against the live
 library. False positives are cheap; missed invariants are not. Per
 ``feedback_corpus_is_measurement_not_authoring``, the corpus is the
 measurement output, not authorship.
@@ -57,9 +57,9 @@ sys.path[:] = [p for p in sys.path if Path(p).resolve() != Path(_SCRIPT_DIR).res
 sys.path[:] = [p for p in sys.path if p != ""]
 
 from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.path)
+    InvariantCandidate,
     MinerLandmarkMissingError,
     MinerSource,
-    RuleCandidate,
     call_func_path,
     check_installed_version,
     find_class,
@@ -80,7 +80,7 @@ LIBRARY = "vllm"
 # ``vllm.beam_search``, and engine-construction kwargs under ``vllm.engine``
 # (per ``src/llenergymeasure/config/engine_configs.py``). The
 # ``vllm.config.*`` family doesn't yet have its own sub-model, so its rules
-# go under ``vllm.engine``; vendor CI surfaces any path mismatch.
+# go under ``vllm.engine``; validation CI surfaces any path mismatch.
 NS_SAMPLING = "vllm.sampling"
 NS_STRUCTURED = "vllm.sampling.structured_outputs"
 NS_ENGINE = "vllm.engine"
@@ -236,7 +236,7 @@ _AST_TARGETS: tuple[_ASTTarget, ...] = (
         native_type="vllm.config.ModelConfig",
     ),
     # SpeculativeConfig.__post_init__ is 264 lines of nested-config wiring;
-    # AST-walking it produces 30+ raw rules that all fail vendor-CI because
+    # AST-walking it produces 30+ raw rules that all fail validation-CI because
     # the predicates depend on cross-config references (model_config,
     # parallel_config) the static miner can't synthesise from kwargs alone.
     # The pydantic-lift over SpeculativeConfig (in the dynamic miner) covers
@@ -381,7 +381,7 @@ def _detect_body_stmts(body: list[ast.stmt]) -> list[_Detected]:
     per assignment. ``vllm.SamplingParams._verify_greedy_sampling`` is
     the canonical case — it overrides three sampling fields in one branch
     and we want a rule for each. Recurses into nested ``if`` blocks via
-    the parent walker.
+    the parent miner.
     """
     out: list[_Detected] = []
     for stmt in body:
@@ -710,7 +710,7 @@ def _build_match_fields(preds: list[_Predicate], namespace: str) -> dict[str, An
 
 
 # ---------------------------------------------------------------------------
-# Walker proper
+# Miner proper
 # ---------------------------------------------------------------------------
 
 
@@ -727,9 +727,9 @@ def _walk_function(
     target: _ASTTarget,
     rel_source_path: str,
     today: str,
-) -> list[RuleCandidate]:
+) -> list[InvariantCandidate]:
     """Walk one method body and emit rule candidates."""
-    rules: list[RuleCandidate] = []
+    rules: list[InvariantCandidate] = []
     seen_ids: set[str] = set()
 
     public_fields = _public_field_names_from_target(target)
@@ -803,8 +803,8 @@ def _build_rule(
     detected: _Detected,
     rel_source_path: str,
     today: str,
-) -> RuleCandidate | None:
-    """Assemble one RuleCandidate from accumulated predicates + detected body."""
+) -> InvariantCandidate | None:
+    """Assemble one InvariantCandidate from accumulated predicates + detected body."""
     # If the detected body affects a field via self-assign, append a
     # ``present True`` predicate on that field so the loader's "subject"
     # convention picks it up.
@@ -837,12 +837,12 @@ def _build_rule(
     if known and default != kwargs_pos.get(last_pred.field):
         kwargs_neg = {**kwargs_neg, last_pred.field: default}
 
-    rule_id = _make_rule_id(target=target, preds=effective_preds, detected=detected)
+    invariant_id = _make_rule_id(target=target, preds=effective_preds, detected=detected)
 
     rule_under_test = _describe_rule(target=target, preds=effective_preds, detected=detected)
 
-    return RuleCandidate(
-        id=rule_id,
+    return InvariantCandidate(
+        id=invariant_id,
         engine=ENGINE,
         library=LIBRARY,
         rule_under_test=rule_under_test,
@@ -860,9 +860,9 @@ def _build_rule(
             "outcome": detected.outcome,
             "emission_channel": detected.emission_channel,
             # Bare field name (no namespace prefix) — matches the runtime
-            # observation shape ``vendor_rules`` returns. Namespacing this
+            # observation shape ``validate_invariants`` returns. Namespacing this
             # would cause every dormancy rule to diverge on
-            # ``normalised_fields`` in vendor-CI.
+            # ``normalised_fields`` in validation-CI.
             "normalised_fields": (
                 [subject_field]
                 if subject_field is not None and detected.outcome.startswith("dormant")
@@ -1096,7 +1096,7 @@ def _check_landmarks() -> tuple[str, dict[str, str]]:
 # ---------------------------------------------------------------------------
 
 
-def walk_vllm_static(*, today: str | None = None) -> tuple[list[RuleCandidate], str]:
+def walk_vllm_static(*, today: str | None = None) -> tuple[list[InvariantCandidate], str]:
     """Walk all vLLM AST targets, return (candidates, vllm_version).
 
     Raises :class:`MinerVersionMismatchError` /
@@ -1114,7 +1114,7 @@ def walk_vllm_static(*, today: str | None = None) -> tuple[list[RuleCandidate], 
         frozen = os.environ.get("LLENERGY_MINER_FROZEN_AT")
         today = frozen if frozen else dt.date.today().isoformat()
 
-    candidates: list[RuleCandidate] = []
+    candidates: list[InvariantCandidate] = []
     # Cache parsed module ASTs so methods sharing a file parse once.
     ast_cache: dict[str, ast.Module] = {}
     for target in _AST_TARGETS:
@@ -1154,7 +1154,7 @@ def walk_vllm_static(*, today: str | None = None) -> tuple[list[RuleCandidate], 
 # ---------------------------------------------------------------------------
 
 
-def _candidate_to_dict(c: RuleCandidate) -> dict[str, Any]:
+def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
     return {
         "id": c.id,
         "engine": c.engine,
@@ -1181,7 +1181,7 @@ def _candidate_to_dict(c: RuleCandidate) -> dict[str, Any]:
     }
 
 
-def emit_yaml(candidates: list[RuleCandidate], engine_version: str) -> str:
+def emit_yaml(candidates: list[InvariantCandidate], engine_version: str) -> str:
     import yaml
 
     sorted_candidates = sorted(candidates, key=lambda c: (c.miner_source.method, c.id))
@@ -1191,9 +1191,9 @@ def emit_yaml(candidates: list[RuleCandidate], engine_version: str) -> str:
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
-        "walker_pinned_range": str(load_miner_pin("vllm", "static")),
+        "miner_pinned_range": str(load_miner_pin("vllm", "static")),
         "mined_at": mined_at,
-        "rules": [_candidate_to_dict(c) for c in sorted_candidates],
+        "invariants": [_candidate_to_dict(c) for c in sorted_candidates],
     }
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
 

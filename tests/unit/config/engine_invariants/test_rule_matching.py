@@ -1,4 +1,4 @@
-"""Tests for :class:`Rule.try_match`, the predicate engine, and message rendering."""
+"""Tests for :class:`Invariant.try_match`, the predicate engine, and message rendering."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from llenergymeasure.config.vendored_rules import (
-    Rule,
+from llenergymeasure.config.engine_invariants import (
+    Invariant,
     evaluate_predicate,
     resolve_field_path,
 )
@@ -43,8 +43,8 @@ def _make_rule(
     match_fields: dict[str, Any] | None = None,
     severity: str = "dormant",
     message: str | None = "Declared {declared_value}",
-) -> Rule:
-    return Rule(
+) -> Invariant:
+    return Invariant(
         id=id,
         engine="transformers",
         library="transformers",
@@ -282,7 +282,7 @@ def test_resolve_field_path_dataclass_field_wins_over_method_name() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Rule.try_match
+# Invariant.try_match
 # ---------------------------------------------------------------------------
 
 
@@ -336,7 +336,7 @@ def test_try_match_stops_at_first_failing_predicate() -> None:
 def test_render_message_substitutes_declared_value() -> None:
     rule = _make_rule(
         match_fields={"transformers.sampling.temperature": {"present": True}},
-        message="Dormant: temperature={declared_value} rule={rule_id}",
+        message="Dormant: temperature={declared_value} invariant={invariant_id}",
     )
     config = _Config(transformers=_Transformers(sampling=_Sampling(temperature=0.7)))
     match = rule.try_match(config)

@@ -1,4 +1,4 @@
-"""Tests for SchemaLoader — loads vendored engine schemas from discovered_schemas/."""
+"""Tests for SchemaLoader — loads discovered engine schemas from discovered_schemas/."""
 
 from __future__ import annotations
 
@@ -142,7 +142,7 @@ def test_load_all_schemas_returns_all_known() -> None:
 
 
 @pytest.mark.parametrize("engine", KNOWN_ENGINES)
-def test_vendored_schema_has_expected_shape(engine: str) -> None:
+def test_discovered_schema_has_expected_shape(engine: str) -> None:
     schema = SchemaLoader().load_schema(engine)
     # Every param entry must be a dict with a 'type' key (common contract)
     for name, spec in schema.engine_params.items():

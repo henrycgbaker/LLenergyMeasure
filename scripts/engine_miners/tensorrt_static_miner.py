@@ -66,9 +66,9 @@ sys.path[:] = [p for p in sys.path if Path(p).resolve() != Path(_SCRIPT_DIR).res
 sys.path[:] = [p for p in sys.path if p != ""]
 
 from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.path)
+    InvariantCandidate,
     MinerLandmarkMissingError,
     MinerSource,
-    RuleCandidate,
     call_func_path,
     find_class,
     find_method,
@@ -525,7 +525,7 @@ class _Emitter:
     method_name: str
     rel_source_path: str
     today: str
-    rules: list[RuleCandidate] = field(default_factory=list)
+    rules: list[InvariantCandidate] = field(default_factory=list)
     _seen_ids: set[str] = field(default_factory=set)
     _id_counter: dict[str, int] = field(default_factory=dict)
     _loop_vars: list[tuple[str, Any]] = field(default_factory=list)
@@ -561,11 +561,11 @@ class _Emitter:
         if kwargs_pos == kwargs_neg:
             kwargs_neg = self._force_distinct(kwargs_pos, preds)
 
-        rule_id = self._make_id(preds, detected, subject_field)
+        invariant_id = self._make_id(preds, detected, subject_field)
         rule_under_test = self._describe(preds, detected)
 
-        rule = RuleCandidate(
-            id=rule_id,
+        rule = InvariantCandidate(
+            id=invariant_id,
             engine=ENGINE,
             library=LIBRARY,
             rule_under_test=rule_under_test,
@@ -783,7 +783,7 @@ def _other_type_default(label: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Validator-method walker — public entry
+# Validator-method miner — public entry
 # ---------------------------------------------------------------------------
 
 
@@ -794,7 +794,7 @@ def _walk_method(
     method_name: str,
     rel_source_path: str,
     today: str,
-) -> list[RuleCandidate]:
+) -> list[InvariantCandidate]:
     """Walk the body of one validator method and return rule candidates."""
     emitter = _Emitter(
         native_type=native_type,
@@ -853,7 +853,7 @@ def _walk_field_validator(
     emitter: _Emitter,
     native_type: str,
     method_name: str,
-) -> list[RuleCandidate]:
+) -> list[InvariantCandidate]:
     """Emit one rule per (target field, raise/warn site) pair.
 
     Field validators take ``(cls, v, info=None)``. Raises inside the body
@@ -867,7 +867,7 @@ def _walk_field_validator(
     targets = _field_validator_targets(method)
     if not targets:
         return []
-    rules: list[RuleCandidate] = []
+    rules: list[InvariantCandidate] = []
     for target in targets:
         sub_emitter = _Emitter(
             native_type=native_type,
@@ -965,14 +965,14 @@ def _walk_literal_fields(
     native_type: str,
     rel_source_path: str,
     today: str,
-) -> list[RuleCandidate]:
+) -> list[InvariantCandidate]:
     """Emit one allowlist rule per ``Literal[...]``-typed Pydantic field.
 
     Equivalent to ``_pydantic_lift._from_literal`` but reads the AST instead
     of importing the live class — needed because TRT-LLM 0.21.0 isn't
     importable on the host (the design's "source-driven" contract).
     """
-    out: list[RuleCandidate] = []
+    out: list[InvariantCandidate] = []
     for stmt in cls_node.body:
         if not isinstance(stmt, ast.AnnAssign):
             continue
@@ -1037,12 +1037,12 @@ def _make_literal_rule(
     rel_source_path: str,
     line: int,
     today: str,
-) -> RuleCandidate:
+) -> InvariantCandidate:
     cls_short = native_type.rsplit(".", 1)[-1]
     rid = f"tensorrt_{cls_short.lower()}_{field_name}_in_{len(values)}_values"
     sample_invalid = "<invalid_static_miner_probe>"
     sample_valid = values[0]
-    return RuleCandidate(
+    return InvariantCandidate(
         id=rid,
         engine=ENGINE,
         library=LIBRARY,
@@ -1078,7 +1078,7 @@ def _walk_strenum(
     field_name: str,
     rel_source_path: str,
     today: str,
-) -> RuleCandidate | None:
+) -> InvariantCandidate | None:
     """Lift a ``StrEnum`` class to a single allowlist rule for the named field.
 
     The enum class itself is the underlying type for one particular field on
@@ -1096,7 +1096,7 @@ def _walk_strenum(
         return None
     cls_short = cls_node.name
     rid = f"tensorrt_{field_name}_in_{len(values)}_values"
-    return RuleCandidate(
+    return InvariantCandidate(
         id=rid,
         engine=ENGINE,
         library=LIBRARY,
@@ -1207,7 +1207,7 @@ def _verify_method_landmarks(tree: _SourceTree) -> None:
             )
 
 
-def walk_tensorrt(source_root: Path | None = None) -> tuple[list[RuleCandidate], str, str]:
+def walk_tensorrt(source_root: Path | None = None) -> tuple[list[InvariantCandidate], str, str]:
     """Walk TRT-LLM source and return ``(candidates, version, llm_args_rel_path)``.
 
     ``source_root`` defaults to ``/tmp/trt-llm-0.21.0/tensorrt_llm`` —
@@ -1222,7 +1222,7 @@ def walk_tensorrt(source_root: Path | None = None) -> tuple[list[RuleCandidate],
     version = _read_source_version(root)
 
     today = dt.date.today().isoformat()
-    candidates: list[RuleCandidate] = []
+    candidates: list[InvariantCandidate] = []
 
     # 1) Validator-method walks.
     for cls_name, method_name in _METHOD_LANDMARKS:
@@ -1300,7 +1300,7 @@ def _read_source_version(source_root: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _candidate_to_dict(c: RuleCandidate) -> dict[str, Any]:
+def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
     return {
         "id": c.id,
         "engine": c.engine,
@@ -1328,7 +1328,7 @@ def _candidate_to_dict(c: RuleCandidate) -> dict[str, Any]:
 
 
 def emit_yaml(
-    candidates: list[RuleCandidate],
+    candidates: list[InvariantCandidate],
     *,
     engine_version: str,
     rel_path: str,
@@ -1346,9 +1346,9 @@ def emit_yaml(
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
-        "walker_pinned_range": str(load_miner_pin("tensorrt", "static")),
+        "miner_pinned_range": str(load_miner_pin("tensorrt", "static")),
         "mined_at": mined_at,
-        "rules": [_candidate_to_dict(c) for c in sorted_candidates],
+        "invariants": [_candidate_to_dict(c) for c in sorted_candidates],
     }
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
 

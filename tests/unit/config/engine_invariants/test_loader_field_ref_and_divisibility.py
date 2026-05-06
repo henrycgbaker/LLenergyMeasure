@@ -17,11 +17,11 @@ from typing import Any
 
 import pytest
 
-from llenergymeasure.config.vendored_rules import (
-    Rule,
+from llenergymeasure.config.engine_invariants import (
+    Invariant,
     evaluate_predicate,
 )
-from llenergymeasure.config.vendored_rules.loader import (
+from llenergymeasure.config.engine_invariants.loader import (
     _is_int_pair,
     _resolve_field_refs_in_spec,
 )
@@ -49,8 +49,8 @@ class _Config:
     transformers: _Transformers
 
 
-def _make_rule(*, match_fields: dict[str, Any]) -> Rule:
-    return Rule(
+def _make_rule(*, match_fields: dict[str, Any]) -> Invariant:
+    return Invariant(
         id="rule_x",
         engine="transformers",
         library="transformers",
@@ -223,7 +223,7 @@ def test_is_int_pair_helper() -> None:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end via Rule.try_match — corpus-shape predicate
+# End-to-end via Invariant.try_match — corpus-shape predicate
 # ---------------------------------------------------------------------------
 
 

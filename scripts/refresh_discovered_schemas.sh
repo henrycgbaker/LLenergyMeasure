@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Rediscover a vendored engine schema by running discovery inside the
+# Rediscover an engine schema by running discovery inside the
 # appropriate Docker image.
 #
 # Usage: ./scripts/refresh_discovered_schemas.sh {vllm|tensorrt|transformers}
 #
 # Always writes to src/llenergymeasure/engines/<engine>.json
-# and prints the resulting `git diff`. Does NOT commit. The vendored JSON
+# and prints the resulting `git diff`. Does NOT commit. The discovered JSON
 # file IS the canonical SSOT — authority comes from `git commit`, not from
 # who ran discovery.
 #
@@ -101,7 +101,7 @@ fi
 
 if git diff --quiet -- "$OUTPUT_REL" 2>/dev/null; then
     if [[ -z "$(git status --porcelain -- "$OUTPUT_REL")" ]]; then
-        echo "[$ENGINE] No changes to vendored schema." >&2
+        echo "[$ENGINE] No changes to discovered schema." >&2
         exit 0
     fi
 fi

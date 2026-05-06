@@ -12,7 +12,7 @@ Covers:
   load-bearing methods (``LookaheadDecodingConfig.validate_positive_values``,
   ``BaseLlmArgs.validate_build_config_with_runtime_params``).
 - Gate-soundness fixpoint contract (Decision #12 of the adversarial review)
-  — running ``assert_gate_soundness_fixpoint`` against the live vendor
+  — running ``assert_gate_soundness_fixpoint`` against the live validation
   gate must succeed.
 
 These tests skip cleanly when the 0.21.0 source isn't available locally
@@ -305,7 +305,7 @@ class TestLandmarkContract:
 
 
 class TestGateSoundnessFixpoint:
-    """The vendor-CI gate's three soundness checks must all be wired.
+    """The validation-CI gate's three soundness checks must all be wired.
 
     This is the same regression contract :class:`TestGateSoundnessFixpoint`
     in :mod:`tests.unit.scripts.engine_miners.test_fixpoint` exercises — duplicated

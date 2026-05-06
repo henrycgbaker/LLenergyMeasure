@@ -3,7 +3,7 @@
 The walker depends on transformers being importable. Tests that actually
 invoke the walker use ``pytest.importorskip("transformers")`` so the suite
 passes on environments without transformers installed. Pure-serialisation
-tests (YAML emission, envelope shape) construct RuleCandidates directly and
+tests (YAML emission, envelope shape) construct InvariantCandidates directly and
 don't require transformers.
 """
 
@@ -20,7 +20,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts.engine_miners import transformers_miner as tf_walker  # noqa: E402
-from scripts.engine_miners._base import MinerSource, RuleCandidate  # noqa: E402
+from scripts.engine_miners._base import InvariantCandidate, MinerSource  # noqa: E402
 from scripts.engine_miners._ssot import load_miner_pin  # noqa: E402
 
 # Pin guard: tests that actually invoke ``tf_walker.walk()`` depend on
@@ -47,8 +47,8 @@ requires_pinned_transformers = pytest.mark.skipif(
 )
 
 
-def _sample_candidate() -> RuleCandidate:
-    return RuleCandidate(
+def _sample_candidate() -> InvariantCandidate:
+    return InvariantCandidate(
         id="transformers_test_sample",
         engine="transformers",
         library="transformers",
@@ -96,7 +96,7 @@ def test_emit_yaml_deterministic_ordering() -> None:
         "schema_version": "1.0.0",
         "engine": "transformers",
         "engine_version": "4.56.0",
-        "walker_pinned_range": ">=4.50,<5.0",
+        "miner_pinned_range": ">=4.50,<5.0",
         "mined_at": "2026-04-23T00:00:00Z",
     }
     yaml_a = tf_walker.emit_yaml(candidates, envelope)
@@ -110,7 +110,7 @@ def test_emit_yaml_roundtrip_preserves_fields() -> None:
         "schema_version": "1.0.0",
         "engine": "transformers",
         "engine_version": "4.56.0",
-        "walker_pinned_range": ">=4.50,<5.0",
+        "miner_pinned_range": ">=4.50,<5.0",
         "mined_at": "2026-04-23T00:00:00Z",
     }
     text = tf_walker.emit_yaml(candidates, envelope)

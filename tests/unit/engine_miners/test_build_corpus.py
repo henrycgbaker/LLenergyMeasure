@@ -33,7 +33,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from llenergymeasure.config.vendored_rules import VendoredRulesLoader  # noqa: E402
+from llenergymeasure.config.engine_invariants import EngineInvariantsLoader  # noqa: E402
 from scripts.engine_miners import build_corpus  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -126,9 +126,9 @@ def _envelope(rules: list[dict[str, Any]], engine_version: str = "4.56.0") -> di
         "schema_version": "1.0.0",
         "engine": "transformers",
         "engine_version": engine_version,
-        "walker_pinned_range": ">=4.56,<4.57",
+        "miner_pinned_range": ">=4.56,<4.57",
         "mined_at": "2026-04-25T00:00:00Z",
-        "rules": rules,
+        "invariants": rules,
     }
 
 
@@ -491,7 +491,7 @@ class TestEmptyStaging:
 
 
 class TestLoaderRoundTrip:
-    def test_merger_output_loads_via_vendoredrulesloader(self, tmp_path: Path) -> None:
+    def test_merger_output_loads_via_engine_invariants_loader(self, tmp_path: Path) -> None:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         _write_staging(
@@ -500,10 +500,10 @@ class TestLoaderRoundTrip:
 
         build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
 
-        loader = VendoredRulesLoader(corpus_root=tmp_path)
-        parsed = loader.load_rules("transformers")
-        assert len(parsed.rules) == 1
-        rule = parsed.rules[0]
+        loader = EngineInvariantsLoader(corpus_root=tmp_path)
+        parsed = loader.load_invariants("transformers")
+        assert len(parsed.invariants) == 1
+        rule = parsed.invariants[0]
         assert rule.added_by == "static_miner"
         assert rule.cross_validated_by == ("dynamic_miner",)
 
@@ -512,7 +512,7 @@ class TestLoaderRoundTrip:
         # corpus YAML directly with a bad cross_validated_by entry — the
         # loader must reject it, since the closed-enum guard is the
         # whole point of validating cross-validation provenance.
-        from llenergymeasure.config.vendored_rules import UnknownAddedByError
+        from llenergymeasure.config.engine_invariants import UnknownAddedByError
 
         rule = _ast_rule()
         rule["cross_validated_by"] = ["NOT_A_REAL_PROVENANCE"]
@@ -520,9 +520,9 @@ class TestLoaderRoundTrip:
         canonical.parent.mkdir(parents=True, exist_ok=True)
         canonical.write_text(yaml.safe_dump(_envelope([rule]), sort_keys=False))
 
-        loader = VendoredRulesLoader(corpus_root=tmp_path)
+        loader = EngineInvariantsLoader(corpus_root=tmp_path)
         with pytest.raises(UnknownAddedByError):
-            loader.load_rules("transformers")
+            loader.load_invariants("transformers")
 
 
 # ---------------------------------------------------------------------------
@@ -606,24 +606,24 @@ class TestAddedAtPreservation:
 # ---------------------------------------------------------------------------
 
 
-def _stub_vendor_engine(
+def _stub_validate_engine(
     *, divergent_rule_ids: tuple[str, ...] = (), divergence_field: str = "outcome"
 ):
-    """Return a callable mirroring :func:`scripts.vendor_rules.vendor_engine`.
+    """Return a callable mirroring :func:`scripts.validate_invariants.validate_engine`.
 
     The stub doesn't run the real library — it returns synthetic divergences
-    keyed off rule ids. Tests monkeypatch ``scripts.vendor_rules.vendor_engine``
-    onto this stub so the merger's vendor wiring runs without needing the
+    keyed off invariant ids. Tests monkeypatch ``scripts.validate_invariants.validate_engine``
+    onto this stub so the merger's validation wiring runs without needing the
     transformers package available in the test environment.
     """
-    from scripts._invariant_vendor_common import Divergence
+    from scripts._invariant_validation_common import Divergence
 
     def _stub(*, engine: str, corpus_path: Path, out_path: Path, **kwargs: Any):
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text("{}\n")
         divergences = [
             Divergence(
-                rule_id=rid,
+                invariant_id=rid,
                 field=divergence_field,
                 expected="expected_value",
                 observed="observed_value",
@@ -643,15 +643,15 @@ def _stub_vendor_engine(
 
 
 class TestVendorValidationGate:
-    """Integration tests for the vendor-validation step in the merger."""
+    """Integration tests for the validation step in the merger."""
 
-    def test_vendor_kept_rules_land_in_canonical(
+    def test_validated_kept_invariants_land_in_canonical(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Rules with no divergence are kept in the canonical YAML."""
-        import scripts.vendor_rules as vr
+        import scripts.validate_invariants as vr
 
-        monkeypatch.setattr(vr, "vendor_engine", _stub_vendor_engine())
+        monkeypatch.setattr(vr, "validate_engine", _stub_validate_engine())
 
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
@@ -668,16 +668,16 @@ class TestVendorValidationGate:
         canonical = (tmp_path / "transformers" / "invariants.proposed.yaml").read_text()
         assert "rule_kept" in canonical
 
-    def test_vendor_divergent_rule_is_quarantined(
+    def test_divergent_invariant_is_quarantined(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A rule whose vendor outcome diverges is dropped from canonical."""
-        import scripts.vendor_rules as vr
+        """An invariant whose validation outcome diverges is dropped from canonical."""
+        import scripts.validate_invariants as vr
 
         monkeypatch.setattr(
             vr,
-            "vendor_engine",
-            _stub_vendor_engine(divergent_rule_ids=("rule_bad",)),
+            "validate_engine",
+            _stub_validate_engine(divergent_rule_ids=("rule_bad",)),
         )
 
         staging = tmp_path / "transformers" / "_staging"
@@ -704,15 +704,15 @@ class TestVendorValidationGate:
     def test_skip_validation_keeps_all_candidates(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """``--skip-validation`` short-circuits the gate; vendor never runs."""
-        import scripts.vendor_rules as vr
+        """``--skip-validation`` short-circuits the gate; validate_engine never runs."""
+        import scripts.validate_invariants as vr
 
-        # If vendor_engine were called, this stub would mark ALL rules as
+        # If validate_engine were called, this stub would mark ALL invariants as
         # divergent — but skip_validation should prevent the call entirely.
         monkeypatch.setattr(
             vr,
-            "vendor_engine",
-            _stub_vendor_engine(divergent_rule_ids=("rule_a", "rule_b")),
+            "validate_engine",
+            _stub_validate_engine(divergent_rule_ids=("rule_a", "rule_b")),
         )
 
         staging = tmp_path / "transformers" / "_staging"
@@ -744,12 +744,12 @@ class TestVendorValidationGate:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The quarantine file matches the documented {schema_version, engine, engine_version, generated_at, quarantined_rules} shape."""
-        import scripts.vendor_rules as vr
+        import scripts.validate_invariants as vr
 
         monkeypatch.setattr(
             vr,
-            "vendor_engine",
-            _stub_vendor_engine(
+            "validate_engine",
+            _stub_validate_engine(
                 divergent_rule_ids=("rule_bad",),
                 divergence_field="outcome",
             ),
@@ -790,7 +790,7 @@ class TestVendorValidationGate:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A pre-existing quarantine file is cleared when the new run has no divergences."""
-        import scripts.vendor_rules as vr
+        import scripts.validate_invariants as vr
 
         # Plant a stale quarantine file from an earlier (hypothetical) run.
         staging = tmp_path / "transformers" / "_staging"
@@ -798,7 +798,7 @@ class TestVendorValidationGate:
         stale = staging / "_failed_validation_transformers.yaml"
         stale.write_text("schema_version: 1.0.0\nengine: transformers\nquarantined_rules: []\n")
 
-        monkeypatch.setattr(vr, "vendor_engine", _stub_vendor_engine())
+        monkeypatch.setattr(vr, "validate_engine", _stub_validate_engine())
         _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
 
         build_corpus.write_corpus("transformers", tmp_path)
@@ -810,12 +810,12 @@ class TestVendorValidationGate:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """``--check`` re-runs validation so drift detection compares apples-to-apples."""
-        import scripts.vendor_rules as vr
+        import scripts.validate_invariants as vr
 
         monkeypatch.setattr(
             vr,
-            "vendor_engine",
-            _stub_vendor_engine(divergent_rule_ids=("rule_bad",)),
+            "validate_engine",
+            _stub_validate_engine(divergent_rule_ids=("rule_bad",)),
         )
 
         staging = tmp_path / "transformers" / "_staging"
@@ -852,9 +852,9 @@ class TestVendorValidationGate:
         caused stale kwargs to dominate the re-merge under fingerprint
         dedup and silently masked extractor-side fixes.
         """
-        import scripts.vendor_rules as vr
+        import scripts.validate_invariants as vr
 
-        monkeypatch.setattr(vr, "vendor_engine", _stub_vendor_engine())
+        monkeypatch.setattr(vr, "validate_engine", _stub_validate_engine())
 
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(

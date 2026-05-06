@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Semantic differ for vendored engine schema JSONs.
+"""Semantic differ for discovered engine schema JSONs.
 
 Classifies changes between two schema versions as safe or breaking.
 

@@ -24,8 +24,8 @@ def _envelope(cases: list[dict[str, Any]], **meta: Any) -> dict[str, Any]:
         "engine_version": "4.56.0",
         "image_ref": "test:latest",
         "base_image_ref": "test:latest",
-        "vendored_at": "2026-04-23T00:00:00+00:00",
-        "vendor_commit": "abc",
+        "validated_at": "2026-04-23T00:00:00+00:00",
+        "validation_commit": "abc",
         "cases": cases,
         "divergences": [],
     }
@@ -70,15 +70,15 @@ class TestDiffRules:
         result = diff_rules.diff_rules(old, new)
         assert not result.is_breaking
         assert len(result.safe) == 1
-        assert result.safe[0].kind == "added_rule"
-        assert result.safe[0].rule_id == "r2"
+        assert result.safe[0].kind == "added_invariant"
+        assert result.safe[0].invariant_id == "r2"
 
     def test_removed_rule_is_breaking(self) -> None:
         old = _envelope([_case("r1"), _case("r2")])
         new = _envelope([_case("r1")])
         result = diff_rules.diff_rules(old, new)
         assert result.is_breaking
-        assert any(c.kind == "removed_rule" for c in result.breaking)
+        assert any(c.kind == "removed_invariant" for c in result.breaking)
 
     def test_severity_escalated_is_breaking(self) -> None:
         old = _envelope([_case("r1", outcome="warn")])
@@ -168,7 +168,7 @@ class TestRenderMarkdown:
         new = _envelope([_case("r1"), _case("r2")])
         md = diff_rules.render_markdown(diff_rules.diff_rules(old, new))
         assert "invariants-safe" in md
-        assert "added_rule" in md
+        assert "added_invariant" in md
 
 
 # ---------------------------------------------------------------------------

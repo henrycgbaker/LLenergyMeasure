@@ -4,19 +4,19 @@ The validation-rules pipeline is split into independent miners (dynamic miner,
 static miner, future runtime-warning miner) that each write to a staging file
 under ``src/llenergymeasure/engines/{engine}/_staging/{engine}_{name}.yaml``. This
 module is the single canonical entry point that runs them, merges their outputs
-into one :class:`~llenergymeasure.config.vendored_rules.loader.VendoredRules`-shaped
+into one :class:`~llenergymeasure.config.engine_invariants.loader.EngineInvariants`-shaped
 document, and writes ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``.
 
-Pipeline: miners → staging → merge → **vendor-validate** → write canonical corpus.
+Pipeline: miners → staging → merge → **validation-gate** → write canonical corpus.
 
-Vendor validation gate
+Validation gate
 ----------------------
 Between merge and canonical-write, every candidate's ``kwargs_positive`` and
 ``kwargs_negative`` are replayed against the real engine library via
-:func:`scripts.vendor_rules.vendor_engine`. Rules whose declared
+:func:`scripts.validate_invariants.validate_engine`. Rules whose declared
 ``expected_outcome`` doesn't match observed library behaviour are quarantined
 to ``_staging/_failed_validation_{engine}.yaml`` instead of landing in the
-canonical corpus. The merger optimises for *recall*; vendor validation is the
+canonical corpus. The merger optimises for *recall*; validation-gate is the
 single architectural gate that turns the recall-first candidate list into the
 runtime-applied corpus.
 
@@ -26,7 +26,7 @@ Today the corpus is single-writer (dynamic miner only). With the static miner
 landing in parallel, we need a deterministic reconciliation step — same rule
 discovered by two independent paths becomes evidence of cross-validation, not
 two duplicates. Different fingerprints across paths stay as two rules; the
-vendor CI pipeline (``scripts/vendor_rules.py``) runs every rule's
+validation CI pipeline (``scripts/validate_invariants.py``) runs every rule's
 ``kwargs_positive`` / ``kwargs_negative`` against the real library and fails
 divergent rules — the merger optimises for *recall* and lets CI kill false
 positives.
@@ -37,7 +37,7 @@ Two viable shapes for tagging cross-validation:
 
     A. ``added_by: list[str]`` — change the existing single-string field to a
        list. Touches the loader, every test that pins the literal, and the
-       vendor JSON shape.
+       validated JSON shape.
     B. ``added_by: <single primary string>`` + ``cross_validated_by: list[str]``
        — additive; primary source unchanged, secondary sources surfaced via a
        new optional field.
@@ -48,8 +48,8 @@ flipping it to ``list[str]`` ripples through every test that constructs a
 :class:`Rule` directly. ``cross_validated_by`` is strictly additive — old
 rules default to an empty tuple, the loader accepts the new field with its
 own enum validation, and the merger writes it only when there's a second
-source to cite. Loader changes are minimal: one new field on :class:`Rule`,
-one parse step in :func:`_parse_rule`.
+source to cite. Loader changes are minimal: one new field on :class:`Invariant`,
+one parse step in :func:`_parse_invariant`.
 
 Fingerprint
 -----------
@@ -129,7 +129,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 # When this file is run directly (``python scripts/engine_miners/build_corpus.py``),
 # Python prepends ``scripts/engine_miners/`` to sys.path. That directory contains a
 # ``transformers_miner.py`` miner module which would shadow the real ``transformers``
-# library on import — vendor validation would then crash with
+# library on import — validation would then crash with
 # ``module 'transformers' has no attribute '__version__'``. Drop the script's
 # own directory from sys.path so the upstream library wins. ``-m`` invocation
 # doesn't trigger this branch (sys.path[0] is the cwd then).
@@ -361,7 +361,7 @@ def _load_staging(path: Path) -> dict[str, Any]:
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise ValueError(f"Staging file {path} is not a YAML mapping")
-    if "rules" not in raw or not isinstance(raw["rules"], list):
+    if "invariants" not in raw or not isinstance(raw["invariants"], list):
         raise ValueError(f"Staging file {path} missing 'rules' list")
     return raw
 
@@ -409,7 +409,7 @@ def _merge_bucket(rules: list[dict[str, Any]]) -> _MergeResult:
 
     See module docstring for the per-field precedence table. Conflict
     annotations are accumulated and surfaced on the merged rule so a human
-    reviewer can spot ambiguous merges; the vendor CI step will catch
+    reviewer can spot ambiguous merges; the validation-CI step will catch
     semantically wrong outputs regardless.
     """
     if len(rules) == 1:
@@ -543,7 +543,7 @@ def merge_staging(
 
     buckets: dict[bytes, list[dict[str, Any]]] = {}
     for envelope in staging_envelopes:
-        for rule in envelope.get("rules") or []:
+        for rule in envelope.get("invariants") or []:
             if not isinstance(rule, dict):
                 continue
             key = fingerprint_rule(rule)
@@ -576,13 +576,13 @@ def merge_staging(
     # Surface miner version pin, if any staging file declared one.
     pinned_ranges = sorted(
         {
-            str(s.get("walker_pinned_range", ""))
+            str(s.get("miner_pinned_range", ""))
             for s in staging_envelopes
-            if s.get("walker_pinned_range")
+            if s.get("miner_pinned_range")
         }
     )
     if pinned_ranges:
-        envelope["walker_pinned_range"] = pinned_ranges[-1]
+        envelope["miner_pinned_range"] = pinned_ranges[-1]
 
     # mined_at: max across staging (or env override for reproducibility tests).
     frozen = os.environ.get("LLENERGY_MINER_FROZEN_AT")
@@ -632,7 +632,7 @@ def _load_prior_added_at_map(corpus_path: Path) -> dict[bytes, str]:
         return {}
     if not isinstance(prior, dict):
         return {}
-    rules = prior.get("rules") or []
+    rules = prior.get("invariants") or []
     out: dict[bytes, str] = {}
     for rule in rules:
         if not isinstance(rule, dict):
@@ -661,13 +661,13 @@ def _preserve_added_at(rules: list[dict[str, Any]], prior: dict[bytes, str]) -> 
 
 
 # ---------------------------------------------------------------------------
-# Vendor validation gate
+# Validation gate
 # ---------------------------------------------------------------------------
 
 
 _MERGED_CANDIDATES_BASENAME = "{engine}_merged_candidates.yaml"
 """Staging filename for the unfiltered merger output. Vendor validation reads
-this back as a corpus-shaped YAML so :func:`scripts.vendor_rules.vendor_engine`
+this back as a corpus-shaped YAML so :func:`scripts.validate_invariants.validate_engine`
 can replay every candidate's positive/negative kwargs."""
 
 _FAILED_VALIDATION_BASENAME = "_failed_validation_{engine}.yaml"
@@ -682,7 +682,7 @@ Schema::
     quarantined_rules:
       - rule: <full rule dict>
         divergences:
-          - rule_id: <id>
+          - invariant_id: <id>
             field: <expected_outcome.* or positive_confirmed/negative_confirmed>
             expected: <value>
             observed: <value>
@@ -721,39 +721,41 @@ def _validate_candidates(
     ``expected_outcome`` matched observed behaviour AND whose
     ``kwargs_positive`` actually fired AND whose ``kwargs_negative`` actually
     didn't, and ``divergent`` is the rest annotated with the per-field
-    diagnostic info from ``vendor_engine``.
+    diagnostic info from ``validate_engine``.
 
     The function writes the candidates to ``_staging/{engine}_merged_candidates.yaml``
-    as a side effect — that file is the input to :func:`vendor_engine`. The
-    YAML envelope ``vendor_engine`` writes goes to a sibling temp path
-    (``_staging/_vendor_envelope_{engine}.yaml``) so the canonical
-    ``src/llenergymeasure/engines/{engine}/invariants.vendored.yaml`` (the
+    as a side effect — that file is the input to :func:`validate_engine`. The
+    YAML envelope ``validate_engine`` writes goes to a sibling temp path
+    (``_staging/_validation_envelope_{engine}.yaml``) so the canonical
+    ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml`` (the
     runtime-loaded sidecar) is never overwritten by this build step. The
     leading-underscore prefix keeps the temp file out of the
     ``{engine}_*.yaml`` glob that ``discover_staging_files`` walks.
     """
     # Local import keeps the merger importable in environments that don't have
     # the engine library installed (e.g. CI lint job): only --skip-validation
-    # callers need to load vendor_rules.
-    from scripts.vendor_rules import vendor_engine
+    # callers need to load validate_invariants.
+    from scripts.validate_invariants import validate_engine
 
     candidates_path = _write_merged_candidates(corpus_root, engine, candidates, envelope)
-    vendor_envelope_path = _staging_dir(corpus_root, engine) / f"_vendor_envelope_{engine}.yaml"
+    validation_envelope_path = (
+        _staging_dir(corpus_root, engine) / f"_validation_envelope_{engine}.yaml"
+    )
 
-    # vendor_engine returns (envelope, divergences). Divergences carry rule_id,
+    # validate_engine returns (envelope, divergences). Divergences carry invariant_id,
     # field, expected, observed — exactly the diagnostic we need to surface in
     # the quarantine file.
-    _vendor_envelope, divergences = vendor_engine(
+    _validation_envelope, divergences = validate_engine(
         engine=engine,
         corpus_path=candidates_path,
-        out_path=vendor_envelope_path,
+        out_path=validation_envelope_path,
     )
 
     divergence_by_id: dict[str, list[dict[str, Any]]] = {}
     for d in divergences:
-        divergence_by_id.setdefault(d.rule_id, []).append(
+        divergence_by_id.setdefault(d.invariant_id, []).append(
             {
-                "rule_id": d.rule_id,
+                "invariant_id": d.invariant_id,
                 "field": d.field,
                 "expected": d.expected,
                 "observed": d.observed,
@@ -763,12 +765,12 @@ def _validate_candidates(
     kept: list[dict[str, Any]] = []
     divergent: list[dict[str, Any]] = []
     for rule in candidates:
-        rule_id = str(rule.get("id", ""))
-        if rule_id in divergence_by_id:
+        invariant_id = str(rule.get("id", ""))
+        if invariant_id in divergence_by_id:
             divergent.append(
                 {
                     "rule": rule,
-                    "divergences": divergence_by_id[rule_id],
+                    "divergences": divergence_by_id[invariant_id],
                 }
             )
         else:
@@ -858,12 +860,12 @@ def emit_yaml(rules: list[dict[str, Any]], envelope: dict[str, Any]) -> str:
         "engine": envelope.get("engine", ""),
         "engine_version": envelope.get("engine_version", ""),
     }
-    if "walker_pinned_range" in envelope:
-        doc["walker_pinned_range"] = envelope["walker_pinned_range"]
+    if "miner_pinned_range" in envelope:
+        doc["miner_pinned_range"] = envelope["miner_pinned_range"]
     doc["mined_at"] = envelope.get("mined_at", "")
     if "staging_engine_versions" in envelope:
         doc["staging_engine_versions"] = envelope["staging_engine_versions"]
-    doc["rules"] = [_ordered_rule(r) for r in rules]
+    doc["invariants"] = [_ordered_rule(r) for r in rules]
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
 
 
@@ -894,11 +896,11 @@ def build_corpus_text_and_outcome(
     *,
     skip_validation: bool = False,
 ) -> _BuildResult:
-    """Discover staging files, merge, vendor-validate, return canonical YAML.
+    """Discover staging files, merge, validation-gate, return canonical YAML.
 
     Pure-ish modulo the staging-file read; callable in isolation by
     pre-populating the staging directory. When ``skip_validation`` is true,
-    all merged candidates land in the canonical YAML regardless of vendor
+    all merged candidates land in the canonical YAML regardless of validation
     outcomes — useful for fast local iteration but never appropriate in CI.
     """
     paths = discover_staging_files(engine, corpus_root)
@@ -920,7 +922,7 @@ def build_corpus_text_and_outcome(
 
     if skip_validation:
         # Still write the merged-candidates staging file so reviewers can
-        # inspect the recall-first list; just don't run the vendor gate.
+        # inspect the recall-first list; just don't run the validation gate.
         _write_merged_candidates(corpus_root, engine, candidates, envelope)
         # Drop any stale quarantine file — running --skip-validation with a
         # leftover file from a previous validating run would be misleading.
@@ -989,7 +991,7 @@ def check_drift(
     *,
     skip_validation: bool = False,
 ) -> tuple[int, str]:
-    """Re-run merger (with vendor validation); compare against checked-in corpus.
+    """Re-run merger (with validation); compare against checked-in corpus.
 
     Returns ``(exit_code, diff_text)``. ``exit_code`` is ``0`` if the
     canonical corpus matches the merger's freshly-built output exactly; ``1``
@@ -1053,7 +1055,7 @@ def main(argv: list[str] | None = None) -> int:
         "--skip-validation",
         action="store_true",
         help=(
-            "Skip the vendor-validation gate: write every merged candidate to "
+            "Skip the validation gate: write every merged candidate to "
             "the canonical corpus regardless of whether its declared "
             "expected_outcome matches observed library behaviour. Off by "
             "default (CI must always validate); on for fast local iteration."
@@ -1090,7 +1092,7 @@ def main(argv: list[str] | None = None) -> int:
     if result.validation_skipped:
         print(
             f"[build_corpus] {result.candidates_merged} candidates merged; "
-            f"vendor validation SKIPPED (use without --skip-validation in CI).",
+            f"validation SKIPPED (use without --skip-validation in CI).",
             file=sys.stderr,
         )
     else:
@@ -1108,8 +1110,8 @@ def main(argv: list[str] | None = None) -> int:
                 f"[build_corpus] divergent rules written to {quarantine_path}",
                 file=sys.stderr,
             )
-            for rule_id in result.quarantined_ids[:10]:
-                print(f"  - {rule_id}", file=sys.stderr)
+            for invariant_id in result.quarantined_ids[:10]:
+                print(f"  - {invariant_id}", file=sys.stderr)
             if len(result.quarantined_ids) > 10:
                 print(
                     f"  ... and {len(result.quarantined_ids) - 10} more.",

@@ -1,8 +1,8 @@
-"""Tests for the generic ``_apply_vendored_rules`` model validator.
+"""Tests for the generic ``_apply_invariants`` model validator.
 
 Covers the three severity paths (error / warn / dormant) plus the
-no-match / missing-corpus fallbacks. Rule loading is exercised by
-``tests/unit/config/vendored_rules/test_loader.py``; this module focuses on
+no-match / missing-corpus fallbacks. Invariant loading is exercised by
+``tests/unit/config/engine_invariants/test_loader.py``; this module focuses on
 the validator's dispatch and the ``_dormant_observations`` contract.
 """
 
@@ -18,12 +18,12 @@ from llenergymeasure.config.engine_configs import (
     TransformersConfig,
     TransformersSamplingConfig,
 )
+from llenergymeasure.config.engine_invariants.loader import EngineInvariants, Invariant
 from llenergymeasure.config.models import (
     ExperimentConfig,
     _reset_rules_loader_cache,
 )
 from llenergymeasure.config.probe import DormantField
-from llenergymeasure.config.vendored_rules.loader import Rule, VendoredRules
 from llenergymeasure.config.warnings import ConfigValidationWarning
 
 
@@ -33,9 +33,9 @@ def _make_rule(
     match_fields: dict[str, Any],
     message_template: str | None = "test rule fired ({declared_value})",
     outcome: str = "error",
-) -> Rule:
-    """Build a minimal Rule for validator-path testing."""
-    return Rule(
+) -> Invariant:
+    """Build a minimal Invariant for validator-path testing."""
+    return Invariant(
         id=rule_id,
         engine="transformers",
         library="transformers",
@@ -56,29 +56,29 @@ def _make_rule(
 
 
 class _StubLoader:
-    def __init__(self, rules: list[Rule]) -> None:
+    def __init__(self, rules: list[Invariant]) -> None:
         self._rules = tuple(rules)
 
-    def load_rules(self, engine: str) -> VendoredRules:
-        return VendoredRules(
+    def load_invariants(self, engine: str) -> EngineInvariants:
+        return EngineInvariants(
             engine=engine,
             schema_version="1.0.0",
             engine_version="test",
-            rules=self._rules,
+            invariants=self._rules,
         )
 
 
 class _NoCorpusLoader:
-    def load_rules(self, engine: str) -> VendoredRules:
+    def load_invariants(self, engine: str) -> EngineInvariants:
         raise FileNotFoundError(f"no corpus for {engine}")
 
 
-def _install_test_rules(monkeypatch: pytest.MonkeyPatch, rules: list[Rule]) -> None:
+def _install_test_rules(monkeypatch: pytest.MonkeyPatch, rules: list[Invariant]) -> None:
     """Substitute the module's loader accessor with a stub returning *rules*."""
     from llenergymeasure.config import models as models_mod
 
     stub = _StubLoader(rules)
-    monkeypatch.setattr(models_mod, "_get_rules_loader", lambda: stub)
+    monkeypatch.setattr(models_mod, "_get_invariants_loader", lambda: stub)
 
 
 @pytest.fixture(autouse=True)
@@ -211,7 +211,7 @@ def test_missing_corpus_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
     """FileNotFoundError from the loader is swallowed and logged at debug."""
     from llenergymeasure.config import models as models_mod
 
-    monkeypatch.setattr(models_mod, "_get_rules_loader", lambda: _NoCorpusLoader())
+    monkeypatch.setattr(models_mod, "_get_invariants_loader", lambda: _NoCorpusLoader())
 
     cfg = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
     assert cfg._dormant_observations == {}

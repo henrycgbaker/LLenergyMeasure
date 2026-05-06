@@ -1,30 +1,30 @@
-# Validation rules corpus
+# Engine invariants corpus
 
-This directory contains the SSOT for per-engine configuration validation rules — the
+This directory contains the SSOT for per-engine configuration invariants — the
 data that tells users "this combination will error", "this field will be
-silently ignored", or "this will trigger a library warning". Rules live as
+silently ignored", or "this will trigger a library warning". Invariants live as
 **data**, not code; a single generic Pydantic validator
 (landing in phase 50.2c) consumes the corpus and emits error / warn / dormant
-annotations per rule.
+annotations per invariant.
 
 Design doc: [`.product/designs/config-deduplication-dormancy/runtime-config-validation.md`](../../.product/designs/config-deduplication-dormancy/runtime-config-validation.md)
 (primary).
 
 ## Layout
 
-Each engine is a sub-package containing its validation rules and discovered schema:
+Each engine is a sub-package containing its validation invariants and discovered schema:
 
 - `{engine}/invariants.proposed.yaml` — post-mine corpus from `scripts/engine_miners/{engine}_miner.py`
-- `{engine}/invariants.vendored.yaml` — post-replay envelope from `scripts/validate_invariants.py`
+- `{engine}/invariants.validated.yaml` — post-validation envelope from `scripts/validate_invariants.py`
 - `{engine}/schema.discovered.json` — discovered parameters from `scripts/refresh_discovered_schemas.sh`
 - `{engine}/_staging/` — gitignored scratch directory for intermediate artefacts
 
 The `.proposed.yaml` is the post-mine corpus — declared expectations only. The
-`.vendored.yaml` is the post-replay envelope capturing observed outcomes plus any
+`.validated.yaml` is the post-validation envelope capturing observed outcomes plus any
 divergences from the proposed expectations. The runtime
-`VendoredRulesLoader` reads the `.vendored.yaml` when present and overlays
+`EngineInvariantsLoader` reads the `.validated.yaml` when present and overlays
 its observations onto the proposed YAML, falling back to the proposed YAML
-alone for local development without a vendor run.
+alone for local development without a validation run.
 
 ## File envelope
 
@@ -32,27 +32,26 @@ alone for local development without a vendor run.
 schema_version: "1.0.0"
 engine: transformers
 engine_version: "4.56.0"
-walker_pinned_range: ">=4.50,<5.0"
+miner_pinned_range: ">=4.50,<5.0"
 mined_at: "2026-04-23T00:00:00Z"
-rules:
+invariants:
   - id: ...
   - id: ...
 ```
 
 - `schema_version` — semver. Loader supports major 1; mismatches raise
   `UnsupportedSchemaVersionError` (see
-  `src/llenergymeasure/config/vendored_rules/loader.py`).
+  `src/llenergymeasure/config/engine_invariants/loader.py`).
 - `engine_version` — the library version the corpus was seeded against.
-  Informational; the vendor CI pipeline (50.2b) will revalidate against each
+  Informational; the validation-CI pipeline will revalidate against each
   Dockerfile-pinned version.
-- `walker_pinned_range` — echoes the miner module's `TESTED_AGAINST_VERSIONS`
-  constant. CI fails if the installed library is outside range.
+- `miner_pinned_range` — echoes the miner module's SSOT pin. CI fails if the installed library is outside range.
 - `mined_at` — ISO-8601 UTC timestamp of the miner run. Byte-reproducibility
   via `LLENERGY_MINER_FROZEN_AT=<timestamp>` env variable.
 
-## Rule schema
+## Invariant schema
 
-Every entry under `rules:` must populate the following fields.
+Every entry under `invariants:` must populate the following fields.
 
 ```yaml
 - id: transformers_greedy_strips_temperature
@@ -119,7 +118,7 @@ transformers.sampling.temperature: {present: true, not_equal: 1.0}
 ```
 
 `match.fields` is also AND-combined **across field paths** — every entry
-under `match.fields` must satisfy its predicate for the rule to fire.
+under `match.fields` must satisfy its predicate for the invariant to fire.
 Use this for cross-field preconditions (e.g. "fires when
 `num_beam_groups > 1` AND `diversity_penalty <= 0`").
 
@@ -134,8 +133,8 @@ transformers.sampling.watermarking_config:
   type_is_not: [WatermarkingConfig, SynthIDTextWatermarkingConfig]
 ```
 
-Every predicate in `match.fields` must hold for `rule.try_match(config)` to
-return a `RuleMatch`.
+Every predicate in `match.fields` must hold for `invariant.try_match(config)` to
+return an `InvariantMatch`.
 
 ### Cross-field references (`@field_path`)
 
@@ -170,7 +169,7 @@ match:
 
 References resolve to `None` when the target is missing; comparison
 operators treat `None` as "predicate does not fire", so a partially-set
-config never trips a cross-field rule by accident. References are also
+config never trips a cross-field invariant by accident. References are also
 walked recursively through list / tuple specs, so e.g.
 `{in: ['@x', '@y']}` resolves both items before evaluation.
 
@@ -181,16 +180,16 @@ predicate rather than raising.
 
 ### ID convention
 
-`{engine}_{rule_summary_snake}` — unique within engine. Miner-authored IDs
+`{engine}_{invariant_summary_snake}` — unique within engine. Miner-authored IDs
 encode the pattern (`greedy_strips_X`, `single_beam_strips_X`,
 `bnb_X_type`); manual seeds use a descriptive snake-case tail.
 
 ### Corpus invariants
 
-These are enforced via `tests/unit/config/vendored_rules/test_corpus_invariants.py`
-and extended by the vendor CI gate (`scripts/validate_invariants.py`).
+These are enforced via `tests/unit/config/engine_invariants/test_corpus_invariants.py`
+and extended by the validation-CI gate (`scripts/validate_invariants.py`).
 
-1. Every rule has a unique `id` within the engine.
+1. Every invariant has a unique `id` within the engine.
 2. `match.fields` is non-empty.
 3. Both `kwargs_positive` and `kwargs_negative` are populated.
 4. `severity` ↔ `expected_outcome.outcome` consistency:
@@ -199,7 +198,7 @@ and extended by the vendor CI gate (`scripts/validate_invariants.py`).
    - `dormant` ↔ `dormant_silent | dormant_announced`
 5. `dormant_silent` outcomes imply non-empty `expected_outcome.normalised_fields`.
 
-## Adding a rule
+## Adding an invariant
 
 ### Via miner (preferred)
 
@@ -208,24 +207,24 @@ and extended by the vendor CI gate (`scripts/validate_invariants.py`).
    (optionally with `LLENERGY_MINER_FROZEN_AT=<iso-utc>` for reproducibility).
 2. Inspect the diff against the previous corpus file. Review the predicate
    shape and verify it matches the library source before merging.
-3. Open a draft PR. The vendor CI gate verifies each rule fires on
+3. Open a draft PR. The validation-CI gate verifies each invariant fires on
    `kwargs_positive` and doesn't fire on `kwargs_negative`.
 
 ### Via manual seed
 
-Some rules live outside miner scope (e.g., vLLM's greedy-strip in
+Some invariants live outside miner scope (e.g., vLLM's greedy-strip in
 `EngineArgs.create_engine_config()` rather than `__post_init__`). Author the
 YAML entry directly:
 
 - Pick a descriptive `id`.
 - Set `added_by: manual_seed` and today's `added_at`.
 - Cite the source location in `references`.
-- Populate both `kwargs_positive` and `kwargs_negative`; the vendor CI step
+- Populate both `kwargs_positive` and `kwargs_negative`; the validation-CI step
   verifies both.
 
 ### Via feedback loop
 
-Two automated discovery channels populate rules from study runs: runtime
+Two automated discovery channels populate invariants from study runs: runtime
 warning capture (`runtime_warning`) and observed-collision detection
 (`observed_collision`). Both open draft PRs with `added_by` set accordingly.
 
@@ -233,9 +232,9 @@ warning capture (`runtime_warning`) and observed-collision detection
 
 When reviewing a corpus PR:
 
-- [ ] Invariants pass (`pytest tests/unit/config/vendored_rules/test_corpus_invariants.py`).
-- [ ] Each new rule's `message_template` reads correctly when substituted.
-- [ ] `kwargs_positive` genuinely triggers the rule in the target library.
+- [ ] Invariants pass (`pytest tests/unit/config/engine_invariants/test_corpus_invariants.py`).
+- [ ] Each new invariant's `message_template` reads correctly when substituted.
+- [ ] `kwargs_positive` genuinely triggers the invariant in the target library.
 - [ ] `kwargs_negative` genuinely does NOT trigger it.
 - [ ] `miner_source.path` is a stable relative path (site-packages-rooted).
 
@@ -245,5 +244,5 @@ When reviewing a corpus PR:
   `configs/example-study-full.yaml` and related. Corpus YAMLs are data, not
   executable configs.
 - The corpus is not consumed at runtime yet (phase 50.2c wires the generic
-  `@model_validator`). Today the loader parses the corpus so tests and 50.2b
+  `@model_validator`). Today the loader parses the corpus so tests and validation
   tooling have a stable entry point.

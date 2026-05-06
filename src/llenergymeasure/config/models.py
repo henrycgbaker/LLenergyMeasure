@@ -41,21 +41,21 @@ if TYPE_CHECKING:
         TransformersConfig,
         VLLMConfig,
     )
-    from llenergymeasure.config.vendored_rules.loader import VendoredRulesLoader
+    from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
 
 
 @lru_cache(maxsize=1)
-def _get_rules_loader() -> VendoredRulesLoader:
+def _get_invariants_loader() -> EngineInvariantsLoader:
     # Lazy import so module load doesn't read YAML off disk. Tests substitute
-    # via ``monkeypatch.setattr(models, "_get_rules_loader", ...)``.
-    from llenergymeasure.config.vendored_rules.loader import VendoredRulesLoader
+    # via ``monkeypatch.setattr(models, "_get_invariants_loader", ...)``.
+    from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
 
-    return VendoredRulesLoader()
+    return EngineInvariantsLoader()
 
 
 def _reset_rules_loader_cache() -> None:
     """Clear the memoised loader; used by tests that mutate the on-disk corpus."""
-    _get_rules_loader.cache_clear()
+    _get_invariants_loader.cache_clear()
 
 
 # =============================================================================
@@ -508,7 +508,7 @@ class ExperimentConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _apply_vendored_rules(self) -> ExperimentConfig:
+    def _apply_invariants(self) -> ExperimentConfig:
         # ``object.__setattr__`` bypasses Pydantic's ``extra='forbid'``;
         # consumers read via ``cfg._dormant_observations`` (dict keyed by
         # rule.id). Missing corpus is non-fatal — the rules layer is additive.
@@ -516,12 +516,12 @@ class ExperimentConfig(BaseModel):
 
         dormant_observations: dict[str, DormantField] = {}
         try:
-            rules = _get_rules_loader().load_rules(self.engine.value).rules
+            invariants = _get_invariants_loader().load_invariants(self.engine.value).invariants
         except FileNotFoundError:
-            logger.debug("No vendored rules corpus for engine %r; skipping.", self.engine.value)
-            rules = ()
+            logger.debug("No invariants corpus for engine %r; skipping.", self.engine.value)
+            invariants = ()
 
-        for rule in rules:
+        for rule in invariants:
             match = rule.try_match(self)
             if match is None:
                 continue
@@ -703,7 +703,7 @@ class ExecutionConfig(BaseModel):
         default=True,
         description=(
             "When true (default), sweep expansion applies library resolution to each declared "
-            "ExperimentConfig via vendored dormant-rule application and drops "
+            "ExperimentConfig via engine-invariants dormant-rule application and drops "
             "duplicates that share an resolved_config_hash. When false, every declared "
             "config runs — the library-resolution mechanism still populates equivalence-group "
             "metadata for the sidecar but no configs are elided. The --no-dedup "

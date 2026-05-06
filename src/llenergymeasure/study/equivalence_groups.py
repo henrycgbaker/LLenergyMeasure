@@ -61,7 +61,7 @@ class EquivalenceGroups:
 
     study_id: str
     dedup_mode: Literal["resolved", "off"]
-    vendored_rules_version: str = ""
+    validated_invariants_version: str = ""
     groups: list[PreRunGroup] = field(default_factory=list)
     observed_collision_groups: list[ObservedCollisionGroup] = field(default_factory=list)
 
@@ -165,7 +165,7 @@ def write_equivalence_groups(groups: EquivalenceGroups, path: Path) -> None:
     payload = {
         "study_id": groups.study_id,
         "dedup_mode": groups.dedup_mode,
-        "vendored_rules_version": groups.vendored_rules_version,
+        "validated_invariants_version": groups.validated_invariants_version,
         "groups": [asdict(g) for g in groups.groups],
         "observed_collision_groups": [asdict(g) for g in groups.observed_collision_groups],
     }
@@ -181,7 +181,9 @@ def load_equivalence_groups(path: Path) -> EquivalenceGroups:
     return EquivalenceGroups(
         study_id=str(data.get("study_id", "")),
         dedup_mode=dedup_mode,
-        vendored_rules_version=str(data.get("vendored_rules_version", "")),
+        validated_invariants_version=str(
+            data.get("validated_invariants_version", "") or data.get("vendored_rules_version", "")
+        ),
         groups=[_pre_from_dict(g) for g in data.get("groups", [])],
         observed_collision_groups=[
             _post_from_dict(g) for g in data.get("observed_collision_groups", [])

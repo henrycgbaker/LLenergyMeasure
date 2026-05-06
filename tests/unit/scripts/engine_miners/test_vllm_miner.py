@@ -10,7 +10,7 @@ Covers:
   installed library, raising :class:`MinerLandmarkMissingError` if any
   drifts away.
 - Fixpoint gate-soundness: ``assert_gate_soundness_fixpoint`` succeeds on
-  the real vendor gate, mirroring the transformers test.
+  the real validation gate, mirroring the transformers test.
 
 Tests are skipped when ``vllm`` isn't importable in the test environment
 (GH-hosted ``ubuntu-latest`` without the optional extra installed).
@@ -108,7 +108,7 @@ class TestLiftCallSites:
         """The dynamic miner intentionally skips ``_dataclass_lift(EngineArgs)``.
 
         Stdlib dataclass doesn't enforce Literal types — running the lift
-        here would emit ~23 unenforceable rules that all fail vendor-CI.
+        here would emit ~23 unenforceable invariants that all fail validation-CI.
         Pin the omission so a future refactor doesn't accidentally re-add
         the call.
         """

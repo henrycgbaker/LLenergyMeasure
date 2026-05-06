@@ -23,8 +23,8 @@ engines/
   transformers/
     __init__.py        # Re-exports TransformersEngine from plugin
     plugin.py          # HuggingFace Transformers engine
-    invariants.proposed.yaml    # Mined validation rules
-    invariants.vendored.yaml    # Vendor-replayed observations
+    invariants.proposed.yaml    # Mined proposed invariants
+    invariants.validated.yaml   # Validation-confirmed observations
     schema.discovered.json      # Introspected parameter schema
     _staging/          # Per-engine miner staging (gitkeep'd)
 
@@ -33,7 +33,7 @@ engines/
 ```
 
 The runtime data files (`invariants.*.yaml`, `schema.discovered.json`) are
-loaded by `llenergymeasure.config.vendored_rules.VendoredRulesLoader` and
+loaded by `llenergymeasure.config.engine_invariants.EngineInvariantsLoader` and
 `llenergymeasure.config.SchemaLoader` respectively. CI workflows
 (`update-engine-{invariants,schemas}.yml`) regenerate them via Renovate-driven
 library bumps and commit-back. See `INVARIANTS_README.md` for the corpus
@@ -55,7 +55,7 @@ class MyEngine:
     def check_hardware(self, config: ExperimentConfig) -> list[str]: ...
 ```
 
-`check_hardware()` returns a list of error strings (empty means compatible). Called via `engines.probe_adapter.build_config_probe()` at preflight to catch host-GPU mismatches (e.g., FP8 on A100, SM below the engine's floor). Framework-rule validation (library-semantics) lives in the vendored-rules corpus consumed by `ExperimentConfig._apply_vendored_rules`.
+`check_hardware()` returns a list of error strings (empty means compatible). Called via `engines.probe_adapter.build_config_probe()` at preflight to catch host-GPU mismatches (e.g., FP8 on A100, SM below the engine's floor). Framework-invariant validation (library-semantics) lives in the validated corpus consumed by `ExperimentConfig._apply_invariants`.
 
 `InferenceOutput` carries the minimal data the harness needs:
 

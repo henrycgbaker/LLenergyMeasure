@@ -1,4 +1,4 @@
-"""msgspec ``Struct`` → ``RuleCandidate[]`` lift.
+"""msgspec ``Struct`` → ``InvariantCandidate[]`` lift.
 
 Sub-library type-system lift consumed by per-engine miners. Walks
 :class:`msgspec.Struct` subclasses via :func:`msgspec.inspect.type_info` and
@@ -27,7 +27,7 @@ from typing import Any
 
 import msgspec
 
-from scripts.engine_miners._base import MinerSource, RuleCandidate
+from scripts.engine_miners._base import InvariantCandidate, MinerSource
 
 # msgspec maps annotated-types-style constraints onto these attribute names
 # on its ``Constraints`` info object. We mirror the pydantic lift's op-key
@@ -80,7 +80,7 @@ def lift(
     namespace: str,
     today: str,
     source_path: str,
-) -> list[RuleCandidate]:
+) -> list[InvariantCandidate]:
     """Extract validation-rule candidates from a ``msgspec.Struct`` subclass.
 
     Parameters
@@ -96,7 +96,7 @@ def lift(
 
     Returns
     -------
-    list[RuleCandidate]
+    list[InvariantCandidate]
         One candidate per ``Meta(...)`` numeric/length constraint or per
         ``Literal[...]`` allowlist. Empty if the struct has no annotations.
     """
@@ -115,7 +115,7 @@ def lift(
     if not isinstance(info, msgspec.inspect.StructType):
         return []
 
-    candidates: list[RuleCandidate] = []
+    candidates: list[InvariantCandidate] = []
     for field in info.fields:
         candidates.extend(
             _candidates_for_field(
@@ -142,9 +142,9 @@ def _candidates_for_field(
     source_path: str,
     namespace: str,
     today: str,
-) -> list[RuleCandidate]:
+) -> list[InvariantCandidate]:
     """Emit candidates for one ``msgspec`` struct field's type info."""
-    out: list[RuleCandidate] = []
+    out: list[InvariantCandidate] = []
     field_type = field.type
     field_name = field.name
 
@@ -217,9 +217,9 @@ def _build_numeric(
     source_path: str,
     namespace: str,
     today: str,
-) -> RuleCandidate:
+) -> InvariantCandidate:
     """Materialise a numeric-constraint rule candidate."""
-    return RuleCandidate(
+    return InvariantCandidate(
         id=f"{library}_{type_name.lower()}_{field_name}_{op_key.replace('>', 'gt').replace('<', 'lt').replace('=', 'e')}_{_slug(threshold)}",
         engine=library,
         library=library,
@@ -253,11 +253,11 @@ def _build_length(
     source_path: str,
     namespace: str,
     today: str,
-) -> RuleCandidate:
+) -> InvariantCandidate:
     """Materialise a length-constraint rule candidate."""
     bad = "" if op_key == "min_len" else "x" * (threshold + 1)
     good = "x" * (threshold if op_key == "min_len" else threshold)
-    return RuleCandidate(
+    return InvariantCandidate(
         id=f"{library}_{type_name.lower()}_{field_name}_{op_key}_{threshold}",
         engine=library,
         library=library,
@@ -290,9 +290,9 @@ def _build_literal(
     source_path: str,
     namespace: str,
     today: str,
-) -> RuleCandidate:
+) -> InvariantCandidate:
     """Materialise a Literal-allowlist rule candidate."""
-    return RuleCandidate(
+    return InvariantCandidate(
         id=f"{library}_{type_name.lower()}_{field_name}_in_{len(values)}_values",
         engine=library,
         library=library,

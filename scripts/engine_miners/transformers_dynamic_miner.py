@@ -1,4 +1,4 @@
-"""Transformers library-API introspection walker — combinatorial-probe edition.
+"""Transformers library-API introspection miner — combinatorial-probe edition.
 
 Derives validation rules from HF's runtime machinery by combinatorially
 sweeping related kwargs and inferring predicates from the raise/no-raise
@@ -42,19 +42,19 @@ Predicate inference (cluster path) covers, in order of preference:
   one specific value.
 
 Recall over precision: when multiple predicates fit, the inferrer emits
-ALL plausible candidates. The vendor CI
+ALL plausible candidates. The validation CI
 pipeline downstream re-runs each emitted rule's ``kwargs_positive`` /
 ``kwargs_negative`` against the live library; rules that misfire fail CI
 and are pruned. False positives are cheap; missed invariants are not.
 
-Every rule this walker emits carries ``added_by="dynamic_miner"``.
+Every invariant this miner emits carries ``added_by="dynamic_miner"``.
 
 BitsAndBytesConfig coverage gap
 -------------------------------
 This extractor is scoped to ``GenerationConfig`` (and its depth-1
 ``WatermarkingConfig`` / ``SynthIDTextWatermarkingConfig`` helpers). BNB
 ``post_init`` type-check raises are NOT emitted here. The pre-pipeline
-walker (:mod:`scripts.engine_miners.transformers`, deregistered) hand-curated
+miner (:mod:`scripts.engine_miners.transformers`, deregistered) hand-curated
 nine BNB rules; that path was lost in the refactor.
 
 Coverage is restored structurally by :mod:`scripts.engine_miners.transformers_static_miner`,
@@ -63,7 +63,7 @@ which AST-walks ``BitsAndBytesConfig.post_init`` directly — the
 ``type_is_not`` predicate path already handles. The AST walker reads
 ``transformers.utils.quantization_config`` source via
 ``inspect.getsourcefile`` rather than importing the library, which
-keeps the walker fast and dependency-free.
+keeps the miner fast and dependency-free.
 
 **Re. CUDA**: an earlier inherited comment claimed BNB introspection
 "touches CUDA". That's overstated. ``import bitsandbytes`` discovers
@@ -76,7 +76,7 @@ yet probe BNB is **scope** (the cluster wasn't added in the refactor),
 not CUDA.
 
 If/when BNB probing becomes useful (cross-validation against the AST
-walker, or to catch ``__init__``-time gates the AST walker doesn't
+miner, or to catch ``__init__``-time gates the AST walker doesn't
 currently walk like ``load_in_4bit AND load_in_8bit``), add a
 ``bitsandbytes_quant`` cluster: the ``_Cluster`` pattern below
 generalises directly to ``BitsAndBytesConfig`` — swap the constructor
@@ -107,15 +107,15 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 # When run as a script (``python scripts/engine_miners/transformers_dynamic_miner.py``),
 # Python prepends the script's directory to ``sys.path`` — that directory contains
-# ``transformers.py`` (the sibling walker module), which shadows the third-party
-# ``transformers`` package import. Drop the walkers dir so HF's ``transformers``
+# ``transformers.py`` (the sibling miner module), which shadows the third-party
+# ``transformers`` package import. Drop the miners dir so HF's ``transformers``
 # resolves correctly. Module-style invocation
 # (``python -m scripts.engine_miners.transformers_dynamic_miner``) avoids this trap
 # but the verification command in the task brief uses script-style.
 if str(_WALKERS_DIR) in sys.path:
     sys.path.remove(str(_WALKERS_DIR))
 
-from scripts.engine_miners._base import MinerSource, RuleCandidate  # noqa: E402
+from scripts.engine_miners._base import InvariantCandidate, MinerSource  # noqa: E402
 from scripts.engine_miners._dataclass_lift import lift as _dataclass_lift  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -532,7 +532,7 @@ def _run_cluster_probes(cluster: _Cluster) -> list[_ProbeRow]:
 
     # HF emits ``logger.warning`` lines on every dormant kwarg in __init__;
     # we capture validate(strict=True) raises programmatically and the warnings
-    # spam the walker output. Silence them at probe-time.
+    # spam the miner output. Silence them at probe-time.
     hf_logger = logging.getLogger("transformers.generation.configuration_utils")
     prev_level = hf_logger.level
     hf_logger.setLevel(logging.ERROR)
@@ -610,7 +610,7 @@ def _run_cartesian(
 
 
 @dataclass
-class _InferredRule:
+class _InferredInvariant:
     """Result of predicate inference over a probe-row group."""
 
     id_suffix: str
@@ -1137,9 +1137,9 @@ def _representative_message(error_rows: list[_ProbeRow]) -> str:
 def _extract_construct_error_rules(
     cluster: _Cluster,
     rows: list[_ProbeRow],
-) -> list[_InferredRule]:
+) -> list[_InferredInvariant]:
     """Run predicate inference for each construct-error message-class."""
-    rules: list[_InferredRule] = []
+    rules: list[_InferredInvariant] = []
     error_groups = _group_construct_errors_by_class(rows)
     for group_rows in error_groups.values():
         rules.extend(
@@ -1151,13 +1151,13 @@ def _extract_construct_error_rules(
 def _extract_validate_error_rules(
     cluster: _Cluster,
     rows: list[_ProbeRow],
-) -> list[_InferredRule]:
+) -> list[_InferredInvariant]:
     """Run predicate inference for each validate-error per-field group.
 
     These rows ARE dormancy, but cross-field gates (num_return_sequences > 1
     AND do_sample=False AND num_beams=1) often surface here.
     """
-    rules: list[_InferredRule] = []
+    rules: list[_InferredInvariant] = []
     field_groups = _group_validate_errors_by_field(rows)
     for affected_field, group_rows in field_groups.items():
         if affected_field in _DORMANCY_SKIP_FIELDS:
@@ -1183,7 +1183,7 @@ def _infer_rules_for_group(
     severity: str,
     method: str,
     affected_field_hint: str | None = None,
-) -> list[_InferredRule]:
+) -> list[_InferredInvariant]:
     """Try every predicate-inference shape; emit ALL fits with confidence ranking.
 
     Inference order is by specificity (most informative first):
@@ -1191,7 +1191,7 @@ def _infer_rules_for_group(
     → single-field threshold. Results are emitted with confidence:
 
     - ``high``  — exactly one inference shape fits.
-    - ``medium`` — two shapes fit (likely overlap, vendor CI prunes losers).
+    - ``medium`` — two shapes fit (likely overlap, validation CI prunes losers).
     - ``low``   — three or more shapes fit (ambiguous).
 
     Inference-shape order is also the rule-id suffix order, which keeps
@@ -1285,7 +1285,7 @@ def _infer_rules_for_group(
         )
 
     # If nothing more specific fits but we have a multi-field gate, emit it
-    # as a pure gate-equality / range rule. Lowest confidence — vendor CI
+    # as a pure gate-equality / range rule. Lowest confidence — validation CI
     # is the safety net.
     if not inferences and common_match_addition:
         if common_assignment:
@@ -1319,8 +1319,8 @@ def _infer_rules_for_group(
     else:
         confidence = "low"
 
-    # Build _InferredRule for each fit.
-    out: list[_InferredRule] = []
+    # Build _InferredInvariant for each fit.
+    out: list[_InferredInvariant] = []
     for id_suffix, _label, match_fields, affected_fields, declared_field in inferences:
         pn = _pick_positive_negative_for_predicate(cluster, all_rows, error_rows, affected_fields)
         if pn is None:
@@ -1339,7 +1339,7 @@ def _infer_rules_for_group(
         rule_under_test = _rule_under_test_for(method, declared_field, id_suffix)
 
         out.append(
-            _InferredRule(
+            _InferredInvariant(
                 id_suffix=id_suffix,
                 rule_under_test=rule_under_test,
                 severity=severity,
@@ -1454,10 +1454,10 @@ def _make_dormancy_candidate(
     abs_source_path: str,
     rel_source_path: str,
     today: str,
-) -> RuleCandidate:
+) -> InvariantCandidate:
     template = _substitute_declared_value(library_message, field_name, probe)
     line = _find_line(abs_source_path, f"self.{field_name}")
-    return RuleCandidate(
+    return InvariantCandidate(
         id=f"{trigger.id_prefix}{field_name}",
         engine="transformers",
         library="transformers",
@@ -1509,14 +1509,14 @@ _REFERENCE_BY_METHOD: dict[str, str] = {
 
 def _make_inferred_candidate(
     cluster: _Cluster,
-    rule: _InferredRule,
+    rule: _InferredInvariant,
     abs_source_path: str,
     rel_source_path: str,
     today: str,
-) -> RuleCandidate:
-    """Compose a ``RuleCandidate`` from a combinatorial-inference rule."""
+) -> InvariantCandidate:
+    """Compose a ``InvariantCandidate`` from a combinatorial-inference rule."""
     line = _find_line(abs_source_path, f"self.{_subject_field_from_id(rule.id_suffix)}")
-    return RuleCandidate(
+    return InvariantCandidate(
         id=f"transformers_{cluster.name}_{rule.id_suffix}",
         engine="transformers",
         library="transformers",
@@ -1550,13 +1550,13 @@ def _make_dormant_probe_candidate(
     abs_source_path: str,
     rel_source_path: str,
     today: str,
-) -> RuleCandidate:
-    """Compose a ``RuleCandidate`` from a hardcoded validate-time dormant probe."""
+) -> InvariantCandidate:
+    """Compose a ``InvariantCandidate`` from a hardcoded validate-time dormant probe."""
     template = _substitute_declared_value(
         library_message, probe.probed_field, probe.kwargs_positive[probe.probed_field]
     )
     line = _find_line(abs_source_path, f"self.{probe.probed_field}")
-    return RuleCandidate(
+    return InvariantCandidate(
         id=probe.id,
         engine="transformers",
         library="transformers",
@@ -1594,9 +1594,9 @@ def _walk_combinatorial(
     abs_source_path: str,
     rel_source_path: str,
     today: str,
-) -> tuple[list[RuleCandidate], int]:
+) -> tuple[list[InvariantCandidate], int]:
     """Run all clusters and return ``(candidates, total_probe_rows)``."""
-    candidates: list[RuleCandidate] = []
+    candidates: list[InvariantCandidate] = []
     total_rows = 0
     seen_ids: set[str] = set()
     for cluster in CLUSTERS:
@@ -1619,7 +1619,7 @@ def walk_generation_config_rules(
     abs_source_path: str,
     rel_source_path: str,
     today: str,
-) -> list[RuleCandidate]:
+) -> list[InvariantCandidate]:
     """Return all introspection-derived rules for ``GenerationConfig``.
 
     Composes three sources in deterministic order:
@@ -1641,7 +1641,7 @@ def walk_generation_config_rules(
     prev_level = hf_logger.level
     hf_logger.setLevel(logging.ERROR)
 
-    candidates: list[RuleCandidate] = []
+    candidates: list[InvariantCandidate] = []
 
     # Path 0: sub-library type-system lift (locked design §1 REVISED).
     # Composes the generic stdlib-dataclass lift over GenerationConfig and
@@ -1732,8 +1732,8 @@ def _relative_source_path(abs_path: str) -> str:
     return Path(abs_path).name
 
 
-def _candidate_to_dict(c: RuleCandidate) -> dict[str, Any]:
-    """Render a :class:`RuleCandidate` into the YAML corpus entry shape."""
+def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
+    """Render a :class:`InvariantCandidate` into the YAML corpus entry shape."""
     return {
         "id": c.id,
         "engine": c.engine,

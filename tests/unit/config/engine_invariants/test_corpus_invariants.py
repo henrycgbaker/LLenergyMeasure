@@ -1,6 +1,6 @@
 """Invariants enforced on the seeded validation-rules corpus.
 
-The vendor CI pipeline (a separate follow-up PR) runs a richer equivalent
+The validation CI pipeline (a separate follow-up PR) runs a richer equivalent
 of these checks — empirically verifying each rule's ``kwargs_positive``
 actually fires in the real library and ``kwargs_negative`` doesn't. These
 schema-level invariants are the offline backstop.
@@ -17,19 +17,19 @@ from pathlib import Path
 
 import pytest
 
-from llenergymeasure.config.vendored_rules import (
+from llenergymeasure.config.engine_invariants import (
     VALID_ADDED_BY,
     VALID_EMISSION_CHANNEL,
     VALID_OUTCOME,
     VALID_SEVERITY,
-    VendoredRulesLoader,
+    EngineInvariantsLoader,
 )
 
 
 @pytest.fixture(scope="module")
 def transformers_corpus():
-    loader = VendoredRulesLoader()
-    return loader.load_rules("transformers")
+    loader = EngineInvariantsLoader()
+    return loader.load_invariants("transformers")
 
 
 def test_corpus_covers_required_invariants(transformers_corpus) -> None:
@@ -41,18 +41,18 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
     ``.product/designs/config-deduplication-dormancy/runtime-config-validation.md``
     decision-log entry of 2026-04-25 (corpus-as-measurement principle).
     """
-    rules = transformers_corpus.rules
+    rules = transformers_corpus.invariants
 
     def covers_field(field_path: str) -> bool:
         return any(field_path in rule.match_fields for rule in rules)
 
     # Single-field invariants — at least one rule must touch each path.
     # Scope reflects the regenerated canonical corpus produced by
-    # ``scripts/engine_miners/build_corpus.py`` with the vendor-validation gate.
-    # Adding a path here means: a rule for that field must survive vendor
-    # validation against the pinned engine library (see ``engine_version``
+    # ``scripts/engine_miners/build_corpus.py`` with the validation gate.
+    # Adding a path here means: an invariant for that field must survive validation
+    # against the pinned engine library (see ``engine_version``
     # in the corpus envelope). If a path drops out, investigate WHY (real
-    # extractor regression, real library change, or vendor-harness gap)
+    # extractor regression, real library change, or validation-harness gap)
     # before weakening this list.
     required_fields = (
         # Greedy dormancy: do_sample=False / num_beams=1 strip these.
@@ -68,7 +68,7 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         "transformers.sampling.length_penalty",
         # Note: num_beam_groups + diversity_penalty validations were softened
         # in transformers 4.57.x (error → dormant_announced or no_op). The
-        # vendor-CI gate quarantines the corpus rules that previously claimed
+        # validation-CI gate quarantines the corpus rules that previously claimed
         # error severity. Coverage loss tracked separately; do NOT re-add
         # without first confirming the library re-introduced enforcement.
         # No-return-dict dormancy.
@@ -83,7 +83,7 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         "transformers.sampling.compile_config",
         # PR #387 cross-field invariant gates.
         "transformers.sampling.num_beams",
-        # Watermarking + BNB type-check paths landed in PR 5 (vendor-
+        # Watermarking + BNB type-check paths landed in PR 5 (validation-
         # validation gate). The BNB rules use the field paths the real
         # ExperimentConfig schema exposes (``transformers.load_in_4bit``
         # etc.) rather than the old ``transformers.quant.<field>`` paths
@@ -95,7 +95,7 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         "transformers.llm_int8_skip_modules",
         "transformers.llm_int8_enable_fp32_cpu_offload",
         "transformers.llm_int8_has_fp16_weight",
-        # Note: transformers.bnb_4bit_compute_dtype — vendor-CI quarantined
+        # Note: transformers.bnb_4bit_compute_dtype — validation-CI quarantined
         # the type-check rule under 4.57.3. Coverage loss tracked in a
         # follow-up alongside num_beam_groups / diversity_penalty.
         "transformers.bnb_4bit_quant_type",
@@ -129,7 +129,7 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
     # Corpus-as-measurement: the regenerated corpus is machine-extracted by
     # construction, so no rule should carry ``added_by: manual_seed``. Any
     # manual entry indicates a hand-edit of the canonical YAML that bypasses
-    # the build_corpus.py + vendor-validation gate and would silently drift
+    # the build_corpus.py + validation gate and would silently drift
     # on the next library bump. This PR's regeneration drops the legacy
     # hand-curated BNB type-check entries; the AST walker now emits them
     # under ``added_by: static_miner``.
@@ -145,56 +145,56 @@ def test_corpus_schema_version_is_current(transformers_corpus) -> None:
 
 
 def test_corpus_ids_unique(transformers_corpus) -> None:
-    ids = [rule.id for rule in transformers_corpus.rules]
+    ids = [invariant.id for invariant in transformers_corpus.invariants]
     assert len(ids) == len(set(ids))
 
 
 def test_corpus_match_fields_non_empty(transformers_corpus) -> None:
-    for rule in transformers_corpus.rules:
-        assert rule.match_fields, f"Rule {rule.id} has empty match.fields"
+    for invariant in transformers_corpus.invariants:
+        assert invariant.match_fields, f"Invariant {invariant.id} has empty match.fields"
 
 
 def test_corpus_kwargs_positive_and_negative_populated(transformers_corpus) -> None:
-    for rule in transformers_corpus.rules:
-        assert rule.kwargs_positive, f"Rule {rule.id} has empty kwargs_positive"
-        assert rule.kwargs_negative, f"Rule {rule.id} has empty kwargs_negative"
+    for invariant in transformers_corpus.invariants:
+        assert invariant.kwargs_positive, f"Invariant {invariant.id} has empty kwargs_positive"
+        assert invariant.kwargs_negative, f"Invariant {invariant.id} has empty kwargs_negative"
 
 
 def test_corpus_severity_values_are_valid(transformers_corpus) -> None:
-    for rule in transformers_corpus.rules:
-        assert rule.severity in VALID_SEVERITY, rule.id
+    for invariant in transformers_corpus.invariants:
+        assert invariant.severity in VALID_SEVERITY, invariant.id
 
 
 def test_corpus_outcome_values_are_valid(transformers_corpus) -> None:
-    for rule in transformers_corpus.rules:
-        outcome = rule.expected_outcome.get("outcome")
-        assert outcome in VALID_OUTCOME, f"{rule.id}: bad outcome {outcome!r}"
+    for invariant in transformers_corpus.invariants:
+        outcome = invariant.expected_outcome.get("outcome")
+        assert outcome in VALID_OUTCOME, f"{invariant.id}: bad outcome {outcome!r}"
 
 
 def test_corpus_emission_channels_valid(transformers_corpus) -> None:
-    for rule in transformers_corpus.rules:
-        channel = rule.expected_outcome.get("emission_channel")
-        assert channel in VALID_EMISSION_CHANNEL, f"{rule.id}: {channel!r}"
+    for invariant in transformers_corpus.invariants:
+        channel = invariant.expected_outcome.get("emission_channel")
+        assert channel in VALID_EMISSION_CHANNEL, f"{invariant.id}: {channel!r}"
 
 
 def test_corpus_severity_outcome_consistency(transformers_corpus) -> None:
-    for rule in transformers_corpus.rules:
-        outcome = rule.expected_outcome["outcome"]
-        if rule.severity == "error":
-            assert outcome == "error", f"{rule.id}: severity=error but outcome={outcome}"
-        elif rule.severity == "warn":
-            assert outcome == "warn", f"{rule.id}: severity=warn but outcome={outcome}"
-        elif rule.severity == "dormant":
+    for invariant in transformers_corpus.invariants:
+        outcome = invariant.expected_outcome["outcome"]
+        if invariant.severity == "error":
+            assert outcome == "error", f"{invariant.id}: severity=error but outcome={outcome}"
+        elif invariant.severity == "warn":
+            assert outcome == "warn", f"{invariant.id}: severity=warn but outcome={outcome}"
+        elif invariant.severity == "dormant":
             assert outcome in {"dormant_silent", "dormant_announced"}, (
-                f"{rule.id}: severity=dormant but outcome={outcome}"
+                f"{invariant.id}: severity=dormant but outcome={outcome}"
             )
 
 
 def test_corpus_dormant_silent_has_normalised_fields(transformers_corpus) -> None:
-    for rule in transformers_corpus.rules:
-        if rule.expected_outcome.get("outcome") == "dormant_silent":
-            normalised = rule.expected_outcome.get("normalised_fields")
-            assert normalised, f"{rule.id}: dormant_silent but no normalised_fields"
+    for invariant in transformers_corpus.invariants:
+        if invariant.expected_outcome.get("outcome") == "dormant_silent":
+            normalised = invariant.expected_outcome.get("normalised_fields")
+            assert normalised, f"{invariant.id}: dormant_silent but no normalised_fields"
 
 
 def test_corpus_added_by_values_valid(transformers_corpus) -> None:
@@ -202,8 +202,10 @@ def test_corpus_added_by_values_valid(transformers_corpus) -> None:
     # loader's UnknownAddedByError would have rejected the rule at parse
     # time if the value were outside the enum. Kept here for human-readable
     # catalogue + defence-in-depth.
-    for rule in transformers_corpus.rules:
-        assert rule.added_by in VALID_ADDED_BY, f"{rule.id}: added_by={rule.added_by!r}"
+    for invariant in transformers_corpus.invariants:
+        assert invariant.added_by in VALID_ADDED_BY, (
+            f"{invariant.id}: added_by={invariant.added_by!r}"
+        )
 
 
 def test_corpus_file_is_valid_yaml() -> None:
@@ -222,4 +224,4 @@ def test_corpus_file_is_valid_yaml() -> None:
     assert path.exists()
     doc = yaml.safe_load(path.read_text())
     assert isinstance(doc, dict)
-    assert "rules" in doc
+    assert "invariants" in doc

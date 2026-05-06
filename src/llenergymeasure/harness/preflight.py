@@ -147,7 +147,7 @@ def run_preflight(config: ExperimentConfig) -> None:
     if model_error is not None:
         failures.append(model_error)
 
-    # Check 4: Hardware compatibility (vendored-rules validator runs at
+    # Check 4: Hardware compatibility (invariants validator runs at
     # config-load; this catches host-GPU-dependent issues via check_hardware).
     try:
         from llenergymeasure.engines.probe_adapter import build_config_probe

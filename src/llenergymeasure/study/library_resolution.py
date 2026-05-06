@@ -1,20 +1,20 @@
-"""Sweep library-resolution mechanism — apply vendored dormant rules to fixpoint, dedup by resolved_config_hash.
+"""Sweep library-resolution mechanism — apply validated dormant invariants to fixpoint, dedup by resolved_config_hash.
 
 Design: ``.product/designs/config-deduplication-dormancy/sweep-dedup.md`` §2.
 
 The library-resolution mechanism is the host-side, pre-dispatch layer that normalises every
-field the vendored corpus marks as ``dormant``. Each rule's fired-state
+field the engine-invariants corpus marks as ``dormant``. Each invariant's fired-state
 projection is taken from its match predicate's "not_equal" / "present"
 operand (the sentinel value the predicate is *deviating from*) — that same
 projection is what :mod:`scripts.engine_miners._fixpoint_test` enforces in CI, so
 runtime canonicalisation and CI correctness tests apply an identical
 normalisation.
 
-Rules chain (vLLM epsilon-clamp → greedy-normalise); iteration is capped at
+Invariants chain (vLLM epsilon-clamp → greedy-normalise); iteration is capped at
 :data:`_MAX_ITER` to surface cycles via :class:`LibraryResolutionCycleError`.
 
 Out-of-scope per PLAN §Scope OUT: vLLM/TRT-LLM corpora don't exist yet, so
-this PR mostly exercises the transformers rules. The library-resolution mechanism itself is
+this PR mostly exercises the transformers invariants. The library-resolution mechanism itself is
 engine-generic.
 """
 
@@ -24,12 +24,12 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.config.vendored_rules.loader import (
-    Rule,
-    VendoredRulesLoader,
+from llenergymeasure.config.engine_invariants.loader import (
+    EngineInvariantsLoader,
+    Invariant,
     resolve_field_path,
 )
+from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.study.hashing import build_resolved_view, hash_config
 
 logger = logging.getLogger(__name__)
@@ -45,16 +45,16 @@ passes; 10 is generous headroom that still surfaces a rule cycle quickly.
 class LibraryResolutionCycleError(RuntimeError):
     """The library-resolution mechanism did not reach a fixpoint within :data:`_MAX_ITER` passes.
 
-    Indicates a cycle in the vendored rules corpus (rule A produces state
-    matching rule B which produces state matching rule A). The corpus vendor
-    step's shuffle-application test is supposed to catch this at CI time,
+    Indicates a cycle in the engine-invariants corpus (invariant A produces state
+    matching invariant B which produces state matching invariant A). The corpus
+    validation step's shuffle-application test is supposed to catch this at CI time,
     but this guard prevents runtime hangs if a bad corpus ships anyway.
     """
 
     def __init__(self, final_config: ExperimentConfig, iterations: int) -> None:
         super().__init__(
             f"Library resolution did not reach fixpoint within {iterations} iterations. "
-            f"Likely a cycle in the vendored rules corpus. "
+            f"Likely a cycle in the engine-invariants corpus. "
             f"Final engine={final_config.engine}."
         )
         self.final_config = final_config
@@ -67,7 +67,7 @@ class LibraryResolutionCycleError(RuntimeError):
 
 
 def _apply_rules_fixpoint(
-    config: ExperimentConfig, rules: list[Rule] | tuple[Rule, ...]
+    config: ExperimentConfig, rules: list[Invariant] | tuple[Invariant, ...]
 ) -> ExperimentConfig:
     """Apply every ``dormant``-severity rule to ``config`` repeatedly until stable.
 
@@ -77,11 +77,11 @@ def _apply_rules_fixpoint(
     Args:
         config: A validated ``ExperimentConfig``.
         rules: The rule list for the config's engine (typically from
-            ``VendoredRulesLoader.load_rules(engine).rules``).
+            ``EngineInvariantsLoader.load_invariants(engine).invariants``).
 
     Raises:
         LibraryResolutionCycleError: If the fixpoint loop exceeds
-            :data:`_MAX_ITER` passes — the vendored corpus has a rule cycle.
+            :data:`_MAX_ITER` passes — the validated corpus has an invariant cycle.
     """
     dormant_rules = [r for r in rules if r.severity in ("dormant", "dormant_silent")]
     if not dormant_rules:
@@ -106,7 +106,7 @@ def _apply_rules_fixpoint(
     raise LibraryResolutionCycleError(current, _MAX_ITER)
 
 
-def _rule_normalisations(rule: Rule) -> dict[str, Any]:
+def _rule_normalisations(rule: Invariant) -> dict[str, Any]:
     """Return ``{field_path: canonical_value}`` the rule normalises to.
 
     Strategy (per sweep-dedup.md §2.1 and the fixpoint test's projection):
@@ -223,8 +223,8 @@ class DedupResult:
 def resolve_library_effective(
     configs: list[ExperimentConfig],
     *,
-    rules: list[Rule] | tuple[Rule, ...] | None = None,
-    loader: VendoredRulesLoader | None = None,
+    rules: list[Invariant] | tuple[Invariant, ...] | None = None,
+    loader: EngineInvariantsLoader | None = None,
     deduplicate: bool = True,
 ) -> DedupResult:
     """Canonicalise then (optionally) resolved-config-hash dedup ``configs``.
@@ -238,7 +238,7 @@ def resolve_library_effective(
         configs: Sweep-expanded declared configs.
         rules: Optional explicit rule list. Overrides the loader when the
             sweep is single-engine and the caller has a rules handle.
-        loader: Optional ``VendoredRulesLoader``. Defaults to a fresh one
+        loader: Optional ``EngineInvariantsLoader``. Defaults to a fresh one
             (per-process cache is internal to each instance).
         deduplicate: When ``False``, every declared config still runs —
             groups are computed for the equivalence-groups sidecar but the
@@ -250,15 +250,15 @@ def resolve_library_effective(
     if not configs:
         return DedupResult(canonical_configs=[])
 
-    resolved_loader = loader or VendoredRulesLoader()
+    resolved_loader = loader or EngineInvariantsLoader()
     explicit_rules = tuple(rules) if rules is not None else None
 
-    def _rules_for(cfg: ExperimentConfig) -> tuple[Rule, ...]:
+    def _rules_for(cfg: ExperimentConfig) -> tuple[Invariant, ...]:
         if explicit_rules is not None:
             return explicit_rules
         engine = cfg.engine.value if hasattr(cfg.engine, "value") else str(cfg.engine)
         try:
-            return resolved_loader.load_rules(engine).rules
+            return resolved_loader.load_invariants(engine).invariants
         except FileNotFoundError:
             return ()
 

@@ -43,16 +43,16 @@ LLenergyMeasure has two pipelines that work together to give users early, action
   │   │         │               │                                       │
   │   │    build_corpus.py      │  merge + dedup + fingerprint         │
   │   │         │               │                                       │
-  │   │    vendor_rules.py      │  replay against live library         │
+  │   │    validate_invariants.py      │  replay against live library         │
   │   │         │               │                                       │
   │   │  proposed corpus YAML   │  src/llenergymeasure/engines/          │
   │   │                          │  {e}.proposed.yaml                   │
-  │   │  vendored corpus YAML   │  src/llenergymeasure/engines/          │
-  │   │                          │  {e}.vendored.yaml                   │
+  │   │  validated corpus YAML   │  src/llenergymeasure/engines/          │
+  │   │                          │  {e}.validated.yaml                   │
   │   └─────────────────────────┘                                       │
   └─────────────────────────────────────────────────────────────────────┘
                       │
-                      │ vendored YAML ships with package
+                      │ validated YAML ships with package
                       │
   ┌─────────────────────────────────────────────────────────────────────┐
   │  RUNTIME (user submits ExperimentConfig)                            │
@@ -61,7 +61,7 @@ LLenergyMeasure has two pipelines that work together to give users early, action
   │              │                                                      │
   │              ▼                                                      │
   │   ┌─────────────────────────┐                                       │
-  │   │  Config Validation      │  src/.../config/vendored_rules/      │
+  │   │  Config Validation      │  src/.../config/engine_invariants/      │
   │   │  Pipeline               │  loader.py                           │
   │   │                         │                                       │
   │   │  ┌───────────────┐      │                                       │
@@ -91,7 +91,7 @@ LLenergyMeasure has two pipelines that work together to give users early, action
 
 **Inputs:** Engine library source code (at a pinned version).
 
-**Outputs:** `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` (maintainer-seeded corpus, post-mining) and `src/llenergymeasure/engines/{engine}/invariants.vendored.yaml` (CI-validated observed behaviour, post-vendor-replay; both ship with the package).
+**Outputs:** `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` (maintainer-seeded corpus, post-mining) and `src/llenergymeasure/engines/{engine}/invariants.validated.yaml` (CI-validated observed behaviour, post-validate-replay; both ship with the package).
 
 **Three components:**
 - Static miner - walks Python AST of validator methods; no constructor calls.
@@ -102,9 +102,9 @@ Deep-dive: [miner-pipeline.md](/architecture/miner-pipeline)
 
 ### 2. The parameter-discovery / config-validation pipeline
 
-**What it does:** At runtime, when a user submits an `ExperimentConfig`, evaluates each rule in the vendored corpus against the config and rejects invalid combinations before engine initialisation begins.
+**What it does:** At runtime, when a user submits an `ExperimentConfig`, evaluates each invariant in the validated corpus against the config and rejects invalid combinations before engine initialisation begins.
 
-**Inputs:** User's `ExperimentConfig`; vendored corpus YAML.
+**Inputs:** User's `ExperimentConfig`; validated corpus YAML.
 
 **Outputs:** Error / warning / dormant annotations surfaced to the user via the CLI or the Python API.
 
@@ -135,12 +135,12 @@ Both pipelines sit inside the larger LLenergyMeasure architecture. The config-va
   Layer 1  infra/          Docker runner, container entrypoint
                │
   Layer 0  config/  ◄──── config validation pipeline lives here
-           domain/         vendored_rules/loader.py
+           domain/         engine_invariants/loader.py
            device/
            utils/
 ```
 
-The invariant miner pipeline lives in `scripts/engine_miners/` - it is a build-time tool, not a library module. Its output is the vendored corpus that ships with the package.
+The invariant miner pipeline lives in `scripts/engine_miners/` - it is a build-time tool, not a library module. Its output is the validated corpus that ships with the package.
 
 ---
 
@@ -154,7 +154,7 @@ The invariant miner pipeline lives in `scripts/engine_miners/` - it is a build-t
   (Dockerfile ARG default is derived at build time from the SSOT)
                │
                ▼
-  Engine-invariants pipeline fires (probe + mine + vendor)
+  Engine-invariants pipeline fires (probe + mine + validate)
                │
                ├──► transformers: build-engine-image.yml builds the
                │    image (cache export only, no runtime push), then
@@ -181,15 +181,15 @@ The invariant miner pipeline lives in `scripts/engine_miners/` - it is a build-t
        (lift modules — pydantic / msgspec / dataclass — run inside
         build_corpus.py; static miner wins on match.fields, dynamic miner
         wins on message_template.)
-    3. Vendor-replay — vendor_rules.py replays every rule against the
+    3. Vendor-replay — validate_invariants.py replays every rule against the
        live library (checks: kwargs_positive raises, message matches
        template, kwargs_negative does NOT raise). Confirmed cases write
-       to src/llenergymeasure/engines/{engine}/invariants.vendored.yaml; divergent
+       to src/llenergymeasure/engines/{engine}/invariants.validated.yaml; divergent
        rules surface as a non-zero exit when --fail-on-divergence is set.
     4. Doc-gen — generate_invariants_doc.py refreshes
        docs/generated/invariants-{engine}.md.
     5. Atomic writeback — one bot commit covers proposed.yaml,
-       vendored.yaml, the digest doc, and engine_versions/{engine}.compat.json.
+       validated.yaml, the digest doc, and engine_versions/{engine}.compat.json.
                │
                ▼
   CI must be green before merge
@@ -224,7 +224,7 @@ The corpus complements, rather than replaces, engine-side validation: it capture
 
 Live introspection at runtime would require importing each engine at startup - which on vLLM and TRT-LLM means initialising CUDA contexts. The corpus is pre-computed and ships as a JSON file that loads in a few milliseconds with no GPU dependency.
 
-The trade-off is staleness risk: the corpus must be regenerated when the engine library changes. The Renovate-driven refresh loop and the vendor-CI gate together enforce this discipline. See [miner-pipeline.md - Renovate refresh loop](/architecture/miner-pipeline#renovate-driven-refresh-loop).
+The trade-off is staleness risk: the corpus must be regenerated when the engine library changes. The Renovate-driven refresh loop and the validation-CI gate together enforce this discipline. See [miner-pipeline.md - Renovate refresh loop](/architecture/miner-pipeline#renovate-driven-refresh-loop).
 
 ---
 
@@ -236,12 +236,12 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 | **Static miner** | The AST-walking component; reads source, no constructor calls |
 | **Dynamic miner** | The probing component; constructs config objects, observes raises |
 | **Lift module** | Type-system adapter; extracts constraints from Pydantic / msgspec / dataclass metadata |
-| **Corpus** | The YAML file of extracted, vendor-validated rules for one engine |
-| **Vendored JSON** | The CI-observed version of the corpus that ships with the package |
-| **Vendor-CI gate** | The step that replays every rule against the live library; divergences fail CI |
-| **Fixpoint contract** | `_fixpoint_test.py` - asserts dormant rules converge to a stable state under repeated application |
-| **AddedBy** | Provenance field on each rule: `static_miner`, `dynamic_miner`, `pydantic_lift`, `msgspec_lift`, `dataclass_lift`, `manual_seed`, `runtime_warning`, `observed_collision` (full reference in [validation-rule-corpus.md](/architecture/validation-rule-corpus#added_by)) |
-| **MinerSource** | The `{path, method, line_at_scan}` record pointing back to the library source line that produced a rule |
+| **Corpus** | The YAML file of extracted, validation-gate-confirmed invariants for one engine |
+| **Validated YAML** | The CI-observed version of the corpus that ships with the package |
+| **Validation-CI gate** | The step that replays every invariant against the live library; divergences fail CI |
+| **Fixpoint contract** | `_fixpoint_test.py` - asserts dormant invariants converge to a stable state under repeated application |
+| **AddedBy** | Provenance field on each invariant: `static_miner`, `dynamic_miner`, `pydantic_lift`, `msgspec_lift`, `dataclass_lift`, `manual_seed`, `runtime_warning`, `observed_collision` (full reference in [validation-rule-corpus.md](/architecture/validation-rule-corpus#added_by)) |
+| **MinerSource** | The `{path, method, line_at_scan}` record pointing back to the library source line that produced an invariant |
 | **Loader grammar** | The predicate DSL used in `match.fields`: `in`, `not_in`, `@field_ref`, `not_divisible_by`, `type_is`, etc. |
 
 ---
@@ -263,20 +263,20 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
       ├── vllm_static_miner.py    (in flight)
       ├── vllm_dynamic_miner.py   (in flight)
       ├── tensorrt_static_miner.py  (in flight)
-      └── build_corpus.py         Merge + dedup + vendor-validate orchestration
+      └── build_corpus.py         Merge + dedup + validation-gate orchestration
 
   scripts/
-  ├── vendor_rules.py             Replay rules against live library; write vendored YAML
-  └── _invariant_vendor_common.py Shared capture + comparison utilities
+  ├── validate_invariants.py             Replay invariants against live library; write validated YAML
+  └── _invariant_validation_common.py Shared capture + comparison utilities
 
   configs/
   └── engine_invariants/
       ├── transformers.proposed.yaml   Authoritative corpus post-mine (transformers)
-      ├── transformers.vendored.yaml   Vendored observations post-replay (transformers)
+      ├── transformers.validated.yaml   Validated observations post-replay (transformers)
       └── _staging/                    Per-miner staging output (not committed)
 
   src/llenergymeasure/config/
-  └── vendored_rules/
+  └── engine_invariants/
       ├── loader.py                    Runtime corpus consumer + predicate engine
       └── __init__.py
 

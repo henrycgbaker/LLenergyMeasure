@@ -1,7 +1,7 @@
 """Unit tests for ``engines.probe_adapter.build_config_probe``.
 
 The adapter composes hardware errors (from ``EnginePlugin.check_hardware``)
-with dormancy observations (from ``ExperimentConfig._apply_vendored_rules``)
+with dormancy observations (from ``ExperimentConfig._apply_invariants``)
 into a :class:`ConfigProbe`. M1 leaves effective-params placeholders empty;
 they come to life when the M2 introspection walker supplies the surface.
 """

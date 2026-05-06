@@ -1,9 +1,9 @@
 schema_version: 1.0.0
 engine: vllm
 engine_version: 0.17.1
-walker_pinned_range: <0.18,>=0.17
+miner_pinned_range: <0.18,>=0.17
 mined_at: '2026-04-27'
-rules:
+invariants:
 - id: vllm_cacheconfig_cache_dtype_in_7_values
   engine: vllm
   library: vllm

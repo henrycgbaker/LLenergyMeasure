@@ -2,7 +2,7 @@
 
 Covers happy-path constraint extraction (numeric ge/le, multiple_of, Literal)
 plus the empty-on-non-Pydantic edge case. Uses ad-hoc Pydantic models so
-the tests don't depend on any vendored library version.
+the tests don't depend on any pinned library version.
 """
 
 from __future__ import annotations

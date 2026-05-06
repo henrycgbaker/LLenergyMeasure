@@ -6,8 +6,8 @@ per-engine miners will compose to extract validation rules from pinned
 library source. No concrete miner ships today; they land as independent
 PRs per engine.
 
-- :class:`RuleCandidate` — the miner output type, serialised to the YAML
-  corpus entry shape in :mod:`llenergymeasure.config.vendored_rules.loader`.
+- :class:`InvariantCandidate` — the miner output type, serialised to the YAML
+  corpus entry shape in :mod:`llenergymeasure.config.engine_invariants.loader`.
 - :class:`MinerVersionMismatchError`, :class:`MinerLandmarkMissingError` —
   fail-loud exceptions CI treats as fatal.
 - :func:`check_installed_version` — version-envelope guard for each miner;
@@ -57,12 +57,12 @@ class MinerSource:
 
 
 @dataclass
-class RuleCandidate:
+class InvariantCandidate:
     """One extracted rule candidate.
 
     Serialised verbatim into ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``
     after human review. Field names match the corpus schema so no
-    translation step is needed between walker output and corpus entry.
+    translation step is needed between miner output and corpus entry.
     """
 
     id: str
@@ -83,7 +83,7 @@ class RuleCandidate:
 
 
 # ---------------------------------------------------------------------------
-# Error types (all inherit from a common base so per-engine walkers can
+# Error types (all inherit from a common base so per-engine miners can
 # raise-or-collect uniformly at CI time)
 # ---------------------------------------------------------------------------
 
@@ -204,7 +204,7 @@ def first_string_arg(call: ast.Call) -> str | None:
       Variable-template forms (``template_var.format(...)``) need scope
       resolution unavailable at this layer; they fall through to ``None``.
 
-    All three avoid returning literal Python source — vendor-CI substring
+    All three avoid returning literal Python source — validation-CI substring
     matching against the live library's rendered string fails on source.
     """
     for arg in call.args:
@@ -268,7 +268,7 @@ def render_binop_concat_template(node: ast.expr) -> str | None:
     parts kept verbatim; ``self.X`` and ``str(self.X)`` / ``repr(self.X)``
     render as ``{X}`` placeholders. Returns ``None`` if any operand can't be
     rendered cleanly — preferable to leaking literal Python source via
-    ``ast.unparse``, which breaks vendor-CI substring matching.
+    ``ast.unparse``, which breaks validation-CI substring matching.
     """
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
@@ -336,7 +336,7 @@ def resolve_local_assign(func: ast.FunctionDef, name: str) -> str | None:
     fine for message templates that are constant per function call,
     brittle for names the function reassigns. Suits current HF validate()
     shape; if a future library uses branch-local message templates, the
-    walker calling site needs a richer resolver.
+    miner calling site needs a richer resolver.
     """
     for node in func.body:
         if not isinstance(node, ast.Assign) or len(node.targets) != 1:
@@ -453,7 +453,7 @@ class ConditionalLoggerWarningDetector:
     Strictly matches two-element paths (``logger.<method>``). Patterns like
     ``logger.sub.warning(...)`` or ``self.logger.warning(...)`` do NOT match
     — if a real library rule uses a non-top-level logger attribute, the
-    walker for that library must supply its own detector.
+    miner for that library must supply its own detector.
     """
 
     def detect(self, stmt: ast.stmt) -> DetectedPattern | None:
@@ -526,7 +526,7 @@ _DEFAULT_DETECTORS: tuple[
 )
 """Private default detector bundle — ordered by specificity.
 
-Per-engine walkers are expected to assemble their own tuple from the
+Per-engine miners are expected to assemble their own tuple from the
 individual detector classes, so this constant is not part of the public
 API. Ordering rationale for the default: ``raise`` before self-assign
 ensures raise+rollback chains are attributed to the raise; ``minor_issues``
@@ -543,13 +543,13 @@ def default_detectors() -> tuple[
     | MinorIssuesDictAssignDetector,
     ...,
 ]:
-    """Return the default detector tuple — walkers copy / slice this to taste.
+    """Return the default detector tuple — miners copy / slice this to taste.
 
     **Stability contract:** the tuple's *contents* and *ordering* may grow
     or shift as new detectors are added to cover additional libraries.
-    Walkers that need behaviour-stable detection across corpus-pipeline
+    Miners that need behaviour-stable detection across corpus-pipeline
     reruns should capture a local tuple (e.g. select-by-class-name) at
-    walker definition time rather than calling this each walk.
+    miner definition time rather than calling this each scan.
     """
     return _DEFAULT_DETECTORS
 
@@ -569,7 +569,7 @@ def filter_condition_references_self(condition: ast.expr, public_fields: frozens
     ``if strict: raise ValueError(...)`` inside ``validate(self, strict=False)``
     get dropped even though they CAN represent real config constraints when
     the kwarg's default changes the behaviour. If a library exposes such a
-    rule, the walker for it must supply its own condition-inclusion filter
+    rule, the miner for it must supply its own condition-inclusion filter
     (via composition) rather than relying on this one. Pinning this
     behaviour explicitly here so the contract is discoverable at the
     definition site, not only in design-review notes.
@@ -621,8 +621,8 @@ def filter_kwargs_positive_derivable(condition: ast.expr) -> bool:
     return True
 
 
-def candidate_to_dict(candidate: RuleCandidate) -> dict[str, Any]:
-    """Serialize a RuleCandidate to the YAML corpus dict shape.
+def candidate_to_dict(candidate: InvariantCandidate) -> dict[str, Any]:
+    """Serialize a InvariantCandidate to the YAML corpus dict shape.
 
     Used by all per-engine miners (dynamic + static) to emit staging files.
     Ensures consistent schema across all miners.

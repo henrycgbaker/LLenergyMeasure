@@ -68,7 +68,7 @@ def test_no_tested_against_versions_constant_survives() -> None:
 REQUIRED_TOP_LEVEL_KEYS = ("schema_version", "engine")
 REQUIRED_LIBRARY_KEYS = ("pep503_name", "current_version")
 REQUIRED_IMAGE_KEYS = ("base_image_ref",)
-REQUIRED_ARTEFACT_PATH_KEYS = ("rules_corpus", "vendored_rules", "discovered_schemas")
+REQUIRED_ARTEFACT_PATH_KEYS = ("engine_invariants", "validated_invariants", "discovered_schemas")
 
 
 @pytest.mark.parametrize("engine", ENGINES)

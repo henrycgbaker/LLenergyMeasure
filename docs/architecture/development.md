@@ -7,7 +7,7 @@ inside Docker; coordination code runs on host.**
 
 | Layer | Runs on | Why |
 |---|---|---|
-| Engine code (miners, introspectors, vendor gates, model load) | Docker only | tensorrt-llm loads CUDA bindings on import; a unified host `uv.lock` produced incompatible cross-engine transitive constraints (#437); the multi-gigabyte `tensorrt_llm` wheel OOMed Renovate's lock-update runner. |
+| Engine code (miners, introspectors, validation gates, model load) | Docker only | tensorrt-llm loads CUDA bindings on import; a unified host `uv.lock` produced incompatible cross-engine transitive constraints (#437); the multi-gigabyte `tensorrt_llm` wheel OOMed Renovate's lock-update runner. |
 | Coordination (CLI, config validation, study runner, energy-measurement scaffolding without engines) | Host | Iteration speed for CLI / config / runner debugging matters; no GPU dependency. |
 | Engine-touching tests | Docker only | Tests that import an engine library run inside that engine's image. Host tests gate themselves via `pytest.importorskip(...)` and skip when the engine is absent. |
 
@@ -124,7 +124,7 @@ When Renovate (or a maintainer) bumps `engine_versions/transformers.yaml` or `do
 
    Pulls the layer cache from `:transformers-<VERSION>-buildcache` so the rebuild is essentially free (every layer cache-hits) — only the registry push step actually does network work. Skipped only when the parent run was a `workflow_dispatch` of the BUILD workflow (the build-only ad-hoc test path).
 3. **Update engine schemas — transformers** (`schemas-transformers` job in `update-engine-schemas.yml`) — `workflow_run`-triggered on Publish engine image's `success`. Pulls the just-pushed runtime image (canonical or PR-time depending on the trigger that started the chain), runs schema discovery, writes back the discovered JSON + curation digest.
-4. **Update engine invariants — transformers** (`invariants-transformers` job in `update-engine-invariants.yml`) — same trigger and ordering. Pulls the same image, runs the miner + vendor + invariants digest, rebases against schemas's writeback before pushing its own commit.
+4. **Update engine invariants — transformers** (`invariants-transformers` job in `update-engine-invariants.yml`) — same trigger and ordering. Pulls the same image, runs the miner + validate + invariants digest, rebases against schemas's writeback before pushing its own commit.
 
 Why split build from push:
 - **Push failures don't burn the FA3 compile.** A GHCR permission misconfig, transient registry outage, or rate-limit on the push step previously meant re-running ~50 min of cold compile; now the push retry runs in seconds against the durable cache.

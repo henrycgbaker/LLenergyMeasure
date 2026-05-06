@@ -1,4 +1,4 @@
-"""``@dataclasses.dataclass`` → ``RuleCandidate[]`` lift.
+"""``@dataclasses.dataclass`` → ``InvariantCandidate[]`` lift.
 
 Sub-library type-system lift consumed by per-engine miners. Walks
 :func:`dataclasses.fields` and emits one rule candidate per
@@ -39,7 +39,7 @@ import dataclasses
 import inspect
 from typing import Any, Literal, get_args, get_origin, get_type_hints
 
-from scripts.engine_miners._base import MinerSource, RuleCandidate
+from scripts.engine_miners._base import InvariantCandidate, MinerSource
 
 
 def _extract_literal_values(annotation: Any) -> tuple[Any, ...] | None:
@@ -66,7 +66,7 @@ def lift(
     namespace: str,
     today: str,
     source_path: str,
-) -> list[RuleCandidate]:
+) -> list[InvariantCandidate]:
     """Extract validation-rule candidates from a ``@dataclasses.dataclass`` class.
 
     Parameters
@@ -83,7 +83,7 @@ def lift(
 
     Returns
     -------
-    list[RuleCandidate]
+    list[InvariantCandidate]
         One candidate per field whose type annotation contains a
         ``Literal[...]``. Empty if ``target_type`` is not a dataclass or has
         no Literal-typed fields.
@@ -110,7 +110,7 @@ def lift(
         # let ``_extract_literal_values`` no-op on it.
         hints = {f.name: f.type for f in dataclasses.fields(target_type)}
 
-    candidates: list[RuleCandidate] = []
+    candidates: list[InvariantCandidate] = []
     for field in dataclasses.fields(target_type):
         annotation = hints.get(field.name, field.type)
         values = _extract_literal_values(annotation)
@@ -143,9 +143,9 @@ def _build_literal(
     source_path: str,
     namespace: str,
     today: str,
-) -> RuleCandidate:
+) -> InvariantCandidate:
     """Materialise a Literal-allowlist rule candidate from a dataclass field."""
-    return RuleCandidate(
+    return InvariantCandidate(
         id=f"{library}_{type_name.lower()}_{field_name}_in_{len(values)}_values",
         engine=library,
         library=library,

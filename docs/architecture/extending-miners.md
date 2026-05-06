@@ -26,7 +26,7 @@ Before writing any code, answer these questions:
 
 4. What is the CUDA / import dependency? Engines have no host install path — they are imported only inside their per-engine Docker images (see [development.md](/architecture/development)). Within the engine container, can the miner `import enginelib` on the CPU phase of the build, or does the import require a live CUDA runtime? (vLLM: importable inside `llenergymeasure:vllm-${VER}` without GPU at probe time; TRT-LLM: requires CUDA-aware import even inside the NGC container.)
 
-5. What is a realistic post-vendor-CI rule count? (Transformers: 46; vLLM: 80-110; TRT-LLM: 20-28.) This helps plan the scope.
+5. What is a realistic post-validation-CI invariant count? (Transformers: 46; vLLM: 80-110; TRT-LLM: 20-28.) This helps plan the scope.
 
 ---
 
@@ -79,7 +79,7 @@ if _cls is None:
 
 Based on your Step 0 research, apply one or more lift modules to extract constraints directly from type metadata.
 
-All three lift modules expose a single function named `lift` with the same signature: `lift(target_type, *, namespace, today, source_path) -> list[RuleCandidate]`. The engine/library is derived automatically from `target_type.__module__`. Import each lift under an alias to keep call sites readable.
+All three lift modules expose a single function named `lift` with the same signature: `lift(target_type, *, namespace, today, source_path) -> list[InvariantCandidate]`. The engine/library is derived automatically from `target_type.__module__`. Import each lift under an alias to keep call sites readable.
 
 ### If the engine uses Pydantic v2
 
@@ -90,19 +90,19 @@ from enginelib.config import CacheConfig, SchedulerConfig
 
 TODAY = date.today().isoformat()
 
-def mine_pydantic_rules():
-    rules = []
+def mine_pydantic_invariants():
+    invariants = []
     for cls in [CacheConfig, SchedulerConfig]:
-        rules.extend(lift_pydantic(
+        invariants.extend(lift_pydantic(
             cls,
             namespace="myengine.config",
             today=TODAY,
             source_path="enginelib/config.py",
         ))
-    return rules
+    return invariants
 ```
 
-The lift emits one rule per `Gt`, `Ge`, `Lt`, `Le`, `MultipleOf`, `MinLen`, `MaxLen` constraint and per `Literal[...]` allowlist found on any field.
+The lift emits one invariant per `Gt`, `Ge`, `Lt`, `Le`, `MultipleOf`, `MinLen`, `MaxLen` constraint and per `Literal[...]` allowlist found on any field.
 
 ### If the engine uses msgspec
 
@@ -110,7 +110,7 @@ The lift emits one rule per `Gt`, `Ge`, `Lt`, `Le`, `MultipleOf`, `MinLen`, `Max
 from scripts.engine_miners._msgspec_lift import lift as lift_msgspec
 from enginelib.config import SamplingParams
 
-def mine_msgspec_rules():
+def mine_msgspec_invariants():
     return lift_msgspec(
         SamplingParams,
         namespace="myengine.sampling",
@@ -127,7 +127,7 @@ Note: if the class ships zero `Meta(ge=...)` annotations (common for msgspec cla
 from scripts.engine_miners._dataclass_lift import lift as lift_dataclass
 from enginelib.config import EngineArgs
 
-def mine_dataclass_rules():
+def mine_dataclass_invariants():
     return lift_dataclass(
         EngineArgs,
         namespace="myengine.args",
@@ -136,7 +136,7 @@ def mine_dataclass_rules():
     )
 ```
 
-The dataclass lift is limited to `Literal[...]` value-allowlist rules (no numeric bounds; stdlib dataclasses carry no bound metadata by default).
+The dataclass lift is limited to `Literal[...]` value-allowlist invariants (no numeric bounds; stdlib dataclasses carry no bound metadata by default).
 
 ---
 
@@ -154,10 +154,10 @@ from scripts.engine_miners._base import (
     filter_condition_references_self,
     ConditionalRaiseDetector, ConditionalSelfAssignDetector,
     ConditionalWarningsWarnDetector, ConditionalLoggerWarningDetector,
-    RuleCandidate, MinerSource,
+    InvariantCandidate, MinerSource,
 )
 
-def walk_validate_method(cls_source: str, cls_name: str) -> list[RuleCandidate]:
+def walk_validate_method(cls_source: str, cls_name: str) -> list[InvariantCandidate]:
     module = ast.parse(cls_source)
     cls_node = find_class(module, cls_name)
     if cls_node is None:
@@ -188,7 +188,7 @@ def walk_validate_method(cls_source: str, cls_name: str) -> list[RuleCandidate]:
             for detector in detectors:
                 pattern = detector.detect(stmt)
                 if pattern is not None:
-                    # build RuleCandidate from pattern + condition
+                    # build InvariantCandidate from pattern + condition
                     candidate = _build_candidate(node.test, pattern, ...)
                     candidates.append(candidate)
     return candidates
@@ -289,7 +289,7 @@ def probe_cluster(cluster: _Cluster) -> list[tuple[dict, str | None]]:
 After probing, group error rows by message class and infer predicates:
 
 ```python
-def infer_predicates(rows: list[tuple[dict, str | None]]) -> list[RuleCandidate]:
+def infer_predicates(rows: list[tuple[dict, str | None]]) -> list[InvariantCandidate]:
     # Group by error message
     by_message: dict[str, list[dict]] = {}
     for kwargs, error in rows:
@@ -305,7 +305,7 @@ def infer_predicates(rows: list[tuple[dict, str | None]]) -> list[RuleCandidate]
         # 4. single-field range
         # 5. single-field equality
         # 6. value allowlist
-        # Emit ALL plausible candidates (recall-first; vendor CI prunes false positives)
+        # Emit ALL plausible candidates (recall-first; validation CI prunes false positives)
         ...
     return candidates
 ```
@@ -317,10 +317,10 @@ def infer_predicates(rows: list[tuple[dict, str | None]]) -> list[RuleCandidate]
 `scripts/engine_miners/{engine}_miner.py` is the main entry point:
 
 ```python
-def mine() -> list[RuleCandidate]:
+def mine() -> list[InvariantCandidate]:
     candidates = []
-    candidates.extend(mine_pydantic_rules())
-    candidates.extend(mine_dataclass_rules())
+    candidates.extend(mine_pydantic_invariants())
+    candidates.extend(mine_dataclass_invariants())
 
     # Static miner
     from scripts.engine_miners.myengine_static_miner import mine as static_mine
@@ -339,7 +339,7 @@ if __name__ == "__main__":
     staging = {
         "schema_version": "1.0.0",
         "engine": ENGINE,
-        "rules": [candidate_to_dict(c) for c in results],
+        "invariants": [candidate_to_dict(c) for c in results],
     }
     output_path = Path("src/llenergymeasure/engines/_staging/myengine_miner.yaml")
     output_path.write_text(yaml.dump(staging, allow_unicode=True))
@@ -394,7 +394,7 @@ def test_landmark_checks_raise_on_missing():
      job to `update-engine-invariants.yml` and `update-engine-schemas.yml` mirroring the
      existing `invariants-vllm` / `schemas-vllm` (or `*-tensorrt`) jobs. The
      job pulls the upstream canonical image, then runs probe → mine →
-     vendor-replay → doc-gen → atomic-writeback inline.
+     validate → doc-gen → atomic-writeback inline.
    - **First-party image (transformers pattern)** — split the build out into
      a pair of workflows modelled on `build-engine-image.yml` (build + cache
      export, no runtime push) and `publish-engine-image.yml` (workflow_run-
@@ -417,7 +417,7 @@ def test_landmark_checks_raise_on_missing():
    pattern, mirror `build-engine-image.yml` + `publish-engine-image.yml` + the
    workflow_run-gated cell pair in update-engine-invariants.yml / update-engine-schemas.yml.
 
-3. The vendor-replay step runs inside the engine's container in the same job as the miner — no separate vendor workflow to update.
+3. The validate step runs inside the engine's container in the same job as the miner — no separate validation workflow to update.
 
 4. Add a Renovate `packageRule` so library bumps trigger the appropriate
    workflow via the `engine_versions/{engine}.yaml` path filter (or, for
@@ -436,12 +436,12 @@ python scripts/engine_miners/myengine_miner.py
 # Writes src/llenergymeasure/engines/_staging/myengine_miner.yaml
 
 python scripts/engine_miners/build_corpus.py --engine myengine
-# Merges staging files, runs vendor-CI gate, writes corpus
+# Merges staging files, runs validation-CI gate, writes corpus
 
-python scripts/vendor_rules.py \
+python scripts/validate_invariants.py \
   --engine myengine \
   --corpus src/llenergymeasure/engines/myengine.proposed.yaml \
-  --out src/llenergymeasure/engines/myengine.vendored.yaml
+  --out src/llenergymeasure/engines/myengine.validated.yaml
 # Validates all rules against live library
 ```
 
@@ -485,7 +485,7 @@ public_fields = frozenset(
 
 ### Unparseable sub-clauses: log, don't drop
 
-When the static miner encounters a condition sub-clause it cannot translate (e.g. an opaque function call), it logs the clause and emits the surrounding rule with the parseable parts. The rule is still useful; the vendor-CI gate will confirm whether it fires correctly:
+When the static miner encounters a condition sub-clause it cannot translate (e.g. an opaque function call), it logs the clause and emits the surrounding invariant with the parseable parts. The invariant is still useful; the validation-CI gate will confirm whether it fires correctly:
 
 ```python
 # transformers_static_miner.py pattern:
@@ -499,13 +499,13 @@ if unparseable_clause:
 
 ### Recall-first: emit all plausible candidates
 
-Both static and dynamic miners err toward recall. The vendor-CI gate is the prune step. Do not add extra filters "just in case" - if a rule candidate is wrong, the vendor-CI gate will quarantine it.
+Both static and dynamic miners err toward recall. The validation-CI gate is the prune step. Do not add extra filters "just in case" - if an invariant candidate is wrong, the validation-CI gate will quarantine it.
 
 ---
 
 ## Failure modes when libraries evolve
 
-When Renovate bumps an engine library, the miner pipeline must catch behavioural drift before stale rules ship. Failures fall into three categories: loud failures caught by the miner pipeline at mining time, loud failures caught by the vendor gate at validation time, and one silent failure mode the YAML/JSON split was specifically designed to make visible.
+When Renovate bumps an engine library, the miner pipeline must catch behavioural drift before stale invariants ship. Failures fall into three categories: loud failures caught by the miner pipeline at mining time, loud failures caught by the validation gate at validation time, and one silent failure mode the YAML/JSON split was specifically designed to make visible.
 
 ### Loud failures caught by the miner pipeline
 
@@ -521,33 +521,33 @@ The miner pipeline's import-time contract (Step 1 above) raises hard CI errors w
 
 These three errors all surface as red CI on the Renovate PR, blocking merge until the miner is updated.
 
-### Loud failures caught by the vendor gate
+### Loud failures caught by the validation gate
 
-After mining completes and a YAML corpus is written, `vendor_rules.py --fail-on-divergence` replays each rule's `kwargs_positive` and `kwargs_negative` against the live library inside the engine's Docker container:
+After mining completes and a YAML corpus is written, `validate_invariants.py --fail-on-divergence` replays each invariant's `kwargs_positive` and `kwargs_negative` against the live library inside the engine's Docker container:
 
-- **`--fail-on-divergence`** flips the vendor gate to non-zero exit when an existing rule's declared `expected_outcome` no longer matches the library's actual behaviour. This catches three distinct kinds of behavioural drift:
+- **`--fail-on-divergence`** flips the validation gate to non-zero exit when an existing invariant's declared `expected_outcome` no longer matches the library's actual behaviour. This catches three distinct kinds of behavioural drift:
   1. The library changed its validation behaviour for an existing rule (e.g. relaxed a numeric bound, changed an error type).
   2. The library dropped a rule entirely (the constraint no longer fires).
   3. The library added a new constraint path that the existing rule's `kwargs_negative` example now happens to trip.
 
-All three engines (transformers, vLLM, TRT-LLM) have `--fail-on-divergence` operational as of Phase A (#445). Gate-breaking divergences are P0 incidents - they block the Renovate PR from merging.
+All three engines (transformers, vLLM, TRT-LLM) have `--fail-on-divergence` operational as of PR #445. Gate-breaking divergences are P0 incidents - they block the Renovate PR from merging.
 
 ### Silent failure: recall regression
 
-The vendor gate above validates the rules that *exist* in the corpus. It cannot tell you about rules that *should* exist but no longer do, because the miner regressed and stopped finding them.
+The validation gate above validates the invariants that *exist* in the corpus. It cannot tell you about invariants that *should* exist but no longer do, because the miner regressed and stopped finding them.
 
-Concrete scenario: a refactor in `_pydantic_lift.py` changes how it walks `FieldInfo.metadata`, and the lift now finds 12 rules where it previously found 30. The 18 lost rules silently disappear from the corpus.
+Concrete scenario: a refactor in `_pydantic_lift.py` changes how it walks `FieldInfo.metadata`, and the lift now finds 12 invariants where it previously found 30. The 18 lost invariants silently disappear from the corpus.
 
-- The vendor gate runs only on the 12 surviving rules - every one of them passes.
+- The validation gate runs only on the 12 surviving invariants - every one of them passes.
 - CI is green.
 - The Renovate PR merges with a corpus that has 60% the recall it had before.
 - Users hitting the lost validations get no constraint check at runtime.
 
-**Mitigation: the proposed-vs-vendored YAML pair (the trust seam).**
+**Mitigation: the proposed-vs-validated YAML pair (the trust seam).**
 
-The engine-invariants pipeline (`update-engine-invariants.yml`, with per-job `if:` gating selecting the right cell for each trigger source: `pull_request: paths` for vllm + tensorrt, `workflow_run` after Build engine image for transformers) mines the proposed corpus into `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` and then vendor-replays it into `src/llenergymeasure/engines/{engine}/invariants.vendored.yaml` in the same job. Both YAMLs land in one atomic commit-back to the PR branch, and the per-pipeline diff comment includes both diffs.
+The engine-invariants pipeline (`update-engine-invariants.yml`, with per-job `if:` gating selecting the right cell for each trigger source: `pull_request: paths` for vllm + tensorrt, `workflow_run` after Build engine image for transformers) mines the proposed corpus into `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` and then validates it into `src/llenergymeasure/engines/{engine}/invariants.validated.yaml` in the same job. Both YAMLs land in one atomic commit-back to the PR branch, and the per-pipeline diff comment includes both diffs.
 
-Because the proposed-corpus diff is emitted alongside the vendored diff, a miner refactor that silently drops 18 rules shows up as 18 deletions in the proposed-corpus diff - a maintainer reading the PR notices the regression even when the vendor gate's verdict on the surviving rules is green.
+Because the proposed-corpus diff is emitted alongside the validated diff, a miner refactor that silently drops 18 invariants shows up as 18 deletions in the proposed-corpus diff - a maintainer reading the PR notices the regression even when the validation gate's verdict on the surviving invariants is green.
 
 The historical Stage-1 / Stage-2 split between `auto-mine.yml` and `invariant-miner.yml` forced the same property by serialising two workflows; the merger preserves the property by emitting two diffs from one workflow. Cross-reference: #450 (trust seam architecture decision), #465 (writeback contract).
 
@@ -557,7 +557,7 @@ The fail-loud envelope and the YAML diff together cover the failure modes that t
 
 - **Pre-mining envelope check (#469).** Verifies the installed library version is inside the SSOT-pinned envelope *before* CI invests effort in mining. Today the check happens at miner import time, which is fine but late - if mining takes 5 minutes and the version is wrong, the maintainer waits 5 minutes to find out.
 - **Compat-matrix sweep (#470).** Runs the miner against every library version in a declared support range and reports per-version `(rule_count, divergences, errors)`. Surfaces "this miner mostly works on the new version but loses 3 rules" before a Renovate PR ever opens.
-- **Coordinated bump command `llem bump-engine` (#471).** A single CLI entry point that updates the Dockerfile ARG, regenerates the corpus, runs the vendor gate, and reports the diff in one local invocation - used by maintainers handling library bumps that need manual intervention (e.g. `MinerVersionMismatchError` resolution).
+- **Coordinated bump command `llem bump-engine` (#471).** A single CLI entry point that updates the Dockerfile ARG, regenerates the corpus, runs the validation gate, and reports the diff in one local invocation - used by maintainers handling library bumps that need manual intervention (e.g. `MinerVersionMismatchError` resolution).
 
 ---
 

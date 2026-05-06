@@ -1,4 +1,4 @@
-"""Pydantic v2 model → ``RuleCandidate[]`` lift.
+"""Pydantic v2 model → ``InvariantCandidate[]`` lift.
 
 Sub-library type-system lift consumed by per-engine miners. Walks
 :class:`pydantic.BaseModel` subclasses (or ``pydantic.dataclasses.dataclass``-decorated
@@ -19,7 +19,7 @@ Used by:
 Operator vocabulary
 -------------------
 The lift maps ``annotated-types`` predicate types directly to
-:class:`RuleCandidate.match_fields` operator strings, aligning the corpus with
+:class:`InvariantCandidate.match_fields` operator strings, aligning the corpus with
 the standard library:
 
 - ``Gt``  → ``">"``
@@ -48,7 +48,7 @@ from typing import Any, Literal, get_args, get_origin
 
 import annotated_types as at
 
-from scripts.engine_miners._base import MinerSource, RuleCandidate
+from scripts.engine_miners._base import InvariantCandidate, MinerSource
 
 # ---------------------------------------------------------------------------
 # Operator mapping (annotated-types -> match_fields key)
@@ -154,7 +154,7 @@ def lift(
     namespace: str,
     today: str,
     source_path: str,
-) -> list[RuleCandidate]:
+) -> list[InvariantCandidate]:
     """Extract validation-rule candidates from ``target_type`` via Pydantic v2 introspection.
 
     Parameters
@@ -174,12 +174,12 @@ def lift(
 
     Returns
     -------
-    list[RuleCandidate]
+    list[InvariantCandidate]
         One candidate per ``annotated-types`` constraint or ``Literal[...]``
         allowlist found on a field. Empty if ``target_type`` exposes no
         Pydantic field metadata.
     """
-    candidates: list[RuleCandidate] = []
+    candidates: list[InvariantCandidate] = []
     library = target_type.__module__.split(".", 1)[0]
     type_name = target_type.__name__
     method = "<pydantic_lift>"
@@ -286,10 +286,10 @@ def _build(
     line: int,
     source_path: str,
     today: str,
-) -> RuleCandidate:
-    """Wrap a partial-dict from one of the ``_from_*`` helpers in a RuleCandidate."""
+) -> InvariantCandidate:
+    """Wrap a partial-dict from one of the ``_from_*`` helpers in a InvariantCandidate."""
     rid = f"{library}_{type_name.lower()}_{partial['id_suffix']}"
-    return RuleCandidate(
+    return InvariantCandidate(
         id=rid,
         engine=library,
         library=library,
