@@ -33,6 +33,10 @@ from typing import Any
 
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.engine_introspectors._common import DEFAULT_SCHEMA_FILENAME
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _ENGINES = ("vllm", "tensorrt", "transformers")
@@ -73,7 +77,7 @@ def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) 
             errors.append(f"{engine}: SSOT not found: {ssot_path}")
             continue
 
-        schema_path = engines_dir / engine / "schema.discovered.json"
+        schema_path = engines_dir / engine / DEFAULT_SCHEMA_FILENAME
         try:
             schema_version = _parse_schema_version(schema_path)
         except FileNotFoundError:

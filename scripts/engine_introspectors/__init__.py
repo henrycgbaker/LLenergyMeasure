@@ -51,9 +51,6 @@ DISCOVERY_FUNCTIONS: dict[str, DiscoveryFn] = {
 def _resolve_output_path(
     *, engine: str, output_arg: Path | None, multi: bool, repo_root: Path
 ) -> Path:
-    # Z-engines layout: per-engine sub-package holds its schema. Default and
-    # directory-override resolutions both produce ``<dir>/<engine>/<filename>``
-    # so behaviour is uniform; explicit per-engine file paths bypass this.
     if output_arg is None:
         return repo_root / DEFAULT_OUTPUT_DIR / engine / DEFAULT_SCHEMA_FILENAME
     if multi or output_arg.is_dir() or output_arg.suffix == "":

@@ -111,7 +111,6 @@ concurrency:
   cancel-in-progress: false   # writeback target: never cancel mid-flight
 
 env:
-  # Z-engines layout: per-engine sub-package owns its runtime data.
   # Per-engine paths constructed as ${ENGINES_DIR}/<engine>/schema.discovered.json.
   ENGINES_DIR: src/llenergymeasure/engines
 

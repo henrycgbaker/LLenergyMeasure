@@ -107,11 +107,7 @@ class SchemaLoader:
         try:
             raw_text = (resources.files(engine_package) / _SCHEMA_FILENAME).read_text()
         except (FileNotFoundError, ModuleNotFoundError) as exc:
-            # ModuleNotFoundError fires when the engine sub-package itself is
-            # absent (e.g. _KNOWN_ENGINES was monkeypatched to inject a fake
-            # engine, or the package was tampered with). Same user-facing
-            # remediation as a missing JSON file: regenerate via the refresh
-            # script or remove the engine from _KNOWN_ENGINES.
+            # resources.files raises ModuleNotFoundError on a missing engine sub-package.
             raise FileNotFoundError(
                 f"Vendored schema for engine {engine!r} not found. "
                 f"Run `./scripts/refresh_discovered_schemas.sh {engine}` to generate it."

@@ -23,8 +23,10 @@ from typing import Any
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT / "src"))
+sys.path.insert(0, str(_PROJECT_ROOT))
 
 from llenergymeasure.config.ssot import Engine  # noqa: E402
+from scripts.engine_introspectors._common import DEFAULT_SCHEMA_FILENAME  # noqa: E402
 
 _ENGINE_DISPLAY_NAMES: dict[str, str] = {
     "transformers": "Transformers",
@@ -39,7 +41,7 @@ def _load_schema(engine: str) -> dict[str, Any]:
     Returns ``{}`` for missing/empty schemas to degrade gracefully when
     discovery hasn't run yet, rather than failing the markdown render.
     """
-    path = _PROJECT_ROOT / "src" / "llenergymeasure" / "engines" / engine / "schema.discovered.json"
+    path = _PROJECT_ROOT / "src" / "llenergymeasure" / "engines" / engine / DEFAULT_SCHEMA_FILENAME
     if not path.is_file():
         return {}
     text = path.read_text()

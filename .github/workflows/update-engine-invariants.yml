@@ -118,7 +118,6 @@ concurrency:
   cancel-in-progress: false   # writeback target: never cancel mid-flight
 
 env:
-  # Z-engines layout: per-engine sub-package owns its runtime data.
   # Per-engine paths constructed as ${ENGINES_DIR}/<engine>/invariants.<kind>.yaml.
   ENGINES_DIR: src/llenergymeasure/engines
 

@@ -199,23 +199,12 @@ _ENGINE_EXTRACTORS: dict[str, tuple[_Extractor, ...]] = {
 }
 
 
-def _engine_dir(corpus_root: Path, engine: str) -> Path:
-    """Per-engine sub-package directory under the engines root.
-
-    Z-engines layout: ``corpus_root`` is ``src/llenergymeasure/engines``;
-    each engine owns its runtime data at ``{corpus_root}/{engine}/``.
-    """
-    return corpus_root / engine
-
-
 def _staging_dir(corpus_root: Path, engine: str) -> Path:
-    """Per-engine staging directory under the engine's sub-package."""
-    return _engine_dir(corpus_root, engine) / "_staging"
+    return corpus_root / engine / "_staging"
 
 
 def _canonical_path(corpus_root: Path, engine: str) -> Path:
-    """Canonical post-mine corpus YAML path for ``engine``."""
-    return _engine_dir(corpus_root, engine) / "invariants.proposed.yaml"
+    return corpus_root / engine / "invariants.proposed.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -1053,10 +1042,7 @@ def main(argv: list[str] | None = None) -> int:
         "--corpus-root",
         type=Path,
         default=Path(_PROJECT_ROOT) / "src" / "llenergymeasure" / "engines",
-        help=(
-            "Engines root containing per-engine sub-packages. Each engine's "
-            "canonical corpus + _staging/ live under <engines>/<engine>/."
-        ),
+        help="Engines root; each engine's corpus + _staging/ live under <engines>/<engine>/.",
     )
     parser.add_argument(
         "--skip-extract",
