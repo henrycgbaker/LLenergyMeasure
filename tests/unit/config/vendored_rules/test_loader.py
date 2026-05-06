@@ -148,11 +148,11 @@ rules: []
     assert result.rules == ()
 
 
-def test_default_corpus_root_resolves_to_configs(tmp_path: Path) -> None:
-    # Constructing without corpus_root uses the repo's configs/engine_invariants/.
+def test_default_corpus_root_resolves_to_engines(tmp_path: Path) -> None:
+    # Constructing without corpus_root uses the repo's src/llenergymeasure/engines/.
     loader = VendoredRulesLoader()
-    assert loader.corpus_root.name == "engine_invariants"
-    assert loader.corpus_root.parent.name == "configs"
+    assert loader.corpus_root.name == "engines"
+    assert loader.corpus_root.parent.name == "llenergymeasure"
 
 
 # ---------------------------------------------------------------------------

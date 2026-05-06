@@ -4,7 +4,7 @@
 #
 # Usage: ./scripts/refresh_discovered_schemas.sh {vllm|tensorrt|transformers}
 #
-# Always writes to src/llenergymeasure/config/discovered_schemas/<engine>.json
+# Always writes to src/llenergymeasure/engines/<engine>.json
 # and prints the resulting `git diff`. Does NOT commit. The vendored JSON
 # file IS the canonical SSOT — authority comes from `git commit`, not from
 # who ran discovery.
@@ -12,7 +12,7 @@
 # Legitimate refresh (e.g. you bumped a Dockerfile FROM tag):
 #   review the diff, `git add`, and open a PR.
 # Exploring a fork or stale image:
-#   `git checkout src/llenergymeasure/config/discovered_schemas/<engine>.json`
+#   `git checkout src/llenergymeasure/engines/<engine>.json`
 #
 # Discovery image selection:
 #   vllm         -> pristine vllm/vllm-openai:<tag> (vllm pre-installed)
@@ -28,7 +28,7 @@ usage() {
 Usage: ./scripts/refresh_discovered_schemas.sh {vllm|tensorrt|transformers}
 
 Builds or pulls the engine's discovery image, runs discovery inside it,
-writes src/llenergymeasure/config/discovered_schemas/<engine>.json, and
+writes src/llenergymeasure/engines/<engine>.json, and
 prints the git diff. Does NOT commit.
 EOF
 }
@@ -75,7 +75,7 @@ if [[ -z "${IMAGE:-}" ]]; then
     exit 1
 fi
 
-OUTPUT_REL="src/llenergymeasure/config/discovered_schemas/${ENGINE}.json"
+OUTPUT_REL="src/llenergymeasure/engines/${ENGINE}/schema.discovered.json"
 
 echo "[$ENGINE] Running discovery inside $IMAGE..." >&2
 # Forward LLENERGY_DISCOVERY_FROZEN_AT into the container if the caller (CI)
