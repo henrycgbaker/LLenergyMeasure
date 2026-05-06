@@ -1,0 +1,93 @@
+schema_version: 1.0.0
+engine: tensorrt
+engine_version: 0.21.0
+walker_pinned_range: <0.22.0,>=0.21.0
+mined_at: '2026-05-06T19:12:04+02:00'
+rules:
+- id: tensorrt_raises_max_ngram_size_le_0_positive_values
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: LookaheadDecodingConfig.validate_positive_values raises when max_ngram_size <= 0 (via
+    raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.LookaheadDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_positive_values
+    line_at_scan: 577
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_ngram_size:
+        <=: 0
+  kwargs_positive:
+    max_ngram_size: 0
+  kwargs_negative:
+    max_ngram_size: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Value must be positive, got {v}
+  references:
+  - llmapi/llm_args.py:577 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
+  added_by: static_miner
+  added_at: '2026-05-06'
+- id: tensorrt_raises_max_verification_set_size_le_0_positive_values
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: LookaheadDecodingConfig.validate_positive_values raises when max_verification_set_size
+    <= 0 (via raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.LookaheadDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_positive_values
+    line_at_scan: 577
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_verification_set_size:
+        <=: 0
+  kwargs_positive:
+    max_verification_set_size: 0
+  kwargs_negative:
+    max_verification_set_size: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Value must be positive, got {v}
+  references:
+  - llmapi/llm_args.py:577 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
+  added_by: static_miner
+  added_at: '2026-05-06'
+- id: tensorrt_raises_max_window_size_le_0_positive_values
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: LookaheadDecodingConfig.validate_positive_values raises when max_window_size <= 0 (via
+    raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.LookaheadDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_positive_values
+    line_at_scan: 577
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_window_size:
+        <=: 0
+  kwargs_positive:
+    max_window_size: 0
+  kwargs_negative:
+    max_window_size: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Value must be positive, got {v}
+  references:
+  - llmapi/llm_args.py:577 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
+  added_by: static_miner
+  added_at: '2026-05-06'
