@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: transformers
 engine_version: 4.57.3
-mined_at: '2026-05-06T20:39:58+02:00'
+mined_at: '2026-05-06T22:37:55+02:00'
 invariants:
 - id: transformers_beam_search_num_beams_eq_1
   engine: transformers
@@ -41,8 +41,8 @@ invariants:
 - id: transformers_cache_choice_cache_implementation_not_in_allowlist
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.__init__ flags `cache_implementation` (cache implementation not in
-    allowlist)
+  invariant_under_test: GenerationConfig.__init__ flags `cache_implementation` (cache implementation not
+    in allowlist)
   severity: error
   native_type: transformers.GenerationConfig
   miner_source:
@@ -161,8 +161,8 @@ invariants:
 - id: transformers_dormant_early_stopping_set_true
   engine: transformers
   library: transformers
-  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when num_beams == 1 AND early_stopping
-    present True (dropped: self.early_stopping is not False)'
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when num_beams == 1 AND
+    early_stopping present True (dropped: self.early_stopping is not False)'
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
@@ -227,8 +227,8 @@ invariants:
 - id: transformers_dormant_eta_cutoff_ne_0_0
   engine: transformers
   library: transformers
-  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when eta_cutoff present True
-    AND eta_cutoff != 0.0 (dropped: self.do_sample is False)'
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when eta_cutoff present
+    True AND eta_cutoff != 0.0 (dropped: self.do_sample is False)'
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
@@ -317,8 +317,8 @@ invariants:
 - id: transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.__init__ flags `early_stopping` (early stopping type not in bool or
-    int or str)
+  invariant_under_test: GenerationConfig.__init__ flags `early_stopping` (early stopping type not in bool
+    or int or str)
   severity: error
   native_type: transformers.GenerationConfig
   miner_source:
@@ -349,8 +349,8 @@ invariants:
 - id: transformers_greedy_strips_epsilon_cutoff
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.validate() records dormant `epsilon_cutoff` when do_sample=False and
-    `epsilon_cutoff` is set to a non-default value
+  invariant_under_test: GenerationConfig.validate() records dormant `epsilon_cutoff` when do_sample=False
+    and `epsilon_cutoff` is set to a non-default value
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
@@ -384,8 +384,8 @@ invariants:
 - id: transformers_greedy_strips_eta_cutoff
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.validate() records dormant `eta_cutoff` when do_sample=False and `eta_cutoff`
-    is set to a non-default value
+  invariant_under_test: GenerationConfig.validate() records dormant `eta_cutoff` when do_sample=False
+    and `eta_cutoff` is set to a non-default value
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
@@ -452,8 +452,8 @@ invariants:
 - id: transformers_greedy_strips_temperature
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.validate() records dormant `temperature` when do_sample=False and
-    `temperature` is set to a non-default value
+  invariant_under_test: GenerationConfig.validate() records dormant `temperature` when do_sample=False
+    and `temperature` is set to a non-default value
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
@@ -555,8 +555,8 @@ invariants:
 - id: transformers_greedy_strips_typical_p
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.validate() records dormant `typical_p` when do_sample=False and `typical_p`
-    is set to a non-default value
+  invariant_under_test: GenerationConfig.validate() records dormant `typical_p` when do_sample=False and
+    `typical_p` is set to a non-default value
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
@@ -723,7 +723,8 @@ invariants:
 - id: transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.__init__ flags `num_beams` (do sample eq false and num beams eq 1)
+  invariant_under_test: GenerationConfig.__init__ flags `num_beams` (do sample eq false and num beams
+    eq 1)
   severity: error
   native_type: transformers.GenerationConfig
   miner_source:
@@ -909,7 +910,8 @@ invariants:
 - id: transformers_raises_bnb_4bit_quant_type_not_type_str
   engine: transformers
   library: bitsandbytes
-  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when bnb_4bit_quant_type type_is_not str'
+  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when bnb_4bit_quant_type type_is_not
+    str'
   severity: error
   native_type: transformers.BitsAndBytesConfig
   miner_source:
@@ -966,8 +968,8 @@ invariants:
 - id: transformers_raises_compile_config_not_type_compileconfig
   engine: transformers
   library: transformers
-  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when compile_config present True AND compile_config
-    type_is_not CompileConfig'
+  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when compile_config present True AND
+    compile_config type_is_not CompileConfig'
   severity: error
   native_type: transformers.GenerationConfig
   miner_source:
@@ -997,8 +999,8 @@ invariants:
 - id: transformers_raises_llm_int8_enable_fp32_cpu_offload_not_type_bool
   engine: transformers
   library: bitsandbytes
-  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when llm_int8_enable_fp32_cpu_offload type_is_not
-    bool'
+  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when llm_int8_enable_fp32_cpu_offload
+    type_is_not bool'
   severity: error
   native_type: transformers.BitsAndBytesConfig
   miner_source:
@@ -1055,8 +1057,8 @@ invariants:
 - id: transformers_raises_llm_int8_skip_modules_not_type_list
   engine: transformers
   library: bitsandbytes
-  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when llm_int8_skip_modules present True
-    AND llm_int8_skip_modules type_is_not list'
+  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when llm_int8_skip_modules present
+    True AND llm_int8_skip_modules type_is_not list'
   severity: error
   native_type: transformers.BitsAndBytesConfig
   miner_source:
@@ -1085,7 +1087,8 @@ invariants:
 - id: transformers_raises_llm_int8_threshold_not_type_float
   engine: transformers
   library: bitsandbytes
-  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when llm_int8_threshold type_is_not float'
+  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when llm_int8_threshold type_is_not
+    float'
   severity: error
   native_type: transformers.BitsAndBytesConfig
   miner_source:
@@ -1169,8 +1172,8 @@ invariants:
 - id: transformers_raises_num_beams_eq_1
   engine: transformers
   library: transformers
-  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when num_return_sequences != 1 AND num_beams
-    == 1 (dropped: self.do_sample is False)'
+  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when num_return_sequences != 1 AND
+    num_beams == 1 (dropped: self.do_sample is False)'
   severity: error
   native_type: transformers.GenerationConfig
   miner_source:
@@ -1204,8 +1207,8 @@ invariants:
 - id: transformers_single_beam_strips_early_stopping
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.validate() records dormant `early_stopping` when num_beams=1 and `early_stopping`
-    is set
+  invariant_under_test: GenerationConfig.validate() records dormant `early_stopping` when num_beams=1
+    and `early_stopping` is set
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
@@ -1238,8 +1241,8 @@ invariants:
 - id: transformers_single_beam_strips_length_penalty
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.validate() records dormant `length_penalty` when num_beams=1 and `length_penalty`
-    is set
+  invariant_under_test: GenerationConfig.validate() records dormant `length_penalty` when num_beams=1
+    and `length_penalty` is set
   severity: dormant
   native_type: transformers.GenerationConfig
   miner_source:
@@ -1272,8 +1275,8 @@ invariants:
 - id: transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig
   engine: transformers
   library: transformers
-  invariant_under_test: GenerationConfig.__init__ flags `watermarking_config` (watermarking config type not
-    in WatermarkingConfig)
+  invariant_under_test: GenerationConfig.__init__ flags `watermarking_config` (watermarking config type
+    not in WatermarkingConfig)
   severity: error
   native_type: transformers.GenerationConfig
   miner_source:
