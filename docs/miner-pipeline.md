@@ -467,8 +467,10 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │  ─────────────── engine-schemas (per-engine) ──────────────       │
   │                       ▼                                           │
   │  scripts/engine_introspectors introspects engine config classes   │
-  │  inside Docker, regenerates discovered_schemas/{engine}.json,     │
-  │  bot commits and posts a diff comment.                            │
+  │  inside Docker, regenerates discovered_schemas/{engine}.json;     │
+  │  generate_curation_doc.py + generate_schema_doc.py refresh        │
+  │  docs/generated/{curation,schema}-{engine}.md, bot commits        │
+  │  and posts a diff comment.                                        │
   │                       │                                           │
   │                       ▼                                           │
   │  CI green required before merge.                                  │
