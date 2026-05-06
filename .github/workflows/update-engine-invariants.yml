@@ -73,7 +73,7 @@ on:
       - "scripts/_invariant_vendor_common.py"
       - "scripts/refresh_invariant_rules.sh"
       - "src/llenergymeasure/engines/*/invariants.*.yaml"
-      - ".github/workflows/engine-invariants.yml"
+      - ".github/workflows/update-engine-invariants.yml"
   workflow_run:
     # Chain off the BUILD workflow (which fires on PR + push). The
     # transformers cell pulls the runtime image from the

@@ -70,7 +70,7 @@ on:
       - "engine_versions/tensorrt.yaml"
       - "scripts/engine_introspectors/**"
       - "src/llenergymeasure/engines/*/schema.discovered.json"
-      - ".github/workflows/engine-schemas.yml"
+      - ".github/workflows/update-engine-schemas.yml"
   workflow_run:
     # Chain off the BUILD workflow (which fires on PR + push). The
     # transformers cell pulls the runtime image from the
@@ -571,7 +571,7 @@ jobs:
       - name: Clean workspace (fix root-owned files from prior Docker runs)
         # Container-written artefacts persist as root-owned on the self-
         # hosted runner and break subsequent checkouts otherwise. Mirrors
-        # gpu-ci.yml + engine-invariants.yml.
+        # gpu-ci.yml + update-engine-invariants.yml.
         run: |
           docker run --rm \
             -v "${{ github.workspace }}":/workspace \
