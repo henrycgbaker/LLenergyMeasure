@@ -3,8 +3,8 @@ engine: tensorrt
 engine_version: 0.21.0
 image_ref: llenergymeasure:tensorrt
 base_image_ref: llenergymeasure:tensorrt
-vendored_at: '2026-05-06T20:12:13+02:00'
-vendor_commit: 093bc933307dcada9135ce1de5795ca1508d58bc
+vendored_at: '2026-05-06T20:35:47+02:00'
+vendor_commit: 4ad6ee7b8e43c1282751a5b76ca936c6fe6982a3
 cases:
 - id: tensorrt_raises_max_ngram_size_le_0_positive_values
   outcome: error
