@@ -45,9 +45,9 @@ LLenergyMeasure has two pipelines that work together to give users early, action
   │   │         │               │                                       │
   │   │    vendor_rules.py      │  replay against live library         │
   │   │         │               │                                       │
-  │   │  proposed corpus YAML   │  configs/engine_invariants/          │
+  │   │  proposed corpus YAML   │  src/llenergymeasure/engines/          │
   │   │                          │  {e}.proposed.yaml                   │
-  │   │  vendored corpus YAML   │  configs/engine_invariants/          │
+  │   │  vendored corpus YAML   │  src/llenergymeasure/engines/          │
   │   │                          │  {e}.vendored.yaml                   │
   │   └─────────────────────────┘                                       │
   └─────────────────────────────────────────────────────────────────────┘
@@ -91,7 +91,7 @@ LLenergyMeasure has two pipelines that work together to give users early, action
 
 **Inputs:** Engine library source code (at a pinned version).
 
-**Outputs:** `configs/engine_invariants/{engine}.proposed.yaml` (maintainer-seeded corpus, post-mining) and `configs/engine_invariants/{engine}.vendored.yaml` (CI-validated observed behaviour, post-vendor-replay; both ship with the package).
+**Outputs:** `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` (maintainer-seeded corpus, post-mining) and `src/llenergymeasure/engines/{engine}/invariants.vendored.yaml` (CI-validated observed behaviour, post-vendor-replay; both ship with the package).
 
 **Three components:**
 - Static miner - walks Python AST of validator methods; no constructor calls.
@@ -177,14 +177,14 @@ The invariant miner pipeline lives in `scripts/engine_miners/` - it is a build-t
   Per-engine step sequence inside one job:
     1. Probe — scripts._probe checks landmarks; `fail` skips downstream.
     2. Mine — build_corpus.py writes
-       configs/engine_invariants/{engine}.proposed.yaml.
+       src/llenergymeasure/engines/{engine}/invariants.proposed.yaml.
        (lift modules — pydantic / msgspec / dataclass — run inside
         build_corpus.py; static miner wins on match.fields, dynamic miner
         wins on message_template.)
     3. Vendor-replay — vendor_rules.py replays every rule against the
        live library (checks: kwargs_positive raises, message matches
        template, kwargs_negative does NOT raise). Confirmed cases write
-       to configs/engine_invariants/{engine}.vendored.yaml; divergent
+       to src/llenergymeasure/engines/{engine}/invariants.vendored.yaml; divergent
        rules surface as a non-zero exit when --fail-on-divergence is set.
     4. Doc-gen — generate_invariants_doc.py refreshes
        docs/generated/invariants-{engine}.md.
