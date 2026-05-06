@@ -12,15 +12,12 @@ const sidebars: SidebarsConfig = {
         'docker-setup',
       ],
     },
-    {
-      type: 'category',
-      label: 'Reference',
-      items: ['cli-reference', 'study-config'],
-    },
+    'cli-reference',
+    'study-config',
     'troubleshooting',
     {
       type: 'category',
-      label: 'Reference (auto-generated)',
+      label: 'Engine reference',
       collapsed: true,
       items: [
         {

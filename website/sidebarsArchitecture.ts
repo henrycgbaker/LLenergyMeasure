@@ -10,8 +10,6 @@ const sidebarsArchitecture: SidebarsConfig = {
     'development',
     'schema-refresh',
     'validation-rule-corpus',
-    // TODO: append 'Python API reference (auto-generated)' category once
-    // pdoc-driven API docs land. See sequencing in /docs/architecture/.
   ],
 };
 
