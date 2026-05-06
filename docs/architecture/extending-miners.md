@@ -2,14 +2,14 @@
 
 This document is the practitioner's guide to adding invariant miner support for a new engine. It uses the transformers miner as the gold-standard reference throughout.
 
-**Audience:** engine extenders. Assumes familiarity with the [miner-pipeline.md](miner-pipeline.md) concepts.
+**Audience:** engine extenders. Assumes familiarity with the [miner-pipeline.md](/architecture/miner-pipeline) concepts.
 
 ---
 
 ## Before you start
 
-1. Read [miner-pipeline.md](miner-pipeline.md) to understand the static miner / dynamic miner / lift module split.
-2. Read the [corpus format reference](validation-rule-corpus.md) to understand what rules look like.
+1. Read [miner-pipeline.md](/architecture/miner-pipeline) to understand the static miner / dynamic miner / lift module split.
+2. Read the [corpus format reference](/architecture/validation-rule-corpus) to understand what rules look like.
 3. Review `scripts/engine_miners/transformers_static_miner.py` and `scripts/engine_miners/transformers_dynamic_miner.py` as the gold standard. The comments in those files contain important design decisions.
 
 ---
@@ -24,7 +24,7 @@ Before writing any code, answer these questions:
 
 3. Does the engine constructor raise on invalid inputs, or silently normalise them? (Transformers and vLLM raise; TRT-LLM constructors are more permissive, so TRT-LLM has no dynamic miner.)
 
-4. What is the CUDA / import dependency? Engines have no host install path — they are imported only inside their per-engine Docker images (see [development.md](development.md)). Within the engine container, can the miner `import enginelib` on the CPU phase of the build, or does the import require a live CUDA runtime? (vLLM: importable inside `llenergymeasure:vllm-${VER}` without GPU at probe time; TRT-LLM: requires CUDA-aware import even inside the NGC container.)
+4. What is the CUDA / import dependency? Engines have no host install path — they are imported only inside their per-engine Docker images (see [development.md](/architecture/development)). Within the engine container, can the miner `import enginelib` on the CPU phase of the build, or does the import require a live CUDA runtime? (vLLM: importable inside `llenergymeasure:vllm-${VER}` without GPU at probe time; TRT-LLM: requires CUDA-aware import even inside the NGC container.)
 
 5. What is a realistic post-vendor-CI rule count? (Transformers: 46; vLLM: 80-110; TRT-LLM: 20-28.) This helps plan the scope.
 
@@ -405,7 +405,7 @@ def test_landmark_checks_raise_on_missing():
      of the heavy from-source compile (e.g. ~30 min FA3 compile) on retry.
 
 2. Set the runner: every engine miner runs inside its own Docker image
-   (no host extras exist — see [development.md](development.md)). For the
+   (no host extras exist — see [development.md](/architecture/development)). For the
    upstream-image pattern, mirror `invariants-vllm` as the template for
    engines whose miners need a GPU only for `import`-time reasons; use
    `invariants-tensorrt` as the template for engines whose Python source
@@ -576,10 +576,10 @@ The fail-loud envelope and the YAML diff together cover the failure modes that t
 
 ## See also
 
-- [miner-pipeline.md](miner-pipeline.md) - pipeline architecture reference
-- [validation-rule-corpus.md](validation-rule-corpus.md) - corpus format
-- [parameter-discovery.md](parameter-discovery.md) - runtime validation
-- [architecture-overview.md](architecture-overview.md) - system overview
+- [miner-pipeline.md](/architecture/miner-pipeline) - pipeline architecture reference
+- [validation-rule-corpus.md](/architecture/validation-rule-corpus) - corpus format
+- [parameter-discovery.md](/methodology/parameter-discovery) - runtime validation
+- [architecture-overview.md](/architecture/architecture-overview) - system overview
 - `scripts/engine_miners/transformers_static_miner.py` - gold-standard static miner
 - `scripts/engine_miners/transformers_dynamic_miner.py` - gold-standard dynamic miner
 - `scripts/engine_miners/_base.py` - shared infrastructure

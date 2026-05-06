@@ -4,7 +4,7 @@ This document is the deep-dive reference for the invariant miner pipeline: how i
 
 **Audience:** engine extenders, CI maintainers, and research readers interested in the technical approach.
 
-For the runtime side of the pipeline (how the corpus is consumed at validation time), see [parameter-discovery.md](parameter-discovery.md).
+For the runtime side of the pipeline (how the corpus is consumed at validation time), see [parameter-discovery.md](/methodology/parameter-discovery).
 
 ---
 
@@ -574,7 +574,7 @@ Decision: leave the JSON commit-back in place; revisit when #467 lands.
 
 All miners run inside their engine's Docker image. The host has no engine
 libraries (`import transformers`, `import vllm`, `import tensorrt_llm` all
-fail by design — see [development.md](development.md)), so every engine's
+fail by design — see [development.md](/architecture/development)), so every engine's
 mining stage must run in the matching container.
 
 | Runner | Image | What runs |
@@ -617,10 +617,10 @@ The templates NOT adopted from Daikon's full library: linear arithmetic ternary 
 
 ## See also
 
-- [architecture-overview.md](architecture-overview.md) - system overview and data-flow
-- [validation-rule-corpus.md](validation-rule-corpus.md) - corpus YAML format reference
-- [extending-miners.md](extending-miners.md) - how to add a new engine miner
-- [parameter-discovery.md](parameter-discovery.md) - runtime validation pipeline
-- [research-context.md](research-context.md) - academic positioning
-- [engines.md](engines.md) - engine configuration reference
-- [schema-refresh.md](schema-refresh.md) - parameter-discovery pipeline (Renovate-driven schema refresh)
+- [architecture-overview.md](/architecture/architecture-overview) - system overview and data-flow
+- [validation-rule-corpus.md](/architecture/validation-rule-corpus) - corpus YAML format reference
+- [extending-miners.md](/architecture/extending-miners) - how to add a new engine miner
+- [parameter-discovery.md](/methodology/parameter-discovery) - runtime validation pipeline
+- [research-context.md](/methodology/research-context) - academic positioning
+- [engines.md](/architecture/engines) - engine configuration reference
+- [schema-refresh.md](/architecture/schema-refresh) - parameter-discovery pipeline (Renovate-driven schema refresh)

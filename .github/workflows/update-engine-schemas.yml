@@ -372,14 +372,16 @@ jobs:
       - name: Regenerate schemas digest
         if: steps.probe.outputs.verdict == 'pass'
         run: |
-          uv run python scripts/generate_curation_doc.py --engine transformers
+          uv run python scripts/generate_curation_doc.py \
+            --engine transformers \
+            --out docs/user/generated/curation-transformers.md
 
       - name: Regenerate schema doc
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           uv run python scripts/generate_schema_doc.py \
             --engine transformers \
-            --out docs/generated/schema-transformers.md
+            --out docs/user/generated/schema-transformers.md
 
       - name: Classify diff
         if: steps.probe.outputs.verdict == 'pass'
@@ -512,8 +514,8 @@ jobs:
           git add \
             "${SCHEMAS_DIR}/transformers.json" \
             engine_versions/transformers.yaml \
-            docs/generated/curation-transformers.md \
-            docs/generated/schema-transformers.md
+            docs/user/generated/curation-transformers.md \
+            docs/user/generated/schema-transformers.md
 
           if git diff --cached --quiet; then
             echo "No engine-schemas artefact changes to commit."
@@ -776,14 +778,16 @@ jobs:
       - name: Regenerate schemas digest
         if: steps.probe.outputs.verdict == 'pass'
         run: |
-          uv run python scripts/generate_curation_doc.py --engine vllm
+          uv run python scripts/generate_curation_doc.py \
+            --engine vllm \
+            --out docs/user/generated/curation-vllm.md
 
       - name: Regenerate schema doc
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           uv run python scripts/generate_schema_doc.py \
             --engine vllm \
-            --out docs/generated/schema-vllm.md
+            --out docs/user/generated/schema-vllm.md
 
       - name: Classify diff
         if: steps.probe.outputs.verdict == 'pass'
@@ -919,8 +923,8 @@ jobs:
           git add \
             "${SCHEMAS_DIR}/vllm.json" \
             engine_versions/vllm.yaml \
-            docs/generated/curation-vllm.md \
-            docs/generated/schema-vllm.md
+            docs/user/generated/curation-vllm.md \
+            docs/user/generated/schema-vllm.md
 
           if git diff --cached --quiet; then
             echo "No engine-schemas artefact changes to commit."
@@ -1207,14 +1211,16 @@ jobs:
       - name: Regenerate schemas digest
         if: steps.probe.outputs.verdict == 'pass'
         run: |
-          uv run python scripts/generate_curation_doc.py --engine tensorrt
+          uv run python scripts/generate_curation_doc.py \
+            --engine tensorrt \
+            --out docs/user/generated/curation-tensorrt.md
 
       - name: Regenerate schema doc
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           uv run python scripts/generate_schema_doc.py \
             --engine tensorrt \
-            --out docs/generated/schema-tensorrt.md
+            --out docs/user/generated/schema-tensorrt.md
 
       - name: Classify diff
         if: steps.probe.outputs.verdict == 'pass'
@@ -1350,8 +1356,8 @@ jobs:
           git add \
             "${SCHEMAS_DIR}/tensorrt.json" \
             engine_versions/tensorrt.yaml \
-            docs/generated/curation-tensorrt.md \
-            docs/generated/schema-tensorrt.md
+            docs/user/generated/curation-tensorrt.md \
+            docs/user/generated/schema-tensorrt.md
 
           if git diff --cached --quiet; then
             echo "No engine-schemas artefact changes to commit."

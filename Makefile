@@ -8,6 +8,7 @@
 .PHONY: discover-schema discover-schemas-all
 .PHONY: package-check docs-check docker-smoke docker-smoke-pytorch ci ci-all ci-docker
 .PHONY: gpu-ci gpu-ci-pytorch
+.PHONY: docs-serve docs-build docs-clean
 
 # PUID/PGID for correct file ownership on bind mounts (LinuxServer.io pattern)
 export PUID := $(shell id -u)
@@ -368,3 +369,18 @@ lem-clean-trt:
 lem-clean-all:
 	docker volume rm lem-experiment-state lem-hf-cache lem-trt-engine-cache 2>/dev/null || true
 	@echo "Cleared all LEM volumes"
+
+# =============================================================================
+# Docs site (Docusaurus)
+#   Source content lives in docs/; site infra lives in website/.
+#   Run `make docs-serve` for a local dev server (auto-reloads on edits).
+# =============================================================================
+
+docs-serve:
+	cd website && npm start
+
+docs-build:
+	cd website && npm run build
+
+docs-clean:
+	rm -rf website/node_modules website/build website/.docusaurus website/.cache-loader

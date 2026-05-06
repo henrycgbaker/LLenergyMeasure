@@ -1,6 +1,6 @@
 # Getting Started
 
-**Prerequisites:** Complete [Installation](installation.md) first.
+**Prerequisites:** Complete [Installation](/docs/installation) first.
 
 This guide has three tracks. Choose one based on your setup:
 
@@ -14,9 +14,9 @@ This guide has three tracks. Choose one based on your setup:
 
 ### Prerequisites
 
-- `llenergymeasure` installed (see [Installation](installation.md))
+- `llenergymeasure` installed (see [Installation](/docs/installation))
 - Docker + NVIDIA Container Toolkit installed — every engine, including
-  Transformers, runs inside a per-engine Docker image (see [development.md](development.md))
+  Transformers, runs inside a per-engine Docker image (see [development.md](/architecture/development))
 - NVIDIA GPU available
 
 ### 1. Verify your environment
@@ -27,8 +27,8 @@ llem config
 
 Check that the output shows your GPU detected and an energy sampler
 selected. Engines will show as "not installed" on host — that is expected;
-they run inside Docker. See [Installation](installation.md) and
-[development.md](development.md) for the Docker build/run pattern.
+they run inside Docker. See [Installation](/docs/installation) and
+[development.md](/architecture/development) for the Docker build/run pattern.
 
 ### 2. Run your first experiment
 
@@ -96,8 +96,8 @@ llem run --model gpt2 -e pytorch --output /data/experiments
 ### Prerequisites
 
 - `llenergymeasure` installed (host-side orchestrator)
-- Docker + NVIDIA Container Toolkit installed — see [Docker Setup](docker-setup.md)
-- vLLM Docker image built — see [development.md](development.md)
+- Docker + NVIDIA Container Toolkit installed — see [Docker Setup](/docs/docker-setup)
+- vLLM Docker image built — see [development.md](/architecture/development)
 
 ### 1. Create a config file
 
@@ -138,9 +138,9 @@ runs with the same config load the cached engine and are much faster.
 
 ### Prerequisites
 
-- Docker + NVIDIA Container Toolkit installed — see [Docker Setup](docker-setup.md)
+- Docker + NVIDIA Container Toolkit installed — see [Docker Setup](/docs/docker-setup)
 - `llenergymeasure` installed (host-side orchestrator)
-- TensorRT-LLM Docker image built — see [development.md](development.md)
+- TensorRT-LLM Docker image built — see [development.md](/architecture/development)
 - NVIDIA GPU with SM >= 7.5 (Turing or newer; e.g. RTX 2000-series, A100, H100)
 
 ### 1. Create a config file
@@ -219,13 +219,13 @@ llem run experiment.yaml
 
 This is equivalent to `llem run --model gpt2 -e pytorch -n 100`. CLI flags override YAML values when both are provided.
 
-For study sweeps (running multiple configurations), see the [Study Configuration](study-config.md) reference.
+For study sweeps (running multiple configurations), see the [Study Configuration](/docs/study-config) reference.
 
 ---
 
 ## Next Steps
 
-- [Study Configuration](study-config.md) — run parameter sweeps across models, engines, and configurations
-- [Docker Setup](docker-setup.md) — set up Docker + NVIDIA Container Toolkit for vLLM/TensorRT-LLM
-- [Engine Configuration](engines.md) — configure vLLM, TensorRT-LLM, and switch between engines
-- [CLI Reference](cli-reference.md) — all `llem run` and `llem config` flags
+- [Study Configuration](/docs/study-config) — run parameter sweeps across models, engines, and configurations
+- [Docker Setup](/docs/docker-setup) — set up Docker + NVIDIA Container Toolkit for vLLM/TensorRT-LLM
+- [Engine Configuration](/architecture/engines) — configure vLLM, TensorRT-LLM, and switch between engines
+- [CLI Reference](/docs/cli-reference) — all `llem run` and `llem config` flags

@@ -199,7 +199,7 @@ via path-based triggers (`docker/Dockerfile.*`).
 
 ## Related
 
-- [Docker Setup](docker-setup.md) - building engine images locally
-- [Engine Configuration](engines.md) - configuring engine parameters
-- [Miner Pipeline](miner-pipeline.md) - how the validation-rule corpus is regenerated alongside parameter schemas on library bumps
-- [Architecture Overview](architecture-overview.md) - full system context
+- [Docker Setup](/docs/docker-setup) - building engine images locally
+- [Engine Configuration](/architecture/engines) - configuring engine parameters
+- [Miner Pipeline](/architecture/miner-pipeline) - how the validation-rule corpus is regenerated alongside parameter schemas on library bumps
+- [Architecture Overview](/architecture/architecture-overview) - full system context

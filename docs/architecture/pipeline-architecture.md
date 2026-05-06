@@ -305,4 +305,4 @@ ADJACENT PIPELINES (independent of per-PR Renovate cycle)
 ================================================================================
 ```
 
-For the full design rationale (including the resolution of the per-engine vs per-concern split, the wait-for-sibling coordination decision, and the rejected summariser-workflow alternative), see [`.product/designs/engine-coupling-architecture-2026-04-28.md`](../.product/designs/engine-coupling-architecture-2026-04-28.md).
+For the full design rationale (including the resolution of the per-engine vs per-concern split, the wait-for-sibling coordination decision, and the rejected summariser-workflow alternative), see the engine-coupling design discussion captured across PRs #477–#492.
