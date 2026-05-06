@@ -39,14 +39,7 @@ def _load_schema(engine: str) -> dict[str, Any]:
     Returns ``{}`` for missing/empty schemas to degrade gracefully when
     discovery hasn't run yet, rather than failing the markdown render.
     """
-    path = (
-        _PROJECT_ROOT
-        / "src"
-        / "llenergymeasure"
-        / "config"
-        / "discovered_schemas"
-        / f"{engine}.json"
-    )
+    path = _PROJECT_ROOT / "src" / "llenergymeasure" / "engines" / engine / "schema.discovered.json"
     if not path.is_file():
         return {}
     text = path.read_text()

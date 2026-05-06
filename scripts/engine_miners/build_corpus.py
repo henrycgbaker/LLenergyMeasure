@@ -1052,8 +1052,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--corpus-root",
         type=Path,
-        default=Path(_PROJECT_ROOT) / "configs" / "engine_invariants",
-        help="Root directory for both the canonical corpus and the _staging/ subdir.",
+        default=Path(_PROJECT_ROOT) / "src" / "llenergymeasure" / "engines",
+        help=(
+            "Engines root containing per-engine sub-packages. Each engine's "
+            "canonical corpus + _staging/ live under <engines>/<engine>/."
+        ),
     )
     parser.add_argument(
         "--skip-extract",

@@ -85,12 +85,9 @@ def _group_by_added_by(rules: list[dict[str, Any]]) -> dict[str, list[dict[str, 
 
 def _render(engine: str) -> str:
     """Build the digest Markdown for ``engine``."""
-    proposed = _load_yaml(
-        _PROJECT_ROOT / "configs" / "engine_invariants" / f"{engine}.proposed.yaml"
-    )
-    vendored = _load_yaml(
-        _PROJECT_ROOT / "configs" / "engine_invariants" / f"{engine}.vendored.yaml"
-    )
+    engine_dir = _PROJECT_ROOT / "src" / "llenergymeasure" / "engines" / engine
+    proposed = _load_yaml(engine_dir / "invariants.proposed.yaml")
+    vendored = _load_yaml(engine_dir / "invariants.vendored.yaml")
     ssot = _load_yaml(_PROJECT_ROOT / "engine_versions" / f"{engine}.yaml")
 
     library = ssot.get("library") if isinstance(ssot.get("library"), dict) else {}
