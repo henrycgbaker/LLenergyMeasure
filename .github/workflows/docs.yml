@@ -3,6 +3,11 @@ name: Build docs site
 # Builds the Docusaurus site under website/ and deploys to GitHub Pages
 # on push to main. PR-time runs build only (no deploy) so reviewers can
 # verify the build is clean before merge.
+#
+# Path-trigger self-test: this workflow's own filename is included in
+# `on.pull_request.paths` and `on.push.paths` below, so edits to this
+# file fire the workflow at PR time and exercise its current behaviour
+# (per the convention in CLAUDE.md §"Path-trigger self-tests").
 
 on:
   pull_request:
@@ -35,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
         uses: actions/setup-node@v4

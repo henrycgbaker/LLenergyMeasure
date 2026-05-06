@@ -2,6 +2,8 @@ import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
+import {ROUTES, GITHUB_REPO, EDIT_URL} from './src/constants';
+
 // Runs in Node.js — no client-side code (no browser APIs, no JSX).
 //
 // Three-plugin IA: docs/user/ (technical user guide + auto-generated
@@ -51,8 +53,7 @@ const config: Config = {
           path: '../docs/user',
           routeBasePath: 'docs',
           sidebarPath: './sidebars.ts',
-          editUrl:
-            'https://github.com/henrycgbaker/llenergymeasure/tree/main/website/',
+          editUrl: EDIT_URL,
         },
         blog: false,
         theme: {
@@ -70,8 +71,7 @@ const config: Config = {
         path: '../docs/methodology',
         routeBasePath: 'methodology',
         sidebarPath: './sidebarsMethodology.ts',
-        editUrl:
-          'https://github.com/henrycgbaker/llenergymeasure/tree/main/website/',
+        editUrl: EDIT_URL,
       },
     ],
     [
@@ -81,8 +81,7 @@ const config: Config = {
         path: '../docs/architecture',
         routeBasePath: 'architecture',
         sidebarPath: './sidebarsArchitecture.ts',
-        editUrl:
-          'https://github.com/henrycgbaker/llenergymeasure/tree/main/website/',
+        editUrl: EDIT_URL,
       },
     ],
     [
@@ -104,18 +103,10 @@ const config: Config = {
     navbar: {
       title: 'llenergymeasure',
       items: [
-        {to: '/docs/installation', label: 'User Guide', position: 'left'},
-        {to: '/methodology/methodology', label: 'Methodology', position: 'left'},
-        {
-          to: '/architecture/architecture-overview',
-          label: 'Architecture',
-          position: 'left',
-        },
-        {
-          href: 'https://github.com/henrycgbaker/llenergymeasure',
-          label: 'GitHub',
-          position: 'right',
-        },
+        {to: ROUTES.userGuide, label: 'User Guide', position: 'left'},
+        {to: ROUTES.methodology, label: 'Methodology', position: 'left'},
+        {to: ROUTES.architecture, label: 'Architecture', position: 'left'},
+        {href: GITHUB_REPO, label: 'GitHub', position: 'right'},
       ],
     },
     footer: {
@@ -124,7 +115,7 @@ const config: Config = {
         {
           title: 'Use',
           items: [
-            {label: 'Installation', to: '/docs/installation'},
+            {label: 'Installation', to: ROUTES.userGuide},
             {label: 'CLI reference', to: '/docs/cli-reference'},
             {label: 'Troubleshooting', to: '/docs/troubleshooting'},
           ],
@@ -132,21 +123,15 @@ const config: Config = {
         {
           title: 'Learn',
           items: [
-            {label: 'Methodology', to: '/methodology/methodology'},
+            {label: 'Methodology', to: ROUTES.methodology},
             {label: 'Energy measurement', to: '/methodology/energy-measurement'},
-            {
-              label: 'Architecture overview',
-              to: '/architecture/architecture-overview',
-            },
+            {label: 'Architecture overview', to: ROUTES.architecture},
           ],
         },
         {
           title: 'More',
           items: [
-            {
-              label: 'GitHub',
-              href: 'https://github.com/henrycgbaker/llenergymeasure',
-            },
+            {label: 'GitHub', href: GITHUB_REPO},
           ],
         },
       ],

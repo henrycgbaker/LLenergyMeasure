@@ -4,6 +4,7 @@ import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 
+import {ROUTES} from '../constants';
 import styles from './index.module.css';
 
 export default function Home(): ReactNode {
@@ -33,17 +34,17 @@ export default function Home(): ReactNode {
             <div className={styles.actions}>
               <Link
                 className="button button--primary button--lg"
-                to="/docs/installation">
+                to={ROUTES.userGuide}>
                 Read the docs
               </Link>
               <Link
                 className="button button--secondary button--lg"
-                to="/methodology/methodology">
+                to={ROUTES.methodology}>
                 Methodology
               </Link>
               <Link
                 className="button button--secondary button--lg"
-                to="/architecture/architecture-overview">
+                to={ROUTES.architecture}>
                 Architecture
               </Link>
             </div>
