@@ -1,10 +1,10 @@
-"""``llem report-gaps`` — feedback-loop proposer for the rules corpus.
+"""``llem report-gaps`` — feedback-loop proposer for the invariants corpus.
 
 Reads ``runtime_observations.jsonl`` emitted by
 :mod:`llenergymeasure.study.runtime_observations`, groups captured warnings
 and log records by their normalised message template, partitions configs
-into *collision_configs* (A) and *not collision_configs* (B), and proposes corpus rules for
-templates the existing rules corpus does not already match.
+into *collision_configs* (A) and *not collision_configs* (B), and proposes corpus invariants for
+templates the existing invariants corpus does not already match.
 
 Design:
 

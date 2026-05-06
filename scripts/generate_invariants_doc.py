@@ -63,7 +63,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _rule_summary(invariant: dict[str, Any]) -> str:
+def _invariant_summary(invariant: dict[str, Any]) -> str:
     """One-line summary of a single invariant for the digest list."""
     invariant_id = invariant.get("id", "<unknown>")
     severity = invariant.get("severity", "?")
@@ -128,7 +128,7 @@ def _render(engine: str) -> str:
             lines.append(f"### {display_label} ({len(invariants)})")
             lines.append("")
             for invariant in invariants:
-                lines.append(_rule_summary(invariant))
+                lines.append(_invariant_summary(invariant))
             lines.append("")
         unknown_keys = sorted(set(groups) - set(_PROVENANCE_PRIORITY))
         for added_by in unknown_keys:
@@ -136,7 +136,7 @@ def _render(engine: str) -> str:
             lines.append(f"### {added_by} ({len(invariants)})")
             lines.append("")
             for invariant in invariants:
-                lines.append(_rule_summary(invariant))
+                lines.append(_invariant_summary(invariant))
             lines.append("")
 
     return "\n".join(lines)

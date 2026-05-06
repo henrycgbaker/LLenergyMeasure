@@ -1,6 +1,6 @@
 """TensorRT-LLM static miner — source-driven AST extraction.
 
-Parses ``tensorrt_llm`` 0.21.0 source via ``ast.parse`` and emits validation-rule
+Parses ``tensorrt_llm`` 0.21.0 source via ``ast.parse`` and emits validation-invariant
 candidates for the AST validators on :class:`BaseLlmArgs`, :class:`TrtLlmArgs`,
 and :class:`LookaheadDecodingConfig`, plus ``Literal[...]``-typed field
 allowlists extracted from class bodies.
@@ -27,7 +27,7 @@ No dynamic miner
 ----------------
 TRT-LLM's ``TrtLlmArgs(...)`` constructor is permissive at construction —
 zero raises observed across 32-trial parallelism / sequence / quantisation
-probes (research §7). All cross-field rules fire at engine build inside C++,
+probes (research §7). All cross-field invariants fire at engine build inside C++,
 out of reach for Python-side construction probing. The adversarial review
 (decision #8) explicitly skipped a TRT-LLM dynamic miner for this reason.
 
@@ -270,9 +270,9 @@ def _isinstance_type_names(node: ast.expr) -> list[str]:
 def _extract_predicates(condition: ast.expr) -> list[_Predicate]:
     """Translate a condition AST into a list of ``self.<field>`` predicates.
 
-    Only AND-combined predicates are extracted into the rule's match.fields;
+    Only AND-combined predicates are extracted into the invariant's match.fields;
     OR / opaque calls / non-self conditions are silently dropped (recall-first
-    — the rule still emits, just without those preconditions).
+    — the invariant still emits, just without those preconditions).
     """
     if isinstance(condition, ast.BoolOp) and isinstance(condition.op, ast.And):
         out: list[_Predicate] = []
@@ -445,7 +445,7 @@ def _flatten_if_chain(if_node: ast.If) -> list[tuple[ast.expr | None, list[ast.s
 
 
 def _walk_if_block(if_node: ast.If, frame: _Frame, emit: _Emitter) -> None:
-    """Walk an ``if/elif/else`` chain; emit one rule per detected body stmt."""
+    """Walk an ``if/elif/else`` chain; emit one invariant per detected body stmt."""
     for cond, body in _flatten_if_chain(if_node):
         if cond is not None:
             preds = _extract_predicates(cond)
@@ -463,12 +463,12 @@ def _walk_if_block(if_node: ast.If, frame: _Frame, emit: _Emitter) -> None:
 
 
 def _walk_for_block(for_node: ast.For, frame: _Frame, emit: _Emitter) -> None:
-    """Walk a ``for key in [literal, ...]:`` loop; parameterise rules per literal.
+    """Walk a ``for key in [literal, ...]:`` loop; parameterise invariants per literal.
 
     For loops over a literal list/tuple of strings (the
     ``set_runtime_knobs_from_build_config`` pattern), expand the loop into
-    one rule per literal — the loop variable's bound value gets recorded as
-    extra context on each emitted rule.
+    one invariant per literal — the loop variable's bound value gets recorded as
+    extra context on each emitted invariant.
     """
     literals = _literal_iterable(for_node.iter)
     target_name = for_node.target.id if isinstance(for_node.target, ast.Name) else None
@@ -513,19 +513,19 @@ def _literal_iterable(iter_node: ast.expr) -> list[Any] | None:
 
 
 # ---------------------------------------------------------------------------
-# Rule emission
+# Invariant emission
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class _Emitter:
-    """Stateful collector for rules produced from one validator method."""
+    """Stateful collector for invariants produced from one validator method."""
 
     native_type: str
     method_name: str
     rel_source_path: str
     today: str
-    rules: list[InvariantCandidate] = field(default_factory=list)
+    invariants: list[InvariantCandidate] = field(default_factory=list)
     _seen_ids: set[str] = field(default_factory=set)
     _id_counter: dict[str, int] = field(default_factory=dict)
     _loop_vars: list[tuple[str, Any]] = field(default_factory=list)
@@ -537,7 +537,7 @@ class _Emitter:
         self._loop_vars.pop()
 
     def emit(self, detected: _DetectedBody, frame: _Frame, *, line: int) -> None:
-        # Resolve a "subject field" for the rule. If a loop variable holds a
+        # Resolve a "subject field" for the invariant. If a loop variable holds a
         # string, treat it as the affected field (set_runtime_knobs pattern).
         subject_field: str | None = None
         loop_context: dict[str, Any] = {}
@@ -551,7 +551,7 @@ class _Emitter:
             preds.append(_Predicate(field=subject_field, op="present", rhs=True))
 
         if not preds:
-            # No predicates at all — the rule has nothing to match on. Skip
+            # No predicates at all — the invariant has nothing to match on. Skip
             # to avoid fingerprint collisions in the merger.
             return
 
@@ -564,7 +564,7 @@ class _Emitter:
         invariant_id = self._make_id(preds, detected, subject_field)
         invariant_under_test = self._describe(preds, detected)
 
-        rule = InvariantCandidate(
+        invariant = InvariantCandidate(
             id=invariant_id,
             engine=ENGINE,
             library=LIBRARY,
@@ -592,11 +592,11 @@ class _Emitter:
             added_at=self.today,
         )
         # De-dup id collisions (same predicate shape on two different lines).
-        if rule.id in self._seen_ids:
-            self._id_counter[rule.id] = self._id_counter.get(rule.id, 1) + 1
-            rule.id = f"{rule.id}__{self._id_counter[rule.id]}"
-        self._seen_ids.add(rule.id)
-        self.rules.append(rule)
+        if invariant.id in self._seen_ids:
+            self._id_counter[invariant.id] = self._id_counter.get(invariant.id, 1) + 1
+            invariant.id = f"{invariant.id}__{self._id_counter[invariant.id]}"
+        self._seen_ids.add(invariant.id)
+        self.invariants.append(invariant)
 
     # -- helpers --------------------------------------------------------
 
@@ -795,7 +795,7 @@ def _walk_method(
     rel_source_path: str,
     today: str,
 ) -> list[InvariantCandidate]:
-    """Walk the body of one validator method and return rule candidates."""
+    """Walk the body of one validator method and return invariant candidates."""
     emitter = _Emitter(
         native_type=native_type,
         method_name=method_name,
@@ -804,7 +804,7 @@ def _walk_method(
     )
     # Field validators are ``def validate_X(cls, v, info=None)`` — they raise on
     # ``v`` (the new value), not ``self.X``. For these, we emit at most one
-    # rule per top-level raise, treating the field name as the implicit
+    # invariant per top-level raise, treating the field name as the implicit
     # subject. Detect by signature: first arg is ``cls`` and second is ``v``.
     is_field_validator = _is_field_validator(method)
     if is_field_validator:
@@ -818,7 +818,7 @@ def _walk_method(
             _walk_if_block(stmt, frame, emitter)
         elif isinstance(stmt, ast.For):
             _walk_for_block(stmt, frame, emitter)
-    return emitter.rules
+    return emitter.invariants
 
 
 def _is_field_validator(method: ast.FunctionDef) -> bool:
@@ -854,20 +854,20 @@ def _walk_field_validator(
     native_type: str,
     method_name: str,
 ) -> list[InvariantCandidate]:
-    """Emit one rule per (target field, raise/warn site) pair.
+    """Emit one invariant per (target field, raise/warn site) pair.
 
     Field validators take ``(cls, v, info=None)``. Raises inside the body
     fire when ``v`` violates a check. We translate each detected raise/warn
-    into a rule keyed on every target field declared in the decorator.
+    into a invariant keyed on every target field declared in the decorator.
 
     Conditions like ``if v <= 0: raise`` are translated to the equivalent
     predicate on the *target field*: ``self.<field> <= 0``. This is the same
-    rule from the corpus loader's perspective.
+    invariant from the corpus loader's perspective.
     """
     targets = _field_validator_targets(method)
     if not targets:
         return []
-    rules: list[InvariantCandidate] = []
+    invariants: list[InvariantCandidate] = []
     for target in targets:
         sub_emitter = _Emitter(
             native_type=native_type,
@@ -877,14 +877,14 @@ def _walk_field_validator(
         )
         for stmt in method.body:
             _walk_field_validator_stmt(stmt, target, sub_emitter)
-        rules.extend(sub_emitter.rules)
-    return rules
+        invariants.extend(sub_emitter.invariants)
+    return invariants
 
 
 def _walk_field_validator_stmt(stmt: ast.stmt, target: str, emitter: _Emitter) -> None:
     """Walk one statement inside a field_validator body, rebinding ``v`` to ``target``.
 
-    The detector emits a rule whose predicates are derived from the condition,
+    The detector emits a invariant whose predicates are derived from the condition,
     with all references to the local parameter ``v`` rewritten as
     ``self.<target>``. Other patterns (assignments to ``v`` etc.) are ignored.
     """
@@ -966,7 +966,7 @@ def _walk_literal_fields(
     rel_source_path: str,
     today: str,
 ) -> list[InvariantCandidate]:
-    """Emit one allowlist rule per ``Literal[...]``-typed Pydantic field.
+    """Emit one allowlist invariant per ``Literal[...]``-typed Pydantic field.
 
     Equivalent to ``_pydantic_lift._from_literal`` but reads the AST instead
     of importing the live class — needed because TRT-LLM 0.21.0 isn't
@@ -1079,11 +1079,11 @@ def _walk_strenum(
     rel_source_path: str,
     today: str,
 ) -> InvariantCandidate | None:
-    """Lift a ``StrEnum`` class to a single allowlist rule for the named field.
+    """Lift a ``StrEnum`` class to a single allowlist invariant for the named field.
 
     The enum class itself is the underlying type for one particular field on
     ``TrtLlmArgs`` (e.g. ``BatchingType`` is the type of ``batching_type``).
-    The rule constrains the field's value to the enum's string members.
+    The invariant constrains the field's value to the enum's string members.
     """
     values: list[str] = []
     for item in cls_node.body:
@@ -1258,15 +1258,15 @@ def walk_tensorrt(source_root: Path | None = None) -> tuple[list[InvariantCandid
         cls = find_class(tree.llm_args, enum_cls)
         if cls is None:
             continue
-        rule = _walk_strenum(
+        invariant = _walk_strenum(
             cls,
             native_type=f"{LIBRARY}.TrtLlmArgs",
             field_name=field_name,
             rel_source_path=tree.llm_args_rel,
             today=today,
         )
-        if rule is not None:
-            candidates.append(rule)
+        if invariant is not None:
+            candidates.append(invariant)
 
     return candidates, version, tree.llm_args_rel
 
@@ -1385,7 +1385,7 @@ def main(argv: list[str] | None = None) -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text)
     print(
-        f"Wrote {len(candidates)} candidate rules to {args.out}",
+        f"Wrote {len(candidates)} candidate invariants to {args.out}",
         file=sys.stderr,
     )
     return 0

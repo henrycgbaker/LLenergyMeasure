@@ -308,7 +308,7 @@ def test_select_backend_auto_forwards_gpu_indices() -> None:
 
 
 def test_nvml_trapezoidal_integration() -> None:
-    """stop_tracking() correctly integrates power samples via trapezoidal rule.
+    """stop_tracking() correctly integrates power samples via trapezoidal invariant.
 
     3 samples at t=0.0, 0.1, 0.2 all with power_w=100.0 W.
     Expected energy = 100.0 W * 0.2 s = 20.0 J.

@@ -341,7 +341,7 @@ class TestBuildLlmKwargs:
         assert kwargs["enable_build_cache"] is True
 
     def test_trt_build_cache_path_requires_enabled(self, monkeypatch):
-        """LLEM_TRT_BUILD_CACHE_PATH set but ENABLED unset → kwarg absent (passthrough rule)."""
+        """LLEM_TRT_BUILD_CACHE_PATH set but ENABLED unset → kwarg absent (passthrough invariant)."""
         monkeypatch.delenv("LLEM_TRT_BUILD_CACHE_ENABLED", raising=False)
         monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_PATH", "/tmp/test")
         config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tensor_parallel_size=1))

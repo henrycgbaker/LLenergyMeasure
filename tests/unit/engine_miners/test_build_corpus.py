@@ -9,8 +9,8 @@ extractors, no real library dependencies.
 Coverage:
 
 - Fingerprint stability across float-precision jitter and dict-key ordering.
-- Cross-validation: shared fingerprint -> single rule with both sources cited.
-- Different fingerprints kept as separate rules.
+- Cross-validation: shared fingerprint -> single invariant with both sources cited.
+- Different fingerprints kept as separate invariants.
 - Per-field precedence: AST-miner wins predicates / kwargs; introspection
   wins message_template.
 - Stability: byte-identical YAML on re-runs.
@@ -37,13 +37,13 @@ from llenergymeasure.config.engine_invariants import EngineInvariantsLoader  # n
 from scripts.engine_miners import build_corpus  # noqa: E402
 
 # ---------------------------------------------------------------------------
-# Fixtures: minimal staging-file rule shapes
+# Fixtures: minimal staging-file invariant shapes
 # ---------------------------------------------------------------------------
 
 
 def _ast_rule(
     *,
-    rule_id: str = "transformers_negative_max_new_tokens",
+    invariant_id: str = "transformers_negative_max_new_tokens",
     severity: str = "error",
     fields: dict[str, Any] | None = None,
     message: str = "max_new_tokens must be > 0 (AST-derived).",
@@ -53,7 +53,7 @@ def _ast_rule(
     references: list[str] | None = None,
 ) -> dict[str, Any]:
     return {
-        "id": rule_id,
+        "id": invariant_id,
         "engine": "transformers",
         "library": "transformers",
         "invariant_under_test": "max_new_tokens > 0",
@@ -84,14 +84,14 @@ def _ast_rule(
 
 def _introspection_rule(
     *,
-    rule_id: str = "transformers_negative_max_new_tokens",
+    invariant_id: str = "transformers_negative_max_new_tokens",
     severity: str = "error",
     fields: dict[str, Any] | None = None,
     message: str = "`max_new_tokens` must be greater than 0, but is -1.",
     observed_messages: list[str] | None = None,
 ) -> dict[str, Any]:
     return {
-        "id": rule_id,
+        "id": invariant_id,
         "engine": "transformers",
         "library": "transformers",
         "invariant_under_test": "max_new_tokens > 0",
@@ -121,14 +121,14 @@ def _introspection_rule(
     }
 
 
-def _envelope(rules: list[dict[str, Any]], engine_version: str = "4.56.0") -> dict[str, Any]:
+def _envelope(invariants: list[dict[str, Any]], engine_version: str = "4.56.0") -> dict[str, Any]:
     return {
         "schema_version": "1.0.0",
         "engine": "transformers",
         "engine_version": engine_version,
         "miner_pinned_range": ">=4.56,<4.57",
         "mined_at": "2026-04-25T00:00:00Z",
-        "invariants": rules,
+        "invariants": invariants,
     }
 
 
@@ -146,60 +146,60 @@ def _write_staging(staging_dir: Path, basename: str, envelope: dict[str, Any]) -
 
 class TestFingerprint:
     def test_identical_rules_have_identical_fingerprints(self) -> None:
-        rule_a = _ast_rule()
-        rule_b = _ast_rule()
-        assert build_corpus.fingerprint_invariant(rule_a) == build_corpus.fingerprint_invariant(
-            rule_b
-        )
+        invariant_a = _ast_rule()
+        invariant_b = _ast_rule()
+        assert build_corpus.fingerprint_invariant(
+            invariant_a
+        ) == build_corpus.fingerprint_invariant(invariant_b)
 
     def test_fingerprint_ignores_dict_key_order(self) -> None:
         # canonical_serialise sorts keys; the merger inherits that.
-        rule_a = _ast_rule(
+        invariant_a = _ast_rule(
             fields={
                 "transformers.sampling.do_sample": False,
                 "transformers.sampling.num_beams": 1,
             },
         )
-        rule_b = _ast_rule(
+        invariant_b = _ast_rule(
             fields={
                 "transformers.sampling.num_beams": 1,
                 "transformers.sampling.do_sample": False,
             },
         )
-        assert build_corpus.fingerprint_invariant(rule_a) == build_corpus.fingerprint_invariant(
-            rule_b
-        )
+        assert build_corpus.fingerprint_invariant(
+            invariant_a
+        ) == build_corpus.fingerprint_invariant(invariant_b)
 
     def test_fingerprint_stable_across_float_jitter(self) -> None:
         # Floats round to 12 sig digits via canonical_serialise; bit-level
         # jitter in the last place must not change the fingerprint.
-        rule_a = _ast_rule(fields={"transformers.sampling.temperature": 0.7})
-        rule_b = _ast_rule(fields={"transformers.sampling.temperature": 0.7000000000001})
-        assert build_corpus.fingerprint_invariant(rule_a) == build_corpus.fingerprint_invariant(
-            rule_b
-        )
+        invariant_a = _ast_rule(fields={"transformers.sampling.temperature": 0.7})
+        invariant_b = _ast_rule(fields={"transformers.sampling.temperature": 0.7000000000001})
+        assert build_corpus.fingerprint_invariant(
+            invariant_a
+        ) == build_corpus.fingerprint_invariant(invariant_b)
 
     def test_fingerprint_excludes_id_and_message(self) -> None:
-        # Two rules with the same constraint but different ids / messages
+        # Two invariants with the same constraint but different ids / messages
         # still bucket together — the corpus is about the constraint.
-        rule_a = _ast_rule(rule_id="foo", message="msg A")
-        rule_b = _ast_rule(rule_id="bar", message="msg B")
-        assert build_corpus.fingerprint_invariant(rule_a) == build_corpus.fingerprint_invariant(
-            rule_b
-        )
+        invariant_a = _ast_rule(invariant_id="foo", message="msg A")
+        invariant_b = _ast_rule(invariant_id="bar", message="msg B")
+        assert build_corpus.fingerprint_invariant(
+            invariant_a
+        ) == build_corpus.fingerprint_invariant(invariant_b)
 
     def test_fingerprint_distinguishes_severity(self) -> None:
-        rule_a = _ast_rule(severity="error")
-        rule_b = _ast_rule(severity="warn")
-        assert build_corpus.fingerprint_invariant(rule_a) != build_corpus.fingerprint_invariant(
-            rule_b
-        )
+        invariant_a = _ast_rule(severity="error")
+        invariant_b = _ast_rule(severity="warn")
+        assert build_corpus.fingerprint_invariant(
+            invariant_a
+        ) != build_corpus.fingerprint_invariant(invariant_b)
 
     def test_fingerprint_collapses_int_and_float_thresholds(self) -> None:
         # Static miners read literals from source (`0.0` -> float); dynamic
         # miners emit Python int probes (`0` -> int). Same constraint, two
         # numeric types. Without canonicalisation the cross-validation safety
-        # net would split a single library invariant into two corpus rules.
+        # net would split a single library invariant into two corpus invariants.
         rule_int = _ast_rule(fields={"vllm.sampling.repetition_penalty": {"<=": 0}})
         rule_float = _ast_rule(fields={"vllm.sampling.repetition_penalty": {"<=": 0.0}})
         assert build_corpus.fingerprint_invariant(rule_int) == build_corpus.fingerprint_invariant(
@@ -207,7 +207,7 @@ class TestFingerprint:
         )
 
     def test_fingerprint_preserves_bool_distinct_from_int(self) -> None:
-        # Bool must NOT collapse into int despite ``True == 1``: a rule that
+        # Bool must NOT collapse into int despite ``True == 1``: a invariant that
         # fires on ``do_sample is True`` is semantically different from one
         # that fires on ``num_beams == 1``.
         rule_bool = _ast_rule(fields={"transformers.sampling.do_sample": True})
@@ -230,11 +230,11 @@ class TestCrossValidation:
             staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
         )
 
-        rules, _envelope_out = build_corpus.merge_staging(
+        invariants, _envelope_out = build_corpus.merge_staging(
             [build_corpus._load_staging(p) for p in sorted(staging.glob("transformers_*.yaml"))]
         )
-        assert len(rules) == 1
-        merged = rules[0]
+        assert len(invariants) == 1
+        merged = invariants[0]
         assert merged["added_by"] == "static_miner"
         assert merged["cross_validated_by"] == ["dynamic_miner"]
 
@@ -253,14 +253,14 @@ class TestCrossValidation:
             _envelope([_introspection_rule(message="`max_new_tokens` must be > 0, but is -1.")]),
         )
 
-        rules, _ = build_corpus.merge_staging(
+        invariants, _ = build_corpus.merge_staging(
             [build_corpus._load_staging(p) for p in sorted(staging.glob("transformers_*.yaml"))]
         )
-        assert len(rules) == 1
-        assert rules[0]["message_template"] == "`max_new_tokens` must be > 0, but is -1."
+        assert len(invariants) == 1
+        assert invariants[0]["message_template"] == "`max_new_tokens` must be > 0, but is -1."
         # Conflict surfaced for review (since the messages differed).
-        assert "conflict_note" in rules[0]
-        assert "message_template" in rules[0]["conflict_note"]
+        assert "conflict_note" in invariants[0]
+        assert "message_template" in invariants[0]["conflict_note"]
 
     def test_ast_kwargs_positive_overrides_introspection(self, tmp_path: Path) -> None:
         staging = tmp_path / "transformers" / "_staging"
@@ -281,12 +281,12 @@ class TestCrossValidation:
         intro["kwargs_negative"] = {"max_new_tokens": 16}
         _write_staging(staging, "transformers_dynamic_miner.yaml", _envelope([intro]))
 
-        rules, _ = build_corpus.merge_staging(
+        invariants, _ = build_corpus.merge_staging(
             [build_corpus._load_staging(p) for p in sorted(staging.glob("transformers_*.yaml"))]
         )
-        assert len(rules) == 1
-        assert rules[0]["kwargs_positive"] == {"max_new_tokens": -42}
-        assert rules[0]["kwargs_negative"] == {"max_new_tokens": 99}
+        assert len(invariants) == 1
+        assert invariants[0]["kwargs_positive"] == {"max_new_tokens": -42}
+        assert invariants[0]["kwargs_negative"] == {"max_new_tokens": 99}
 
     def test_observed_messages_carry_over_from_introspection(self, tmp_path: Path) -> None:
         staging = tmp_path / "transformers" / "_staging"
@@ -303,11 +303,11 @@ class TestCrossValidation:
             ),
         )
 
-        rules, _ = build_corpus.merge_staging(
+        invariants, _ = build_corpus.merge_staging(
             [build_corpus._load_staging(p) for p in sorted(staging.glob("transformers_*.yaml"))]
         )
-        assert len(rules) == 1
-        observed = rules[0]["expected_outcome"].get("observed_messages")
+        assert len(invariants) == 1
+        observed = invariants[0]["expected_outcome"].get("observed_messages")
         assert observed == ["`max_new_tokens` must be greater than 0, but is -1."]
 
     def test_references_unioned_across_sources(self, tmp_path: Path) -> None:
@@ -321,10 +321,10 @@ class TestCrossValidation:
         intro["references"] = ["Introspection ref 2"]
         _write_staging(staging, "transformers_dynamic_miner.yaml", _envelope([intro]))
 
-        rules, _ = build_corpus.merge_staging(
+        invariants, _ = build_corpus.merge_staging(
             [build_corpus._load_staging(p) for p in sorted(staging.glob("transformers_*.yaml"))]
         )
-        refs = rules[0]["references"]
+        refs = invariants[0]["references"]
         assert "AST ref 1" in refs
         assert "Introspection ref 2" in refs
 
@@ -336,7 +336,7 @@ class TestCrossValidation:
 
 class TestDistinctFingerprints:
     def test_different_match_fields_kept_as_two_rules(self, tmp_path: Path) -> None:
-        # Same id, different match.fields -> two separate rules. Vendor CI
+        # Same id, different match.fields -> two separate invariants. Vendor CI
         # will prove which fires correctly on the live library.
         staging = tmp_path / "transformers" / "_staging"
         ast = _ast_rule(
@@ -348,14 +348,14 @@ class TestDistinctFingerprints:
         _write_staging(staging, "transformers_static_miner.yaml", _envelope([ast]))
         _write_staging(staging, "transformers_dynamic_miner.yaml", _envelope([intro]))
 
-        rules, _ = build_corpus.merge_staging(
+        invariants, _ = build_corpus.merge_staging(
             [build_corpus._load_staging(p) for p in sorted(staging.glob("transformers_*.yaml"))]
         )
-        assert len(rules) == 2
+        assert len(invariants) == 2
         # Both keep their original added_by; neither has cross_validated_by.
-        sources = {r["added_by"] for r in rules}
+        sources = {r["added_by"] for r in invariants}
         assert sources == {"static_miner", "dynamic_miner"}
-        for r in rules:
+        for r in invariants:
             assert "cross_validated_by" not in r
 
 
@@ -372,8 +372,10 @@ class TestStability:
             "transformers_static_miner.yaml",
             _envelope(
                 [
-                    _ast_rule(rule_id="rule_b", fields={"transformers.sampling.top_k": 51}),
-                    _ast_rule(rule_id="rule_a"),
+                    _ast_rule(
+                        invariant_id="invariant_b", fields={"transformers.sampling.top_k": 51}
+                    ),
+                    _ast_rule(invariant_id="invariant_a"),
                 ]
             ),
         )
@@ -422,8 +424,8 @@ class TestStability:
             "transformers_static_miner.yaml",
             _envelope(
                 [
-                    _ast_rule(rule_id="zzz_late", fields={"f1": 1}),
-                    _ast_rule(rule_id="aaa_early", fields={"f2": 2}),
+                    _ast_rule(invariant_id="zzz_late", fields={"f1": 1}),
+                    _ast_rule(invariant_id="aaa_early", fields={"f2": 2}),
                 ]
             ),
         )
@@ -517,9 +519,9 @@ class TestLoaderRoundTrip:
         loader = EngineInvariantsLoader(corpus_root=tmp_path)
         parsed = loader.load_invariants("transformers")
         assert len(parsed.invariants) == 1
-        rule = parsed.invariants[0]
-        assert rule.added_by == "static_miner"
-        assert rule.cross_validated_by == ("dynamic_miner",)
+        invariant = parsed.invariants[0]
+        assert invariant.added_by == "static_miner"
+        assert invariant.cross_validated_by == ("dynamic_miner",)
 
     def test_loader_rejects_unknown_cross_validated_by_value(self, tmp_path: Path) -> None:
         # Bypass the merger's single-source normalisation by writing a
@@ -528,11 +530,11 @@ class TestLoaderRoundTrip:
         # whole point of validating cross-validation provenance.
         from llenergymeasure.config.engine_invariants import UnknownAddedByError
 
-        rule = _ast_rule()
-        rule["cross_validated_by"] = ["NOT_A_REAL_PROVENANCE"]
+        invariant = _ast_rule()
+        invariant["cross_validated_by"] = ["NOT_A_REAL_PROVENANCE"]
         canonical = tmp_path / "transformers" / "invariants.proposed.yaml"
         canonical.parent.mkdir(parents=True, exist_ok=True)
-        canonical.write_text(yaml.safe_dump(_envelope([rule]), sort_keys=False))
+        canonical.write_text(yaml.safe_dump(_envelope([invariant]), sort_keys=False))
 
         loader = EngineInvariantsLoader(corpus_root=tmp_path)
         with pytest.raises(UnknownAddedByError):
@@ -556,42 +558,42 @@ class TestAddedAtPreservation:
         assert out == {}
 
     def test_load_prior_added_at_map_extracts_fingerprint_to_date(self, tmp_path: Path) -> None:
-        rule = _ast_rule()
-        rule["added_at"] = "2026-04-01"
+        invariant = _ast_rule()
+        invariant["added_at"] = "2026-04-01"
         path = tmp_path / "prior.yaml"
-        path.write_text(yaml.safe_dump(_envelope([rule]), sort_keys=False))
+        path.write_text(yaml.safe_dump(_envelope([invariant]), sort_keys=False))
         out = build_corpus._load_prior_added_at_map(path)
-        fp = build_corpus.fingerprint_invariant(rule)
+        fp = build_corpus.fingerprint_invariant(invariant)
         assert out == {fp: "2026-04-01"}
 
     def test_preserve_added_at_restores_matching_fingerprint(self) -> None:
-        rule = _ast_rule()
-        rule["added_at"] = "2026-04-30"
-        prior = {build_corpus.fingerprint_invariant(rule): "2026-04-01"}
-        build_corpus._preserve_added_at([rule], prior)
-        assert rule["added_at"] == "2026-04-01"
+        invariant = _ast_rule()
+        invariant["added_at"] = "2026-04-30"
+        prior = {build_corpus.fingerprint_invariant(invariant): "2026-04-01"}
+        build_corpus._preserve_added_at([invariant], prior)
+        assert invariant["added_at"] == "2026-04-01"
 
     def test_preserve_added_at_keeps_today_when_no_match(self) -> None:
-        rule = _ast_rule()
-        rule["added_at"] = "2026-04-30"
+        invariant = _ast_rule()
+        invariant["added_at"] = "2026-04-30"
         # Different fingerprint in prior — no match expected.
         other = _ast_rule(fields={"transformers.sampling.top_p": {"<": 0.0}})
         prior = {build_corpus.fingerprint_invariant(other): "2026-04-01"}
-        build_corpus._preserve_added_at([rule], prior)
-        assert rule["added_at"] == "2026-04-30"
+        build_corpus._preserve_added_at([invariant], prior)
+        assert invariant["added_at"] == "2026-04-30"
 
     def test_preserve_added_at_no_op_when_prior_empty(self) -> None:
-        rule = _ast_rule()
-        rule["added_at"] = "2026-04-30"
-        build_corpus._preserve_added_at([rule], {})
-        assert rule["added_at"] == "2026-04-30"
+        invariant = _ast_rule()
+        invariant["added_at"] = "2026-04-30"
+        build_corpus._preserve_added_at([invariant], {})
+        assert invariant["added_at"] == "2026-04-30"
 
     def test_e2e_added_at_preserved_across_remine(self, tmp_path: Path) -> None:
         """Re-running the merger after a prior canonical exists keeps each
-        rule's original ``added_at`` instead of stamping today's date.
+        invariant's original ``added_at`` instead of stamping today's date.
 
         Stops Renovate-driven rebuilds from producing noise diffs that
-        flip ``added_at`` on every rule even when content is unchanged.
+        flip ``added_at`` on every invariant even when content is unchanged.
         """
         staging = tmp_path / "transformers" / "_staging"
 
@@ -662,7 +664,7 @@ class TestVendorValidationGate:
     def test_validated_kept_invariants_land_in_canonical(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Rules with no divergence are kept in the canonical YAML."""
+        """Invariants with no divergence are kept in the canonical YAML."""
         import scripts.validate_invariants as vr
 
         monkeypatch.setattr(vr, "validate_engine", _stub_validate_engine())
@@ -671,7 +673,7 @@ class TestVendorValidationGate:
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
-            _envelope([_ast_rule(rule_id="rule_kept")]),
+            _envelope([_ast_rule(invariant_id="rule_kept")]),
         )
 
         result = build_corpus.write_corpus("transformers", tmp_path)
@@ -700,8 +702,8 @@ class TestVendorValidationGate:
             "transformers_static_miner.yaml",
             _envelope(
                 [
-                    _ast_rule(rule_id="rule_bad", fields={"f1": 1}),
-                    _ast_rule(rule_id="rule_kept", fields={"f2": 2}),
+                    _ast_rule(invariant_id="rule_bad", fields={"f1": 1}),
+                    _ast_rule(invariant_id="rule_kept", fields={"f2": 2}),
                 ]
             ),
         )
@@ -726,7 +728,7 @@ class TestVendorValidationGate:
         monkeypatch.setattr(
             vr,
             "validate_engine",
-            _stub_validate_engine(divergent_rule_ids=("rule_a", "rule_b")),
+            _stub_validate_engine(divergent_rule_ids=("invariant_a", "invariant_b")),
         )
 
         staging = tmp_path / "transformers" / "_staging"
@@ -735,8 +737,8 @@ class TestVendorValidationGate:
             "transformers_static_miner.yaml",
             _envelope(
                 [
-                    _ast_rule(rule_id="rule_a", fields={"f1": 1}),
-                    _ast_rule(rule_id="rule_b", fields={"f2": 2}),
+                    _ast_rule(invariant_id="invariant_a", fields={"f1": 1}),
+                    _ast_rule(invariant_id="invariant_b", fields={"f2": 2}),
                 ]
             ),
         )
@@ -747,8 +749,8 @@ class TestVendorValidationGate:
         assert result.invariants_quarantined == 0
 
         canonical = (tmp_path / "transformers" / "invariants.proposed.yaml").read_text()
-        assert "rule_a" in canonical
-        assert "rule_b" in canonical
+        assert "invariant_a" in canonical
+        assert "invariant_b" in canonical
         # No quarantine file when validation is skipped.
         assert not (
             tmp_path / "transformers" / "_staging" / "_failed_validation_transformers.yaml"
@@ -773,7 +775,7 @@ class TestVendorValidationGate:
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
-            _envelope([_ast_rule(rule_id="rule_bad")]),
+            _envelope([_ast_rule(invariant_id="rule_bad")]),
         )
 
         build_corpus.write_corpus("transformers", tmp_path)
@@ -795,7 +797,7 @@ class TestVendorValidationGate:
         assert len(doc["quarantined_rules"]) == 1
 
         entry = doc["quarantined_rules"][0]
-        assert entry["rule"]["id"] == "rule_bad"
+        assert entry["invariant"]["id"] == "rule_bad"
         assert entry["divergences"][0]["field"] == "outcome"
         assert entry["divergences"][0]["expected"] == "expected_value"
         assert entry["divergences"][0]["observed"] == "observed_value"
@@ -838,8 +840,8 @@ class TestVendorValidationGate:
             "transformers_static_miner.yaml",
             _envelope(
                 [
-                    _ast_rule(rule_id="rule_bad", fields={"f1": 1}),
-                    _ast_rule(rule_id="rule_kept", fields={"f2": 2}),
+                    _ast_rule(invariant_id="rule_bad", fields={"f1": 1}),
+                    _ast_rule(invariant_id="rule_kept", fields={"f2": 2}),
                 ]
             ),
         )
@@ -874,7 +876,7 @@ class TestVendorValidationGate:
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
-            _envelope([_ast_rule(rule_id="rule_real")]),
+            _envelope([_ast_rule(invariant_id="rule_real")]),
         )
 
         build_corpus.write_corpus("transformers", tmp_path)

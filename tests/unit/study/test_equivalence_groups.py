@@ -48,7 +48,7 @@ class TestRoundTripSerialisation:
                     member_resolved_config_hashes=("sha256:abc", "sha256:xyz"),
                     member_experiment_ids=("exp_0001", "exp_0003"),
                     gap_detected=True,
-                    proposed_rule_id="candidate_rule_1",
+                    proposed_invariant_id="candidate_invariant_1",
                 )
             ],
         )
@@ -71,7 +71,7 @@ class TestBuildPreRunGroups:
         cfg_a = _mk_config(transformers={"sampling": {"do_sample": False, "temperature": 0.5}})
         cfg_b = _mk_config(transformers={"sampling": {"do_sample": False, "temperature": 0.7}})
         result = resolve_library_effective([cfg_a, cfg_b])
-        # Both collapse via the real corpus' greedy rules.
+        # Both collapse via the real corpus' greedy invariants.
         pre = build_pre_run_groups(result, experiment_ids=["exp_a", "exp_b"])
         assert len(pre) == 1
         assert pre[0].member_experiment_ids == ("exp_a", "exp_b")

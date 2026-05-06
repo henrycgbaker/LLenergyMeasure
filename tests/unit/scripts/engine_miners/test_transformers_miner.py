@@ -52,7 +52,7 @@ def _sample_candidate() -> InvariantCandidate:
         id="transformers_test_sample",
         engine="transformers",
         library="transformers",
-        invariant_under_test="Sample rule",
+        invariant_under_test="Sample invariant",
         severity="dormant",
         native_type="transformers.GenerationConfig",
         miner_source=MinerSource(
@@ -117,10 +117,10 @@ def test_emit_yaml_roundtrip_preserves_fields() -> None:
     doc = yaml.safe_load(text)
     assert doc["schema_version"] == "1.0.0"
     assert len(doc["invariants"]) == 1
-    rule = doc["invariants"][0]
-    assert rule["id"] == "transformers_test_sample"
-    assert rule["match"]["fields"] == {"transformers.sampling.temperature": 0.5}
-    assert "path" in rule["miner_source"]
+    invariant = doc["invariants"][0]
+    assert invariant["id"] == "transformers_test_sample"
+    assert invariant["match"]["fields"] == {"transformers.sampling.temperature": 0.5}
+    assert "path" in invariant["miner_source"]
 
 
 # ---------------------------------------------------------------------------
@@ -140,18 +140,18 @@ def test_walk_extracts_expected_rule_count() -> None:
     """Coverage-by-shape rather than exact count.
 
     The pre-refactor introspection miner used a hardcoded probe list
-    that emitted exactly 22 rules (16 dormant + 6 error). With BNB
-    rules from the parallel miner, total was 31. The combinatorial
+    that emitted exactly 22 invariants (16 dormant + 6 error). With BNB
+    invariants from the parallel miner, total was 31. The combinatorial
     refactor (PR 3 of phase-50 #391) shifts the count as the matrix
     discovers new patterns; pinning exact numbers re-encodes
     implementation detail and breaks every time the cluster sweep
     surfaces a new edge case. Pin SHAPE: miner still produces a
-    non-trivial number of rules with valid envelope.
+    non-trivial number of invariants with valid envelope.
     """
     pytest.importorskip("transformers")
     candidates, envelope = tf_walker.walk()
     assert len(candidates) >= 20, (
-        f"miner produced only {len(candidates)} rules — extractor regression?"
+        f"miner produced only {len(candidates)} invariants — extractor regression?"
     )
     assert envelope["engine"] == "transformers"
     assert envelope["schema_version"] == "1.0.0"
@@ -184,7 +184,7 @@ def test_walk_extracts_beam_dormancy_rules() -> None:
     pytest.importorskip("transformers")
     candidates, _ = tf_walker.walk()
     beam_ids = {c.id for c in candidates if "single_beam_strips" in c.id}
-    # Exact set — adding a new single-beam rule must update this list.
+    # Exact set — adding a new single-beam invariant must update this list.
     expected = {
         f"transformers_single_beam_strips_{f}"
         for f in (
@@ -203,7 +203,7 @@ def test_walk_extracts_bnb_type_rules() -> None:
     pytest.importorskip("transformers")
     candidates, _ = tf_walker.walk()
     bnb_ids = {c.id for c in candidates if "bnb_" in c.id}
-    # Must include the core type-check rules that appear in the 2026-04-22
+    # Must include the core type-check invariants that appear in the 2026-04-22
     # AST PoC for BitsAndBytesConfig.post_init.
     for field in (
         "load_in_4bit",

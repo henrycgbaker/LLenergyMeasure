@@ -35,17 +35,17 @@ class _NoLiterals:
     y: str = "y"
 
 
-def _by_op(rules: list, op: str) -> list:
+def _by_op(invariants: list, op: str) -> list:
     return [
         r
-        for r in rules
+        for r in invariants
         if any(op in (m if isinstance(m, dict) else {}) for m in r.match_fields.values())
     ]
 
 
 def test_lift_extracts_literal_allowlists() -> None:
-    rules = lift(_LiteralDataclass, namespace="d.lit", today="2026-04-26", source_path="x.py")
-    in_rules = _by_op(rules, "in")
+    invariants = lift(_LiteralDataclass, namespace="d.lit", today="2026-04-26", source_path="x.py")
+    in_rules = _by_op(invariants, "in")
     # Two Literal fields: quant_method and optional_choice (one nested in Optional).
     assert len(in_rules) == 2
 

@@ -29,18 +29,18 @@ class _Bounds(BaseModel):
     mode: Literal["greedy", "beam", "sample"] = "greedy"
 
 
-def _by_op(rules: list, op: str) -> list:
+def _by_op(invariants: list, op: str) -> list:
     return [
         r
-        for r in rules
+        for r in invariants
         if any(op in (m if isinstance(m, dict) else {}) for m in r.match_fields.values())
     ]
 
 
 def test_lift_numeric_bounds() -> None:
-    rules = lift(_Bounds, namespace="t.bounds", today="2026-04-26", source_path="x.py")
-    ge_rules = _by_op(rules, ">=")
-    le_rules = _by_op(rules, "<=")
+    invariants = lift(_Bounds, namespace="t.bounds", today="2026-04-26", source_path="x.py")
+    ge_rules = _by_op(invariants, ">=")
+    le_rules = _by_op(invariants, "<=")
     assert len(ge_rules) == 1
     assert len(le_rules) == 1
     ge_rule = ge_rules[0]
@@ -52,13 +52,13 @@ def test_lift_numeric_bounds() -> None:
 
 
 def test_lift_multiple_of_and_lengths() -> None:
-    rules = lift(_Bounds, namespace="t.bounds", today="2026-04-26", source_path="x.py")
-    mo = _by_op(rules, "multiple_of")
+    invariants = lift(_Bounds, namespace="t.bounds", today="2026-04-26", source_path="x.py")
+    mo = _by_op(invariants, "multiple_of")
     assert len(mo) == 1
     assert mo[0].match_fields == {"t.bounds.block_size": {"multiple_of": 8}}
 
-    min_len = _by_op(rules, "min_len")
-    max_len = _by_op(rules, "max_len")
+    min_len = _by_op(invariants, "min_len")
+    max_len = _by_op(invariants, "max_len")
     assert len(min_len) == 1
     assert len(max_len) == 1
     assert min_len[0].kwargs_positive == {"name": ""}
@@ -66,13 +66,13 @@ def test_lift_multiple_of_and_lengths() -> None:
 
 
 def test_lift_literal_allowlist() -> None:
-    rules = lift(_Bounds, namespace="t.bounds", today="2026-04-26", source_path="x.py")
-    in_rules = _by_op(rules, "in")
+    invariants = lift(_Bounds, namespace="t.bounds", today="2026-04-26", source_path="x.py")
+    in_rules = _by_op(invariants, "in")
     assert len(in_rules) == 1
-    rule = in_rules[0]
-    assert rule.match_fields == {"t.bounds.mode": {"in": ["greedy", "beam", "sample"]}}
+    invariant = in_rules[0]
+    assert invariant.match_fields == {"t.bounds.mode": {"in": ["greedy", "beam", "sample"]}}
     # negative case picks the first valid value
-    assert rule.kwargs_negative == {"mode": "greedy"}
+    assert invariant.kwargs_negative == {"mode": "greedy"}
 
 
 def test_lift_returns_empty_on_non_pydantic_type() -> None:
@@ -90,7 +90,7 @@ def test_lift_handles_optional_literal() -> None:
     class _OptionalLiteral(BaseModel):
         choice: Literal["a", "b"] | None = None
 
-    rules = lift(_OptionalLiteral, namespace="t", today="2026-04-26", source_path="x.py")
-    in_rules = _by_op(rules, "in")
+    invariants = lift(_OptionalLiteral, namespace="t", today="2026-04-26", source_path="x.py")
+    in_rules = _by_op(invariants, "in")
     assert len(in_rules) == 1
     assert in_rules[0].match_fields == {"t.choice": {"in": ["a", "b"]}}

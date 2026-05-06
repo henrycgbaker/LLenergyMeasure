@@ -29,7 +29,7 @@ invariants:
   - id: transformers_test_rule
     engine: transformers
     library: transformers
-    invariant_under_test: "Test rule"
+    invariant_under_test: "Test invariant"
     severity: dormant
     native_type: transformers.GenerationConfig
     miner_source:
@@ -195,8 +195,8 @@ def test_all_added_by_values_round_trip(tmp_path: Path, provenance: str) -> None
     corpus = _CORPUS_MINIMAL.replace("added_by: static_miner", f"added_by: {provenance}")
     _write_corpus(tmp_path, "transformers", corpus)
     loader = EngineInvariantsLoader(corpus_root=tmp_path)
-    rules = loader.load_invariants("transformers").invariants
-    assert rules[0].added_by == provenance
+    invariants = loader.load_invariants("transformers").invariants
+    assert invariants[0].added_by == provenance
 
 
 def test_unknown_added_by_value_raises(tmp_path: Path) -> None:
@@ -215,8 +215,8 @@ def test_missing_added_by_defaults_to_manual_seed(tmp_path: Path) -> None:
     corpus = _CORPUS_MINIMAL.replace("    added_by: static_miner\n", "")
     _write_corpus(tmp_path, "transformers", corpus)
     loader = EngineInvariantsLoader(corpus_root=tmp_path)
-    rules = loader.load_invariants("transformers").invariants
-    assert rules[0].added_by == "manual_seed"
+    invariants = loader.load_invariants("transformers").invariants
+    assert invariants[0].added_by == "manual_seed"
 
 
 # ---------------------------------------------------------------------------

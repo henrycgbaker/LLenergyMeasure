@@ -2,7 +2,7 @@
 
 Sub-library type-system lift consumed by per-engine miners. Walks
 :class:`msgspec.Struct` subclasses via :func:`msgspec.inspect.type_info` and
-emits one rule candidate per ``Meta(ge=, le=, ...)`` constraint or
+emits one invariant candidate per ``Meta(ge=, le=, ...)`` constraint or
 ``Literal[...]`` allowlist.
 
 Used by:
@@ -81,7 +81,7 @@ def lift(
     today: str,
     source_path: str,
 ) -> list[InvariantCandidate]:
-    """Extract validation-rule candidates from a ``msgspec.Struct`` subclass.
+    """Extract validation-invariant candidates from a ``msgspec.Struct`` subclass.
 
     Parameters
     ----------
@@ -92,7 +92,7 @@ def lift(
     today:
         ISO-8601 date string for ``added_at``.
     source_path:
-        Source-file path recorded on each rule's :class:`MinerSource`.
+        Source-file path recorded on each invariant's :class:`MinerSource`.
 
     Returns
     -------
@@ -218,7 +218,7 @@ def _build_numeric(
     namespace: str,
     today: str,
 ) -> InvariantCandidate:
-    """Materialise a numeric-constraint rule candidate."""
+    """Materialise a numeric-constraint invariant candidate."""
     return InvariantCandidate(
         id=f"{library}_{type_name.lower()}_{field_name}_{op_key.replace('>', 'gt').replace('<', 'lt').replace('=', 'e')}_{_slug(threshold)}",
         engine=library,
@@ -254,7 +254,7 @@ def _build_length(
     namespace: str,
     today: str,
 ) -> InvariantCandidate:
-    """Materialise a length-constraint rule candidate."""
+    """Materialise a length-constraint invariant candidate."""
     bad = "" if op_key == "min_len" else "x" * (threshold + 1)
     good = "x" * (threshold if op_key == "min_len" else threshold)
     return InvariantCandidate(
@@ -291,7 +291,7 @@ def _build_literal(
     namespace: str,
     today: str,
 ) -> InvariantCandidate:
-    """Materialise a Literal-allowlist rule candidate."""
+    """Materialise a Literal-allowlist invariant candidate."""
     return InvariantCandidate(
         id=f"{library}_{type_name.lower()}_{field_name}_in_{len(values)}_values",
         engine=library,

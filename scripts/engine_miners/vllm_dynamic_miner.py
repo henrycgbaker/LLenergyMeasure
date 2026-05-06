@@ -6,7 +6,7 @@ on their own:
 
 1. **Pydantic lift** over the 12 ``vllm.config.*`` pydantic-dataclasses
    (``CacheConfig``, ``ParallelConfig``, ``ModelConfig``, …). Each emits one
-   rule per ``annotated-types`` constraint (``Gt``, ``Le``, ``MultipleOf``,
+   invariant per ``annotated-types`` constraint (``Gt``, ``Le``, ``MultipleOf``,
    …) and per ``Literal[...]`` allowlist annotation.
 2. **msgspec lift** over ``vllm.SamplingParams``. Per the research doc,
    vLLM ships zero ``msgspec.Meta(...)`` annotations on SamplingParams, so
@@ -14,16 +14,16 @@ on their own:
    release adopting msgspec.Meta is captured automatically.
 
 A stdlib **dataclass lift** over ``vllm.engine.arg_utils.EngineArgs`` is
-DELIBERATELY OMITTED: the lift would emit ~23 rule candidates from
+DELIBERATELY OMITTED: the lift would emit ~23 invariant candidates from
 ``Literal[...]`` annotations, but stdlib dataclass does not enforce
 ``Literal`` types at construction (``EngineArgs(runner="bogus")`` only
 warns at runtime). The real validation site for those fields is the
 depth-1 ``vllm.config.*`` pydantic-dataclasses — already covered by the
-pydantic lift. Emitting the dataclass-lift rules would just bloat the
-quarantine file with rules that validation-CI cannot get to fire.
+pydantic lift. Emitting the dataclass-lift invariants would just bloat the
+quarantine file with invariants that validation-CI cannot get to fire.
 
 Plus a runtime probe pass over ``SamplingParams`` cluster grids — small
-Cartesian sweeps that surface cross-field rules (``min_tokens > max_tokens``,
+Cartesian sweeps that surface cross-field invariants (``min_tokens > max_tokens``,
 ``stop AND not detokenize``) the AST static miner already catches but
 re-confirms via observed library behaviour.
 
@@ -105,7 +105,7 @@ class _LiftTarget:
 
     ``module_attr`` is the dotted path under ``vllm`` (e.g.
     ``"config.cache.CacheConfig"``). ``namespace`` is the field path-prefix
-    used in emitted rules.
+    used in emitted invariants.
     """
 
     module_attr: str
@@ -150,7 +150,7 @@ class _Cluster:
     transformers we pass a callable that takes a kwargs dict and returns
     a constructed instance (or raises).
 
-    ``namespace`` is the field-path prefix used when emitting rules from
+    ``namespace`` is the field-path prefix used when emitting invariants from
     this cluster.
     """
 
@@ -402,7 +402,7 @@ def _infer_single_field_threshold(
 
 
 # ---------------------------------------------------------------------------
-# Cluster -> rule candidate
+# Cluster -> invariant candidate
 # ---------------------------------------------------------------------------
 
 
@@ -462,11 +462,11 @@ def _cluster_rules(
 ) -> list[InvariantCandidate]:
     """Run predicate inference per error-class and emit one InvariantCandidate per fit.
 
-    Splits errored rows by normalised message-class so each underlying rule
+    Splits errored rows by normalised message-class so each underlying invariant
     in the cluster gets its own inference pass. Without grouping, a cluster
     that hits multiple validators (``temperature < 0`` AND ``top_p > 1``)
     fails to find any single predicate explaining all errors and emits zero
-    rules — the symptom this grouping fixes.
+    invariants — the symptom this grouping fixes.
     """
     err_rows, ok_rows = _split(rows)
     if not err_rows or not ok_rows:
@@ -476,11 +476,11 @@ def _cluster_rules(
     seen_ids: set[str] = set()
     for msg_class, group_rows in _group_errors_by_class(err_rows).items():
         del msg_class  # used only for grouping
-        for rule in _infer_for_group(cluster, rows, group_rows, rel_source_path, today):
-            if rule.id in seen_ids:
+        for invariant in _infer_for_group(cluster, rows, group_rows, rel_source_path, today):
+            if invariant.id in seen_ids:
                 continue
-            seen_ids.add(rule.id)
-            out.append(rule)
+            seen_ids.add(invariant.id)
+            out.append(invariant)
     return out
 
 
@@ -575,7 +575,7 @@ def _make_cluster_rule(
 
 # Operator inversion: the lift modules emit ``match_fields`` shaped as the
 # *constraint* the field must satisfy (e.g. ``{">": 0}`` for ``Gt(0)``). The
-# corpus loader's convention is that ``match_fields`` encodes the rule's
+# corpus loader's convention is that ``match_fields`` encodes the invariant's
 # *firing condition* — i.e. the violation predicate. The transformers static
 # miner emits violation-shape predicates because it walks ``if X: raise``
 # AST. The lift modules emit constraint-shape predicates and we invert here
@@ -733,8 +733,8 @@ def walk_vllm_dynamic(*, today: str | None = None) -> tuple[list[InvariantCandid
         # ``annotated-types`` operator names; vLLM's runtime messages come
         # from msgspec / pydantic and don't match. Drop the synthesised
         # template so the validation-CI gate skips the substring check (the
-        # rule's ``kwargs_positive`` raises and ``kwargs_negative`` doesn't,
-        # which is sufficient signal for a lift-derived rule). Per
+        # invariant's ``kwargs_positive`` raises and ``kwargs_negative`` doesn't,
+        # which is sufficient signal for a lift-derived invariant). Per
         # ``feedback_corpus_is_measurement_not_authoring``, the corpus
         # records what fires, not how the library worded the message.
         cand.message_template = None
@@ -780,7 +780,7 @@ def walk_vllm_dynamic(*, today: str | None = None) -> tuple[list[InvariantCandid
     #
     # ``EngineArgs`` is a 175-field stdlib dataclass with rich
     # ``Literal[...]`` annotations. Calling ``_dataclass_lift`` over it
-    # produces ~23 candidate rules — all of which fail validation-CI because
+    # produces ~23 candidate invariants — all of which fail validation-CI because
     # stdlib dataclass does NOT enforce Literal types at construction:
     # ``EngineArgs(runner="bogus")`` succeeds and only triggers a runtime
     # warning. Real validation lives on the depth-1 ``vllm.config.*``
@@ -788,9 +788,9 @@ def walk_vllm_dynamic(*, today: str | None = None) -> tuple[list[InvariantCandid
     # the AST-walked validators (covered by the static miner).
     #
     # Recall-first would say "emit and let validation-CI prune", but that
-    # bloats the quarantine file with unenforceable rules. This is the
+    # bloats the quarantine file with unenforceable invariants. This is the
     # type-system mismatch the design's "skip dynamic-TRT-LLM" decision
-    # also encountered: not every lift x class produces real rules.
+    # also encountered: not every lift x class produces real invariants.
     # Symmetric resolution is to omit the lift call when the class isn't
     # the actual validation site. Per-engine adaptation, no lift-module
     # change.
@@ -862,7 +862,7 @@ def main(argv: list[str] | None = None) -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text)
     print(
-        f"Wrote {len(candidates)} vLLM dynamic-miner rule candidates to {args.out}",
+        f"Wrote {len(candidates)} vLLM dynamic-miner invariant candidates to {args.out}",
         file=sys.stderr,
     )
     return 0

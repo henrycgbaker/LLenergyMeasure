@@ -1,6 +1,6 @@
 """Canonical corpus builder — orchestrate miners, merge staging, emit corpus.
 
-The validation-rules pipeline is split into independent miners (dynamic miner,
+The validation-invariants pipeline is split into independent miners (dynamic miner,
 static miner, future runtime-warning miner) that each write to a staging file
 under ``src/llenergymeasure/engines/{engine}/_staging/{engine}_{name}.yaml``. This
 module is the single canonical entry point that runs them, merges their outputs
@@ -13,7 +13,7 @@ Validation gate
 ----------------------
 Between merge and canonical-write, every candidate's ``kwargs_positive`` and
 ``kwargs_negative`` are replayed against the real engine library via
-:func:`scripts.validate_invariants.validate_engine`. Rules whose declared
+:func:`scripts.validate_invariants.validate_engine`. Invariants whose declared
 ``expected_outcome`` doesn't match observed library behaviour are quarantined
 to ``_staging/_failed_validation_{engine}.yaml`` instead of landing in the
 canonical corpus. The merger optimises for *recall*; validation-gate is the
@@ -23,12 +23,12 @@ runtime-applied corpus.
 Why a merger at all
 -------------------
 Today the corpus is single-writer (dynamic miner only). With the static miner
-landing in parallel, we need a deterministic reconciliation step — same rule
+landing in parallel, we need a deterministic reconciliation step — same invariant
 discovered by two independent paths becomes evidence of cross-validation, not
-two duplicates. Different fingerprints across paths stay as two rules; the
-validation CI pipeline (``scripts/validate_invariants.py``) runs every rule's
+two duplicates. Different fingerprints across paths stay as two invariants; the
+validation CI pipeline (``scripts/validate_invariants.py``) runs every invariant's
 ``kwargs_positive`` / ``kwargs_negative`` against the real library and fails
-divergent rules — the merger optimises for *recall* and lets CI kill false
+divergent invariants — the merger optimises for *recall* and lets CI kill false
 positives.
 
 Schema choice for cross-source provenance
@@ -45,8 +45,8 @@ Two viable shapes for tagging cross-validation:
 This module picks **B**. Rationale: the existing ``AddedBy`` Literal and the
 ``test_corpus_added_by_values_valid`` invariant treat the field as an enum;
 flipping it to ``list[str]`` ripples through every test that constructs a
-:class:`Rule` directly. ``cross_validated_by`` is strictly additive — old
-rules default to an empty tuple, the loader accepts the new field with its
+:class:`Invariant` directly. ``cross_validated_by`` is strictly additive — old
+invariants default to an empty tuple, the loader accepts the new field with its
 own enum validation, and the merger writes it only when there's a second
 source to cite. Loader changes are minimal: one new field on :class:`Invariant`,
 one parse step in :func:`_parse_invariant`.
@@ -56,14 +56,14 @@ Fingerprint
 The dedup key is::
 
     canonical_serialise({
-        "engine": rule.engine,
-        "severity": rule.severity,
-        "match_fields": rule.match["fields"],
+        "engine": invariant.engine,
+        "severity": invariant.severity,
+        "match_fields": invariant.match["fields"],
     })
 
 via :func:`llenergymeasure.domain.hashing.canonical_serialise` — same primitive
 that powers ``resolved_config_hash``. It normalises floats, sorts keys, and
-distinguishes ``None`` from missing. Two rules with the same fingerprint are
+distinguishes ``None`` from missing. Two invariants with the same fingerprint are
 the same constraint discovered by two independent paths.
 
 Per-field merge precedence
@@ -83,7 +83,7 @@ Field                               Wins from
 =================================== =================================
 
 If precedence is ambiguous (e.g. both sources are dynamic-miner-derived but
-disagree on a field), the merger keeps the rule from the higher-priority
+disagree on a field), the merger keeps the invariant from the higher-priority
 source and emits a ``conflict_note`` annotation in the YAML for reviewer
 attention.
 
@@ -212,7 +212,7 @@ def _canonical_path(corpus_root: Path, engine: str) -> Path:
 # ---------------------------------------------------------------------------
 
 
-# Lower index = higher priority for "primary source" assignment when a rule's
+# Lower index = higher priority for "primary source" assignment when a invariant's
 # fingerprint appears in multiple staging files. The remaining sources go into
 # ``cross_validated_by`` (sorted alphabetically for stability).
 #
@@ -270,10 +270,10 @@ def _canonicalise_numbers(value: Any) -> Any:
     return value
 
 
-def fingerprint_invariant(rule: dict[str, Any]) -> bytes:
-    """Return the canonical-serialised fingerprint bytes for a rule dict.
+def fingerprint_invariant(invariant: dict[str, Any]) -> bytes:
+    """Return the canonical-serialised fingerprint bytes for a invariant dict.
 
-    Two rules with identical fingerprints are the same constraint discovered
+    Two invariants with identical fingerprints are the same constraint discovered
     by two independent paths and get merged. The fingerprint uses
     :func:`canonical_serialise` so float jitter, dict-key ordering, and
     NaN don't break dedup. Numeric thresholds are int/float-canonicalised
@@ -283,15 +283,15 @@ def fingerprint_invariant(rule: dict[str, Any]) -> bytes:
     The fingerprint deliberately excludes ``id`` (extractors should already
     agree on deterministic ids, but a one-character drift shouldn't break
     cross-validation), ``message_template`` (the real library text differs
-    from a structural reconstruction even when the rule is the same), and
+    from a structural reconstruction even when the invariant is the same), and
     ``miner_source`` (path / line moves on every library bump).
     """
-    match = rule.get("match") or {}
+    match = invariant.get("match") or {}
     fields = match.get("fields") if isinstance(match, dict) else None
     return canonical_serialise(
         {
-            "engine": rule.get("engine"),
-            "severity": rule.get("severity"),
+            "engine": invariant.get("engine"),
+            "severity": invariant.get("severity"),
             "match_fields": _canonicalise_numbers(fields or {}),
         }
     )
@@ -352,7 +352,7 @@ def discover_staging_files(engine: str, corpus_root: Path) -> list[Path]:
 
 
 def _load_staging(path: Path) -> dict[str, Any]:
-    """Parse a staging YAML file; return the envelope dict (with rules list).
+    """Parse a staging YAML file; return the envelope dict (with invariants list).
 
     Raises ``ValueError`` on a missing or malformed envelope rather than
     silently skipping — staging files are produced by trusted extractors,
@@ -362,7 +362,7 @@ def _load_staging(path: Path) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError(f"Staging file {path} is not a YAML mapping")
     if "invariants" not in raw or not isinstance(raw["invariants"], list):
-        raise ValueError(f"Staging file {path} missing 'rules' list")
+        raise ValueError(f"Staging file {path} missing 'invariants' list")
     return raw
 
 
@@ -404,26 +404,26 @@ class _MergeResult:
     """Per-field conflict annotations for reviewer attention."""
 
 
-def _merge_bucket(rules: list[dict[str, Any]]) -> _MergeResult:
-    """Merge rules sharing one fingerprint into a single corpus entry.
+def _merge_bucket(invariants: list[dict[str, Any]]) -> _MergeResult:
+    """Merge invariants sharing one fingerprint into a single corpus entry.
 
     See module docstring for the per-field precedence table. Conflict
-    annotations are accumulated and surfaced on the merged rule so a human
+    annotations are accumulated and surfaced on the merged invariant so a human
     reviewer can spot ambiguous merges; the validation-CI step will catch
     semantically wrong outputs regardless.
     """
-    if len(rules) == 1:
-        # Single-source rule — preserve its shape as-is, just normalise an
+    if len(invariants) == 1:
+        # Single-source invariant — preserve its shape as-is, just normalise an
         # empty cross_validated_by entry away.
-        rule = dict(rules[0])
-        rule.pop("cross_validated_by", None)
-        sources_unique = (str(rule.get("added_by", "manual_seed")),)
-        return _MergeResult(invariant=rule, sources=sources_unique, conflict_notes=())
+        invariant = dict(invariants[0])
+        invariant.pop("cross_validated_by", None)
+        sources_unique = (str(invariant.get("added_by", "manual_seed")),)
+        return _MergeResult(invariant=invariant, sources=sources_unique, conflict_notes=())
 
     # Sort by provenance priority so the highest-priority source is the
     # "primary" (its fields win where the precedence table doesn't override).
     sorted_rules = sorted(
-        rules, key=lambda r: (_provenance_rank(str(r.get("added_by", ""))), r.get("id", ""))
+        invariants, key=lambda r: (_provenance_rank(str(r.get("added_by", ""))), r.get("id", ""))
     )
     primary = dict(sorted_rules[0])
     secondaries = sorted_rules[1:]
@@ -432,7 +432,7 @@ def _merge_bucket(rules: list[dict[str, Any]]) -> _MergeResult:
     # Per-field precedence
     # ------------------------------------------------------------------
 
-    # Pull contributors by source-type so the per-field rules can reach for
+    # Pull contributors by source-type so the per-field invariants can reach for
     # them by name without re-walking the list.
     by_source = {str(r.get("added_by", "")): dict(r) for r in sorted_rules}
     ast_rule = by_source.get("static_miner")
@@ -526,9 +526,9 @@ def _merge_bucket(rules: list[dict[str, Any]]) -> _MergeResult:
 def merge_staging(
     staging_envelopes: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Merge a list of staging-file dicts into a list of canonical rule dicts.
+    """Merge a list of staging-file dicts into a list of canonical invariant dicts.
 
-    Returns ``(rules, envelope)`` where ``rules`` is alphabetically sorted by
+    Returns ``(invariants, envelope)`` where ``invariants`` is alphabetically sorted by
     id (so the merger's output is byte-stable for ``--check`` mode), and
     ``envelope`` carries the per-engine schema_version / engine / engine_version
     metadata. When staging envelopes disagree on engine_version, the highest
@@ -543,11 +543,11 @@ def merge_staging(
 
     buckets: dict[bytes, list[dict[str, Any]]] = {}
     for envelope in staging_envelopes:
-        for rule in envelope.get("invariants") or []:
-            if not isinstance(rule, dict):
+        for invariant in envelope.get("invariants") or []:
+            if not isinstance(invariant, dict):
                 continue
-            key = fingerprint_invariant(rule)
-            buckets.setdefault(key, []).append(rule)
+            key = fingerprint_invariant(invariant)
+            buckets.setdefault(key, []).append(invariant)
 
     merged_rules: list[dict[str, Any]] = []
     for bucket_rules in buckets.values():
@@ -611,7 +611,7 @@ def _load_prior_added_at_map(corpus_path: Path) -> dict[bytes, str]:
     """Read the prior canonical corpus and build ``{fingerprint: added_at}``.
 
     Returns empty dict if the corpus doesn't exist (first build) or fails
-    to parse. Per-rule ``added_at`` records when the rule was first
+    to parse. Per-invariant ``added_at`` records when the invariant was first
     discovered; preserving it across re-mines avoids spurious diff churn
     on every Renovate-driven rebuild. A parse failure on an existing
     corpus warns then falls open: dropping every ``added_at`` because of
@@ -625,39 +625,39 @@ def _load_prior_added_at_map(corpus_path: Path) -> dict[bytes, str]:
     except (yaml.YAMLError, OSError) as exc:
         _log.warning(
             "Could not read prior corpus at %s for added_at preservation: %s. "
-            "Falling open — every rule will be stamped with today's date.",
+            "Falling open — every invariant will be stamped with today's date.",
             corpus_path,
             exc,
         )
         return {}
     if not isinstance(prior, dict):
         return {}
-    rules = prior.get("invariants") or []
+    invariants = prior.get("invariants") or []
     out: dict[bytes, str] = {}
-    for rule in rules:
-        if not isinstance(rule, dict):
+    for invariant in invariants:
+        if not isinstance(invariant, dict):
             continue
-        added_at = rule.get("added_at")
+        added_at = invariant.get("added_at")
         if not added_at:
             continue
-        out[fingerprint_invariant(rule)] = str(added_at)
+        out[fingerprint_invariant(invariant)] = str(added_at)
     return out
 
 
-def _preserve_added_at(rules: list[dict[str, Any]], prior: dict[bytes, str]) -> None:
-    """Restore each rule's prior ``added_at`` if its fingerprint matches.
+def _preserve_added_at(invariants: list[dict[str, Any]], prior: dict[bytes, str]) -> None:
+    """Restore each invariant's prior ``added_at`` if its fingerprint matches.
 
-    Mutates ``rules`` in place. Rules without a fingerprint match keep
+    Mutates ``invariants`` in place. Invariants without a fingerprint match keep
     their current (today's-date) value. Fingerprint excludes ``id`` and
     ``message_template`` (see :func:`fingerprint_invariant`), so renames or
     template-rendering changes don't reset the discovery date.
     """
     if not prior:
         return
-    for rule in rules:
-        prior_added = prior.get(fingerprint_invariant(rule))
+    for invariant in invariants:
+        prior_added = prior.get(fingerprint_invariant(invariant))
         if prior_added:
-            rule["added_at"] = prior_added
+            invariant["added_at"] = prior_added
 
 
 # ---------------------------------------------------------------------------
@@ -671,7 +671,7 @@ this back as a corpus-shaped YAML so :func:`scripts.validate_invariants.validate
 can replay every candidate's positive/negative kwargs."""
 
 _FAILED_VALIDATION_BASENAME = "_failed_validation_{engine}.yaml"
-"""Staging filename for the divergent-rules quarantine.
+"""Staging filename for the divergent-invariants quarantine.
 
 Schema::
 
@@ -680,7 +680,7 @@ Schema::
     engine_version: <version observed during validation>
     generated_at: <ISO-8601 UTC>
     quarantined_rules:
-      - rule: <full rule dict>
+      - invariant: <full invariant dict>
         divergences:
           - invariant_id: <id>
             field: <expected_outcome.* or positive_confirmed/negative_confirmed>
@@ -692,7 +692,7 @@ Schema::
 def _write_merged_candidates(
     corpus_root: Path,
     engine: str,
-    rules: list[dict[str, Any]],
+    invariants: list[dict[str, Any]],
     envelope: dict[str, Any],
 ) -> Path:
     """Write the merger output to ``_staging/{engine}_merged_candidates.yaml``.
@@ -705,7 +705,7 @@ def _write_merged_candidates(
     staging = _staging_dir(corpus_root, engine)
     staging.mkdir(parents=True, exist_ok=True)
     path = staging / _MERGED_CANDIDATES_BASENAME.format(engine=engine)
-    path.write_text(emit_yaml(rules, envelope))
+    path.write_text(emit_yaml(invariants, envelope))
     return path
 
 
@@ -715,7 +715,7 @@ def _validate_candidates(
     corpus_root: Path,
     envelope: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Re-run each candidate through the real engine library; filter divergent rules.
+    """Re-run each candidate through the real engine library; filter divergent invariants.
 
     Returns ``(kept, divergent)`` where ``kept`` is the subset whose declared
     ``expected_outcome`` matched observed behaviour AND whose
@@ -764,17 +764,17 @@ def _validate_candidates(
 
     kept: list[dict[str, Any]] = []
     divergent: list[dict[str, Any]] = []
-    for rule in candidates:
-        invariant_id = str(rule.get("id", ""))
+    for invariant in candidates:
+        invariant_id = str(invariant.get("id", ""))
         if invariant_id in divergence_by_id:
             divergent.append(
                 {
-                    "rule": rule,
+                    "invariant": invariant,
                     "divergences": divergence_by_id[invariant_id],
                 }
             )
         else:
-            kept.append(rule)
+            kept.append(invariant)
 
     return kept, divergent
 
@@ -785,9 +785,9 @@ def _emit_failed_validation_yaml(
     divergent: list[dict[str, Any]],
     envelope: dict[str, Any],
 ) -> Path | None:
-    """Write the quarantine file for divergent rules.
+    """Write the quarantine file for divergent invariants.
 
-    Returns the path written, or ``None`` if there are no divergent rules
+    Returns the path written, or ``None`` if there are no divergent invariants
     (in which case any stale quarantine file is removed so the next reviewer
     isn't misled by leftover state from a previous run).
     """
@@ -804,7 +804,7 @@ def _emit_failed_validation_yaml(
         "engine_version": str(envelope.get("engine_version", "")),
         "generated_at": _now_iso(),
         "quarantined_rules": [
-            {"rule": _ordered_rule(entry["rule"]), "divergences": entry["divergences"]}
+            {"invariant": _ordered_rule(entry["invariant"]), "divergences": entry["divergences"]}
             for entry in divergent
         ],
     }
@@ -817,8 +817,8 @@ def _emit_failed_validation_yaml(
 # ---------------------------------------------------------------------------
 
 
-def _ordered_rule(rule: dict[str, Any]) -> dict[str, Any]:
-    """Return a rule dict with keys in the conventional corpus order.
+def _ordered_rule(invariant: dict[str, Any]) -> dict[str, Any]:
+    """Return a invariant dict with keys in the conventional corpus order.
 
     Keeping key order stable across re-runs makes ``--check`` mode reliable.
     Unknown keys (e.g. ``conflict_note``) sort to the end so the canonical
@@ -844,16 +844,16 @@ def _ordered_rule(rule: dict[str, Any]) -> dict[str, Any]:
     ]
     out: dict[str, Any] = {}
     for key in canonical_order:
-        if key in rule:
-            out[key] = rule[key]
+        if key in invariant:
+            out[key] = invariant[key]
     # Trailing extras (conflict_note, future fields).
-    for key in sorted(rule.keys()):
+    for key in sorted(invariant.keys()):
         if key not in out:
-            out[key] = rule[key]
+            out[key] = invariant[key]
     return out
 
 
-def emit_yaml(rules: list[dict[str, Any]], envelope: dict[str, Any]) -> str:
+def emit_yaml(invariants: list[dict[str, Any]], envelope: dict[str, Any]) -> str:
     """Serialise the canonical corpus as a deterministic YAML string."""
     doc: dict[str, Any] = {
         "schema_version": envelope.get("schema_version", "1.0.0"),
@@ -865,7 +865,7 @@ def emit_yaml(rules: list[dict[str, Any]], envelope: dict[str, Any]) -> str:
     doc["mined_at"] = envelope.get("mined_at", "")
     if "staging_engine_versions" in envelope:
         doc["staging_engine_versions"] = envelope["staging_engine_versions"]
-    doc["invariants"] = [_ordered_rule(r) for r in rules]
+    doc["invariants"] = [_ordered_rule(r) for r in invariants]
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
 
 
@@ -876,7 +876,7 @@ def emit_yaml(rules: list[dict[str, Any]], envelope: dict[str, Any]) -> str:
 
 @dataclass
 class _BuildResult:
-    """In-memory build output: canonical YAML text plus rule counts.
+    """In-memory build output: canonical YAML text plus invariant counts.
 
     Returned by :func:`build_corpus_text_and_outcome` so callers can write
     the canonical YAML and report counts without re-running the merge.
@@ -913,10 +913,10 @@ def build_corpus_text_and_outcome(
     candidates, envelope = merge_staging(envelopes)
     candidates_count = len(candidates)
 
-    # Preserve added_at across re-mines: rules whose fingerprint matches a
+    # Preserve added_at across re-mines: invariants whose fingerprint matches a
     # prior canonical-corpus entry keep their original discovery date
     # instead of being stamped with today's anchor. Stops every Renovate-
-    # driven rebuild from producing a noise diff on every rule.
+    # driven rebuild from producing a noise diff on every invariant.
     prior_added_at = _load_prior_added_at_map(_canonical_path(corpus_root, engine))
     _preserve_added_at(candidates, prior_added_at)
 
@@ -944,7 +944,7 @@ def build_corpus_text_and_outcome(
     kept, divergent = _validate_candidates(candidates, engine, corpus_root, envelope)
     _emit_failed_validation_yaml(corpus_root, engine, divergent, envelope)
 
-    quarantined_ids = tuple(sorted(str(entry["rule"].get("id", "")) for entry in divergent))
+    quarantined_ids = tuple(sorted(str(entry["invariant"].get("id", "")) for entry in divergent))
     text = emit_yaml(kept, envelope)
     return _BuildResult(
         canonical_text=text,
@@ -1032,7 +1032,7 @@ def check_drift(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Build the canonical validation-rules corpus from staging extractors.",
+        description="Build the canonical validation-invariants corpus from staging extractors.",
     )
     parser.add_argument(
         "--engine",
@@ -1107,7 +1107,7 @@ def main(argv: list[str] | None = None) -> int:
                 corpus_root, args.engine
             ) / _FAILED_VALIDATION_BASENAME.format(engine=args.engine)
             print(
-                f"[build_corpus] divergent rules written to {quarantine_path}",
+                f"[build_corpus] divergent invariants written to {quarantine_path}",
                 file=sys.stderr,
             )
             for invariant_id in result.quarantined_ids[:10]:

@@ -1,6 +1,6 @@
 """Transformers library-API introspection miner — combinatorial-probe edition.
 
-Derives validation rules from HF's runtime machinery by combinatorially
+Derives validation invariants from HF's runtime machinery by combinatorially
 sweeping related kwargs and inferring predicates from the raise/no-raise
 pattern. Replaces the old single-kwarg-perturbation extractor; the
 single-pass approach can't see cross-field invariants (modulo, comparison,
@@ -21,7 +21,7 @@ Three extraction paths, all observe the library at walk time:
    ``GenerationConfig(**kwargs)`` (and call ``.validate(strict=True)`` if
    construction succeeds), and tabulate which combinations raise / which
    normalise / which pass. A predicate-inference pass then groups error
-   rows by message-class and emits one rule per inferred predicate.
+   rows by message-class and emits one invariant per inferred predicate.
 
 3. **Validate-time self-triggered dormant probes** (kept). The
    ``pad_token_id < 0`` family — dormancy gated by the field's own value
@@ -43,8 +43,8 @@ Predicate inference (cluster path) covers, in order of preference:
 
 Recall over precision: when multiple predicates fit, the inferrer emits
 ALL plausible candidates. The validation CI
-pipeline downstream re-runs each emitted rule's ``kwargs_positive`` /
-``kwargs_negative`` against the live library; rules that misfire fail CI
+pipeline downstream re-runs each emitted invariant's ``kwargs_positive`` /
+``kwargs_negative`` against the live library; invariants that misfire fail CI
 and are pruned. False positives are cheap; missed invariants are not.
 
 Every invariant this miner emits carries ``added_by="dynamic_miner"``.
@@ -55,7 +55,7 @@ This extractor is scoped to ``GenerationConfig`` (and its depth-1
 ``WatermarkingConfig`` / ``SynthIDTextWatermarkingConfig`` helpers). BNB
 ``post_init`` type-check raises are NOT emitted here. The pre-pipeline
 miner (:mod:`scripts.engine_miners.transformers`, deregistered) hand-curated
-nine BNB rules; that path was lost in the refactor.
+nine BNB invariants; that path was lost in the refactor.
 
 Coverage is restored structurally by :mod:`scripts.engine_miners.transformers_static_miner`,
 which AST-walks ``BitsAndBytesConfig.post_init`` directly — the
@@ -131,7 +131,7 @@ class _DormancyTrigger:
     single-beam (``num_beams=1``), and scalar-output
     (``return_dict_in_generate=False``). Each trigger ships an
     ``isolation_kwargs`` payload — values for the OTHER triggers that DON'T
-    activate them — so the auto-enumerator can attribute a firing rule to
+    activate them — so the auto-enumerator can attribute a firing invariant to
     exactly one trigger class even though the three categories overlap.
     """
 
@@ -284,7 +284,7 @@ def _normalise_message_class(msg: str) -> str:
       ``not str``) so that messages that differ ONLY in the offending
       value's type still hash to one class. This is what enables
       type-allowlist inference: HF's ``WatermarkingConfig() ... not int``
-      and ``... not list`` are the same rule on the type-allowlist axis.
+      and ``... not list`` are the same invariant on the type-allowlist axis.
 
     Used to group probe rows by error class before predicate inference.
     """
@@ -385,7 +385,7 @@ class _Cluster:
     they're applied to every trial.
 
     ``probe_class_match_prefix`` is the engine-config field-path prefix
-    inserted when emitting rules from this cluster
+    inserted when emitting invariants from this cluster
     (``transformers.sampling`` for most clusters).
     """
 
@@ -523,7 +523,7 @@ def _run_cluster_probes(cluster: _Cluster) -> list[_ProbeRow]:
     ``validate(strict=True)`` and capture any composed raise.
 
     State diffs are not yet tabulated (would catch silent normalisation but
-    silent normalisations don't surface as introspection rules in HF — they'd
+    silent normalisations don't surface as introspection invariants in HF — they'd
     need vLLM-style detection, out of scope here).
     """
     import logging
@@ -713,7 +713,7 @@ def _check_predicate_explains_errors(
         if not holds and not is_this_class_error:
             saw_ok = True
     # Need at least one positive and one negative example for the predicate
-    # to be a meaningful rule (rule discrimination).
+    # to be a meaningful invariant (invariant discrimination).
     return saw_error and saw_ok
 
 
@@ -1036,7 +1036,7 @@ def _infer_multi_field_equality_gate(
 
 
 # ---------------------------------------------------------------------------
-# Cluster-level rule extraction
+# Cluster-level invariant extraction
 # ---------------------------------------------------------------------------
 
 
@@ -1065,9 +1065,9 @@ def _yaml_safe_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
 
     The corpus needs to round-trip through ``yaml.safe_dump`` so the merger
     and the loader can re-parse it. Dropping the live instance to ``None``
-    is lossy for the kwargs-positive / kwargs-negative pair, but the rule's
+    is lossy for the kwargs-positive / kwargs-negative pair, but the invariant's
     *match predicate* still expresses the correct invariant — the consumer
-    re-runs kwargs_positive to confirm the rule fires, kwargs_negative to
+    re-runs kwargs_positive to confirm the invariant fires, kwargs_negative to
     confirm it doesn't, and library classes are typically representable as
     ``{}`` (empty kwargs) or ``None`` (absent) for the negative case.
     """
@@ -1080,7 +1080,7 @@ def _pick_positive_negative_for_predicate(
     error_rows: list[_ProbeRow],
     affected_fields: list[str],
 ) -> tuple[dict[str, Any], dict[str, Any]] | None:
-    """Pick representative kwargs_positive / kwargs_negative pair for a rule.
+    """Pick representative kwargs_positive / kwargs_negative pair for a invariant.
 
     Positive: an error row's kwargs (subset to fields in the cluster).
     Negative: a non-error row's kwargs that differs MINIMALLY from the
@@ -1139,13 +1139,13 @@ def _extract_construct_error_rules(
     rows: list[_ProbeRow],
 ) -> list[_InferredInvariant]:
     """Run predicate inference for each construct-error message-class."""
-    rules: list[_InferredInvariant] = []
+    invariants: list[_InferredInvariant] = []
     error_groups = _group_construct_errors_by_class(rows)
     for group_rows in error_groups.values():
-        rules.extend(
+        invariants.extend(
             _infer_rules_for_group(cluster, rows, group_rows, severity="error", method="construct")
         )
-    return rules
+    return invariants
 
 
 def _extract_validate_error_rules(
@@ -1157,13 +1157,13 @@ def _extract_validate_error_rules(
     These rows ARE dormancy, but cross-field gates (num_return_sequences > 1
     AND do_sample=False AND num_beams=1) often surface here.
     """
-    rules: list[_InferredInvariant] = []
+    invariants: list[_InferredInvariant] = []
     field_groups = _group_validate_errors_by_field(rows)
     for affected_field, group_rows in field_groups.items():
         if affected_field in _DORMANCY_SKIP_FIELDS:
             # The dormancy enumerator handles these.
             continue
-        rules.extend(
+        invariants.extend(
             _infer_rules_for_group(
                 cluster,
                 rows,
@@ -1173,7 +1173,7 @@ def _extract_validate_error_rules(
                 affected_field_hint=affected_field,
             )
         )
-    return rules
+    return invariants
 
 
 def _infer_rules_for_group(
@@ -1194,8 +1194,8 @@ def _infer_rules_for_group(
     - ``medium`` — two shapes fit (likely overlap, validation CI prunes losers).
     - ``low``   — three or more shapes fit (ambiguous).
 
-    Inference-shape order is also the rule-id suffix order, which keeps
-    rule IDs stable across reruns.
+    Inference-shape order is also the invariant-id suffix order, which keeps
+    invariant IDs stable across reruns.
     """
     if not error_rows:
         return []
@@ -1285,7 +1285,7 @@ def _infer_rules_for_group(
         )
 
     # If nothing more specific fits but we have a multi-field gate, emit it
-    # as a pure gate-equality / range rule. Lowest confidence — validation CI
+    # as a pure gate-equality / range invariant. Lowest confidence — validation CI
     # is the safety net.
     if not inferences and common_match_addition:
         if common_assignment:
@@ -1365,7 +1365,7 @@ _OP_NAMES: dict[str, str] = {
 
 
 def _value_label(v: Any) -> str:
-    """Short rule-id-safe label for a value (``-1`` → ``neg1``, ``0`` → ``zero``)."""
+    """Short invariant-id-safe label for a value (``-1`` → ``neg1``, ``0`` → ``zero``)."""
     if v is None:
         return "none"
     if v is True:
@@ -1396,7 +1396,7 @@ def _invariant_under_test_for(method: str, declared_field: str, id_suffix: str) 
 
 @dataclass(frozen=True)
 class _DormantProbe:
-    """A validate-time dormancy rule whose trigger is field-self-driven."""
+    """A validate-time dormancy invariant whose trigger is field-self-driven."""
 
     id: str
     invariant_under_test: str
@@ -1419,7 +1419,7 @@ _VALIDATE_DORMANT_PROBES: tuple[_DormantProbe, ...] = (
 
 
 # ---------------------------------------------------------------------------
-# Rule-candidate factories
+# Invariant-candidate factories
 # ---------------------------------------------------------------------------
 
 
@@ -1509,38 +1509,38 @@ _REFERENCE_BY_METHOD: dict[str, str] = {
 
 def _make_inferred_candidate(
     cluster: _Cluster,
-    rule: _InferredInvariant,
+    invariant: _InferredInvariant,
     abs_source_path: str,
     rel_source_path: str,
     today: str,
 ) -> InvariantCandidate:
-    """Compose a ``InvariantCandidate`` from a combinatorial-inference rule."""
-    line = _find_line(abs_source_path, f"self.{_subject_field_from_id(rule.id_suffix)}")
+    """Compose a ``InvariantCandidate`` from a combinatorial-inference invariant."""
+    line = _find_line(abs_source_path, f"self.{_subject_field_from_id(invariant.id_suffix)}")
     return InvariantCandidate(
-        id=f"transformers_{cluster.name}_{rule.id_suffix}",
+        id=f"transformers_{cluster.name}_{invariant.id_suffix}",
         engine="transformers",
         library="transformers",
-        invariant_under_test=rule.invariant_under_test,
-        severity=rule.severity,
+        invariant_under_test=invariant.invariant_under_test,
+        severity=invariant.severity,
         native_type="transformers.GenerationConfig",
         miner_source=MinerSource(
             path=rel_source_path,
-            method="validate" if rule.method == "validate" else "__init__",
+            method="validate" if invariant.method == "validate" else "__init__",
             line_at_scan=line,
         ),
-        match_fields=rule.match_fields,
-        kwargs_positive=rule.kwargs_positive,
-        kwargs_negative=rule.kwargs_negative,
-        expected_outcome=_OUTCOME_BY_SEVERITY[rule.severity],
-        message_template=rule.message_template,
-        references=[_REFERENCE_BY_METHOD[rule.method]],
+        match_fields=invariant.match_fields,
+        kwargs_positive=invariant.kwargs_positive,
+        kwargs_negative=invariant.kwargs_negative,
+        expected_outcome=_OUTCOME_BY_SEVERITY[invariant.severity],
+        message_template=invariant.message_template,
+        references=[_REFERENCE_BY_METHOD[invariant.method]],
         added_by="dynamic_miner",
         added_at=today,
     )
 
 
 def _subject_field_from_id(id_suffix: str) -> str:
-    """Best-effort: pull the leading kwarg name from the rule-id suffix."""
+    """Best-effort: pull the leading kwarg name from the invariant-id suffix."""
     return id_suffix.split("_")[0]
 
 
@@ -1604,10 +1604,12 @@ def _walk_combinatorial(
         total_rows += len(rows)
         construct_rules = _extract_construct_error_rules(cluster, rows)
         validate_rules = _extract_validate_error_rules(cluster, rows)
-        for rule in (*construct_rules, *validate_rules):
-            cand = _make_inferred_candidate(cluster, rule, abs_source_path, rel_source_path, today)
+        for invariant in (*construct_rules, *validate_rules):
+            cand = _make_inferred_candidate(
+                cluster, invariant, abs_source_path, rel_source_path, today
+            )
             if cand.id in seen_ids:
-                # Same rule discovered in multiple clusters — keep the
+                # Same invariant discovered in multiple clusters — keep the
                 # first (deterministic by CLUSTERS iteration order).
                 continue
             seen_ids.add(cand.id)
@@ -1615,18 +1617,18 @@ def _walk_combinatorial(
     return candidates, total_rows
 
 
-def walk_generation_config_rules(
+def walk_generation_config_invariants(
     abs_source_path: str,
     rel_source_path: str,
     today: str,
 ) -> list[InvariantCandidate]:
-    """Return all introspection-derived rules for ``GenerationConfig``.
+    """Return all introspection-derived invariants for ``GenerationConfig``.
 
     Composes three sources in deterministic order:
 
-    1. Mode-gated dormancy rules auto-enumerated per trigger class.
-    2. Combinatorial cluster-probe rules (cross-field invariants).
-    3. Validate-time self-triggered dormant rules.
+    1. Mode-gated dormancy invariants auto-enumerated per trigger class.
+    2. Combinatorial cluster-probe invariants (cross-field invariants).
+    3. Validate-time self-triggered dormant invariants.
 
     Raises :class:`IntrospectionProbeDisappeared` when a hardcoded probe
     silently stops firing — preserves the "silent coverage loss becomes a
@@ -1645,13 +1647,13 @@ def walk_generation_config_rules(
 
     # Path 0: sub-library type-system lift (locked design §1 REVISED).
     # Composes the generic stdlib-dataclass lift over GenerationConfig and
-    # surfaces any Literal[...] allowlist rules. GenerationConfig is not a
+    # surfaces any Literal[...] allowlist invariants. GenerationConfig is not a
     # dataclass on transformers 4.x (its fields live in ``__init__`` as
     # ``**kwargs``-stuffed self-assigns), so this returns ``[]`` today —
     # the call is wired to validate the abstraction's plumbing on the gold
     # standard before vLLM and TRT-LLM consume it. If a future transformers
     # release rebases ``GenerationConfig`` onto dataclasses, this picks up
-    # the field-level Literal rules for free.
+    # the field-level Literal invariants for free.
     candidates.extend(
         _dataclass_lift(
             GenerationConfig,
@@ -1790,9 +1792,9 @@ def main(argv: list[str] | None = None) -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     version, abs_source_path, rel_source_path = _resolve_source_paths()
-    today = os.environ.get("LLENERGY_WALKER_FROZEN_AT", dt.date.today().isoformat())[:10]
+    today = os.environ.get("LLENERGY_MINER_FROZEN_AT", dt.date.today().isoformat())[:10]
 
-    candidates = walk_generation_config_rules(
+    candidates = walk_generation_config_invariants(
         abs_source_path=abs_source_path,
         rel_source_path=rel_source_path,
         today=today,
@@ -1802,7 +1804,7 @@ def main(argv: list[str] | None = None) -> int:
     candidates_sorted = sorted(candidates, key=lambda c: (c.miner_source.method, c.id))
 
     mined_at = os.environ.get(
-        "LLENERGY_WALKER_FROZEN_AT",
+        "LLENERGY_MINER_FROZEN_AT",
         dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
     )
 
@@ -1817,7 +1819,7 @@ def main(argv: list[str] | None = None) -> int:
     out_path.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100))
 
     print(
-        f"Wrote {len(candidates_sorted)} introspection-derived rules to {out_path}",
+        f"Wrote {len(candidates_sorted)} introspection-derived invariants to {out_path}",
         file=sys.stderr,
     )
     return 0
@@ -1828,7 +1830,7 @@ __all__ = [
     "TRIGGERS",
     "IntrospectionProbeDisappeared",
     "discover_dormancy_fields",
-    "walk_generation_config_rules",
+    "walk_generation_config_invariants",
 ]
 
 

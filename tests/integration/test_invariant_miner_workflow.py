@@ -20,7 +20,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts import _invariant_validation_common, validate_invariants  # noqa: E402
-from scripts import diff_engine_invariants as diff_rules  # noqa: E402
+from scripts import diff_engine_invariants as diff_invariants  # noqa: E402
 from scripts._invariant_validation_common import run_case  # noqa: E402
 from scripts.engine_miners._fixpoint_test import fixpoint_test_corpus  # noqa: E402
 
@@ -156,7 +156,7 @@ class TestWorkflowGlue:
             out_path=out1,
         )
 
-        # Simulate a new rule being added to the envelope.
+        # Simulate a new invariant being added to the envelope.
         envelope2 = dict(envelope1)
         envelope2["cases"] = [
             *envelope1["cases"],
@@ -172,7 +172,7 @@ class TestWorkflowGlue:
             },
         ]
 
-        result = diff_rules.diff_rules(envelope1, envelope2)
+        result = diff_invariants.diff_invariants(envelope1, envelope2)
         assert not result.is_breaking
         assert any(c.kind == "added_invariant" for c in result.safe)
 
@@ -194,8 +194,8 @@ class TestWorkflowGlue:
         empty_envelope = dict(envelope)
         empty_envelope["cases"] = []
         md_out = tmp_path / "comment.md"
-        result = diff_rules.diff_rules(empty_envelope, envelope)
-        md = diff_rules.render_markdown(result, title="Smoke")
+        result = diff_invariants.diff_invariants(empty_envelope, envelope)
+        md = diff_invariants.render_markdown(result, title="Smoke")
         md_out.write_text(md)
         assert md_out.exists()
         assert "## Smoke" in md

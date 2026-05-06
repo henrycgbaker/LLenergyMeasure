@@ -268,27 +268,27 @@ def test_ssot_dtype_values_match_param_test_values():
 
 
 def test_get_validation_rules_returns_list():
-    """get_validation_rules() returns a list containing the engine mismatch rule."""
-    rules = get_validation_rules()
-    assert isinstance(rules, list)
-    combinations = [r["combination"] for r in rules]
+    """get_validation_rules() returns a list containing the engine mismatch invariant."""
+    invariants = get_validation_rules()
+    assert isinstance(invariants, list)
+    combinations = [r["combination"] for r in invariants]
     assert any("mismatch" in c for c in combinations)
 
 
 def test_get_validation_rules_each_has_required_keys():
-    """Each validation rule has engine, combination, reason, resolution keys."""
-    rules = get_validation_rules()
-    for rule in rules:
-        assert "engine" in rule, f"Rule missing 'engine': {rule}"
-        assert "combination" in rule, f"Rule missing 'combination': {rule}"
-        assert "reason" in rule, f"Rule missing 'reason': {rule}"
-        assert "resolution" in rule, f"Rule missing 'resolution': {rule}"
+    """Each validation invariant has engine, combination, reason, resolution keys."""
+    invariants = get_validation_rules()
+    for invariant in invariants:
+        assert "engine" in invariant, f"Invariant missing 'engine': {invariant}"
+        assert "combination" in invariant, f"Invariant missing 'combination': {invariant}"
+        assert "reason" in invariant, f"Invariant missing 'reason': {invariant}"
+        assert "resolution" in invariant, f"Invariant missing 'resolution': {invariant}"
 
 
 def test_get_validation_rules_contains_engine_section_mismatch_rule():
-    """Validation rules include the engine section mismatch rule."""
-    rules = get_validation_rules()
-    combinations = [r["combination"] for r in rules]
+    """Validation invariants include the engine section mismatch invariant."""
+    invariants = get_validation_rules()
+    combinations = [r["combination"] for r in invariants]
     assert any("mismatch" in c for c in combinations)
 
 

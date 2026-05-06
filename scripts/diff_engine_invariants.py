@@ -190,8 +190,8 @@ def _normalise_messages(messages: list[Any]) -> tuple[str, ...]:
     return tuple(sorted(str(m).strip() for m in messages))
 
 
-def diff_rules(old: dict[str, Any], new: dict[str, Any]) -> DiffResult:
-    """Compare two rules envelopes and classify per-rule changes."""
+def diff_invariants(old: dict[str, Any], new: dict[str, Any]) -> DiffResult:
+    """Compare two invariants envelopes and classify per-invariant changes."""
     result = DiffResult()
 
     for key in ("engine_version", "schema_version", "validation_commit"):
@@ -226,7 +226,7 @@ def diff_rules(old: dict[str, Any], new: dict[str, Any]) -> DiffResult:
 # ---------------------------------------------------------------------------
 
 
-def render_markdown(result: DiffResult, *, title: str = "Rules Diff") -> str:
+def render_markdown(result: DiffResult, *, title: str = "Invariants Diff") -> str:
     lines: list[str] = [f"## {title}", ""]
     lines.append(f"**Summary:** {result.summary}")
     lines.append("")
@@ -299,7 +299,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--title",
-        default="Rules Diff",
+        default="Invariants Diff",
         help="Title used in the Markdown summary.",
     )
     args = parser.parse_args(argv)
@@ -311,7 +311,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Error reading envelopes: {exc}", file=sys.stderr)
         return 2
 
-    result = diff_rules(old, new)
+    result = diff_invariants(old, new)
 
     output = {
         "safe": [c.as_dict() for c in result.safe],

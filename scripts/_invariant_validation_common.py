@@ -7,7 +7,7 @@ This module is engine-agnostic. Per-engine behaviour lives behind
 :func:`get_native_type_runner`, which dispatches on engine name.
 
 Design contract: the validation step observes library behaviour concretely. It
-never re-interprets the rule's declared shape — if the library behaves
+never re-interprets the invariant's declared shape — if the library behaves
 differently from what the corpus claims, CI fails. See
 :doc:`.product/designs/config-deduplication-dormancy/runtime-config-validation.md`
 §4.3 for the full contract.
@@ -86,7 +86,7 @@ class CaptureBuffers:
 
 @dataclass
 class CaseResult:
-    """Per-rule observed outcome, ready for JSON serialisation."""
+    """Per-invariant observed outcome, ready for JSON serialisation."""
 
     id: str
     outcome: str  # see _classify_outcome
@@ -246,12 +246,12 @@ def _patch_warning_once() -> Callable[[], None]:
 
     HF's ``warning_once`` is ``@functools.lru_cache``-wrapped at the module
     level — the cache survives across ``run_case`` calls in the same process.
-    Without clearing it, a dormancy rule that fires its message on rule N
-    would silently no-op on rule N+1 reusing the same template, and the
+    Without clearing it, a dormancy invariant that fires its message on invariant N
+    would silently no-op on invariant N+1 reusing the same template, and the
     validation classifier would observe ``logger_warning`` (the underlying
-    ``warning`` channel) instead of ``logger_warning_once`` for every rule
+    ``warning`` channel) instead of ``logger_warning_once`` for every invariant
     after the first hit. Clear the cache on every spy installation so each
-    rule sees a clean slate.
+    invariant sees a clean slate.
     """
     original = getattr(logging.Logger, "warning_once", None)
     if original is None:
@@ -377,7 +377,7 @@ def classify_emission_channel(capture: CaptureBuffers) -> str:
 
     ``logger_warning_once`` is distinguished from plain ``logger_warning``
     via the sentinel prepended by :func:`_patch_warning_once`. Mixed
-    batches (same rule emitting both forms) classify as
+    batches (same invariant emitting both forms) classify as
     ``logger_warning_once`` — the dedup-wrapped form is the stricter claim
     on user visibility.
     """
@@ -414,7 +414,7 @@ def compare_expected_vs_observed(
     observed_emission: str,
     silent_normalisations: dict[str, Any],
 ) -> list[Divergence]:
-    """Return the list of expected-vs-observed divergences for one rule.
+    """Return the list of expected-vs-observed divergences for one invariant.
 
     Missing/extra fields on either side are *not* treated as divergence —
     only fields present in ``expected`` are checked. This keeps the
@@ -516,7 +516,7 @@ def message_template_to_substring(template: str) -> str:
     Returns the empty string if the template has no static content
     longer than :data:`_MIN_STATIC_FRAGMENT_LEN` characters - the caller
     should treat this as ``message_template_too_dynamic`` and skip the
-    substring check (recording a divergence so the rule's author knows
+    substring check (recording a divergence so the invariant's author knows
     the template is too placeholder-heavy to verify).
 
     Examples
@@ -543,7 +543,7 @@ def message_template_to_substring(template: str) -> str:
 def _strip_fstring_quoting(template: str) -> str:
     """Strip a leading ``f'`` / ``f"`` and matching trailing quote, if present.
 
-    Some corpus rules record the AST source literal rather than the
+    Some corpus invariants record the AST source literal rather than the
     runtime format-string. ``"f'Greedy methods do not support {x}.'"``
     becomes ``"Greedy methods do not support {x}."`` so the placeholder
     splitter can do its job.

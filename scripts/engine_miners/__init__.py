@@ -1,9 +1,9 @@
-"""Miners that extract validation rules from engine library source.
+"""Miners that extract validation invariants from engine library source.
 
 Each ``scripts/engine_miners/{engine}_miner.py`` (added per-engine in follow-up
 PRs) is version-pinned to a specific library release via the miner module's
 ``TESTED_AGAINST_VERSIONS`` and emits a corpus-compatible YAML document of
-rule candidates.
+invariant candidates.
 
 Two extraction mechanisms are in scope:
 

@@ -2,12 +2,12 @@
 
 Sub-library type-system lift consumed by per-engine miners. Walks
 :class:`pydantic.BaseModel` subclasses (or ``pydantic.dataclasses.dataclass``-decorated
-classes) and emits one rule candidate per ``annotated-types`` constraint or
+classes) and emits one invariant candidate per ``annotated-types`` constraint or
 ``Literal[...]`` allowlist found on a field.
 
 This is the Tier-1 adoption from the locked design's §5: ``model_json_schema()``
 and ``FieldInfo.metadata`` are well-defined Pydantic v2 surfaces, so the lift
-is deterministic, has no probing, and emits a predictable rule shape per
+is deterministic, has no probing, and emits a predictable invariant shape per
 field constraint.
 
 Used by:
@@ -30,7 +30,7 @@ the standard library:
 - ``MinLen`` → ``"min_len"``
 - ``MaxLen`` → ``"max_len"``
 
-For ``Literal[a, b, c]`` annotations the lift emits a value-allowlist rule
+For ``Literal[a, b, c]`` annotations the lift emits a value-allowlist invariant
 with ``match_fields[<field>] == {"in": [a, b, c]}``.
 
 Determinism
@@ -72,7 +72,7 @@ _LENGTH_OPS: tuple[tuple[type, str, str], ...] = (
 def _violates_numeric(op_key: str, threshold: Any) -> Any:
     """Return a value that violates the numeric predicate ``op_key threshold``.
 
-    Used to populate ``kwargs_positive`` (the kwargs that *should* trip the rule).
+    Used to populate ``kwargs_positive`` (the kwargs that *should* trip the invariant).
     The complement value populates ``kwargs_negative``.
     """
     if op_key == ">":
@@ -155,7 +155,7 @@ def lift(
     today: str,
     source_path: str,
 ) -> list[InvariantCandidate]:
-    """Extract validation-rule candidates from ``target_type`` via Pydantic v2 introspection.
+    """Extract validation-invariant candidates from ``target_type`` via Pydantic v2 introspection.
 
     Parameters
     ----------
@@ -164,12 +164,12 @@ def lift(
         class. Other types yield an empty list.
     namespace:
         Engine field-namespace prefix used in ``match_fields``
-        (e.g. ``"vllm.cache"`` → emits rules keyed
+        (e.g. ``"vllm.cache"`` → emits invariants keyed
         ``"vllm.cache.<field>"``).
     today:
-        ISO-8601 date string used for the rule's ``added_at`` field.
+        ISO-8601 date string used for the invariant's ``added_at`` field.
     source_path:
-        Source path recorded on each rule's :class:`MinerSource`. Typically
+        Source path recorded on each invariant's :class:`MinerSource`. Typically
         the relative path within ``site-packages/`` for reproducibility.
 
     Returns
@@ -219,7 +219,7 @@ def lift(
 def _from_numeric(
     meta: Any, field_name: str, target_type: type, namespace: str
 ) -> dict[str, Any] | None:
-    """Build a partial rule dict from an ``annotated-types`` numeric constraint."""
+    """Build a partial invariant dict from an ``annotated-types`` numeric constraint."""
     for cls, op_key, attr in _NUMERIC_OPS:
         if isinstance(meta, cls):
             threshold = getattr(meta, attr)
@@ -239,7 +239,7 @@ def _from_numeric(
 def _from_length(
     meta: Any, field_name: str, target_type: type, namespace: str
 ) -> dict[str, Any] | None:
-    """Build a partial rule dict from a length constraint (``MinLen``/``MaxLen``)."""
+    """Build a partial invariant dict from a length constraint (``MinLen``/``MaxLen``)."""
     for cls, op_key, attr in _LENGTH_OPS:
         if isinstance(meta, cls):
             threshold = getattr(meta, attr)
@@ -265,7 +265,7 @@ def _from_length(
 def _from_literal(
     values: tuple[Any, ...], field_name: str, target_type: type, namespace: str
 ) -> dict[str, Any]:
-    """Build a partial rule dict from a ``Literal[...]`` annotation."""
+    """Build a partial invariant dict from a ``Literal[...]`` annotation."""
     sample_invalid = "<invalid_pydantic_lift_probe>"
     sample_valid = values[0]
     return {
@@ -315,7 +315,7 @@ def _build(
 
 
 def _slug(value: Any) -> str:
-    """Stable, filesystem-safe slug for embedding numeric thresholds in rule ids."""
+    """Stable, filesystem-safe slug for embedding numeric thresholds in invariant ids."""
     return str(value).replace("-", "neg").replace(".", "p").replace(" ", "_").replace("/", "_")
 
 

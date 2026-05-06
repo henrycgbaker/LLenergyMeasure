@@ -7,17 +7,17 @@ Five tiers, each with a different dependency on live library behaviour:
 * **Tier B — Library-observational property tests.** Parametrised over the
   miner's probe set; checks that every positive probe still fires on the
   installed ``transformers`` and every negative probe doesn't. This is the
-  test that fails loud when HF drops or adds a rule.
+  test that fails loud when HF drops or adds a invariant.
 * **Tier C — Mutation / behavioural e2e.** Corrupt the committed YAML
   corpus (message, predicate, added_by, presence), re-run the miner,
   assert the miner output corrects each mutation. Proves the miner is a
   functioning drift-detection loop, not an inert replayer.
-* **Tier D — Library-round-trip.** For each dormancy rule, derive ground
+* **Tier D — Library-round-trip.** For each dormancy invariant, derive ground
   truth at test time by probing the live library, assert the miner's
   emitted template (after ``{declared_value}`` substitution) is a substring
   of the library's actual raise message. No hardcoded library phrasing.
 * **Tier E — Auto-discovery sanity.** Prove the enumerator finds the full
-  partition the corpus requires, so dormancy rules never accidentally
+  partition the corpus requires, so dormancy invariants never accidentally
   slip back to hand-curation.
 """
 
@@ -74,7 +74,7 @@ def committed_corpus() -> dict[str, Any]:
 @pytest.fixture(scope="module")
 def miner_candidates() -> list:
     """Return fresh miner output once per test module (walking is expensive)."""
-    return intro.walk_generation_config_rules(
+    return intro.walk_generation_config_invariants(
         abs_source_path="/nonexistent",
         rel_source_path="transformers/generation/configuration_utils.py",
         today="2026-04-24",
@@ -93,12 +93,12 @@ def enumerated_dormancy() -> list:
 
 
 def test_miner_is_deterministic() -> None:
-    a = intro.walk_generation_config_rules(
+    a = intro.walk_generation_config_invariants(
         abs_source_path="/nonexistent",
         rel_source_path="stub.py",
         today="2026-04-24",
     )
-    b = intro.walk_generation_config_rules(
+    b = intro.walk_generation_config_invariants(
         abs_source_path="/nonexistent",
         rel_source_path="stub.py",
         today="2026-04-24",
@@ -111,8 +111,8 @@ def test_miner_is_deterministic() -> None:
 
 
 def test_every_introspection_rule_is_tagged_introspection(miner_candidates) -> None:
-    # No rule from this miner should ever leak through as manual_seed
-    # — that tag belongs to BNB rules only, which live in the parent miner.
+    # No invariant from this miner should ever leak through as manual_seed
+    # — that tag belongs to BNB invariants only, which live in the parent miner.
     tags = {c.added_by for c in miner_candidates}
     assert tags == {"dynamic_miner"}
 
@@ -128,15 +128,15 @@ def test_miner_emits_expected_severity_partition(miner_candidates) -> None:
     contain only known severities.
     """
     severities = {c.severity for c in miner_candidates}
-    assert "dormant" in severities, "introspection should still discover dormancy rules"
-    assert "error" in severities, "introspection should still discover error rules"
+    assert "dormant" in severities, "introspection should still discover dormancy invariants"
+    assert "error" in severities, "introspection should still discover error invariants"
     assert severities <= {"dormant", "error", "warn"}, (
         f"unexpected severity in miner output: {severities - {'dormant', 'error', 'warn'}}"
     )
 
 
 def test_mode_gated_dormancy_templates_carry_placeholder(miner_candidates) -> None:
-    """Each mode-gated dormancy rule's template must have a ``{declared_value}`` slot.
+    """Each mode-gated dormancy invariant's template must have a ``{declared_value}`` slot.
 
     Regression guard: the strict substitution anchors on ``\\`{field}\\` is
     set to \\`{value}\\``` — if HF ever rephrases the greedy / beam
@@ -147,32 +147,32 @@ def test_mode_gated_dormancy_templates_carry_placeholder(miner_candidates) -> No
         intro._GREEDY_TRIGGER.id_prefix,
         intro._BEAM_TRIGGER.id_prefix,
     }
-    for rule in miner_candidates:
-        if not any(rule.id.startswith(p) for p in mode_prefixes):
+    for invariant in miner_candidates:
+        if not any(invariant.id.startswith(p) for p in mode_prefixes):
             continue
-        assert "{declared_value}" in (rule.message_template or ""), (
-            f"Dormancy rule {rule.id!r} lost its {{declared_value}} slot — "
-            f"HF phrasing may have drifted. Template: {rule.message_template!r}"
+        assert "{declared_value}" in (invariant.message_template or ""), (
+            f"Dormancy invariant {invariant.id!r} lost its {{declared_value}} slot — "
+            f"HF phrasing may have drifted. Template: {invariant.message_template!r}"
         )
 
 
 def test_dormancy_rule_match_fields_align_with_id_prefix(miner_candidates) -> None:
-    """Every dormancy rule's match_fields reflect the trigger its ID prefix advertises.
+    """Every dormancy invariant's match_fields reflect the trigger its ID prefix advertises.
 
     Catches the "greedy/beam prefix swap" regression: if someone renames
-    a trigger's ``id_prefix`` to another trigger's, the rules would
-    silently land in the wrong bucket. This test asserts each rule's
+    a trigger's ``id_prefix`` to another trigger's, the invariants would
+    silently land in the wrong bucket. This test asserts each invariant's
     predicate actually includes the ``trigger_field = trigger_positive``
     pair its prefix claims.
     """
-    for rule in miner_candidates:
+    for invariant in miner_candidates:
         for trigger in intro.TRIGGERS:
-            if rule.id.startswith(trigger.id_prefix):
+            if invariant.id.startswith(trigger.id_prefix):
                 expected_key = f"transformers.sampling.{trigger.trigger_field}"
-                assert rule.match_fields.get(expected_key) == trigger.trigger_positive, (
-                    f"Rule {rule.id!r} is tagged with {trigger.id_prefix!r} but "
+                assert invariant.match_fields.get(expected_key) == trigger.trigger_positive, (
+                    f"Invariant {invariant.id!r} is tagged with {trigger.id_prefix!r} but "
                     f"its match predicate for {expected_key!r} is "
-                    f"{rule.match_fields.get(expected_key)!r}, not "
+                    f"{invariant.match_fields.get(expected_key)!r}, not "
                     f"{trigger.trigger_positive!r}"
                 )
                 break
@@ -191,7 +191,7 @@ def test_positive_trigger_probe_fires_minor_issue(trigger, enumerated_dormancy) 
     # Pick any field discovered under this trigger; doesn't matter which.
     fields_for_trigger = [f for (t, f, *_) in enumerated_dormancy if t is trigger]
     assert fields_for_trigger, (
-        f"Trigger {trigger.id_prefix!r} discovered no dormancy rules — "
+        f"Trigger {trigger.id_prefix!r} discovered no dormancy invariants — "
         f"library behaviour may have drifted."
     )
 
@@ -210,7 +210,7 @@ def test_positive_trigger_probe_fires_minor_issue(trigger, enumerated_dormancy) 
 
 @pytest.mark.parametrize("trigger", intro.TRIGGERS, ids=lambda t: t.id_prefix)
 def test_negative_trigger_probe_does_not_fire(trigger, enumerated_dormancy) -> None:
-    """Inverting the trigger kwarg silences the field's dormancy rule.
+    """Inverting the trigger kwarg silences the field's dormancy invariant.
 
     Every field discovered under ``trigger`` is checked. Three legitimate
     "doesn't fire" outcomes are accepted:
@@ -257,12 +257,12 @@ def test_negative_trigger_probe_does_not_fire(trigger, enumerated_dormancy) -> N
 # The pre-refactor introspection extractor exposed ``ERROR_PROBES`` as a
 # hardcoded tuple and these tests parametrised over it. The combinatorial
 # refactor (2026-04-25) replaced the hardcoded tuple with cluster-based
-# inference (``CLUSTERS``), so the semantic assertion (every error rule's
+# inference (``CLUSTERS``), so the semantic assertion (every error invariant's
 # kwargs_positive raises in the live library; kwargs_negative does not)
 # now lives at the *corpus* level via the future validation CI pipeline that
-# re-runs every rule's kwargs against the real library. Pinning here would
+# re-runs every invariant's kwargs against the real library. Pinning here would
 # re-encode the implementation detail (which probes exist) rather than the
-# semantic invariant (the corpus's rules are all correct on real library).
+# semantic invariant (the corpus's invariants are all correct on real library).
 
 
 # ---------------------------------------------------------------------------
@@ -271,14 +271,14 @@ def test_negative_trigger_probe_does_not_fire(trigger, enumerated_dormancy) -> N
 
 
 def _pick_introspection_rule(corpus: dict[str, Any]) -> dict[str, Any]:
-    """Return any introspection-tagged rule from the corpus; prefer temperature."""
-    for rule in corpus["invariants"]:
-        if rule["id"] == "transformers_greedy_strips_temperature":
-            return rule
-    for rule in corpus["invariants"]:
-        if rule.get("added_by") == "dynamic_miner":
-            return rule
-    raise AssertionError("Corpus has no introspection-tagged rule.")
+    """Return any introspection-tagged invariant from the corpus; prefer temperature."""
+    for invariant in corpus["invariants"]:
+        if invariant["id"] == "transformers_greedy_strips_temperature":
+            return invariant
+    for invariant in corpus["invariants"]:
+        if invariant.get("added_by") == "dynamic_miner":
+            return invariant
+    raise AssertionError("Corpus has no introspection-tagged invariant.")
 
 
 def _find_miner_invariant(miner_candidates, invariant_id: str):
@@ -311,7 +311,7 @@ def test_miner_corrects_wrong_predicate_default(committed_corpus, miner_candidat
             found = True
             break
     if not found:
-        pytest.skip("Picked rule has no not_equal predicate to corrupt.")
+        pytest.skip("Picked invariant has no not_equal predicate to corrupt.")
 
     miner_invariant = _find_miner_invariant(miner_candidates, target["id"])
     assert miner_invariant.match_fields[target_path].get("not_equal") != "__CORRUPTED__"
@@ -320,14 +320,14 @@ def test_miner_corrects_wrong_predicate_default(committed_corpus, miner_candidat
 @pytest.mark.skip(
     reason=(
         "Pre-refactor invariant — miner emitted a stable id for every committed "
-        "rule. Combinatorial probing now derives ids from observed patterns; the "
+        "invariant. Combinatorial probing now derives ids from observed patterns; the "
         "load-bearing question 'do the corpus and miner agree' lives at the "
         "merger + validation-CI level (lands in follow-up PRs). Re-enable or remove "
         "once the canonical corpus is regenerated by build_corpus.py."
     )
 )
 def test_miner_flags_missing_invariant(committed_corpus, miner_candidates) -> None:
-    """A rule removed from a corpus copy is still present in miner output."""
+    """A invariant removed from a corpus copy is still present in miner output."""
     mutant = copy.deepcopy(committed_corpus)
     introspection_rules = [r for r in mutant["invariants"] if r.get("added_by") == "dynamic_miner"]
     removed = introspection_rules[0]
@@ -354,18 +354,18 @@ def test_miner_rejects_drift_in_added_by(committed_corpus, miner_candidates) -> 
 
 @pytest.mark.skip(
     reason=(
-        "Combinatorial probing emits some rules whose kwargs_positive are inferred "
+        "Combinatorial probing emits some invariants whose kwargs_positive are inferred "
         "from cluster sweeps and don't always round-trip in the live library — "
         "exactly the recall-first behaviour validation CI (separate follow-up PR) is "
         "designed to filter. Re-enable or remove once validation is wired "
         "into build_corpus.py and the canonical corpus excludes non-round-tripping "
-        "rules empirically."
+        "invariants empirically."
     )
 )
 def test_miner_dormancy_template_is_substring_of_live_library_message(
     miner_candidates,
 ) -> None:
-    """For every dormancy rule the miner emits, rendering its template with
+    """For every dormancy invariant the miner emits, rendering its template with
     the probed value must be a substring of what the library actually says
     when the same kwargs run through ``validate(strict=True)``.
 
@@ -374,22 +374,22 @@ def test_miner_dormancy_template_is_substring_of_live_library_message(
     """
     from transformers import GenerationConfig
 
-    for rule in miner_candidates:
-        if rule.severity != "dormant":
+    for invariant in miner_candidates:
+        if invariant.severity != "dormant":
             continue
-        isolation = _isolation_for_rule(rule)
-        kwargs = {**isolation, **rule.kwargs_positive}
-        probed_field = _probed_field(rule)
+        isolation = _isolation_for_rule(invariant)
+        kwargs = {**isolation, **invariant.kwargs_positive}
+        probed_field = _probed_field(invariant)
         gc = GenerationConfig(**kwargs)
         with pytest.raises(ValueError) as exc:
             gc.validate(strict=True)
         issues = intro._parse_strict_raise(str(exc.value))
-        assert probed_field in issues, f"Rule {rule.id!r} didn't fire on live library"
+        assert probed_field in issues, f"Invariant {invariant.id!r} didn't fire on live library"
 
         probe_value = kwargs[probed_field]
-        rendered = rule.message_template.format(declared_value=probe_value)
+        rendered = invariant.message_template.format(declared_value=probe_value)
         assert rendered == issues[probed_field], (
-            f"Rule {rule.id!r} template + declared_value={probe_value!r} "
+            f"Invariant {invariant.id!r} template + declared_value={probe_value!r} "
             f"produced {rendered!r}, but live library said {issues[probed_field]!r}"
         )
 
@@ -410,31 +410,31 @@ def test_dormancy_template_substitution_uses_declared_value_not_frozen(
         intro._BEAM_TRIGGER.id_prefix,
     }
     sentinel = "__USER_VALUE_MARKER__"
-    for rule in miner_candidates:
-        if not any(rule.id.startswith(p) for p in mode_prefixes):
+    for invariant in miner_candidates:
+        if not any(invariant.id.startswith(p) for p in mode_prefixes):
             continue
-        rendered = (rule.message_template or "").format(declared_value=sentinel)
+        rendered = (invariant.message_template or "").format(declared_value=sentinel)
         assert sentinel in rendered, (
-            f"Rule {rule.id!r} template did not render {sentinel!r}; "
-            f"substitution is broken. Template: {rule.message_template!r}"
+            f"Invariant {invariant.id!r} template did not render {sentinel!r}; "
+            f"substitution is broken. Template: {invariant.message_template!r}"
         )
 
 
-def _isolation_for_rule(rule) -> dict[str, Any]:
-    """Return isolation kwargs appropriate for the trigger class in ``rule.id``."""
+def _isolation_for_rule(invariant) -> dict[str, Any]:
+    """Return isolation kwargs appropriate for the trigger class in ``invariant.id``."""
     for trigger in intro.TRIGGERS:
-        if rule.id.startswith(trigger.id_prefix):
+        if invariant.id.startswith(trigger.id_prefix):
             return trigger.isolation_kwargs
     return {}  # self-triggered dormancy (pad_token_id) needs no isolation
 
 
-def _probed_field(rule) -> str:
+def _probed_field(invariant) -> str:
     """Return the probed field name — last segment of the non-trigger match key."""
     for trigger in intro.TRIGGERS:
-        if rule.id.startswith(trigger.id_prefix):
-            return rule.id.removeprefix(trigger.id_prefix)
+        if invariant.id.startswith(trigger.id_prefix):
+            return invariant.id.removeprefix(trigger.id_prefix)
     # self-triggered: single match key
-    key = next(iter(rule.match_fields))
+    key = next(iter(invariant.match_fields))
     return key.rsplit(".", 1)[-1]
 
 
@@ -445,7 +445,7 @@ def _probed_field(rule) -> str:
 
 @pytest.mark.skip(
     reason=(
-        "Vendor validation (PR 5) quarantines multi-predicate dormancy rules "
+        "Vendor validation (PR 5) quarantines multi-predicate dormancy invariants "
         "whose negative kwargs still trip the same dormancy (the AST "
         "negate_predicates helper only flips the last predicate, leaving the "
         "remaining AND-clauses unchanged). The committed corpus is therefore "
@@ -463,15 +463,17 @@ def test_autodiscovered_dormancy_fields_match_committed_corpus(
 
     If auto-discovery finds strictly more fields than the corpus, a corpus
     refresh PR is needed. If it finds strictly fewer, the library has
-    dropped rules and the miner pin should move. Either way, this test
+    dropped invariants and the miner pin should move. Either way, this test
     fails and a maintainer reviews.
     """
     discovered = intro.discover_dormancy_fields()
     corpus_partition: dict[str, set[str]] = {t.id_prefix: set() for t in intro.TRIGGERS}
-    for rule in committed_corpus["invariants"]:
+    for invariant in committed_corpus["invariants"]:
         for trigger in intro.TRIGGERS:
-            if rule["id"].startswith(trigger.id_prefix):
-                corpus_partition[trigger.id_prefix].add(rule["id"].removeprefix(trigger.id_prefix))
+            if invariant["id"].startswith(trigger.id_prefix):
+                corpus_partition[trigger.id_prefix].add(
+                    invariant["id"].removeprefix(trigger.id_prefix)
+                )
                 break
     assert discovered == corpus_partition
 

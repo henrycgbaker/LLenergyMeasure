@@ -79,7 +79,7 @@ LIBRARY = "vllm"
 # SamplingParams under ``vllm.sampling``, ``BeamSearchParams`` under
 # ``vllm.beam_search``, and engine-construction kwargs under ``vllm.engine``
 # (per ``src/llenergymeasure/config/engine_configs.py``). The
-# ``vllm.config.*`` family doesn't yet have its own sub-model, so its rules
+# ``vllm.config.*`` family doesn't yet have its own sub-model, so its invariants
 # go under ``vllm.engine``; validation CI surfaces any path mismatch.
 NS_SAMPLING = "vllm.sampling"
 NS_STRUCTURED = "vllm.sampling.structured_outputs"
@@ -133,8 +133,8 @@ class _ASTTarget:
     ``module_attr`` is the dotted attribute path under ``vllm`` from which
     to import the class (e.g. ``"sampling_params.SamplingParams"``).
     ``method`` is the method name on the class. ``namespace`` is the field
-    path-prefix used when emitting rules from this method's body.
-    ``native_type`` is the corpus's ``native_type`` value for these rules.
+    path-prefix used when emitting invariants from this method's body.
+    ``native_type`` is the corpus's ``native_type`` value for these invariants.
     ``severity_default`` filters the default outcome shape for self-assigns
     (``dormant``) vs raises (``error``).
     """
@@ -236,7 +236,7 @@ _AST_TARGETS: tuple[_ASTTarget, ...] = (
         native_type="vllm.config.ModelConfig",
     ),
     # SpeculativeConfig.__post_init__ is 264 lines of nested-config wiring;
-    # AST-walking it produces 30+ raw rules that all fail validation-CI because
+    # AST-walking it produces 30+ raw invariants that all fail validation-CI because
     # the predicates depend on cross-config references (model_config,
     # parallel_config) the static miner can't synthesise from kwargs alone.
     # The pydantic-lift over SpeculativeConfig (in the dynamic miner) covers
@@ -261,7 +261,7 @@ _AST_TARGETS: tuple[_ASTTarget, ...] = (
 
 
 # ---------------------------------------------------------------------------
-# Detected pattern + rule emission
+# Detected pattern + invariant emission
 # ---------------------------------------------------------------------------
 
 
@@ -377,10 +377,10 @@ def _detect_body_stmts(body: list[ast.stmt]) -> list[_Detected]:
     """Return all detected sites in an ``if`` body, preserving order.
 
     Iterates over every statement (not just the first) so a single ``if``
-    block containing multiple ``self.x = …`` assignments emits one rule
+    block containing multiple ``self.x = …`` assignments emits one invariant
     per assignment. ``vllm.SamplingParams._verify_greedy_sampling`` is
     the canonical case — it overrides three sampling fields in one branch
-    and we want a rule for each. Recurses into nested ``if`` blocks via
+    and we want a invariant for each. Recurses into nested ``if`` blocks via
     the parent miner.
     """
     out: list[_Detected] = []
@@ -555,7 +555,7 @@ def _extract_predicates(condition: ast.expr) -> list[_Predicate]:
     """Translate an arbitrary boolean condition into AND-combined predicates.
 
     BoolOp(And) -> recurse and concat. BoolOp(Or) is dropped entirely (the
-    loader operator vocabulary cannot express OR; the rule would emit
+    loader operator vocabulary cannot express OR; the invariant would emit
     incorrectly). UnaryOp(Not) inverts a single inner predicate when the
     operator is invertible. Bare ``self.X`` is treated as ``present True``.
     """
@@ -583,7 +583,7 @@ def _extract_predicates(condition: ast.expr) -> list[_Predicate]:
 
 
 # ---------------------------------------------------------------------------
-# kwargs synthesis (positive = trips the rule; negative = doesn't)
+# kwargs synthesis (positive = trips the invariant; negative = doesn't)
 # ---------------------------------------------------------------------------
 
 
@@ -678,7 +678,7 @@ def _synthesise_kwargs(preds: list[_Predicate]) -> dict[str, Any]:
 
 
 def _negate_predicates(preds: list[_Predicate]) -> list[_Predicate]:
-    """Flip the last predicate so the resulting kwargs DON'T trip the rule."""
+    """Flip the last predicate so the resulting kwargs DON'T trip the invariant."""
     if not preds:
         return []
     last = preds[-1]
@@ -728,14 +728,14 @@ def _walk_function(
     rel_source_path: str,
     today: str,
 ) -> list[InvariantCandidate]:
-    """Walk one method body and emit rule candidates."""
-    rules: list[InvariantCandidate] = []
+    """Walk one method body and emit invariant candidates."""
+    invariants: list[InvariantCandidate] = []
     seen_ids: set[str] = set()
 
     public_fields = _public_field_names_from_target(target)
 
     def descend(body: list[ast.stmt], frame: _Frame) -> None:
-        # Emit rules for top-level detector hits first (rare but possible:
+        # Emit invariants for top-level detector hits first (rare but possible:
         # bare ``raise`` in a method body — we skip those because they have
         # no condition to translate).
         # Then recurse into ``if`` / ``for`` blocks.
@@ -749,39 +749,39 @@ def _walk_function(
 
     def _handle_if(if_node: ast.If, frame: _Frame) -> None:
         own_preds = _extract_predicates(if_node.test)
-        # Filter: rule's condition must reference at least one self.<field>
+        # Filter: invariant's condition must reference at least one self.<field>
         # that is a public, configurable field of the native type. Drops
         # internal-state guards (``if self._initialized``) and argument-
-        # gated rules without configuration meaning.
+        # gated invariants without configuration meaning.
         if public_fields and not any(p.field in public_fields for p in own_preds):
             # Recurse anyway — nested predicates on different fields may still
             # be public-field-referencing.
             descend(if_node.body, frame)
             return
         local = _Frame(predicates=[*frame.predicates, *own_preds])
-        # Emit rules for every detected statement in this body (not just
+        # Emit invariants for every detected statement in this body (not just
         # the first — multiple self-assigns in one branch must each emit).
         for det in _detect_body_stmts(if_node.body):
-            rule = _build_rule(
+            invariant = _build_rule(
                 target=target,
                 preds=local.predicates,
                 detected=det,
                 rel_source_path=rel_source_path,
                 today=today,
             )
-            if rule is None:
+            if invariant is None:
                 continue
-            if rule.id in seen_ids:
+            if invariant.id in seen_ids:
                 # Append a numeric suffix on collision rather than dropping —
-                # multiple rules at the same predicate shape can be real
-                # (e.g. greedy block sets top_p, top_k, min_p — three rules
+                # multiple invariants at the same predicate shape can be real
+                # (e.g. greedy block sets top_p, top_k, min_p — three invariants
                 # on the same predicate).
                 suffix = 2
-                while f"{rule.id}__{suffix}" in seen_ids:
+                while f"{invariant.id}__{suffix}" in seen_ids:
                     suffix += 1
-                rule.id = f"{rule.id}__{suffix}"
-            seen_ids.add(rule.id)
-            rules.append(rule)
+                invariant.id = f"{invariant.id}__{suffix}"
+            seen_ids.add(invariant.id)
+            invariants.append(invariant)
         # Recurse into the if body for nested ``if``s.
         descend(if_node.body, local)
         # Walk the elif/else chain as separate frames at sibling depth.
@@ -793,7 +793,7 @@ def _walk_function(
                 continue
 
     descend(func.body, _Frame())
-    return rules
+    return invariants
 
 
 def _build_rule(
@@ -829,7 +829,7 @@ def _build_rule(
     # Use the field's runtime default for the negative when available —
     # raw-flipped values (None on an int field, "_neg" on an int) trip
     # pydantic type validation on the negative path which would
-    # quarantine an otherwise-correct rule. Falling back to the
+    # quarantine an otherwise-correct invariant. Falling back to the
     # pydantic-declared default keeps the negative inside the type
     # envelope.
     last_pred = effective_preds[-1]
@@ -837,7 +837,7 @@ def _build_rule(
     if known and default != kwargs_pos.get(last_pred.field):
         kwargs_neg = {**kwargs_neg, last_pred.field: default}
 
-    invariant_id = _make_rule_id(target=target, preds=effective_preds, detected=detected)
+    invariant_id = _make_invariant_id(target=target, preds=effective_preds, detected=detected)
 
     invariant_under_test = _describe_rule(target=target, preds=effective_preds, detected=detected)
 
@@ -861,7 +861,7 @@ def _build_rule(
             "emission_channel": detected.emission_channel,
             # Bare field name (no namespace prefix) — matches the runtime
             # observation shape ``validate_invariants`` returns. Namespacing this
-            # would cause every dormancy rule to diverge on
+            # would cause every dormancy invariant to diverge on
             # ``normalised_fields`` in validation-CI.
             "normalised_fields": (
                 [subject_field]
@@ -917,15 +917,15 @@ def _slug(value: Any) -> str:
     return "".join(ch for ch in s if ch.isalnum() or ch == "_").lower()[:24]
 
 
-def _make_rule_id(
+def _make_invariant_id(
     *,
     target: _ASTTarget,
     preds: list[_Predicate],
     detected: _Detected,
 ) -> str:
-    """Stable, descriptive rule-id."""
+    """Stable, descriptive invariant-id."""
     severity_tag = {"error": "raises", "warn": "warns", "dormant": "dormant"}.get(
-        detected.severity, "rule"
+        detected.severity, "invariant"
     )
     short = target.class_name.lower()
     parts: list[str] = ["vllm", short, severity_tag]
@@ -1213,7 +1213,7 @@ def main(argv: list[str] | None = None) -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text)
     print(
-        f"Wrote {len(candidates)} vLLM static-miner rule candidates to {args.out}",
+        f"Wrote {len(candidates)} vLLM static-miner invariant candidates to {args.out}",
         file=sys.stderr,
     )
     return 0

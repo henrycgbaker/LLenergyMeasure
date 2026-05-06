@@ -51,13 +51,13 @@ def test_check_hardware_is_static(engine_cls, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Transformers: no host-hardware rules at MVP
+# Transformers: no host-hardware invariants at MVP
 # ---------------------------------------------------------------------------
 
 
 class TestTransformersCheckHardware:
     def test_returns_empty_on_any_sm(self, monkeypatch):
-        """Transformers has no host-hardware rules; always returns ``[]``."""
+        """Transformers has no host-hardware invariants; always returns ``[]``."""
         for sm in [(7, 0), (8, 0), (8, 9), (9, 0), None]:
             monkeypatch.setattr(
                 "llenergymeasure.device.gpu_info.get_compute_capability",
@@ -68,13 +68,13 @@ class TestTransformersCheckHardware:
 
 
 # ---------------------------------------------------------------------------
-# vLLM: no host-hardware rules at MVP
+# vLLM: no host-hardware invariants at MVP
 # ---------------------------------------------------------------------------
 
 
 class TestVLLMCheckHardware:
     def test_returns_empty_on_any_sm(self, monkeypatch):
-        """vLLM has no host-hardware rules at MVP; always returns ``[]``."""
+        """vLLM has no host-hardware invariants at MVP; always returns ``[]``."""
         for sm in [(7, 0), (8, 0), (8, 9), (9, 0), None]:
             monkeypatch.setattr(
                 "llenergymeasure.device.gpu_info.get_compute_capability",

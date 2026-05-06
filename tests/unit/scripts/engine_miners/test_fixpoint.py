@@ -1,9 +1,9 @@
 """Tests for :mod:`scripts.engine_miners._fixpoint_test`.
 
 Covers:
-- Convergence on idempotent rules.
-- Cycle detection (two rules that flip a field forever).
-- Order-dependence detection (two non-commuting rules).
+- Convergence on idempotent invariants.
+- Cycle detection (two invariants that flip a field forever).
+- Order-dependence detection (two non-commuting invariants).
 - Corpus-level integration against the seeded transformers corpus.
 """
 
@@ -22,8 +22,8 @@ if str(_PROJECT_ROOT) not in sys.path:
 from scripts.engine_miners._fixpoint_test import (  # noqa: E402
     GateSoundnessRegressionError,
     LibraryResolutionCycleError,
-    NonIdempotentRuleError,
-    OrderDependentRuleError,
+    NonIdempotentInvariantError,
+    OrderDependentInvariantError,
     _ProjectedInvariant,
     apply_to_fixpoint,
     assert_gate_soundness_fixpoint,
@@ -32,7 +32,7 @@ from scripts.engine_miners._fixpoint_test import (  # noqa: E402
     construct_seed_states,
     fixpoint_test_corpus,
     load_dormant_invariants,
-    synthesise_malformed_rule_cases,
+    synthesise_malformed_invariant_cases,
 )
 from scripts.validate_invariants import (  # noqa: E402
     CHECK_MESSAGE_TEMPLATE_MATCH,
@@ -60,26 +60,26 @@ def _rule(
 
 class TestApplyToFixpoint:
     def test_no_applicable_rules(self) -> None:
-        rules = [_rule("r1", {"a": 1}, ("b",))]
+        invariants = [_rule("r1", {"a": 1}, ("b",))]
         seed = {"a": 2}
-        state, applied = apply_to_fixpoint(seed, rules)
+        state, applied = apply_to_fixpoint(seed, invariants)
         assert state == seed
         assert applied == []
 
     def test_single_rule_converges(self) -> None:
-        rules = [_rule("strip_temp", {"do_sample": False}, ("temperature",))]
+        invariants = [_rule("strip_temp", {"do_sample": False}, ("temperature",))]
         seed = {"do_sample": False, "temperature": 0.9}
-        state, applied = apply_to_fixpoint(seed, rules)
+        state, applied = apply_to_fixpoint(seed, invariants)
         assert state["temperature"] is None
         assert applied == ["strip_temp"]
 
     def test_two_independent_rules(self) -> None:
-        rules = [
+        invariants = [
             _rule("strip_a", {"mode": "greedy"}, ("a",)),
             _rule("strip_b", {"mode": "greedy"}, ("b",)),
         ]
         seed = {"mode": "greedy", "a": 1, "b": 2}
-        state, applied = apply_to_fixpoint(seed, rules)
+        state, applied = apply_to_fixpoint(seed, invariants)
         assert state["a"] is None
         assert state["b"] is None
         assert sorted(applied) == ["strip_a", "strip_b"]
@@ -92,9 +92,9 @@ class TestApplyToFixpoint:
 
 class TestIdempotence:
     def test_idempotent_rule_passes(self) -> None:
-        rule = _rule("strip_x", {"do_sample": False}, ("x",))
+        invariant = _rule("strip_x", {"do_sample": False}, ("x",))
         seed = {"do_sample": False, "x": 1}
-        assert_idempotent(rule, seed)  # should not raise
+        assert_idempotent(invariant, seed)  # should not raise
 
     def test_non_idempotent_rule_raises(self) -> None:
         class TogglingRule(_ProjectedInvariant):
@@ -103,15 +103,15 @@ class TestIdempotence:
                 next_state["x"] = next_state.get("x", 0) + 1
                 return next_state
 
-        rule = TogglingRule(
+        invariant = TogglingRule(
             id="toggle",
             severity="dormant",
             match_fields={"do_sample": False},
             normalised_fields=("x",),
         )
         seed = {"do_sample": False, "x": 1}
-        with pytest.raises(NonIdempotentRuleError):
-            assert_idempotent(rule, seed)
+        with pytest.raises(NonIdempotentInvariantError):
+            assert_idempotent(invariant, seed)
 
 
 # ---------------------------------------------------------------------------
@@ -121,19 +121,19 @@ class TestIdempotence:
 
 class TestShuffleStability:
     def test_commuting_rules_stable(self) -> None:
-        rules = [
+        invariants = [
             _rule("r1", {"greedy": True}, ("a",)),
             _rule("r2", {"greedy": True}, ("b",)),
             _rule("r3", {"greedy": True}, ("c",)),
         ]
         seed = {"greedy": True, "a": 1, "b": 2, "c": 3}
-        final = assert_shuffle_stable(rules, seed, shuffle_count=5)
+        final = assert_shuffle_stable(invariants, seed, shuffle_count=5)
         assert final["a"] is None
         assert final["b"] is None
         assert final["c"] is None
 
     def test_cycle_detected(self) -> None:
-        # Two rules where r_a sets x=1, r_b sets x=2, both always applicable.
+        # Two invariants where r_a sets x=1, r_b sets x=2, both always applicable.
         class SetValue(_ProjectedInvariant):
             def __init__(self, invariant_id: str, value: int) -> None:
                 super().__init__(
@@ -152,10 +152,10 @@ class TestShuffleStability:
                 next_state["x"] = self._value
                 return next_state
 
-        rules = [SetValue("ra", 1), SetValue("rb", 2)]
+        invariants = [SetValue("ra", 1), SetValue("rb", 2)]
         seed = {"x": 0}
         with pytest.raises(LibraryResolutionCycleError):
-            apply_to_fixpoint(seed, rules)
+            apply_to_fixpoint(seed, invariants)
 
     def test_order_dependent_detected(self) -> None:
         # r1: if y is None, set x=0. r2: always set y=None.
@@ -191,7 +191,7 @@ class TestShuffleStability:
         #     final: {x: 99, y: 1}
         # Order [r2, r1]: r2 applies (x=None) -> y=99. r1 applies-no (y=99). Done.
         #     final: {x: None, y: 99}
-        with pytest.raises(OrderDependentRuleError):
+        with pytest.raises(OrderDependentInvariantError):
             assert_shuffle_stable([r1, r2], seed, shuffle_count=10, seed_rng=0)
 
 
@@ -233,19 +233,19 @@ class TestCorpusIntegration:
                 },
             ]
         }
-        rules = load_dormant_invariants(corpus)
-        assert len(rules) == 1
-        assert rules[0].id == "r_dormant"
+        invariants = load_dormant_invariants(corpus)
+        assert len(invariants) == 1
+        assert invariants[0].id == "r_dormant"
 
     def test_construct_seed_states_satisfies_matches(self) -> None:
-        rules = [
+        invariants = [
             _rule(
                 "r1",
                 {"do_sample": False, "temperature": {"present": True, "not_equal": 1.0}},
                 ("temperature",),
             )
         ]
-        seeds = construct_seed_states(rules)
+        seeds = construct_seed_states(invariants)
         assert len(seeds) == 1
         assert seeds[0]["do_sample"] is False
         # The generated sentinel must not equal 1.0 (so the predicate fires).
@@ -260,7 +260,7 @@ class TestCorpusIntegration:
 class TestGateSoundnessFixpoint:
     """Pin Decision #12 of the invariant-miner adversarial review.
 
-    Three malformed rules (one per gate-soundness check) feed
+    Three malformed invariants (one per gate-soundness check) feed
     :func:`compute_gate_soundness_divergences`; each must surface its
     matching ``check_failed`` divergence. If a future refactor drops a
     check, the corresponding parameter case fails.
@@ -275,16 +275,18 @@ class TestGateSoundnessFixpoint:
         ],
     )
     def test_each_check_surfaces_its_divergence(self, expected_check: str) -> None:
-        cases = {c["check_name"]: c for c in synthesise_malformed_rule_cases()}
+        cases = {c["check_name"]: c for c in synthesise_malformed_invariant_cases()}
         case = cases[expected_check]
 
-        divergences = compute_gate_soundness_divergences(case["rule"], case["pos"], case["neg"])
+        divergences = compute_gate_soundness_divergences(
+            case["invariant"], case["pos"], case["neg"]
+        )
 
         check_names = [d.check_failed for d in divergences]
-        invariant_id = case["rule"]["id"]
+        invariant_id = case["invariant"]["id"]
         assert expected_check in check_names, (
             f"Expected gate to record check_failed={expected_check!r} for "
-            f"rule {invariant_id!r}; got {check_names!r}"
+            f"invariant {invariant_id!r}; got {check_names!r}"
         )
 
     def test_assert_gate_soundness_fixpoint_passes_on_real_gate(self) -> None:
@@ -303,10 +305,10 @@ class TestGateSoundnessFixpoint:
         # recurse into the patched name.
         real_gate = vr.compute_gate_soundness_divergences
 
-        def stripped_gate(rule: Any, pos: Any, neg: Any) -> list[Any]:
+        def stripped_gate(invariant: Any, pos: Any, neg: Any) -> list[Any]:
             return [
                 d
-                for d in real_gate(rule, pos, neg)
+                for d in real_gate(invariant, pos, neg)
                 if d.check_failed != CHECK_NEGATIVE_DOES_NOT_RAISE
             ]
 

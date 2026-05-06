@@ -38,7 +38,7 @@ _MAX_ITER = 10
 """Maximum fixpoint passes before declaring non-convergence.
 
 PoC-F (sweep-dedup.md §10) converged every seeded-corpus case within 2
-passes; 10 is generous headroom that still surfaces a rule cycle quickly.
+passes; 10 is generous headroom that still surfaces a invariant cycle quickly.
 """
 
 
@@ -62,39 +62,39 @@ class LibraryResolutionCycleError(RuntimeError):
 
 
 # ---------------------------------------------------------------------------
-# Core _apply_rules_fixpoint() — one config
+# Core _apply_invariants_fixpoint() — one config
 # ---------------------------------------------------------------------------
 
 
-def _apply_rules_fixpoint(
-    config: ExperimentConfig, rules: list[Invariant] | tuple[Invariant, ...]
+def _apply_invariants_fixpoint(
+    config: ExperimentConfig, invariants: list[Invariant] | tuple[Invariant, ...]
 ) -> ExperimentConfig:
-    """Apply every ``dormant``-severity rule to ``config`` repeatedly until stable.
+    """Apply every ``dormant``-severity invariant to ``config`` repeatedly until stable.
 
-    Returns a deep-copy of ``config`` with each dormant rule's normalisations
+    Returns a deep-copy of ``config`` with each dormant invariant's normalisations
     projected onto the fired fields. The input is not mutated.
 
     Args:
         config: A validated ``ExperimentConfig``.
-        rules: The rule list for the config's engine (typically from
+        invariants: The invariant list for the config's engine (typically from
             ``EngineInvariantsLoader.load_invariants(engine).invariants``).
 
     Raises:
         LibraryResolutionCycleError: If the fixpoint loop exceeds
             :data:`_MAX_ITER` passes — the validated corpus has an invariant cycle.
     """
-    dormant_rules = [r for r in rules if r.severity in ("dormant", "dormant_silent")]
+    dormant_rules = [r for r in invariants if r.severity in ("dormant", "dormant_silent")]
     if not dormant_rules:
         return config.model_copy(deep=True)
 
     current = config.model_copy(deep=True)
     for _iteration in range(_MAX_ITER):
         fired = False
-        for rule in dormant_rules:
-            match = rule.try_match(current)
+        for invariant in dormant_rules:
+            match = invariant.try_match(current)
             if match is None:
                 continue
-            updates = _rule_normalisations(rule)
+            updates = _rule_normalisations(invariant)
             if not updates:
                 continue
             for field_path, target_value in updates.items():
@@ -106,14 +106,14 @@ def _apply_rules_fixpoint(
     raise LibraryResolutionCycleError(current, _MAX_ITER)
 
 
-def _rule_normalisations(rule: Invariant) -> dict[str, Any]:
-    """Return ``{field_path: canonical_value}`` the rule normalises to.
+def _rule_normalisations(invariant: Invariant) -> dict[str, Any]:
+    """Return ``{field_path: canonical_value}`` the invariant normalises to.
 
     Strategy (per sweep-dedup.md §2.1 and the fixpoint test's projection):
 
     1. If ``expected_outcome["normalised_fields"]`` lists explicit paths, they
        collapse to ``None`` (the universal "strip this field" sentinel).
-    2. Otherwise, fall back to the rule's *match* predicate: any field
+    2. Otherwise, fall back to the invariant's *match* predicate: any field
        matched with a ``not_equal`` / ``present`` operator is normalised by
        stripping (setting to ``None`` or the ``not_equal`` sentinel if
        scalar). This is the fixpoint-test projection — structurally identical
@@ -125,7 +125,7 @@ def _rule_normalisations(rule: Invariant) -> dict[str, Any]:
     """
     out: dict[str, Any] = {}
 
-    explicit = rule.expected_outcome.get("normalised_fields") or []
+    explicit = invariant.expected_outcome.get("normalised_fields") or []
     for raw_path in explicit:
         path = str(raw_path)
         out[path] = None
@@ -133,12 +133,12 @@ def _rule_normalisations(rule: Invariant) -> dict[str, Any]:
     if out:
         return out
 
-    for path, spec in rule.match_fields.items():
+    for path, spec in invariant.match_fields.items():
         if not isinstance(spec, dict):
             continue
         if "not_equal" in spec:
             # The "canonical" state is the not_equal sentinel — applying the
-            # rule drives the field back to the library-observed default.
+            # invariant drives the field back to the library-observed default.
             out[path] = spec["not_equal"]
         elif spec.get("present") and "in" not in spec:
             # Subject field marked only as "present" — strip to None (the
@@ -223,21 +223,21 @@ class DedupResult:
 def resolve_library_effective(
     configs: list[ExperimentConfig],
     *,
-    rules: list[Invariant] | tuple[Invariant, ...] | None = None,
+    invariants: list[Invariant] | tuple[Invariant, ...] | None = None,
     loader: EngineInvariantsLoader | None = None,
     deduplicate: bool = True,
 ) -> DedupResult:
     """Canonicalise then (optionally) resolved-config-hash dedup ``configs``.
 
-    Rules are resolved lazily: if ``rules`` is None the loader is consulted
+    Rules are resolved lazily: if ``invariants`` is None the loader is consulted
     per-engine for each config (cached by the loader instance). Callers
-    running homogeneous sweeps may pass ``rules`` directly to skip the
+    running homogeneous sweeps may pass ``invariants`` directly to skip the
     loader hop.
 
     Args:
         configs: Sweep-expanded declared configs.
-        rules: Optional explicit rule list. Overrides the loader when the
-            sweep is single-engine and the caller has a rules handle.
+        invariants: Optional explicit invariant list. Overrides the loader when the
+            sweep is single-engine and the caller has a invariants handle.
         loader: Optional ``EngineInvariantsLoader``. Defaults to a fresh one
             (per-process cache is internal to each instance).
         deduplicate: When ``False``, every declared config still runs —
@@ -251,9 +251,9 @@ def resolve_library_effective(
         return DedupResult(canonical_configs=[])
 
     resolved_loader = loader or EngineInvariantsLoader()
-    explicit_rules = tuple(rules) if rules is not None else None
+    explicit_rules = tuple(invariants) if invariants is not None else None
 
-    def _rules_for(cfg: ExperimentConfig) -> tuple[Invariant, ...]:
+    def _invariants_for(cfg: ExperimentConfig) -> tuple[Invariant, ...]:
         if explicit_rules is not None:
             return explicit_rules
         engine = cfg.engine.value if hasattr(cfg.engine, "value") else str(cfg.engine)
@@ -265,7 +265,7 @@ def resolve_library_effective(
     canonicalised: list[ExperimentConfig] = []
     hashes: list[str] = []
     for cfg in configs:
-        canon = _apply_rules_fixpoint(cfg, _rules_for(cfg))
+        canon = _apply_invariants_fixpoint(cfg, _invariants_for(cfg))
         canonicalised.append(canon)
         hashes.append(hash_config(build_resolved_view(canon)))
 

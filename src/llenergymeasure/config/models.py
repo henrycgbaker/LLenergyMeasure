@@ -53,7 +53,7 @@ def _get_invariants_loader() -> EngineInvariantsLoader:
     return EngineInvariantsLoader()
 
 
-def _reset_rules_loader_cache() -> None:
+def _reset_invariants_loader_cache() -> None:
     """Clear the memoised loader; used by tests that mutate the on-disk corpus."""
     _get_invariants_loader.cache_clear()
 
@@ -489,7 +489,7 @@ class ExperimentConfig(BaseModel):
         """FlashAttention (FA2/FA3) requires float16 or bfloat16 dtype (not float32).
 
         Retained as a hand-written validator until a ``PreTrainedModel``
-        introspection miner can derive this rule programmatically (the check
+        introspection miner can derive this invariant programmatically (the check
         lives in ``_autoset_attn_implementation``, not in
         ``GenerationConfig.validate``). See memory note
         ``project_phase_50_pipeline_replan.md``.
@@ -511,7 +511,7 @@ class ExperimentConfig(BaseModel):
     def _apply_invariants(self) -> ExperimentConfig:
         # ``object.__setattr__`` bypasses Pydantic's ``extra='forbid'``;
         # consumers read via ``cfg._dormant_observations`` (dict keyed by
-        # rule.id). Missing corpus is non-fatal — the rules layer is additive.
+        # invariant.id). Missing corpus is non-fatal — the invariants layer is additive.
         from llenergymeasure.config.probe import DormantField
 
         dormant_observations: dict[str, DormantField] = {}
@@ -521,18 +521,18 @@ class ExperimentConfig(BaseModel):
             logger.debug("No invariants corpus for engine %r; skipping.", self.engine.value)
             invariants = ()
 
-        for rule in invariants:
-            match = rule.try_match(self)
+        for invariant in invariants:
+            match = invariant.try_match(self)
             if match is None:
                 continue
-            annotated = f"[{rule.id}] {rule.render_message(match)}"
-            if rule.severity == "error":
+            annotated = f"[{invariant.id}] {invariant.render_message(match)}"
+            if invariant.severity == "error":
                 raise ValueError(annotated)
-            if rule.severity == "warn":
+            if invariant.severity == "warn":
                 warnings.warn(annotated, ConfigValidationWarning, stacklevel=2)
                 continue
-            if rule.severity == "dormant":
-                dormant_observations[rule.id] = DormantField(
+            if invariant.severity == "dormant":
+                dormant_observations[invariant.id] = DormantField(
                     declared_value=match.declared_value,
                     effective_value=match.effective_value,
                     reason=annotated,
@@ -541,7 +541,7 @@ class ExperimentConfig(BaseModel):
             # Typo in the corpus: loader validation would normally reject this,
             # but surface it visibly if anything slips past.
             warnings.warn(
-                f"[{rule.id}] unknown severity {rule.severity!r}",
+                f"[{invariant.id}] unknown severity {invariant.severity!r}",
                 ConfigValidationWarning,
                 stacklevel=2,
             )
@@ -703,7 +703,7 @@ class ExecutionConfig(BaseModel):
         default=True,
         description=(
             "When true (default), sweep expansion applies library resolution to each declared "
-            "ExperimentConfig via engine-invariants dormant-rule application and drops "
+            "ExperimentConfig via engine-invariants dormant-invariant application and drops "
             "duplicates that share an resolved_config_hash. When false, every declared "
             "config runs — the library-resolution mechanism still populates equivalence-group "
             "metadata for the sidecar but no configs are elided. The --no-dedup "
@@ -774,7 +774,7 @@ class StudyConfig(BaseModel):
     dedup_mode: Literal["resolved", "off"] = Field(
         default="resolved",
         description=(
-            "Library-resolution mechanism dedup mode. 'resolved' applies dormant-rule "
+            "Library-resolution mechanism dedup mode. 'resolved' applies dormant-invariant "
             "library resolution at expansion and collapses resolved-config-hash-equivalent "
             "configs to a single run. 'off' runs every declared config "
             "regardless of equivalence. Set via "

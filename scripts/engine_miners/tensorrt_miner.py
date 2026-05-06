@@ -4,7 +4,7 @@ Per the locked invariant-miner design (decision #8 of the adversarial
 review, 2026-04-26), TRT-LLM ships **without** a dynamic miner: probing
 ``TrtLlmArgs(...)`` with combinatorial inputs yields near-zero raises
 because the constructor is permissive — all real cross-field validity
-rules fire later at engine compile time, inside C++ ``Builder.build_engine``.
+invariants fire later at engine compile time, inside C++ ``Builder.build_engine``.
 The static miner alone covers the surface that matters at config-validation
 time.
 
@@ -84,14 +84,14 @@ def main(argv: list[str] | None = None) -> int:
     candidates, source_version, rel_path = walk_tensorrt(args.source_root)
     # Pin the source-tree version against the SSOT miner range — any drift
     # (e.g. someone pointed --source-root at a 1.x checkout) becomes a fatal
-    # MinerVersionMismatchError instead of silently emitting drifted rules.
+    # MinerVersionMismatchError instead of silently emitting drifted invariants.
     check_installed_version("tensorrt_llm", source_version, engine="tensorrt", producer="static")
 
     text = emit_yaml(candidates, engine_version=source_version, rel_path=rel_path)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text)
     print(
-        f"Wrote {len(candidates)} tensorrt_llm rules to {args.out}",
+        f"Wrote {len(candidates)} tensorrt_llm invariants to {args.out}",
         file=sys.stderr,
     )
     return 0

@@ -35,7 +35,7 @@ name: Update engine invariants
 #                  CPU runners cannot import the library at all.
 #
 # Determinism contract:
-#   The LLENERGY_MINER_FROZEN_AT and LLENERGY_VENDOR_FROZEN_AT env vars are
+#   The LLENERGY_MINER_FROZEN_AT and LLENERGY_VALIDATION_FROZEN_AT env vars are
 #   set from the author date of the most recent commit touching any INPUT
 #   path (miner modules, lift modules, build_corpus, validate script, refresh
 #   helper, SSOT yaml). The anchor is stable across the workflow's own
@@ -380,7 +380,7 @@ jobs:
         run: |
           docker run --rm \
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
-            -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
+            -e LLENERGY_VALIDATION_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
             -e PYTHONPATH \
             -v "${{ github.workspace }}:/repo" \
@@ -824,7 +824,7 @@ jobs:
             -v /tmp/llem-passwd-synth:/etc/passwd:ro \
             -v /tmp/llem-group-synth:/etc/group:ro \
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
-            -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
+            -e LLENERGY_VALIDATION_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
             -e PYTHONPATH \
             -v "${{ github.workspace }}:/repo" \
@@ -1298,7 +1298,7 @@ jobs:
             -v /tmp/llem-group-synth:/etc/group:ro \
             -e LD_LIBRARY_PATH \
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
-            -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
+            -e LLENERGY_VALIDATION_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
             -e PYTHONPATH \
             -v "${{ github.workspace }}:/repo" \

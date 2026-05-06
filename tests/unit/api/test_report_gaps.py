@@ -95,7 +95,7 @@ def test_predicate_inference_equality() -> None:
 
 def test_predicate_inference_multi_field() -> None:
     """Arity-2 predicate is recovered when no single field distinguishes."""
-    # temperature=0.0 fires only when do_sample=True (greedy-with-temp-0 rule).
+    # temperature=0.0 fires only when do_sample=True (greedy-with-temp-0 invariant).
     collision_configs = [
         {"do_sample": True, "temperature": 0.0, "top_p": 0.95},
         {"do_sample": True, "temperature": 0.0, "top_p": 1.0},
@@ -302,7 +302,7 @@ def test_engine_filter(tmp_path: Path) -> None:
     )
 
     # No corpus for vllm — engines without a corpus still allow proposals
-    # through (the loader returns no suppressing rule).
+    # through (the loader returns no suppressing invariant).
     gaps = find_runtime_gaps([study], engine_invariants={}, engine="vllm")
     assert len(gaps) == 1
     assert gaps[0].engine == "vllm"

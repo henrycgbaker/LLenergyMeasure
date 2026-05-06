@@ -1,7 +1,7 @@
 """Tests for canonical serialisation + resolved/observed config hashing.
 
-Normalisation rules come from ``sweep-dedup.md`` §9.Q3. Each test pins one
-rule from the table so a rule change surfaces as a targeted failure rather
+Normalisation invariants come from ``sweep-dedup.md`` §9.Q3. Each test pins one
+invariant from the table so a invariant change surfaces as a targeted failure rather
 than a diffuse hash-mismatch.
 """
 

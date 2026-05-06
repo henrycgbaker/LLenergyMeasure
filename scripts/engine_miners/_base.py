@@ -1,8 +1,8 @@
-"""Shared infrastructure for per-engine validation-rule miners.
+"""Shared infrastructure for per-engine validation-invariant miners.
 
 Miner depth is fixed at 1 (same module, no helper-call tracing). This
 module ships the AST primitives and pattern detectors that future
-per-engine miners will compose to extract validation rules from pinned
+per-engine miners will compose to extract validation invariants from pinned
 library source. No concrete miner ships today; they land as independent
 PRs per engine.
 
@@ -15,7 +15,7 @@ PRs per engine.
 - AST helpers (:func:`extract_condition_fields`, :func:`resolve_local_assign`,
   etc.) — deterministic, stateless primitives for AST-based miners.
 - Pattern detectors (``ConditionalRaiseDetector``, etc.) — one class per
-  known library rule shape; each fires on one ``ast.If`` body at a time.
+  known library invariant shape; each fires on one ``ast.If`` body at a time.
 
 Tests cover each primitive on synthetic AST fixtures; the per-engine miners
 run against pinned real libraries.
@@ -49,7 +49,7 @@ EmissionChannel = Literal[
 
 @dataclass
 class MinerSource:
-    """Provenance for a miner-extracted rule candidate."""
+    """Provenance for a miner-extracted invariant candidate."""
 
     path: str
     method: str
@@ -58,7 +58,7 @@ class MinerSource:
 
 @dataclass
 class InvariantCandidate:
-    """One extracted rule candidate.
+    """One extracted invariant candidate.
 
     Serialised verbatim into ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``
     after human review. Field names match the corpus schema so no
@@ -292,7 +292,7 @@ def render_binop_concat_template(node: ast.expr) -> str | None:
 def extract_condition_fields(condition: ast.expr) -> set[str]:
     """Return the set of ``self.<field>`` attribute names referenced in ``condition``.
 
-    Used by the ``condition_references_self`` filter (rule must reference at
+    Used by the ``condition_references_self`` filter (invariant must reference at
     least one public field of the native type).
     """
     fields: set[str] = set()
@@ -356,7 +356,7 @@ def extract_loop_literal_iterable(loop: ast.For) -> list[Any] | None:
     """Return the literal list/tuple a ``for`` loop iterates over, or ``None``.
 
     ``for arg in [a, b]:`` → ``[a, b]``; ``for arg in self.x:`` → ``None``.
-    Enables one parameterised rule per loop when the iterable is AST-static.
+    Enables one parameterised invariant per loop when the iterable is AST-static.
     """
     iter_node = loop.iter
     if not isinstance(iter_node, (ast.List, ast.Tuple)):
@@ -377,7 +377,7 @@ def extract_loop_literal_iterable(loop: ast.For) -> list[Any] | None:
 
 @dataclass
 class DetectedPattern:
-    """One detected rule-body statement inside an ``if X: ...`` branch."""
+    """One detected invariant-body statement inside an ``if X: ...`` branch."""
 
     severity: Severity
     emission_channel: EmissionChannel
@@ -387,7 +387,7 @@ class DetectedPattern:
 
 
 class ConditionalRaiseDetector:
-    """``if X: raise SomeException(...)`` — error rule."""
+    """``if X: raise SomeException(...)`` — error invariant."""
 
     def detect(self, stmt: ast.stmt) -> DetectedPattern | None:
         if not isinstance(stmt, ast.Raise) or stmt.exc is None:
@@ -406,7 +406,7 @@ class ConditionalRaiseDetector:
 
 
 class ConditionalSelfAssignDetector:
-    """``if X: self.A = B`` — silent dormancy rule.
+    """``if X: self.A = B`` — silent dormancy invariant.
 
     The affected field is ``A``. Represents the library silently normalising
     the user's declared value — no warning, no error, but the effective state
@@ -430,7 +430,7 @@ class ConditionalSelfAssignDetector:
 
 
 class ConditionalWarningsWarnDetector:
-    """``if X: warnings.warn(...)`` — announced warn rule."""
+    """``if X: warnings.warn(...)`` — announced warn invariant."""
 
     def detect(self, stmt: ast.stmt) -> DetectedPattern | None:
         if not isinstance(stmt, ast.Expr) or not isinstance(stmt.value, ast.Call):
@@ -452,7 +452,7 @@ class ConditionalLoggerWarningDetector:
 
     Strictly matches two-element paths (``logger.<method>``). Patterns like
     ``logger.sub.warning(...)`` or ``self.logger.warning(...)`` do NOT match
-    — if a real library rule uses a non-top-level logger attribute, the
+    — if a real library invariant uses a non-top-level logger attribute, the
     miner for that library must supply its own detector.
     """
 
@@ -562,14 +562,14 @@ def default_detectors() -> tuple[
 def filter_condition_references_self(condition: ast.expr, public_fields: frozenset[str]) -> bool:
     """True iff condition references at least one public field via ``self.<field>``.
 
-    Drops argument-dependent rules (``if strict: raise``) and private-state
-    rules (``if self._initialized: ...``) that don't constrain user config.
+    Drops argument-dependent invariants (``if strict: raise``) and private-state
+    invariants (``if self._initialized: ...``) that don't constrain user config.
 
-    **Known false-negative:** kwarg-gated rules like HF's
+    **Known false-negative:** kwarg-gated invariants like HF's
     ``if strict: raise ValueError(...)`` inside ``validate(self, strict=False)``
     get dropped even though they CAN represent real config constraints when
     the kwarg's default changes the behaviour. If a library exposes such a
-    rule, the miner for it must supply its own condition-inclusion filter
+    invariant, the miner for it must supply its own condition-inclusion filter
     (via composition) rather than relying on this one. Pinning this
     behaviour explicitly here so the contract is discoverable at the
     definition site, not only in design-review notes.

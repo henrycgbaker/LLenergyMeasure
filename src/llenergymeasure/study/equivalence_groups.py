@@ -52,7 +52,7 @@ class ObservedCollisionGroup:
     member_resolved_config_hashes: tuple[str, ...]
     member_experiment_ids: tuple[str, ...]
     gap_detected: bool
-    proposed_rule_id: str | None = None
+    proposed_invariant_id: str | None = None
 
 
 @dataclass
@@ -211,5 +211,5 @@ def _post_from_dict(data: dict[str, Any]) -> ObservedCollisionGroup:
         member_resolved_config_hashes=tuple(data.get("member_resolved_config_hashes", [])),
         member_experiment_ids=tuple(data.get("member_experiment_ids", [])),
         gap_detected=bool(data.get("gap_detected", False)),
-        proposed_rule_id=data.get("proposed_rule_id"),
+        proposed_invariant_id=data.get("proposed_invariant_id") or data.get("proposed_rule_id"),
     )

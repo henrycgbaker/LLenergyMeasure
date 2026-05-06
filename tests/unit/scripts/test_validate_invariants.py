@@ -177,7 +177,7 @@ class TestRunCase:
     def test_preserves_warnings_when_call_raises(self) -> None:
         # Dormant-then-raise paths (e.g. deprecation warning followed by a
         # strict-mode ValueError) must preserve the warning alongside the
-        # exception — both are the rule's fingerprint.
+        # exception — both are the invariant's fingerprint.
         import warnings
 
         def warn_then_raise() -> None:
@@ -342,7 +342,7 @@ class TestVendorRuleSynthetic:
         return synthetic_runner
 
     def test_error_rule_positive_confirmed(self, patched_runner: Any) -> None:
-        rule = {
+        invariant = {
             "id": "test_raises",
             "severity": "error",
             "native_type": "test.raises",
@@ -350,14 +350,14 @@ class TestVendorRuleSynthetic:
             "kwargs_negative": {},
             "expected_outcome": {"outcome": "error", "emission_channel": "none"},
         }
-        result = validate_invariants.validate_invariant("transformers", rule, gpu_mode="all")
+        result = validate_invariants.validate_invariant("transformers", invariant, gpu_mode="all")
         assert result.outcome == "error"
         assert result.positive_confirmed is True
         assert result.observed_exception is not None
         assert result.observed_exception["type"] == "ValueError"
 
     def test_dormant_silent_detected(self, patched_runner: Any) -> None:
-        rule = {
+        invariant = {
             "id": "test_normalises",
             "severity": "dormant",
             "native_type": "test.normalises",
@@ -369,12 +369,12 @@ class TestVendorRuleSynthetic:
                 "normalised_fields": ["temperature"],
             },
         }
-        result = validate_invariants.validate_invariant("transformers", rule, gpu_mode="all")
+        result = validate_invariants.validate_invariant("transformers", invariant, gpu_mode="all")
         assert result.outcome == "dormant_silent"
         assert "temperature" in result.observed_silent_normalisations
 
     def test_gpu_mode_skip_skips_gpu_rule(self, patched_runner: Any) -> None:
-        rule = {
+        invariant = {
             "id": "test_gpu",
             "severity": "error",
             "native_type": "test.raises",
@@ -383,7 +383,7 @@ class TestVendorRuleSynthetic:
             "kwargs_negative": {},
             "expected_outcome": {"outcome": "error"},
         }
-        result = validate_invariants.validate_invariant("transformers", rule, gpu_mode="skip")
+        result = validate_invariants.validate_invariant("transformers", invariant, gpu_mode="skip")
         assert result.outcome == "skipped_hardware_dependent"
         assert result.skipped_reason == "requires_gpu_and_gpu_mode_skip"
 
@@ -581,7 +581,7 @@ class TestComputeGateSoundnessDivergences:
     """Decision #12 of the invariant-miner adversarial review."""
 
     def test_clean_error_rule_no_divergence(self) -> None:
-        rule = {
+        invariant = {
             "id": "r1",
             "severity": "error",
             "kwargs_positive": {"a": 1},
@@ -590,11 +590,11 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(exception_type="ValueError", exception_message="field `a` must be non-zero")
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(rule, pos, neg)
+        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
         assert divergences == []
 
     def test_positive_did_not_raise_for_error_severity(self) -> None:
-        rule = {
+        invariant = {
             "id": "r2",
             "severity": "error",
             "kwargs_positive": {"a": 1},
@@ -603,11 +603,11 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(observed_state={"a": 1})  # construction succeeded
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(rule, pos, neg)
+        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
         assert any(d.check_failed == validate_invariants.CHECK_POSITIVE_RAISES for d in divergences)
 
     def test_dormant_severity_accepts_warning(self) -> None:
-        rule = {
+        invariant = {
             "id": "r3",
             "severity": "dormant",
             "kwargs_positive": {"a": 1},
@@ -616,12 +616,12 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(logger_messages=("use `a=0` for stability",))
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(rule, pos, neg)
-        # Dormant rule fired (logger.warning) - no positive_raises divergence.
+        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
+        # Dormant invariant fired (logger.warning) - no positive_raises divergence.
         assert all(d.check_failed != validate_invariants.CHECK_POSITIVE_RAISES for d in divergences)
 
     def test_dormant_severity_no_op_is_divergence(self) -> None:
-        rule = {
+        invariant = {
             "id": "r4",
             "severity": "dormant",
             "kwargs_positive": {"a": 1},
@@ -630,11 +630,11 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(observed_state={"a": 1})  # nothing fired
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(rule, pos, neg)
+        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
         assert any(d.check_failed == validate_invariants.CHECK_POSITIVE_RAISES for d in divergences)
 
     def test_message_template_match_failure(self) -> None:
-        rule = {
+        invariant = {
             "id": "r5",
             "severity": "error",
             "kwargs_positive": {"a": 1},
@@ -643,13 +643,13 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(exception_type="ValueError", exception_message="totally different message")
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(rule, pos, neg)
+        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
         assert any(
             d.check_failed == validate_invariants.CHECK_MESSAGE_TEMPLATE_MATCH for d in divergences
         )
 
     def test_message_template_too_dynamic(self) -> None:
-        rule = {
+        invariant = {
             "id": "r6",
             "severity": "error",
             "kwargs_positive": {"a": 1},
@@ -658,14 +658,14 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(exception_type="ValueError", exception_message="anything")
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(rule, pos, neg)
+        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
         assert any(
             d.check_failed == validate_invariants.CHECK_MESSAGE_TEMPLATE_TOO_DYNAMIC
             for d in divergences
         )
 
     def test_negative_raised_unexpectedly(self) -> None:
-        rule = {
+        invariant = {
             "id": "r7",
             "severity": "error",
             "kwargs_positive": {"a": 1},
@@ -674,13 +674,13 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(exception_type="ValueError", exception_message="field `a` must be non-zero")
         neg = _capture(exception_type="TypeError", exception_message="oops")
-        divergences = validate_invariants.compute_gate_soundness_divergences(rule, pos, neg)
+        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
         assert any(
             d.check_failed == validate_invariants.CHECK_NEGATIVE_DOES_NOT_RAISE for d in divergences
         )
 
     def test_divergence_dict_includes_check_failed_field(self) -> None:
-        rule = {
+        invariant = {
             "id": "r8",
             "severity": "error",
             "kwargs_positive": {"a": 1},
@@ -689,7 +689,7 @@ class TestComputeGateSoundnessDivergences:
         }
         pos = _capture(observed_state={"a": 1})  # no raise - should trip positive_raises
         neg = _capture(observed_state={"a": 0})
-        divergences = validate_invariants.compute_gate_soundness_divergences(rule, pos, neg)
+        divergences = validate_invariants.compute_gate_soundness_divergences(invariant, pos, neg)
         d = divergences[0].as_dict()
         assert "check_failed" in d
         assert d["check_failed"] == validate_invariants.CHECK_POSITIVE_RAISES

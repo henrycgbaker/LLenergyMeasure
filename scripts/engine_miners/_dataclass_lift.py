@@ -1,7 +1,7 @@
 """``@dataclasses.dataclass`` → ``InvariantCandidate[]`` lift.
 
 Sub-library type-system lift consumed by per-engine miners. Walks
-:func:`dataclasses.fields` and emits one rule candidate per
+:func:`dataclasses.fields` and emits one invariant candidate per
 ``Literal[...]`` allowlist found on a field's type annotation.
 
 Used by:
@@ -16,9 +16,9 @@ Plain ``@dataclasses.dataclass`` carries **no numeric-bound metadata** by
 default — bounds aren't part of the dataclass spec. The only structural axis
 the lift can derive from a stdlib dataclass is:
 
-- ``Literal[a, b, c]`` annotations → value-allowlist rules.
-- The annotated type itself (``int``, ``str``, ``Path``, …) → no rule
-  emitted in this lift; type-check rules require library-side runtime checks
+- ``Literal[a, b, c]`` annotations → value-allowlist invariants.
+- The annotated type itself (``int``, ``str``, ``Path``, …) → no invariant
+  emitted in this lift; type-check invariants require library-side runtime checks
   the lift cannot mechanically derive (and stdlib dataclasses don't enforce
   type annotations at construction time).
 
@@ -67,7 +67,7 @@ def lift(
     today: str,
     source_path: str,
 ) -> list[InvariantCandidate]:
-    """Extract validation-rule candidates from a ``@dataclasses.dataclass`` class.
+    """Extract validation-invariant candidates from a ``@dataclasses.dataclass`` class.
 
     Parameters
     ----------
@@ -79,7 +79,7 @@ def lift(
     today:
         ISO-8601 date string for ``added_at``.
     source_path:
-        Source-file path recorded on each rule's :class:`MinerSource`.
+        Source-file path recorded on each invariant's :class:`MinerSource`.
 
     Returns
     -------
@@ -144,7 +144,7 @@ def _build_literal(
     namespace: str,
     today: str,
 ) -> InvariantCandidate:
-    """Materialise a Literal-allowlist rule candidate from a dataclass field."""
+    """Materialise a Literal-allowlist invariant candidate from a dataclass field."""
     return InvariantCandidate(
         id=f"{library}_{type_name.lower()}_{field_name}_in_{len(values)}_values",
         engine=library,

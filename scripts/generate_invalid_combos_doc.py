@@ -42,10 +42,10 @@ def generate_markdown() -> str:
         "|---------|---------------------|--------|------------|",
     ]
 
-    for rule in get_validation_rules():
+    for invariant in get_validation_rules():
         lines.append(
-            f"| {rule['engine']} | `{rule['combination']}` | "
-            f"{rule['reason']} | {rule['resolution']} |"
+            f"| {invariant['engine']} | `{invariant['combination']}` | "
+            f"{invariant['reason']} | {invariant['resolution']} |"
         )
 
     lines.extend(

@@ -1,7 +1,7 @@
-"""Invariants enforced on the seeded validation-rules corpus.
+"""Invariants enforced on the seeded validation-invariants corpus.
 
 The validation CI pipeline (a separate follow-up PR) runs a richer equivalent
-of these checks — empirically verifying each rule's ``kwargs_positive``
+of these checks — empirically verifying each invariant's ``kwargs_positive``
 actually fires in the real library and ``kwargs_negative`` doesn't. These
 schema-level invariants are the offline backstop.
 
@@ -33,20 +33,20 @@ def transformers_corpus():
 
 
 def test_corpus_covers_required_invariants(transformers_corpus) -> None:
-    """Coverage-by-invariant: every required field surface has at least one rule.
+    """Coverage-by-invariant: every required field surface has at least one invariant.
 
-    Pins SEMANTIC coverage, not specific rule IDs. Extractor refinements
-    that rename rules don't break this test; extractor regressions that
+    Pins SEMANTIC coverage, not specific invariant IDs. Extractor refinements
+    that rename invariants don't break this test; extractor regressions that
     drop coverage of a real invariant do. See
     ``.product/designs/config-deduplication-dormancy/runtime-config-validation.md``
     decision-log entry of 2026-04-25 (corpus-as-measurement principle).
     """
-    rules = transformers_corpus.invariants
+    invariants = transformers_corpus.invariants
 
     def covers_field(field_path: str) -> bool:
-        return any(field_path in rule.match_fields for rule in rules)
+        return any(field_path in invariant.match_fields for invariant in invariants)
 
-    # Single-field invariants — at least one rule must touch each path.
+    # Single-field invariants — at least one invariant must touch each path.
     # Scope reflects the regenerated canonical corpus produced by
     # ``scripts/engine_miners/build_corpus.py`` with the validation gate.
     # Adding a path here means: an invariant for that field must survive validation
@@ -68,14 +68,14 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         "transformers.sampling.length_penalty",
         # Note: num_beam_groups + diversity_penalty validations were softened
         # in transformers 4.57.x (error → dormant_announced or no_op). The
-        # validation-CI gate quarantines the corpus rules that previously claimed
+        # validation-CI gate quarantines the corpus invariants that previously claimed
         # error severity. Coverage loss tracked separately; do NOT re-add
         # without first confirming the library re-introduced enforcement.
         # No-return-dict dormancy.
         "transformers.sampling.output_scores",
         "transformers.sampling.output_attentions",
         "transformers.sampling.output_hidden_states",
-        # GenerationConfig.validate() error rules.
+        # GenerationConfig.validate() error invariants.
         "transformers.sampling.max_new_tokens",
         "transformers.sampling.cache_implementation",
         "transformers.sampling.num_return_sequences",
@@ -84,7 +84,7 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         # PR #387 cross-field invariant gates.
         "transformers.sampling.num_beams",
         # Watermarking + BNB type-check paths landed in PR 5 (validation-
-        # validation gate). The BNB rules use the field paths the real
+        # validation gate). The BNB invariants use the field paths the real
         # ExperimentConfig schema exposes (``transformers.load_in_4bit``
         # etc.) rather than the old ``transformers.quant.<field>`` paths
         # which never resolved at runtime.
@@ -96,15 +96,17 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         "transformers.llm_int8_enable_fp32_cpu_offload",
         "transformers.llm_int8_has_fp16_weight",
         # Note: transformers.bnb_4bit_compute_dtype — validation-CI quarantined
-        # the type-check rule under 4.57.3. Coverage loss tracked in a
+        # the type-check invariant under 4.57.3. Coverage loss tracked in a
         # follow-up alongside num_beam_groups / diversity_penalty.
         "transformers.bnb_4bit_quant_type",
         "transformers.bnb_4bit_use_double_quant",
     )
     missing = [path for path in required_fields if not covers_field(path)]
-    assert not missing, f"corpus is missing rules for {len(missing)} required invariants: {missing}"
+    assert not missing, (
+        f"corpus is missing invariants for {len(missing)} required invariants: {missing}"
+    )
 
-    # Cross-field invariants — at least one rule must AND-combine the listed
+    # Cross-field invariants — at least one invariant must AND-combine the listed
     # fields. Catches regressions where the extractor lost the cross-field
     # predicate machinery. PR 5 added the (num_beam_groups,
     # diversity_penalty) pair (the AST miner's beam-search divisibility
@@ -112,30 +114,30 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
     # @field_ref-tightened greedy-rejects predicate).
     cross_field_pairs = (
         # Note: (num_beams, num_beam_groups) and (num_beam_groups,
-        # diversity_penalty) cross-field rules were quarantined in 4.57.x
-        # along with the single-field dormancy rules; see required_fields
+        # diversity_penalty) cross-field invariants were quarantined in 4.57.x
+        # along with the single-field dormancy invariants; see required_fields
         # comment above.
         ("transformers.sampling.num_beams", "transformers.sampling.num_return_sequences"),
     )
     missing_pairs = [
         pair
         for pair in cross_field_pairs
-        if not any(all(p in rule.match_fields for p in pair) for rule in rules)
+        if not any(all(p in invariant.match_fields for p in pair) for invariant in invariants)
     ]
     assert not missing_pairs, (
-        f"corpus missing cross-field rules for {len(missing_pairs)} invariants: {missing_pairs}"
+        f"corpus missing cross-field invariants for {len(missing_pairs)} invariants: {missing_pairs}"
     )
 
     # Corpus-as-measurement: the regenerated corpus is machine-extracted by
-    # construction, so no rule should carry ``added_by: manual_seed``. Any
+    # construction, so no invariant should carry ``added_by: manual_seed``. Any
     # manual entry indicates a hand-edit of the canonical YAML that bypasses
     # the build_corpus.py + validation gate and would silently drift
     # on the next library bump. This PR's regeneration drops the legacy
     # hand-curated BNB type-check entries; the AST miner now emits them
     # under ``added_by: static_miner``.
-    manual = [rule.id for rule in rules if rule.added_by == "manual_seed"]
+    manual = [invariant.id for invariant in invariants if invariant.added_by == "manual_seed"]
     assert not manual, (
-        f"corpus contains {len(manual)} hand-seeded rules; corpus must be "
+        f"corpus contains {len(manual)} hand-seeded invariants; corpus must be "
         f"machine-extracted (run scripts/engine_miners/build_corpus.py): {manual}"
     )
 
@@ -199,7 +201,7 @@ def test_corpus_dormant_silent_has_normalised_fields(transformers_corpus) -> Non
 
 def test_corpus_added_by_values_valid(transformers_corpus) -> None:
     # Defers to the loader's single source of truth (VALID_ADDED_BY) — the
-    # loader's UnknownAddedByError would have rejected the rule at parse
+    # loader's UnknownAddedByError would have rejected the invariant at parse
     # time if the value were outside the enum. Kept here for human-readable
     # catalogue + defence-in-depth.
     for invariant in transformers_corpus.invariants:

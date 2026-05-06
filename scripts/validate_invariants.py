@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Run each validation rule through the real library inside its engine container.
+"""Run each validation invariant through the real library inside its engine container.
 
 The validation step is the **observe half** of the "observe, don't re-encode"
 design in :doc:`.product/designs/config-deduplication-dormancy/runtime-config-validation.md`.
 The YAML corpus at ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`` declares each
-rule's ``expected_outcome``; this script executes the rule through the
+invariant's ``expected_outcome``; this script executes the invariant through the
 library and records what *actually* happened. Divergence between declared and
 observed fails CI.
 
@@ -17,7 +17,7 @@ Usage (inside the engine's Docker container)::
 
 Exit codes:
 
-    0 - all rules confirmed (positive + negative + expected matches observed)
+    0 - all invariants confirmed (positive + negative + expected matches observed)
     1 - one or more divergences; envelope still written
     2 - hard error (corpus malformed, engine not importable, etc.)
 
@@ -82,11 +82,11 @@ class ValidationEngineNotImportable(ValidationError):
 
 
 class ValidationDivergenceError(ValidationError):
-    """One or more rules diverged from their declared expected_outcome."""
+    """One or more invariants diverged from their declared expected_outcome."""
 
     def __init__(self, divergences: list[Divergence]) -> None:
         super().__init__(
-            f"{len(divergences)} rule(s) diverged from expected_outcome. "
+            f"{len(divergences)} invariant(s) diverged from expected_outcome. "
             "See the validated YAML 'divergences' array for details."
         )
         self.divergences = divergences
@@ -118,7 +118,7 @@ def _load_corpus(path: Path) -> dict[str, Any]:
 def _run_transformers(
     native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
 ) -> CaptureBuffers:
-    """Execute one rule's kwargs through the transformers library.
+    """Execute one invariant's kwargs through the transformers library.
 
     Handles both ``GenerationConfig`` (uses ``.validate()``) and
     ``BitsAndBytesConfig`` (construction itself raises). Other
@@ -128,7 +128,7 @@ def _run_transformers(
     composed ValueError listing every issue (corresponds to corpus
     ``severity=error``); ``False`` emits dormant/announced issues via
     ``logger.warning_once`` (corresponds to corpus ``severity=dormant``). The
-    caller picks the mode based on the rule's declared severity.
+    caller picks the mode based on the invariant's declared severity.
     """
     logger_names = (
         "transformers",
@@ -156,7 +156,7 @@ def _run_transformers(
 
 
 def _construct_and_validate_generation_config(kwargs: dict[str, Any], *, strict: bool) -> Any:
-    # Corpus kwargs pass through verbatim — the raw YAML shape IS the rule
+    # Corpus kwargs pass through verbatim — the raw YAML shape IS the invariant
     # under test (e.g. compile_config receives a raw dict on purpose).
     from transformers import GenerationConfig  # type: ignore
 
@@ -190,7 +190,7 @@ def _construct_generic(native_type: str, kwargs: dict[str, Any]) -> Any:
 # The static miner emits short-form ``native_type`` values (``tensorrt_llm.X``)
 # matching the AST symbol it walked. Map those to the deep import paths inside
 # the library, and substitute ``BaseLlmArgs`` -> ``TrtLlmArgs`` because
-# ``BaseLlmArgs`` is the abstract parent and rules tagged on it apply to
+# ``BaseLlmArgs`` is the abstract parent and invariants tagged on it apply to
 # inherited fields on the concrete subclass.
 
 _TRTLLM_NATIVE_TYPE_MAP: dict[str, str] = {
@@ -205,9 +205,9 @@ _TRTLLM_NATIVE_TYPE_MAP: dict[str, str] = {
 # ``BaseLlmArgs`` / ``TrtLlmArgs`` declare ``model`` as a required field. The
 # corpus's ``kwargs_positive`` / ``kwargs_negative`` only carry the field under
 # test, so without an injected default Pydantic raises a "model: field
-# required" error before any rule-relevant validator runs. The placeholder is
+# required" error before any invariant-relevant validator runs. The placeholder is
 # never resolved to a real checkpoint - construction stops at validator-pass
-# time on either the rule's positive raise (intended) or the negative success
+# time on either the invariant's positive raise (intended) or the negative success
 # (intended), both before the loader would try to read from disk.
 _TRTLLM_LLMARGS_TYPES: frozenset[str] = frozenset(
     {"tensorrt_llm.BaseLlmArgs", "tensorrt_llm.TrtLlmArgs"}
@@ -218,7 +218,7 @@ _TRTLLM_MODEL_PLACEHOLDER = "/tmp/llem-validation-gate-model-placeholder"
 def _run_tensorrt(
     native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
 ) -> CaptureBuffers:
-    """Execute one TRT-LLM rule's kwargs through the live library.
+    """Execute one TRT-LLM invariant's kwargs through the live library.
 
     ``strict_validate`` is accepted for parity with the transformers runner
     but is not consulted - TRT-LLM has no `.validate(strict=...)` analogue;
@@ -288,7 +288,7 @@ _VLLM_BOOTSTRAP_NOISE = re.compile(
 
 
 def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool) -> CaptureBuffers:
-    """Execute one rule's kwargs through the vLLM library.
+    """Execute one invariant's kwargs through the vLLM library.
 
     ``strict_validate`` is unused — vLLM has no analog to HF's ``strict``
     flag; sampling-param errors raise during construction and dormancy
@@ -304,13 +304,13 @@ def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
     ``run_case``: vLLM logs ``INFO 04-26 [model.py] Resolved architecture``
     on every ``ModelConfig`` construction, which the capture handler would
     otherwise classify as ``dormant_announced`` and trip ``negative_confirms``.
-    The rule's intended channel is ``logger.warning`` / ``warning_once`` /
+    The invariant's intended channel is ``logger.warning`` / ``warning_once`` /
     ``warnings.warn`` only; INFO is plumbing.
 
     A handful of import-time warnings (``_SixMetaPathImporter``, SWIG type
     metadata, ROCm probe failures) leak into ``warnings.catch_warnings``
     on the first run-case invocation per process. These are torch/vLLM
-    bootstrap noise unrelated to the rule under test, so we strip them
+    bootstrap noise unrelated to the invariant under test, so we strip them
     from the captured warnings tuple before returning.
     """
     del strict_validate  # currently unused for vLLM
@@ -332,7 +332,7 @@ def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
     # ``Resolved architecture``, ``Using max model len`` etc. all surface
     # via ``vllm.config.model`` / ``vllm.config.scheduler`` and would
     # otherwise classify the negative case as ``dormant_announced``,
-    # tripping ``negative_confirms`` for every rule that constructs one of
+    # tripping ``negative_confirms`` for every invariant that constructs one of
     # these classes. The captured records carry no level prefix in the
     # plain-message handler (``%(message)s`` formatter), so we filter on
     # known-bootstrap message substrings instead — vLLM's
@@ -342,7 +342,7 @@ def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
     if filtered_logs != result.logger_messages:
         result = dataclass_replace(result, logger_messages=filtered_logs)
     # Strip torch/SWIG/ROCm bootstrap noise that has nothing to do with the
-    # rule under test.
+    # invariant under test.
     filtered_warnings = tuple(
         w for w in result.warnings_captured if not _VLLM_IMPORT_NOISE.search(w)
     )
@@ -370,24 +370,24 @@ def get_native_type_runner(engine: str):
 
 
 # ---------------------------------------------------------------------------
-# Per-rule driver
+# Per-invariant driver
 # ---------------------------------------------------------------------------
 
 
-def validate_invariant(engine: str, rule: dict[str, Any], *, gpu_mode: str) -> CaseResult:
-    """Run one rule's positive + negative kwargs and assemble the case result.
+def validate_invariant(engine: str, invariant: dict[str, Any], *, gpu_mode: str) -> CaseResult:
+    """Run one invariant's positive + negative kwargs and assemble the case result.
 
-    ``gpu_mode`` is ``"all" | "skip" | "only"`` — hardware-dependent rules
+    ``gpu_mode`` is ``"all" | "skip" | "only"`` — hardware-dependent invariants
     are skipped unless ``gpu_mode`` permits them.
     """
-    case, _pos, _neg = _validate_invariant_with_captures(engine, rule, gpu_mode=gpu_mode)
+    case, _pos, _neg = _validate_invariant_with_captures(engine, invariant, gpu_mode=gpu_mode)
     return case
 
 
 def _validate_invariant_with_captures(
-    engine: str, rule: dict[str, Any], *, gpu_mode: str
+    engine: str, invariant: dict[str, Any], *, gpu_mode: str
 ) -> tuple[CaseResult, CaptureBuffers | None, CaptureBuffers | None]:
-    """Run one rule and return the case plus the raw positive/negative captures.
+    """Run one invariant and return the case plus the raw positive/negative captures.
 
     The captures are needed by the gate-soundness checks added per
     Decision #12 of the invariant-miner adversarial review - they look at
@@ -398,11 +398,11 @@ def _validate_invariant_with_captures(
     helper exposes what the gate needs.
 
     Returns ``(case, pos, neg)``. ``pos`` / ``neg`` are ``None`` when the
-    rule was skipped.
+    invariant was skipped.
     """
-    invariant_id = rule["id"]
-    requires_gpu = bool(rule.get("requires_gpu", False))
-    hardware_dependent = bool(rule.get("hardware_dependent", False))
+    invariant_id = invariant["id"]
+    requires_gpu = bool(invariant.get("requires_gpu", False))
+    hardware_dependent = bool(invariant.get("hardware_dependent", False))
 
     if gpu_mode == "skip" and (requires_gpu or hardware_dependent):
         return (
@@ -427,17 +427,17 @@ def _validate_invariant_with_captures(
             None,
         )
 
-    native_type = rule["native_type"]
+    native_type = invariant["native_type"]
     runner = get_native_type_runner(engine)
-    severity = str(rule.get("severity", "")).lower()
+    severity = str(invariant.get("severity", "")).lower()
     # Per-engine strictness routing: transformers' GenerationConfig has a
     # non-strict path (logger.warning for dormant/announced) and a strict
     # path (composed ValueError for errors). Dispatch by declared severity
     # so the validation observation matches the corpus's expected outcome shape.
     strict_validate = severity == "error"
 
-    kwargs_positive = dict(rule["kwargs_positive"])
-    kwargs_negative = dict(rule["kwargs_negative"])
+    kwargs_positive = dict(invariant["kwargs_positive"])
+    kwargs_negative = dict(invariant["kwargs_negative"])
 
     pos = runner(native_type, kwargs_positive, strict_validate=strict_validate)
     neg = runner(native_type, kwargs_negative, strict_validate=strict_validate)
@@ -451,7 +451,7 @@ def _validate_invariant_with_captures(
     outcome = classify_outcome(pos, silent_normalisations)
     emission = classify_emission_channel(pos)
 
-    expected = dict(rule.get("expected_outcome") or {})
+    expected = dict(invariant.get("expected_outcome") or {})
     positive_confirmed = _positive_confirms(expected, outcome)
     neg_silent = (
         diff_input_vs_state(kwargs_negative, neg.observed_state) if neg.observed_state else {}
@@ -493,7 +493,7 @@ CHECK_MESSAGE_TEMPLATE_TOO_DYNAMIC = "message_template_too_dynamic"
 
 
 def compute_gate_soundness_divergences(
-    rule: dict[str, Any], pos: CaptureBuffers, neg: CaptureBuffers
+    invariant: dict[str, Any], pos: CaptureBuffers, neg: CaptureBuffers
 ) -> list[Divergence]:
     """Return divergences from the three gate-soundness checks.
 
@@ -501,30 +501,30 @@ def compute_gate_soundness_divergences(
     (`.product/designs/adversarial-review-invariant-miner-2026-04-26.md`)
     surfaced a soundness gap: the existing ``compare_expected_vs_observed``
     only checks fields *present* in ``expected_outcome``, so a typo in the
-    corpus YAML silently passes. These three checks bind the rule's
+    corpus YAML silently passes. These three checks bind the invariant's
     declared shape to the live library's behaviour:
 
-    1. ``positive_raises`` - for ``severity=error`` rules, ``kwargs_positive``
-       MUST raise. For ``severity=dormant`` rules, it MUST emit (warn or
+    1. ``positive_raises`` - for ``severity=error`` invariants, ``kwargs_positive``
+       MUST raise. For ``severity=dormant`` invariants, it MUST emit (warn or
        dormant-announce) - i.e., not be a no-op and not raise unexpectedly.
     2. ``message_template_match`` - when the positive raised, the exception's
        ``str()`` must contain the static fragment of ``message_template``
        (case-insensitive). When the template has no useful static fragment
        (almost all placeholders), record ``message_template_too_dynamic``
-       so the rule's author knows to add a more specific template.
+       so the invariant's author knows to add a more specific template.
     3. ``negative_does_not_raise`` - ``kwargs_negative`` MUST construct
        successfully (i.e., not raise).
 
     Each divergence carries ``check_failed`` so downstream tooling can
     filter by check type.
     """
-    invariant_id = rule["id"]
-    severity = str(rule.get("severity", "")).lower()
+    invariant_id = invariant["id"]
+    severity = str(invariant.get("severity", "")).lower()
     divergences: list[Divergence] = []
 
     # 1. Positive must fire (raise for severity=error, emit for severity=dormant).
     pos_silent = (
-        diff_input_vs_state(dict(rule.get("kwargs_positive") or {}), pos.observed_state)
+        diff_input_vs_state(dict(invariant.get("kwargs_positive") or {}), pos.observed_state)
         if pos.observed_state
         else {}
     )
@@ -541,7 +541,7 @@ def compute_gate_soundness_divergences(
                 )
             )
     else:
-        # dormant rules emit but don't raise - anything other than no_op or error.
+        # dormant invariants emit but don't raise - anything other than no_op or error.
         if pos_outcome in {"no_op", "error"}:
             divergences.append(
                 Divergence(
@@ -555,7 +555,7 @@ def compute_gate_soundness_divergences(
 
     # 2. Message-template substring match (only when positive raised, since
     #    the message_template specifically describes the raised string).
-    template = str(rule.get("message_template") or "")
+    template = str(invariant.get("message_template") or "")
     if pos.exception_type is not None and template:
         matched, fragment = message_matches_template(pos.exception_message or "", template)
         if not fragment:
@@ -595,7 +595,7 @@ def compute_gate_soundness_divergences(
 
 
 def _positive_confirms(expected: dict[str, Any], observed_outcome: str) -> bool:
-    """True iff the rule fired on the positive kwargs as declared.
+    """True iff the invariant fired on the positive kwargs as declared.
 
     When the corpus declares a specific outcome, positive_confirmed requires
     an exact match. When the corpus leaves ``outcome`` unset, we accept any
@@ -608,7 +608,7 @@ def _positive_confirms(expected: dict[str, Any], observed_outcome: str) -> bool:
 
 
 def _negative_confirms(neg: CaptureBuffers, silent_normalisations: dict[str, Any]) -> bool:
-    """True iff the rule did NOT fire on the negative kwargs.
+    """True iff the invariant did NOT fire on the negative kwargs.
 
     Delegates to :func:`classify_outcome` so the definition of "fired"
     lives in one place: anything other than ``no_op`` counts as firing,
@@ -687,19 +687,19 @@ def validate_engine(
     cases: list[CaseResult] = []
     divergences: list[Divergence] = []
 
-    for rule in corpus.get("invariants", []):
+    for invariant in corpus.get("invariants", []):
         # ValidationError (and subclasses) propagate — they indicate misconfig, not
         # a library behaviour finding. Any other Exception gets recorded as a
-        # per-rule error so one bad rule doesn't abort the full validation run.
+        # per-invariant error so one bad invariant doesn't abort the full validation run.
         pos: CaptureBuffers | None = None
         neg: CaptureBuffers | None = None
         try:
-            case, pos, neg = _validate_invariant_with_captures(engine, rule, gpu_mode=gpu_mode)
+            case, pos, neg = _validate_invariant_with_captures(engine, invariant, gpu_mode=gpu_mode)
         except ValidationError:
             raise
         except Exception as exc:  # pragma: no cover - defensive
             case = CaseResult(
-                id=rule.get("id", "<unknown>"),
+                id=invariant.get("id", "<unknown>"),
                 outcome="error",
                 emission_channel="none",
                 observed_exception={"type": type(exc).__name__, "message": str(exc)},
@@ -710,8 +710,8 @@ def validate_engine(
             continue
 
         rule_divergences = compare_expected_vs_observed(
-            invariant_id=rule["id"],
-            expected=rule.get("expected_outcome") or {},
+            invariant_id=invariant["id"],
+            expected=invariant.get("expected_outcome") or {},
             observed_outcome=case.outcome,
             observed_emission=case.emission_channel,
             silent_normalisations=case.observed_silent_normalisations,
@@ -719,7 +719,7 @@ def validate_engine(
         if not case.positive_confirmed:
             rule_divergences.append(
                 Divergence(
-                    invariant_id=rule["id"],
+                    invariant_id=invariant["id"],
                     field="positive_confirmed",
                     expected=True,
                     observed=False,
@@ -728,7 +728,7 @@ def validate_engine(
         if not case.negative_confirmed:
             rule_divergences.append(
                 Divergence(
-                    invariant_id=rule["id"],
+                    invariant_id=invariant["id"],
                     field="negative_confirmed",
                     expected=True,
                     observed=False,
@@ -737,7 +737,7 @@ def validate_engine(
         # Gate-soundness checks (Decision #12). Only run when both captures
         # are available - defensive guard for the bare-except fallback above.
         if pos is not None and neg is not None:
-            rule_divergences.extend(compute_gate_soundness_divergences(rule, pos, neg))
+            rule_divergences.extend(compute_gate_soundness_divergences(invariant, pos, neg))
         divergences.extend(rule_divergences)
 
     envelope = assemble_envelope(
@@ -820,7 +820,7 @@ def main(argv: list[str] | None = None) -> int:
         choices=("all", "skip", "only"),
         default="all",
         help=(
-            "Which rules to run. 'skip' drops rules with requires_gpu=true "
+            "Which invariants to run. 'skip' drops invariants with requires_gpu=true "
             "(for GH-hosted CPU jobs); 'only' runs only those (for self-hosted "
             "GPU jobs); 'all' runs everything (default, useful locally)."
         ),
@@ -847,7 +847,7 @@ def main(argv: list[str] | None = None) -> int:
         "--fail-on-divergence",
         action="store_true",
         help=(
-            "Exit 1 if any rule diverged from its expected_outcome. CI always "
+            "Exit 1 if any invariant diverged from its expected_outcome. CI always "
             "passes this flag; locally it's off by default so developers can "
             "inspect the YAML without CI-style exit."
         ),
