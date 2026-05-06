@@ -72,7 +72,7 @@ on:
       - "scripts/vendor_rules.py"
       - "scripts/_invariant_vendor_common.py"
       - "scripts/refresh_invariant_rules.sh"
-      - "configs/engine_invariants/**"
+      - "src/llenergymeasure/engines/*/invariants.*.yaml"
       - ".github/workflows/engine-invariants.yml"
   workflow_run:
     # Chain off the BUILD workflow (which fires on PR + push). The
@@ -118,7 +118,9 @@ concurrency:
   cancel-in-progress: false   # writeback target: never cancel mid-flight
 
 env:
-  CORPUS_DIR: configs/engine_invariants
+  # Z-engines layout: per-engine sub-package owns its runtime data.
+  # Per-engine paths constructed as ${ENGINES_DIR}/<engine>/invariants.<kind>.yaml.
+  ENGINES_DIR: src/llenergymeasure/engines
 
 jobs:
   filter:
@@ -151,7 +153,7 @@ jobs:
               - 'scripts/vendor_rules.py'
               - 'scripts/_invariant_vendor_common.py'
               - 'scripts/refresh_invariant_rules.sh'
-              - 'configs/engine_invariants/transformers.*.yaml'
+              - 'src/llenergymeasure/engines/transformers/invariants.*.yaml'
               - '.github/workflows/update-engine-invariants.yml'
               - 'scripts/ci/upsert_pr_comment.sh'
             vllm:
@@ -162,7 +164,7 @@ jobs:
               - 'scripts/vendor_rules.py'
               - 'scripts/_invariant_vendor_common.py'
               - 'scripts/refresh_invariant_rules.sh'
-              - 'configs/engine_invariants/vllm.*.yaml'
+              - 'src/llenergymeasure/engines/vllm/invariants.*.yaml'
               - '.github/workflows/update-engine-invariants.yml'
               - 'scripts/ci/upsert_pr_comment.sh'
             tensorrt:
@@ -173,7 +175,7 @@ jobs:
               - 'scripts/vendor_rules.py'
               - 'scripts/_invariant_vendor_common.py'
               - 'scripts/refresh_invariant_rules.sh'
-              - 'configs/engine_invariants/tensorrt.*.yaml'
+              - 'src/llenergymeasure/engines/tensorrt/invariants.*.yaml'
               - '.github/workflows/update-engine-invariants.yml'
               - 'scripts/ci/upsert_pr_comment.sh'
 
@@ -361,7 +363,7 @@ jobs:
         run: |
           mkdir -p /tmp/engine-invariants-diff
           for KIND in proposed vendored; do
-            OLD_YAML="${CORPUS_DIR}/transformers.${KIND}.yaml"
+            OLD_YAML="${ENGINES_DIR}/transformers/invariants.${KIND}.yaml"
             DEST="/tmp/engine-invariants-diff/transformers.${KIND}.old.yaml"
             if [[ -f "$OLD_YAML" ]]; then
               cp "$OLD_YAML" "$DEST"
@@ -391,8 +393,8 @@ jobs:
               python3 -m scripts.engine_miners.build_corpus --engine transformers
               python3 scripts/vendor_rules.py \
                 --engine transformers \
-                --corpus '${CORPUS_DIR}/transformers.proposed.yaml' \
-                --out '${CORPUS_DIR}/transformers.vendored.yaml' \
+                --corpus '${ENGINES_DIR}/transformers/invariants.proposed.yaml' \
+                --out '${ENGINES_DIR}/transformers/invariants.vendored.yaml' \
                 --vendor-commit '${ANCHOR_SHA}' \
                 --fail-on-divergence
             "
@@ -426,7 +428,7 @@ jobs:
           set +e
           uv run python scripts/diff_engine_invariants.py \
             /tmp/engine-invariants-diff/transformers.vendored.old.yaml \
-            "${CORPUS_DIR}/transformers.vendored.yaml" \
+            "${ENGINES_DIR}/transformers/invariants.vendored.yaml" \
             --out /tmp/engine-invariants-diff/transformers.vendored.md \
             --title "Transformers vendored invariants diff"
           VENDORED_EXIT=$?
@@ -434,13 +436,13 @@ jobs:
 
           PROPOSED_CHANGED=true
           if diff -q /tmp/engine-invariants-diff/transformers.proposed.old.yaml \
-                    "${CORPUS_DIR}/transformers.proposed.yaml" >/dev/null 2>&1; then
+                    "${ENGINES_DIR}/transformers/invariants.proposed.yaml" >/dev/null 2>&1; then
             PROPOSED_CHANGED=false
           fi
 
           VENDORED_CHANGED=true
           if diff -q /tmp/engine-invariants-diff/transformers.vendored.old.yaml \
-                    "${CORPUS_DIR}/transformers.vendored.yaml" >/dev/null 2>&1; then
+                    "${ENGINES_DIR}/transformers/invariants.vendored.yaml" >/dev/null 2>&1; then
             VENDORED_CHANGED=false
           fi
 
@@ -465,7 +467,7 @@ jobs:
                 echo '```diff'
                 diff -u --label transformers.proposed.yaml --label transformers.proposed.yaml \
                         /tmp/engine-invariants-diff/transformers.proposed.old.yaml \
-                        "${CORPUS_DIR}/transformers.proposed.yaml" | head -n 200 || true
+                        "${ENGINES_DIR}/transformers/invariants.proposed.yaml" | head -n 200 || true
                 echo '```'
                 echo
               fi
@@ -513,8 +515,8 @@ jobs:
             /tmp/engine-invariants-diff/transformers.proposed.old.yaml
             /tmp/engine-invariants-diff/transformers.vendored.old.yaml
             /tmp/engine-invariants-diff/transformers.summary.md
-            ${{ env.CORPUS_DIR }}/transformers.proposed.yaml
-            ${{ env.CORPUS_DIR }}/transformers.vendored.yaml
+            ${{ env.ENGINES_DIR }}/transformers/invariants.proposed.yaml
+            ${{ env.ENGINES_DIR }}/transformers/invariants.vendored.yaml
 
       - name: Post per-pipeline comment
         if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
@@ -567,8 +569,8 @@ jobs:
           git pull --rebase --autostash
 
           git add \
-            "${CORPUS_DIR}/transformers.proposed.yaml" \
-            "${CORPUS_DIR}/transformers.vendored.yaml" \
+            "${ENGINES_DIR}/transformers/invariants.proposed.yaml" \
+            "${ENGINES_DIR}/transformers/invariants.vendored.yaml" \
             engine_versions/transformers.yaml \
             docs/user/generated/invariants-transformers.md
 
@@ -802,7 +804,7 @@ jobs:
         run: |
           mkdir -p /tmp/engine-invariants-diff
           for KIND in proposed vendored; do
-            OLD_YAML="${CORPUS_DIR}/vllm.${KIND}.yaml"
+            OLD_YAML="${ENGINES_DIR}/vllm/invariants.${KIND}.yaml"
             DEST="/tmp/engine-invariants-diff/vllm.${KIND}.old.yaml"
             if [[ -f "$OLD_YAML" ]]; then
               cp "$OLD_YAML" "$DEST"
@@ -835,8 +837,8 @@ jobs:
               python3 -m scripts.engine_miners.build_corpus --engine vllm
               python3 scripts/vendor_rules.py \
                 --engine vllm \
-                --corpus '${CORPUS_DIR}/vllm.proposed.yaml' \
-                --out '${CORPUS_DIR}/vllm.vendored.yaml' \
+                --corpus '${ENGINES_DIR}/vllm/invariants.proposed.yaml' \
+                --out '${ENGINES_DIR}/vllm/invariants.vendored.yaml' \
                 --vendor-commit '${ANCHOR_SHA}' \
                 --fail-on-divergence
             "
@@ -870,7 +872,7 @@ jobs:
           set +e
           uv run python scripts/diff_engine_invariants.py \
             /tmp/engine-invariants-diff/vllm.vendored.old.yaml \
-            "${CORPUS_DIR}/vllm.vendored.yaml" \
+            "${ENGINES_DIR}/vllm/invariants.vendored.yaml" \
             --out /tmp/engine-invariants-diff/vllm.vendored.md \
             --title "vLLM vendored invariants diff"
           VENDORED_EXIT=$?
@@ -878,13 +880,13 @@ jobs:
 
           PROPOSED_CHANGED=true
           if diff -q /tmp/engine-invariants-diff/vllm.proposed.old.yaml \
-                    "${CORPUS_DIR}/vllm.proposed.yaml" >/dev/null 2>&1; then
+                    "${ENGINES_DIR}/vllm/invariants.proposed.yaml" >/dev/null 2>&1; then
             PROPOSED_CHANGED=false
           fi
 
           VENDORED_CHANGED=true
           if diff -q /tmp/engine-invariants-diff/vllm.vendored.old.yaml \
-                    "${CORPUS_DIR}/vllm.vendored.yaml" >/dev/null 2>&1; then
+                    "${ENGINES_DIR}/vllm/invariants.vendored.yaml" >/dev/null 2>&1; then
             VENDORED_CHANGED=false
           fi
 
@@ -909,7 +911,7 @@ jobs:
                 echo '```diff'
                 diff -u --label vllm.proposed.yaml --label vllm.proposed.yaml \
                         /tmp/engine-invariants-diff/vllm.proposed.old.yaml \
-                        "${CORPUS_DIR}/vllm.proposed.yaml" | head -n 200 || true
+                        "${ENGINES_DIR}/vllm/invariants.proposed.yaml" | head -n 200 || true
                 echo '```'
                 echo
               fi
@@ -957,8 +959,8 @@ jobs:
             /tmp/engine-invariants-diff/vllm.proposed.old.yaml
             /tmp/engine-invariants-diff/vllm.vendored.old.yaml
             /tmp/engine-invariants-diff/vllm.summary.md
-            ${{ env.CORPUS_DIR }}/vllm.proposed.yaml
-            ${{ env.CORPUS_DIR }}/vllm.vendored.yaml
+            ${{ env.ENGINES_DIR }}/vllm/invariants.proposed.yaml
+            ${{ env.ENGINES_DIR }}/vllm/invariants.vendored.yaml
 
       - name: Post per-pipeline comment
         if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
@@ -1015,8 +1017,8 @@ jobs:
           git pull --rebase --autostash
 
           git add \
-            "${CORPUS_DIR}/vllm.proposed.yaml" \
-            "${CORPUS_DIR}/vllm.vendored.yaml" \
+            "${ENGINES_DIR}/vllm/invariants.proposed.yaml" \
+            "${ENGINES_DIR}/vllm/invariants.vendored.yaml" \
             engine_versions/vllm.yaml \
             docs/user/generated/invariants-vllm.md
 
@@ -1274,7 +1276,7 @@ jobs:
         run: |
           mkdir -p /tmp/engine-invariants-diff
           for KIND in proposed vendored; do
-            OLD_YAML="${CORPUS_DIR}/tensorrt.${KIND}.yaml"
+            OLD_YAML="${ENGINES_DIR}/tensorrt/invariants.${KIND}.yaml"
             DEST="/tmp/engine-invariants-diff/tensorrt.${KIND}.old.yaml"
             if [[ -f "$OLD_YAML" ]]; then
               cp "$OLD_YAML" "$DEST"
@@ -1310,8 +1312,8 @@ jobs:
               python3 -m scripts.engine_miners.build_corpus --engine tensorrt
               python3 scripts/vendor_rules.py \
                 --engine tensorrt \
-                --corpus '${CORPUS_DIR}/tensorrt.proposed.yaml' \
-                --out '${CORPUS_DIR}/tensorrt.vendored.yaml' \
+                --corpus '${ENGINES_DIR}/tensorrt/invariants.proposed.yaml' \
+                --out '${ENGINES_DIR}/tensorrt/invariants.vendored.yaml' \
                 --vendor-commit '${ANCHOR_SHA}' \
                 --fail-on-divergence
             "
@@ -1342,7 +1344,7 @@ jobs:
           set +e
           uv run python scripts/diff_engine_invariants.py \
             /tmp/engine-invariants-diff/tensorrt.vendored.old.yaml \
-            "${CORPUS_DIR}/tensorrt.vendored.yaml" \
+            "${ENGINES_DIR}/tensorrt/invariants.vendored.yaml" \
             --out /tmp/engine-invariants-diff/tensorrt.vendored.md \
             --title "TensorRT-LLM vendored invariants diff"
           VENDORED_EXIT=$?
@@ -1350,13 +1352,13 @@ jobs:
 
           PROPOSED_CHANGED=true
           if diff -q /tmp/engine-invariants-diff/tensorrt.proposed.old.yaml \
-                    "${CORPUS_DIR}/tensorrt.proposed.yaml" >/dev/null 2>&1; then
+                    "${ENGINES_DIR}/tensorrt/invariants.proposed.yaml" >/dev/null 2>&1; then
             PROPOSED_CHANGED=false
           fi
 
           VENDORED_CHANGED=true
           if diff -q /tmp/engine-invariants-diff/tensorrt.vendored.old.yaml \
-                    "${CORPUS_DIR}/tensorrt.vendored.yaml" >/dev/null 2>&1; then
+                    "${ENGINES_DIR}/tensorrt/invariants.vendored.yaml" >/dev/null 2>&1; then
             VENDORED_CHANGED=false
           fi
 
@@ -1381,7 +1383,7 @@ jobs:
                 echo '```diff'
                 diff -u --label tensorrt.proposed.yaml --label tensorrt.proposed.yaml \
                         /tmp/engine-invariants-diff/tensorrt.proposed.old.yaml \
-                        "${CORPUS_DIR}/tensorrt.proposed.yaml" | head -n 200 || true
+                        "${ENGINES_DIR}/tensorrt/invariants.proposed.yaml" | head -n 200 || true
                 echo '```'
                 echo
               fi
@@ -1429,8 +1431,8 @@ jobs:
             /tmp/engine-invariants-diff/tensorrt.proposed.old.yaml
             /tmp/engine-invariants-diff/tensorrt.vendored.old.yaml
             /tmp/engine-invariants-diff/tensorrt.summary.md
-            ${{ env.CORPUS_DIR }}/tensorrt.proposed.yaml
-            ${{ env.CORPUS_DIR }}/tensorrt.vendored.yaml
+            ${{ env.ENGINES_DIR }}/tensorrt/invariants.proposed.yaml
+            ${{ env.ENGINES_DIR }}/tensorrt/invariants.vendored.yaml
 
       - name: Post per-pipeline comment
         if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
@@ -1487,8 +1489,8 @@ jobs:
           git pull --rebase --autostash
 
           git add \
-            "${CORPUS_DIR}/tensorrt.proposed.yaml" \
-            "${CORPUS_DIR}/tensorrt.vendored.yaml" \
+            "${ENGINES_DIR}/tensorrt/invariants.proposed.yaml" \
+            "${ENGINES_DIR}/tensorrt/invariants.vendored.yaml" \
             engine_versions/tensorrt.yaml \
             docs/user/generated/invariants-tensorrt.md
 

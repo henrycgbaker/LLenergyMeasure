@@ -50,9 +50,10 @@ llem = "llenergymeasure.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/llenergymeasure"]
-# Hatchling includes non-Python files in package dirs by default, so
-# src/llenergymeasure/config/discovered_schemas/*.json ships automatically
-# in the wheel — no force-include needed (and adding one creates duplicates).
+# Hatchling includes non-Python files in package dirs by default, so the
+# Z-engines runtime data (src/llenergymeasure/engines/<engine>/{invariants.*.yaml,
+# schema.discovered.json}) ships automatically in the wheel — no force-include
+# needed (and adding one creates duplicates).
 
 [tool.ruff]
 line-length = 100
@@ -106,8 +107,10 @@ filterwarnings = [
 [tool.coverage.run]
 source = ["llenergymeasure"]
 omit = [
-    "*/engines/vllm.py",
-    "*/engines/tensorrt.py",
+    # Engine plugins live under engines/<engine>/plugin.py post Z-engines reorg.
+    # They run only inside Docker, so coverage on the host is meaningless.
+    "*/engines/vllm/*.py",
+    "*/engines/tensorrt/*.py",
     "*/infra/docker_runner.py",
     "*/entrypoints/container.py",
 ]

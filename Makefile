@@ -125,7 +125,7 @@ generate-docs:
 check-docs: docs-check
 
 # Rediscover a vendored engine schema by running introspection inside the
-# engine's Docker image. Writes to src/llenergymeasure/config/discovered_schemas/<engine>.json
+# engine's Docker image. Writes to src/llenergymeasure/engines/<engine>/schema.discovered.json
 # and prints the git diff. Committing (or not) is the review gate.
 # Usage: make discover-schema ENGINE=vllm
 discover-schema:

@@ -69,7 +69,7 @@ on:
       - "engine_versions/vllm.yaml"
       - "engine_versions/tensorrt.yaml"
       - "scripts/engine_introspectors/**"
-      - "src/llenergymeasure/config/discovered_schemas/**"
+      - "src/llenergymeasure/engines/*/schema.discovered.json"
       - ".github/workflows/engine-schemas.yml"
   workflow_run:
     # Chain off the BUILD workflow (which fires on PR + push). The
@@ -111,7 +111,9 @@ concurrency:
   cancel-in-progress: false   # writeback target: never cancel mid-flight
 
 env:
-  SCHEMAS_DIR: src/llenergymeasure/config/discovered_schemas
+  # Z-engines layout: per-engine sub-package owns its runtime data.
+  # Per-engine paths constructed as ${ENGINES_DIR}/<engine>/schema.discovered.json.
+  ENGINES_DIR: src/llenergymeasure/engines
 
 jobs:
   filter:
@@ -140,21 +142,21 @@ jobs:
               - 'docker/Dockerfile.transformers'
               - 'scripts/engine_introspectors/transformers_*.py'
               - 'scripts/engine_introspectors/_*.py'
-              - 'src/llenergymeasure/config/discovered_schemas/transformers.json'
+              - 'src/llenergymeasure/engines/transformers/schema.discovered.json'
               - '.github/workflows/update-engine-schemas.yml'
               - 'scripts/ci/upsert_pr_comment.sh'
             vllm:
               - 'engine_versions/vllm.yaml'
               - 'scripts/engine_introspectors/vllm_*.py'
               - 'scripts/engine_introspectors/_*.py'
-              - 'src/llenergymeasure/config/discovered_schemas/vllm.json'
+              - 'src/llenergymeasure/engines/vllm/schema.discovered.json'
               - '.github/workflows/update-engine-schemas.yml'
               - 'scripts/ci/upsert_pr_comment.sh'
             tensorrt:
               - 'engine_versions/tensorrt.yaml'
               - 'scripts/engine_introspectors/tensorrt_*.py'
               - 'scripts/engine_introspectors/_*.py'
-              - 'src/llenergymeasure/config/discovered_schemas/tensorrt.json'
+              - 'src/llenergymeasure/engines/tensorrt/schema.discovered.json'
               - '.github/workflows/update-engine-schemas.yml'
               - 'scripts/ci/upsert_pr_comment.sh'
 
@@ -327,7 +329,7 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           mkdir -p /tmp/engine-schemas-diff
-          OLD="${SCHEMAS_DIR}/transformers.json"
+          OLD="${ENGINES_DIR}/transformers/schema.discovered.json"
           DEST="/tmp/engine-schemas-diff/transformers.old.json"
           if [[ -f "$OLD" ]]; then
             cp "$OLD" "$DEST"
@@ -352,7 +354,7 @@ jobs:
             -m scripts.engine_introspectors \
               --engine transformers \
               --image-ref "${IMAGE}" \
-              --output "${SCHEMAS_DIR}/transformers.json"
+              --output "${ENGINES_DIR}/transformers/schema.discovered.json"
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
@@ -390,13 +392,13 @@ jobs:
           set +e
           uv run python scripts/diff_discovered_schemas.py \
             /tmp/engine-schemas-diff/transformers.old.json \
-            "${SCHEMAS_DIR}/transformers.json" \
+            "${ENGINES_DIR}/transformers/schema.discovered.json" \
             > /tmp/engine-schemas-diff/transformers.diff.json
           DIFF_EXIT=$?
           set -e
 
           if diff -q /tmp/engine-schemas-diff/transformers.old.json \
-                    "${SCHEMAS_DIR}/transformers.json" >/dev/null 2>&1; then
+                    "${ENGINES_DIR}/transformers/schema.discovered.json" >/dev/null 2>&1; then
             CLASSIFICATION="no-changes"
           elif [[ $DIFF_EXIT -eq 1 ]]; then
             CLASSIFICATION="breaking"
@@ -462,7 +464,7 @@ jobs:
             /tmp/engine-schemas-diff/transformers.old.json
             /tmp/engine-schemas-diff/transformers.diff.json
             /tmp/engine-schemas-diff/transformers.summary.md
-            ${{ env.SCHEMAS_DIR }}/transformers.json
+            ${{ env.ENGINES_DIR }}/transformers/schema.discovered.json
 
       - name: Post per-pipeline comment
         if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
@@ -512,7 +514,7 @@ jobs:
           git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
 
           git add \
-            "${SCHEMAS_DIR}/transformers.json" \
+            "${ENGINES_DIR}/transformers/schema.discovered.json" \
             engine_versions/transformers.yaml \
             docs/user/generated/curation-transformers.md \
             docs/user/generated/schema-transformers.md
@@ -731,7 +733,7 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           mkdir -p /tmp/engine-schemas-diff
-          OLD="${SCHEMAS_DIR}/vllm.json"
+          OLD="${ENGINES_DIR}/vllm/schema.discovered.json"
           DEST="/tmp/engine-schemas-diff/vllm.old.json"
           if [[ -f "$OLD" ]]; then
             cp "$OLD" "$DEST"
@@ -759,7 +761,7 @@ jobs:
             -m scripts.engine_introspectors \
               --engine vllm \
               --image-ref "${IMAGE}" \
-              --output "${SCHEMAS_DIR}/vllm.json"
+              --output "${ENGINES_DIR}/vllm/schema.discovered.json"
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
@@ -796,13 +798,13 @@ jobs:
           set +e
           uv run python scripts/diff_discovered_schemas.py \
             /tmp/engine-schemas-diff/vllm.old.json \
-            "${SCHEMAS_DIR}/vllm.json" \
+            "${ENGINES_DIR}/vllm/schema.discovered.json" \
             > /tmp/engine-schemas-diff/vllm.diff.json
           DIFF_EXIT=$?
           set -e
 
           if diff -q /tmp/engine-schemas-diff/vllm.old.json \
-                    "${SCHEMAS_DIR}/vllm.json" >/dev/null 2>&1; then
+                    "${ENGINES_DIR}/vllm/schema.discovered.json" >/dev/null 2>&1; then
             CLASSIFICATION="no-changes"
           elif [[ $DIFF_EXIT -eq 1 ]]; then
             CLASSIFICATION="breaking"
@@ -868,7 +870,7 @@ jobs:
             /tmp/engine-schemas-diff/vllm.old.json
             /tmp/engine-schemas-diff/vllm.diff.json
             /tmp/engine-schemas-diff/vllm.summary.md
-            ${{ env.SCHEMAS_DIR }}/vllm.json
+            ${{ env.ENGINES_DIR }}/vllm/schema.discovered.json
 
       - name: Post per-pipeline comment
         if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
@@ -921,7 +923,7 @@ jobs:
           git pull --rebase --autostash
 
           git add \
-            "${SCHEMAS_DIR}/vllm.json" \
+            "${ENGINES_DIR}/vllm/schema.discovered.json" \
             engine_versions/vllm.yaml \
             docs/user/generated/curation-vllm.md \
             docs/user/generated/schema-vllm.md
@@ -1163,7 +1165,7 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           mkdir -p /tmp/engine-schemas-diff
-          OLD="${SCHEMAS_DIR}/tensorrt.json"
+          OLD="${ENGINES_DIR}/tensorrt/schema.discovered.json"
           DEST="/tmp/engine-schemas-diff/tensorrt.old.json"
           if [[ -f "$OLD" ]]; then
             cp "$OLD" "$DEST"
@@ -1194,7 +1196,7 @@ jobs:
             -m scripts.engine_introspectors \
               --engine tensorrt \
               --image-ref "${IMAGE}" \
-              --output "${SCHEMAS_DIR}/tensorrt.json"
+              --output "${ENGINES_DIR}/tensorrt/schema.discovered.json"
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
@@ -1229,13 +1231,13 @@ jobs:
           set +e
           uv run python scripts/diff_discovered_schemas.py \
             /tmp/engine-schemas-diff/tensorrt.old.json \
-            "${SCHEMAS_DIR}/tensorrt.json" \
+            "${ENGINES_DIR}/tensorrt/schema.discovered.json" \
             > /tmp/engine-schemas-diff/tensorrt.diff.json
           DIFF_EXIT=$?
           set -e
 
           if diff -q /tmp/engine-schemas-diff/tensorrt.old.json \
-                    "${SCHEMAS_DIR}/tensorrt.json" >/dev/null 2>&1; then
+                    "${ENGINES_DIR}/tensorrt/schema.discovered.json" >/dev/null 2>&1; then
             CLASSIFICATION="no-changes"
           elif [[ $DIFF_EXIT -eq 1 ]]; then
             CLASSIFICATION="breaking"
@@ -1301,7 +1303,7 @@ jobs:
             /tmp/engine-schemas-diff/tensorrt.old.json
             /tmp/engine-schemas-diff/tensorrt.diff.json
             /tmp/engine-schemas-diff/tensorrt.summary.md
-            ${{ env.SCHEMAS_DIR }}/tensorrt.json
+            ${{ env.ENGINES_DIR }}/tensorrt/schema.discovered.json
 
       - name: Post per-pipeline comment
         if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
@@ -1354,7 +1356,7 @@ jobs:
           git pull --rebase --autostash
 
           git add \
-            "${SCHEMAS_DIR}/tensorrt.json" \
+            "${ENGINES_DIR}/tensorrt/schema.discovered.json" \
             engine_versions/tensorrt.yaml \
             docs/user/generated/curation-tensorrt.md \
             docs/user/generated/schema-tensorrt.md

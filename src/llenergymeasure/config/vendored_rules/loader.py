@@ -1,9 +1,9 @@
 """Load, match, and render validation rules from the YAML corpus.
 
-The corpus at ``configs/engine_invariants/{engine}.proposed.yaml`` is parsed
-here into typed :class:`Rule` entries. Each rule carries a match predicate
-(operators defined in :func:`evaluate_predicate`) and a message template.
-The generic ``@model_validator`` in ``config/models.py`` calls
+The corpus at ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``
+is parsed here into typed :class:`Rule` entries. Each rule carries a match
+predicate (operators defined in :func:`evaluate_predicate`) and a message
+template. The generic ``@model_validator`` in ``config/models.py`` calls
 :meth:`Rule.try_match` on every rule for a given engine and emits
 error/warn/dormant annotations based on the rule's severity.
 
@@ -16,11 +16,11 @@ Lifecycle pair (per the engine-coupling architecture, 2026-04-28):
   The proposed YAML carries each rule's declared ``expected_outcome``. The
   ``engine-invariants`` (vendor gate) CI pipeline (see
   ``scripts/vendor_rules.py``) runs every rule through the real library
-  and emits ``configs/engine_invariants/{engine}.vendored.yaml`` — this
-  YAML captures observed outcomes. When present, the loader overlays the
-  vendored observations onto the corpus so downstream consumers see
-  CI-validated truth; absent, the loader falls back to the proposed YAML
-  so local development without a vendor run still works.
+  and emits ``src/llenergymeasure/engines/{engine}/invariants.vendored.yaml``
+  — this YAML captures observed outcomes. When present, the loader overlays
+  the vendored observations onto the corpus so downstream consumers see
+  CI-validated truth; absent, the loader falls back to the proposed YAML so
+  local development without a vendor run still works.
 """
 
 from __future__ import annotations
@@ -188,7 +188,7 @@ class Rule:
     """One validation rule parsed from the corpus.
 
     Field names mirror the YAML schema documented in
-    ``configs/engine_invariants/README.md``. Construction goes through
+    ``src/llenergymeasure/engines/INVARIANTS_README.md``. Construction goes through
     :func:`_parse_rule`; tests can instantiate directly for unit coverage.
     """
 
@@ -642,10 +642,10 @@ class VendoredRulesLoader:
     Per-instance cache (rather than module-level LRU) — tests can instantiate
     a loader and monkeypatch ``corpus_root`` without polluting other tests.
 
-    Load order (picked up automatically):
-      1. **Proposed YAML** under ``configs/engine_invariants/{engine}.proposed.yaml`` —
+    Load order (picked up automatically; per-engine sub-package layout):
+      1. **Proposed YAML** under ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`` —
          the maintainer-seeded source of truth; always present in-repo.
-      2. **Vendored YAML** under ``configs/engine_invariants/{engine}.vendored.yaml`` —
+      2. **Vendored YAML** under ``src/llenergymeasure/engines/{engine}/invariants.vendored.yaml`` —
          CI-validated observed behaviour, overlaid onto the corpus's rules
          when present. Written by ``scripts/vendor_rules.py`` under the
          engine-invariants CI.

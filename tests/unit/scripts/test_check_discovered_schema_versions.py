@@ -36,15 +36,17 @@ def _setup_repo(
     (ssot_dir / "tensorrt.yaml").write_text(_ssot_yaml(trt_ssot))
     (ssot_dir / "transformers.yaml").write_text(_ssot_yaml(transformers_ssot))
 
-    schema_dir = repo / "src" / "llenergymeasure" / "config" / "discovered_schemas"
-    schema_dir.mkdir(parents=True)
+    engines_dir = repo / "src" / "llenergymeasure" / "engines"
+
+    def _write_schema(engine: str, version: str) -> None:
+        engine_dir = engines_dir / engine
+        engine_dir.mkdir(parents=True, exist_ok=True)
+        (engine_dir / "schema.discovered.json").write_text(json.dumps({"engine_version": version}))
 
     if not skip_vllm_schema:
-        (schema_dir / "vllm.json").write_text(json.dumps({"engine_version": vllm_schema_version}))
-    (schema_dir / "tensorrt.json").write_text(json.dumps({"engine_version": trt_schema_version}))
-    (schema_dir / "transformers.json").write_text(
-        json.dumps({"engine_version": transformers_schema_version})
-    )
+        _write_schema("vllm", vllm_schema_version)
+    _write_schema("tensorrt", trt_schema_version)
+    _write_schema("transformers", transformers_schema_version)
 
     return repo
 

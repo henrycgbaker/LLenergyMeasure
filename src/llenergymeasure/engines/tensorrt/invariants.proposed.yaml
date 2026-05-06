@@ -2,7 +2,7 @@ schema_version: 1.0.0
 engine: tensorrt
 engine_version: 0.21.0
 walker_pinned_range: <0.22.0,>=0.21.0
-mined_at: '2026-05-05T22:07:12+02:00'
+mined_at: '2026-05-06T19:12:04+02:00'
 rules:
 - id: tensorrt_raises_max_ngram_size_le_0_positive_values
   engine: tensorrt
@@ -32,7 +32,7 @@ rules:
   references:
   - llmapi/llm_args.py:577 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
   added_by: static_miner
-  added_at: '2026-04-26'
+  added_at: '2026-05-06'
 - id: tensorrt_raises_max_verification_set_size_le_0_positive_values
   engine: tensorrt
   library: tensorrt_llm
@@ -61,7 +61,7 @@ rules:
   references:
   - llmapi/llm_args.py:577 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
   added_by: static_miner
-  added_at: '2026-04-26'
+  added_at: '2026-05-06'
 - id: tensorrt_raises_max_window_size_le_0_positive_values
   engine: tensorrt
   library: tensorrt_llm
@@ -90,4 +90,4 @@ rules:
   references:
   - llmapi/llm_args.py:577 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
   added_by: static_miner
-  added_at: '2026-04-26'
+  added_at: '2026-05-06'

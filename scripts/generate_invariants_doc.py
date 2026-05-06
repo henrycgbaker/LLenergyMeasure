@@ -2,7 +2,7 @@
 """Generate the invariants digest doc for one engine.
 
 Produces ``docs/generated/invariants-{engine}.md`` from the corpus + vendor
-artefacts under ``configs/engine_invariants/`` and the previous corpus state
+artefacts under ``src/llenergymeasure/engines/<engine>/`` and the previous corpus state
 in git history. Per the engine-coupling design doc §6, this digest is
 section 2 of the per-engine curation digest (sections 1 + 3 are produced
 by ``generate_curation_doc.py`` + an on-demand runtime-gaps renderer).

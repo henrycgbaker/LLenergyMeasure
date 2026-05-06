@@ -2,7 +2,7 @@
 """Generate the discovered-schema doc for one engine.
 
 Produces ``docs/generated/schema-{engine}.md`` from the introspector-mined
-JSON under ``src/llenergymeasure/config/discovered_schemas/``. The output
+JSON at ``src/llenergymeasure/engines/<engine>/schema.discovered.json``. The output
 is a per-engine reference of every parameter the engine exposes, with
 type, default, description, and deprecation state, plus any limitations
 the introspector flagged.

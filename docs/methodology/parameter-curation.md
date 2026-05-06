@@ -14,7 +14,7 @@ llem exposes engine parameters to users through hand-authored Pydantic models. T
   programmatic discovery                  Pydantic curation
   (scripts/discover_*.py)                 (config/engine_configs.py)
   introspect engine APIs                  hand-authored sub-config models
-  → discovered_schemas/*.json             expose typed, documented fields
+  → engines/*/schema.discovered.json      expose typed, documented fields
             │                                         │
             └──────────────┬──────────────────────────┘
                            ▼

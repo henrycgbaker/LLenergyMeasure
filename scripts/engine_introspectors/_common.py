@@ -34,7 +34,12 @@ SCHEMA_VERSION = "1.0.0"
 # local Dockerfile.
 TRANSFORMERS_DOCKERFILE = "docker/Dockerfile.transformers"
 
-DEFAULT_OUTPUT_DIR = "src/llenergymeasure/config/discovered_schemas"
+# Z-engines layout: per-engine sub-package owns its discovered schema as
+# ``schema.discovered.json``. The introspector resolves the output path to
+# ``DEFAULT_OUTPUT_DIR / <engine> / DEFAULT_SCHEMA_FILENAME`` by default; CI
+# typically overrides via ``--output``.
+DEFAULT_OUTPUT_DIR = "src/llenergymeasure/engines"
+DEFAULT_SCHEMA_FILENAME = "schema.discovered.json"
 
 
 def annotation_to_type_str(annotation: Any) -> str:

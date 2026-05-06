@@ -6,16 +6,38 @@ Thin inference engine plugins implementing the `EnginePlugin` protocol. Layer 2 
 
 Each engine owns only inference: load model, run warmup, run inference, clean up. The `MeasurementHarness` (layer 3) owns everything else: energy tracking, FLOPs estimation, CUDA sync, result assembly.
 
-## Modules
+## Layout
 
-| Module | Description |
-|--------|-------------|
-| `protocol.py` | `EnginePlugin` protocol and `InferenceOutput` dataclass |
-| `transformers.py` | HuggingFace Transformers engine |
-| `vllm.py` | vLLM engine (Docker-only in production) |
-| `tensorrt.py` | TensorRT-LLM engine (NGC Docker) |
-| `_helpers.py` | Shared helpers (dataset loading, token counting) |
-| `__init__.py` | `get_engine(name)` factory, `detect_default_engine()` |
+Z-engines structure: each engine is a sub-package owning its plugin code AND
+its runtime data (validation invariants + discovered schema). SOTA Python
+pattern; mirrors sphinx (`themes/`), spaCy (`languages/`), scikit-learn
+(`datasets/`).
+
+```
+engines/
+  __init__.py          # get_engine(name) factory, detect_default_engine()
+  protocol.py          # EnginePlugin protocol + InferenceOutput dataclass
+  probe_adapter.py     # Adapter helpers
+  _helpers.py          # Shared helpers (dataset loading, token counting)
+
+  transformers/
+    __init__.py        # Re-exports TransformersEngine from plugin
+    plugin.py          # HuggingFace Transformers engine
+    invariants.proposed.yaml    # Mined validation rules
+    invariants.vendored.yaml    # Vendor-replayed observations
+    schema.discovered.json      # Introspected parameter schema
+    _staging/          # Per-engine miner staging (gitkeep'd)
+
+  vllm/                # Same shape: vLLM engine (Docker-only)
+  tensorrt/            # Same shape: TensorRT-LLM engine (NGC Docker)
+```
+
+The runtime data files (`invariants.*.yaml`, `schema.discovered.json`) are
+loaded by `llenergymeasure.config.vendored_rules.VendoredRulesLoader` and
+`llenergymeasure.config.SchemaLoader` respectively. CI workflows
+(`update-engine-{invariants,schemas}.yml`) regenerate them via Renovate-driven
+library bumps and commit-back. See `INVARIANTS_README.md` for the corpus
+schema specification.
 
 ## EnginePlugin protocol
 
