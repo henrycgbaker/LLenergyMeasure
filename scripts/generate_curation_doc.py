@@ -175,16 +175,24 @@ def main(argv: list[str] | None = None) -> int:
         choices=ENGINES,
         help="Generate the digest for one engine. Omit to render all three.",
     )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="Output Markdown path. Requires --engine; omit for default location.",
+    )
     args = parser.parse_args(argv)
 
-    output_dir = _PROJECT_ROOT / "docs" / "generated"
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if args.out and not args.engine:
+        parser.error("--out requires --engine (single-engine mode)")
+
+    default_dir = _PROJECT_ROOT / "docs" / "user" / "generated"
     loader = SchemaLoader()
 
     targets = (args.engine,) if args.engine else ENGINES
     for engine in targets:
         content = generate_engine_doc(engine, loader)
-        output_path = output_dir / f"curation-{engine}.md"
+        output_path = args.out if args.out else default_dir / f"curation-{engine}.md"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(content)
         print(f"Generated: {output_path}")
     return 0
