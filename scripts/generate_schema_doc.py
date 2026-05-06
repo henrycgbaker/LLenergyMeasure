@@ -17,12 +17,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
-_ENGINE_DISPLAY_NAMES = {
+from llenergymeasure.config.ssot import Engine  # noqa: E402
+
+_ENGINE_DISPLAY_NAMES: dict[str, str] = {
     "transformers": "Transformers",
     "vllm": "vLLM",
     "tensorrt": "TensorRT-LLM",
@@ -32,9 +36,8 @@ _ENGINE_DISPLAY_NAMES = {
 def _load_schema(engine: str) -> dict[str, Any]:
     """Read + parse the discovered-schema JSON for ``engine``.
 
-    Returns ``{}`` if the file is missing so the renderer degrades to a
-    placeholder doc rather than raising — mirrors ``_load_yaml`` in
-    ``generate_invariants_doc.py``.
+    Returns ``{}`` for missing/empty schemas to degrade gracefully when
+    discovery hasn't run yet, rather than failing the markdown render.
     """
     path = (
         _PROJECT_ROOT
@@ -171,7 +174,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--engine",
         required=True,
-        choices=tuple(_ENGINE_DISPLAY_NAMES),
+        choices=tuple(e.value for e in Engine),
         help="Engine name.",
     )
     parser.add_argument(
