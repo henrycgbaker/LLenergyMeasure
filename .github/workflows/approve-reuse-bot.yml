@@ -8,8 +8,8 @@ name: Approve Reuse — Slash Command Bot
 # PR comments. When the commenter has write/maintain/admin permission on
 # this repo, the bot widens the SSOT's miner_pins SpecifierSet for the
 # requested (engine, producer) so the bumped library.current_version
-# falls inside the envelope. Subsequent re-runs of engine-invariants.yml
-# or engine-schemas.yml then probe under the new envelope and proceed.
+# falls inside the envelope. Subsequent re-runs of update-engine-invariants.yml
+# or update-engine-schemas.yml then probe under the new envelope and proceed.
 #
 # Producer naming
 # ---------------
