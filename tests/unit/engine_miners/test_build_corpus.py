@@ -11,7 +11,7 @@ Coverage:
 - Fingerprint stability across float-precision jitter and dict-key ordering.
 - Cross-validation: shared fingerprint -> single rule with both sources cited.
 - Different fingerprints kept as separate rules.
-- Per-field precedence: AST-walker wins predicates / kwargs; introspection
+- Per-field precedence: AST-miner wins predicates / kwargs; introspection
   wins message_template.
 - Stability: byte-identical YAML on re-runs.
 - ``--check`` mode: drift surfaces as exit 1 with a diff.
@@ -56,7 +56,7 @@ def _ast_rule(
         "id": rule_id,
         "engine": "transformers",
         "library": "transformers",
-        "rule_under_test": "max_new_tokens > 0",
+        "invariant_under_test": "max_new_tokens > 0",
         "severity": severity,
         "native_type": "transformers.GenerationConfig",
         "miner_source": {
@@ -76,7 +76,7 @@ def _ast_rule(
             "normalised_fields": [],
         },
         "message_template": message,
-        "references": references or ["AST-walker reference"],
+        "references": references or ["AST-miner reference"],
         "added_by": "static_miner",
         "added_at": "2026-04-25",
     }
@@ -94,7 +94,7 @@ def _introspection_rule(
         "id": rule_id,
         "engine": "transformers",
         "library": "transformers",
-        "rule_under_test": "max_new_tokens > 0",
+        "invariant_under_test": "max_new_tokens > 0",
         "severity": severity,
         "native_type": "transformers.GenerationConfig",
         "miner_source": {
@@ -148,7 +148,9 @@ class TestFingerprint:
     def test_identical_rules_have_identical_fingerprints(self) -> None:
         rule_a = _ast_rule()
         rule_b = _ast_rule()
-        assert build_corpus.fingerprint_rule(rule_a) == build_corpus.fingerprint_rule(rule_b)
+        assert build_corpus.fingerprint_invariant(rule_a) == build_corpus.fingerprint_invariant(
+            rule_b
+        )
 
     def test_fingerprint_ignores_dict_key_order(self) -> None:
         # canonical_serialise sorts keys; the merger inherits that.
@@ -164,26 +166,34 @@ class TestFingerprint:
                 "transformers.sampling.do_sample": False,
             },
         )
-        assert build_corpus.fingerprint_rule(rule_a) == build_corpus.fingerprint_rule(rule_b)
+        assert build_corpus.fingerprint_invariant(rule_a) == build_corpus.fingerprint_invariant(
+            rule_b
+        )
 
     def test_fingerprint_stable_across_float_jitter(self) -> None:
         # Floats round to 12 sig digits via canonical_serialise; bit-level
         # jitter in the last place must not change the fingerprint.
         rule_a = _ast_rule(fields={"transformers.sampling.temperature": 0.7})
         rule_b = _ast_rule(fields={"transformers.sampling.temperature": 0.7000000000001})
-        assert build_corpus.fingerprint_rule(rule_a) == build_corpus.fingerprint_rule(rule_b)
+        assert build_corpus.fingerprint_invariant(rule_a) == build_corpus.fingerprint_invariant(
+            rule_b
+        )
 
     def test_fingerprint_excludes_id_and_message(self) -> None:
         # Two rules with the same constraint but different ids / messages
         # still bucket together — the corpus is about the constraint.
         rule_a = _ast_rule(rule_id="foo", message="msg A")
         rule_b = _ast_rule(rule_id="bar", message="msg B")
-        assert build_corpus.fingerprint_rule(rule_a) == build_corpus.fingerprint_rule(rule_b)
+        assert build_corpus.fingerprint_invariant(rule_a) == build_corpus.fingerprint_invariant(
+            rule_b
+        )
 
     def test_fingerprint_distinguishes_severity(self) -> None:
         rule_a = _ast_rule(severity="error")
         rule_b = _ast_rule(severity="warn")
-        assert build_corpus.fingerprint_rule(rule_a) != build_corpus.fingerprint_rule(rule_b)
+        assert build_corpus.fingerprint_invariant(rule_a) != build_corpus.fingerprint_invariant(
+            rule_b
+        )
 
     def test_fingerprint_collapses_int_and_float_thresholds(self) -> None:
         # Static miners read literals from source (`0.0` -> float); dynamic
@@ -192,7 +202,9 @@ class TestFingerprint:
         # net would split a single library invariant into two corpus rules.
         rule_int = _ast_rule(fields={"vllm.sampling.repetition_penalty": {"<=": 0}})
         rule_float = _ast_rule(fields={"vllm.sampling.repetition_penalty": {"<=": 0.0}})
-        assert build_corpus.fingerprint_rule(rule_int) == build_corpus.fingerprint_rule(rule_float)
+        assert build_corpus.fingerprint_invariant(rule_int) == build_corpus.fingerprint_invariant(
+            rule_float
+        )
 
     def test_fingerprint_preserves_bool_distinct_from_int(self) -> None:
         # Bool must NOT collapse into int despite ``True == 1``: a rule that
@@ -200,7 +212,9 @@ class TestFingerprint:
         # that fires on ``num_beams == 1``.
         rule_bool = _ast_rule(fields={"transformers.sampling.do_sample": True})
         rule_int = _ast_rule(fields={"transformers.sampling.do_sample": 1})
-        assert build_corpus.fingerprint_rule(rule_bool) != build_corpus.fingerprint_rule(rule_int)
+        assert build_corpus.fingerprint_invariant(rule_bool) != build_corpus.fingerprint_invariant(
+            rule_int
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +429,7 @@ class TestStability:
         )
         text = build_corpus.build_corpus_text("transformers", tmp_path, skip_validation=True)
         doc = yaml.safe_load(text)
-        ids = [r["id"] for r in doc["rules"]]
+        ids = [r["id"] for r in doc["invariants"]]
         assert ids == sorted(ids)
 
 
@@ -547,13 +561,13 @@ class TestAddedAtPreservation:
         path = tmp_path / "prior.yaml"
         path.write_text(yaml.safe_dump(_envelope([rule]), sort_keys=False))
         out = build_corpus._load_prior_added_at_map(path)
-        fp = build_corpus.fingerprint_rule(rule)
+        fp = build_corpus.fingerprint_invariant(rule)
         assert out == {fp: "2026-04-01"}
 
     def test_preserve_added_at_restores_matching_fingerprint(self) -> None:
         rule = _ast_rule()
         rule["added_at"] = "2026-04-30"
-        prior = {build_corpus.fingerprint_rule(rule): "2026-04-01"}
+        prior = {build_corpus.fingerprint_invariant(rule): "2026-04-01"}
         build_corpus._preserve_added_at([rule], prior)
         assert rule["added_at"] == "2026-04-01"
 
@@ -562,7 +576,7 @@ class TestAddedAtPreservation:
         rule["added_at"] = "2026-04-30"
         # Different fingerprint in prior — no match expected.
         other = _ast_rule(fields={"transformers.sampling.top_p": {"<": 0.0}})
-        prior = {build_corpus.fingerprint_rule(other): "2026-04-01"}
+        prior = {build_corpus.fingerprint_invariant(other): "2026-04-01"}
         build_corpus._preserve_added_at([rule], prior)
         assert rule["added_at"] == "2026-04-30"
 
@@ -589,7 +603,7 @@ class TestAddedAtPreservation:
 
         prior_path = tmp_path / "transformers" / "invariants.proposed.yaml"
         prior = yaml.safe_load(prior_path.read_text())
-        assert prior["rules"][0]["added_at"] == "2026-04-01"
+        assert prior["invariants"][0]["added_at"] == "2026-04-01"
 
         # Second run: re-stage with same fingerprint but today's date.
         second_rule = _ast_rule()
@@ -598,7 +612,7 @@ class TestAddedAtPreservation:
         build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
 
         rebuilt = yaml.safe_load(prior_path.read_text())
-        assert rebuilt["rules"][0]["added_at"] == "2026-04-01"
+        assert rebuilt["invariants"][0]["added_at"] == "2026-04-01"
 
 
 # ---------------------------------------------------------------------------
@@ -661,8 +675,8 @@ class TestVendorValidationGate:
         )
 
         result = build_corpus.write_corpus("transformers", tmp_path)
-        assert result.rules_in_canonical == 1
-        assert result.rules_quarantined == 0
+        assert result.invariants_in_canonical == 1
+        assert result.invariants_quarantined == 0
         assert result.quarantined_ids == ()
 
         canonical = (tmp_path / "transformers" / "invariants.proposed.yaml").read_text()
@@ -693,8 +707,8 @@ class TestVendorValidationGate:
         )
 
         result = build_corpus.write_corpus("transformers", tmp_path)
-        assert result.rules_in_canonical == 1
-        assert result.rules_quarantined == 1
+        assert result.invariants_in_canonical == 1
+        assert result.invariants_quarantined == 1
         assert "rule_bad" in result.quarantined_ids
 
         canonical = (tmp_path / "transformers" / "invariants.proposed.yaml").read_text()
@@ -729,8 +743,8 @@ class TestVendorValidationGate:
 
         result = build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
         assert result.validation_skipped is True
-        assert result.rules_in_canonical == 2
-        assert result.rules_quarantined == 0
+        assert result.invariants_in_canonical == 2
+        assert result.invariants_quarantined == 0
 
         canonical = (tmp_path / "transformers" / "invariants.proposed.yaml").read_text()
         assert "rule_a" in canonical

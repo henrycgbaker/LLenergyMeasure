@@ -225,7 +225,7 @@ def _from_numeric(
             threshold = getattr(meta, attr)
             return {
                 "id_suffix": f"{field_name}_{attr}_{_slug(threshold)}",
-                "rule_under_test": (
+                "invariant_under_test": (
                     f"{target_type.__name__}.{field_name} requires {op_key} {threshold!r}"
                 ),
                 "match_fields": {f"{namespace}.{field_name}": {op_key: threshold}},
@@ -251,7 +251,7 @@ def _from_length(
             good = "x" * threshold
             return {
                 "id_suffix": f"{field_name}_{op_key}_{threshold}",
-                "rule_under_test": (
+                "invariant_under_test": (
                     f"{target_type.__name__}.{field_name} requires {op_key} {threshold}"
                 ),
                 "match_fields": {f"{namespace}.{field_name}": {op_key: threshold}},
@@ -270,7 +270,9 @@ def _from_literal(
     sample_valid = values[0]
     return {
         "id_suffix": f"{field_name}_in_{len(values)}_values",
-        "rule_under_test": (f"{target_type.__name__}.{field_name} must be one of {list(values)!r}"),
+        "invariant_under_test": (
+            f"{target_type.__name__}.{field_name} must be one of {list(values)!r}"
+        ),
         "match_fields": {f"{namespace}.{field_name}": {"in": list(values)}},
         "kwargs_positive": {field_name: sample_invalid},
         "kwargs_negative": {field_name: sample_valid},
@@ -293,7 +295,7 @@ def _build(
         id=rid,
         engine=library,
         library=library,
-        rule_under_test=partial["rule_under_test"],
+        invariant_under_test=partial["invariant_under_test"],
         severity="error",
         native_type=f"{library}.{type_name}",
         miner_source=MinerSource(path=source_path, method=method, line_at_scan=line),

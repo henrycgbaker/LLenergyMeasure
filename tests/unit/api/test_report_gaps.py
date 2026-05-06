@@ -409,7 +409,7 @@ def test_round_trip_through_loader(tmp_path: Path) -> None:
     assert invariant.severity == "warn"
     assert invariant.expected_outcome["emission_channel"] == "warnings_warn"
     # Banner comment present at top of raw YAML fragment output.
-    assert "Rule fragment proposed by 'llem report-gaps'" in yaml_body
+    assert "Invariant fragment proposed by 'llem report-gaps'" in yaml_body
 
 
 def test_render_yaml_error_severity_roundtrip(tmp_path: Path) -> None:

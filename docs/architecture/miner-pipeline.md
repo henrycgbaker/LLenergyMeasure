@@ -618,7 +618,7 @@ The templates NOT adopted from Daikon's full library: linear arithmetic ternary 
 ## See also
 
 - [architecture-overview.md](/architecture/architecture-overview) - system overview and data-flow
-- [validation-rule-corpus.md](/architecture/validation-rule-corpus) - corpus YAML format reference
+- [validation-invariant-corpus.md](/architecture/validation-invariant-corpus) - corpus YAML format reference
 - [extending-miners.md](/architecture/extending-miners) - how to add a new engine miner
 - [parameter-discovery.md](/methodology/parameter-discovery) - runtime validation pipeline
 - [research-context.md](/methodology/research-context) - academic positioning

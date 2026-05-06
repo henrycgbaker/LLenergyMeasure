@@ -562,13 +562,13 @@ class _Emitter:
             kwargs_neg = self._force_distinct(kwargs_pos, preds)
 
         invariant_id = self._make_id(preds, detected, subject_field)
-        rule_under_test = self._describe(preds, detected)
+        invariant_under_test = self._describe(preds, detected)
 
         rule = InvariantCandidate(
             id=invariant_id,
             engine=ENGINE,
             library=LIBRARY,
-            rule_under_test=rule_under_test,
+            invariant_under_test=invariant_under_test,
             severity=detected.severity,
             native_type=self.native_type,
             miner_source=MinerSource(
@@ -1046,7 +1046,7 @@ def _make_literal_rule(
         id=rid,
         engine=ENGINE,
         library=LIBRARY,
-        rule_under_test=(f"{cls_short}.{field_name} must be one of {list(values)!r}"),
+        invariant_under_test=(f"{cls_short}.{field_name} must be one of {list(values)!r}"),
         severity="error",
         native_type=native_type,
         miner_source=MinerSource(
@@ -1100,7 +1100,7 @@ def _walk_strenum(
         id=rid,
         engine=ENGINE,
         library=LIBRARY,
-        rule_under_test=(
+        invariant_under_test=(
             f"{native_type.split('.')[-1]}.{field_name} must be one of "
             f"{cls_short} members {values!r}"
         ),
@@ -1305,7 +1305,7 @@ def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
         "id": c.id,
         "engine": c.engine,
         "library": c.library,
-        "rule_under_test": c.rule_under_test,
+        "invariant_under_test": c.invariant_under_test,
         "severity": c.severity,
         "native_type": c.native_type,
         "miner_source": {

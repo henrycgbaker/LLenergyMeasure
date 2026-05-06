@@ -182,7 +182,7 @@ The nearest citation cluster: Daikon (inference), Houdini (guess-and-check archi
 
 - [architecture-overview.md](/architecture/architecture-overview) - system overview
 - [miner-pipeline.md](/architecture/miner-pipeline) - implementation details
-- [validation-rule-corpus.md](/architecture/validation-rule-corpus) - corpus format
+- [validation-invariant-corpus.md](/architecture/validation-invariant-corpus) - corpus format
 
 Internal-only design artefacts (not in the public package):
 

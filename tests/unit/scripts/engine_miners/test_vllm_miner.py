@@ -210,12 +210,12 @@ class TestStaticMinerLandmarks:
 
 
 # ---------------------------------------------------------------------------
-# Walker top-level smoke
+# Miner top-level smoke
 # ---------------------------------------------------------------------------
 
 
 class TestWalkerSmoke:
-    """Confirm the full walker returns plausible output."""
+    """Confirm the full miner returns plausible output."""
 
     def test_static_miner_emits_rules(self) -> None:
         """Static miner produces a non-trivial number of rules on the live library."""

@@ -61,7 +61,7 @@ Below is a complete rule from the transformers corpus with every field annotated
   # Matches engine for single-library engines;
   # may differ for engines that alias a library.
 
-  rule_under_test: "GenerationConfig.__init__ flags `num_beams` (num beams not divisible by num beam groups)"
+  invariant_under_test: "GenerationConfig.__init__ flags `num_beams` (num beams not divisible by num beam groups)"
   # Human-readable description of what library behaviour this rule captures.
   # Format: {NativeType}.{method} flags {field} ({condition})
 

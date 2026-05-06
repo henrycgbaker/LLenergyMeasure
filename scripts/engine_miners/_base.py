@@ -68,7 +68,7 @@ class InvariantCandidate:
     id: str
     engine: str
     library: str
-    rule_under_test: str
+    invariant_under_test: str
     severity: Severity
     native_type: str
     miner_source: MinerSource
@@ -631,7 +631,7 @@ def candidate_to_dict(candidate: InvariantCandidate) -> dict[str, Any]:
         "id": candidate.id,
         "engine": candidate.engine,
         "library": candidate.library,
-        "rule_under_test": candidate.rule_under_test,
+        "invariant_under_test": candidate.invariant_under_test,
         "severity": candidate.severity,
         "native_type": candidate.native_type,
         "miner_source": {

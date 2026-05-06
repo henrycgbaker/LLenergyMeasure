@@ -1,4 +1,4 @@
-"""AST walker for the transformers library — recall-first rule extraction.
+"""AST miner for the transformers library — recall-first rule extraction.
 
 Walks ``GenerationConfig.validate()`` and the depth-1 helpers it calls
 (``WatermarkingConfig.validate``, ``SynthIDTextWatermarkingConfig.validate``)
@@ -13,7 +13,7 @@ That works for one-axis rules but loses the **shape** of cross-field
 predicates: the introspection layer sees the message
 ``"`num_beams` should be divisible by `num_beam_groups`"`` but cannot tell
 that the underlying check is ``num_beams % num_beam_groups != 0``. This
-walker reads predicate structure directly from the AST.
+miner reads predicate structure directly from the AST.
 
 Recall over precision
 ---------------------
@@ -155,7 +155,7 @@ class ExtractedCondition:
     """An ``ast.expr`` condition translated into a list of FieldPredicates.
 
     ``unparseable_clauses`` records sub-clauses the miner couldn't translate
-    — surfaced into the YAML rule's ``rule_under_test`` so reviewers see what
+    — surfaced into the YAML rule's ``invariant_under_test`` so reviewers see what
     was dropped.
     """
 
@@ -184,7 +184,7 @@ class InvariantCandidate:
     native_type: str
     method: str
     line: int
-    rule_under_test: str
+    invariant_under_test: str
     severity: str
     outcome: str
     emission_channel: str
@@ -849,7 +849,7 @@ def walk_function(
                 _handle_if(stmt, frame)
                 continue
             if isinstance(stmt, ast.For):
-                # Walker depth-1: dive into for-loops and treat their body as
+                # Miner depth-1: dive into for-loops and treat their body as
                 # if scoped under hasattr-style accumulator. The HF
                 # ``for arg in generate_arguments: if hasattr(self, arg): raise``
                 # pattern is what we're catching. We don't accumulate the for's
@@ -989,7 +989,7 @@ def _build_rule(
     invariant_id = _make_rule_id(preds=preds, detected=detected, subject_field=subject_field)
 
     short_name = class_short_name or native_type.rsplit(".", 1)[-1]
-    rule_under_test = _describe_rule(
+    invariant_under_test = _describe_rule(
         preds, detected, frame.unparseable, class_short_name=short_name
     )
 
@@ -1002,7 +1002,7 @@ def _build_rule(
         native_type=native_type,
         method=method_name,
         line=line_at_scan,
-        rule_under_test=rule_under_test,
+        invariant_under_test=invariant_under_test,
         severity=detected.severity,
         outcome=detected.outcome,
         emission_channel=detected.emission_channel,
@@ -1124,7 +1124,7 @@ def _value_satisfying(op: str, rhs: Any) -> Any:
         # outright (e.g. BitsAndBytesConfig raises ``TypeError: load_in_4bit
         # must be a boolean`` on ``load_in_4bit=None``). Use ``False``, which
         # is the documented default for the BNB / GenerationConfig flag-style
-        # kwargs the AST walker actually emits. Validation CI quarantines any
+        # kwargs the AST miner actually emits. Validation CI quarantines any
         # rule where the chosen value still trips the predicate.
         return False
     if op == "type_is":
@@ -1374,7 +1374,7 @@ def _candidate_to_dict(rule: InvariantCandidate, rel_path: str) -> dict[str, Any
         "id": rule.id,
         "engine": ENGINE,
         "library": rule.library,
-        "rule_under_test": rule.rule_under_test,
+        "invariant_under_test": rule.invariant_under_test,
         "severity": rule.severity,
         "native_type": rule.native_type,
         "miner_source": {

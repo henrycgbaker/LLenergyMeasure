@@ -60,7 +60,7 @@ nine BNB rules; that path was lost in the refactor.
 Coverage is restored structurally by :mod:`scripts.engine_miners.transformers_static_miner`,
 which AST-walks ``BitsAndBytesConfig.post_init`` directly — the
 ``if not isinstance(self.X, T): raise`` pattern is exactly what its
-``type_is_not`` predicate path already handles. The AST walker reads
+``type_is_not`` predicate path already handles. The AST miner reads
 ``transformers.utils.quantization_config`` source via
 ``inspect.getsourcefile`` rather than importing the library, which
 keeps the miner fast and dependency-free.
@@ -76,7 +76,7 @@ yet probe BNB is **scope** (the cluster wasn't added in the refactor),
 not CUDA.
 
 If/when BNB probing becomes useful (cross-validation against the AST
-miner, or to catch ``__init__``-time gates the AST walker doesn't
+miner, or to catch ``__init__``-time gates the AST miner doesn't
 currently walk like ``load_in_4bit AND load_in_8bit``), add a
 ``bitsandbytes_quant`` cluster: the ``_Cluster`` pattern below
 generalises directly to ``BitsAndBytesConfig`` — swap the constructor
@@ -140,7 +140,7 @@ class _DormancyTrigger:
     trigger_positive: Any
     trigger_negative: Any
     isolation_kwargs: dict[str, Any]
-    rule_under_test_template: str
+    invariant_under_test_template: str
 
 
 _GREEDY_TRIGGER = _DormancyTrigger(
@@ -149,7 +149,7 @@ _GREEDY_TRIGGER = _DormancyTrigger(
     trigger_positive=False,
     trigger_negative=True,
     isolation_kwargs={"num_beams": 4, "return_dict_in_generate": True},
-    rule_under_test_template=(
+    invariant_under_test_template=(
         "GenerationConfig.validate() records dormant `{field}` when "
         "do_sample=False and `{field}` is set to a non-default value"
     ),
@@ -162,7 +162,7 @@ _BEAM_TRIGGER = _DormancyTrigger(
     trigger_positive=1,
     trigger_negative=4,
     isolation_kwargs={"do_sample": True, "return_dict_in_generate": True},
-    rule_under_test_template=(
+    invariant_under_test_template=(
         "GenerationConfig.validate() records dormant `{field}` when "
         "num_beams=1 and `{field}` is set"
     ),
@@ -175,7 +175,7 @@ _RETURN_DICT_TRIGGER = _DormancyTrigger(
     trigger_positive=False,
     trigger_negative=True,
     isolation_kwargs={"do_sample": True, "num_beams": 4},
-    rule_under_test_template=(
+    invariant_under_test_template=(
         "GenerationConfig.validate() records dormant `{field}` when "
         "return_dict_in_generate=False and `{field}` is set"
     ),
@@ -614,7 +614,7 @@ class _InferredInvariant:
     """Result of predicate inference over a probe-row group."""
 
     id_suffix: str
-    rule_under_test: str
+    invariant_under_test: str
     severity: str  # "error" or "dormant"
     match_fields: dict[str, Any]
     kwargs_positive: dict[str, Any]
@@ -1336,12 +1336,12 @@ def _infer_rules_for_group(
         probe_value = kwargs_positive.get(declared_field)
         message_template = _substitute_declared_value(rep_msg, declared_field, probe_value)
 
-        rule_under_test = _rule_under_test_for(method, declared_field, id_suffix)
+        invariant_under_test = _invariant_under_test_for(method, declared_field, id_suffix)
 
         out.append(
             _InferredInvariant(
                 id_suffix=id_suffix,
-                rule_under_test=rule_under_test,
+                invariant_under_test=invariant_under_test,
                 severity=severity,
                 match_fields=match_fields,
                 kwargs_positive=kwargs_positive,
@@ -1383,8 +1383,8 @@ def _value_label(v: Any) -> str:
     return re.sub(r"\W+", "_", str(v))
 
 
-def _rule_under_test_for(method: str, declared_field: str, id_suffix: str) -> str:
-    """Compose a human-readable rule_under_test."""
+def _invariant_under_test_for(method: str, declared_field: str, id_suffix: str) -> str:
+    """Compose a human-readable invariant_under_test."""
     site = "GenerationConfig.__init__" if method == "construct" else "GenerationConfig.validate"
     return f"{site} flags `{declared_field}` ({id_suffix.replace('_', ' ')})"
 
@@ -1399,7 +1399,7 @@ class _DormantProbe:
     """A validate-time dormancy rule whose trigger is field-self-driven."""
 
     id: str
-    rule_under_test: str
+    invariant_under_test: str
     match_fields: dict[str, Any]
     kwargs_positive: dict[str, Any]
     kwargs_negative: dict[str, Any]
@@ -1409,7 +1409,7 @@ class _DormantProbe:
 _VALIDATE_DORMANT_PROBES: tuple[_DormantProbe, ...] = (
     _DormantProbe(
         id="transformers_negative_pad_token_id",
-        rule_under_test="GenerationConfig.validate() records dormant pad_token_id < 0",
+        invariant_under_test="GenerationConfig.validate() records dormant pad_token_id < 0",
         match_fields={"transformers.sampling.pad_token_id": {"<": 0}},
         kwargs_positive={"pad_token_id": -1},
         kwargs_negative={"pad_token_id": 0},
@@ -1461,7 +1461,7 @@ def _make_dormancy_candidate(
         id=f"{trigger.id_prefix}{field_name}",
         engine="transformers",
         library="transformers",
-        rule_under_test=trigger.rule_under_test_template.format(field=field_name),
+        invariant_under_test=trigger.invariant_under_test_template.format(field=field_name),
         severity="dormant",
         native_type="transformers.GenerationConfig",
         miner_source=MinerSource(
@@ -1520,7 +1520,7 @@ def _make_inferred_candidate(
         id=f"transformers_{cluster.name}_{rule.id_suffix}",
         engine="transformers",
         library="transformers",
-        rule_under_test=rule.rule_under_test,
+        invariant_under_test=rule.invariant_under_test,
         severity=rule.severity,
         native_type="transformers.GenerationConfig",
         miner_source=MinerSource(
@@ -1560,7 +1560,7 @@ def _make_dormant_probe_candidate(
         id=probe.id,
         engine="transformers",
         library="transformers",
-        rule_under_test=probe.rule_under_test,
+        invariant_under_test=probe.invariant_under_test,
         severity="dormant",
         native_type="transformers.GenerationConfig",
         miner_source=MinerSource(
@@ -1738,7 +1738,7 @@ def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
         "id": c.id,
         "engine": c.engine,
         "library": c.library,
-        "rule_under_test": c.rule_under_test,
+        "invariant_under_test": c.invariant_under_test,
         "severity": c.severity,
         "native_type": c.native_type,
         "miner_source": {
@@ -1812,7 +1812,7 @@ def main(argv: list[str] | None = None) -> int:
         "engine_version": version,
         "mined_at": mined_at,
         "extractor": "transformers_dynamic_miner",
-        "rules": [_candidate_to_dict(c) for c in candidates_sorted],
+        "invariants": [_candidate_to_dict(c) for c in candidates_sorted],
     }
     out_path.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100))
 

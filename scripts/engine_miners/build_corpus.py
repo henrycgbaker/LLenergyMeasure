@@ -270,7 +270,7 @@ def _canonicalise_numbers(value: Any) -> Any:
     return value
 
 
-def fingerprint_rule(rule: dict[str, Any]) -> bytes:
+def fingerprint_invariant(rule: dict[str, Any]) -> bytes:
     """Return the canonical-serialised fingerprint bytes for a rule dict.
 
     Two rules with identical fingerprints are the same constraint discovered
@@ -394,11 +394,11 @@ def _union_preserving_order(*lists: list[Any] | tuple[Any, ...] | None) -> list[
 class _MergeResult:
     """Output of merging one fingerprint bucket."""
 
-    rule: dict[str, Any]
-    """The merged rule dict (corpus-shape)."""
+    invariant: dict[str, Any]
+    """The merged invariant dict (corpus-shape)."""
 
     sources: tuple[str, ...]
-    """All ``added_by`` strings from the source rules in this bucket, sorted."""
+    """All ``added_by`` strings from the source invariants in this bucket, sorted."""
 
     conflict_notes: tuple[str, ...]
     """Per-field conflict annotations for reviewer attention."""
@@ -418,7 +418,7 @@ def _merge_bucket(rules: list[dict[str, Any]]) -> _MergeResult:
         rule = dict(rules[0])
         rule.pop("cross_validated_by", None)
         sources_unique = (str(rule.get("added_by", "manual_seed")),)
-        return _MergeResult(rule=rule, sources=sources_unique, conflict_notes=())
+        return _MergeResult(invariant=rule, sources=sources_unique, conflict_notes=())
 
     # Sort by provenance priority so the highest-priority source is the
     # "primary" (its fields win where the precedence table doesn't override).
@@ -520,7 +520,7 @@ def _merge_bucket(rules: list[dict[str, Any]]) -> _MergeResult:
         primary["conflict_note"] = "; ".join(conflicts)
 
     sources = tuple(sorted({str(r.get("added_by", "")) for r in sorted_rules}))
-    return _MergeResult(rule=primary, sources=sources, conflict_notes=tuple(conflicts))
+    return _MergeResult(invariant=primary, sources=sources, conflict_notes=tuple(conflicts))
 
 
 def merge_staging(
@@ -546,13 +546,13 @@ def merge_staging(
         for rule in envelope.get("invariants") or []:
             if not isinstance(rule, dict):
                 continue
-            key = fingerprint_rule(rule)
+            key = fingerprint_invariant(rule)
             buckets.setdefault(key, []).append(rule)
 
     merged_rules: list[dict[str, Any]] = []
     for bucket_rules in buckets.values():
         result = _merge_bucket(bucket_rules)
-        merged_rules.append(result.rule)
+        merged_rules.append(result.invariant)
 
     # Stability: sort by id so re-running on the same staging produces
     # byte-identical canonical YAML.
@@ -640,7 +640,7 @@ def _load_prior_added_at_map(corpus_path: Path) -> dict[bytes, str]:
         added_at = rule.get("added_at")
         if not added_at:
             continue
-        out[fingerprint_rule(rule)] = str(added_at)
+        out[fingerprint_invariant(rule)] = str(added_at)
     return out
 
 
@@ -649,13 +649,13 @@ def _preserve_added_at(rules: list[dict[str, Any]], prior: dict[bytes, str]) -> 
 
     Mutates ``rules`` in place. Rules without a fingerprint match keep
     their current (today's-date) value. Fingerprint excludes ``id`` and
-    ``message_template`` (see :func:`fingerprint_rule`), so renames or
+    ``message_template`` (see :func:`fingerprint_invariant`), so renames or
     template-rendering changes don't reset the discovery date.
     """
     if not prior:
         return
     for rule in rules:
-        prior_added = prior.get(fingerprint_rule(rule))
+        prior_added = prior.get(fingerprint_invariant(rule))
         if prior_added:
             rule["added_at"] = prior_added
 
@@ -828,7 +828,7 @@ def _ordered_rule(rule: dict[str, Any]) -> dict[str, Any]:
         "id",
         "engine",
         "library",
-        "rule_under_test",
+        "invariant_under_test",
         "severity",
         "native_type",
         "miner_source",
@@ -883,9 +883,9 @@ class _BuildResult:
     """
 
     canonical_text: str
-    rules_in_canonical: int
+    invariants_in_canonical: int
     candidates_merged: int
-    rules_quarantined: int = 0
+    invariants_quarantined: int = 0
     quarantined_ids: tuple[str, ...] = ()
     validation_skipped: bool = False
 
@@ -934,9 +934,9 @@ def build_corpus_text_and_outcome(
         text = emit_yaml(candidates, envelope)
         return _BuildResult(
             canonical_text=text,
-            rules_in_canonical=candidates_count,
+            invariants_in_canonical=candidates_count,
             candidates_merged=candidates_count,
-            rules_quarantined=0,
+            invariants_quarantined=0,
             quarantined_ids=(),
             validation_skipped=True,
         )
@@ -948,9 +948,9 @@ def build_corpus_text_and_outcome(
     text = emit_yaml(kept, envelope)
     return _BuildResult(
         canonical_text=text,
-        rules_in_canonical=len(kept),
+        invariants_in_canonical=len(kept),
         candidates_merged=candidates_count,
-        rules_quarantined=len(divergent),
+        invariants_quarantined=len(divergent),
         quarantined_ids=quarantined_ids,
         validation_skipped=False,
     )
@@ -1098,11 +1098,11 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(
             f"[build_corpus] {result.candidates_merged} candidates merged, "
-            f"{result.rules_in_canonical} validated and kept, "
-            f"{result.rules_quarantined} quarantined.",
+            f"{result.invariants_in_canonical} validated and kept, "
+            f"{result.invariants_quarantined} quarantined.",
             file=sys.stderr,
         )
-        if result.rules_quarantined:
+        if result.invariants_quarantined:
             quarantine_path = _staging_dir(
                 corpus_root, args.engine
             ) / _FAILED_VALIDATION_BASENAME.format(engine=args.engine)

@@ -92,7 +92,7 @@ class TestModuleContract:
         """Pin the contract that the miner uses the shared landmark helpers.
 
         If a refactor renames or removes these helpers, the regression should
-        be a loud test failure rather than silent walker breakage.
+        be a loud test failure rather than silent miner breakage.
         """
         # _METHOD_LANDMARKS lookups exercise find_class / find_method directly.
         assert trt_miner._METHOD_LANDMARKS  # at least one landmark
@@ -340,7 +340,7 @@ class TestAstHelpers:
     def test_extract_predicates_handles_cross_field_compare(self) -> None:
         # ``self.max_batch_size > self.build_config.max_batch_size`` —
         # the right-hand side is a nested attribute, not a self.<simple>
-        # — so the walker treats it as opaque (no @ref synthesised).
+        # — so the miner treats it as opaque (no @ref synthesised).
         fragment = "self.max_batch_size > self.build_config.max_batch_size"
         cond = ast.parse(fragment, mode="eval").body
         preds = trt_miner._extract_predicates(cond)

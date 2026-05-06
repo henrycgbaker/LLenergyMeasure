@@ -67,7 +67,7 @@ def _rule_summary(invariant: dict[str, Any]) -> str:
     """One-line summary of a single invariant for the digest list."""
     invariant_id = invariant.get("id", "<unknown>")
     severity = invariant.get("severity", "?")
-    under_test = invariant.get("rule_under_test") or invariant.get("message_template") or ""
+    under_test = invariant.get("invariant_under_test") or invariant.get("message_template") or ""
     under_test = str(under_test).replace("\n", " ").strip()
     if len(under_test) > 100:
         under_test = under_test[:97] + "..."

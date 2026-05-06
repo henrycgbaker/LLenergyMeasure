@@ -9,7 +9,7 @@ This document is the practitioner's guide to adding invariant miner support for 
 ## Before you start
 
 1. Read [miner-pipeline.md](/architecture/miner-pipeline) to understand the static miner / dynamic miner / lift module split.
-2. Read the [corpus format reference](/architecture/validation-rule-corpus) to understand what rules look like.
+2. Read the [corpus format reference](/architecture/validation-invariant-corpus) to understand what rules look like.
 3. Review `scripts/engine_miners/transformers_static_miner.py` and `scripts/engine_miners/transformers_dynamic_miner.py` as the gold standard. The comments in those files contain important design decisions.
 
 ---
@@ -577,7 +577,7 @@ The fail-loud envelope and the YAML diff together cover the failure modes that t
 ## See also
 
 - [miner-pipeline.md](/architecture/miner-pipeline) - pipeline architecture reference
-- [validation-rule-corpus.md](/architecture/validation-rule-corpus) - corpus format
+- [validation-invariant-corpus.md](/architecture/validation-invariant-corpus) - corpus format
 - [parameter-discovery.md](/methodology/parameter-discovery) - runtime validation
 - [architecture-overview.md](/architecture/architecture-overview) - system overview
 - `scripts/engine_miners/transformers_static_miner.py` - gold-standard static miner

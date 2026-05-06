@@ -1,11 +1,11 @@
-"""Load, match, and render validation rules from the YAML corpus.
+"""Load, match, and render validation invariants from the YAML corpus.
 
 The corpus at ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``
 is parsed here into typed :class:`Invariant` entries. Each invariant carries a match
 predicate (operators defined in :func:`evaluate_predicate`) and a message
 template. The generic ``@model_validator`` in ``config/models.py`` calls
-:meth:`Invariant.try_match` on every rule for a given engine and emits
-error/warn/dormant annotations based on the rule's severity.
+:meth:`Invariant.try_match` on every invariant for a given engine and emits
+error/warn/dormant annotations based on the invariant's severity.
 
 Design mirror: this module parallels :mod:`llenergymeasure.config.schema_loader`
 from parameter-discovery — same envelope validation
@@ -13,9 +13,9 @@ from parameter-discovery — same envelope validation
 per-instance caching for test isolation, same lazy load pattern.
 
 Lifecycle pair (per the engine-coupling architecture, 2026-04-28):
-  The proposed YAML carries each rule's declared ``expected_outcome``. The
+  The proposed YAML carries each invariant's declared ``expected_outcome``. The
   ``engine-invariants`` (validation gate) CI pipeline (see
-  ``scripts/validate_invariants.py``) runs every rule through the real library
+  ``scripts/validate_invariants.py``) runs every invariant through the real library
   and emits ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml``
   — this YAML captures observed outcomes. When present, the loader overlays
   the validated observations onto the corpus so downstream consumers see
@@ -40,10 +40,10 @@ refuses partial reads to avoid silently accepting a future schema shape.
 
 
 Severity = Literal["dormant", "warn", "error"]
-"""Severity tier a rule match produces at validation time.
+"""Severity tier a invariant match produces at validation time.
 
 - ``dormant`` — the config still runs, but a field is silently ignored or
-  coerced by the engine. Observable-but-user-invisible; the rule surfaces
+  coerced by the engine. Observable-but-user-invisible; the invariant surfaces
   this.
 - ``warn`` — the engine announces a suboptimal setting at construct or
   runtime but still proceeds.
@@ -57,7 +57,7 @@ Outcome = Literal[
     "error",
     "pass",
 ]
-"""What the engine does when the rule's predicate holds.
+"""What the engine does when the invariant's predicate holds.
 
 - ``dormant_silent`` — the engine silently normalises or ignores
   (observable only via ``extract_observed_params`` post-construction).
@@ -66,7 +66,7 @@ Outcome = Literal[
 - ``warn`` — the engine calls ``warnings.warn(...)`` or equivalent.
 - ``error`` — the engine raises at construct / validate time.
 - ``pass`` — the predicate matched but the engine handles it cleanly;
-  used for positive-reference rules.
+  used for positive-reference invariants.
 """
 
 EmissionChannel = Literal[
@@ -86,7 +86,7 @@ EmissionChannel = Literal[
 - ``none`` — no user-visible emission (silent coercion or raise).
 - ``runtime_exception`` — exception raised at engine construct / runtime.
 
-Canonical rule: ``minor_issues_dict`` alone is an internal signal; if HF
+Canonical invariant: ``minor_issues_dict`` alone is an internal signal; if HF
 composes the dict then emits via ``logger.warning_once``, the
 user-visible channel is ``logger_warning_once``. Corpus authors should
 record what users see, not the internal staging buffer.
@@ -102,24 +102,24 @@ AddedBy = Literal[
     "runtime_warning",
     "observed_collision",
 ]
-"""Provenance of a rule in the corpus.
+"""Provenance of a invariant in the corpus.
 
 Eight discovery paths with distinct trust/verifiability profiles:
 
-- ``static_miner`` — rule extracted by parsing Python source AST
+- ``static_miner`` — invariant extracted by parsing Python source AST
   (used by vLLM / TRT-LLM miners; CI can re-derive on library bump).
-- ``dynamic_miner`` — rule extracted via library-API introspection
+- ``dynamic_miner`` — invariant extracted via library-API introspection
   (transformers' ``GenerationConfig.validate(strict=True)`` returning
   structured ``minor_issues`` dict; CI can re-derive on library bump).
-- ``pydantic_lift`` — rule extracted from a ``pydantic.BaseModel`` (or
+- ``pydantic_lift`` — invariant extracted from a ``pydantic.BaseModel`` (or
   ``pydantic.dataclasses.dataclass``) via ``model_json_schema()`` plus
   ``FieldInfo.metadata`` (annotated-types constraints + Literal allowlists).
-- ``msgspec_lift`` — rule extracted from a ``msgspec.Struct`` via
+- ``msgspec_lift`` — invariant extracted from a ``msgspec.Struct`` via
   ``msgspec.inspect.type_info`` (``Meta(ge=, le=, ...)`` constraints).
-- ``dataclass_lift`` — rule extracted from a ``@dataclasses.dataclass``
+- ``dataclass_lift`` — invariant extracted from a ``@dataclasses.dataclass``
   via ``dataclasses.fields()`` plus ``Literal[...]`` annotation parsing.
 - ``manual_seed`` — hand-written by a maintainer for cases the miners
-  can't reach (e.g. BNB type rules; not auto-regenerable).
+  can't reach (e.g. BNB type invariants; not auto-regenerable).
 - ``runtime_warning`` — proposed by the feedback loop from captured
   ``logger.warning_once`` emissions (needs human generalisation before
   landing).
@@ -169,15 +169,15 @@ class UnknownEmissionChannelError(UnknownEnumValueError):
 
 @dataclass(frozen=True)
 class InvariantMatch:
-    """Result of a rule matching a concrete config.
+    """Result of a invariant matching a concrete config.
 
     ``declared_value`` is the user-set value for the *trigger* field (the first
     non-trivially-predicated field in the match spec). ``effective_value``
-    populates only when the rule's ``expected_outcome`` lists the rule as
+    populates only when the invariant's ``expected_outcome`` lists the invariant as
     ``dormant_silent`` with a ``normalised_fields`` mapping.
     """
 
-    rule: Invariant
+    invariant: Invariant
     declared_value: Any
     effective_value: Any | None = None
     matched_fields: dict[str, Any] = field(default_factory=dict)
@@ -185,7 +185,7 @@ class InvariantMatch:
 
 @dataclass(frozen=True)
 class Invariant:
-    """One validation rule parsed from the corpus.
+    """One validation invariant parsed from the corpus.
 
     Field names mirror the YAML schema documented in
     ``src/llenergymeasure/engines/INVARIANTS_README.md``. Construction goes through
@@ -195,7 +195,7 @@ class Invariant:
     id: str
     engine: str
     library: str
-    rule_under_test: str
+    invariant_under_test: str
     severity: str
     native_type: str
     match_engine: str
@@ -209,11 +209,11 @@ class Invariant:
     added_by: str
     added_at: str
     cross_validated_by: tuple[str, ...] = ()
-    """Other miner sources that produced the same fingerprint as this rule.
+    """Other miner sources that produced the same fingerprint as this invariant.
 
-    Empty for single-source rules. Populated by the corpus merger
+    Empty for single-source invariants. Populated by the corpus merger
     (``scripts/engine_miners/build_corpus.py``) when two or more miners
-    independently emitted a rule with the same ``(engine, severity,
+    independently emitted a invariant with the same ``(engine, severity,
     match.fields)`` fingerprint. ``added_by`` remains the *primary*
     source (used for downstream filtering); ``cross_validated_by`` is
     additional provenance for the reviewer.
@@ -221,7 +221,7 @@ class Invariant:
     Schema choice rationale: keeping ``added_by`` as a single string
     preserves the existing ``AddedBy`` Literal and the corpus-invariants
     test that pins it; ``cross_validated_by`` is a strictly additive field
-    with a sane default for older rules.
+    with a sane default for older invariants.
     """
 
     def try_match(self, config: Any) -> InvariantMatch | None:
@@ -240,7 +240,7 @@ class Invariant:
 
         ``declared_value`` on the returned match is the last field's value —
         corpus convention puts the precondition fields first and the
-        *subject* field last (the field the rule is actually about). Users
+        *subject* field last (the field the invariant is actually about). Users
         see the subject value substituted into message templates.
         """
         matched: dict[str, Any] = {}
@@ -252,13 +252,13 @@ class Invariant:
                 return None
             matched[path] = actual
             last_value = actual
-        return InvariantMatch(rule=self, declared_value=last_value, matched_fields=matched)
+        return InvariantMatch(invariant=self, declared_value=last_value, matched_fields=matched)
 
     def render_message(self, match: InvariantMatch) -> str:
         """Substitute ``{declared_value}`` / ``{effective_value}`` / ``{invariant_id}`` in the template.
 
         Uses ``str.format`` with permissive defaults — templates that reference
-        missing keys fall back to the rule id + raw template rather than
+        missing keys fall back to the invariant id + raw template rather than
         raising at user-facing time.
         """
         if self.message_template is None:
@@ -356,7 +356,7 @@ _OPERATOR_HANDLERS: dict[str, Any] = {
     # Comparison operators: bilaterally None-safe on the *asymmetric* ones.
     # ``a`` may be None when the predicate's field is unset; ``b`` may be
     # None when a ``@field_ref`` resolves against a missing target. Both
-    # cases must yield False (rule does not fire) rather than raise.
+    # cases must yield False (invariant does not fire) rather than raise.
     # ``==`` and ``equals`` stay as plain equality — `None == x` evaluates
     # to `False` for any non-None `x`, so they naturally don't fire on None.
     # ``equals`` / ``not_equal`` are word-form aliases of ``==`` / ``!=``
@@ -370,7 +370,7 @@ _OPERATOR_HANDLERS: dict[str, Any] = {
     "equals": lambda a, b: a == b,
     "not_equal": lambda a, b: a is not None and b is not None and a != b,
     # Membership operators: None-safe on the asymmetric one (``not_in``)
-    # so unset fields don't trip the rule. ``in`` against a missing field
+    # so unset fields don't trip the invariant. ``in`` against a missing field
     # naturally yields False without an explicit guard. Reject non-iterable
     # specs (a string spec would otherwise fall through to substring match —
     # "ab" in "abc" is True, which surprises corpus authors writing
@@ -393,8 +393,8 @@ _OPERATOR_HANDLERS: dict[str, Any] = {
     # (``True``/``False`` would silently pass via ``bool`` < ``int``).
     # ``not_divisible_by`` fires when ``a % b != 0`` — corpus authors
     # write ``num_beams: {not_divisible_by: '@num_beam_groups'}`` to
-    # express "rule fires when num_beams isn't a multiple of
-    # num_beam_groups". A zero divisor yields False (no rule fires).
+    # express "invariant fires when num_beams isn't a multiple of
+    # num_beam_groups". A zero divisor yields False (no invariant fires).
     "divisible_by": lambda a, b: _is_int_pair(a, b) and b != 0 and a % b == 0,
     "not_divisible_by": lambda a, b: _is_int_pair(a, b) and b != 0 and a % b != 0,
 }
@@ -584,7 +584,7 @@ def _parse_invariant(raw: dict[str, Any]) -> Invariant:
         id=str(invariant_id),
         engine=str(raw["engine"]),
         library=str(raw.get("library", raw["engine"])),
-        rule_under_test=str(raw.get("rule_under_test", "")),
+        invariant_under_test=str(raw.get("invariant_under_test", "")),
         severity=severity,
         native_type=str(raw["native_type"]),
         match_engine=str(match.get("engine", raw["engine"])),
@@ -660,7 +660,7 @@ class EngineInvariantsLoader:
 
         When a CI-validated validated YAML envelope exists at the configured
         ``corpus_root``, the loader overlays its observed outcomes onto the
-        corpus's rules — downstream consumers see empirically-confirmed
+        corpus's invariants — downstream consumers see empirically-confirmed
         behaviour rather than the corpus's declared shape alone.
         """
         cached = self._cache.get(engine)
@@ -687,7 +687,7 @@ class EngineInvariantsLoader:
         return parsed
 
     def invalidate(self, engine: str | None = None) -> None:
-        """Clear cached rules (all or for one engine)."""
+        """Clear cached invariants (all or for one engine)."""
         if engine is None:
             self._cache.clear()
         else:
@@ -700,7 +700,7 @@ class EngineInvariantsLoader:
 
 
 def _try_load_validated_yaml(corpus_root: Path, engine: str) -> dict[str, Any] | None:
-    """Return parsed validated-rules YAML for ``engine`` or ``None`` if absent.
+    """Return parsed validated-invariants YAML for ``engine`` or ``None`` if absent.
 
     Reads from ``{corpus_root}/{engine}/invariants.validated.yaml``. Swallows YAML parse
     errors and rejects unsupported envelope versions to avoid breaking
@@ -739,7 +739,7 @@ _OBSERVED_KEY_MAP = {
 def _overlay_validated_observations(
     parsed: EngineInvariants, validated: dict[str, Any]
 ) -> EngineInvariants:
-    """Overlay observed outcomes from a validated YAML envelope onto the corpus rules.
+    """Overlay observed outcomes from a validated YAML envelope onto the corpus invariants.
 
     The corpus carries the declared shape; the validated YAML carries what
     CI observed. When the validated YAML is present, the loader writes
@@ -751,11 +751,13 @@ def _overlay_validated_observations(
     ``scripts/_invariant_validation_common.py``).
     """
     cases = {c["id"]: c for c in validated.get("cases", []) if isinstance(c, dict) and "id" in c}
-    overlaid = tuple(_overlay_invariant(rule, cases.get(rule.id)) for rule in parsed.invariants)
+    overlaid = tuple(
+        _overlay_invariant(invariant, cases.get(invariant.id)) for invariant in parsed.invariants
+    )
     return replace(parsed, invariants=overlaid)
 
 
-def _overlay_invariant(rule: Invariant, observed: dict[str, Any] | None) -> Invariant:
+def _overlay_invariant(invariant: Invariant, observed: dict[str, Any] | None) -> Invariant:
     """Merge observed-* fields from a validated case into an invariant's expected_outcome.
 
     Observed keys are written directly (not via ``setdefault``) so a
@@ -764,10 +766,10 @@ def _overlay_invariant(rule: Invariant, observed: dict[str, Any] | None) -> Inva
     so this never clobbers corpus-authored data.
     """
     if observed is None:
-        return rule
-    merged = dict(rule.expected_outcome)
+        return invariant
+    merged = dict(invariant.expected_outcome)
     for validated_key, expected_key in _OBSERVED_KEY_MAP.items():
         value = observed.get(validated_key)
         if value not in (None, [], {}):
             merged[expected_key] = list(value) if isinstance(value, list) else value
-    return replace(rule, expected_outcome=merged)
+    return replace(invariant, expected_outcome=merged)

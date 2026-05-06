@@ -191,7 +191,7 @@ def _evaluate(actual: Any, spec: Any) -> bool:
 def load_dormant_invariants(corpus: dict[str, Any]) -> list[_ProjectedInvariant]:
     """Return the ``_ProjectedInvariant`` view of every dormant rule in the corpus."""
     rules: list[_ProjectedInvariant] = []
-    for raw in corpus.get("rules", []):
+    for raw in corpus.get("invariants", []):
         if str(raw.get("severity", "")).lower() != "dormant":
             continue
         match = raw.get("match") or {}

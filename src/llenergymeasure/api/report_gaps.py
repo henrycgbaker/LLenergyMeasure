@@ -682,7 +682,7 @@ def render_yaml_fragment(proposal: GapProposal) -> str:
         "id": _proposed_rule_id(proposal),
         "engine": engine_str,
         "library": engine_str,
-        "rule_under_test": (
+        "invariant_under_test": (
             "(runtime-derived) Library emitted normalised template; reviewer to confirm semantic."
         ),
         "severity": proposal.severity,

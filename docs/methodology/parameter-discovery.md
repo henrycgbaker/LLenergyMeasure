@@ -317,7 +317,7 @@ The validated YAML in the installed package was built with a schema major versio
 ## See also
 
 - [architecture-overview.md](/architecture/architecture-overview) - system overview
-- [validation-rule-corpus.md](/architecture/validation-rule-corpus) - corpus YAML format reference
+- [validation-invariant-corpus.md](/architecture/validation-invariant-corpus) - corpus YAML format reference
 - [miner-pipeline.md](/architecture/miner-pipeline) - how the corpus is built
 - [extending-miners.md](/architecture/extending-miners) - adding new rules
 - [engines.md](/architecture/engines) - engine configuration reference

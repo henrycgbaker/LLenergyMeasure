@@ -2,18 +2,18 @@
 
 Five tiers, each with a different dependency on live library behaviour:
 
-* **Tier A — Walker internal invariants.** Determinism and tag hygiene.
-  Runs the walker twice, asserts shape.
+* **Tier A — Miner internal invariants.** Determinism and tag hygiene.
+  Runs the miner twice, asserts shape.
 * **Tier B — Library-observational property tests.** Parametrised over the
-  walker's probe set; checks that every positive probe still fires on the
+  miner's probe set; checks that every positive probe still fires on the
   installed ``transformers`` and every negative probe doesn't. This is the
   test that fails loud when HF drops or adds a rule.
 * **Tier C — Mutation / behavioural e2e.** Corrupt the committed YAML
-  corpus (message, predicate, added_by, presence), re-run the walker,
-  assert the walker output corrects each mutation. Proves the walker is a
+  corpus (message, predicate, added_by, presence), re-run the miner,
+  assert the miner output corrects each mutation. Proves the miner is a
   functioning drift-detection loop, not an inert replayer.
 * **Tier D — Library-round-trip.** For each dormancy rule, derive ground
-  truth at test time by probing the live library, assert the walker's
+  truth at test time by probing the live library, assert the miner's
   emitted template (after ``{declared_value}`` substitution) is a substring
   of the library's actual raise message. No hardcoded library phrasing.
 * **Tier E — Auto-discovery sanity.** Prove the enumerator finds the full
@@ -38,12 +38,12 @@ if str(_PROJECT_ROOT) not in sys.path:
 from scripts.engine_miners import transformers_dynamic_miner as intro  # noqa: E402
 from scripts.engine_miners._ssot import load_miner_pin  # noqa: E402
 
-# Every test in this module needs transformers importable — the walker
+# Every test in this module needs transformers importable — the miner
 # observes the real library. Skip the whole module if it's not installed.
 pytest.importorskip("transformers")
 
 # Pin-check: these tests compare the committed corpus (generated against
-# the walker's version envelope) to live-library output. If the test env's
+# the miner's version envelope) to live-library output. If the test env's
 # transformers is outside the SSOT miner pin, live-library output drifts
 # from the corpus and every Tier B / D / E test fails noisily for a reason
 # that has nothing to do with the PR. Skip the module up-front so the
@@ -72,8 +72,8 @@ def committed_corpus() -> dict[str, Any]:
 
 
 @pytest.fixture(scope="module")
-def walker_candidates() -> list:
-    """Return fresh walker output once per test module (walking is expensive)."""
+def miner_candidates() -> list:
+    """Return fresh miner output once per test module (walking is expensive)."""
     return intro.walk_generation_config_rules(
         abs_source_path="/nonexistent",
         rel_source_path="transformers/generation/configuration_utils.py",
@@ -88,11 +88,11 @@ def enumerated_dormancy() -> list:
 
 
 # ---------------------------------------------------------------------------
-# Tier A — Walker internal invariants
+# Tier A — Miner internal invariants
 # ---------------------------------------------------------------------------
 
 
-def test_walker_is_deterministic() -> None:
+def test_miner_is_deterministic() -> None:
     a = intro.walk_generation_config_rules(
         abs_source_path="/nonexistent",
         rel_source_path="stub.py",
@@ -110,14 +110,14 @@ def test_walker_is_deterministic() -> None:
     ]
 
 
-def test_every_introspection_rule_is_tagged_introspection(walker_candidates) -> None:
-    # No rule from this walker should ever leak through as manual_seed
-    # — that tag belongs to BNB rules only, which live in the parent walker.
-    tags = {c.added_by for c in walker_candidates}
+def test_every_introspection_rule_is_tagged_introspection(miner_candidates) -> None:
+    # No rule from this miner should ever leak through as manual_seed
+    # — that tag belongs to BNB rules only, which live in the parent miner.
+    tags = {c.added_by for c in miner_candidates}
     assert tags == {"dynamic_miner"}
 
 
-def test_walker_emits_expected_severity_partition(walker_candidates) -> None:
+def test_miner_emits_expected_severity_partition(miner_candidates) -> None:
     """Coverage-by-class invariant rather than pinned counts.
 
     Pre-refactor (single-pass, hardcoded probes) emitted exact counts
@@ -127,15 +127,15 @@ def test_walker_emits_expected_severity_partition(walker_candidates) -> None:
     both severity classes must be non-empty, and the partition must
     contain only known severities.
     """
-    severities = {c.severity for c in walker_candidates}
+    severities = {c.severity for c in miner_candidates}
     assert "dormant" in severities, "introspection should still discover dormancy rules"
     assert "error" in severities, "introspection should still discover error rules"
     assert severities <= {"dormant", "error", "warn"}, (
-        f"unexpected severity in walker output: {severities - {'dormant', 'error', 'warn'}}"
+        f"unexpected severity in miner output: {severities - {'dormant', 'error', 'warn'}}"
     )
 
 
-def test_mode_gated_dormancy_templates_carry_placeholder(walker_candidates) -> None:
+def test_mode_gated_dormancy_templates_carry_placeholder(miner_candidates) -> None:
     """Each mode-gated dormancy rule's template must have a ``{declared_value}`` slot.
 
     Regression guard: the strict substitution anchors on ``\\`{field}\\` is
@@ -147,7 +147,7 @@ def test_mode_gated_dormancy_templates_carry_placeholder(walker_candidates) -> N
         intro._GREEDY_TRIGGER.id_prefix,
         intro._BEAM_TRIGGER.id_prefix,
     }
-    for rule in walker_candidates:
+    for rule in miner_candidates:
         if not any(rule.id.startswith(p) for p in mode_prefixes):
             continue
         assert "{declared_value}" in (rule.message_template or ""), (
@@ -156,7 +156,7 @@ def test_mode_gated_dormancy_templates_carry_placeholder(walker_candidates) -> N
         )
 
 
-def test_dormancy_rule_match_fields_align_with_id_prefix(walker_candidates) -> None:
+def test_dormancy_rule_match_fields_align_with_id_prefix(miner_candidates) -> None:
     """Every dormancy rule's match_fields reflect the trigger its ID prefix advertises.
 
     Catches the "greedy/beam prefix swap" regression: if someone renames
@@ -165,7 +165,7 @@ def test_dormancy_rule_match_fields_align_with_id_prefix(walker_candidates) -> N
     predicate actually includes the ``trigger_field = trigger_positive``
     pair its prefix claims.
     """
-    for rule in walker_candidates:
+    for rule in miner_candidates:
         for trigger in intro.TRIGGERS:
             if rule.id.startswith(trigger.id_prefix):
                 expected_key = f"transformers.sampling.{trigger.trigger_field}"
@@ -272,34 +272,34 @@ def test_negative_trigger_probe_does_not_fire(trigger, enumerated_dormancy) -> N
 
 def _pick_introspection_rule(corpus: dict[str, Any]) -> dict[str, Any]:
     """Return any introspection-tagged rule from the corpus; prefer temperature."""
-    for rule in corpus["rules"]:
+    for rule in corpus["invariants"]:
         if rule["id"] == "transformers_greedy_strips_temperature":
             return rule
-    for rule in corpus["rules"]:
+    for rule in corpus["invariants"]:
         if rule.get("added_by") == "dynamic_miner":
             return rule
     raise AssertionError("Corpus has no introspection-tagged rule.")
 
 
-def _find_walker_invariant(walker_candidates, invariant_id: str):
-    for c in walker_candidates:
+def _find_miner_invariant(miner_candidates, invariant_id: str):
+    for c in miner_candidates:
         if c.id == invariant_id:
             return c
     raise AssertionError(f"Miner did not emit {invariant_id!r}.")
 
 
-def test_walker_corrects_wrong_message_template(committed_corpus, walker_candidates) -> None:
-    """A corrupted message_template in the corpus is not what the walker emits."""
+def test_miner_corrects_wrong_message_template(committed_corpus, miner_candidates) -> None:
+    """A corrupted message_template in the corpus is not what the miner emits."""
     mutant = copy.deepcopy(committed_corpus)
     target = _pick_introspection_rule(mutant)
     target["message_template"] = "BOGUS — library does not say this"
 
-    walker_rule = _find_walker_rule(walker_candidates, target["id"])
-    assert walker_rule.message_template != target["message_template"]
+    miner_invariant = _find_miner_invariant(miner_candidates, target["id"])
+    assert miner_invariant.message_template != target["message_template"]
 
 
-def test_walker_corrects_wrong_predicate_default(committed_corpus, walker_candidates) -> None:
-    """A corrupted ``not_equal`` default in the corpus is not what the walker emits."""
+def test_miner_corrects_wrong_predicate_default(committed_corpus, miner_candidates) -> None:
+    """A corrupted ``not_equal`` default in the corpus is not what the miner emits."""
     mutant = copy.deepcopy(committed_corpus)
     target = _pick_introspection_rule(mutant)
     # Find any ``not_equal`` key under ``match.fields.*`` and corrupt it.
@@ -313,38 +313,38 @@ def test_walker_corrects_wrong_predicate_default(committed_corpus, walker_candid
     if not found:
         pytest.skip("Picked rule has no not_equal predicate to corrupt.")
 
-    walker_rule = _find_walker_rule(walker_candidates, target["id"])
-    assert walker_rule.match_fields[target_path].get("not_equal") != "__CORRUPTED__"
+    miner_invariant = _find_miner_invariant(miner_candidates, target["id"])
+    assert miner_invariant.match_fields[target_path].get("not_equal") != "__CORRUPTED__"
 
 
 @pytest.mark.skip(
     reason=(
-        "Pre-refactor invariant — walker emitted a stable id for every committed "
+        "Pre-refactor invariant — miner emitted a stable id for every committed "
         "rule. Combinatorial probing now derives ids from observed patterns; the "
-        "load-bearing question 'do the corpus and walker agree' lives at the "
+        "load-bearing question 'do the corpus and miner agree' lives at the "
         "merger + validation-CI level (lands in follow-up PRs). Re-enable or remove "
         "once the canonical corpus is regenerated by build_corpus.py."
     )
 )
-def test_walker_flags_missing_rule(committed_corpus, walker_candidates) -> None:
-    """A rule removed from a corpus copy is still present in walker output."""
+def test_miner_flags_missing_invariant(committed_corpus, miner_candidates) -> None:
+    """A rule removed from a corpus copy is still present in miner output."""
     mutant = copy.deepcopy(committed_corpus)
-    introspection_rules = [r for r in mutant["rules"] if r.get("added_by") == "dynamic_miner"]
+    introspection_rules = [r for r in mutant["invariants"] if r.get("added_by") == "dynamic_miner"]
     removed = introspection_rules[0]
-    mutant["rules"] = [r for r in mutant["rules"] if r["id"] != removed["id"]]
+    mutant["invariants"] = [r for r in mutant["invariants"] if r["id"] != removed["id"]]
 
-    walker_ids = {c.id for c in walker_candidates}
-    assert removed["id"] in walker_ids
+    miner_ids = {c.id for c in miner_candidates}
+    assert removed["id"] in miner_ids
 
 
-def test_walker_rejects_drift_in_added_by(committed_corpus, walker_candidates) -> None:
-    """Flipping ``added_by`` to ``manual_seed`` on a corpus copy doesn't change walker tag."""
+def test_miner_rejects_drift_in_added_by(committed_corpus, miner_candidates) -> None:
+    """Flipping ``added_by`` to ``manual_seed`` on a corpus copy doesn't change miner tag."""
     mutant = copy.deepcopy(committed_corpus)
     target = _pick_introspection_rule(mutant)
     target["added_by"] = "manual_seed"
 
-    walker_rule = _find_walker_rule(walker_candidates, target["id"])
-    assert walker_rule.added_by == "dynamic_miner"
+    miner_invariant = _find_miner_invariant(miner_candidates, target["id"])
+    assert miner_invariant.added_by == "dynamic_miner"
 
 
 # ---------------------------------------------------------------------------
@@ -362,10 +362,10 @@ def test_walker_rejects_drift_in_added_by(committed_corpus, walker_candidates) -
         "rules empirically."
     )
 )
-def test_walker_dormancy_template_is_substring_of_live_library_message(
-    walker_candidates,
+def test_miner_dormancy_template_is_substring_of_live_library_message(
+    miner_candidates,
 ) -> None:
-    """For every dormancy rule the walker emits, rendering its template with
+    """For every dormancy rule the miner emits, rendering its template with
     the probed value must be a substring of what the library actually says
     when the same kwargs run through ``validate(strict=True)``.
 
@@ -374,7 +374,7 @@ def test_walker_dormancy_template_is_substring_of_live_library_message(
     """
     from transformers import GenerationConfig
 
-    for rule in walker_candidates:
+    for rule in miner_candidates:
         if rule.severity != "dormant":
             continue
         isolation = _isolation_for_rule(rule)
@@ -395,7 +395,7 @@ def test_walker_dormancy_template_is_substring_of_live_library_message(
 
 
 def test_dormancy_template_substitution_uses_declared_value_not_frozen(
-    walker_candidates,
+    miner_candidates,
 ) -> None:
     """Rendering a mode-gated dormancy template with a NON-probe value must
     appear in the rendered output — and the probe value must NOT.
@@ -410,7 +410,7 @@ def test_dormancy_template_substitution_uses_declared_value_not_frozen(
         intro._BEAM_TRIGGER.id_prefix,
     }
     sentinel = "__USER_VALUE_MARKER__"
-    for rule in walker_candidates:
+    for rule in miner_candidates:
         if not any(rule.id.startswith(p) for p in mode_prefixes):
             continue
         rendered = (rule.message_template or "").format(declared_value=sentinel)
@@ -463,12 +463,12 @@ def test_autodiscovered_dormancy_fields_match_committed_corpus(
 
     If auto-discovery finds strictly more fields than the corpus, a corpus
     refresh PR is needed. If it finds strictly fewer, the library has
-    dropped rules and the walker pin should move. Either way, this test
+    dropped rules and the miner pin should move. Either way, this test
     fails and a maintainer reviews.
     """
     discovered = intro.discover_dormancy_fields()
     corpus_partition: dict[str, set[str]] = {t.id_prefix: set() for t in intro.TRIGGERS}
-    for rule in committed_corpus["rules"]:
+    for rule in committed_corpus["invariants"]:
         for trigger in intro.TRIGGERS:
             if rule["id"].startswith(trigger.id_prefix):
                 corpus_partition[trigger.id_prefix].add(rule["id"].removeprefix(trigger.id_prefix))

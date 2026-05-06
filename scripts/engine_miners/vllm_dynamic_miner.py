@@ -500,7 +500,7 @@ def _infer_for_group(
             _make_cluster_rule(
                 cluster=cluster,
                 id_suffix=f"{a}_{_OP_NAMES[op]}_{b}",
-                rule_under_test=f"{cluster.name}: error when {a} {op} {b}",
+                invariant_under_test=f"{cluster.name}: error when {a} {op} {b}",
                 match_fields={f"{cluster.namespace}.{a}": {op: f"@{b}"}},
                 kwargs_positive=group_rows[0].kwargs,
                 kwargs_negative=ok_rows[0].kwargs,
@@ -518,7 +518,7 @@ def _infer_for_group(
             _make_cluster_rule(
                 cluster=cluster,
                 id_suffix=f"{a}_{_OP_NAMES[op]}_{_value_label(threshold)}",
-                rule_under_test=f"{cluster.name}: error when {a} {op} {threshold}",
+                invariant_under_test=f"{cluster.name}: error when {a} {op} {threshold}",
                 match_fields={f"{cluster.namespace}.{a}": {op: threshold}},
                 kwargs_positive=group_rows[0].kwargs,
                 kwargs_negative=ok_rows[0].kwargs,
@@ -535,7 +535,7 @@ def _make_cluster_rule(
     *,
     cluster: _Cluster,
     id_suffix: str,
-    rule_under_test: str,
+    invariant_under_test: str,
     match_fields: dict[str, Any],
     kwargs_positive: dict[str, Any],
     kwargs_negative: dict[str, Any],
@@ -548,7 +548,7 @@ def _make_cluster_rule(
         id=rid,
         engine=ENGINE,
         library=LIBRARY,
-        rule_under_test=rule_under_test,
+        invariant_under_test=invariant_under_test,
         severity="error",
         native_type=cluster.native_type,
         miner_source=MinerSource(
@@ -808,7 +808,7 @@ def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
         "id": c.id,
         "engine": c.engine,
         "library": c.library,
-        "rule_under_test": c.rule_under_test,
+        "invariant_under_test": c.invariant_under_test,
         "severity": c.severity,
         "native_type": c.native_type,
         "miner_source": {

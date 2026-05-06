@@ -3,7 +3,7 @@
 The adapter composes hardware errors (from ``EnginePlugin.check_hardware``)
 with dormancy observations (from ``ExperimentConfig._apply_invariants``)
 into a :class:`ConfigProbe`. M1 leaves effective-params placeholders empty;
-they come to life when the M2 introspection walker supplies the surface.
+they come to life when the M2 introspection miner supplies the surface.
 """
 
 from __future__ import annotations
@@ -121,7 +121,7 @@ def test_missing_dormant_observations_yields_empty(monkeypatch):
 def test_effective_params_empty_in_m1():
     """observed_engine_params and observed_sampling_params are placeholders in M1.
 
-    Delete/flip when the M2 introspection walker supplies the effective-kwargs surface.
+    Delete/flip when the M2 introspection miner supplies the effective-kwargs surface.
     """
     config = make_config(model="test-model", engine="transformers")
     probe = build_config_probe(config)

@@ -50,7 +50,7 @@ _ISO_TIMESTAMP_RE = re.compile(
 # strip them before path normalisation so the path itself doesn't swallow them.
 _LINE_NUMBER_RE = re.compile(r"(?<=\.py):\d+")
 # Absolute and relative path-like tokens. Kept intentionally narrow — the
-# walker emits short human messages, not shell output.
+# miner emits short human messages, not shell output.
 _PATH_RE = re.compile(r"(?:(?<=\s)|^)(?:/[^\s:()\[\]]+|[A-Za-z]:\\[^\s:]+)")
 # Hex digests / fingerprints (sha256: prefixes and loose 16+ hex runs).
 _HEX_RE = re.compile(r"\b(?:sha256:)?[0-9a-fA-F]{16,}\b")

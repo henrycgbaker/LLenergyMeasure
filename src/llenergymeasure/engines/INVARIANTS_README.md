@@ -57,7 +57,7 @@ Every entry under `invariants:` must populate the following fields.
 - id: transformers_greedy_strips_temperature
   engine: transformers
   library: transformers
-  rule_under_test: >
+  invariant_under_test: >
     GenerationConfig.validate() records dormant `temperature` when
     do_sample=False and `temperature` is set to a non-default value
   severity: dormant                      # dormant | warn | error

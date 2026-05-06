@@ -116,6 +116,6 @@ These identifiers look similar but are NOT part of the engine-invariants subsyst
 
 ## See also
 
-- [validation-rule-corpus.md](/architecture/validation-rule-corpus) — corpus YAML format specification
+- [validation-invariant-corpus.md](/architecture/validation-invariant-corpus) — corpus YAML format specification
 - [miner-pipeline.md](/architecture/miner-pipeline) — pipeline architecture
 - [extending-miners.md](/architecture/extending-miners) — adding a new engine

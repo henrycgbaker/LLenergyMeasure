@@ -612,7 +612,7 @@ def _negative_confirms(neg: CaptureBuffers, silent_normalisations: dict[str, Any
 
     Delegates to :func:`classify_outcome` so the definition of "fired"
     lives in one place: anything other than ``no_op`` counts as firing,
-    which would be a dead walker entry.
+    which would be a dead miner entry.
     """
     return classify_outcome(neg, silent_normalisations) == "no_op"
 

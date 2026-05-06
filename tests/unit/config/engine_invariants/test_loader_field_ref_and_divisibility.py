@@ -54,7 +54,7 @@ def _make_rule(*, match_fields: dict[str, Any]) -> Invariant:
         id="rule_x",
         engine="transformers",
         library="transformers",
-        rule_under_test="test",
+        invariant_under_test="test",
         severity="error",
         native_type="transformers.GenerationConfig",
         match_engine="transformers",

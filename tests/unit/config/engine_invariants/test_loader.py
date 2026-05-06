@@ -11,14 +11,14 @@ from llenergymeasure.config.engine_invariants import (
     VALID_EMISSION_CHANNEL,
     VALID_OUTCOME,
     VALID_SEVERITY,
+    EngineInvariants,
+    EngineInvariantsLoader,
     UnknownAddedByError,
     UnknownEmissionChannelError,
     UnknownEnumValueError,
     UnknownOutcomeError,
     UnknownSeverityError,
     UnsupportedSchemaVersionError,
-    EngineInvariants,
-    EngineInvariantsLoader,
 )
 
 _CORPUS_MINIMAL = """\
@@ -29,7 +29,7 @@ invariants:
   - id: transformers_test_rule
     engine: transformers
     library: transformers
-    rule_under_test: "Test rule"
+    invariant_under_test: "Test rule"
     severity: dormant
     native_type: transformers.GenerationConfig
     miner_source:

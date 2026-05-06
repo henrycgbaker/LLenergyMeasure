@@ -34,7 +34,7 @@ def _mk_rule(
         id=rule_id,
         engine="transformers",
         library="transformers",
-        rule_under_test="",
+        invariant_under_test="",
         severity=severity,
         native_type="transformers.GenerationConfig",
         match_engine="transformers",

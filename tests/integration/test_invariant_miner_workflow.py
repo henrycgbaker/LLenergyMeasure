@@ -39,7 +39,7 @@ invariants:
   - id: synthetic_error
     engine: transformers
     library: transformers
-    rule_under_test: Synthetic raises on bad input
+    invariant_under_test: Synthetic raises on bad input
     severity: error
     native_type: fixture.raises
     miner_source: {path: fixture.py, method: __init__, line_at_scan: 0}
@@ -60,7 +60,7 @@ invariants:
   - id: synthetic_dormant
     engine: transformers
     library: transformers
-    rule_under_test: Synthetic silent strip
+    invariant_under_test: Synthetic silent strip
     severity: dormant
     native_type: fixture.normalises
     miner_source: {path: fixture.py, method: __init__, line_at_scan: 0}

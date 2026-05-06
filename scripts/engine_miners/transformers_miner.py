@@ -187,7 +187,7 @@ def _make_bnb_type_rule(
         id=f"transformers_bnb_{field}_type",
         engine="transformers",
         library="bitsandbytes",
-        rule_under_test=(
+        invariant_under_test=(
             f"BitsAndBytesConfig.post_init() rejects non-{type_label} values for `{field}`"
         ),
         severity="error",
@@ -231,7 +231,7 @@ def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
         "id": c.id,
         "engine": c.engine,
         "library": c.library,
-        "rule_under_test": c.rule_under_test,
+        "invariant_under_test": c.invariant_under_test,
         "severity": c.severity,
         "native_type": c.native_type,
         "miner_source": asdict(c.miner_source),

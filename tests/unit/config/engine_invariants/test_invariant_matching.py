@@ -48,7 +48,7 @@ def _make_rule(
         id=id,
         engine="transformers",
         library="transformers",
-        rule_under_test="test",
+        invariant_under_test="test",
         severity=severity,
         native_type="transformers.GenerationConfig",
         match_engine="transformers",

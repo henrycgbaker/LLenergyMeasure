@@ -839,13 +839,13 @@ def _build_rule(
 
     invariant_id = _make_rule_id(target=target, preds=effective_preds, detected=detected)
 
-    rule_under_test = _describe_rule(target=target, preds=effective_preds, detected=detected)
+    invariant_under_test = _describe_rule(target=target, preds=effective_preds, detected=detected)
 
     return InvariantCandidate(
         id=invariant_id,
         engine=ENGINE,
         library=LIBRARY,
-        rule_under_test=rule_under_test,
+        invariant_under_test=invariant_under_test,
         severity=detected.severity,  # type: ignore[arg-type]
         native_type=target.native_type,
         miner_source=MinerSource(
@@ -1068,7 +1068,7 @@ def _check_landmarks() -> tuple[str, dict[str, str]]:
         # AST find_class / find_method on the parsed source — fail-loud if
         # the symbol is on the runtime class but not in the source AST
         # (e.g. dynamically attached method). The runtime ``hasattr``
-        # check above is necessary but not sufficient; the AST walker
+        # check above is necessary but not sufficient; the AST miner
         # cannot see methods that aren't in the parsed source.
         abs_path = inspect.getsourcefile(module)
         if abs_path is None:
@@ -1159,7 +1159,7 @@ def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
         "id": c.id,
         "engine": c.engine,
         "library": c.library,
-        "rule_under_test": c.rule_under_test,
+        "invariant_under_test": c.invariant_under_test,
         "severity": c.severity,
         "native_type": c.native_type,
         "miner_source": {

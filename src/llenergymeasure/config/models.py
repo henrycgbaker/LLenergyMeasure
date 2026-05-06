@@ -489,7 +489,7 @@ class ExperimentConfig(BaseModel):
         """FlashAttention (FA2/FA3) requires float16 or bfloat16 dtype (not float32).
 
         Retained as a hand-written validator until a ``PreTrainedModel``
-        introspection walker can derive this rule programmatically (the check
+        introspection miner can derive this rule programmatically (the check
         lives in ``_autoset_attn_implementation``, not in
         ``GenerationConfig.validate``). See memory note
         ``project_phase_50_pipeline_replan.md``.

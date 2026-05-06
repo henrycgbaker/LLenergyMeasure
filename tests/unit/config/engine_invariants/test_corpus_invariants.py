@@ -107,7 +107,7 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
     # Cross-field invariants — at least one rule must AND-combine the listed
     # fields. Catches regressions where the extractor lost the cross-field
     # predicate machinery. PR 5 added the (num_beam_groups,
-    # diversity_penalty) pair (the AST walker's beam-search divisibility
+    # diversity_penalty) pair (the AST miner's beam-search divisibility
     # invariant) and the (num_beams, num_return_sequences) pair (the
     # @field_ref-tightened greedy-rejects predicate).
     cross_field_pairs = (
@@ -131,7 +131,7 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
     # manual entry indicates a hand-edit of the canonical YAML that bypasses
     # the build_corpus.py + validation gate and would silently drift
     # on the next library bump. This PR's regeneration drops the legacy
-    # hand-curated BNB type-check entries; the AST walker now emits them
+    # hand-curated BNB type-check entries; the AST miner now emits them
     # under ``added_by: static_miner``.
     manual = [rule.id for rule in rules if rule.added_by == "manual_seed"]
     assert not manual, (

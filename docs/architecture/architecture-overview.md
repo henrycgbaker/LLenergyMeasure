@@ -240,7 +240,7 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 | **Validated YAML** | The CI-observed version of the corpus that ships with the package |
 | **Validation-CI gate** | The step that replays every invariant against the live library; divergences fail CI |
 | **Fixpoint contract** | `_fixpoint_test.py` - asserts dormant invariants converge to a stable state under repeated application |
-| **AddedBy** | Provenance field on each invariant: `static_miner`, `dynamic_miner`, `pydantic_lift`, `msgspec_lift`, `dataclass_lift`, `manual_seed`, `runtime_warning`, `observed_collision` (full reference in [validation-rule-corpus.md](/architecture/validation-rule-corpus#added_by)) |
+| **AddedBy** | Provenance field on each invariant: `static_miner`, `dynamic_miner`, `pydantic_lift`, `msgspec_lift`, `dataclass_lift`, `manual_seed`, `runtime_warning`, `observed_collision` (full reference in [validation-invariant-corpus.md](/architecture/validation-invariant-corpus#added_by)) |
 | **MinerSource** | The `{path, method, line_at_scan}` record pointing back to the library source line that produced an invariant |
 | **Loader grammar** | The predicate DSL used in `match.fields`: `in`, `not_in`, `@field_ref`, `not_divisible_by`, `type_is`, etc. |
 
@@ -291,7 +291,7 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 
 - [miner-pipeline.md](/architecture/miner-pipeline) - invariant miner deep-dive
 - [parameter-discovery.md](/methodology/parameter-discovery) - runtime validation pipeline
-- [validation-rule-corpus.md](/architecture/validation-rule-corpus) - corpus YAML format reference
+- [validation-invariant-corpus.md](/architecture/validation-invariant-corpus) - corpus YAML format reference
 - [extending-miners.md](/architecture/extending-miners) - how to add a new engine miner
 - [research-context.md](/methodology/research-context) - academic positioning
 - [engines.md](/architecture/engines) - engine configuration reference

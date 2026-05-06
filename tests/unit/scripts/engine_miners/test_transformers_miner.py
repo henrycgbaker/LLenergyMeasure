@@ -1,7 +1,7 @@
 """Tests for :mod:`scripts.engine_miners.transformers`.
 
-The walker depends on transformers being importable. Tests that actually
-invoke the walker use ``pytest.importorskip("transformers")`` so the suite
+The miner depends on transformers being importable. Tests that actually
+invoke the miner use ``pytest.importorskip("transformers")`` so the suite
 passes on environments without transformers installed. Pure-serialisation
 tests (YAML emission, envelope shape) construct InvariantCandidates directly and
 don't require transformers.
@@ -52,7 +52,7 @@ def _sample_candidate() -> InvariantCandidate:
         id="transformers_test_sample",
         engine="transformers",
         library="transformers",
-        rule_under_test="Sample rule",
+        invariant_under_test="Sample rule",
         severity="dormant",
         native_type="transformers.GenerationConfig",
         miner_source=MinerSource(
@@ -90,7 +90,7 @@ def test_relative_source_path_falls_back_to_basename() -> None:
 
 def test_emit_yaml_deterministic_ordering() -> None:
     # Two candidates in reverse order should serialise the same regardless of
-    # input order — the walker sorts by (method, id).
+    # input order — the miner sorts by (method, id).
     candidates = [_sample_candidate()]
     envelope = {
         "schema_version": "1.0.0",
@@ -116,8 +116,8 @@ def test_emit_yaml_roundtrip_preserves_fields() -> None:
     text = tf_walker.emit_yaml(candidates, envelope)
     doc = yaml.safe_load(text)
     assert doc["schema_version"] == "1.0.0"
-    assert len(doc["rules"]) == 1
-    rule = doc["rules"][0]
+    assert len(doc["invariants"]) == 1
+    rule = doc["invariants"][0]
     assert rule["id"] == "transformers_test_sample"
     assert rule["match"]["fields"] == {"transformers.sampling.temperature": 0.5}
     assert "path" in rule["miner_source"]
@@ -139,19 +139,19 @@ def test_walker_landmark_check_passes_on_installed_transformers() -> None:
 def test_walk_extracts_expected_rule_count() -> None:
     """Coverage-by-shape rather than exact count.
 
-    The pre-refactor introspection walker used a hardcoded probe list
+    The pre-refactor introspection miner used a hardcoded probe list
     that emitted exactly 22 rules (16 dormant + 6 error). With BNB
-    rules from the parallel walker, total was 31. The combinatorial
+    rules from the parallel miner, total was 31. The combinatorial
     refactor (PR 3 of phase-50 #391) shifts the count as the matrix
     discovers new patterns; pinning exact numbers re-encodes
     implementation detail and breaks every time the cluster sweep
-    surfaces a new edge case. Pin SHAPE: walker still produces a
+    surfaces a new edge case. Pin SHAPE: miner still produces a
     non-trivial number of rules with valid envelope.
     """
     pytest.importorskip("transformers")
     candidates, envelope = tf_walker.walk()
     assert len(candidates) >= 20, (
-        f"walker produced only {len(candidates)} rules — extractor regression?"
+        f"miner produced only {len(candidates)} rules — extractor regression?"
     )
     assert envelope["engine"] == "transformers"
     assert envelope["schema_version"] == "1.0.0"

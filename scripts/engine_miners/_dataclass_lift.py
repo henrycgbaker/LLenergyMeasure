@@ -149,7 +149,7 @@ def _build_literal(
         id=f"{library}_{type_name.lower()}_{field_name}_in_{len(values)}_values",
         engine=library,
         library=library,
-        rule_under_test=(f"{type_name}.{field_name} must be one of {list(values)!r}"),
+        invariant_under_test=(f"{type_name}.{field_name} must be one of {list(values)!r}"),
         severity="error",
         native_type=f"{library}.{type_name}",
         miner_source=MinerSource(path=source_path, method=method, line_at_scan=line),
