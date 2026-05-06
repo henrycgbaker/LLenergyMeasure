@@ -3,7 +3,7 @@
 
 The vendor step is the **observe half** of the "observe, don't re-encode"
 design in :doc:`.product/designs/config-deduplication-dormancy/runtime-config-validation.md`.
-The YAML corpus at ``configs/engine_invariants/{engine}.proposed.yaml`` declares each
+The YAML corpus at ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`` declares each
 rule's ``expected_outcome``; this script executes the rule through the
 library and records what *actually* happened. Divergence between declared and
 observed fails CI.
@@ -12,8 +12,8 @@ Usage (inside the engine's Docker container)::
 
     python scripts/vendor_rules.py \\
         --engine transformers \\
-        --corpus configs/engine_invariants/transformers.proposed.yaml \\
-        --out configs/engine_invariants/transformers.vendored.yaml
+        --corpus src/llenergymeasure/engines/transformers/invariants.proposed.yaml \\
+        --out src/llenergymeasure/engines/transformers/invariants.vendored.yaml
 
 Exit codes:
 
@@ -22,7 +22,7 @@ Exit codes:
     2 - hard error (corpus malformed, engine not importable, etc.)
 
 The envelope structure mirrors the parameter-discovery envelope in
-``src/llenergymeasure/config/discovered_schemas/*.json`` (same field shape,
+``src/llenergymeasure/engines/{engine}/schema.discovered.json`` (same field shape,
 YAML serialisation here so the proposed and vendored corpora share a single
 human-readable format).
 """

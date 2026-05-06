@@ -1,6 +1,6 @@
 # Validation rules corpus
 
-This directory is the SSOT for per-engine configuration validation rules — the
+This directory contains the SSOT for per-engine configuration validation rules — the
 data that tells users "this combination will error", "this field will be
 silently ignored", or "this will trigger a library warning". Rules live as
 **data**, not code; a single generic Pydantic validator
@@ -12,20 +12,15 @@ Design doc: [`.product/designs/config-deduplication-dormancy/runtime-config-vali
 
 ## Layout
 
-Each engine ships a lifecycle pair of files:
+Each engine is a sub-package containing its validation rules and discovered schema:
 
-- `transformers.proposed.yaml` + `transformers.vendored.yaml` — transformers + BitsAndBytesConfig rules
-- `vllm.proposed.yaml` + `vllm.vendored.yaml` — vLLM rules
-- `tensorrt.proposed.yaml` + `tensorrt.vendored.yaml` — TensorRT-LLM rules
-- `_staging/` — gitignored scratch directory for the corpus builder's
-  intermediate artefacts (merged candidates, per-engine vendor envelopes from
-  `--skip-validation` runs); never committed.
+- `{engine}/invariants.proposed.yaml` — post-mine corpus from `scripts/engine_miners/{engine}_miner.py`
+- `{engine}/invariants.vendored.yaml` — post-replay envelope from `scripts/validate_invariants.py`
+- `{engine}/schema.discovered.json` — discovered parameters from `scripts/refresh_discovered_schemas.sh`
+- `{engine}/_staging/` — gitignored scratch directory for intermediate artefacts
 
-The `.proposed.yaml` is the post-mine corpus emitted by
-`scripts/engine_miners/{engine}_miner.py` — declared expectations only. The
-`.vendored.yaml` is the post-replay envelope emitted by
-`scripts/vendor_rules.py` after running each rule against the real engine
-library inside its Docker image — it captures observed outcomes plus any
+The `.proposed.yaml` is the post-mine corpus — declared expectations only. The
+`.vendored.yaml` is the post-replay envelope capturing observed outcomes plus any
 divergences from the proposed expectations. The runtime
 `VendoredRulesLoader` reads the `.vendored.yaml` when present and overlays
 its observations onto the proposed YAML, falling back to the proposed YAML
@@ -193,7 +188,7 @@ encode the pattern (`greedy_strips_X`, `single_beam_strips_X`,
 ### Corpus invariants
 
 These are enforced via `tests/unit/config/vendored_rules/test_corpus_invariants.py`
-and extended by the vendor CI gate (`scripts/vendor_rules.py`).
+and extended by the vendor CI gate (`scripts/validate_invariants.py`).
 
 1. Every rule has a unique `id` within the engine.
 2. `match.fields` is non-empty.
@@ -209,7 +204,7 @@ and extended by the vendor CI gate (`scripts/vendor_rules.py`).
 ### Via miner (preferred)
 
 1. Rerun the miner for the engine:
-   `python -m scripts.engine_miners.{engine}_miner --out configs/engine_invariants/{engine}.proposed.yaml`
+   `python -m scripts.engine_miners.{engine}_miner --out src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`
    (optionally with `LLENERGY_MINER_FROZEN_AT=<iso-utc>` for reproducibility).
 2. Inspect the diff against the previous corpus file. Review the predicate
    shape and verify it matches the library source before merging.

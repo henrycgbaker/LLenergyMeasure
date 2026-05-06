@@ -3,7 +3,7 @@
 
 Each engine has a canonical version pinned in
 ``engine_versions/<engine>.yaml`` under ``library.current_version``. The
-discovered schema in ``src/llenergymeasure/config/discovered_schemas``
+discovered schema at ``src/llenergymeasure/engines/<engine>/schema.discovered.json``
 must agree.
 
 Engines covered:
@@ -33,6 +33,10 @@ from typing import Any
 
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.engine_introspectors._common import DEFAULT_SCHEMA_FILENAME
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _ENGINES = ("vllm", "tensorrt", "transformers")
@@ -59,7 +63,7 @@ def _parse_schema_version(schema_path: Path) -> Any:
 
 def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) -> int:
     root = repo_root or REPO_ROOT
-    schema_dir = root / "src" / "llenergymeasure" / "config" / "discovered_schemas"
+    engines_dir = root / "src" / "llenergymeasure" / "engines"
     ssot_dir = root / "engine_versions"
 
     errors: list[str] = []
@@ -73,7 +77,7 @@ def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) 
             errors.append(f"{engine}: SSOT not found: {ssot_path}")
             continue
 
-        schema_path = schema_dir / f"{engine}.json"
+        schema_path = engines_dir / engine / DEFAULT_SCHEMA_FILENAME
         try:
             schema_version = _parse_schema_version(schema_path)
         except FileNotFoundError:

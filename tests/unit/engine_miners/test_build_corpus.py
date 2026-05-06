@@ -2,7 +2,7 @@
 
 The merger orchestrates the per-engine staging extractors, dedups by
 fingerprint with cross-validation provenance, and emits the canonical
-:file:`configs/engine_invariants/{engine}.proposed.yaml`. These tests exercise each
+:file:`src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`. These tests exercise each
 contract behaviour in isolation against synthetic staging files — no live
 extractors, no real library dependencies.
 
@@ -210,7 +210,7 @@ class TestFingerprint:
 
 class TestCrossValidation:
     def test_two_sources_one_fingerprint_merged_to_one_rule(self, tmp_path: Path) -> None:
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         _write_staging(
             staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
@@ -227,7 +227,7 @@ class TestCrossValidation:
     def test_introspection_message_overrides_ast_message(self, tmp_path: Path) -> None:
         # Per the precedence table, introspection's message_template wins
         # because it's the real library text.
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
@@ -249,7 +249,7 @@ class TestCrossValidation:
         assert "message_template" in rules[0]["conflict_note"]
 
     def test_ast_kwargs_positive_overrides_introspection(self, tmp_path: Path) -> None:
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
@@ -275,7 +275,7 @@ class TestCrossValidation:
         assert rules[0]["kwargs_negative"] == {"max_new_tokens": 99}
 
     def test_observed_messages_carry_over_from_introspection(self, tmp_path: Path) -> None:
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         _write_staging(
             staging,
@@ -297,7 +297,7 @@ class TestCrossValidation:
         assert observed == ["`max_new_tokens` must be greater than 0, but is -1."]
 
     def test_references_unioned_across_sources(self, tmp_path: Path) -> None:
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
@@ -324,7 +324,7 @@ class TestDistinctFingerprints:
     def test_different_match_fields_kept_as_two_rules(self, tmp_path: Path) -> None:
         # Same id, different match.fields -> two separate rules. Vendor CI
         # will prove which fires correctly on the live library.
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         ast = _ast_rule(
             fields={"transformers.sampling.max_new_tokens": {"<=": 0}},
         )
@@ -352,7 +352,7 @@ class TestDistinctFingerprints:
 
 class TestStability:
     def test_repeated_runs_produce_identical_yaml(self, tmp_path: Path) -> None:
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
@@ -379,7 +379,7 @@ class TestStability:
         # MUST equal that exact value, regardless of staging timestamps. This
         # is the anchor that keeps re-runs on unchanged source byte-identical
         # — without it the workflow's commit-back synchronize-loops.
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
@@ -402,7 +402,7 @@ class TestStability:
         assert text == second
 
     def test_rules_sorted_alphabetically_by_id(self, tmp_path: Path) -> None:
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
@@ -426,7 +426,7 @@ class TestStability:
 
 class TestCheckMode:
     def test_check_passes_when_corpus_matches_staging(self, tmp_path: Path) -> None:
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         _write_staging(
             staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
@@ -438,7 +438,7 @@ class TestCheckMode:
         assert code == 0
 
     def test_check_fails_with_diff_on_drift(self, tmp_path: Path) -> None:
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
 
         build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
@@ -454,7 +454,7 @@ class TestCheckMode:
         assert "Different message" in diff
 
     def test_check_returns_2_when_canonical_corpus_missing(self, tmp_path: Path) -> None:
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         # No write_corpus call — canonical YAML missing.
         code, msg = build_corpus.check_drift("transformers", tmp_path, skip_validation=True)
@@ -475,7 +475,8 @@ class TestEmptyStaging:
     def test_no_staging_does_not_touch_existing_corpus(self, tmp_path: Path) -> None:
         # A pre-existing corpus must NOT be wiped if the merger fails to
         # find staging — the canonical file stays untouched.
-        canonical = tmp_path / "transformers.proposed.yaml"
+        canonical = tmp_path / "transformers" / "invariants.proposed.yaml"
+        canonical.parent.mkdir(parents=True, exist_ok=True)
         canonical.write_text("schema_version: 1.0.0\nengine: transformers\nrules: []\n")
 
         with pytest.raises(FileNotFoundError):
@@ -491,7 +492,7 @@ class TestEmptyStaging:
 
 class TestLoaderRoundTrip:
     def test_merger_output_loads_via_vendoredrulesloader(self, tmp_path: Path) -> None:
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         _write_staging(
             staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
@@ -515,7 +516,8 @@ class TestLoaderRoundTrip:
 
         rule = _ast_rule()
         rule["cross_validated_by"] = ["NOT_A_REAL_PROVENANCE"]
-        canonical = tmp_path / "transformers.proposed.yaml"
+        canonical = tmp_path / "transformers" / "invariants.proposed.yaml"
+        canonical.parent.mkdir(parents=True, exist_ok=True)
         canonical.write_text(yaml.safe_dump(_envelope([rule]), sort_keys=False))
 
         loader = VendoredRulesLoader(corpus_root=tmp_path)
@@ -577,7 +579,7 @@ class TestAddedAtPreservation:
         Stops Renovate-driven rebuilds from producing noise diffs that
         flip ``added_at`` on every rule even when content is unchanged.
         """
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
 
         # First run: produce canonical with added_at "2026-04-01".
         first_rule = _ast_rule()
@@ -585,7 +587,7 @@ class TestAddedAtPreservation:
         _write_staging(staging, "transformers_static_miner.yaml", _envelope([first_rule]))
         build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
 
-        prior_path = tmp_path / "transformers.proposed.yaml"
+        prior_path = tmp_path / "transformers" / "invariants.proposed.yaml"
         prior = yaml.safe_load(prior_path.read_text())
         assert prior["rules"][0]["added_at"] == "2026-04-01"
 
@@ -651,7 +653,7 @@ class TestVendorValidationGate:
 
         monkeypatch.setattr(vr, "vendor_engine", _stub_vendor_engine())
 
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
@@ -663,7 +665,7 @@ class TestVendorValidationGate:
         assert result.rules_quarantined == 0
         assert result.quarantined_ids == ()
 
-        canonical = (tmp_path / "transformers.proposed.yaml").read_text()
+        canonical = (tmp_path / "transformers" / "invariants.proposed.yaml").read_text()
         assert "rule_kept" in canonical
 
     def test_vendor_divergent_rule_is_quarantined(
@@ -678,7 +680,7 @@ class TestVendorValidationGate:
             _stub_vendor_engine(divergent_rule_ids=("rule_bad",)),
         )
 
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
@@ -695,7 +697,7 @@ class TestVendorValidationGate:
         assert result.rules_quarantined == 1
         assert "rule_bad" in result.quarantined_ids
 
-        canonical = (tmp_path / "transformers.proposed.yaml").read_text()
+        canonical = (tmp_path / "transformers" / "invariants.proposed.yaml").read_text()
         assert "rule_kept" in canonical
         assert "rule_bad" not in canonical
 
@@ -713,7 +715,7 @@ class TestVendorValidationGate:
             _stub_vendor_engine(divergent_rule_ids=("rule_a", "rule_b")),
         )
 
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
@@ -730,11 +732,13 @@ class TestVendorValidationGate:
         assert result.rules_in_canonical == 2
         assert result.rules_quarantined == 0
 
-        canonical = (tmp_path / "transformers.proposed.yaml").read_text()
+        canonical = (tmp_path / "transformers" / "invariants.proposed.yaml").read_text()
         assert "rule_a" in canonical
         assert "rule_b" in canonical
         # No quarantine file when validation is skipped.
-        assert not (tmp_path / "_staging" / "_failed_validation_transformers.yaml").exists()
+        assert not (
+            tmp_path / "transformers" / "_staging" / "_failed_validation_transformers.yaml"
+        ).exists()
 
     def test_quarantine_yaml_has_documented_schema(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -751,7 +755,7 @@ class TestVendorValidationGate:
             ),
         )
 
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
@@ -760,7 +764,9 @@ class TestVendorValidationGate:
 
         build_corpus.write_corpus("transformers", tmp_path)
 
-        quarantine_path = tmp_path / "_staging" / "_failed_validation_transformers.yaml"
+        quarantine_path = (
+            tmp_path / "transformers" / "_staging" / "_failed_validation_transformers.yaml"
+        )
         assert quarantine_path.exists()
         doc = yaml.safe_load(quarantine_path.read_text())
         assert set(doc) >= {
@@ -787,7 +793,7 @@ class TestVendorValidationGate:
         import scripts.vendor_rules as vr
 
         # Plant a stale quarantine file from an earlier (hypothetical) run.
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         staging.mkdir(parents=True, exist_ok=True)
         stale = staging / "_failed_validation_transformers.yaml"
         stale.write_text("schema_version: 1.0.0\nengine: transformers\nquarantined_rules: []\n")
@@ -812,7 +818,7 @@ class TestVendorValidationGate:
             _stub_vendor_engine(divergent_rule_ids=("rule_bad",)),
         )
 
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
@@ -827,7 +833,7 @@ class TestVendorValidationGate:
         # Build with validation: rule_bad gets quarantined and only rule_kept
         # lands in canonical.
         build_corpus.write_corpus("transformers", tmp_path)
-        canonical_path = tmp_path / "transformers.proposed.yaml"
+        canonical_path = tmp_path / "transformers" / "invariants.proposed.yaml"
         assert "rule_bad" not in canonical_path.read_text()
 
         # --check should now agree (re-runs validation, observes the same
@@ -850,7 +856,7 @@ class TestVendorValidationGate:
 
         monkeypatch.setattr(vr, "vendor_engine", _stub_vendor_engine())
 
-        staging = tmp_path / "_staging"
+        staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
             "transformers_static_miner.yaml",

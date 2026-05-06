@@ -34,7 +34,8 @@ SCHEMA_VERSION = "1.0.0"
 # local Dockerfile.
 TRANSFORMERS_DOCKERFILE = "docker/Dockerfile.transformers"
 
-DEFAULT_OUTPUT_DIR = "src/llenergymeasure/config/discovered_schemas"
+DEFAULT_OUTPUT_DIR = "src/llenergymeasure/engines"
+DEFAULT_SCHEMA_FILENAME = "schema.discovered.json"
 
 
 def annotation_to_type_str(annotation: Any) -> str:

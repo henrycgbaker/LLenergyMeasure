@@ -1780,8 +1780,10 @@ def main(argv: list[str] | None = None) -> int:
     """Run the introspection extractor end-to-end and write the staging YAML."""
     out_path = (
         Path(_PROJECT_ROOT)
-        / "configs"
-        / "engine_invariants"
+        / "src"
+        / "llenergymeasure"
+        / "engines"
+        / "transformers"
         / "_staging"
         / "transformers_dynamic_miner.yaml"
     )

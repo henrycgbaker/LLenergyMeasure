@@ -22,11 +22,11 @@ miner_pins:
   dynamic: ">=4.56,<4.57"
   discovery: ">=4.56,<4.57"
 artefact_paths:
-  rules_corpus: src/llenergymeasure/config/engine_invariants/transformers.proposed.yaml
-  vendored_rules: src/llenergymeasure/config/engine_invariants/transformers.vendored.yaml
-  discovered_schemas: src/llenergymeasure/config/discovered_schemas/transformers.json
+  rules_corpus: src/llenergymeasure/engines/transformers/invariants.proposed.yaml
+  vendored_rules: src/llenergymeasure/engines/transformers/invariants.vendored.yaml
+  discovered_schemas: src/llenergymeasure/engines/transformers/schema.discovered.json
 last_probe:
   verdict: pass
   version_inside_envelope: false
-  fingerprint: "46664ddbff9a9c9df2974d9d5cbdbbe04ae093b874f50ee92a0cd1b0c4b83860"
+  fingerprint: "14dc1896757dfc00a9a4e1990528ecac45394bb5f2850bfab17e87871aaa29da"
   fingerprint_drift: []

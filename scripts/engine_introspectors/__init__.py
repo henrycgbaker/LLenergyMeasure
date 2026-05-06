@@ -28,7 +28,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from scripts.engine_introspectors._common import DEFAULT_OUTPUT_DIR, jsonable
+from scripts.engine_introspectors._common import (
+    DEFAULT_OUTPUT_DIR,
+    DEFAULT_SCHEMA_FILENAME,
+    jsonable,
+)
 from scripts.engine_introspectors.tensorrt_introspector import discover as discover_tensorrt
 from scripts.engine_introspectors.transformers_introspector import (
     discover as discover_transformers,
@@ -48,9 +52,9 @@ def _resolve_output_path(
     *, engine: str, output_arg: Path | None, multi: bool, repo_root: Path
 ) -> Path:
     if output_arg is None:
-        return repo_root / DEFAULT_OUTPUT_DIR / f"{engine}.json"
+        return repo_root / DEFAULT_OUTPUT_DIR / engine / DEFAULT_SCHEMA_FILENAME
     if multi or output_arg.is_dir() or output_arg.suffix == "":
-        return output_arg / f"{engine}.json"
+        return output_arg / engine / DEFAULT_SCHEMA_FILENAME
     return output_arg
 
 
@@ -72,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=None,
         help="Output file (single engine) or directory (multiple engines). "
-        f"Default: {DEFAULT_OUTPUT_DIR}/<engine>.json relative to repo root.",
+        f"Default: {DEFAULT_OUTPUT_DIR}/<engine>/{DEFAULT_SCHEMA_FILENAME} relative to repo root.",
     )
     parser.add_argument(
         "--image-ref",

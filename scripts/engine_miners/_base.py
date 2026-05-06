@@ -60,7 +60,7 @@ class MinerSource:
 class RuleCandidate:
     """One extracted rule candidate.
 
-    Serialised verbatim into ``configs/engine_invariants/{engine}.proposed.yaml``
+    Serialised verbatim into ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``
     after human review. Field names match the corpus schema so no
     translation step is needed between walker output and corpus entry.
     """

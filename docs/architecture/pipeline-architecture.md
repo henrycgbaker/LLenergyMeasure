@@ -94,9 +94,9 @@ LEGEND:  [auto]    fully automated, no human action
 │  ── if probe == pass ──      │         │  ── if probe == pass ──      │
 │  STEP 2 [auto]: MINE         │         │  STEP 2 [auto]: DISCOVER     │
 │   build_corpus.py            │         │   engine_introspectors       │
-│   → configs/engine_invariants│         │   → src/llenergymeasure/     │
-│     /{engine}.proposed.yaml  │         │     config/discovered_       │
-│                              │         │     schemas/{engine}.json    │
+│   → src/llenergymeasure/engines│         │   → src/llenergymeasure/     │
+│     /{engine}/invariants.proposed.yaml  │         │     config/discovered_       │
+│                              │         │     schemas/{engine}/schema.discovered.json    │
 │  STEP 3 [auto]: VENDOR-REPLAY│         │                              │
 │   vendor_rules.py + the      │         │  STEP 3 [auto]: DIFF vs HEAD │
 │   compare_expected_vs_       │         │                              │
@@ -108,8 +108,8 @@ LEGEND:  [auto]    fully automated, no human action
 │   outcomes (positive_        │         │    curator; pre-existing     │
 │   confirmed, negative_       │         │    behaviour preserved)      │
 │   confirmed, divergence)     │         │                              │
-│   → configs/engine_invariants│         │  STEP 5 [auto]: COMMENT      │
-│     /{engine}.vendored.yaml  │         │   + LABEL (suppress on empty)│
+│   → src/llenergymeasure/engines│         │  STEP 5 [auto]: COMMENT      │
+│     /{engine}/invariants.vendored.yaml  │         │   + LABEL (suppress on empty)│
 │                              │         │                              │
 │  STEP 4 [auto]: DIFF vs HEAD │         │  ── if probe == fail ──      │
 │   for both proposed.yaml +   │         │  Post probe-fail comment     │
@@ -144,10 +144,10 @@ LEGEND:  [auto]    fully automated, no human action
               │    (lewagon/wait-on-check-action; already-finished sibling      │
               │     exits immediately)                                          │
               │  - LAST-FINISHING workflow performs ATOMIC WRITEBACK in-line:   │
-              │     git add configs/engine_invariants/{engine}.proposed.yaml    │
-              │             configs/engine_invariants/{engine}.vendored.yaml    │
-              │             src/llenergymeasure/config/discovered_schemas/      │
-              │                  {engine}.json                                  │
+              │     git add src/llenergymeasure/engines/{engine}/invariants.proposed.yaml    │
+              │             src/llenergymeasure/engines/{engine}/invariants.vendored.yaml    │
+              │             src/llenergymeasure/src/llenergymeasure/engines/      │
+              │                  {engine}/schema.discovered.json                                  │
               │             docs/generated/curation-{engine}.md                 │
               │             docs/generated/invariants-{engine}.md               │
               │             engine_versions/{engine}.compat.json                │

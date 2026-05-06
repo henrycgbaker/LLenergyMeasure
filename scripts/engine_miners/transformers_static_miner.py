@@ -25,9 +25,9 @@ the surrounding rule and notes the dropped sub-clause in a YAML comment.
 
 Output
 ------
-Writes ``configs/engine_invariants/_staging/transformers_static_miner.yaml`` —
-consumed downstream by ``scripts/engine_miners/build_corpus.py`` (other subagent's
-territory). Schema mirrors ``configs/engine_invariants/transformers.proposed.yaml``
+Writes ``src/llenergymeasure/engines/transformers/_staging/transformers_static_miner.yaml``
+— consumed downstream by ``scripts/engine_miners/build_corpus.py``. Schema
+mirrors ``src/llenergymeasure/engines/transformers/invariants.proposed.yaml``
 exactly: ``schema_version``, ``engine``, ``engine_version``, ``rules: [...]``.
 
 Run::
@@ -1548,8 +1548,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path("configs/engine_invariants/_staging/transformers_static_miner.yaml"),
-        help="Where to write the staging YAML (default: configs/engine_invariants/_staging/transformers_static_miner.yaml)",
+        default=Path(
+            "src/llenergymeasure/engines/transformers/_staging/transformers_static_miner.yaml"
+        ),
+        help=(
+            "Where to write the staging YAML "
+            "(default: src/llenergymeasure/engines/transformers/_staging/transformers_static_miner.yaml)"
+        ),
     )
     args = parser.parse_args(argv)
 

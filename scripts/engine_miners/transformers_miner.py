@@ -33,7 +33,7 @@ not reachable via this walker's landmarks. Stays hand-written in
 Usage::
 
     python -m scripts.engine_miners.transformers_miner \\
-        --out configs/engine_invariants/transformers.proposed.yaml
+        --out src/llenergymeasure/engines/transformers/invariants.proposed.yaml
 
 With ``LLENERGY_WALKER_FROZEN_AT`` set for byte-stable reproducibility.
 """

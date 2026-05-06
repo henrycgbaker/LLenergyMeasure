@@ -45,7 +45,7 @@ here; Cartesian probing only.
 
 Output
 ------
-Writes ``configs/engine_invariants/_staging/vllm_dynamic_miner.yaml``.
+Writes ``src/llenergymeasure/engines/vllm/_staging/vllm_dynamic_miner.yaml``.
 """
 
 from __future__ import annotations
@@ -852,7 +852,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path("configs/engine_invariants/_staging/vllm_dynamic_miner.yaml"),
+        default=Path("src/llenergymeasure/engines/vllm/_staging/vllm_dynamic_miner.yaml"),
         help="Where to write the staging YAML.",
     )
     args = parser.parse_args(argv)

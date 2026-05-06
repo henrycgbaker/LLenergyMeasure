@@ -2,10 +2,10 @@
 
 The validation-rules pipeline is split into independent miners (dynamic miner,
 static miner, future runtime-warning miner) that each write to a staging file
-under ``configs/engine_invariants/_staging/{engine}_{name}.yaml``. This module
-is the single canonical entry point that runs them, merges their outputs into
-one :class:`~llenergymeasure.config.vendored_rules.loader.VendoredRules`-shaped
-document, and writes ``configs/engine_invariants/{engine}.proposed.yaml``.
+under ``src/llenergymeasure/engines/{engine}/_staging/{engine}_{name}.yaml``. This
+module is the single canonical entry point that runs them, merges their outputs
+into one :class:`~llenergymeasure.config.vendored_rules.loader.VendoredRules`-shaped
+document, and writes ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``.
 
 Pipeline: miners → staging → merge → **vendor-validate** → write canonical corpus.
 
@@ -154,7 +154,7 @@ class _Extractor:
     each subagent's extractor must accept a single ``--out`` argument.
 
     ``staging_basename`` is the filename written under
-    ``configs/engine_invariants/_staging/``. Convention:
+    ``src/llenergymeasure/engines/{engine}/_staging/``. Convention:
     ``{engine}_{source_name}.yaml`` so the merger's glob pattern stays
     predictable.
     """
@@ -199,12 +199,12 @@ _ENGINE_EXTRACTORS: dict[str, tuple[_Extractor, ...]] = {
 }
 
 
-def _staging_dir(corpus_root: Path) -> Path:
-    return corpus_root / "_staging"
+def _staging_dir(corpus_root: Path, engine: str) -> Path:
+    return corpus_root / engine / "_staging"
 
 
 def _canonical_path(corpus_root: Path, engine: str) -> Path:
-    return corpus_root / f"{engine}.proposed.yaml"
+    return corpus_root / engine / "invariants.proposed.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +315,7 @@ def run_extractors(engine: str, corpus_root: Path) -> None:
             f"No extractors registered for engine={engine!r}. "
             f"Add an entry to _ENGINE_EXTRACTORS in {__file__}."
         )
-    staging = _staging_dir(corpus_root)
+    staging = _staging_dir(corpus_root, engine)
     staging.mkdir(parents=True, exist_ok=True)
     for extractor in extractors:
         out_path = staging / extractor.staging_basename
@@ -344,7 +344,7 @@ def discover_staging_files(engine: str, corpus_root: Path) -> list[Path]:
     re-merge under fingerprint dedup) and giving every successive run
     monotonically older data.
     """
-    staging = _staging_dir(corpus_root)
+    staging = _staging_dir(corpus_root, engine)
     if not staging.is_dir():
         return []
     merged_self = _MERGED_CANDIDATES_BASENAME.format(engine=engine)
@@ -702,7 +702,7 @@ def _write_merged_candidates(
     same on-disk shape :func:`emit_yaml` produces. The file lives under
     ``_staging`` so it's never confused with the canonical corpus.
     """
-    staging = _staging_dir(corpus_root)
+    staging = _staging_dir(corpus_root, engine)
     staging.mkdir(parents=True, exist_ok=True)
     path = staging / _MERGED_CANDIDATES_BASENAME.format(engine=engine)
     path.write_text(emit_yaml(rules, envelope))
@@ -727,7 +727,7 @@ def _validate_candidates(
     as a side effect — that file is the input to :func:`vendor_engine`. The
     YAML envelope ``vendor_engine`` writes goes to a sibling temp path
     (``_staging/_vendor_envelope_{engine}.yaml``) so the canonical
-    ``configs/engine_invariants/{engine}.vendored.yaml`` (the
+    ``src/llenergymeasure/engines/{engine}/invariants.vendored.yaml`` (the
     runtime-loaded sidecar) is never overwritten by this build step. The
     leading-underscore prefix keeps the temp file out of the
     ``{engine}_*.yaml`` glob that ``discover_staging_files`` walks.
@@ -738,7 +738,7 @@ def _validate_candidates(
     from scripts.vendor_rules import vendor_engine
 
     candidates_path = _write_merged_candidates(corpus_root, engine, candidates, envelope)
-    vendor_envelope_path = _staging_dir(corpus_root) / f"_vendor_envelope_{engine}.yaml"
+    vendor_envelope_path = _staging_dir(corpus_root, engine) / f"_vendor_envelope_{engine}.yaml"
 
     # vendor_engine returns (envelope, divergences). Divergences carry rule_id,
     # field, expected, observed — exactly the diagnostic we need to surface in
@@ -789,7 +789,7 @@ def _emit_failed_validation_yaml(
     (in which case any stale quarantine file is removed so the next reviewer
     isn't misled by leftover state from a previous run).
     """
-    staging = _staging_dir(corpus_root)
+    staging = _staging_dir(corpus_root, engine)
     path = staging / _FAILED_VALIDATION_BASENAME.format(engine=engine)
     if not divergent:
         if path.exists():
@@ -904,7 +904,7 @@ def build_corpus_text_and_outcome(
     paths = discover_staging_files(engine, corpus_root)
     if not paths:
         raise FileNotFoundError(
-            f"No staging files at {_staging_dir(corpus_root)}/{engine}_*.yaml. "
+            f"No staging files at {_staging_dir(corpus_root, engine)}/{engine}_*.yaml. "
             f"Run extractors first (omit --skip-extract)."
         )
     envelopes = [_load_staging(p) for p in paths]
@@ -924,7 +924,9 @@ def build_corpus_text_and_outcome(
         _write_merged_candidates(corpus_root, engine, candidates, envelope)
         # Drop any stale quarantine file — running --skip-validation with a
         # leftover file from a previous validating run would be misleading.
-        stale = _staging_dir(corpus_root) / _FAILED_VALIDATION_BASENAME.format(engine=engine)
+        stale = _staging_dir(corpus_root, engine) / _FAILED_VALIDATION_BASENAME.format(
+            engine=engine
+        )
         if stale.exists():
             stale.unlink()
         text = emit_yaml(candidates, envelope)
@@ -976,6 +978,7 @@ def write_corpus(
     """
     result = build_corpus_text_and_outcome(engine, corpus_root, skip_validation=skip_validation)
     out_path = _canonical_path(corpus_root, engine)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(result.canonical_text)
     return result
 
@@ -1038,8 +1041,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--corpus-root",
         type=Path,
-        default=Path(_PROJECT_ROOT) / "configs" / "engine_invariants",
-        help="Root directory for both the canonical corpus and the _staging/ subdir.",
+        default=Path(_PROJECT_ROOT) / "src" / "llenergymeasure" / "engines",
+        help="Engines root; each engine's corpus + _staging/ live under <engines>/<engine>/.",
     )
     parser.add_argument(
         "--skip-extract",
@@ -1098,9 +1101,9 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         if result.rules_quarantined:
-            quarantine_path = _staging_dir(corpus_root) / _FAILED_VALIDATION_BASENAME.format(
-                engine=args.engine
-            )
+            quarantine_path = _staging_dir(
+                corpus_root, args.engine
+            ) / _FAILED_VALIDATION_BASENAME.format(engine=args.engine)
             print(
                 f"[build_corpus] divergent rules written to {quarantine_path}",
                 file=sys.stderr,

@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: transformers
 engine_version: 4.57.3
-mined_at: '2026-05-05T19:33:15Z'
+mined_at: '2026-05-06T20:35:47+02:00'
 rules:
 - id: transformers_beam_search_num_beams_eq_1
   engine: transformers

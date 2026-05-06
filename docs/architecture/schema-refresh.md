@@ -1,7 +1,7 @@
 # Parameter Discovery Pipeline
 
 Engine parameter schemas are vendored as JSON files in
-`src/llenergymeasure/config/discovered_schemas/`. When an upstream engine
+`src/llenergymeasure/src/llenergymeasure/engines/`. When an upstream engine
 releases a new version, these schemas must be regenerated so that config
 validation stays in sync with the engine's actual parameters.
 

@@ -24,11 +24,11 @@ miner_pins:
   dynamic: ">=0.21.0,<0.22.0"
   discovery: ">=0.21.0,<0.22.0"
 artefact_paths:
-  rules_corpus: src/llenergymeasure/config/engine_invariants/tensorrt.proposed.yaml
-  vendored_rules: src/llenergymeasure/config/engine_invariants/tensorrt.vendored.yaml
-  discovered_schemas: src/llenergymeasure/config/discovered_schemas/tensorrt.json
+  rules_corpus: src/llenergymeasure/engines/tensorrt/invariants.proposed.yaml
+  vendored_rules: src/llenergymeasure/engines/tensorrt/invariants.vendored.yaml
+  discovered_schemas: src/llenergymeasure/engines/tensorrt/schema.discovered.json
 last_probe:
   verdict: pass
   version_inside_envelope: true
-  fingerprint: "5126812b572055f3f9d5b1c0f1e297ce627230f272165837b5fe0699bb9f54fa"
+  fingerprint: "a7902bb13b595121c161edcb00516bb4e1b719c339edd70ab3e9d09802d75e6d"
   fingerprint_drift: []

@@ -2,7 +2,7 @@
 """Generate the invariants digest doc for one engine.
 
 Produces ``docs/generated/invariants-{engine}.md`` from the corpus + vendor
-artefacts under ``configs/engine_invariants/`` and the previous corpus state
+artefacts under ``src/llenergymeasure/engines/<engine>/`` and the previous corpus state
 in git history. Per the engine-coupling design doc §6, this digest is
 section 2 of the per-engine curation digest (sections 1 + 3 are produced
 by ``generate_curation_doc.py`` + an on-demand runtime-gaps renderer).
@@ -85,12 +85,9 @@ def _group_by_added_by(rules: list[dict[str, Any]]) -> dict[str, list[dict[str, 
 
 def _render(engine: str) -> str:
     """Build the digest Markdown for ``engine``."""
-    proposed = _load_yaml(
-        _PROJECT_ROOT / "configs" / "engine_invariants" / f"{engine}.proposed.yaml"
-    )
-    vendored = _load_yaml(
-        _PROJECT_ROOT / "configs" / "engine_invariants" / f"{engine}.vendored.yaml"
-    )
+    engine_dir = _PROJECT_ROOT / "src" / "llenergymeasure" / "engines" / engine
+    proposed = _load_yaml(engine_dir / "invariants.proposed.yaml")
+    vendored = _load_yaml(engine_dir / "invariants.vendored.yaml")
     ssot = _load_yaml(_PROJECT_ROOT / "engine_versions" / f"{engine}.yaml")
 
     library = ssot.get("library") if isinstance(ssot.get("library"), dict) else {}

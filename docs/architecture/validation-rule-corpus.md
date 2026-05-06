@@ -9,7 +9,7 @@ This document is the reference for the YAML corpus format: what each field means
 ## File locations
 
 ```
-  configs/engine_invariants/
+  src/llenergymeasure/engines/
   ├── transformers.proposed.yaml   Maintainer-seeded corpus, post-mining
   ├── transformers.vendored.yaml   CI-validated overlay, post-vendor-replay
   └── _staging/

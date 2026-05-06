@@ -55,7 +55,7 @@ The output is a corpus of rules, each describing one constraint on a config fiel
   │                            │                                        │
   │                            ▼                                        │
   │                   staging files                                     │
-  │              configs/engine_invariants/_staging/                    │
+  │              src/llenergymeasure/engines/_staging/                    │
   │                            │                                        │
   │                            ▼                                        │
   │                    build_corpus.py                                  │
@@ -68,10 +68,10 @@ The output is a corpus of rules, each describing one constraint on a config fiel
   │           ┌────────────────┴──────────────────┐                    │
   │           ▼                                   ▼                    │
   │  confirmed rules                   quarantined rules               │
-  │  configs/engine_invariants/        configs/engine_invariants/       │
-  │  {engine}.proposed.yaml            _staging/_failed_*.yaml          │
-  │  configs/engine_invariants/                                         │
-  │  {engine}.vendored.yaml                                             │
+  │  src/llenergymeasure/engines/        src/llenergymeasure/engines/       │
+  │  {engine}/invariants.proposed.yaml            _staging/_failed_*.yaml          │
+  │  src/llenergymeasure/engines/                                         │
+  │  {engine}/invariants.vendored.yaml                                             │
   └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -453,11 +453,11 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │   1. Probe — scripts._probe checks landmarks; `fail` skips        │
   │      downstream and posts a `probe-blocked` comment + label.      │
   │   2. Mine — build_corpus.py merges staging into                   │
-  │      configs/engine_invariants/{engine}.proposed.yaml.            │
+  │      src/llenergymeasure/engines/{engine}/invariants.proposed.yaml.            │
   │   3. Vendor-replay — vendor_rules.py --fail-on-divergence         │
   │      replays each rule against the live library inside the        │
   │      engine's Docker container; confirmed cases write to          │
-  │      configs/engine_invariants/{engine}.vendored.yaml.            │
+  │      src/llenergymeasure/engines/{engine}/invariants.vendored.yaml.            │
   │   4. Doc-gen — generate_invariants_doc.py refreshes               │
   │      docs/generated/invariants-{engine}.md.                       │
   │   5. Atomic writeback — one bot commit covers proposed.yaml,      │
@@ -467,7 +467,7 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │  ─────────────── engine-schemas (per-engine) ──────────────       │
   │                       ▼                                           │
   │  scripts/engine_introspectors introspects engine config classes   │
-  │  inside Docker, regenerates discovered_schemas/{engine}.json;     │
+  │  inside Docker, regenerates engines/{engine}/schema.discovered.json;                │
   │  generate_curation_doc.py + generate_schema_doc.py refresh        │
   │  docs/generated/{curation,schema}-{engine}.md, bot commits        │
   │  and posts a diff comment.                                        │

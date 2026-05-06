@@ -37,9 +37,9 @@ miner_pins:
   dynamic: ">=4.56,<4.57"
   discovery: ">=4.56,<4.57"
 artefact_paths:
-  rules_corpus: configs/engine_invariants/transformers.proposed.yaml
-  vendored_rules: configs/engine_invariants/transformers.vendored.yaml
-  discovered_schemas: src/llenergymeasure/config/discovered_schemas/transformers.json
+  rules_corpus: src/llenergymeasure/engines/transformers/invariants.proposed.yaml
+  vendored_rules: src/llenergymeasure/engines/transformers/invariants.vendored.yaml
+  discovered_schemas: src/llenergymeasure/engines/transformers/schema.discovered.json
 last_probe:
   verdict: unrun
   version_inside_envelope: null

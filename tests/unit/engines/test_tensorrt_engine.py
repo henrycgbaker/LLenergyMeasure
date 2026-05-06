@@ -29,7 +29,8 @@ from llenergymeasure.config.engine_configs import (
     TensorRTSamplingConfig,
     TensorRTSchedulerConfig,
 )
-from llenergymeasure.engines.tensorrt import TensorRTEngine, _validate_engine_directory
+from llenergymeasure.engines.tensorrt import TensorRTEngine
+from llenergymeasure.engines.tensorrt.plugin import _validate_engine_directory
 from tests.conftest import make_config
 
 # =============================================================================

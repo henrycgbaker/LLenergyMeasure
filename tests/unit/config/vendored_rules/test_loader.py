@@ -57,8 +57,9 @@ rules:
 
 
 def _write_corpus(root: Path, engine: str, text: str) -> None:
-    root.mkdir(parents=True, exist_ok=True)
-    (root / f"{engine}.proposed.yaml").write_text(text)
+    engine_dir = root / engine
+    engine_dir.mkdir(parents=True, exist_ok=True)
+    (engine_dir / "invariants.proposed.yaml").write_text(text)
 
 
 def test_load_rules_returns_parsed_corpus(tmp_path: Path) -> None:
@@ -147,11 +148,11 @@ rules: []
     assert result.rules == ()
 
 
-def test_default_corpus_root_resolves_to_configs(tmp_path: Path) -> None:
-    # Constructing without corpus_root uses the repo's configs/engine_invariants/.
+def test_default_corpus_root_resolves_to_engines(tmp_path: Path) -> None:
+    # Constructing without corpus_root uses the repo's src/llenergymeasure/engines/.
     loader = VendoredRulesLoader()
-    assert loader.corpus_root.name == "engine_invariants"
-    assert loader.corpus_root.parent.name == "configs"
+    assert loader.corpus_root.name == "engines"
+    assert loader.corpus_root.parent.name == "llenergymeasure"
 
 
 # ---------------------------------------------------------------------------
