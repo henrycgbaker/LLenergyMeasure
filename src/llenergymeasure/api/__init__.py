@@ -5,7 +5,7 @@ from llenergymeasure.api.report_gaps import (
     GapProposal,
     ReportGapsError,
     find_runtime_gaps,
-    load_rules_corpus,
+    load_engine_invariants,
     render_yaml_fragment,
 )
 from llenergymeasure.results.persistence import save_result
@@ -17,8 +17,8 @@ __all__ = [
     "ReportGapsError",
     "find_resumable_study",
     "find_runtime_gaps",
+    "load_engine_invariants",
     "load_resume_state",
-    "load_rules_corpus",
     "probe_energy_sampler",
     "render_yaml_fragment",
     "run_experiment",

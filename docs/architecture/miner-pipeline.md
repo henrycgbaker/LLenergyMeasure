@@ -16,7 +16,7 @@ The miner pipeline derives structured constraint rules from ML engine config cla
 2. **Dynamic analysis** - instantiating config classes with combinatorial probe values and observing raise/no-raise patterns.
 3. **Type-system lifting** - extracting constraints directly from Pydantic `FieldInfo`, msgspec `Meta`, and stdlib `Literal[...]` annotations.
 
-The output is a corpus of rules, each describing one constraint on a config field or combination of fields. Corpus rules are then validated against the live library (the vendor-CI gate) before shipping.
+The output is a corpus of invariants, each describing one constraint on a config field or combination of fields. Corpus rules are then validated against the live library (the validation-CI gate) before shipping.
 
 ---
 
@@ -62,7 +62,7 @@ The output is a corpus of rules, each describing one constraint on a config fiel
   │                (merge + dedup + fingerprint)                        │
   │                            │                                        │
   │                            ▼                                        │
-  │                    vendor_rules.py                                  │
+  │                    validate_invariants.py                                  │
   │              (replay against live library)                          │
   │                            │                                        │
   │           ┌────────────────┴──────────────────┐                    │
@@ -71,7 +71,7 @@ The output is a corpus of rules, each describing one constraint on a config fiel
   │  src/llenergymeasure/engines/        src/llenergymeasure/engines/       │
   │  {engine}/invariants.proposed.yaml            _staging/_failed_*.yaml          │
   │  src/llenergymeasure/engines/                                         │
-  │  {engine}/invariants.vendored.yaml                                             │
+  │  {engine}/invariants.validated.yaml                                             │
   └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -188,7 +188,7 @@ Given the probe-row table, the dynamic miner infers one rule per error message c
 | Single-field equality | `a == V` | error rows correlate with one field having a specific value |
 | Value allowlist | `a not in {v1, v2, ...}` | error rows correlate with field value not in a set |
 
-The dynamic miner errs toward recall: when multiple templates fit the evidence, it emits all plausible candidates. The vendor-CI gate prunes false positives downstream.
+The dynamic miner errs toward recall: when multiple templates fit the evidence, it emits all plausible candidates. The validation-CI gate prunes false positives downstream.
 
 ---
 
@@ -267,7 +267,7 @@ The three engines have structurally different config surfaces, which determines 
   │              │                     │              │  QuantConfig)           │
   └──────────────┴─────────────────────┴──────────────┴─────────────────────────┘
 
-  Target rule count after vendor-CI gate:
+  Target rule count after validation-CI gate:
     transformers:  46 rules (shipped)
     vLLM:          80-110 rules (target)
     TRT-LLM:       20-28 rules (target)
@@ -322,19 +322,19 @@ If an expected class or method is missing from the library source (e.g. a class 
 
 ### Structural fixpoint: ensuring the contract is enforced
 
-`_fixpoint_test.py` includes a structural test that synthesises one malformed rule per gate-soundness check and asserts the vendor-CI gate records a divergence for each. This pins the three checks in place:
+`_fixpoint_test.py` includes a structural test that synthesises one malformed rule per gate-soundness check and asserts the validation-CI gate records a divergence for each. This pins the three checks in place:
 
 1. `positive_raises` - `kwargs_positive` must cause the library to raise.
 2. `message_template_match` - the raised message must contain the template's static fragment.
 3. `negative_does_not_raise` - `kwargs_negative` must construct without raising.
 
-If any of the three checks is removed from `vendor_rules.compute_gate_soundness_divergences`, the corresponding case in `_fixpoint_test.py` fails loudly.
+If any of the three checks is removed from `validate_invariants.compute_gate_soundness_divergences`, the corresponding case in `_fixpoint_test.py` fails loudly.
 
 ---
 
 ## Build corpus: merge and dedup
 
-`build_corpus.py` is the orchestration entrypoint. It runs all miners, collects staging files, merges them, deduplicates, and calls the vendor-CI gate.
+`build_corpus.py` is the orchestration entrypoint. It runs all miners, collects staging files, merges them, deduplicates, and calls the validation-CI gate.
 
 ### Fingerprinting
 
@@ -366,9 +366,9 @@ When static and dynamic miners both emit a rule with the same fingerprint, the f
 
 ---
 
-## Vendor-CI gate
+## Validation-CI gate
 
-The vendor-CI gate runs after merge. It replays every rule's `kwargs_positive` and `kwargs_negative` against the live library inside the engine's Docker container and compares observed behaviour against the declared `expected_outcome`.
+The validation-CI gate runs after merge. It replays every rule's `kwargs_positive` and `kwargs_negative` against the live library inside the engine's Docker container and compares observed behaviour against the declared `expected_outcome`.
 
 ```
   for each rule in merged corpus:
@@ -394,9 +394,9 @@ The vendor-CI gate runs after merge. It replays every rule's `kwargs_positive` a
 
 The gate runs inside the Docker container for each engine so that the live library version used for validation matches the version the miner was built against.
 
-**Exit codes from `vendor_rules.py`:**
+**Exit codes from `validate_invariants.py`:**
 - `0` - all rules confirmed.
-- `1` - one or more divergences; vendored YAML still written (for diagnostic purposes).
+- `1` - one or more divergences; validated YAML still written (for diagnostic purposes).
 - `2` - hard error (corpus malformed, engine not importable).
 
 ---
@@ -454,14 +454,14 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │      downstream and posts a `probe-blocked` comment + label.      │
   │   2. Mine — build_corpus.py merges staging into                   │
   │      src/llenergymeasure/engines/{engine}/invariants.proposed.yaml.            │
-  │   3. Vendor-replay — vendor_rules.py --fail-on-divergence         │
+  │   3. Validate-replay — validate_invariants.py --fail-on-divergence         │
   │      replays each rule against the live library inside the        │
   │      engine's Docker container; confirmed cases write to          │
-  │      src/llenergymeasure/engines/{engine}/invariants.vendored.yaml.            │
+  │      src/llenergymeasure/engines/{engine}/invariants.validated.yaml.            │
   │   4. Doc-gen — generate_invariants_doc.py refreshes               │
   │      docs/generated/invariants-{engine}.md.                       │
   │   5. Atomic writeback — one bot commit covers proposed.yaml,      │
-  │      vendored.yaml, the digest doc, and engine_versions/          │
+  │      validated.yaml, the digest doc, and engine_versions/          │
   │      {engine}.compat.json. Pushed with --force-with-lease.        │
   │                       │                                           │
   │  ─────────────── engine-schemas (per-engine) ──────────────       │
@@ -477,10 +477,10 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │  Divergences from --fail-on-divergence are P0 incidents.          │
   │                       │                                           │
   │                       ▼                                           │
-  │  Maintainer reviews proposed YAML diff, vendored YAML diff, and   │
+  │  Maintainer reviews proposed YAML diff, validated YAML diff, and   │
   │  schema diff in the PR. The proposed YAML commit is the trust     │
   │  seam: recall regressions show up as rule drops in the diff       │
-  │  emitted before the vendor gate's verdict lands in the same       │
+  │  emitted before the validation gate's verdict lands in the same       │
   │  commit.                                                          │
   └───────────────────────────────────────────────────────────────────┘
 ```
@@ -495,12 +495,12 @@ The update workflow:
 2. CI fires, `MinerVersionMismatchError` raised for the affected miner.
 3. Maintainer checks the library's release notes for validator changes.
 4. Maintainer updates `miner_pins` in the engine SSOT and any landmark names that changed.
-5. CI re-runs with updated miner; vendor-CI gate runs.
+5. CI re-runs with updated miner; validation-CI gate runs.
 6. If any rules now diverge, they are quarantined; maintainer updates the corpus.
 
 ### Phase B.6 observed flow (historical)
 
-The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transformers v4.57.3 → v4.57.6) was the first naturally-Renovate-authored exercise of the full chain. It pre-dates the merge of mining + vendor into `engine-invariants.yml` and the rename of the schema workflow to `engine-schemas.yml`; the workflow names below (`auto-mine.yml`, `invariant-miner.yml`, `parameter-discovery.yml`) are historical and reflect the predecessor pipeline shape that has since collapsed/renamed. The structural lessons (commit-back determinism, self-hosted runner serialisation) carry over to the merged workflow. The actual commit sequence on the PR branch:
+The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transformers v4.57.3 → v4.57.6) was the first naturally-Renovate-authored exercise of the full chain. It pre-dates the merge of mining + validate into `engine-invariants.yml` and the rename of the schema workflow to `engine-schemas.yml`; the workflow names below (`auto-mine.yml`, `invariant-miner.yml`, `parameter-discovery.yml`) are historical and reflect the predecessor pipeline shape that has since collapsed/renamed. The structural lessons (commit-back determinism, self-hosted runner serialisation) carry over to the merged workflow. The actual commit sequence on the PR branch:
 
 ```
   Commit (PR #459 branch)   Author       Producing workflow / event
@@ -509,9 +509,9 @@ The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transforme
                                          (TRANSFORMERS_VERSION → 4.57.6)
                                                   │
                                                   ▼
-  a77aa185                  llem-ci-bot  invariant-miner.yml — vendor-tensorrt
+  a77aa185                  llem-ci-bot  invariant-miner.yml — validate-tensorrt
                                          (first cycle; replays existing
-                                          tensorrt rules against live library)
+                                          tensorrt invariants against live library)
                                                   │
                                                   ▼
   ae22d224                  llem-ci-bot  parameter-discovery.yml
@@ -519,9 +519,9 @@ The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transforme
                                           schema, 1 safe change)
                                                   │
                                                   ▼
-  45e0d75a                  llem-ci-bot  invariant-miner.yml — vendor-transformers
+  45e0d75a                  llem-ci-bot  invariant-miner.yml — validate-transformers
                                          (first cycle; replays existing
-                                          transformers rules against new library)
+                                          transformers invariants against new library)
                                                   │
                                                   ▼
   96d811fb                  llem-ci-bot  auto-mine.yml — mine-transformers
@@ -529,12 +529,12 @@ The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transforme
                                           from miners against new library)
                                                   │
                                                   ▼  (chain validation re-fire)
-  fb473a22                  llem-ci-bot  invariant-miner.yml — vendor-transformers
+  fb473a22                  llem-ci-bot  invariant-miner.yml — validate-transformers
                                          (Stage 2 RE-FIRES on auto-mine's
-                                          new YAML; vendors against new YAML)
+                                          new YAML; validates against new YAML)
                                                   │
                                                   ▼  (delayed; serial runner)
-  75d4c0c1                  llem-ci-bot  invariant-miner.yml — vendor-vllm
+  75d4c0c1                  llem-ci-bot  invariant-miner.yml — validate-vllm
                                          (delayed: self-hosted GPU runner is
                                           serial, vLLM job queued behind others)
 ```
@@ -542,10 +542,10 @@ The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transforme
 **What this proved empirically (carries over to the merged workflow):**
 
 - **Path-filter-driven fan-out fires on a single Renovate-authored bump.** No actor-gate intervention; path filters alone are sufficient. Same property holds for `update-engine-invariants.yml`.
-- **Stage 1 → Stage 2 chain validation works as designed.** The historical `auto-mine.yml` writeback at `96d811fb` re-fired the historical `invariant-miner.yml` at `fb473a22` against the new YAML. The trust seam (YAML diff visible to reviewers before JSON gate runs) was exercised end-to-end. The merged `update-engine-invariants.yml` preserves the trust seam in-process: the proposed-corpus diff is emitted before the vendor-replay's verdict lands in the same commit.
+- **Stage 1 → Stage 2 chain validation works as designed.** The historical `auto-mine.yml` writeback at `96d811fb` re-fired the historical `invariant-miner.yml` at `fb473a22` against the new YAML. The trust seam (YAML diff visible to reviewers before JSON gate runs) was exercised end-to-end. The merged `update-engine-invariants.yml` preserves the trust seam in-process: the proposed-corpus diff is emitted before the validate-replay's verdict lands in the same commit.
 - **App-token + `--force-with-lease` writebacks succeed** without recursion-guard issues.
 - **Determinism holds.** Of the ~14 bot comments posted across the cycle, 8 were "No changes" after subsequent runs - proving the `LLENERGY_*_FROZEN_AT` env-var contracts produce reproducible outputs once the corpus has converged.
-- **Self-hosted GPU runner serialisation is observable.** The vLLM vendor gate (`75d4c0c1`) was queued behind vendor-tensorrt and arrived after the transformers chain had already converged.
+- **Self-hosted GPU runner serialisation is observable.** The vLLM validation gate (`75d4c0c1`) was queued behind validate-tensorrt and arrived after the transformers chain had already converged.
 
 **What did not work on this PR (separate blockers, not chain-validation failures):**
 
@@ -558,11 +558,11 @@ For the full closure summary and bot-comment audit, see PR #459's final comment 
 
 ### Status: #394 (check-vs-commit semantics)
 
-Issue #394 raised the question of whether Stage 2's bot writeback should commit the vendored JSON back to the PR or merely check it (a "check-only" mode without a writeback). At the time of writing the simplification looked attractive - the YAML at Stage 1 already serves the trust-seam role.
+Issue #394 raised the question of whether Stage 2's bot writeback should commit the validated YAML back to the PR or merely check it (a "check-only" mode without a writeback). At the time of writing the simplification looked attractive - the YAML at Stage 1 already serves the trust-seam role.
 
 Status note as of Phase C closure:
 
-- The runtime currently reads the vendored JSON via `_apply_vendored_rules` in `src/llenergymeasure/config/models.py` (which calls `_get_rules_loader().load_rules`). Removing the JSON commit-back without first migrating the runtime path would break runtime validation.
+- The runtime currently reads the validated YAML via `_apply_invariants` in `src/llenergymeasure/config/models.py` (which calls `_get_invariants_loader().load_invariants`). Removing the commit-back without first migrating the runtime path would break runtime validation.
 - This makes the blast radius of #394's proposed simplification larger than the issue thread implied. A clean resolution depends on the Docker-only target architecture being settled first (#467), since the JSON consumption pattern is a function of how the runtime resolves rules at experiment-run time.
 - Cross-references: #394 (the original check-vs-commit question), #467 (Docker-only architecture that affects the runtime side), #393 (the historical auto-mine automation gap, partially closed by Phase B.4 and finished by the merge into `engine-invariants.yml`).
 
@@ -618,7 +618,7 @@ The templates NOT adopted from Daikon's full library: linear arithmetic ternary 
 ## See also
 
 - [architecture-overview.md](/architecture/architecture-overview) - system overview and data-flow
-- [validation-rule-corpus.md](/architecture/validation-rule-corpus) - corpus YAML format reference
+- [validation-invariant-corpus.md](/architecture/validation-invariant-corpus) - corpus YAML format reference
 - [extending-miners.md](/architecture/extending-miners) - how to add a new engine miner
 - [parameter-discovery.md](/methodology/parameter-discovery) - runtime validation pipeline
 - [research-context.md](/methodology/research-context) - academic positioning

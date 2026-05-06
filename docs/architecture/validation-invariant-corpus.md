@@ -11,20 +11,20 @@ This document is the reference for the YAML corpus format: what each field means
 ```
   src/llenergymeasure/engines/
   ├── transformers.proposed.yaml   Maintainer-seeded corpus, post-mining
-  ├── transformers.vendored.yaml   CI-validated overlay, post-vendor-replay
+  ├── transformers.validated.yaml   CI-validated overlay, post-validate-replay
   └── _staging/
       ├── transformers_static_miner.yaml   Per-miner staging output (not committed)
       ├── transformers_dynamic_miner.yaml
       └── _failed_validation_transformers.yaml  Quarantined rules
 
-  src/llenergymeasure/config/vendored_rules/
+  src/llenergymeasure/config/engine_invariants/
   └── loader.py                  Runtime consumer
 ```
 
 The two corpus files form a lifecycle pair: the miner pipeline writes the
-proposed YAML, then `vendor_rules.py` replays each rule inside the
-engine's Docker image and writes the vendored YAML. The runtime loader
-overlays vendored observations onto the proposed corpus, so consumers see
+proposed YAML, then `validate_invariants.py` replays each invariant inside the
+engine's Docker image and writes the validated YAML. The runtime loader
+overlays validated observations onto the proposed corpus, so consumers see
 CI-confirmed behaviour where available and the declared shape elsewhere.
 
 ---
@@ -36,7 +36,7 @@ schema_version: 1.0.0          # Major version must match loader's SUPPORTED_MAJ
 engine: transformers            # Engine name; must match a known engine key
 engine_version: 4.56.0         # Library version the corpus was mined and validated against
 mined_at: '2026-04-25T18:01:18Z'  # ISO 8601 timestamp of last full mine run
-rules:
+invariants:
   - ...                          # List of rule entries
 ```
 
@@ -61,7 +61,7 @@ Below is a complete rule from the transformers corpus with every field annotated
   # Matches engine for single-library engines;
   # may differ for engines that alias a library.
 
-  rule_under_test: "GenerationConfig.__init__ flags `num_beams` (num beams not divisible by num beam groups)"
+  invariant_under_test: "GenerationConfig.__init__ flags `num_beams` (num beams not divisible by num beam groups)"
   # Human-readable description of what library behaviour this rule captures.
   # Format: {NativeType}.{method} flags {field} ({condition})
 
@@ -73,7 +73,7 @@ Below is a complete rule from the transformers corpus with every field annotated
 
   native_type: transformers.GenerationConfig
   # The fully-qualified class name the rule's predicate applies to.
-  # Used by the vendor-CI gate to know which class to instantiate.
+  # Used by the validation-CI gate to know which class to instantiate.
 
   miner_source:
     path: transformers/generation/configuration_utils.py
@@ -98,7 +98,7 @@ Below is a complete rule from the transformers corpus with every field annotated
     num_beams: 2
     num_beam_groups: 3
     # kwargs that trigger the rule (should cause the engine to raise/warn/normalise).
-    # Passed directly to the native_type constructor in the vendor-CI gate.
+    # Passed directly to the native_type constructor in the validation-CI gate.
     # 2 is not divisible by 3, so the rule fires.
 
   kwargs_negative:
@@ -122,7 +122,7 @@ Below is a complete rule from the transformers corpus with every field annotated
     `num_beams` has to be divisible by `num_beam_groups`, but got
     `num_beams`={declared_value} and `num_beam_groups`={declared_value}.
   # The static fragment of the library's error message.
-  # Used by the vendor-CI gate's message_template_match check:
+  # Used by the validation-CI gate's message_template_match check:
   # the gate asserts this fragment appears in the live library's exception message.
   # Template variables ({declared_value}, {effective_value}, etc.) are
   # substituted when the rule fires at validation time.

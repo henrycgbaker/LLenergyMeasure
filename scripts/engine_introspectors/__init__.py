@@ -60,7 +60,7 @@ def _resolve_output_path(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Discover engine parameter schemas and write vendored JSON files."
+        description="Discover engine parameter schemas and write discovered JSON files."
     )
     parser.add_argument(
         "--engine",

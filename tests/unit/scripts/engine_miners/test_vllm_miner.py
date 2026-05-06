@@ -4,13 +4,13 @@ Covers:
 - Lift call-site: ``_pydantic_lift`` and ``_msgspec_lift`` produce
   candidates over the real vLLM types they're configured against.
 - ``_dataclass_lift`` is intentionally NOT called by the vLLM dynamic miner
-  (EngineArgs Literal rules don't fire at construction); the lift module
+  (EngineArgs Literal invariants don't fire at construction); the lift module
   itself has its own unit tests in ``test_dataclass_lift.py``.
 - Static miner method-resolution: every declared landmark exists on the
   installed library, raising :class:`MinerLandmarkMissingError` if any
   drifts away.
 - Fixpoint gate-soundness: ``assert_gate_soundness_fixpoint`` succeeds on
-  the real vendor gate, mirroring the transformers test.
+  the real validation gate, mirroring the transformers test.
 
 Tests are skipped when ``vllm`` isn't importable in the test environment
 (GH-hosted ``ubuntu-latest`` without the optional extra installed).
@@ -82,7 +82,7 @@ class TestLiftCallSites:
             assert cand.added_by == "msgspec_lift"
 
     def test_pydantic_lift_called_on_cache_config(self) -> None:
-        """pydantic_lift on ``CacheConfig`` produces multiple rules.
+        """pydantic_lift on ``CacheConfig`` produces multiple invariants.
 
         Anchors the lift's behaviour on a class the research doc identifies
         as having rich annotated-types metadata
@@ -97,7 +97,7 @@ class TestLiftCallSites:
             source_path="vllm/config/cache.py",
         )
         assert len(result) >= 5, (
-            f"Expected pydantic_lift to find at least 5 rules on CacheConfig "
+            f"Expected pydantic_lift to find at least 5 invariants on CacheConfig "
             f"(gpu_memory_utilization, swap_space, block_size etc.); got {len(result)}"
         )
         for cand in result:
@@ -108,7 +108,7 @@ class TestLiftCallSites:
         """The dynamic miner intentionally skips ``_dataclass_lift(EngineArgs)``.
 
         Stdlib dataclass doesn't enforce Literal types — running the lift
-        here would emit ~23 unenforceable rules that all fail vendor-CI.
+        here would emit ~23 unenforceable invariants that all fail validation-CI.
         Pin the omission so a future refactor doesn't accidentally re-add
         the call.
         """
@@ -124,12 +124,12 @@ class TestLiftCallSites:
         )
         # Sanity: the lift is structurally functional (would emit something).
         assert isinstance(candidates_if_called, list)
-        # The actual dynamic-miner output must NOT include EngineArgs rules.
+        # The actual dynamic-miner output must NOT include EngineArgs invariants.
         candidates, _ = walk_vllm_dynamic()
         engineargs_rules = [c for c in candidates if "EngineArgs" in c.native_type]
         assert engineargs_rules == [], (
             f"Dynamic miner unexpectedly emitted {len(engineargs_rules)} "
-            f"EngineArgs rules; the dataclass-lift call is supposed to be "
+            f"EngineArgs invariants; the dataclass-lift call is supposed to be "
             f"skipped for EngineArgs (see vllm_dynamic_miner.py for rationale)."
         )
 
@@ -146,7 +146,7 @@ class TestLiftCallSites:
 
         Mirrors the static miner's fail-loud landmark contract for the
         dynamic-miner side: missing class -> clear failure rather than
-        silent zero-rule output.
+        silent zero-invariant output.
         """
         from scripts.engine_miners.vllm_dynamic_miner import _LiftTarget
 
@@ -166,14 +166,14 @@ class TestLiftCallSites:
 class TestStaticMinerLandmarks:
     """Every declared AST landmark must resolve via ``find_class`` /
     ``find_method`` at miner-import time, so an upstream rename surfaces
-    as a loud landmark error instead of silent zero-rule output."""
+    as a loud landmark error instead of silent zero-invariant output."""
 
     def test_check_landmarks_passes_on_pinned_version(self) -> None:
         """``_check_landmarks()`` returns cleanly on the pinned vLLM version.
 
         Implicitly verifies every entry in ``_AST_TARGETS`` resolves; if any
         method has been renamed / split, the test fails with the specific
-        landmark name, not a silent zero-rule output.
+        landmark name, not a silent zero-invariant output.
         """
         version, paths = _check_landmarks()
         assert version, "vLLM version string was empty"
@@ -210,15 +210,15 @@ class TestStaticMinerLandmarks:
 
 
 # ---------------------------------------------------------------------------
-# Walker top-level smoke
+# Miner top-level smoke
 # ---------------------------------------------------------------------------
 
 
 class TestWalkerSmoke:
-    """Confirm the full walker returns plausible output."""
+    """Confirm the full miner returns plausible output."""
 
     def test_static_miner_emits_rules(self) -> None:
-        """Static miner produces a non-trivial number of rules on the live library."""
+        """Static miner produces a non-trivial number of invariants on the live library."""
         candidates, version = walk_vllm_static()
         assert load_miner_pin("vllm", "static").contains(version, prereleases=True), (
             f"Installed vllm=={version} outside SSOT miner pin"
@@ -227,7 +227,7 @@ class TestWalkerSmoke:
             f"Static miner emitted only {len(candidates)} candidates; "
             f"expected >=30 across the AST-target list."
         )
-        # Every emitted rule must reference a real vLLM source path.
+        # Every emitted invariant must reference a real vLLM source path.
         for c in candidates:
             assert c.miner_source.path.startswith("vllm/"), (
                 f"Source path {c.miner_source.path!r} not rooted at vllm/"
@@ -290,7 +290,7 @@ class TestGateSoundnessOnVllmCorpus:
     """Re-run the gate-soundness fixpoint from the vLLM test file.
 
     The structural gate-soundness fixpoint is library-agnostic — it
-    synthesises malformed rules and asserts the gate flags each — but
+    synthesises malformed invariants and asserts the gate flags each — but
     re-running it here guarantees the contract is exercised in the
     vLLM CI lane too.
     """

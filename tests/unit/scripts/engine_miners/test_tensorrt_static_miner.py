@@ -12,7 +12,7 @@ Covers:
   load-bearing methods (``LookaheadDecodingConfig.validate_positive_values``,
   ``BaseLlmArgs.validate_build_config_with_runtime_params``).
 - Gate-soundness fixpoint contract (Decision #12 of the adversarial review)
-  — running ``assert_gate_soundness_fixpoint`` against the live vendor
+  — running ``assert_gate_soundness_fixpoint`` against the live validation
   gate must succeed.
 
 These tests skip cleanly when the 0.21.0 source isn't available locally
@@ -92,7 +92,7 @@ class TestModuleContract:
         """Pin the contract that the miner uses the shared landmark helpers.
 
         If a refactor renames or removes these helpers, the regression should
-        be a loud test failure rather than silent walker breakage.
+        be a loud test failure rather than silent miner breakage.
         """
         # _METHOD_LANDMARKS lookups exercise find_class / find_method directly.
         assert trt_miner._METHOD_LANDMARKS  # at least one landmark
@@ -122,7 +122,7 @@ class TestSourceExtraction:
         assert candidates  # something extracted
 
     def test_walk_tensorrt_rule_count_in_target_range(self) -> None:
-        """Pin the design's 20-28 rule target.
+        """Pin the design's 20-28 invariant target.
 
         If a future TRT-LLM source change kicks the count outside this band,
         the test fails loudly — surface the drift rather than silently shift
@@ -140,26 +140,26 @@ class TestSourceExtraction:
             c for c in candidates if c.miner_source.method == "validate_positive_values"
         ]
         assert len(lookahead_rules) == 3
-        fields = sorted(next(iter(rule.match_fields.keys())) for rule in lookahead_rules)
+        fields = sorted(next(iter(invariant.match_fields.keys())) for invariant in lookahead_rules)
         assert fields == [
             "tensorrt.max_ngram_size",
             "tensorrt.max_verification_set_size",
             "tensorrt.max_window_size",
         ]
-        # Each rule must trip the LookaheadDecodingConfig.validate_positive_values
+        # Each invariant must trip the LookaheadDecodingConfig.validate_positive_values
         # raise: ``if v <= 0: raise ValueError("Value must be positive, got {v}")``.
-        for rule in lookahead_rules:
-            assert rule.severity == "error"
-            spec = next(iter(rule.match_fields.values()))
+        for invariant in lookahead_rules:
+            assert invariant.severity == "error"
+            spec = next(iter(invariant.match_fields.values()))
             assert spec == {"<=": 0}, f"Unexpected spec: {spec!r}"
 
     def test_validate_model_emits_type_allowlist_rule(self) -> None:
         candidates, _v, _p = trt_miner.walk_tensorrt()
         model_rules = [c for c in candidates if c.miner_source.method == "validate_model"]
         assert len(model_rules) == 1
-        rule = model_rules[0]
-        assert rule.severity == "error"
-        spec = rule.match_fields["tensorrt.model"]
+        invariant = model_rules[0]
+        assert invariant.severity == "error"
+        spec = invariant.match_fields["tensorrt.model"]
         # ``not isinstance(v, (str, Path))`` -> type_is_not predicate.
         assert "type_is_not" in spec
         assert spec["type_is_not"] in (["str", "Path"], ["Path", "str"])
@@ -172,32 +172,34 @@ class TestSourceExtraction:
         max_seq_len / max_beam_width / max_input_len mismatches.
         """
         candidates, _v, _p = trt_miner.walk_tensorrt()
-        rules = [
+        invariants = [
             c
             for c in candidates
             if c.miner_source.method == "validate_build_config_with_runtime_params"
         ]
-        assert len(rules) == 5
+        assert len(invariants) == 5
         sev_counts: dict[str, int] = {}
-        for rule in rules:
-            sev_counts[rule.severity] = sev_counts.get(rule.severity, 0) + 1
+        for invariant in invariants:
+            sev_counts[invariant.severity] = sev_counts.get(invariant.severity, 0) + 1
         assert sev_counts == {"error": 2, "warn": 3}
 
     def test_validate_enable_build_cache_emits_type_rule(self) -> None:
         candidates, _v, _p = trt_miner.walk_tensorrt()
-        rules = [c for c in candidates if c.miner_source.method == "validate_enable_build_cache"]
-        assert len(rules) == 1
-        assert rules[0].native_type == "tensorrt_llm.TrtLlmArgs"
-        assert rules[0].severity == "error"
+        invariants = [
+            c for c in candidates if c.miner_source.method == "validate_enable_build_cache"
+        ]
+        assert len(invariants) == 1
+        assert invariants[0].native_type == "tensorrt_llm.TrtLlmArgs"
+        assert invariants[0].severity == "error"
 
     def test_set_runtime_knobs_emits_per_loop_iteration_rule(self) -> None:
-        """The loop-literal pattern parameterises 5 fields into 5 rules."""
+        """The loop-literal pattern parameterises 5 fields into 5 invariants."""
         candidates, _v, _p = trt_miner.walk_tensorrt()
-        rules = [
+        invariants = [
             c for c in candidates if c.miner_source.method == "set_runtime_knobs_from_build_config"
         ]
-        assert len(rules) == 5
-        # Each rule's match.fields must reference one of the loop's 5 keys.
+        assert len(invariants) == 5
+        # Each invariant's match.fields must reference one of the loop's 5 keys.
         loop_keys = {
             "tensorrt.max_batch_size",
             "tensorrt.max_num_tokens",
@@ -206,8 +208,8 @@ class TestSourceExtraction:
             "tensorrt.max_beam_width",
         }
         seen_keys: set[str] = set()
-        for rule in rules:
-            for path in rule.match_fields:
+        for invariant in invariants:
+            for path in invariant.match_fields:
                 if path in loop_keys:
                     seen_keys.add(path)
         assert seen_keys == loop_keys
@@ -216,17 +218,17 @@ class TestSourceExtraction:
         """Source-driven Literal lift on BaseLlmArgs.tokenizer_mode."""
         candidates, _v, _p = trt_miner.walk_tensorrt()
         # tokenizer_mode is ``Literal['auto', 'slow']`` at llm_args.py L782.
-        rule = next(
+        invariant = next(
             (c for c in candidates if "tokenizer_mode" in c.id and "in_2_values" in c.id),
             None,
         )
-        assert rule is not None, "tokenizer_mode Literal lift missing"
-        assert rule.match_fields == {"tensorrt.tokenizer_mode": {"in": ["auto", "slow"]}}
+        assert invariant is not None, "tokenizer_mode Literal lift missing"
+        assert invariant.match_fields == {"tensorrt.tokenizer_mode": {"in": ["auto", "slow"]}}
 
     def test_strenum_lift_picks_up_capacity_scheduler_policy(self) -> None:
-        """``CapacitySchedulerPolicy`` (StrEnum, 3 members) -> one allowlist rule."""
+        """``CapacitySchedulerPolicy`` (StrEnum, 3 members) -> one allowlist invariant."""
         candidates, _v, _p = trt_miner.walk_tensorrt()
-        rule = next(
+        invariant = next(
             (
                 c
                 for c in candidates
@@ -234,8 +236,8 @@ class TestSourceExtraction:
             ),
             None,
         )
-        assert rule is not None
-        spec = rule.match_fields["tensorrt.capacity_scheduler_policy"]
+        assert invariant is not None
+        spec = invariant.match_fields["tensorrt.capacity_scheduler_policy"]
         assert spec == {"in": ["MAX_UTILIZATION", "GUARANTEED_NO_EVICT", "STATIC_BATCH"]}
 
 
@@ -305,7 +307,7 @@ class TestLandmarkContract:
 
 
 class TestGateSoundnessFixpoint:
-    """The vendor-CI gate's three soundness checks must all be wired.
+    """The validation-CI gate's three soundness checks must all be wired.
 
     This is the same regression contract :class:`TestGateSoundnessFixpoint`
     in :mod:`tests.unit.scripts.engine_miners.test_fixpoint` exercises — duplicated
@@ -340,12 +342,12 @@ class TestAstHelpers:
     def test_extract_predicates_handles_cross_field_compare(self) -> None:
         # ``self.max_batch_size > self.build_config.max_batch_size`` —
         # the right-hand side is a nested attribute, not a self.<simple>
-        # — so the walker treats it as opaque (no @ref synthesised).
+        # — so the miner treats it as opaque (no @ref synthesised).
         fragment = "self.max_batch_size > self.build_config.max_batch_size"
         cond = ast.parse(fragment, mode="eval").body
         preds = trt_miner._extract_predicates(cond)
         # We extract one predicate with no usable RHS in this case, or none.
-        # Either way, the rule body still emits — recall over precision.
+        # Either way, the invariant body still emits — recall over precision.
         # The important contract is: the call doesn't raise.
         assert isinstance(preds, list)
 

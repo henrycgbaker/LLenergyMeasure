@@ -44,7 +44,7 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     """Project a (post-library-resolution) ``ExperimentConfig`` into a resolved-config view.
 
     Reads the active engine section's full post-normalisation state; the
-    library-resolution mechanism has already applied dormant rules to fixpoint before this
+    library-resolution mechanism has already applied dormant invariants to fixpoint before this
     runs.  Callers pass the resolved config, not the declared one — resolved_config_hash is
     meaningless on a pre-resolved config.
 

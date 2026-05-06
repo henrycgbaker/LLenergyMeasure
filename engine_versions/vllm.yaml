@@ -1,7 +1,7 @@
 # Per-engine version-bundle SSOT for vllm.
 #
 # Renovate updates `library.current_version` on each upstream release;
-# every other artefact (Dockerfile ARG, miner pin reads, vendored gates)
+# every other artefact (Dockerfile ARG, miner pin reads, validation gates)
 # is derived from this file. See
 # `.product/designs/engine-coupling-architecture-2026-04-28.md` §4.
 #
@@ -24,8 +24,8 @@ miner_pins:
   dynamic: ">=0.17,<0.18"
   discovery: ">=0.17,<0.18"
 artefact_paths:
-  rules_corpus: src/llenergymeasure/engines/vllm/invariants.proposed.yaml
-  vendored_rules: src/llenergymeasure/engines/vllm/invariants.vendored.yaml
+  engine_invariants: src/llenergymeasure/engines/vllm/invariants.proposed.yaml
+  validated_invariants: src/llenergymeasure/engines/vllm/invariants.validated.yaml
   discovered_schemas: src/llenergymeasure/engines/vllm/schema.discovered.json
 last_probe:
   verdict: pass

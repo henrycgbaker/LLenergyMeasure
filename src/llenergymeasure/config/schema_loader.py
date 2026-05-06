@@ -1,6 +1,6 @@
-"""Load vendored engine schemas discovered by ``scripts.engine_introspectors``.
+"""Load discovered engine schemas produced by ``scripts.engine_introspectors``.
 
-The vendored JSON files in ``discovered_schemas/`` are the canonical SSOT for
+The discovered JSON files in ``discovered_schemas/`` are the canonical SSOT for
 "what parameters CAN be configured per engine". They are produced by running
 introspection inside each engine's Docker image and committed to the repo.
 
@@ -25,7 +25,7 @@ from llenergymeasure.config.ssot import Engine
 
 SUPPORTED_MAJOR_VERSION = 1
 
-# Engines known to ship a vendored schema. Test-patchable module attribute
+# Engines known to ship a discovered schema. Test-patchable module attribute
 # (tests monkeypatch this to inject fake engines); derived from Engine SSOT.
 _KNOWN_ENGINES: tuple[str, ...] = tuple(Engine)
 
@@ -34,7 +34,7 @@ _SCHEMA_FILENAME = "schema.discovered.json"
 
 
 class UnsupportedSchemaVersionError(ValueError):
-    """Raised when a vendored schema's major version doesn't match this loader."""
+    """Raised when a discovered schema's major version doesn't match this loader."""
 
 
 @dataclass(frozen=True)
@@ -53,7 +53,7 @@ class DiscoveryLimitation:
 
 @dataclass(frozen=True)
 class DiscoveredSchema:
-    """A parsed vendored engine schema.
+    """A parsed discovered engine schema.
 
     ``engine_params`` and ``sampling_params`` are kept as raw dicts rather than
     a typed FieldDescriptor because per-engine richness varies: TRT-LLM fields
@@ -76,7 +76,7 @@ class DiscoveredSchema:
 
 
 class SchemaLoader:
-    """Load and cache vendored engine schemas.
+    """Load and cache discovered engine schemas.
 
     Uses a per-instance dict cache (rather than ``functools.lru_cache``) so
     multiple SchemaLoader instances don't share state — convenient for tests
@@ -87,14 +87,14 @@ class SchemaLoader:
         self._cache: dict[str, DiscoveredSchema] = {}
 
     def load_schema(self, engine: str) -> DiscoveredSchema:
-        """Load the vendored schema for ``engine``.
+        """Load the discovered schema for ``engine``.
 
         Raises:
             ValueError: ``engine`` is not a known engine name.
-            FileNotFoundError: No vendored JSON exists for ``engine``.
-            UnsupportedSchemaVersionError: Vendored schema major version
+            FileNotFoundError: No discovered JSON exists for ``engine``.
+            UnsupportedSchemaVersionError: Discovered schema major version
                 doesn't match ``SUPPORTED_MAJOR_VERSION``.
-            json.JSONDecodeError: Vendored file is not valid JSON.
+            json.JSONDecodeError: Discovered file is not valid JSON.
         """
         if engine not in _KNOWN_ENGINES:
             raise ValueError(f"Unknown engine {engine!r}. Known engines: {list(_KNOWN_ENGINES)}.")
@@ -109,7 +109,7 @@ class SchemaLoader:
         except (FileNotFoundError, ModuleNotFoundError) as exc:
             # resources.files raises ModuleNotFoundError on a missing engine sub-package.
             raise FileNotFoundError(
-                f"Vendored schema for engine {engine!r} not found. "
+                f"Discovered schema for engine {engine!r} not found. "
                 f"Run `./scripts/refresh_discovered_schemas.sh {engine}` to generate it."
             ) from exc
 
@@ -121,7 +121,7 @@ class SchemaLoader:
         """Load all known engines' schemas.
 
         Does not skip missing files — every engine in ``_KNOWN_ENGINES`` must
-        have a vendored schema. Callers that need tolerance should iterate and
+        have a discovered schema. Callers that need tolerance should iterate and
         catch ``FileNotFoundError`` themselves.
         """
         return {engine: self.load_schema(engine) for engine in _KNOWN_ENGINES}
@@ -141,7 +141,7 @@ def _parse_envelope(*, engine: str, raw_text: str) -> DiscoveredSchema:
     major = _major_version(schema_version)
     if major != SUPPORTED_MAJOR_VERSION:
         raise UnsupportedSchemaVersionError(
-            f"Vendored schema for {engine!r} has schema_version={schema_version!r} "
+            f"Discovered schema for {engine!r} has schema_version={schema_version!r} "
             f"(major={major}); this SchemaLoader only supports major "
             f"{SUPPORTED_MAJOR_VERSION}. Regenerate with a matching discovery script, "
             f"or upgrade the loader."

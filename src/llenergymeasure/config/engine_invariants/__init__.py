@@ -1,4 +1,4 @@
-"""Vendored validation rules: loader, matcher, predicate engine.
+"""Engine invariants: loader, matcher, predicate engine.
 
 The corpus at ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``
 is the SSOT for what runtime config validation tells users about their configs.
@@ -7,16 +7,18 @@ generic ``@model_validator`` on :class:`llenergymeasure.config.models.Experiment
 and (eventually) by the library resolution mechanism.
 """
 
-from llenergymeasure.config.vendored_rules.loader import (
+from llenergymeasure.config.engine_invariants.loader import (
     VALID_ADDED_BY,
     VALID_EMISSION_CHANNEL,
     VALID_OUTCOME,
     VALID_SEVERITY,
     AddedBy,
     EmissionChannel,
+    EngineInvariants,
+    EngineInvariantsLoader,
+    Invariant,
+    InvariantMatch,
     Outcome,
-    Rule,
-    RuleMatch,
     Severity,
     UnknownAddedByError,
     UnknownEmissionChannelError,
@@ -24,8 +26,6 @@ from llenergymeasure.config.vendored_rules.loader import (
     UnknownOutcomeError,
     UnknownSeverityError,
     UnsupportedSchemaVersionError,
-    VendoredRules,
-    VendoredRulesLoader,
     evaluate_predicate,
     resolve_field_path,
 )
@@ -37,9 +37,11 @@ __all__ = [
     "VALID_SEVERITY",
     "AddedBy",
     "EmissionChannel",
+    "EngineInvariants",
+    "EngineInvariantsLoader",
+    "Invariant",
+    "InvariantMatch",
     "Outcome",
-    "Rule",
-    "RuleMatch",
     "Severity",
     "UnknownAddedByError",
     "UnknownEmissionChannelError",
@@ -47,8 +49,6 @@ __all__ = [
     "UnknownOutcomeError",
     "UnknownSeverityError",
     "UnsupportedSchemaVersionError",
-    "VendoredRules",
-    "VendoredRulesLoader",
     "evaluate_predicate",
     "resolve_field_path",
 ]

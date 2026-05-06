@@ -1,4 +1,4 @@
-"""Tests for :class:`VendoredRulesLoader` and corpus envelope parsing."""
+"""Tests for :class:`EngineInvariantsLoader` and corpus envelope parsing."""
 
 from __future__ import annotations
 
@@ -6,30 +6,30 @@ from pathlib import Path
 
 import pytest
 
-from llenergymeasure.config.vendored_rules import (
+from llenergymeasure.config.engine_invariants import (
     VALID_ADDED_BY,
     VALID_EMISSION_CHANNEL,
     VALID_OUTCOME,
     VALID_SEVERITY,
+    EngineInvariants,
+    EngineInvariantsLoader,
     UnknownAddedByError,
     UnknownEmissionChannelError,
     UnknownEnumValueError,
     UnknownOutcomeError,
     UnknownSeverityError,
     UnsupportedSchemaVersionError,
-    VendoredRules,
-    VendoredRulesLoader,
 )
 
 _CORPUS_MINIMAL = """\
 schema_version: "1.0.0"
 engine: transformers
 engine_version: "4.56.0"
-rules:
+invariants:
   - id: transformers_test_rule
     engine: transformers
     library: transformers
-    rule_under_test: "Test rule"
+    invariant_under_test: "Test invariant"
     severity: dormant
     native_type: transformers.GenerationConfig
     miner_source:
@@ -64,75 +64,75 @@ def _write_corpus(root: Path, engine: str, text: str) -> None:
 
 def test_load_rules_returns_parsed_corpus(tmp_path: Path) -> None:
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
-    corpus = loader.load_rules("transformers")
-    assert isinstance(corpus, VendoredRules)
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    corpus = loader.load_invariants("transformers")
+    assert isinstance(corpus, EngineInvariants)
     assert corpus.engine == "transformers"
     assert corpus.schema_version == "1.0.0"
     assert corpus.engine_version == "4.56.0"
-    assert len(corpus.rules) == 1
-    assert corpus.rules[0].id == "transformers_test_rule"
+    assert len(corpus.invariants) == 1
+    assert corpus.invariants[0].id == "transformers_test_rule"
 
 
 def test_load_rules_per_instance_cache(tmp_path: Path) -> None:
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
-    corpus1 = loader.load_rules("transformers")
-    corpus2 = loader.load_rules("transformers")
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    corpus1 = loader.load_invariants("transformers")
+    corpus2 = loader.load_invariants("transformers")
     # Same identity: pulled from cache on second call.
     assert corpus1 is corpus2
 
 
 def test_invalidate_clears_cache(tmp_path: Path) -> None:
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
-    first = loader.load_rules("transformers")
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    first = loader.load_invariants("transformers")
     loader.invalidate("transformers")
-    second = loader.load_rules("transformers")
+    second = loader.load_invariants("transformers")
     # Different instances: cache was cleared.
     assert first is not second
 
 
 def test_invalidate_all_clears_all(tmp_path: Path) -> None:
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
-    loader.load_rules("transformers")
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    loader.load_invariants("transformers")
     assert loader._cache
     loader.invalidate()
     assert not loader._cache
 
 
 def test_missing_corpus_raises_file_not_found(tmp_path: Path) -> None:
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
     with pytest.raises(FileNotFoundError):
-        loader.load_rules("transformers")
+        loader.load_invariants("transformers")
 
 
 def test_unsupported_major_version_raises(tmp_path: Path) -> None:
     bad_corpus = _CORPUS_MINIMAL.replace('"1.0.0"', '"2.0.0"', 1)
     _write_corpus(tmp_path, "transformers", bad_corpus)
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
     with pytest.raises(UnsupportedSchemaVersionError):
-        loader.load_rules("transformers")
+        loader.load_invariants("transformers")
 
 
 def test_missing_schema_version_raises(tmp_path: Path) -> None:
     corpus = """\
 engine: transformers
 engine_version: "4.56.0"
-rules: []
+invariants: []
 """
     _write_corpus(tmp_path, "transformers", corpus)
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
     with pytest.raises(UnsupportedSchemaVersionError):
-        loader.load_rules("transformers")
+        loader.load_invariants("transformers")
 
 
 def test_non_mapping_root_raises(tmp_path: Path) -> None:
     _write_corpus(tmp_path, "transformers", "- just a list")
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
     with pytest.raises(ValueError, match="must be a YAML mapping"):
-        loader.load_rules("transformers")
+        loader.load_invariants("transformers")
 
 
 def test_empty_rules_list_is_valid(tmp_path: Path) -> None:
@@ -140,17 +140,17 @@ def test_empty_rules_list_is_valid(tmp_path: Path) -> None:
 schema_version: "1.0.0"
 engine: transformers
 engine_version: "4.56.0"
-rules: []
+invariants: []
 """
     _write_corpus(tmp_path, "transformers", corpus)
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
-    result = loader.load_rules("transformers")
-    assert result.rules == ()
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    result = loader.load_invariants("transformers")
+    assert result.invariants == ()
 
 
 def test_default_corpus_root_resolves_to_engines(tmp_path: Path) -> None:
     # Constructing without corpus_root uses the repo's src/llenergymeasure/engines/.
-    loader = VendoredRulesLoader()
+    loader = EngineInvariantsLoader()
     assert loader.corpus_root.name == "engines"
     assert loader.corpus_root.parent.name == "llenergymeasure"
 
@@ -194,9 +194,9 @@ def test_valid_added_by_set_has_all_provenance_classes() -> None:
 def test_all_added_by_values_round_trip(tmp_path: Path, provenance: str) -> None:
     corpus = _CORPUS_MINIMAL.replace("added_by: static_miner", f"added_by: {provenance}")
     _write_corpus(tmp_path, "transformers", corpus)
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
-    rules = loader.load_rules("transformers").rules
-    assert rules[0].added_by == provenance
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    invariants = loader.load_invariants("transformers").invariants
+    assert invariants[0].added_by == provenance
 
 
 def test_unknown_added_by_value_raises(tmp_path: Path) -> None:
@@ -204,9 +204,9 @@ def test_unknown_added_by_value_raises(tmp_path: Path) -> None:
         "added_by: static_miner", "added_by: chatgpt_hallucination"
     )
     _write_corpus(tmp_path, "transformers", bad_corpus)
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
     with pytest.raises(UnknownAddedByError, match="chatgpt_hallucination"):
-        loader.load_rules("transformers")
+        loader.load_invariants("transformers")
 
 
 def test_missing_added_by_defaults_to_manual_seed(tmp_path: Path) -> None:
@@ -214,9 +214,9 @@ def test_missing_added_by_defaults_to_manual_seed(tmp_path: Path) -> None:
     # falls back to manual_seed (the conservative default).
     corpus = _CORPUS_MINIMAL.replace("    added_by: static_miner\n", "")
     _write_corpus(tmp_path, "transformers", corpus)
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
-    rules = loader.load_rules("transformers").rules
-    assert rules[0].added_by == "manual_seed"
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
+    invariants = loader.load_invariants("transformers").invariants
+    assert invariants[0].added_by == "manual_seed"
 
 
 # ---------------------------------------------------------------------------
@@ -253,17 +253,17 @@ def test_valid_emission_channel_set_matches_design_spec() -> None:
 def test_unknown_severity_value_raises(tmp_path: Path) -> None:
     bad_corpus = _CORPUS_MINIMAL.replace("severity: dormant", "severity: kritical")
     _write_corpus(tmp_path, "transformers", bad_corpus)
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
     with pytest.raises(UnknownSeverityError, match="kritical"):
-        loader.load_rules("transformers")
+        loader.load_invariants("transformers")
 
 
 def test_unknown_outcome_value_raises(tmp_path: Path) -> None:
     bad_corpus = _CORPUS_MINIMAL.replace("outcome: dormant_announced", "outcome: totally_made_up")
     _write_corpus(tmp_path, "transformers", bad_corpus)
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
     with pytest.raises(UnknownOutcomeError, match="totally_made_up"):
-        loader.load_rules("transformers")
+        loader.load_invariants("transformers")
 
 
 def test_unknown_emission_channel_value_raises(tmp_path: Path) -> None:
@@ -271,9 +271,9 @@ def test_unknown_emission_channel_value_raises(tmp_path: Path) -> None:
         "emission_channel: minor_issues_dict", "emission_channel: smoke_signals"
     )
     _write_corpus(tmp_path, "transformers", bad_corpus)
-    loader = VendoredRulesLoader(corpus_root=tmp_path)
+    loader = EngineInvariantsLoader(corpus_root=tmp_path)
     with pytest.raises(UnknownEmissionChannelError, match="smoke_signals"):
-        loader.load_rules("transformers")
+        loader.load_invariants("transformers")
 
 
 def test_enum_value_errors_share_common_base_class() -> None:
@@ -285,18 +285,18 @@ def test_enum_value_errors_share_common_base_class() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Vendored YAML overlay (invariant-miner CI)
+# Validated YAML overlay (invariant-miner CI)
 # ---------------------------------------------------------------------------
 
 
-def test_overlay_applied_when_vendored_yaml_present(
+def test_overlay_applied_when_validated_yaml_present(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from llenergymeasure.config.vendored_rules import loader as loader_mod
+    from llenergymeasure.config.engine_invariants import loader as loader_mod
 
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
 
-    vendored_payload = {
+    validated_payload = {
         "schema_version": "1.0.0",
         "engine": "transformers",
         "engine_version": "4.56.0",
@@ -313,64 +313,64 @@ def test_overlay_applied_when_vendored_yaml_present(
 
     monkeypatch.setattr(
         loader_mod,
-        "_try_load_vendored_yaml",
-        lambda _root, _engine: vendored_payload,
+        "_try_load_validated_yaml",
+        lambda _root, _engine: validated_payload,
     )
 
-    result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
-    assert len(result.rules) == 1
-    expected = result.rules[0].expected_outcome
+    result = EngineInvariantsLoader(corpus_root=tmp_path).load_invariants("transformers")
+    assert len(result.invariants) == 1
+    expected = result.invariants[0].expected_outcome
     assert expected["observed_outcome"] == "dormant_announced"
     assert expected["observed_emission_channel"] == "logger_warning"
     assert expected["observed_messages"] == ["library emitted this"]
 
 
-def test_no_overlay_when_vendored_yaml_absent(
+def test_no_overlay_when_validated_yaml_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from llenergymeasure.config.vendored_rules import loader as loader_mod
+    from llenergymeasure.config.engine_invariants import loader as loader_mod
 
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
-    monkeypatch.setattr(loader_mod, "_try_load_vendored_yaml", lambda _root, _engine: None)
+    monkeypatch.setattr(loader_mod, "_try_load_validated_yaml", lambda _root, _engine: None)
 
-    result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
-    assert len(result.rules) == 1
-    expected = result.rules[0].expected_outcome
+    result = EngineInvariantsLoader(corpus_root=tmp_path).load_invariants("transformers")
+    assert len(result.invariants) == 1
+    expected = result.invariants[0].expected_outcome
     # The corpus's declared fields are preserved; no observed_* keys appear.
     assert "observed_outcome" not in expected
     assert "observed_emission_channel" not in expected
 
 
-def test_overlay_skips_rules_without_matching_vendor_case(
+def test_overlay_skips_invariants_without_matching_validation_case(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from llenergymeasure.config.vendored_rules import loader as loader_mod
+    from llenergymeasure.config.engine_invariants import loader as loader_mod
 
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
     monkeypatch.setattr(
         loader_mod,
-        "_try_load_vendored_yaml",
+        "_try_load_validated_yaml",
         lambda _root, _engine: {"cases": [{"id": "some_other_rule", "outcome": "error"}]},
     )
-    result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
-    # No matching case -> rule is returned unchanged.
-    assert "observed_outcome" not in result.rules[0].expected_outcome
+    result = EngineInvariantsLoader(corpus_root=tmp_path).load_invariants("transformers")
+    # No matching case -> invariant is returned unchanged.
+    assert "observed_outcome" not in result.invariants[0].expected_outcome
 
 
-def test_try_load_vendored_yaml_rejects_non_numeric_schema_version(
+def test_try_load_validated_yaml_rejects_non_numeric_schema_version(
     tmp_path: Path,
 ) -> None:
     # A corrupt commit-back could write a non-numeric schema_version
     # (e.g. "dev"). The loader must return None rather than propagating
-    # UnsupportedSchemaVersionError from _major() — the vendor CI job
+    # UnsupportedSchemaVersionError from _major() — the validation CI job
     # resurfaces the issue separately.
     import yaml
 
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
-    (tmp_path / "transformers.vendored.yaml").write_text(
+    (tmp_path / "transformers.validated.yaml").write_text(
         yaml.safe_dump({"schema_version": "dev", "cases": []})
     )
 
     # Should not raise; should fall back to YAML-only (no observed_* keys).
-    result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
-    assert "observed_outcome" not in result.rules[0].expected_outcome
+    result = EngineInvariantsLoader(corpus_root=tmp_path).load_invariants("transformers")
+    assert "observed_outcome" not in result.invariants[0].expected_outcome

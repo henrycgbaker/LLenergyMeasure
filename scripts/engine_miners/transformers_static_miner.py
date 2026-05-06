@@ -1,34 +1,34 @@
-"""AST walker for the transformers library — recall-first rule extraction.
+"""AST miner for the transformers library — recall-first invariant extraction.
 
 Walks ``GenerationConfig.validate()`` and the depth-1 helpers it calls
 (``WatermarkingConfig.validate``, ``SynthIDTextWatermarkingConfig.validate``)
-and emits structured rule candidates describing every conditional that
+and emits structured invariant candidates describing every conditional that
 raises, warns, silently normalises, or populates ``minor_issues``.
 
 Why source-AST walking instead of pure introspection
 ----------------------------------------------------
 ``transformers_dynamic_miner.py`` exercises ``GenerationConfig.validate(strict=True)``
 against probe values and lifts ``minor_issues`` / ``ValueError`` messages.
-That works for one-axis rules but loses the **shape** of cross-field
+That works for one-axis invariants but loses the **shape** of cross-field
 predicates: the introspection layer sees the message
 ``"`num_beams` should be divisible by `num_beam_groups`"`` but cannot tell
 that the underlying check is ``num_beams % num_beam_groups != 0``. This
-walker reads predicate structure directly from the AST.
+miner reads predicate structure directly from the AST.
 
 Recall over precision
 ---------------------
-Vendor CI runs every emitted rule against the real library; divergent rules
-fail there. So this walker errs toward emitting candidates with
+Validation CI runs every emitted invariant against the real library; divergent invariants
+fail there. So this miner errs toward emitting candidates with
 low confidence rather than dropping them. A predicate the static miner
 can't fully translate (opaque function call, complex method chain) emits
-the surrounding rule and notes the dropped sub-clause in a YAML comment.
+the surrounding invariant and notes the dropped sub-clause in a YAML comment.
 
 Output
 ------
 Writes ``src/llenergymeasure/engines/transformers/_staging/transformers_static_miner.yaml``
 — consumed downstream by ``scripts/engine_miners/build_corpus.py``. Schema
 mirrors ``src/llenergymeasure/engines/transformers/invariants.proposed.yaml``
-exactly: ``schema_version``, ``engine``, ``engine_version``, ``rules: [...]``.
+exactly: ``schema_version``, ``engine``, ``engine_version``, ``invariants: [...]``.
 
 Run::
 
@@ -75,13 +75,13 @@ from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.
 # ConditionalSelfAssignDetector, etc.) and instead define parallel
 # ``_detect_*`` functions below: the base detectors emit ``DetectedPattern``
 # which carries severity / channel / affected_field but not the structured
-# ``FieldPredicate`` data we need for cross-field corpus rules using
+# ``FieldPredicate`` data we need for cross-field corpus invariants using
 # operators like ``not_divisible_by`` and ``@field_ref``. Extending the base
 # classes would either change their public ``DetectedPattern`` shape
 # (breaking the introspection extractor that currently consumes it) or
-# require lossy adapter shims at every emission site. With one walker live
-# today, the cheaper choice is per-walker detectors that emit a richer
-# local ``DetectedBody`` type. Revisit when a second walker (vLLM, TRT-LLM)
+# require lossy adapter shims at every emission site. With one miner live
+# today, the cheaper choice is per-miner detectors that emit a richer
+# local ``DetectedBody`` type. Revisit when a second miner (vLLM, TRT-LLM)
 # lands and we can see whether the parallel detector logic is genuinely
 # divergent or accidentally so.
 
@@ -112,12 +112,12 @@ BNB_NAMESPACE = "transformers"
 
 # A small allowlist of decoder-config field paths used by the project's
 # Pydantic models. Most generation-config fields live under .sampling.
-# Some (max_new_tokens, etc.) live under .decoder. The walker emits paths
-# under sampling. by default; if vendor CI flags a path mismatch we can
+# Some (max_new_tokens, etc.) live under .decoder. The miner emits paths
+# under sampling. by default; if validation CI flags a path mismatch we can
 # refine. Recall first.
 
 # Default values used to synthesise positive / negative kwargs when the
-# walker cannot infer better ones from the predicate.
+# miner cannot infer better ones from the predicate.
 _DEFAULT_BY_TYPE: dict[type, Any] = {
     bool: True,
     int: 1,
@@ -147,15 +147,15 @@ class FieldPredicate:
     op: str
     rhs: Any
     confidence_penalty: int = 0
-    """How much this predicate degrades the rule's confidence (0 = none)."""
+    """How much this predicate degrades the invariant's confidence (0 = none)."""
 
 
 @dataclass
 class ExtractedCondition:
     """An ``ast.expr`` condition translated into a list of FieldPredicates.
 
-    ``unparseable_clauses`` records sub-clauses the walker couldn't translate
-    — surfaced into the YAML rule's ``rule_under_test`` so reviewers see what
+    ``unparseable_clauses`` records sub-clauses the miner couldn't translate
+    — surfaced into the YAML invariant's ``invariant_under_test`` so reviewers see what
     was dropped.
     """
 
@@ -177,14 +177,14 @@ class DetectedBody:
 
 
 @dataclass
-class RuleCandidate:
-    """A walker-extracted rule candidate ready to emit as YAML."""
+class InvariantCandidate:
+    """A miner-extracted invariant candidate ready to emit as YAML."""
 
     id: str
     native_type: str
     method: str
     line: int
-    rule_under_test: str
+    invariant_under_test: str
     severity: str
     outcome: str
     emission_channel: str
@@ -197,9 +197,9 @@ class RuleCandidate:
     library: str = LIBRARY
     """Owning library — overridden for BNB (``bitsandbytes``) etc."""
     source_path: str | None = None
-    """Site-packages-relative source path. Falls back to the walker's
-    primary module path when None — used by GenerationConfig rules; BNB
-    rules sit in a different source file and override this."""
+    """Site-packages-relative source path. Falls back to the miner's
+    primary module path when None — used by GenerationConfig invariants; BNB
+    invariants sit in a different source file and override this."""
     normalised_fields: list[Any] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -276,7 +276,7 @@ def _rhs_from_node(node: ast.expr) -> tuple[bool, Any, int]:
         return True, f"@{name}", 0
     # ast.Name resolved as a module-level constant (e.g. ALL_CACHE_IMPLEMENTATIONS):
     # treat as opaque but flag low confidence — the loader can't replay it,
-    # but vendor CI can run kwargs_positive / kwargs_negative empirically.
+    # but validation CI can run kwargs_positive / kwargs_negative empirically.
     if isinstance(node, ast.Name):
         return False, ast.unparse(node), 1
     return False, ast.unparse(node), 1
@@ -490,7 +490,7 @@ def _extract_unary_not(node: ast.UnaryOp) -> tuple[list[FieldPredicate], list[st
         )
         return inverted, inner_un
     # If inversion isn't local, we can't reliably express it: surface as
-    # unparseable. Vendor CI will catch divergence.
+    # unparseable. Validation CI will catch divergence.
     return [], [ast.unparse(node), *inner_un]
 
 
@@ -499,7 +499,7 @@ def extract_predicates(condition: ast.expr) -> tuple[list[FieldPredicate], list[
 
     BoolOp(And, ...) → AND-combined; we recurse and concatenate.
     BoolOp(Or, ...) → can't represent OR in match.fields — surface the entire
-    OR clause as unparseable; the rule emits with low confidence.
+    OR clause as unparseable; the invariant emits with low confidence.
     Compare → extract via ``_extract_compare``.
     Call (isinstance/hasattr) → ``_extract_call_predicate``.
     UnaryOp(Not, ...) → invert inner.
@@ -545,7 +545,7 @@ def negate_predicates(preds: list[FieldPredicate]) -> list[FieldPredicate]:
     For an AND-combined predicate set, the simplest negation is to flip the
     *last* predicate (so its kwargs_negative differs from kwargs_positive in
     only one field). This isn't a logical negation — it's a "near miss" used
-    to give the vendor CI loop a value that doesn't trigger the rule.
+    to give the validation CI loop a value that doesn't trigger the invariant.
     """
     if not preds:
         return []
@@ -749,7 +749,7 @@ def detect_body(stmt: ast.stmt) -> DetectedBody | None:
 
 
 # ---------------------------------------------------------------------------
-# Walker proper
+# Miner proper
 # ---------------------------------------------------------------------------
 
 
@@ -783,7 +783,7 @@ def _negate_branch_predicates(
 
     Strict: only invertible if the AND-set has exactly one predicate (whose
     operator has a known inversion). Else, surface as an unparseable
-    "else of <conditions>" annotation — the rule emits with low confidence.
+    "else of <conditions>" annotation — the invariant emits with low confidence.
     """
     if len(preds) != 1:
         return [], [f"else of: {' AND '.join(f'{p.field} {p.op} {p.rhs}' for p in preds)}"]
@@ -822,26 +822,26 @@ def walk_function(
     today: str,
     library: str = LIBRARY,
     class_short_name: str | None = None,
-) -> list[RuleCandidate]:
-    """Walk a single function body and return rule candidates.
+) -> list[InvariantCandidate]:
+    """Walk a single function body and return invariant candidates.
 
-    ``library`` is recorded on each emitted rule (BNB rules use
+    ``library`` is recorded on each emitted invariant (BNB invariants use
     ``bitsandbytes`` rather than ``transformers``). ``class_short_name`` is
-    used in human-readable rule descriptions; defaults to the bare class
+    used in human-readable invariant descriptions; defaults to the bare class
     suffix of ``native_type``.
     """
-    rules: list[RuleCandidate] = []
+    invariants: list[InvariantCandidate] = []
     seen_ids: set[str] = set()
     counter: dict[str, int] = {}
 
-    def emit(rule: RuleCandidate) -> None:
+    def emit(invariant: InvariantCandidate) -> None:
         # De-duplicate on id: append a numeric suffix when needed.
-        base = rule.id
+        base = invariant.id
         if base in seen_ids:
             counter[base] = counter.get(base, 1) + 1
-            rule.id = f"{base}__{counter[base]}"
-        seen_ids.add(rule.id)
-        rules.append(rule)
+            invariant.id = f"{base}__{counter[base]}"
+        seen_ids.add(invariant.id)
+        invariants.append(invariant)
 
     def descend(stmts: list[ast.stmt], frame: _IfFrame) -> None:
         for stmt in stmts:
@@ -849,7 +849,7 @@ def walk_function(
                 _handle_if(stmt, frame)
                 continue
             if isinstance(stmt, ast.For):
-                # Walker depth-1: dive into for-loops and treat their body as
+                # Miner depth-1: dive into for-loops and treat their body as
                 # if scoped under hasattr-style accumulator. The HF
                 # ``for arg in generate_arguments: if hasattr(self, arg): raise``
                 # pattern is what we're catching. We don't accumulate the for's
@@ -858,7 +858,7 @@ def walk_function(
                 descend(stmt.body, frame)
                 continue
             # Bare detected statements outside an If: handle as a no-precondition
-            # rule. Rare in practice; skipped.
+            # invariant. Rare in practice; skipped.
             continue
 
     def _handle_if(if_node: ast.If, frame: _IfFrame) -> None:
@@ -909,7 +909,7 @@ def walk_function(
             detected = detect_body(stmt)
             if detected is None:
                 continue
-            rule = _build_rule(
+            invariant = _build_rule(
                 frame=frame,
                 detected=detected,
                 native_type=native_type,
@@ -921,11 +921,11 @@ def walk_function(
                 library=library,
                 class_short_name=short_name,
             )
-            if rule is not None:
-                emit(rule)
+            if invariant is not None:
+                emit(invariant)
 
     descend(func.body, _IfFrame(predicates=[], unparseable=[]))
-    return rules
+    return invariants
 
 
 def _build_rule(
@@ -940,12 +940,12 @@ def _build_rule(
     today: str,
     library: str = LIBRARY,
     class_short_name: str | None = None,
-) -> RuleCandidate | None:
-    """Assemble a RuleCandidate from accumulated predicates + detected body."""
+) -> InvariantCandidate | None:
+    """Assemble a InvariantCandidate from accumulated predicates + detected body."""
     preds = list(frame.predicates)
 
     # If the detected body affects a field (minor_issues key, self-assign),
-    # that field is the rule's *subject*. Place a ``present`` predicate on
+    # that field is the invariant's *subject*. Place a ``present`` predicate on
     # it last so the loader's ``last field = subject`` convention picks it
     # up for the {declared_value} substitution.
     subject_field = detected.affected_field
@@ -985,11 +985,11 @@ def _build_rule(
     else:
         confidence = "low"
 
-    # Rule id summarises the predicate shape.
-    rule_id = _make_rule_id(preds=preds, detected=detected, subject_field=subject_field)
+    # Invariant id summarises the predicate shape.
+    invariant_id = _make_invariant_id(preds=preds, detected=detected, subject_field=subject_field)
 
     short_name = class_short_name or native_type.rsplit(".", 1)[-1]
-    rule_under_test = _describe_rule(
+    invariant_under_test = _describe_rule(
         preds, detected, frame.unparseable, class_short_name=short_name
     )
 
@@ -997,12 +997,12 @@ def _build_rule(
     if frame.unparseable:
         notes.append("dropped sub-clauses: " + " | ".join(frame.unparseable))
 
-    return RuleCandidate(
-        id=rule_id,
+    return InvariantCandidate(
+        id=invariant_id,
         native_type=native_type,
         method=method_name,
         line=line_at_scan,
-        rule_under_test=rule_under_test,
+        invariant_under_test=invariant_under_test,
         severity=detected.severity,
         outcome=detected.outcome,
         emission_channel=detected.emission_channel,
@@ -1035,7 +1035,7 @@ def _build_match_fields(preds: list[FieldPredicate], namespace: str) -> dict[str
             pass
         if p.op in spec:
             # Two predicates with the same operator on the same field —
-            # corpus rule shape can't represent that natively. Keep the
+            # corpus invariant shape can't represent that natively. Keep the
             # last one wins.
             spec[p.op] = rhs
         else:
@@ -1065,9 +1065,9 @@ def _synthesise_kwargs(preds: list[FieldPredicate], *, sense: str) -> dict[str, 
     For ``absent`` predicates we still emit a key (rather than dropping it)
     so the loader's "kwargs_negative is non-empty" invariant holds. We pick
     the field-type's identity element (``False`` for bool flags etc.) so
-    the value satisfies "user passed but the rule shouldn't fire" in the
-    common case where the rule is gated on ``present True``. Vendor CI
-    will quarantine cases where the chosen value still trips the rule.
+    the value satisfies "user passed but the invariant shouldn't fire" in the
+    common case where the invariant is gated on ``present True``. Validation CI
+    will quarantine cases where the chosen value still trips the invariant.
     """
     out: dict[str, Any] = {}
     # For cross-field (@ref) predicates, materialise both fields with values
@@ -1114,9 +1114,9 @@ def _value_satisfying(op: str, rhs: Any) -> Any:
         # be truthy but trips an extra type-check on bool-only fields
         # (e.g. ``BitsAndBytesConfig(load_in_4bit=1)`` raises
         # ``TypeError`` regardless of whether the field is *also*
-        # logically over-broad). Using ``True`` lets vendor validation
-        # observe the actual semantic — does the rule fire when the user
-        # legitimately enables this flag? — and quarantine the rule when
+        # logically over-broad). Using ``True`` lets validation
+        # observe the actual semantic — does the invariant fire when the user
+        # legitimately enables this flag? — and quarantine the invariant when
         # it doesn't.
         return True
     if op == "absent":
@@ -1124,8 +1124,8 @@ def _value_satisfying(op: str, rhs: Any) -> Any:
         # outright (e.g. BitsAndBytesConfig raises ``TypeError: load_in_4bit
         # must be a boolean`` on ``load_in_4bit=None``). Use ``False``, which
         # is the documented default for the BNB / GenerationConfig flag-style
-        # kwargs the AST walker actually emits. Vendor CI quarantines any
-        # rule where the chosen value still trips the predicate.
+        # kwargs the AST miner actually emits. Validation CI quarantines any
+        # invariant where the chosen value still trips the predicate.
         return False
     if op == "type_is":
         return _type_label_default(rhs)
@@ -1180,10 +1180,10 @@ def _type_label_default(label: Any) -> Any:
 
     For non-primitive types we can't materialise without importing the
     relevant runtime (e.g. ``torch.dtype``, custom dataclasses), the
-    walker returns ``None``. The caller treats ``None`` as "field is
+    miner returns ``None``. The caller treats ``None`` as "field is
     absent / default" — many native types (BNB ``bnb_4bit_compute_dtype``,
     GenerationConfig ``compile_config``) accept ``None`` as the no-op
-    value, so vendor validation observes the negative case correctly.
+    value, so validation observes the negative case correctly.
     """
     label_str = label if isinstance(label, str) else (label[0] if label else "str")
     return {
@@ -1218,11 +1218,11 @@ def _force_distinct_negative(pos: dict[str, Any], preds: list[FieldPredicate]) -
     last = preds[-1]
     out = dict(pos)
     # For type_is_not predicates the negation must be a value of the *expected*
-    # type (the type the rule says was violated). ``None`` is a poor sentinel
+    # type (the type the invariant says was violated). ``None`` is a poor sentinel
     # here — many native types reject ``None`` outright (e.g. BNB raises
-    # ``TypeError: load_in_4bit must be a boolean``), so vendor validation
+    # ``TypeError: load_in_4bit must be a boolean``), so validation
     # observes the negative ALSO firing, fails ``negative_confirmed``, and
-    # the rule lands in quarantine. Use a real instance of the rhs type so
+    # the invariant lands in quarantine. Use a real instance of the rhs type so
     # the negative truly doesn't trip the predicate.
     if last.op == "type_is_not":
         rhs = last.rhs
@@ -1243,7 +1243,7 @@ def _force_distinct_negative(pos: dict[str, Any], preds: list[FieldPredicate]) -
     return out
 
 
-def _make_rule_id(
+def _make_invariant_id(
     *,
     preds: list[FieldPredicate],
     detected: DetectedBody,
@@ -1270,14 +1270,14 @@ def _make_rule_id(
         "not_divisible_by": "not_divisible_by",
     }
     # Build (subject, predicate) pieces. Use only as many as keep the id reasonable.
-    # Specialised id shapes for the four mandated rules, derived from predicate shape:
+    # Specialised id shapes for the four mandated invariants, derived from predicate shape:
     fields_in_order = [p.field for p in preds]
     if any(p.op == "not_divisible_by" for p in preds) and "num_beams" in fields_in_order:
         return "transformers_num_beams_not_divisible_by_groups"
     # The library check is `if self.diversity_penalty == 0.0: raise`, in the
     # branch where group beam search is active (an OR-shaped elif we lose).
     # User-facing id signals "diversity_penalty nonpositive when group beams
-    # active" — match the rule by predicate-shape rather than exact predicate.
+    # active" — match the invariant by predicate-shape rather than exact predicate.
     if (
         "diversity_penalty" in fields_in_order
         and any(p.field == "diversity_penalty" and p.op in {"<=", "==", "<"} for p in preds)
@@ -1330,7 +1330,7 @@ def _describe_rule(
     *,
     class_short_name: str = "GenerationConfig",
 ) -> str:
-    """Human-readable rule summary."""
+    """Human-readable invariant summary."""
     pred_str = " AND ".join(f"{p.field} {p.op} {p.rhs}" for p in preds)
     sev_word = {"error": "raises", "warn": "warns", "dormant": "marks dormant"}[detected.severity]
     base = f"{class_short_name}.{detected.detail.replace(' ', '_')}: {sev_word} when {pred_str}"
@@ -1363,44 +1363,44 @@ def _site_packages_relative(abs_path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _candidate_to_dict(rule: RuleCandidate, rel_path: str) -> dict[str, Any]:
-    """Render a RuleCandidate in canonical corpus YAML shape."""
+def _candidate_to_dict(invariant: InvariantCandidate, rel_path: str) -> dict[str, Any]:
+    """Render a InvariantCandidate in canonical corpus YAML shape."""
     expected_outcome: dict[str, Any] = {
-        "outcome": rule.outcome,
-        "emission_channel": rule.emission_channel,
-        "normalised_fields": rule.normalised_fields,
+        "outcome": invariant.outcome,
+        "emission_channel": invariant.emission_channel,
+        "normalised_fields": invariant.normalised_fields,
     }
     return {
-        "id": rule.id,
+        "id": invariant.id,
         "engine": ENGINE,
-        "library": rule.library,
-        "rule_under_test": rule.rule_under_test,
-        "severity": rule.severity,
-        "native_type": rule.native_type,
+        "library": invariant.library,
+        "invariant_under_test": invariant.invariant_under_test,
+        "severity": invariant.severity,
+        "native_type": invariant.native_type,
         "miner_source": {
-            "path": rule.source_path or rel_path,
-            "method": rule.method,
-            "line_at_scan": rule.line,
+            "path": invariant.source_path or rel_path,
+            "method": invariant.method,
+            "line_at_scan": invariant.line,
         },
         "match": {
             "engine": ENGINE,
-            "fields": rule.match_fields,
+            "fields": invariant.match_fields,
         },
-        "kwargs_positive": rule.kwargs_positive,
-        "kwargs_negative": rule.kwargs_negative,
+        "kwargs_positive": invariant.kwargs_positive,
+        "kwargs_negative": invariant.kwargs_negative,
         "expected_outcome": expected_outcome,
-        "message_template": rule.message_template,
-        "references": rule.references,
+        "message_template": invariant.message_template,
+        "references": invariant.references,
         "added_by": "static_miner",
         "added_at": dt.date(2026, 4, 25).isoformat(),
         # Notes (e.g. dropped clauses) are emitted as a non-required field.
-        # The corpus loader ignores unknown keys; vendor CI surfaces them.
-        **({"walker_notes": rule.notes} if rule.notes else {}),
+        # The corpus loader ignores unknown keys; validation CI surfaces them.
+        **({"walker_notes": invariant.notes} if invariant.notes else {}),
     }
 
 
 def emit_yaml(
-    candidates: list[RuleCandidate],
+    candidates: list[InvariantCandidate],
     *,
     engine_version: str,
     rel_path: str,
@@ -1413,9 +1413,9 @@ def emit_yaml(
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
-        "walker": "transformers_static_miner",
+        "miner": "transformers_static_miner",
         "mined_at": dt.date(2026, 4, 25).isoformat(),
-        "rules": [_candidate_to_dict(r, rel_path) for r in candidates_sorted],
+        "invariants": [_candidate_to_dict(r, rel_path) for r in candidates_sorted],
     }
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
 
@@ -1425,7 +1425,7 @@ def emit_yaml(
 # ---------------------------------------------------------------------------
 
 
-def walk_transformers() -> tuple[list[RuleCandidate], str, str]:
+def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
     """Walk transformers source, return (candidates, version, rel_source_path)."""
     try:
         engine_version = importlib.metadata.version("transformers")
@@ -1441,7 +1441,7 @@ def walk_transformers() -> tuple[list[RuleCandidate], str, str]:
     rel_path = _site_packages_relative(abs_path)
     module_ast = _read_source_module(Path(abs_path))
 
-    candidates: list[RuleCandidate] = []
+    candidates: list[InvariantCandidate] = []
     today = dt.date(2026, 4, 25).isoformat()
 
     # 1) GenerationConfig.validate
@@ -1504,11 +1504,11 @@ def walk_transformers() -> tuple[list[RuleCandidate], str, str]:
     return candidates, engine_version, rel_path
 
 
-def _walk_bnb_post_init(today: str) -> list[RuleCandidate]:
+def _walk_bnb_post_init(today: str) -> list[InvariantCandidate]:
     """Walk ``BitsAndBytesConfig.post_init`` for type-check raises.
 
     Returns an empty list if the quantization_config module isn't importable
-    (older transformers) — the merger tolerates absent rules, and vendor CI
+    (older transformers) — the merger tolerates absent invariants, and validation CI
     on a supported version will reintroduce them.
     """
     try:
@@ -1563,7 +1563,7 @@ def main(argv: list[str] | None = None) -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text)
     print(
-        f"Wrote {len(candidates)} candidate rules to {args.out}",
+        f"Wrote {len(candidates)} candidate invariants to {args.out}",
         file=sys.stderr,
     )
     return 0

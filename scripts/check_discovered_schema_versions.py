@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that engine SSOT versions match vendored schema engine_versions.
+"""Check that engine SSOT versions match discovered schema engine_versions.
 
 Each engine has a canonical version pinned in
 ``engine_versions/<engine>.yaml`` under ``library.current_version``. The
@@ -56,7 +56,7 @@ def _ssot_current_version(ssot_path: Path) -> str | None:
 
 
 def _parse_schema_version(schema_path: Path) -> Any:
-    """Extract engine_version from a vendored schema JSON."""
+    """Extract engine_version from a discovered schema JSON."""
     data = json.loads(schema_path.read_text())
     return data.get("engine_version")
 

@@ -1,11 +1,11 @@
-"""Load, match, and render validation rules from the YAML corpus.
+"""Load, match, and render validation invariants from the YAML corpus.
 
 The corpus at ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``
-is parsed here into typed :class:`Rule` entries. Each rule carries a match
+is parsed here into typed :class:`Invariant` entries. Each invariant carries a match
 predicate (operators defined in :func:`evaluate_predicate`) and a message
 template. The generic ``@model_validator`` in ``config/models.py`` calls
-:meth:`Rule.try_match` on every rule for a given engine and emits
-error/warn/dormant annotations based on the rule's severity.
+:meth:`Invariant.try_match` on every invariant for a given engine and emits
+error/warn/dormant annotations based on the invariant's severity.
 
 Design mirror: this module parallels :mod:`llenergymeasure.config.schema_loader`
 from parameter-discovery — same envelope validation
@@ -13,14 +13,14 @@ from parameter-discovery — same envelope validation
 per-instance caching for test isolation, same lazy load pattern.
 
 Lifecycle pair (per the engine-coupling architecture, 2026-04-28):
-  The proposed YAML carries each rule's declared ``expected_outcome``. The
-  ``engine-invariants`` (vendor gate) CI pipeline (see
-  ``scripts/vendor_rules.py``) runs every rule through the real library
-  and emits ``src/llenergymeasure/engines/{engine}/invariants.vendored.yaml``
+  The proposed YAML carries each invariant's declared ``expected_outcome``. The
+  ``engine-invariants`` (validation gate) CI pipeline (see
+  ``scripts/validate_invariants.py``) runs every invariant through the real library
+  and emits ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml``
   — this YAML captures observed outcomes. When present, the loader overlays
-  the vendored observations onto the corpus so downstream consumers see
+  the validated observations onto the corpus so downstream consumers see
   CI-validated truth; absent, the loader falls back to the proposed YAML so
-  local development without a vendor run still works.
+  local development without a validation run still works.
 """
 
 from __future__ import annotations
@@ -40,10 +40,10 @@ refuses partial reads to avoid silently accepting a future schema shape.
 
 
 Severity = Literal["dormant", "warn", "error"]
-"""Severity tier a rule match produces at validation time.
+"""Severity tier a invariant match produces at validation time.
 
 - ``dormant`` — the config still runs, but a field is silently ignored or
-  coerced by the engine. Observable-but-user-invisible; the rule surfaces
+  coerced by the engine. Observable-but-user-invisible; the invariant surfaces
   this.
 - ``warn`` — the engine announces a suboptimal setting at construct or
   runtime but still proceeds.
@@ -57,7 +57,7 @@ Outcome = Literal[
     "error",
     "pass",
 ]
-"""What the engine does when the rule's predicate holds.
+"""What the engine does when the invariant's predicate holds.
 
 - ``dormant_silent`` — the engine silently normalises or ignores
   (observable only via ``extract_observed_params`` post-construction).
@@ -66,7 +66,7 @@ Outcome = Literal[
 - ``warn`` — the engine calls ``warnings.warn(...)`` or equivalent.
 - ``error`` — the engine raises at construct / validate time.
 - ``pass`` — the predicate matched but the engine handles it cleanly;
-  used for positive-reference rules.
+  used for positive-reference invariants.
 """
 
 EmissionChannel = Literal[
@@ -86,7 +86,7 @@ EmissionChannel = Literal[
 - ``none`` — no user-visible emission (silent coercion or raise).
 - ``runtime_exception`` — exception raised at engine construct / runtime.
 
-Canonical rule: ``minor_issues_dict`` alone is an internal signal; if HF
+Canonical invariant: ``minor_issues_dict`` alone is an internal signal; if HF
 composes the dict then emits via ``logger.warning_once``, the
 user-visible channel is ``logger_warning_once``. Corpus authors should
 record what users see, not the internal staging buffer.
@@ -102,24 +102,24 @@ AddedBy = Literal[
     "runtime_warning",
     "observed_collision",
 ]
-"""Provenance of a rule in the corpus.
+"""Provenance of a invariant in the corpus.
 
 Eight discovery paths with distinct trust/verifiability profiles:
 
-- ``static_miner`` — rule extracted by parsing Python source AST
+- ``static_miner`` — invariant extracted by parsing Python source AST
   (used by vLLM / TRT-LLM miners; CI can re-derive on library bump).
-- ``dynamic_miner`` — rule extracted via library-API introspection
+- ``dynamic_miner`` — invariant extracted via library-API introspection
   (transformers' ``GenerationConfig.validate(strict=True)`` returning
   structured ``minor_issues`` dict; CI can re-derive on library bump).
-- ``pydantic_lift`` — rule extracted from a ``pydantic.BaseModel`` (or
+- ``pydantic_lift`` — invariant extracted from a ``pydantic.BaseModel`` (or
   ``pydantic.dataclasses.dataclass``) via ``model_json_schema()`` plus
   ``FieldInfo.metadata`` (annotated-types constraints + Literal allowlists).
-- ``msgspec_lift`` — rule extracted from a ``msgspec.Struct`` via
+- ``msgspec_lift`` — invariant extracted from a ``msgspec.Struct`` via
   ``msgspec.inspect.type_info`` (``Meta(ge=, le=, ...)`` constraints).
-- ``dataclass_lift`` — rule extracted from a ``@dataclasses.dataclass``
+- ``dataclass_lift`` — invariant extracted from a ``@dataclasses.dataclass``
   via ``dataclasses.fields()`` plus ``Literal[...]`` annotation parsing.
 - ``manual_seed`` — hand-written by a maintainer for cases the miners
-  can't reach (e.g. BNB type rules; not auto-regenerable).
+  can't reach (e.g. BNB type invariants; not auto-regenerable).
 - ``runtime_warning`` — proposed by the feedback loop from captured
   ``logger.warning_once`` emissions (needs human generalisation before
   landing).
@@ -134,11 +134,11 @@ VALID_ADDED_BY: frozenset[str] = frozenset(get_args(AddedBy))
 
 
 class UnsupportedSchemaVersionError(ValueError):
-    """Vendored rules corpus has a schema_version major the loader can't parse."""
+    """Validated invariants corpus has a schema_version major the loader can't parse."""
 
 
 class UnknownEnumValueError(ValueError):
-    """Rule entry has a closed-enum field value outside the permitted set.
+    """Invariant entry has a closed-enum field value outside the permitted set.
 
     Covers ``added_by``, ``severity``, ``expected_outcome.outcome``, and
     ``expected_outcome.emission_channel``. Subclassed per field for callers
@@ -147,19 +147,19 @@ class UnknownEnumValueError(ValueError):
 
 
 class UnknownAddedByError(UnknownEnumValueError):
-    """Rule entry has an ``added_by`` value outside :data:`AddedBy`."""
+    """Invariant entry has an ``added_by`` value outside :data:`AddedBy`."""
 
 
 class UnknownSeverityError(UnknownEnumValueError):
-    """Rule entry has a ``severity`` value outside :data:`Severity`."""
+    """Invariant entry has a ``severity`` value outside :data:`Severity`."""
 
 
 class UnknownOutcomeError(UnknownEnumValueError):
-    """Rule entry has an ``expected_outcome.outcome`` value outside :data:`Outcome`."""
+    """Invariant entry has an ``expected_outcome.outcome`` value outside :data:`Outcome`."""
 
 
 class UnknownEmissionChannelError(UnknownEnumValueError):
-    """Rule entry has an ``expected_outcome.emission_channel`` value outside :data:`EmissionChannel`."""
+    """Invariant entry has an ``expected_outcome.emission_channel`` value outside :data:`EmissionChannel`."""
 
 
 # ---------------------------------------------------------------------------
@@ -168,34 +168,34 @@ class UnknownEmissionChannelError(UnknownEnumValueError):
 
 
 @dataclass(frozen=True)
-class RuleMatch:
-    """Result of a rule matching a concrete config.
+class InvariantMatch:
+    """Result of a invariant matching a concrete config.
 
     ``declared_value`` is the user-set value for the *trigger* field (the first
     non-trivially-predicated field in the match spec). ``effective_value``
-    populates only when the rule's ``expected_outcome`` lists the rule as
+    populates only when the invariant's ``expected_outcome`` lists the invariant as
     ``dormant_silent`` with a ``normalised_fields`` mapping.
     """
 
-    rule: Rule
+    invariant: Invariant
     declared_value: Any
     effective_value: Any | None = None
     matched_fields: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
-class Rule:
-    """One validation rule parsed from the corpus.
+class Invariant:
+    """One validation invariant parsed from the corpus.
 
     Field names mirror the YAML schema documented in
     ``src/llenergymeasure/engines/INVARIANTS_README.md``. Construction goes through
-    :func:`_parse_rule`; tests can instantiate directly for unit coverage.
+    :func:`_parse_invariant`; tests can instantiate directly for unit coverage.
     """
 
     id: str
     engine: str
     library: str
-    rule_under_test: str
+    invariant_under_test: str
     severity: str
     native_type: str
     match_engine: str
@@ -209,11 +209,11 @@ class Rule:
     added_by: str
     added_at: str
     cross_validated_by: tuple[str, ...] = ()
-    """Other miner sources that produced the same fingerprint as this rule.
+    """Other miner sources that produced the same fingerprint as this invariant.
 
-    Empty for single-source rules. Populated by the corpus merger
+    Empty for single-source invariants. Populated by the corpus merger
     (``scripts/engine_miners/build_corpus.py``) when two or more miners
-    independently emitted a rule with the same ``(engine, severity,
+    independently emitted a invariant with the same ``(engine, severity,
     match.fields)`` fingerprint. ``added_by`` remains the *primary*
     source (used for downstream filtering); ``cross_validated_by`` is
     additional provenance for the reviewer.
@@ -221,11 +221,11 @@ class Rule:
     Schema choice rationale: keeping ``added_by`` as a single string
     preserves the existing ``AddedBy`` Literal and the corpus-invariants
     test that pins it; ``cross_validated_by`` is a strictly additive field
-    with a sane default for older rules.
+    with a sane default for older invariants.
     """
 
-    def try_match(self, config: Any) -> RuleMatch | None:
-        """Return a :class:`RuleMatch` if every predicate in ``match_fields`` holds.
+    def try_match(self, config: Any) -> InvariantMatch | None:
+        """Return a :class:`InvariantMatch` if every predicate in ``match_fields`` holds.
 
         Field paths are dotted (``"transformers.sampling.temperature"``) and
         resolve against ``config`` attribute-by-attribute, tolerating Pydantic
@@ -240,7 +240,7 @@ class Rule:
 
         ``declared_value`` on the returned match is the last field's value —
         corpus convention puts the precondition fields first and the
-        *subject* field last (the field the rule is actually about). Users
+        *subject* field last (the field the invariant is actually about). Users
         see the subject value substituted into message templates.
         """
         matched: dict[str, Any] = {}
@@ -252,13 +252,13 @@ class Rule:
                 return None
             matched[path] = actual
             last_value = actual
-        return RuleMatch(rule=self, declared_value=last_value, matched_fields=matched)
+        return InvariantMatch(invariant=self, declared_value=last_value, matched_fields=matched)
 
-    def render_message(self, match: RuleMatch) -> str:
-        """Substitute ``{declared_value}`` / ``{effective_value}`` / ``{rule_id}`` in the template.
+    def render_message(self, match: InvariantMatch) -> str:
+        """Substitute ``{declared_value}`` / ``{effective_value}`` / ``{invariant_id}`` in the template.
 
         Uses ``str.format`` with permissive defaults — templates that reference
-        missing keys fall back to the rule id + raw template rather than
+        missing keys fall back to the invariant id + raw template rather than
         raising at user-facing time.
         """
         if self.message_template is None:
@@ -267,7 +267,7 @@ class Rule:
             return self.message_template.format(
                 declared_value=match.declared_value,
                 effective_value=match.effective_value,
-                rule_id=self.id,
+                invariant_id=self.id,
                 **match.matched_fields,
             )
         except (KeyError, IndexError):
@@ -275,13 +275,13 @@ class Rule:
 
 
 @dataclass(frozen=True)
-class VendoredRules:
+class EngineInvariants:
     """Parsed corpus for one engine."""
 
     engine: str
     schema_version: str
     engine_version: str
-    rules: tuple[Rule, ...]
+    invariants: tuple[Invariant, ...]
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +298,7 @@ def _spec_has_field_ref(spec: Any) -> bool:
     Used to short-circuit :func:`_resolve_field_refs_in_spec` on the hot
     path: most predicates are literal (no cross-field refs), so paying a
     cheap pre-scan to skip the substitution-recursion's allocations is
-    a win — every ``Rule.try_match`` runs this on every match_fields
+    a win — every ``Invariant.try_match`` runs this on every match_fields
     spec on every config construction.
     """
     if isinstance(spec, str):
@@ -356,7 +356,7 @@ _OPERATOR_HANDLERS: dict[str, Any] = {
     # Comparison operators: bilaterally None-safe on the *asymmetric* ones.
     # ``a`` may be None when the predicate's field is unset; ``b`` may be
     # None when a ``@field_ref`` resolves against a missing target. Both
-    # cases must yield False (rule does not fire) rather than raise.
+    # cases must yield False (invariant does not fire) rather than raise.
     # ``==`` and ``equals`` stay as plain equality — `None == x` evaluates
     # to `False` for any non-None `x`, so they naturally don't fire on None.
     # ``equals`` / ``not_equal`` are word-form aliases of ``==`` / ``!=``
@@ -370,7 +370,7 @@ _OPERATOR_HANDLERS: dict[str, Any] = {
     "equals": lambda a, b: a == b,
     "not_equal": lambda a, b: a is not None and b is not None and a != b,
     # Membership operators: None-safe on the asymmetric one (``not_in``)
-    # so unset fields don't trip the rule. ``in`` against a missing field
+    # so unset fields don't trip the invariant. ``in`` against a missing field
     # naturally yields False without an explicit guard. Reject non-iterable
     # specs (a string spec would otherwise fall through to substring match —
     # "ab" in "abc" is True, which surprises corpus authors writing
@@ -393,8 +393,8 @@ _OPERATOR_HANDLERS: dict[str, Any] = {
     # (``True``/``False`` would silently pass via ``bool`` < ``int``).
     # ``not_divisible_by`` fires when ``a % b != 0`` — corpus authors
     # write ``num_beams: {not_divisible_by: '@num_beam_groups'}`` to
-    # express "rule fires when num_beams isn't a multiple of
-    # num_beam_groups". A zero divisor yields False (no rule fires).
+    # express "invariant fires when num_beams isn't a multiple of
+    # num_beam_groups". A zero divisor yields False (no invariant fires).
     "divisible_by": lambda a, b: _is_int_pair(a, b) and b != 0 and a % b == 0,
     "not_divisible_by": lambda a, b: _is_int_pair(a, b) and b != 0 and a % b != 0,
 }
@@ -528,7 +528,7 @@ def _major(version: str) -> int:
         ) from exc
 
 
-def _parse_rule(raw: dict[str, Any]) -> Rule:
+def _parse_invariant(raw: dict[str, Any]) -> Invariant:
     required = (
         "id",
         "engine",
@@ -541,33 +541,33 @@ def _parse_rule(raw: dict[str, Any]) -> Rule:
     )
     for key in required:
         if key not in raw:
-            raise ValueError(f"Rule {raw.get('id', '<unknown>')} missing field: {key}")
+            raise ValueError(f"Invariant {raw.get('id', '<unknown>')} missing field: {key}")
     match = raw["match"]
     if not isinstance(match, dict) or "fields" not in match:
-        raise ValueError(f"Rule {raw['id']} has malformed match (missing `fields`): {match!r}")
-    rule_id = raw["id"]
+        raise ValueError(f"Invariant {raw['id']} has malformed match (missing `fields`): {match!r}")
+    invariant_id = raw["id"]
     severity = str(raw["severity"])
     if severity not in VALID_SEVERITY:
         raise UnknownSeverityError(
-            f"Rule {rule_id!r} has severity={severity!r}; must be one of: {sorted(VALID_SEVERITY)}"
+            f"Invariant {invariant_id!r} has severity={severity!r}; must be one of: {sorted(VALID_SEVERITY)}"
         )
     expected_outcome = dict(raw["expected_outcome"])
     outcome = str(expected_outcome.get("outcome", ""))
     if outcome not in VALID_OUTCOME:
         raise UnknownOutcomeError(
-            f"Rule {rule_id!r} has expected_outcome.outcome={outcome!r}; "
+            f"Invariant {invariant_id!r} has expected_outcome.outcome={outcome!r}; "
             f"must be one of: {sorted(VALID_OUTCOME)}"
         )
     emission_channel = str(expected_outcome.get("emission_channel", ""))
     if emission_channel not in VALID_EMISSION_CHANNEL:
         raise UnknownEmissionChannelError(
-            f"Rule {rule_id!r} has expected_outcome.emission_channel={emission_channel!r}; "
+            f"Invariant {invariant_id!r} has expected_outcome.emission_channel={emission_channel!r}; "
             f"must be one of: {sorted(VALID_EMISSION_CHANNEL)}"
         )
     added_by = str(raw.get("added_by", "manual_seed"))
     if added_by not in VALID_ADDED_BY:
         raise UnknownAddedByError(
-            f"Rule {rule_id!r} has added_by={added_by!r}; must be one of: {sorted(VALID_ADDED_BY)}"
+            f"Invariant {invariant_id!r} has added_by={added_by!r}; must be one of: {sorted(VALID_ADDED_BY)}"
         )
     raw_cross = raw.get("cross_validated_by") or ()
     if isinstance(raw_cross, str):
@@ -577,14 +577,14 @@ def _parse_rule(raw: dict[str, Any]) -> Rule:
     for source in cross_validated_by:
         if source not in VALID_ADDED_BY:
             raise UnknownAddedByError(
-                f"Rule {rule_id!r} has cross_validated_by entry={source!r}; "
+                f"Invariant {invariant_id!r} has cross_validated_by entry={source!r}; "
                 f"must be one of: {sorted(VALID_ADDED_BY)}"
             )
-    return Rule(
-        id=str(rule_id),
+    return Invariant(
+        id=str(invariant_id),
         engine=str(raw["engine"]),
         library=str(raw.get("library", raw["engine"])),
-        rule_under_test=str(raw.get("rule_under_test", "")),
+        invariant_under_test=str(raw.get("invariant_under_test", "")),
         severity=severity,
         native_type=str(raw["native_type"]),
         match_engine=str(match.get("engine", raw["engine"])),
@@ -601,30 +601,30 @@ def _parse_rule(raw: dict[str, Any]) -> Rule:
     )
 
 
-def _parse_envelope(engine: str, raw_text: str) -> VendoredRules:
+def _parse_envelope(engine: str, raw_text: str) -> EngineInvariants:
     data = yaml.safe_load(raw_text)
     if not isinstance(data, dict):
         raise ValueError(
-            f"Vendored rules for {engine!r} must be a YAML mapping; got {type(data).__name__}"
+            f"Engine invariants for {engine!r} must be a YAML mapping; got {type(data).__name__}"
         )
     schema_version = str(data.get("schema_version", ""))
     if not schema_version:
         raise UnsupportedSchemaVersionError(
-            f"Vendored rules for {engine!r} missing schema_version."
+            f"Engine invariants for {engine!r} missing schema_version."
         )
     if _major(schema_version) != SUPPORTED_MAJOR_VERSION:
         raise UnsupportedSchemaVersionError(
-            f"Vendored rules for {engine!r} has schema_version={schema_version!r}; "
+            f"Engine invariants for {engine!r} has schema_version={schema_version!r}; "
             f"this loader only supports major {SUPPORTED_MAJOR_VERSION}. "
             f"Regenerate the corpus or upgrade the loader."
         )
-    raw_rules = data.get("rules") or []
-    rules = tuple(_parse_rule(r) for r in raw_rules)
-    return VendoredRules(
+    raw_invariants = data.get("invariants") or []
+    invariants = tuple(_parse_invariant(r) for r in raw_invariants)
+    return EngineInvariants(
         engine=engine,
         schema_version=schema_version,
         engine_version=str(data.get("engine_version", "")),
-        rules=rules,
+        invariants=invariants,
     )
 
 
@@ -636,8 +636,8 @@ def _parse_envelope(engine: str, raw_text: str) -> VendoredRules:
 _DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parents[2] / "engines"
 
 
-class VendoredRulesLoader:
-    """Load, cache, and serve :class:`VendoredRules` per engine.
+class EngineInvariantsLoader:
+    """Load, cache, and serve :class:`EngineInvariants` per engine.
 
     Per-instance cache (rather than module-level LRU) — tests can instantiate
     a loader and monkeypatch ``corpus_root`` without polluting other tests.
@@ -645,22 +645,22 @@ class VendoredRulesLoader:
     Load order (picked up automatically; per-engine sub-package layout):
       1. **Proposed YAML** under ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`` —
          the maintainer-seeded source of truth; always present in-repo.
-      2. **Vendored YAML** under ``src/llenergymeasure/engines/{engine}/invariants.vendored.yaml`` —
-         CI-validated observed behaviour, overlaid onto the corpus's rules
-         when present. Written by ``scripts/vendor_rules.py`` under the
+      2. **Validated YAML** under ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml`` —
+         CI-validated observed behaviour, overlaid onto the corpus's invariants
+         when present. Written by ``scripts/validate_invariants.py`` under the
          engine-invariants CI.
     """
 
     def __init__(self, corpus_root: Path | None = None) -> None:
         self.corpus_root: Path = corpus_root or _DEFAULT_CORPUS_ROOT
-        self._cache: dict[str, VendoredRules] = {}
+        self._cache: dict[str, EngineInvariants] = {}
 
-    def load_rules(self, engine: str) -> VendoredRules:
+    def load_invariants(self, engine: str) -> EngineInvariants:
         """Return the parsed corpus for ``engine``, parsing once per engine.
 
-        When a CI-validated vendored YAML envelope exists at the configured
+        When a CI-validated validated YAML envelope exists at the configured
         ``corpus_root``, the loader overlays its observed outcomes onto the
-        corpus's rules — downstream consumers see empirically-confirmed
+        corpus's invariants — downstream consumers see empirically-confirmed
         behaviour rather than the corpus's declared shape alone.
         """
         cached = self._cache.get(engine)
@@ -679,15 +679,15 @@ class VendoredRulesLoader:
 
         parsed = _parse_envelope(engine, yaml_text)
 
-        vendored = _try_load_vendored_yaml(self.corpus_root, engine)
-        if vendored is not None:
-            parsed = _overlay_vendored_observations(parsed, vendored)
+        validated = _try_load_validated_yaml(self.corpus_root, engine)
+        if validated is not None:
+            parsed = _overlay_validated_observations(parsed, validated)
 
         self._cache[engine] = parsed
         return parsed
 
     def invalidate(self, engine: str | None = None) -> None:
-        """Clear cached rules (all or for one engine)."""
+        """Clear cached invariants (all or for one engine)."""
         if engine is None:
             self._cache.clear()
         else:
@@ -695,19 +695,19 @@ class VendoredRulesLoader:
 
 
 # ---------------------------------------------------------------------------
-# Vendored YAML overlay (engine-invariants CI)
+# Validated YAML overlay (engine-invariants CI)
 # ---------------------------------------------------------------------------
 
 
-def _try_load_vendored_yaml(corpus_root: Path, engine: str) -> dict[str, Any] | None:
-    """Return parsed vendored-rules YAML for ``engine`` or ``None`` if absent.
+def _try_load_validated_yaml(corpus_root: Path, engine: str) -> dict[str, Any] | None:
+    """Return parsed validated-invariants YAML for ``engine`` or ``None`` if absent.
 
-    Reads from ``{corpus_root}/{engine}/invariants.vendored.yaml``. Swallows YAML parse
+    Reads from ``{corpus_root}/{engine}/invariants.validated.yaml``. Swallows YAML parse
     errors and rejects unsupported envelope versions to avoid breaking
-    startup on a corrupt or future-schema commit-back — the vendor CI job
+    startup on a corrupt or future-schema commit-back — the validation CI job
     will resurface the issue.
     """
-    path = corpus_root / engine / "invariants.vendored.yaml"
+    path = corpus_root / engine / "invariants.validated.yaml"
     try:
         raw = path.read_text()
     except FileNotFoundError:
@@ -736,27 +736,29 @@ _OBSERVED_KEY_MAP = {
 }
 
 
-def _overlay_vendored_observations(
-    parsed: VendoredRules, vendored: dict[str, Any]
-) -> VendoredRules:
-    """Overlay observed outcomes from a vendored YAML envelope onto the corpus rules.
+def _overlay_validated_observations(
+    parsed: EngineInvariants, validated: dict[str, Any]
+) -> EngineInvariants:
+    """Overlay observed outcomes from a validated YAML envelope onto the corpus invariants.
 
-    The corpus carries the declared shape; the vendored YAML carries what
-    CI observed. When the vendored YAML is present, the loader writes
+    The corpus carries the declared shape; the validated YAML carries what
+    CI observed. When the validated YAML is present, the loader writes
     observed-* keys alongside the corpus's declared ``outcome`` /
     ``emission_channel`` so consumers (the generic ``@model_validator``)
     can act on CI-validated truth. The declared fields are left untouched
-    — strict validation in :func:`_parse_rule` is not re-exercised against
+    — strict validation in :func:`_parse_invariant` is not re-exercised against
     the observed vocabulary (which is deliberately wider; see
-    ``scripts/_invariant_vendor_common.py``).
+    ``scripts/_invariant_validation_common.py``).
     """
-    cases = {c["id"]: c for c in vendored.get("cases", []) if isinstance(c, dict) and "id" in c}
-    overlaid = tuple(_overlay_rule(rule, cases.get(rule.id)) for rule in parsed.rules)
-    return replace(parsed, rules=overlaid)
+    cases = {c["id"]: c for c in validated.get("cases", []) if isinstance(c, dict) and "id" in c}
+    overlaid = tuple(
+        _overlay_invariant(invariant, cases.get(invariant.id)) for invariant in parsed.invariants
+    )
+    return replace(parsed, invariants=overlaid)
 
 
-def _overlay_rule(rule: Rule, observed: dict[str, Any] | None) -> Rule:
-    """Merge observed-* fields from a vendor case into a rule's expected_outcome.
+def _overlay_invariant(invariant: Invariant, observed: dict[str, Any] | None) -> Invariant:
+    """Merge observed-* fields from a validated case into an invariant's expected_outcome.
 
     Observed keys are written directly (not via ``setdefault``) so a
     re-applied overlay with updated CI observations replaces a prior
@@ -764,10 +766,10 @@ def _overlay_rule(rule: Rule, observed: dict[str, Any] | None) -> Rule:
     so this never clobbers corpus-authored data.
     """
     if observed is None:
-        return rule
-    merged = dict(rule.expected_outcome)
-    for vendored_key, expected_key in _OBSERVED_KEY_MAP.items():
-        value = observed.get(vendored_key)
+        return invariant
+    merged = dict(invariant.expected_outcome)
+    for validated_key, expected_key in _OBSERVED_KEY_MAP.items():
+        value = observed.get(validated_key)
         if value not in (None, [], {}):
             merged[expected_key] = list(value) if isinstance(value, list) else value
-    return replace(rule, expected_outcome=merged)
+    return replace(invariant, expected_outcome=merged)

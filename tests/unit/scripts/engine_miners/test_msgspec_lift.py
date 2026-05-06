@@ -36,19 +36,19 @@ class _PlainStruct(msgspec.Struct):
     n: int = 1
 
 
-def _by_op(rules: list, op: str) -> list:
+def _by_op(invariants: list, op: str) -> list:
     return [
         r
-        for r in rules
+        for r in invariants
         if any(op in (m if isinstance(m, dict) else {}) for m in r.match_fields.values())
     ]
 
 
 def test_lift_numeric_meta_and_literal() -> None:
-    rules = lift(_BoundedStruct, namespace="m.s", today="2026-04-26", source_path="x.py")
-    ge_rules = _by_op(rules, ">=")
-    le_rules = _by_op(rules, "<=")
-    in_rules = _by_op(rules, "in")
+    invariants = lift(_BoundedStruct, namespace="m.s", today="2026-04-26", source_path="x.py")
+    ge_rules = _by_op(invariants, ">=")
+    le_rules = _by_op(invariants, "<=")
+    in_rules = _by_op(invariants, "in")
     assert len(ge_rules) == 1
     assert len(le_rules) == 1
     assert len(in_rules) == 1

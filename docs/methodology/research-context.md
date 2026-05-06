@@ -25,8 +25,8 @@ Daikon is the direct ancestor of our approach at the predicate-inference stage. 
 
 **Where we diverge:**
 - Our "execution traces" are constructor-call outcomes (raises/no-raise), not variable value traces at function entry/exit. Daikon instruments a running program; we probe a class constructor.
-- Our checker is the live vendor library (authoritative ground truth). Daikon's checker is a theorem prover (Simplify/ESC/Java). Ours is more accurate because the library is the spec; no SMT approximation.
-- We deliberately do not implement Daikon's statistical confidence scoring. Daikon computes `P(invariant arises by chance)` and applies a threshold. We remove the `confidence` field entirely: the vendor-CI gate is binary (rule passes or is quarantined). A confidence score that informs no downstream decision is dead weight in the corpus.
+- Our checker is the live library (authoritative ground truth). Daikon's checker is a theorem prover (Simplify/ESC/Java). Ours is more accurate because the library is the spec; no SMT approximation.
+- We deliberately do not implement Daikon's statistical confidence scoring. Daikon computes `P(invariant arises by chance)` and applies a threshold. We remove the `confidence` field entirely: the validation-CI gate is binary (invariant passes or is quarantined). A confidence score that informs no downstream decision is dead weight in the corpus.
 
 **Citation:** Ernst, M.D., Cockrell, J., Griswold, W.G., and Notkin, D. (2001). *Dynamically discovering likely program invariants to support program evolution.* IEEE TSE 27(2):1-25.
 
@@ -36,12 +36,12 @@ Houdini generates a large set of candidate annotations from heuristic templates 
 
 This is exactly our pipeline:
 - **Houdini guess** ≡ our miner emit (recall-first, all plausible candidates).
-- **ESC/Java check** ≡ our vendor-CI prune (replay against live library).
-- **Fixpoint** ≡ `_fixpoint_test.py` (asserts dormant rules converge to a stable normalisation state).
+- **ESC/Java check** ≡ our validation-CI prune (replay against live library).
+- **Fixpoint** ≡ `_fixpoint_test.py` (asserts dormant invariants converge to a stable normalisation state).
 
-The Houdini correctness theorem proves the inferred annotation set is the *unique maximal valid subset* of the candidate set, modulo soundness of the checker. Our corpus is the maximal valid subset of miner candidates modulo the vendor-CI gate's soundness.
+The Houdini correctness theorem proves the inferred annotation set is the *unique maximal valid subset* of the candidate set, modulo soundness of the checker. Our corpus is the maximal valid subset of miner candidates modulo the validation-CI gate's soundness.
 
-Our `_fixpoint_test.py` pins the gate-soundness contract in place: it synthesises malformed rules and asserts the gate fails loudly on each, so that a future refactor cannot silently weaken the gate without breaking CI.
+Our `_fixpoint_test.py` pins the gate-soundness contract in place: it synthesises malformed invariants and asserts the gate fails loudly on each, so that a future refactor cannot silently weaken the gate without breaking CI.
 
 **Citation:** Flanagan, C. and Leino, K.R.M. (2001). *Houdini, an annotation assistant for ESC/Java.* FME 2001, LNCS 2021, pp. 500-517.
 
@@ -50,7 +50,7 @@ Our `_fixpoint_test.py` pins the gate-soundness contract in place: it synthesise
 NeuRI mines constraints for neural network operator APIs by generating valid and invalid traces, then using inductive synthesis to infer input constraints. It is the most direct analogue to our approach in the ML-library literature.
 
 **Mapping to our pipeline:**
-- NeuRI's "valid + invalid trace pairs" ≡ our `(kwargs_positive, kwargs_negative)` pairs in each corpus rule.
+- NeuRI's "valid + invalid trace pairs" ≡ our `(kwargs_positive, kwargs_negative)` pairs in each corpus invariant.
 - NeuRI's inductive synthesis step ≡ our predicate-inference templates (we use a simpler template-matching approach; NeuRI uses full inductive synthesis which generalises better to quantified constraints but costs more).
 - NeuRI operates on operator kernel APIs (shapes, dtypes, device constraints). We operate on config-class constructor APIs (field ranges, cross-field relationships, mode gating).
 
@@ -125,7 +125,7 @@ The lift modules (`_pydantic_lift.py`, `_msgspec_lift.py`, `_dataclass_lift.py`)
 
 The prior-art tools (NeuRI, DocTer, FreeFuzz, etc.) all operate at the runtime-trace level. None of them exploit the type-system metadata that modern Python ML libraries expose through Pydantic v2, msgspec, and `annotated-types`. This is a Tier-1 adoption opportunity that our pipeline is the first (to our knowledge) to realise in the config-constraint-mining context.
 
-The lift output is deterministic: no probing, no randomness, pure function of the class definition. Rules derived from type-system metadata are the most reliable in the corpus because the type system itself is the spec.
+The lift output is deterministic: no probing, no randomness, pure function of the class definition. Invariants derived from type-system metadata are the most reliable in the corpus because the type system itself is the spec.
 
 ---
 
@@ -133,13 +133,13 @@ The lift output is deterministic: no probing, no randomness, pure function of th
 
 The Haiku-era TRT-LLM extractor (PRs #415-#417, reverted in #423) demonstrated a failure mode not discussed in the prior-art literature: a miner that silently degraded on import errors. When `LlmConfig` (a class that does not exist in TRT-LLM 0.21.0) failed to import, the extractor caught the `ImportError` and returned `[]`. The empty return was indistinguishable from "no rules found for this engine".
 
-The fail-loud import contract - the SSOT-pinned envelope read via `load_miner_pin` + `check_installed_version` + `MinerLandmarkMissingError` - makes silent coverage loss impossible. This is a design contribution specifically for the setting where the miner is a CI artefact that runs against a pinned library version: the version pin and the landmark check together guarantee that a miner either mines at the version it was tested against or fails loudly.
+The fail-loud import contract - the SSOT-pinned envelope read via `load_miner_pin` + `check_installed_version` + `MinerLandmarkMissingError` - makes silent coverage loss impossible. This is a design contribution specifically for the setting where the miner is a CI artefact that runs against a pinned library version: the version pin and the landmark check together guarantee that a miner either mines at the version it was written against or fails loudly.
 
 ---
 
 ## The fixpoint contract
 
-`_fixpoint_test.py` implements what we call a **gate-soundness fixpoint**: a structural test that synthesises malformed rules and asserts the vendor-CI gate records a divergence for each. The three checks it pins:
+`_fixpoint_test.py` implements what we call a **gate-soundness fixpoint**: a structural test that synthesises malformed invariants and asserts the validation-CI gate records a divergence for each. The three checks it pins:
 
 1. `positive_raises` - `kwargs_positive` must trigger the rule.
 2. `message_template_match` - the raised message must contain the template fragment.
@@ -147,13 +147,13 @@ The fail-loud import contract - the SSOT-pinned envelope read via `load_miner_pi
 
 This is inspired by the Houdini fixpoint concept but applied to the soundness of the checker itself rather than the convergence of the annotation set. Without the gate-soundness fixpoint, a future maintainer could remove one of the three checks "just to get CI green" without understanding the consequences.
 
-The dormant-rule fixpoint (also in `_fixpoint_test.py`) asserts that applying the corpus's dormant rules to a config state converges to a stable fixed point: idempotent, order-independent, cycle-free. This is a necessary condition for the library-resolution mechanism in the runtime pipeline to be well-defined.
+The dormant-invariant fixpoint (also in `_fixpoint_test.py`) asserts that applying the corpus's dormant invariants to a config state converges to a stable fixed point: idempotent, order-independent, cycle-free. This is a necessary condition for the library-resolution mechanism in the runtime pipeline to be well-defined.
 
 ---
 
 ## Positioning statement
 
-Our approach is best described as: **API configuration constraint mining via static AST analysis and dynamic constructor probing, with type-system lifting and a live-library vendor-CI gate, in the Houdini guess-and-check tradition.**
+Our approach is best described as: **API configuration constraint mining via static AST analysis and dynamic constructor probing, with type-system lifting and a live-library validation-CI gate, in the Houdini guess-and-check tradition.**
 
 The nearest citation cluster: Daikon (inference), Houdini (guess-and-check architecture), NeuRI (ML-library framing). The key novelties:
 
@@ -182,7 +182,7 @@ The nearest citation cluster: Daikon (inference), Houdini (guess-and-check archi
 
 - [architecture-overview.md](/architecture/architecture-overview) - system overview
 - [miner-pipeline.md](/architecture/miner-pipeline) - implementation details
-- [validation-rule-corpus.md](/architecture/validation-rule-corpus) - corpus format
+- [validation-invariant-corpus.md](/architecture/validation-invariant-corpus) - corpus format
 
 Internal-only design artefacts (not in the public package):
 

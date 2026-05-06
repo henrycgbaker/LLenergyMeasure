@@ -1,13 +1,13 @@
-"""Shared infrastructure for per-engine validation-rule miners.
+"""Shared infrastructure for per-engine validation-invariant miners.
 
 Miner depth is fixed at 1 (same module, no helper-call tracing). This
 module ships the AST primitives and pattern detectors that future
-per-engine miners will compose to extract validation rules from pinned
+per-engine miners will compose to extract validation invariants from pinned
 library source. No concrete miner ships today; they land as independent
 PRs per engine.
 
-- :class:`RuleCandidate` — the miner output type, serialised to the YAML
-  corpus entry shape in :mod:`llenergymeasure.config.vendored_rules.loader`.
+- :class:`InvariantCandidate` — the miner output type, serialised to the YAML
+  corpus entry shape in :mod:`llenergymeasure.config.engine_invariants.loader`.
 - :class:`MinerVersionMismatchError`, :class:`MinerLandmarkMissingError` —
   fail-loud exceptions CI treats as fatal.
 - :func:`check_installed_version` — version-envelope guard for each miner;
@@ -15,7 +15,7 @@ PRs per engine.
 - AST helpers (:func:`extract_condition_fields`, :func:`resolve_local_assign`,
   etc.) — deterministic, stateless primitives for AST-based miners.
 - Pattern detectors (``ConditionalRaiseDetector``, etc.) — one class per
-  known library rule shape; each fires on one ``ast.If`` body at a time.
+  known library invariant shape; each fires on one ``ast.If`` body at a time.
 
 Tests cover each primitive on synthetic AST fixtures; the per-engine miners
 run against pinned real libraries.
@@ -49,7 +49,7 @@ EmissionChannel = Literal[
 
 @dataclass
 class MinerSource:
-    """Provenance for a miner-extracted rule candidate."""
+    """Provenance for a miner-extracted invariant candidate."""
 
     path: str
     method: str
@@ -57,18 +57,18 @@ class MinerSource:
 
 
 @dataclass
-class RuleCandidate:
-    """One extracted rule candidate.
+class InvariantCandidate:
+    """One extracted invariant candidate.
 
     Serialised verbatim into ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``
     after human review. Field names match the corpus schema so no
-    translation step is needed between walker output and corpus entry.
+    translation step is needed between miner output and corpus entry.
     """
 
     id: str
     engine: str
     library: str
-    rule_under_test: str
+    invariant_under_test: str
     severity: Severity
     native_type: str
     miner_source: MinerSource
@@ -83,7 +83,7 @@ class RuleCandidate:
 
 
 # ---------------------------------------------------------------------------
-# Error types (all inherit from a common base so per-engine walkers can
+# Error types (all inherit from a common base so per-engine miners can
 # raise-or-collect uniformly at CI time)
 # ---------------------------------------------------------------------------
 
@@ -204,7 +204,7 @@ def first_string_arg(call: ast.Call) -> str | None:
       Variable-template forms (``template_var.format(...)``) need scope
       resolution unavailable at this layer; they fall through to ``None``.
 
-    All three avoid returning literal Python source — vendor-CI substring
+    All three avoid returning literal Python source — validation-CI substring
     matching against the live library's rendered string fails on source.
     """
     for arg in call.args:
@@ -268,7 +268,7 @@ def render_binop_concat_template(node: ast.expr) -> str | None:
     parts kept verbatim; ``self.X`` and ``str(self.X)`` / ``repr(self.X)``
     render as ``{X}`` placeholders. Returns ``None`` if any operand can't be
     rendered cleanly — preferable to leaking literal Python source via
-    ``ast.unparse``, which breaks vendor-CI substring matching.
+    ``ast.unparse``, which breaks validation-CI substring matching.
     """
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
@@ -292,7 +292,7 @@ def render_binop_concat_template(node: ast.expr) -> str | None:
 def extract_condition_fields(condition: ast.expr) -> set[str]:
     """Return the set of ``self.<field>`` attribute names referenced in ``condition``.
 
-    Used by the ``condition_references_self`` filter (rule must reference at
+    Used by the ``condition_references_self`` filter (invariant must reference at
     least one public field of the native type).
     """
     fields: set[str] = set()
@@ -336,7 +336,7 @@ def resolve_local_assign(func: ast.FunctionDef, name: str) -> str | None:
     fine for message templates that are constant per function call,
     brittle for names the function reassigns. Suits current HF validate()
     shape; if a future library uses branch-local message templates, the
-    walker calling site needs a richer resolver.
+    miner calling site needs a richer resolver.
     """
     for node in func.body:
         if not isinstance(node, ast.Assign) or len(node.targets) != 1:
@@ -356,7 +356,7 @@ def extract_loop_literal_iterable(loop: ast.For) -> list[Any] | None:
     """Return the literal list/tuple a ``for`` loop iterates over, or ``None``.
 
     ``for arg in [a, b]:`` → ``[a, b]``; ``for arg in self.x:`` → ``None``.
-    Enables one parameterised rule per loop when the iterable is AST-static.
+    Enables one parameterised invariant per loop when the iterable is AST-static.
     """
     iter_node = loop.iter
     if not isinstance(iter_node, (ast.List, ast.Tuple)):
@@ -377,7 +377,7 @@ def extract_loop_literal_iterable(loop: ast.For) -> list[Any] | None:
 
 @dataclass
 class DetectedPattern:
-    """One detected rule-body statement inside an ``if X: ...`` branch."""
+    """One detected invariant-body statement inside an ``if X: ...`` branch."""
 
     severity: Severity
     emission_channel: EmissionChannel
@@ -387,7 +387,7 @@ class DetectedPattern:
 
 
 class ConditionalRaiseDetector:
-    """``if X: raise SomeException(...)`` — error rule."""
+    """``if X: raise SomeException(...)`` — error invariant."""
 
     def detect(self, stmt: ast.stmt) -> DetectedPattern | None:
         if not isinstance(stmt, ast.Raise) or stmt.exc is None:
@@ -406,7 +406,7 @@ class ConditionalRaiseDetector:
 
 
 class ConditionalSelfAssignDetector:
-    """``if X: self.A = B`` — silent dormancy rule.
+    """``if X: self.A = B`` — silent dormancy invariant.
 
     The affected field is ``A``. Represents the library silently normalising
     the user's declared value — no warning, no error, but the effective state
@@ -430,7 +430,7 @@ class ConditionalSelfAssignDetector:
 
 
 class ConditionalWarningsWarnDetector:
-    """``if X: warnings.warn(...)`` — announced warn rule."""
+    """``if X: warnings.warn(...)`` — announced warn invariant."""
 
     def detect(self, stmt: ast.stmt) -> DetectedPattern | None:
         if not isinstance(stmt, ast.Expr) or not isinstance(stmt.value, ast.Call):
@@ -452,8 +452,8 @@ class ConditionalLoggerWarningDetector:
 
     Strictly matches two-element paths (``logger.<method>``). Patterns like
     ``logger.sub.warning(...)`` or ``self.logger.warning(...)`` do NOT match
-    — if a real library rule uses a non-top-level logger attribute, the
-    walker for that library must supply its own detector.
+    — if a real library invariant uses a non-top-level logger attribute, the
+    miner for that library must supply its own detector.
     """
 
     def detect(self, stmt: ast.stmt) -> DetectedPattern | None:
@@ -526,7 +526,7 @@ _DEFAULT_DETECTORS: tuple[
 )
 """Private default detector bundle — ordered by specificity.
 
-Per-engine walkers are expected to assemble their own tuple from the
+Per-engine miners are expected to assemble their own tuple from the
 individual detector classes, so this constant is not part of the public
 API. Ordering rationale for the default: ``raise`` before self-assign
 ensures raise+rollback chains are attributed to the raise; ``minor_issues``
@@ -543,13 +543,13 @@ def default_detectors() -> tuple[
     | MinorIssuesDictAssignDetector,
     ...,
 ]:
-    """Return the default detector tuple — walkers copy / slice this to taste.
+    """Return the default detector tuple — miners copy / slice this to taste.
 
     **Stability contract:** the tuple's *contents* and *ordering* may grow
     or shift as new detectors are added to cover additional libraries.
-    Walkers that need behaviour-stable detection across corpus-pipeline
+    Miners that need behaviour-stable detection across corpus-pipeline
     reruns should capture a local tuple (e.g. select-by-class-name) at
-    walker definition time rather than calling this each walk.
+    miner definition time rather than calling this each scan.
     """
     return _DEFAULT_DETECTORS
 
@@ -562,14 +562,14 @@ def default_detectors() -> tuple[
 def filter_condition_references_self(condition: ast.expr, public_fields: frozenset[str]) -> bool:
     """True iff condition references at least one public field via ``self.<field>``.
 
-    Drops argument-dependent rules (``if strict: raise``) and private-state
-    rules (``if self._initialized: ...``) that don't constrain user config.
+    Drops argument-dependent invariants (``if strict: raise``) and private-state
+    invariants (``if self._initialized: ...``) that don't constrain user config.
 
-    **Known false-negative:** kwarg-gated rules like HF's
+    **Known false-negative:** kwarg-gated invariants like HF's
     ``if strict: raise ValueError(...)`` inside ``validate(self, strict=False)``
     get dropped even though they CAN represent real config constraints when
     the kwarg's default changes the behaviour. If a library exposes such a
-    rule, the walker for it must supply its own condition-inclusion filter
+    invariant, the miner for it must supply its own condition-inclusion filter
     (via composition) rather than relying on this one. Pinning this
     behaviour explicitly here so the contract is discoverable at the
     definition site, not only in design-review notes.
@@ -621,8 +621,8 @@ def filter_kwargs_positive_derivable(condition: ast.expr) -> bool:
     return True
 
 
-def candidate_to_dict(candidate: RuleCandidate) -> dict[str, Any]:
-    """Serialize a RuleCandidate to the YAML corpus dict shape.
+def candidate_to_dict(candidate: InvariantCandidate) -> dict[str, Any]:
+    """Serialize a InvariantCandidate to the YAML corpus dict shape.
 
     Used by all per-engine miners (dynamic + static) to emit staging files.
     Ensures consistent schema across all miners.
@@ -631,7 +631,7 @@ def candidate_to_dict(candidate: RuleCandidate) -> dict[str, Any]:
         "id": candidate.id,
         "engine": candidate.engine,
         "library": candidate.library,
-        "rule_under_test": candidate.rule_under_test,
+        "invariant_under_test": candidate.invariant_under_test,
         "severity": candidate.severity,
         "native_type": candidate.native_type,
         "miner_source": {

@@ -6,7 +6,7 @@ sweep configs goes through ``load_study_config`` and the resulting
 canonical configs.
 
 Run time: < 1s — no GPU involved, all operations are on Pydantic models
-and the vendored-rules loader.
+and the engine-invariants loader.
 """
 
 from __future__ import annotations

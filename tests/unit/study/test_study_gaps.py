@@ -1,7 +1,7 @@
 """Tests for study gap countdown display and skip logic.
 
 Tests cover:
-- format_gap_duration formatting rules
+- format_gap_duration formatting invariants
 - run_gap normal completion (0-second gap)
 - run_gap with interrupt_event pre-set (immediate return)
 - run_gap in non-TTY environment (no crash)

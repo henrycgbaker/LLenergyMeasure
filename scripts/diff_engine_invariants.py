@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Semantic differ for vendored rules envelopes.
+"""Semantic differ for validated invariant envelopes.
 
 Sibling of :mod:`scripts.diff_discovered_schemas` — same contract (safe vs
 breaking classification, JSON-on-stdout + Markdown summary), different artifact
-kind (rule cases instead of parameter schemas).
+kind (invariant cases instead of parameter schemas).
 
-Reads YAML envelopes (the vendored corpus format); falls back to JSON parsing
+Reads YAML envelopes (the validated corpus format); falls back to JSON parsing
 when YAML's loader returns a non-mapping, so JSON-fixture tests still work.
 
 Usage::
@@ -39,7 +39,7 @@ import yaml
 
 SAFE_KINDS = frozenset(
     {
-        "added_rule",
+        "added_invariant",
         "severity_relaxed",
         "match_widened",
         "message_template_changed",
@@ -49,7 +49,7 @@ SAFE_KINDS = frozenset(
 
 BREAKING_KINDS = frozenset(
     {
-        "removed_rule",
+        "removed_invariant",
         "severity_escalated",
         "outcome_changed",
         "match_narrowed",
@@ -70,7 +70,7 @@ _SEVERITY_RANK = {
 
 @dataclass
 class Change:
-    rule_id: str
+    invariant_id: str
     kind: str
     detail: str = ""
 
@@ -79,7 +79,7 @@ class Change:
         return "breaking" if self.kind in BREAKING_KINDS else "safe"
 
     def as_dict(self) -> dict[str, Any]:
-        d: dict[str, Any] = {"rule_id": self.rule_id, "kind": self.kind}
+        d: dict[str, Any] = {"invariant_id": self.invariant_id, "kind": self.kind}
         if self.detail:
             d["detail"] = self.detail
         return d
@@ -118,7 +118,7 @@ def _index_cases(envelope: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {c["id"]: c for c in envelope.get("cases", []) if isinstance(c, dict) and "id" in c}
 
 
-def _compare_case(rule_id: str, old: dict[str, Any], new: dict[str, Any]) -> list[Change]:
+def _compare_case(invariant_id: str, old: dict[str, Any], new: dict[str, Any]) -> list[Change]:
     changes: list[Change] = []
 
     old_outcome = str(old.get("outcome", ""))
@@ -129,7 +129,7 @@ def _compare_case(rule_id: str, old: dict[str, Any], new: dict[str, Any]) -> lis
         if new_rank > old_rank:
             changes.append(
                 Change(
-                    rule_id=rule_id,
+                    invariant_id=invariant_id,
                     kind="severity_escalated",
                     detail=f"{old_outcome} -> {new_outcome}",
                 )
@@ -137,7 +137,7 @@ def _compare_case(rule_id: str, old: dict[str, Any], new: dict[str, Any]) -> lis
         elif new_rank < old_rank:
             changes.append(
                 Change(
-                    rule_id=rule_id,
+                    invariant_id=invariant_id,
                     kind="severity_relaxed",
                     detail=f"{old_outcome} -> {new_outcome}",
                 )
@@ -145,7 +145,7 @@ def _compare_case(rule_id: str, old: dict[str, Any], new: dict[str, Any]) -> lis
         else:
             changes.append(
                 Change(
-                    rule_id=rule_id,
+                    invariant_id=invariant_id,
                     kind="outcome_changed",
                     detail=f"{old_outcome} -> {new_outcome}",
                 )
@@ -157,7 +157,7 @@ def _compare_case(rule_id: str, old: dict[str, Any], new: dict[str, Any]) -> lis
         if old_channel == "none" and new_channel != "none":
             changes.append(
                 Change(
-                    rule_id=rule_id,
+                    invariant_id=invariant_id,
                     kind="emission_channel_widened",
                     detail=f"{old_channel} -> {new_channel}",
                 )
@@ -165,7 +165,7 @@ def _compare_case(rule_id: str, old: dict[str, Any], new: dict[str, Any]) -> lis
         else:
             changes.append(
                 Change(
-                    rule_id=rule_id,
+                    invariant_id=invariant_id,
                     kind="emission_channel_changed",
                     detail=f"{old_channel} -> {new_channel}",
                 )
@@ -176,7 +176,7 @@ def _compare_case(rule_id: str, old: dict[str, Any], new: dict[str, Any]) -> lis
     if old_messages != new_messages:
         changes.append(
             Change(
-                rule_id=rule_id,
+                invariant_id=invariant_id,
                 kind="message_template_changed",
                 detail=(f"{len(old_messages)} -> {len(new_messages)} message(s)"),
             )
@@ -190,11 +190,11 @@ def _normalise_messages(messages: list[Any]) -> tuple[str, ...]:
     return tuple(sorted(str(m).strip() for m in messages))
 
 
-def diff_rules(old: dict[str, Any], new: dict[str, Any]) -> DiffResult:
-    """Compare two rules envelopes and classify per-rule changes."""
+def diff_invariants(old: dict[str, Any], new: dict[str, Any]) -> DiffResult:
+    """Compare two invariants envelopes and classify per-invariant changes."""
     result = DiffResult()
 
-    for key in ("engine_version", "schema_version", "vendor_commit"):
+    for key in ("engine_version", "schema_version", "validation_commit"):
         old_val = old.get(key)
         new_val = new.get(key)
         if old_val != new_val:
@@ -205,14 +205,14 @@ def diff_rules(old: dict[str, Any], new: dict[str, Any]) -> DiffResult:
     old_ids = set(old_cases)
     new_ids = set(new_cases)
 
-    for rule_id in sorted(new_ids - old_ids):
-        result.safe.append(Change(rule_id=rule_id, kind="added_rule"))
+    for invariant_id in sorted(new_ids - old_ids):
+        result.safe.append(Change(invariant_id=invariant_id, kind="added_invariant"))
 
-    for rule_id in sorted(old_ids - new_ids):
-        result.breaking.append(Change(rule_id=rule_id, kind="removed_rule"))
+    for invariant_id in sorted(old_ids - new_ids):
+        result.breaking.append(Change(invariant_id=invariant_id, kind="removed_invariant"))
 
-    for rule_id in sorted(old_ids & new_ids):
-        for change in _compare_case(rule_id, old_cases[rule_id], new_cases[rule_id]):
+    for invariant_id in sorted(old_ids & new_ids):
+        for change in _compare_case(invariant_id, old_cases[invariant_id], new_cases[invariant_id]):
             if change.severity == "safe":
                 result.safe.append(change)
             else:
@@ -226,7 +226,7 @@ def diff_rules(old: dict[str, Any], new: dict[str, Any]) -> DiffResult:
 # ---------------------------------------------------------------------------
 
 
-def render_markdown(result: DiffResult, *, title: str = "Rules Diff") -> str:
+def render_markdown(result: DiffResult, *, title: str = "Invariants Diff") -> str:
     lines: list[str] = [f"## {title}", ""]
     lines.append(f"**Summary:** {result.summary}")
     lines.append("")
@@ -243,19 +243,19 @@ def render_markdown(result: DiffResult, *, title: str = "Rules Diff") -> str:
     if result.breaking:
         lines.append("### invariants-breaking changes")
         lines.append("")
-        lines.append("| Rule ID | Kind | Detail |")
+        lines.append("| Invariant ID | Kind | Detail |")
         lines.append("| --- | --- | --- |")
         for change in result.breaking:
-            lines.append(f"| `{change.rule_id}` | `{change.kind}` | {change.detail or ''} |")
+            lines.append(f"| `{change.invariant_id}` | `{change.kind}` | {change.detail or ''} |")
         lines.append("")
 
     if result.safe:
         lines.append("### invariants-safe changes")
         lines.append("")
-        lines.append("| Rule ID | Kind | Detail |")
+        lines.append("| Invariant ID | Kind | Detail |")
         lines.append("| --- | --- | --- |")
         for change in result.safe:
-            lines.append(f"| `{change.rule_id}` | `{change.kind}` | {change.detail or ''} |")
+            lines.append(f"| `{change.invariant_id}` | `{change.kind}` | {change.detail or ''} |")
         lines.append("")
 
     if not result.metadata_changes and not result.safe and not result.breaking:
@@ -271,7 +271,7 @@ def render_markdown(result: DiffResult, *, title: str = "Rules Diff") -> str:
 
 
 def _load_envelope(path: Path) -> dict[str, Any]:
-    """Parse a vendored-rules envelope from YAML, with JSON as a graceful fallback.
+    """Parse a validated-invariants envelope from YAML, with JSON as a graceful fallback.
 
     YAML is a superset of JSON, so ``yaml.safe_load`` happily parses both —
     the explicit fallback is only here for defensiveness against pathological
@@ -289,8 +289,8 @@ def _load_envelope(path: Path) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("old", type=Path, help="Path to old vendored-rules envelope")
-    parser.add_argument("new", type=Path, help="Path to new vendored-rules envelope")
+    parser.add_argument("old", type=Path, help="Path to old validated-invariants envelope")
+    parser.add_argument("new", type=Path, help="Path to new validated-invariants envelope")
     parser.add_argument(
         "--out",
         type=Path,
@@ -299,7 +299,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--title",
-        default="Rules Diff",
+        default="Invariants Diff",
         help="Title used in the Markdown summary.",
     )
     args = parser.parse_args(argv)
@@ -311,7 +311,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Error reading envelopes: {exc}", file=sys.stderr)
         return 2
 
-    result = diff_rules(old, new)
+    result = diff_invariants(old, new)
 
     output = {
         "safe": [c.as_dict() for c in result.safe],
@@ -327,7 +327,7 @@ def main(argv: list[str] | None = None) -> int:
         print("\ninvariants-breaking changes:", file=sys.stderr)
         for change in result.breaking:
             detail = f" ({change.detail})" if change.detail else ""
-            print(f"  - {change.rule_id}: {change.kind}{detail}", file=sys.stderr)
+            print(f"  - {change.invariant_id}: {change.kind}{detail}", file=sys.stderr)
 
     if args.out is not None:
         args.out.parent.mkdir(parents=True, exist_ok=True)

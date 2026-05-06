@@ -366,7 +366,7 @@ class VLLMSpeculativeConfig(BaseModel):
         description=(
             "Speculative-decoding method (e.g. 'draft_model', 'ngram', 'medusa', 'eagle'). "
             "Kept as str because the Literal has drifted across vLLM releases — verify against "
-            "EngineArgs.speculative_config.method in the vendored schema before narrowing."
+            "EngineArgs.speculative_config.method in the discovered schema before narrowing."
         ),
     )
 

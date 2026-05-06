@@ -9,7 +9,7 @@ const sidebarsArchitecture: SidebarsConfig = {
     'engines',
     'development',
     'schema-refresh',
-    'validation-rule-corpus',
+    'validation-invariant-corpus',
   ],
 };
 

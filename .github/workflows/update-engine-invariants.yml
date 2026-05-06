@@ -1,7 +1,7 @@
 name: Update engine invariants
 
 # Per-concern workflow for the engine-invariants layer. Each per-engine job
-# probes the producer module's landmarks, mines the rules corpus, vendor-
+# probes the producer module's landmarks, mines the invariants corpus, validate-
 # replays it against the live library, regenerates the invariants digest
 # doc, and atomically commits all four artefacts back to the PR branch.
 #
@@ -15,7 +15,7 @@ name: Update engine invariants
 #                  build-engine-image.yml (cache export only) and is
 #                  republished as a runtime image by publish-engine-image.yml;
 #                  this job pulls that runtime image and runs probe + mine
-#                  + vendor + writeback.
+#                  + validate + writeback.
 #   vllm         : pull_request: paths-gated. Pulls upstream
 #                  vllm/vllm-openai:v${VER} directly (no first-party build)
 #                  so it doesn't depend on the build/push pipeline.
@@ -35,9 +35,9 @@ name: Update engine invariants
 #                  CPU runners cannot import the library at all.
 #
 # Determinism contract:
-#   The LLENERGY_MINER_FROZEN_AT and LLENERGY_VENDOR_FROZEN_AT env vars are
+#   The LLENERGY_MINER_FROZEN_AT and LLENERGY_VALIDATION_FROZEN_AT env vars are
 #   set from the author date of the most recent commit touching any INPUT
-#   path (miner modules, lift modules, build_corpus, vendor script, refresh
+#   path (miner modules, lift modules, build_corpus, validate script, refresh
 #   helper, SSOT yaml). The anchor is stable across the workflow's own
 #   commit-back (which only touches OUTPUT paths), so re-runs on unchanged
 #   source emit byte-identical YAML. This determinism is THE prevention
@@ -69,8 +69,8 @@ on:
       - "engine_versions/vllm.yaml"
       - "engine_versions/tensorrt.yaml"
       - "scripts/engine_miners/**"
-      - "scripts/vendor_rules.py"
-      - "scripts/_invariant_vendor_common.py"
+      - "scripts/validate_invariants.py"
+      - "scripts/_invariant_validation_common.py"
       - "scripts/refresh_invariant_rules.sh"
       - "src/llenergymeasure/engines/*/invariants.*.yaml"
       - ".github/workflows/update-engine-invariants.yml"
@@ -86,7 +86,7 @@ on:
   workflow_dispatch:
     inputs:
       engine:
-        description: "Engine to probe + mine + vendor"
+        description: "Engine to probe + mine + validate"
         required: true
         type: choice
         options:
@@ -149,8 +149,8 @@ jobs:
               - 'scripts/engine_miners/transformers_*.py'
               - 'scripts/engine_miners/_*.py'
               - 'scripts/engine_miners/build_corpus.py'
-              - 'scripts/vendor_rules.py'
-              - 'scripts/_invariant_vendor_common.py'
+              - 'scripts/validate_invariants.py'
+              - 'scripts/_invariant_validation_common.py'
               - 'scripts/refresh_invariant_rules.sh'
               - 'src/llenergymeasure/engines/transformers/invariants.*.yaml'
               - '.github/workflows/update-engine-invariants.yml'
@@ -160,8 +160,8 @@ jobs:
               - 'scripts/engine_miners/vllm_*.py'
               - 'scripts/engine_miners/_*.py'
               - 'scripts/engine_miners/build_corpus.py'
-              - 'scripts/vendor_rules.py'
-              - 'scripts/_invariant_vendor_common.py'
+              - 'scripts/validate_invariants.py'
+              - 'scripts/_invariant_validation_common.py'
               - 'scripts/refresh_invariant_rules.sh'
               - 'src/llenergymeasure/engines/vllm/invariants.*.yaml'
               - '.github/workflows/update-engine-invariants.yml'
@@ -171,8 +171,8 @@ jobs:
               - 'scripts/engine_miners/tensorrt_*.py'
               - 'scripts/engine_miners/_*.py'
               - 'scripts/engine_miners/build_corpus.py'
-              - 'scripts/vendor_rules.py'
-              - 'scripts/_invariant_vendor_common.py'
+              - 'scripts/validate_invariants.py'
+              - 'scripts/_invariant_validation_common.py'
               - 'scripts/refresh_invariant_rules.sh'
               - 'src/llenergymeasure/engines/tensorrt/invariants.*.yaml'
               - '.github/workflows/update-engine-invariants.yml'
@@ -194,14 +194,14 @@ jobs:
         || (github.event_name == 'pull_request' && needs.filter.result == 'success' && needs.filter.outputs.transformers == 'true')
       )
     runs-on: ubuntu-latest
-    # No build step here — pure probe + mine + vendor. 30 min is generous.
+    # No build step here — pure probe + mine + validate. 30 min is generous.
     timeout-minutes: 30
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       # Engine-only image; llenergymeasure is not installed inside the
       # container — see refactor(docker): drop project install from
       # transformers image. We expose the in-repo source via the bind
-      # mount + PYTHONPATH so build_corpus / vendor_rules can import
+      # mount + PYTHONPATH so build_corpus / validate_invariants can import
       # llenergymeasure.* at runtime. Mirrors the contract used by the
       # vllm and tensorrt cells below.
       PYTHONPATH: "/repo/src:/repo"
@@ -290,7 +290,7 @@ jobs:
           fi
           docker tag "$UPSTREAM" "${{ steps.version.outputs.image }}"
 
-      - name: Compute stable mining + vendor anchor
+      - name: Compute stable mining + validation anchor
         id: anchor
         run: |
           PATHS=(
@@ -305,8 +305,8 @@ jobs:
             "scripts/engine_miners/_msgspec_lift.py"
             "scripts/engine_miners/_dataclass_lift.py"
             "scripts/engine_miners/_fixpoint_test.py"
-            "scripts/vendor_rules.py"
-            "scripts/_invariant_vendor_common.py"
+            "scripts/validate_invariants.py"
+            "scripts/_invariant_validation_common.py"
             "scripts/refresh_invariant_rules.sh"
           )
           SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
@@ -361,7 +361,7 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           mkdir -p /tmp/engine-invariants-diff
-          for KIND in proposed vendored; do
+          for KIND in proposed validated; do
             OLD_YAML="${ENGINES_DIR}/transformers/invariants.${KIND}.yaml"
             DEST="/tmp/engine-invariants-diff/transformers.${KIND}.old.yaml"
             if [[ -f "$OLD_YAML" ]]; then
@@ -371,7 +371,7 @@ jobs:
             fi
           done
 
-      - name: Mine + vendor inside container
+      - name: Mine + validate inside container
         if: steps.probe.outputs.verdict == 'pass'
         env:
           IMAGE: ${{ steps.version.outputs.image }}
@@ -380,7 +380,7 @@ jobs:
         run: |
           docker run --rm \
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
-            -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
+            -e LLENERGY_VALIDATION_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
             -e PYTHONPATH \
             -v "${{ github.workspace }}:/repo" \
@@ -390,11 +390,11 @@ jobs:
             -c "
               set -euo pipefail
               python3 -m scripts.engine_miners.build_corpus --engine transformers
-              python3 scripts/vendor_rules.py \
+              python3 scripts/validate_invariants.py \
                 --engine transformers \
                 --corpus '${ENGINES_DIR}/transformers/invariants.proposed.yaml' \
-                --out '${ENGINES_DIR}/transformers/invariants.vendored.yaml' \
-                --vendor-commit '${ANCHOR_SHA}' \
+                --out '${ENGINES_DIR}/transformers/invariants.validated.yaml' \
+                --validation-commit '${ANCHOR_SHA}' \
                 --fail-on-divergence
             "
 
@@ -420,16 +420,16 @@ jobs:
             --engine transformers \
             --out docs/user/generated/invariants-transformers.md
 
-      - name: Classify diff (proposed + vendored)
+      - name: Classify diff (proposed + validated)
         if: steps.probe.outputs.verdict == 'pass'
         id: diff
         run: |
           set +e
           uv run python scripts/diff_engine_invariants.py \
-            /tmp/engine-invariants-diff/transformers.vendored.old.yaml \
-            "${ENGINES_DIR}/transformers/invariants.vendored.yaml" \
-            --out /tmp/engine-invariants-diff/transformers.vendored.md \
-            --title "Transformers vendored invariants diff"
+            /tmp/engine-invariants-diff/transformers.validated.old.yaml \
+            "${ENGINES_DIR}/transformers/invariants.validated.yaml" \
+            --out /tmp/engine-invariants-diff/transformers.validated.md \
+            --title "Transformers validated invariants diff"
           VENDORED_EXIT=$?
           set -e
 
@@ -440,8 +440,8 @@ jobs:
           fi
 
           VENDORED_CHANGED=true
-          if diff -q /tmp/engine-invariants-diff/transformers.vendored.old.yaml \
-                    "${ENGINES_DIR}/transformers/invariants.vendored.yaml" >/dev/null 2>&1; then
+          if diff -q /tmp/engine-invariants-diff/transformers.validated.old.yaml \
+                    "${ENGINES_DIR}/transformers/invariants.validated.yaml" >/dev/null 2>&1; then
             VENDORED_CHANGED=false
           fi
 
@@ -458,7 +458,7 @@ jobs:
             echo "## Engine invariants — transformers"
             echo
             if [[ "$CLASSIFICATION" == "no-changes" ]]; then
-              echo "_No changes to proposed or vendored invariants._"
+              echo "_No changes to proposed or validated invariants._"
             else
               if [[ "$PROPOSED_CHANGED" == "true" ]]; then
                 echo "### Proposed corpus diff"
@@ -470,8 +470,8 @@ jobs:
                 echo '```'
                 echo
               fi
-              if [[ -f /tmp/engine-invariants-diff/transformers.vendored.md ]]; then
-                cat /tmp/engine-invariants-diff/transformers.vendored.md
+              if [[ -f /tmp/engine-invariants-diff/transformers.validated.md ]]; then
+                cat /tmp/engine-invariants-diff/transformers.validated.md
               fi
             fi
           } > /tmp/engine-invariants-diff/transformers.summary.md
@@ -494,7 +494,7 @@ jobs:
             echo
             jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/llem-probe-out/probe-transformers.json
             echo
-            echo "**Downstream mine + vendor steps were skipped.** No corpus changes were committed against this PR."
+            echo "**Downstream mine + validate steps were skipped.** No corpus changes were committed against this PR."
             echo
             echo "**To unblock,** choose one of:"
             echo
@@ -512,10 +512,10 @@ jobs:
           name: engine-invariants-diff-transformers
           path: |
             /tmp/engine-invariants-diff/transformers.proposed.old.yaml
-            /tmp/engine-invariants-diff/transformers.vendored.old.yaml
+            /tmp/engine-invariants-diff/transformers.validated.old.yaml
             /tmp/engine-invariants-diff/transformers.summary.md
             ${{ env.ENGINES_DIR }}/transformers/invariants.proposed.yaml
-            ${{ env.ENGINES_DIR }}/transformers/invariants.vendored.yaml
+            ${{ env.ENGINES_DIR }}/transformers/invariants.validated.yaml
 
       - name: Post per-pipeline comment
         if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
@@ -569,7 +569,7 @@ jobs:
 
           git add \
             "${ENGINES_DIR}/transformers/invariants.proposed.yaml" \
-            "${ENGINES_DIR}/transformers/invariants.vendored.yaml" \
+            "${ENGINES_DIR}/transformers/invariants.validated.yaml" \
             engine_versions/transformers.yaml \
             docs/user/generated/invariants-transformers.md
 
@@ -578,7 +578,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m "chore(invariants): refresh transformers proposed + vendored corpus"
+          git commit -m "chore(invariants): refresh transformers proposed + validated corpus"
           git push --force-with-lease
 
       - name: Apply cross-pipeline rollup label
@@ -729,7 +729,7 @@ jobs:
           fi
           docker tag "$UPSTREAM" "${{ steps.version.outputs.image }}"
 
-      - name: Compute stable mining + vendor anchor
+      - name: Compute stable mining + validation anchor
         id: anchor
         run: |
           PATHS=(
@@ -742,8 +742,8 @@ jobs:
             "scripts/engine_miners/_msgspec_lift.py"
             "scripts/engine_miners/_dataclass_lift.py"
             "scripts/engine_miners/_fixpoint_test.py"
-            "scripts/vendor_rules.py"
-            "scripts/_invariant_vendor_common.py"
+            "scripts/validate_invariants.py"
+            "scripts/_invariant_validation_common.py"
             "scripts/refresh_invariant_rules.sh"
           )
           SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
@@ -802,7 +802,7 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           mkdir -p /tmp/engine-invariants-diff
-          for KIND in proposed vendored; do
+          for KIND in proposed validated; do
             OLD_YAML="${ENGINES_DIR}/vllm/invariants.${KIND}.yaml"
             DEST="/tmp/engine-invariants-diff/vllm.${KIND}.old.yaml"
             if [[ -f "$OLD_YAML" ]]; then
@@ -812,7 +812,7 @@ jobs:
             fi
           done
 
-      - name: Mine + vendor inside container
+      - name: Mine + validate inside container
         if: steps.probe.outputs.verdict == 'pass'
         env:
           IMAGE: ${{ steps.version.outputs.image }}
@@ -824,7 +824,7 @@ jobs:
             -v /tmp/llem-passwd-synth:/etc/passwd:ro \
             -v /tmp/llem-group-synth:/etc/group:ro \
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
-            -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
+            -e LLENERGY_VALIDATION_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
             -e PYTHONPATH \
             -v "${{ github.workspace }}:/repo" \
@@ -834,11 +834,11 @@ jobs:
             -c "
               set -euo pipefail
               python3 -m scripts.engine_miners.build_corpus --engine vllm
-              python3 scripts/vendor_rules.py \
+              python3 scripts/validate_invariants.py \
                 --engine vllm \
                 --corpus '${ENGINES_DIR}/vllm/invariants.proposed.yaml' \
-                --out '${ENGINES_DIR}/vllm/invariants.vendored.yaml' \
-                --vendor-commit '${ANCHOR_SHA}' \
+                --out '${ENGINES_DIR}/vllm/invariants.validated.yaml' \
+                --validation-commit '${ANCHOR_SHA}' \
                 --fail-on-divergence
             "
 
@@ -864,16 +864,16 @@ jobs:
             --engine vllm \
             --out docs/user/generated/invariants-vllm.md
 
-      - name: Classify diff (proposed + vendored)
+      - name: Classify diff (proposed + validated)
         if: steps.probe.outputs.verdict == 'pass'
         id: diff
         run: |
           set +e
           uv run python scripts/diff_engine_invariants.py \
-            /tmp/engine-invariants-diff/vllm.vendored.old.yaml \
-            "${ENGINES_DIR}/vllm/invariants.vendored.yaml" \
-            --out /tmp/engine-invariants-diff/vllm.vendored.md \
-            --title "vLLM vendored invariants diff"
+            /tmp/engine-invariants-diff/vllm.validated.old.yaml \
+            "${ENGINES_DIR}/vllm/invariants.validated.yaml" \
+            --out /tmp/engine-invariants-diff/vllm.validated.md \
+            --title "vLLM validated invariants diff"
           VENDORED_EXIT=$?
           set -e
 
@@ -884,8 +884,8 @@ jobs:
           fi
 
           VENDORED_CHANGED=true
-          if diff -q /tmp/engine-invariants-diff/vllm.vendored.old.yaml \
-                    "${ENGINES_DIR}/vllm/invariants.vendored.yaml" >/dev/null 2>&1; then
+          if diff -q /tmp/engine-invariants-diff/vllm.validated.old.yaml \
+                    "${ENGINES_DIR}/vllm/invariants.validated.yaml" >/dev/null 2>&1; then
             VENDORED_CHANGED=false
           fi
 
@@ -902,7 +902,7 @@ jobs:
             echo "## Engine invariants — vllm"
             echo
             if [[ "$CLASSIFICATION" == "no-changes" ]]; then
-              echo "_No changes to proposed or vendored invariants._"
+              echo "_No changes to proposed or validated invariants._"
             else
               if [[ "$PROPOSED_CHANGED" == "true" ]]; then
                 echo "### Proposed corpus diff"
@@ -914,8 +914,8 @@ jobs:
                 echo '```'
                 echo
               fi
-              if [[ -f /tmp/engine-invariants-diff/vllm.vendored.md ]]; then
-                cat /tmp/engine-invariants-diff/vllm.vendored.md
+              if [[ -f /tmp/engine-invariants-diff/vllm.validated.md ]]; then
+                cat /tmp/engine-invariants-diff/vllm.validated.md
               fi
             fi
           } > /tmp/engine-invariants-diff/vllm.summary.md
@@ -938,7 +938,7 @@ jobs:
             echo
             jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/llem-probe-out/probe-vllm.json
             echo
-            echo "**Downstream mine + vendor steps were skipped.** No corpus changes were committed against this PR."
+            echo "**Downstream mine + validate steps were skipped.** No corpus changes were committed against this PR."
             echo
             echo "**To unblock,** choose one of:"
             echo
@@ -956,10 +956,10 @@ jobs:
           name: engine-invariants-diff-vllm
           path: |
             /tmp/engine-invariants-diff/vllm.proposed.old.yaml
-            /tmp/engine-invariants-diff/vllm.vendored.old.yaml
+            /tmp/engine-invariants-diff/vllm.validated.old.yaml
             /tmp/engine-invariants-diff/vllm.summary.md
             ${{ env.ENGINES_DIR }}/vllm/invariants.proposed.yaml
-            ${{ env.ENGINES_DIR }}/vllm/invariants.vendored.yaml
+            ${{ env.ENGINES_DIR }}/vllm/invariants.validated.yaml
 
       - name: Post per-pipeline comment
         if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
@@ -1017,7 +1017,7 @@ jobs:
 
           git add \
             "${ENGINES_DIR}/vllm/invariants.proposed.yaml" \
-            "${ENGINES_DIR}/vllm/invariants.vendored.yaml" \
+            "${ENGINES_DIR}/vllm/invariants.validated.yaml" \
             engine_versions/vllm.yaml \
             docs/user/generated/invariants-vllm.md
 
@@ -1026,7 +1026,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m "chore(invariants): refresh vllm proposed + vendored corpus"
+          git commit -m "chore(invariants): refresh vllm proposed + validated corpus"
           git push --force-with-lease
 
       - name: Apply cross-pipeline rollup label
@@ -1159,7 +1159,7 @@ jobs:
           fi
           docker tag "$UPSTREAM" "${{ steps.version.outputs.image }}"
 
-      - name: Compute stable mining + vendor anchor
+      - name: Compute stable mining + validation anchor
         id: anchor
         run: |
           PATHS=(
@@ -1172,8 +1172,8 @@ jobs:
             "scripts/engine_miners/_msgspec_lift.py"
             "scripts/engine_miners/_dataclass_lift.py"
             "scripts/engine_miners/_fixpoint_test.py"
-            "scripts/vendor_rules.py"
-            "scripts/_invariant_vendor_common.py"
+            "scripts/validate_invariants.py"
+            "scripts/_invariant_validation_common.py"
             "scripts/refresh_invariant_rules.sh"
           )
           SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
@@ -1250,7 +1250,7 @@ jobs:
 
       - name: Update last_probe in SSOT
         # See invariants-transformers cell for rationale. Runs in
-        # the TRT-LLM image; `--user` matches the surrounding mine + vendor
+        # the TRT-LLM image; `--user` matches the surrounding mine + validate
         # step's pattern so the rewritten engine_versions/tensorrt.yaml
         # stays runner-owned.
         if: always() && steps.probe.outcome == 'success'
@@ -1274,7 +1274,7 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         run: |
           mkdir -p /tmp/engine-invariants-diff
-          for KIND in proposed vendored; do
+          for KIND in proposed validated; do
             OLD_YAML="${ENGINES_DIR}/tensorrt/invariants.${KIND}.yaml"
             DEST="/tmp/engine-invariants-diff/tensorrt.${KIND}.old.yaml"
             if [[ -f "$OLD_YAML" ]]; then
@@ -1284,7 +1284,7 @@ jobs:
             fi
           done
 
-      - name: Mine + vendor inside container
+      - name: Mine + validate inside container
         if: steps.probe.outputs.verdict == 'pass'
         env:
           IMAGE: ${{ steps.version.outputs.image }}
@@ -1298,7 +1298,7 @@ jobs:
             -v /tmp/llem-group-synth:/etc/group:ro \
             -e LD_LIBRARY_PATH \
             -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
-            -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
+            -e LLENERGY_VALIDATION_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
             -e PYTHONPATH \
             -v "${{ github.workspace }}:/repo" \
@@ -1309,11 +1309,11 @@ jobs:
             -c "
               set -euo pipefail
               python3 -m scripts.engine_miners.build_corpus --engine tensorrt
-              python3 scripts/vendor_rules.py \
+              python3 scripts/validate_invariants.py \
                 --engine tensorrt \
                 --corpus '${ENGINES_DIR}/tensorrt/invariants.proposed.yaml' \
-                --out '${ENGINES_DIR}/tensorrt/invariants.vendored.yaml' \
-                --vendor-commit '${ANCHOR_SHA}' \
+                --out '${ENGINES_DIR}/tensorrt/invariants.validated.yaml' \
+                --validation-commit '${ANCHOR_SHA}' \
                 --fail-on-divergence
             "
 
@@ -1336,16 +1336,16 @@ jobs:
             --engine tensorrt \
             --out docs/user/generated/invariants-tensorrt.md
 
-      - name: Classify diff (proposed + vendored)
+      - name: Classify diff (proposed + validated)
         if: steps.probe.outputs.verdict == 'pass'
         id: diff
         run: |
           set +e
           uv run python scripts/diff_engine_invariants.py \
-            /tmp/engine-invariants-diff/tensorrt.vendored.old.yaml \
-            "${ENGINES_DIR}/tensorrt/invariants.vendored.yaml" \
-            --out /tmp/engine-invariants-diff/tensorrt.vendored.md \
-            --title "TensorRT-LLM vendored invariants diff"
+            /tmp/engine-invariants-diff/tensorrt.validated.old.yaml \
+            "${ENGINES_DIR}/tensorrt/invariants.validated.yaml" \
+            --out /tmp/engine-invariants-diff/tensorrt.validated.md \
+            --title "TensorRT-LLM validated invariants diff"
           VENDORED_EXIT=$?
           set -e
 
@@ -1356,8 +1356,8 @@ jobs:
           fi
 
           VENDORED_CHANGED=true
-          if diff -q /tmp/engine-invariants-diff/tensorrt.vendored.old.yaml \
-                    "${ENGINES_DIR}/tensorrt/invariants.vendored.yaml" >/dev/null 2>&1; then
+          if diff -q /tmp/engine-invariants-diff/tensorrt.validated.old.yaml \
+                    "${ENGINES_DIR}/tensorrt/invariants.validated.yaml" >/dev/null 2>&1; then
             VENDORED_CHANGED=false
           fi
 
@@ -1374,7 +1374,7 @@ jobs:
             echo "## Engine invariants — tensorrt"
             echo
             if [[ "$CLASSIFICATION" == "no-changes" ]]; then
-              echo "_No changes to proposed or vendored invariants._"
+              echo "_No changes to proposed or validated invariants._"
             else
               if [[ "$PROPOSED_CHANGED" == "true" ]]; then
                 echo "### Proposed corpus diff"
@@ -1386,8 +1386,8 @@ jobs:
                 echo '```'
                 echo
               fi
-              if [[ -f /tmp/engine-invariants-diff/tensorrt.vendored.md ]]; then
-                cat /tmp/engine-invariants-diff/tensorrt.vendored.md
+              if [[ -f /tmp/engine-invariants-diff/tensorrt.validated.md ]]; then
+                cat /tmp/engine-invariants-diff/tensorrt.validated.md
               fi
             fi
           } > /tmp/engine-invariants-diff/tensorrt.summary.md
@@ -1410,7 +1410,7 @@ jobs:
             echo
             jq -r '.landmarks_missing[] | "- `" + . + "`"' /tmp/llem-probe-out/probe-tensorrt.json
             echo
-            echo "**Downstream mine + vendor steps were skipped.** No corpus changes were committed against this PR."
+            echo "**Downstream mine + validate steps were skipped.** No corpus changes were committed against this PR."
             echo
             echo "**To unblock,** choose one of:"
             echo
@@ -1428,10 +1428,10 @@ jobs:
           name: engine-invariants-diff-tensorrt
           path: |
             /tmp/engine-invariants-diff/tensorrt.proposed.old.yaml
-            /tmp/engine-invariants-diff/tensorrt.vendored.old.yaml
+            /tmp/engine-invariants-diff/tensorrt.validated.old.yaml
             /tmp/engine-invariants-diff/tensorrt.summary.md
             ${{ env.ENGINES_DIR }}/tensorrt/invariants.proposed.yaml
-            ${{ env.ENGINES_DIR }}/tensorrt/invariants.vendored.yaml
+            ${{ env.ENGINES_DIR }}/tensorrt/invariants.validated.yaml
 
       - name: Post per-pipeline comment
         if: steps.probe.outputs.verdict == 'pass' && steps.pr.outputs.number != ''
@@ -1489,7 +1489,7 @@ jobs:
 
           git add \
             "${ENGINES_DIR}/tensorrt/invariants.proposed.yaml" \
-            "${ENGINES_DIR}/tensorrt/invariants.vendored.yaml" \
+            "${ENGINES_DIR}/tensorrt/invariants.validated.yaml" \
             engine_versions/tensorrt.yaml \
             docs/user/generated/invariants-tensorrt.md
 
@@ -1498,7 +1498,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m "chore(invariants): refresh tensorrt proposed + vendored corpus"
+          git commit -m "chore(invariants): refresh tensorrt proposed + validated corpus"
           git push --force-with-lease
 
       - name: Apply cross-pipeline rollup label

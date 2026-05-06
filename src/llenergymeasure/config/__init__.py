@@ -5,7 +5,7 @@ Public API:
 - load_experiment_config: Load from YAML/JSON with CLI override support
 - load_user_config: Load user preferences from XDG config dir
 - get_user_config_path: Return the XDG user config path
-- SchemaLoader / DiscoveredSchema: Access vendored engine parameter schemas
+- SchemaLoader / DiscoveredSchema: Access discovered engine parameter schemas
 """
 
 from llenergymeasure.config.loader import (

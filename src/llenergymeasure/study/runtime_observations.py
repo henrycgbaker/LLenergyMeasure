@@ -1,4 +1,4 @@
-"""Runtime observation capture — feedback channel #1 for the rules corpus.
+"""Runtime observation capture — feedback channel #1 for the invariants corpus.
 
 Wraps an experiment's worker body in a context manager that captures:
 

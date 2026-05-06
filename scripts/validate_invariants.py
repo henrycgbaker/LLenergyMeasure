@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
-"""Run each validation rule through the real library inside its engine container.
+"""Run each validation invariant through the real library inside its engine container.
 
-The vendor step is the **observe half** of the "observe, don't re-encode"
+The validation step is the **observe half** of the "observe, don't re-encode"
 design in :doc:`.product/designs/config-deduplication-dormancy/runtime-config-validation.md`.
 The YAML corpus at ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`` declares each
-rule's ``expected_outcome``; this script executes the rule through the
+invariant's ``expected_outcome``; this script executes the invariant through the
 library and records what *actually* happened. Divergence between declared and
 observed fails CI.
 
 Usage (inside the engine's Docker container)::
 
-    python scripts/vendor_rules.py \\
+    python scripts/validate_invariants.py \\
         --engine transformers \\
         --corpus src/llenergymeasure/engines/transformers/invariants.proposed.yaml \\
-        --out src/llenergymeasure/engines/transformers/invariants.vendored.yaml
+        --out src/llenergymeasure/engines/transformers/invariants.validated.yaml
 
 Exit codes:
 
-    0 - all rules confirmed (positive + negative + expected matches observed)
+    0 - all invariants confirmed (positive + negative + expected matches observed)
     1 - one or more divergences; envelope still written
     2 - hard error (corpus malformed, engine not importable, etc.)
 
 The envelope structure mirrors the parameter-discovery envelope in
 ``src/llenergymeasure/engines/{engine}/schema.discovered.json`` (same field shape,
-YAML serialisation here so the proposed and vendored corpora share a single
+YAML serialisation here so the proposed and validated corpora share a single
 human-readable format).
 """
 
@@ -46,7 +46,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts._invariant_vendor_common import (  # noqa: E402  (late import after sys.path)
+from scripts._invariant_validation_common import (  # noqa: E402  (late import after sys.path)
     TENSORRT_PRIVATE_FIELD_ALLOWLIST,
     TRANSFORMERS_PRIVATE_FIELD_ALLOWLIST,
     CaptureBuffers,
@@ -69,25 +69,25 @@ SCHEMA_VERSION = "1.0.0"
 # ---------------------------------------------------------------------------
 
 
-class VendorError(Exception):
-    """Base class for vendor-step errors."""
+class ValidationError(Exception):
+    """Base class for validation-step errors."""
 
 
-class VendorCorpusError(VendorError):
+class ValidationCorpusError(ValidationError):
     """Corpus YAML is malformed or missing required fields."""
 
 
-class VendorEngineNotImportable(VendorError):
+class ValidationEngineNotImportable(ValidationError):
     """The engine library is not importable in this environment."""
 
 
-class VendorDivergenceError(VendorError):
-    """One or more rules diverged from their declared expected_outcome."""
+class ValidationDivergenceError(ValidationError):
+    """One or more invariants diverged from their declared expected_outcome."""
 
     def __init__(self, divergences: list[Divergence]) -> None:
         super().__init__(
-            f"{len(divergences)} rule(s) diverged from expected_outcome. "
-            "See the vendored YAML 'divergences' array for details."
+            f"{len(divergences)} invariant(s) diverged from expected_outcome. "
+            "See the validated YAML 'divergences' array for details."
         )
         self.divergences = divergences
 
@@ -101,10 +101,12 @@ def _load_corpus(path: Path) -> dict[str, Any]:
     try:
         raw_text = path.read_text()
     except FileNotFoundError as exc:
-        raise VendorCorpusError(f"Corpus not found at {path}") from exc
+        raise ValidationCorpusError(f"Corpus not found at {path}") from exc
     data = yaml.safe_load(raw_text)
-    if not isinstance(data, dict) or "rules" not in data:
-        raise VendorCorpusError(f"Corpus at {path} must be a mapping with a top-level 'rules' key.")
+    if not isinstance(data, dict) or "invariants" not in data:
+        raise ValidationCorpusError(
+            f"Corpus at {path} must be a mapping with a top-level 'invariants' key."
+        )
     return data
 
 
@@ -116,7 +118,7 @@ def _load_corpus(path: Path) -> dict[str, Any]:
 def _run_transformers(
     native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
 ) -> CaptureBuffers:
-    """Execute one rule's kwargs through the transformers library.
+    """Execute one invariant's kwargs through the transformers library.
 
     Handles both ``GenerationConfig`` (uses ``.validate()``) and
     ``BitsAndBytesConfig`` (construction itself raises). Other
@@ -126,7 +128,7 @@ def _run_transformers(
     composed ValueError listing every issue (corresponds to corpus
     ``severity=error``); ``False`` emits dormant/announced issues via
     ``logger.warning_once`` (corresponds to corpus ``severity=dormant``). The
-    caller picks the mode based on the rule's declared severity.
+    caller picks the mode based on the invariant's declared severity.
     """
     logger_names = (
         "transformers",
@@ -154,7 +156,7 @@ def _run_transformers(
 
 
 def _construct_and_validate_generation_config(kwargs: dict[str, Any], *, strict: bool) -> Any:
-    # Corpus kwargs pass through verbatim — the raw YAML shape IS the rule
+    # Corpus kwargs pass through verbatim — the raw YAML shape IS the invariant
     # under test (e.g. compile_config receives a raw dict on purpose).
     from transformers import GenerationConfig  # type: ignore
 
@@ -183,12 +185,12 @@ def _construct_generic(native_type: str, kwargs: dict[str, Any]) -> Any:
 # Runs inside the ``llenergymeasure:tensorrt`` Docker image on the self-hosted
 # GPU runner — TRT-LLM 0.21.0 cannot be imported on a CPU host (loads CUDA
 # bindings on import), so this codepath is only exercised in CI by the
-# ``vendor-tensorrt`` job in ``.github/workflows/engine-invariants.yml``.
+# ``validate-tensorrt`` job in ``.github/workflows/engine-invariants.yml``.
 #
 # The static miner emits short-form ``native_type`` values (``tensorrt_llm.X``)
 # matching the AST symbol it walked. Map those to the deep import paths inside
 # the library, and substitute ``BaseLlmArgs`` -> ``TrtLlmArgs`` because
-# ``BaseLlmArgs`` is the abstract parent and rules tagged on it apply to
+# ``BaseLlmArgs`` is the abstract parent and invariants tagged on it apply to
 # inherited fields on the concrete subclass.
 
 _TRTLLM_NATIVE_TYPE_MAP: dict[str, str] = {
@@ -203,20 +205,20 @@ _TRTLLM_NATIVE_TYPE_MAP: dict[str, str] = {
 # ``BaseLlmArgs`` / ``TrtLlmArgs`` declare ``model`` as a required field. The
 # corpus's ``kwargs_positive`` / ``kwargs_negative`` only carry the field under
 # test, so without an injected default Pydantic raises a "model: field
-# required" error before any rule-relevant validator runs. The placeholder is
+# required" error before any invariant-relevant validator runs. The placeholder is
 # never resolved to a real checkpoint - construction stops at validator-pass
-# time on either the rule's positive raise (intended) or the negative success
+# time on either the invariant's positive raise (intended) or the negative success
 # (intended), both before the loader would try to read from disk.
 _TRTLLM_LLMARGS_TYPES: frozenset[str] = frozenset(
     {"tensorrt_llm.BaseLlmArgs", "tensorrt_llm.TrtLlmArgs"}
 )
-_TRTLLM_MODEL_PLACEHOLDER = "/tmp/llem-vendor-gate-model-placeholder"
+_TRTLLM_MODEL_PLACEHOLDER = "/tmp/llem-validation-gate-model-placeholder"
 
 
 def _run_tensorrt(
     native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
 ) -> CaptureBuffers:
-    """Execute one TRT-LLM rule's kwargs through the live library.
+    """Execute one TRT-LLM invariant's kwargs through the live library.
 
     ``strict_validate`` is accepted for parity with the transformers runner
     but is not consulted - TRT-LLM has no `.validate(strict=...)` analogue;
@@ -286,7 +288,7 @@ _VLLM_BOOTSTRAP_NOISE = re.compile(
 
 
 def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool) -> CaptureBuffers:
-    """Execute one rule's kwargs through the vLLM library.
+    """Execute one invariant's kwargs through the vLLM library.
 
     ``strict_validate`` is unused — vLLM has no analog to HF's ``strict``
     flag; sampling-param errors raise during construction and dormancy
@@ -302,13 +304,13 @@ def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
     ``run_case``: vLLM logs ``INFO 04-26 [model.py] Resolved architecture``
     on every ``ModelConfig`` construction, which the capture handler would
     otherwise classify as ``dormant_announced`` and trip ``negative_confirms``.
-    The rule's intended channel is ``logger.warning`` / ``warning_once`` /
+    The invariant's intended channel is ``logger.warning`` / ``warning_once`` /
     ``warnings.warn`` only; INFO is plumbing.
 
     A handful of import-time warnings (``_SixMetaPathImporter``, SWIG type
     metadata, ROCm probe failures) leak into ``warnings.catch_warnings``
     on the first run-case invocation per process. These are torch/vLLM
-    bootstrap noise unrelated to the rule under test, so we strip them
+    bootstrap noise unrelated to the invariant under test, so we strip them
     from the captured warnings tuple before returning.
     """
     del strict_validate  # currently unused for vLLM
@@ -330,7 +332,7 @@ def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
     # ``Resolved architecture``, ``Using max model len`` etc. all surface
     # via ``vllm.config.model`` / ``vllm.config.scheduler`` and would
     # otherwise classify the negative case as ``dormant_announced``,
-    # tripping ``negative_confirms`` for every rule that constructs one of
+    # tripping ``negative_confirms`` for every invariant that constructs one of
     # these classes. The captured records carry no level prefix in the
     # plain-message handler (``%(message)s`` formatter), so we filter on
     # known-bootstrap message substrings instead — vLLM's
@@ -340,7 +342,7 @@ def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
     if filtered_logs != result.logger_messages:
         result = dataclass_replace(result, logger_messages=filtered_logs)
     # Strip torch/SWIG/ROCm bootstrap noise that has nothing to do with the
-    # rule under test.
+    # invariant under test.
     filtered_warnings = tuple(
         w for w in result.warnings_captured if not _VLLM_IMPORT_NOISE.search(w)
     )
@@ -360,52 +362,52 @@ def get_native_type_runner(engine: str):
     """Return the per-engine dispatcher. Raises if engine unsupported."""
     runner = _ENGINE_RUNNERS.get(engine)
     if runner is None:
-        raise VendorError(
-            f"No vendor runner registered for engine {engine!r}. "
+        raise ValidationError(
+            f"No validation runner registered for engine {engine!r}. "
             f"Known engines: {sorted(_ENGINE_RUNNERS)}"
         )
     return runner
 
 
 # ---------------------------------------------------------------------------
-# Per-rule driver
+# Per-invariant driver
 # ---------------------------------------------------------------------------
 
 
-def vendor_rule(engine: str, rule: dict[str, Any], *, gpu_mode: str) -> CaseResult:
-    """Run one rule's positive + negative kwargs and assemble the case result.
+def validate_invariant(engine: str, invariant: dict[str, Any], *, gpu_mode: str) -> CaseResult:
+    """Run one invariant's positive + negative kwargs and assemble the case result.
 
-    ``gpu_mode`` is ``"all" | "skip" | "only"`` — hardware-dependent rules
+    ``gpu_mode`` is ``"all" | "skip" | "only"`` — hardware-dependent invariants
     are skipped unless ``gpu_mode`` permits them.
     """
-    case, _pos, _neg = _vendor_rule_with_captures(engine, rule, gpu_mode=gpu_mode)
+    case, _pos, _neg = _validate_invariant_with_captures(engine, invariant, gpu_mode=gpu_mode)
     return case
 
 
-def _vendor_rule_with_captures(
-    engine: str, rule: dict[str, Any], *, gpu_mode: str
+def _validate_invariant_with_captures(
+    engine: str, invariant: dict[str, Any], *, gpu_mode: str
 ) -> tuple[CaseResult, CaptureBuffers | None, CaptureBuffers | None]:
-    """Run one rule and return the case plus the raw positive/negative captures.
+    """Run one invariant and return the case plus the raw positive/negative captures.
 
     The captures are needed by the gate-soundness checks added per
     Decision #12 of the invariant-miner adversarial review - they look at
     severity-specific behaviour (positive must raise for ``severity=error``)
     and the raised exception's message text, neither of which fit the
-    public ``CaseResult`` shape. ``vendor_rule`` keeps its existing return
+    public ``CaseResult`` shape. ``validate_invariant`` keeps its existing return
     type for backward compatibility with downstream tests; this internal
     helper exposes what the gate needs.
 
     Returns ``(case, pos, neg)``. ``pos`` / ``neg`` are ``None`` when the
-    rule was skipped.
+    invariant was skipped.
     """
-    rule_id = rule["id"]
-    requires_gpu = bool(rule.get("requires_gpu", False))
-    hardware_dependent = bool(rule.get("hardware_dependent", False))
+    invariant_id = invariant["id"]
+    requires_gpu = bool(invariant.get("requires_gpu", False))
+    hardware_dependent = bool(invariant.get("hardware_dependent", False))
 
     if gpu_mode == "skip" and (requires_gpu or hardware_dependent):
         return (
             CaseResult(
-                id=rule_id,
+                id=invariant_id,
                 outcome="skipped_hardware_dependent",
                 emission_channel="none",
                 skipped_reason="requires_gpu_and_gpu_mode_skip",
@@ -416,7 +418,7 @@ def _vendor_rule_with_captures(
     if gpu_mode == "only" and not requires_gpu:
         return (
             CaseResult(
-                id=rule_id,
+                id=invariant_id,
                 outcome="skipped_hardware_dependent",
                 emission_channel="none",
                 skipped_reason="cpu_rule_and_gpu_mode_only",
@@ -425,17 +427,17 @@ def _vendor_rule_with_captures(
             None,
         )
 
-    native_type = rule["native_type"]
+    native_type = invariant["native_type"]
     runner = get_native_type_runner(engine)
-    severity = str(rule.get("severity", "")).lower()
+    severity = str(invariant.get("severity", "")).lower()
     # Per-engine strictness routing: transformers' GenerationConfig has a
     # non-strict path (logger.warning for dormant/announced) and a strict
     # path (composed ValueError for errors). Dispatch by declared severity
-    # so the vendor observation matches the corpus's expected outcome shape.
+    # so the validation observation matches the corpus's expected outcome shape.
     strict_validate = severity == "error"
 
-    kwargs_positive = dict(rule["kwargs_positive"])
-    kwargs_negative = dict(rule["kwargs_negative"])
+    kwargs_positive = dict(invariant["kwargs_positive"])
+    kwargs_negative = dict(invariant["kwargs_negative"])
 
     pos = runner(native_type, kwargs_positive, strict_validate=strict_validate)
     neg = runner(native_type, kwargs_negative, strict_validate=strict_validate)
@@ -449,7 +451,7 @@ def _vendor_rule_with_captures(
     outcome = classify_outcome(pos, silent_normalisations)
     emission = classify_emission_channel(pos)
 
-    expected = dict(rule.get("expected_outcome") or {})
+    expected = dict(invariant.get("expected_outcome") or {})
     positive_confirmed = _positive_confirms(expected, outcome)
     neg_silent = (
         diff_input_vs_state(kwargs_negative, neg.observed_state) if neg.observed_state else {}
@@ -467,7 +469,7 @@ def _vendor_rule_with_captures(
         }
 
     case = CaseResult(
-        id=rule_id,
+        id=invariant_id,
         outcome=outcome,
         emission_channel=emission,
         observed_messages=observed_messages,
@@ -491,7 +493,7 @@ CHECK_MESSAGE_TEMPLATE_TOO_DYNAMIC = "message_template_too_dynamic"
 
 
 def compute_gate_soundness_divergences(
-    rule: dict[str, Any], pos: CaptureBuffers, neg: CaptureBuffers
+    invariant: dict[str, Any], pos: CaptureBuffers, neg: CaptureBuffers
 ) -> list[Divergence]:
     """Return divergences from the three gate-soundness checks.
 
@@ -499,30 +501,30 @@ def compute_gate_soundness_divergences(
     (`.product/designs/adversarial-review-invariant-miner-2026-04-26.md`)
     surfaced a soundness gap: the existing ``compare_expected_vs_observed``
     only checks fields *present* in ``expected_outcome``, so a typo in the
-    corpus YAML silently passes. These three checks bind the rule's
+    corpus YAML silently passes. These three checks bind the invariant's
     declared shape to the live library's behaviour:
 
-    1. ``positive_raises`` - for ``severity=error`` rules, ``kwargs_positive``
-       MUST raise. For ``severity=dormant`` rules, it MUST emit (warn or
+    1. ``positive_raises`` - for ``severity=error`` invariants, ``kwargs_positive``
+       MUST raise. For ``severity=dormant`` invariants, it MUST emit (warn or
        dormant-announce) - i.e., not be a no-op and not raise unexpectedly.
     2. ``message_template_match`` - when the positive raised, the exception's
        ``str()`` must contain the static fragment of ``message_template``
        (case-insensitive). When the template has no useful static fragment
        (almost all placeholders), record ``message_template_too_dynamic``
-       so the rule's author knows to add a more specific template.
+       so the invariant's author knows to add a more specific template.
     3. ``negative_does_not_raise`` - ``kwargs_negative`` MUST construct
        successfully (i.e., not raise).
 
     Each divergence carries ``check_failed`` so downstream tooling can
     filter by check type.
     """
-    rule_id = rule["id"]
-    severity = str(rule.get("severity", "")).lower()
+    invariant_id = invariant["id"]
+    severity = str(invariant.get("severity", "")).lower()
     divergences: list[Divergence] = []
 
     # 1. Positive must fire (raise for severity=error, emit for severity=dormant).
     pos_silent = (
-        diff_input_vs_state(dict(rule.get("kwargs_positive") or {}), pos.observed_state)
+        diff_input_vs_state(dict(invariant.get("kwargs_positive") or {}), pos.observed_state)
         if pos.observed_state
         else {}
     )
@@ -531,7 +533,7 @@ def compute_gate_soundness_divergences(
         if pos.exception_type is None:
             divergences.append(
                 Divergence(
-                    rule_id=rule_id,
+                    invariant_id=invariant_id,
                     field="kwargs_positive",
                     expected="raises",
                     observed=pos_outcome,
@@ -539,11 +541,11 @@ def compute_gate_soundness_divergences(
                 )
             )
     else:
-        # dormant rules emit but don't raise - anything other than no_op or error.
+        # dormant invariants emit but don't raise - anything other than no_op or error.
         if pos_outcome in {"no_op", "error"}:
             divergences.append(
                 Divergence(
-                    rule_id=rule_id,
+                    invariant_id=invariant_id,
                     field="kwargs_positive",
                     expected="emits_warning_or_announce",
                     observed=pos_outcome,
@@ -553,13 +555,13 @@ def compute_gate_soundness_divergences(
 
     # 2. Message-template substring match (only when positive raised, since
     #    the message_template specifically describes the raised string).
-    template = str(rule.get("message_template") or "")
+    template = str(invariant.get("message_template") or "")
     if pos.exception_type is not None and template:
         matched, fragment = message_matches_template(pos.exception_message or "", template)
         if not fragment:
             divergences.append(
                 Divergence(
-                    rule_id=rule_id,
+                    invariant_id=invariant_id,
                     field="message_template",
                     expected="contains_static_fragment",
                     observed=template,
@@ -569,7 +571,7 @@ def compute_gate_soundness_divergences(
         elif not matched:
             divergences.append(
                 Divergence(
-                    rule_id=rule_id,
+                    invariant_id=invariant_id,
                     field="message_template",
                     expected=fragment,
                     observed=pos.exception_message or "",
@@ -581,7 +583,7 @@ def compute_gate_soundness_divergences(
     if neg.exception_type is not None:
         divergences.append(
             Divergence(
-                rule_id=rule_id,
+                invariant_id=invariant_id,
                 field="kwargs_negative",
                 expected="does_not_raise",
                 observed={"type": neg.exception_type, "message": neg.exception_message or ""},
@@ -593,7 +595,7 @@ def compute_gate_soundness_divergences(
 
 
 def _positive_confirms(expected: dict[str, Any], observed_outcome: str) -> bool:
-    """True iff the rule fired on the positive kwargs as declared.
+    """True iff the invariant fired on the positive kwargs as declared.
 
     When the corpus declares a specific outcome, positive_confirmed requires
     an exact match. When the corpus leaves ``outcome`` unset, we accept any
@@ -606,11 +608,11 @@ def _positive_confirms(expected: dict[str, Any], observed_outcome: str) -> bool:
 
 
 def _negative_confirms(neg: CaptureBuffers, silent_normalisations: dict[str, Any]) -> bool:
-    """True iff the rule did NOT fire on the negative kwargs.
+    """True iff the invariant did NOT fire on the negative kwargs.
 
     Delegates to :func:`classify_outcome` so the definition of "fired"
     lives in one place: anything other than ``no_op`` counts as firing,
-    which would be a dead walker entry.
+    which would be a dead miner entry.
     """
     return classify_outcome(neg, silent_normalisations) == "no_op"
 
@@ -626,20 +628,20 @@ def assemble_envelope(
     engine_version: str,
     image_ref: str,
     base_image_ref: str,
-    vendor_commit: str,
+    validation_commit: str,
     cases: list[CaseResult],
     divergences: list[Divergence],
 ) -> dict[str, Any]:
-    """Build the vendored-rules envelope (parallel to the parameter-discovery envelope)."""
-    now = os.environ.get("LLENERGY_VENDOR_FROZEN_AT") or datetime.now(timezone.utc).isoformat()
+    """Build the validated invariants envelope (parallel to the parameter-discovery envelope)."""
+    now = os.environ.get("LLENERGY_VALIDATION_FROZEN_AT") or datetime.now(timezone.utc).isoformat()
     return {
         "schema_version": SCHEMA_VERSION,
         "engine": engine,
         "engine_version": engine_version,
         "image_ref": image_ref,
         "base_image_ref": base_image_ref,
-        "vendored_at": now,
-        "vendor_commit": vendor_commit,
+        "validated_at": now,
+        "validation_commit": validation_commit,
         "cases": [_case_to_dict(c) for c in cases],
         "divergences": [d.as_dict() for d in divergences],
     }
@@ -652,18 +654,18 @@ def _case_to_dict(case: CaseResult) -> dict[str, Any]:
         if d.get(optional_key) is None:
             d.pop(optional_key, None)
     # duration_ms is wall-clock noise (±1 ms run-to-run); excluding it from
-    # the envelope keeps successive vendor runs on unchanged source byte-
+    # the envelope keeps successive validation runs on unchanged source byte-
     # identical, which breaks the commit-back re-trigger loop.
     d.pop("duration_ms", None)
     return d
 
 
 # ---------------------------------------------------------------------------
-# Main vendor loop
+# Main validation loop
 # ---------------------------------------------------------------------------
 
 
-def vendor_engine(
+def validate_engine(
     *,
     engine: str,
     corpus_path: Path,
@@ -671,11 +673,11 @@ def vendor_engine(
     gpu_mode: str = "all",
     image_ref: str | None = None,
     base_image_ref: str | None = None,
-    vendor_commit: str = "unknown",
+    validation_commit: str = "unknown",
 ) -> tuple[dict[str, Any], list[Divergence]]:
-    """Run the full vendor loop for one engine; write YAML envelope to ``out_path``.
+    """Run the full validation loop for one engine; write YAML envelope to ``out_path``.
 
-    Returns ``(envelope, divergences)``. Raises :class:`VendorEngineNotImportable`
+    Returns ``(envelope, divergences)``. Raises :class:`ValidationEngineNotImportable`
     if the engine library can't be imported. Does NOT raise on divergence —
     the caller inspects the returned list and decides.
     """
@@ -685,19 +687,19 @@ def vendor_engine(
     cases: list[CaseResult] = []
     divergences: list[Divergence] = []
 
-    for rule in corpus.get("rules", []):
-        # VendorError (and subclasses) propagate — they indicate misconfig, not
+    for invariant in corpus.get("invariants", []):
+        # ValidationError (and subclasses) propagate — they indicate misconfig, not
         # a library behaviour finding. Any other Exception gets recorded as a
-        # per-rule error so one bad rule doesn't abort the full vendor run.
+        # per-invariant error so one bad invariant doesn't abort the full validation run.
         pos: CaptureBuffers | None = None
         neg: CaptureBuffers | None = None
         try:
-            case, pos, neg = _vendor_rule_with_captures(engine, rule, gpu_mode=gpu_mode)
-        except VendorError:
+            case, pos, neg = _validate_invariant_with_captures(engine, invariant, gpu_mode=gpu_mode)
+        except ValidationError:
             raise
         except Exception as exc:  # pragma: no cover - defensive
             case = CaseResult(
-                id=rule.get("id", "<unknown>"),
+                id=invariant.get("id", "<unknown>"),
                 outcome="error",
                 emission_channel="none",
                 observed_exception={"type": type(exc).__name__, "message": str(exc)},
@@ -708,8 +710,8 @@ def vendor_engine(
             continue
 
         rule_divergences = compare_expected_vs_observed(
-            rule_id=rule["id"],
-            expected=rule.get("expected_outcome") or {},
+            invariant_id=invariant["id"],
+            expected=invariant.get("expected_outcome") or {},
             observed_outcome=case.outcome,
             observed_emission=case.emission_channel,
             silent_normalisations=case.observed_silent_normalisations,
@@ -717,7 +719,7 @@ def vendor_engine(
         if not case.positive_confirmed:
             rule_divergences.append(
                 Divergence(
-                    rule_id=rule["id"],
+                    invariant_id=invariant["id"],
                     field="positive_confirmed",
                     expected=True,
                     observed=False,
@@ -726,7 +728,7 @@ def vendor_engine(
         if not case.negative_confirmed:
             rule_divergences.append(
                 Divergence(
-                    rule_id=rule["id"],
+                    invariant_id=invariant["id"],
                     field="negative_confirmed",
                     expected=True,
                     observed=False,
@@ -735,7 +737,7 @@ def vendor_engine(
         # Gate-soundness checks (Decision #12). Only run when both captures
         # are available - defensive guard for the bare-except fallback above.
         if pos is not None and neg is not None:
-            rule_divergences.extend(compute_gate_soundness_divergences(rule, pos, neg))
+            rule_divergences.extend(compute_gate_soundness_divergences(invariant, pos, neg))
         divergences.extend(rule_divergences)
 
     envelope = assemble_envelope(
@@ -743,7 +745,7 @@ def vendor_engine(
         engine_version=engine_version,
         image_ref=image_ref or f"llenergymeasure:{engine}",
         base_image_ref=base_image_ref or f"llenergymeasure:{engine}",
-        vendor_commit=vendor_commit,
+        validation_commit=validation_commit,
         cases=cases,
         divergences=divergences,
     )
@@ -762,7 +764,7 @@ def _resolve_engine_version(engine: str) -> str:
 
             return transformers.__version__
         except ImportError as exc:
-            raise VendorEngineNotImportable(
+            raise ValidationEngineNotImportable(
                 "transformers is not importable in this environment"
             ) from exc
     if engine == "tensorrt":
@@ -771,7 +773,7 @@ def _resolve_engine_version(engine: str) -> str:
 
             return tensorrt_llm.__version__
         except ImportError as exc:
-            raise VendorEngineNotImportable(
+            raise ValidationEngineNotImportable(
                 "tensorrt_llm is not importable in this environment "
                 "(expected when running outside the llenergymeasure:tensorrt "
                 "Docker image on a GPU host)"
@@ -782,7 +784,9 @@ def _resolve_engine_version(engine: str) -> str:
 
             return vllm.__version__
         except ImportError as exc:
-            raise VendorEngineNotImportable("vllm is not importable in this environment") from exc
+            raise ValidationEngineNotImportable(
+                "vllm is not importable in this environment"
+            ) from exc
     return "unknown"
 
 
@@ -797,7 +801,7 @@ def main(argv: list[str] | None = None) -> int:
         "--engine",
         required=True,
         choices=sorted(_ENGINE_RUNNERS),
-        help="Engine whose corpus to vendor.",
+        help="Engine whose corpus to validate.",
     )
     parser.add_argument(
         "--corpus",
@@ -809,14 +813,14 @@ def main(argv: list[str] | None = None) -> int:
         "--out",
         type=Path,
         required=True,
-        help="Path to write the vendored YAML envelope.",
+        help="Path to write the validated YAML envelope.",
     )
     parser.add_argument(
         "--gpu-cases",
         choices=("all", "skip", "only"),
         default="all",
         help=(
-            "Which rules to run. 'skip' drops rules with requires_gpu=true "
+            "Which invariants to run. 'skip' drops invariants with requires_gpu=true "
             "(for GH-hosted CPU jobs); 'only' runs only those (for self-hosted "
             "GPU jobs); 'all' runs everything (default, useful locally)."
         ),
@@ -832,10 +836,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Base image reference to record in envelope.base_image_ref.",
     )
     parser.add_argument(
-        "--vendor-commit",
+        "--validation-commit",
         default=os.environ.get("GITHUB_SHA", "unknown"),
         help=(
-            "Git commit SHA under which this vendor run occurred. Defaults to "
+            "Git commit SHA under which this validation run occurred. Defaults to "
             "$GITHUB_SHA when CI runs set it; otherwise 'unknown'."
         ),
     )
@@ -843,7 +847,7 @@ def main(argv: list[str] | None = None) -> int:
         "--fail-on-divergence",
         action="store_true",
         help=(
-            "Exit 1 if any rule diverged from its expected_outcome. CI always "
+            "Exit 1 if any invariant diverged from its expected_outcome. CI always "
             "passes this flag; locally it's off by default so developers can "
             "inspect the YAML without CI-style exit."
         ),
@@ -852,23 +856,23 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        _envelope, divergences = vendor_engine(
+        _envelope, divergences = validate_engine(
             engine=args.engine,
             corpus_path=args.corpus,
             out_path=args.out,
             gpu_mode=args.gpu_cases,
             image_ref=args.image_ref,
             base_image_ref=args.base_image_ref,
-            vendor_commit=args.vendor_commit,
+            validation_commit=args.validation_commit,
         )
-    except VendorCorpusError as exc:
+    except ValidationCorpusError as exc:
         print(f"[{args.engine}] corpus error: {exc}", file=sys.stderr)
         return 2
-    except VendorEngineNotImportable as exc:
+    except ValidationEngineNotImportable as exc:
         print(f"[{args.engine}] engine not importable: {exc}", file=sys.stderr)
         return 2
-    except VendorError as exc:
-        print(f"[{args.engine}] vendor error: {exc}", file=sys.stderr)
+    except ValidationError as exc:
+        print(f"[{args.engine}] validation error: {exc}", file=sys.stderr)
         return 2
 
     print(f"[{args.engine}] wrote {args.out}", file=sys.stderr)
@@ -879,7 +883,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         for d in divergences[:10]:
             print(
-                f"  - {d.rule_id}: {d.field} expected={d.expected!r} observed={d.observed!r}",
+                f"  - {d.invariant_id}: {d.field} expected={d.expected!r} observed={d.observed!r}",
                 file=sys.stderr,
             )
         if len(divergences) > 10:

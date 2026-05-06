@@ -106,7 +106,7 @@ from llenergymeasure.cli.report_gaps import report_gaps_cmd as _report_gaps_cmd 
 
 app.command(
     name="report-gaps",
-    help="Propose rules corpus entries from runtime observations",
+    help="Propose invariants corpus entries from runtime observations",
 )(_report_gaps_cmd)
 
 __all__ = ["app"]

@@ -1,7 +1,7 @@
-"""Smoke test for the invariant-miner (vendor gate) workflow glue.
+"""Smoke test for the invariant-miner (validation gate) workflow glue.
 
-Runs the vendor + diff + fixpoint pipeline end-to-end on a fixture corpus.
-Does NOT spin up Docker or require transformers — the vendor step is driven
+Runs the validate + diff + fixpoint pipeline end-to-end on a fixture corpus.
+Does NOT spin up Docker or require transformers — the validation step is driven
 through a patched synthetic runner. This test is the "trust the glue" check
 that complements the unit tests for each individual script.
 """
@@ -19,9 +19,9 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts import _invariant_vendor_common, vendor_rules  # noqa: E402
-from scripts import diff_engine_invariants as diff_rules  # noqa: E402
-from scripts._invariant_vendor_common import run_case  # noqa: E402
+from scripts import _invariant_validation_common, validate_invariants  # noqa: E402
+from scripts import diff_engine_invariants as diff_invariants  # noqa: E402
+from scripts._invariant_validation_common import run_case  # noqa: E402
 from scripts.engine_miners._fixpoint_test import fixpoint_test_corpus  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -33,13 +33,13 @@ _FIXTURE_CORPUS = """
 schema_version: 1.0.0
 engine: transformers
 engine_version: test-1.0.0
-walker_pinned_range: test-range
+miner_pinned_range: test-range
 mined_at: 2026-04-23T00:00:00Z
-rules:
+invariants:
   - id: synthetic_error
     engine: transformers
     library: transformers
-    rule_under_test: Synthetic raises on bad input
+    invariant_under_test: Synthetic raises on bad input
     severity: error
     native_type: fixture.raises
     miner_source: {path: fixture.py, method: __init__, line_at_scan: 0}
@@ -60,7 +60,7 @@ rules:
   - id: synthetic_dormant
     engine: transformers
     library: transformers
-    rule_under_test: Synthetic silent strip
+    invariant_under_test: Synthetic silent strip
     severity: dormant
     native_type: fixture.normalises
     miner_source: {path: fixture.py, method: __init__, line_at_scan: 0}
@@ -92,7 +92,7 @@ class _Normaliser:
 
 def _synthetic_runner(
     native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
-) -> _invariant_vendor_common.CaptureBuffers:
+) -> _invariant_validation_common.CaptureBuffers:
     if native_type == "fixture.raises":
         if kwargs.get("x", 0) > 0:
 
@@ -120,8 +120,8 @@ def fixture_corpus_path(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def patched_runner(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setitem(vendor_rules._ENGINE_RUNNERS, "transformers", _synthetic_runner)
-    monkeypatch.setattr(vendor_rules, "_resolve_engine_version", lambda _e: "test-1.0.0")
+    monkeypatch.setitem(validate_invariants._ENGINE_RUNNERS, "transformers", _synthetic_runner)
+    monkeypatch.setattr(validate_invariants, "_resolve_engine_version", lambda _e: "test-1.0.0")
     return _synthetic_runner
 
 
@@ -131,11 +131,11 @@ def patched_runner(monkeypatch: pytest.MonkeyPatch):
 
 
 class TestWorkflowGlue:
-    def test_vendor_writes_envelope_and_no_divergence(
+    def test_validate_writes_envelope_and_no_divergence(
         self, fixture_corpus_path: Path, tmp_path: Path, patched_runner: Any
     ) -> None:
-        out = tmp_path / "transformers.vendored.yaml"
-        _envelope, divergences = vendor_rules.vendor_engine(
+        out = tmp_path / "transformers.validated.yaml"
+        _envelope, divergences = validate_invariants.validate_engine(
             engine="transformers",
             corpus_path=fixture_corpus_path,
             out_path=out,
@@ -149,14 +149,14 @@ class TestWorkflowGlue:
     def test_diff_classifier_marks_added_rule_safe(
         self, fixture_corpus_path: Path, tmp_path: Path, patched_runner: Any
     ) -> None:
-        out1 = tmp_path / "first.vendored.yaml"
-        envelope1, _ = vendor_rules.vendor_engine(
+        out1 = tmp_path / "first.validated.yaml"
+        envelope1, _ = validate_invariants.validate_engine(
             engine="transformers",
             corpus_path=fixture_corpus_path,
             out_path=out1,
         )
 
-        # Simulate a new rule being added to the envelope.
+        # Simulate a new invariant being added to the envelope.
         envelope2 = dict(envelope1)
         envelope2["cases"] = [
             *envelope1["cases"],
@@ -172,9 +172,9 @@ class TestWorkflowGlue:
             },
         ]
 
-        result = diff_rules.diff_rules(envelope1, envelope2)
+        result = diff_invariants.diff_invariants(envelope1, envelope2)
         assert not result.is_breaking
-        assert any(c.kind == "added_rule" for c in result.safe)
+        assert any(c.kind == "added_invariant" for c in result.safe)
 
     def test_fixpoint_test_runs_on_fixture_corpus(self, fixture_corpus_path: Path) -> None:
         corpus = yaml.safe_load(fixture_corpus_path.read_text())
@@ -184,8 +184,8 @@ class TestWorkflowGlue:
     def test_markdown_comment_body_well_formed(
         self, fixture_corpus_path: Path, tmp_path: Path, patched_runner: Any
     ) -> None:
-        out = tmp_path / "vendor.vendored.yaml"
-        envelope, _ = vendor_rules.vendor_engine(
+        out = tmp_path / "validation.validated.yaml"
+        envelope, _ = validate_invariants.validate_engine(
             engine="transformers",
             corpus_path=fixture_corpus_path,
             out_path=out,
@@ -194,9 +194,9 @@ class TestWorkflowGlue:
         empty_envelope = dict(envelope)
         empty_envelope["cases"] = []
         md_out = tmp_path / "comment.md"
-        result = diff_rules.diff_rules(empty_envelope, envelope)
-        md = diff_rules.render_markdown(result, title="Smoke")
+        result = diff_invariants.diff_invariants(empty_envelope, envelope)
+        md = diff_invariants.render_markdown(result, title="Smoke")
         md_out.write_text(md)
         assert md_out.exists()
         assert "## Smoke" in md
-        assert "added_rule" in md
+        assert "added_invariant" in md

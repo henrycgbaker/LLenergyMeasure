@@ -12,7 +12,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts import diff_engine_invariants as diff_rules  # noqa: E402
+from scripts import diff_engine_invariants as diff_invariants  # noqa: E402
 
 SCRIPT = _PROJECT_ROOT / "scripts" / "diff_engine_invariants.py"
 
@@ -24,8 +24,8 @@ def _envelope(cases: list[dict[str, Any]], **meta: Any) -> dict[str, Any]:
         "engine_version": "4.56.0",
         "image_ref": "test:latest",
         "base_image_ref": "test:latest",
-        "vendored_at": "2026-04-23T00:00:00+00:00",
-        "vendor_commit": "abc",
+        "validated_at": "2026-04-23T00:00:00+00:00",
+        "validation_commit": "abc",
         "cases": cases,
         "divergences": [],
     }
@@ -52,14 +52,14 @@ def _case(
 
 
 # ---------------------------------------------------------------------------
-# diff_rules() unit tests
+# diff_invariants() unit tests
 # ---------------------------------------------------------------------------
 
 
-class TestDiffRules:
+class TestDiffInvariants:
     def test_identical_envelopes(self) -> None:
         env = _envelope([_case("r1"), _case("r2")])
-        result = diff_rules.diff_rules(env, env)
+        result = diff_invariants.diff_invariants(env, env)
         assert not result.is_breaking
         assert result.safe == []
         assert result.breaking == []
@@ -67,30 +67,30 @@ class TestDiffRules:
     def test_added_rule_is_safe(self) -> None:
         old = _envelope([_case("r1")])
         new = _envelope([_case("r1"), _case("r2", outcome="warn")])
-        result = diff_rules.diff_rules(old, new)
+        result = diff_invariants.diff_invariants(old, new)
         assert not result.is_breaking
         assert len(result.safe) == 1
-        assert result.safe[0].kind == "added_rule"
-        assert result.safe[0].rule_id == "r2"
+        assert result.safe[0].kind == "added_invariant"
+        assert result.safe[0].invariant_id == "r2"
 
     def test_removed_rule_is_breaking(self) -> None:
         old = _envelope([_case("r1"), _case("r2")])
         new = _envelope([_case("r1")])
-        result = diff_rules.diff_rules(old, new)
+        result = diff_invariants.diff_invariants(old, new)
         assert result.is_breaking
-        assert any(c.kind == "removed_rule" for c in result.breaking)
+        assert any(c.kind == "removed_invariant" for c in result.breaking)
 
     def test_severity_escalated_is_breaking(self) -> None:
         old = _envelope([_case("r1", outcome="warn")])
         new = _envelope([_case("r1", outcome="error")])
-        result = diff_rules.diff_rules(old, new)
+        result = diff_invariants.diff_invariants(old, new)
         assert result.is_breaking
         assert any(c.kind == "severity_escalated" for c in result.breaking)
 
     def test_severity_relaxed_is_safe(self) -> None:
         old = _envelope([_case("r1", outcome="error")])
         new = _envelope([_case("r1", outcome="warn")])
-        result = diff_rules.diff_rules(old, new)
+        result = diff_invariants.diff_invariants(old, new)
         assert not result.is_breaking
         assert any(c.kind == "severity_relaxed" for c in result.safe)
 
@@ -101,25 +101,25 @@ class TestDiffRules:
         new = _envelope([_case("r1", outcome="no_op")])
         # tweak outcome that has same rank to force outcome_changed
         new["cases"][0]["outcome"] = "skipped_hardware_dependent"
-        result = diff_rules.diff_rules(old, new)
+        result = diff_invariants.diff_invariants(old, new)
         assert result.is_breaking or len(result.safe) >= 1
 
     def test_emission_channel_widened_is_safe(self) -> None:
         old = _envelope([_case("r1", emission_channel="none")])
         new = _envelope([_case("r1", emission_channel="logger_warning")])
-        result = diff_rules.diff_rules(old, new)
+        result = diff_invariants.diff_invariants(old, new)
         assert any(c.kind == "emission_channel_widened" for c in result.safe)
 
     def test_emission_channel_changed_is_breaking(self) -> None:
         old = _envelope([_case("r1", emission_channel="logger_warning")])
         new = _envelope([_case("r1", emission_channel="warnings_warn")])
-        result = diff_rules.diff_rules(old, new)
+        result = diff_invariants.diff_invariants(old, new)
         assert any(c.kind == "emission_channel_changed" for c in result.breaking)
 
     def test_metadata_change_tracked(self) -> None:
         old = _envelope([], engine_version="4.55.0")
         new = _envelope([], engine_version="4.56.0")
-        result = diff_rules.diff_rules(old, new)
+        result = diff_invariants.diff_invariants(old, new)
         assert "engine_version" in result.metadata_changes
         assert result.metadata_changes["engine_version"]["old"] == "4.55.0"
         assert result.metadata_changes["engine_version"]["new"] == "4.56.0"
@@ -127,20 +127,20 @@ class TestDiffRules:
     def test_message_template_change_tracked(self) -> None:
         old = _envelope([_case("r1", observed_messages=["msg1"])])
         new = _envelope([_case("r1", observed_messages=["msg2", "msg3"])])
-        result = diff_rules.diff_rules(old, new)
+        result = diff_invariants.diff_invariants(old, new)
         kinds = [c.kind for c in result.safe + result.breaking]
         assert "message_template_changed" in kinds
 
     def test_summary_empty_on_no_changes(self) -> None:
         env = _envelope([_case("r1")])
-        result = diff_rules.diff_rules(env, env)
+        result = diff_invariants.diff_invariants(env, env)
         assert "No changes" in result.summary
 
     def test_summary_counts(self) -> None:
         old = _envelope([_case("r1")])
         new = _envelope([_case("r1", outcome="error"), _case("r2", outcome="warn")])
         # r1 in both — no change; r2 added — safe
-        result = diff_rules.diff_rules(old, new)
+        result = diff_invariants.diff_invariants(old, new)
         assert "1 invariants-safe" in result.summary
 
 
@@ -152,23 +152,25 @@ class TestDiffRules:
 class TestRenderMarkdown:
     def test_well_formed_for_no_changes(self) -> None:
         env = _envelope([_case("r1")])
-        md = diff_rules.render_markdown(diff_rules.diff_rules(env, env), title="Test")
+        md = diff_invariants.render_markdown(
+            diff_invariants.diff_invariants(env, env), title="Test"
+        )
         assert "## Test" in md
         assert "No changes detected" in md
 
     def test_includes_breaking_section(self) -> None:
         old = _envelope([_case("r1", outcome="warn")])
         new = _envelope([_case("r1", outcome="error")])
-        md = diff_rules.render_markdown(diff_rules.diff_rules(old, new))
+        md = diff_invariants.render_markdown(diff_invariants.diff_invariants(old, new))
         assert "invariants-breaking" in md
         assert "severity_escalated" in md
 
     def test_includes_safe_section(self) -> None:
         old = _envelope([_case("r1")])
         new = _envelope([_case("r1"), _case("r2")])
-        md = diff_rules.render_markdown(diff_rules.diff_rules(old, new))
+        md = diff_invariants.render_markdown(diff_invariants.diff_invariants(old, new))
         assert "invariants-safe" in md
-        assert "added_rule" in md
+        assert "added_invariant" in md
 
 
 # ---------------------------------------------------------------------------

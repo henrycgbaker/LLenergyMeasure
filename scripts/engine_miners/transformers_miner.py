@@ -1,19 +1,19 @@
-"""Transformers validation-rules walker — landmark-verified orchestrator.
+"""Transformers validation-invariants miner — landmark-verified orchestrator.
 
-Composes two extraction paths to emit a deterministic rules corpus:
+Composes two extraction paths to emit a deterministic invariants corpus:
 
-1. **GenerationConfig rules via library-API introspection** — delegated to
+1. **GenerationConfig invariants via library-API introspection** — delegated to
    :mod:`scripts.engine_miners.transformers_dynamic_miner`. Every dormancy
-   rule is discovered by probing ``GenerationConfig.validate(strict=True)``
-   against a synthesised per-type probe value; every error-class rule's
-   message is lifted from the library's own ``ValueError``. Rules emitted:
+   invariant is discovered by probing ``GenerationConfig.validate(strict=True)``
+   against a synthesised per-type probe value; every error-class invariant's
+   message is lifted from the library's own ``ValueError``. Invariants emitted:
    ``added_by: dynamic_miner``.
 
-2. **BitsAndBytesConfig type-check rules** — hand-curated here. BNB import
-   triggers a CUDA context on GPU-bearing hosts, which would make the walker
-   unsafe to run CPU-only in CI. Keeping BNB rules as landmark-verified
+2. **BitsAndBytesConfig type-check invariants** — hand-curated here. BNB import
+   triggers a CUDA context on GPU-bearing hosts, which would make the miner
+   unsafe to run CPU-only in CI. Keeping BNB invariants as landmark-verified
    manual seed preserves CPU-safety; the justification is the CUDA-context
-   risk, not editorial preference. Rules emitted: ``added_by: manual_seed``.
+   risk, not editorial preference. Invariants emitted: ``added_by: manual_seed``.
 
 Landmark verification: imports ``transformers`` and confirms
 ``GenerationConfig``, ``BitsAndBytesConfig``, ``validate`` and ``post_init``
@@ -22,20 +22,20 @@ envelope: :func:`check_installed_version` reads the dynamic miner pin from
 ``engine_versions/transformers.yaml`` (``miner_pins.dynamic``); a mismatch
 raises :class:`MinerVersionMismatchError` at CI time. Source paths and line
 numbers are derived via :func:`inspect.getsourcefile` and a text grep —
-informational only, not used for rule matching.
+informational only, not used for invariant matching.
 
 Flash-attention validation (``validate_transformers_flash_attn_dtype``) is
 out of scope: its check lives in ``PreTrainedModel._autoset_attn_implementation``,
 not ``GenerationConfig.validate`` or ``BitsAndBytesConfig.post_init``, and is
-not reachable via this walker's landmarks. Stays hand-written in
-``config/models.py`` pending a PreTrainedModel-level walker.
+not reachable via this miner's landmarks. Stays hand-written in
+``config/models.py`` pending a PreTrainedModel-level miner.
 
 Usage::
 
     python -m scripts.engine_miners.transformers_miner \\
         --out src/llenergymeasure/engines/transformers/invariants.proposed.yaml
 
-With ``LLENERGY_WALKER_FROZEN_AT`` set for byte-stable reproducibility.
+With ``LLENERGY_MINER_FROZEN_AT`` set for byte-stable reproducibility.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-# NOTE: the walkers package is a sibling; when run via ``python -m
+# NOTE: the miners package is a sibling; when run via ``python -m
 # scripts.engine_miners.transformers_miner`` the implicit ``scripts``
 # package makes this work. When run as a script directly, we need the
 # project root on sys.path.
@@ -58,14 +58,14 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.path)
+    InvariantCandidate,
     MinerLandmarkMissingError,
     MinerSource,
-    RuleCandidate,
     check_installed_version,
 )
 from scripts.engine_miners._ssot import load_miner_pin  # noqa: E402
 from scripts.engine_miners.transformers_dynamic_miner import (  # noqa: E402
-    walk_generation_config_rules,
+    walk_generation_config_invariants,
 )
 
 # Symbols this orchestrator (and its delegated dynamic miner) relies on
@@ -80,12 +80,12 @@ LANDMARKS: tuple[str, ...] = (
 )
 
 # ---------------------------------------------------------------------------
-# BitsAndBytesConfig type-check rules (kept hand-curated — CPU-safe)
+# BitsAndBytesConfig type-check invariants (kept hand-curated — CPU-safe)
 # ---------------------------------------------------------------------------
 #
-# These rules surface BNB's ``isinstance``-checking ``post_init`` TypeErrors
+# These invariants surface BNB's ``isinstance``-checking ``post_init`` TypeErrors
 # before BNB is actually constructed. BNB's ``import`` triggers a CUDA
-# context on GPU hosts; the walker stays CPU-safe by not importing it.
+# context on GPU hosts; the miner stays CPU-safe by not importing it.
 # Predicate uses ``type_is_not`` — fires only when the field is set AND has
 # the wrong concrete type; a valid value (``True`` for a bool field) does
 # not match.
@@ -117,7 +117,7 @@ _BNB_TYPE_RULES: tuple[tuple[str, str, Any, Any], ...] = (
 
 
 def _check_landmarks() -> tuple[str, str]:
-    """Import transformers, verify the landmarks the walker relies on.
+    """Import transformers, verify the landmarks the miner relies on.
 
     Returns ``(installed_version, generation_config_source_path)``.
     """
@@ -170,24 +170,24 @@ def _today() -> str:
 
 
 # ---------------------------------------------------------------------------
-# BNB rule factory
+# BNB invariant factory
 # ---------------------------------------------------------------------------
 
 
-def _make_bnb_type_rule(
+def _make_bnb_type_invariant(
     field: str,
     type_label: str,
     positive: Any,
     negative: Any,
     source_path: str,
     today: str,
-) -> RuleCandidate:
-    """Factory for ``BitsAndBytesConfig`` type-check rules."""
-    return RuleCandidate(
+) -> InvariantCandidate:
+    """Factory for ``BitsAndBytesConfig`` type-check invariants."""
+    return InvariantCandidate(
         id=f"transformers_bnb_{field}_type",
         engine="transformers",
         library="bitsandbytes",
-        rule_under_test=(
+        invariant_under_test=(
             f"BitsAndBytesConfig.post_init() rejects non-{type_label} values for `{field}`"
         ),
         severity="error",
@@ -225,13 +225,13 @@ def _make_bnb_type_rule(
 # ---------------------------------------------------------------------------
 
 
-def _candidate_to_dict(c: RuleCandidate) -> dict[str, Any]:
-    """Render a :class:`RuleCandidate` into the YAML corpus entry shape."""
+def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
+    """Render a :class:`InvariantCandidate` into the YAML corpus entry shape."""
     return {
         "id": c.id,
         "engine": c.engine,
         "library": c.library,
-        "rule_under_test": c.rule_under_test,
+        "invariant_under_test": c.invariant_under_test,
         "severity": c.severity,
         "native_type": c.native_type,
         "miner_source": asdict(c.miner_source),
@@ -249,11 +249,11 @@ def _candidate_to_dict(c: RuleCandidate) -> dict[str, Any]:
     }
 
 
-def walk() -> tuple[list[RuleCandidate], dict[str, Any]]:
+def walk() -> tuple[list[InvariantCandidate], dict[str, Any]]:
     """Return ``(candidates, envelope_metadata)`` — full corpus for this engine.
 
-    Composes the introspection-derived GenerationConfig rules with the
-    hand-curated BNB rules. Rules in the returned list carry their own
+    Composes the introspection-derived GenerationConfig invariants with the
+    hand-curated BNB invariants. Invariants in the returned list carry their own
     ``added_by`` tag; the envelope captures the shared version pin.
     """
     installed_version, abs_source_path = _check_landmarks()
@@ -266,17 +266,17 @@ def walk() -> tuple[list[RuleCandidate], dict[str, Any]]:
     source_path = _relative_source_path(abs_source_path)
 
     today = _today()
-    candidates: list[RuleCandidate] = []
+    candidates: list[InvariantCandidate] = []
 
     candidates.extend(
-        walk_generation_config_rules(
+        walk_generation_config_invariants(
             abs_source_path=abs_source_path,
             rel_source_path=source_path,
             today=today,
         )
     )
 
-    # BitsAndBytesConfig rules — source path is the quantization_config module.
+    # BitsAndBytesConfig invariants — source path is the quantization_config module.
     # Cheaply locate it without importing bnb (which may touch CUDA).
     bnb_source_path = source_path
     try:
@@ -288,10 +288,12 @@ def walk() -> tuple[list[RuleCandidate], dict[str, Any]]:
         if abs_bnb:
             bnb_source_path = _relative_source_path(abs_bnb)
     for field, type_label, pos, neg in _BNB_TYPE_RULES:
-        candidates.append(_make_bnb_type_rule(field, type_label, pos, neg, bnb_source_path, today))
+        candidates.append(
+            _make_bnb_type_invariant(field, type_label, pos, neg, bnb_source_path, today)
+        )
 
     # Allow tests / reproducibility checks to pin the timestamp.
-    frozen = os.environ.get("LLENERGY_WALKER_FROZEN_AT")
+    frozen = os.environ.get("LLENERGY_MINER_FROZEN_AT")
     mined_at = (
         frozen
         if frozen
@@ -301,13 +303,13 @@ def walk() -> tuple[list[RuleCandidate], dict[str, Any]]:
         "schema_version": "1.0.0",
         "engine": "transformers",
         "engine_version": installed_version,
-        "walker_pinned_range": str(load_miner_pin("transformers", "dynamic")),
+        "miner_pinned_range": str(load_miner_pin("transformers", "dynamic")),
         "mined_at": mined_at,
     }
     return candidates, envelope
 
 
-def emit_yaml(candidates: list[RuleCandidate], envelope: dict[str, Any]) -> str:
+def emit_yaml(candidates: list[InvariantCandidate], envelope: dict[str, Any]) -> str:
     """Serialise candidates + envelope to a deterministic YAML string.
 
     Key order is fixed (not alphabetical) for readability: envelope first,
@@ -320,9 +322,9 @@ def emit_yaml(candidates: list[RuleCandidate], envelope: dict[str, Any]) -> str:
         "schema_version": envelope["schema_version"],
         "engine": envelope["engine"],
         "engine_version": envelope["engine_version"],
-        "walker_pinned_range": envelope["walker_pinned_range"],
+        "miner_pinned_range": envelope["miner_pinned_range"],
         "mined_at": envelope["mined_at"],
-        "rules": [_candidate_to_dict(c) for c in sorted_candidates],
+        "invariants": [_candidate_to_dict(c) for c in sorted_candidates],
     }
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
 
@@ -341,7 +343,7 @@ def main(argv: list[str] | None = None) -> int:
     text = emit_yaml(candidates, envelope)
     args.out.write_text(text)
     print(
-        f"Wrote {len(candidates)} transformers rules to {args.out}",
+        f"Wrote {len(candidates)} transformers invariants to {args.out}",
         file=sys.stderr,
     )
     return 0
