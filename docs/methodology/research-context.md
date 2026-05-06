@@ -2,7 +2,7 @@
 
 This document positions the LLenergyMeasure invariant miner pipeline relative to the academic literature. It is written for paper readers, peer reviewers, and researchers interested in the contribution beyond the practical tooling.
 
-**For end users or extenders**, the [architecture-overview.md](architecture-overview.md), [miner-pipeline.md](miner-pipeline.md), and [extending-miners.md](extending-miners.md) are more directly useful.
+**For end users or extenders**, the [architecture-overview.md](/architecture/architecture-overview), [miner-pipeline.md](/architecture/miner-pipeline), and [extending-miners.md](/architecture/extending-miners) are more directly useful.
 
 ---
 
@@ -180,9 +180,9 @@ The nearest citation cluster: Daikon (inference), Houdini (guess-and-check archi
 
 ## See also
 
-- [architecture-overview.md](architecture-overview.md) - system overview
-- [miner-pipeline.md](miner-pipeline.md) - implementation details
-- [validation-rule-corpus.md](validation-rule-corpus.md) - corpus format
+- [architecture-overview.md](/architecture/architecture-overview) - system overview
+- [miner-pipeline.md](/architecture/miner-pipeline) - implementation details
+- [validation-rule-corpus.md](/architecture/validation-rule-corpus) - corpus format
 
 Internal-only design artefacts (not in the public package):
 

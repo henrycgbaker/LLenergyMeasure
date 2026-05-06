@@ -460,7 +460,7 @@ study_execution:
 
 > **Note:** `shuffle_seed` (study-level scheduling) and `random_seed` (per-experiment
 > inference/dataset RNG) are independent by design. Changing one does not affect the
-> other. See [Methodology — Seeding model](methodology.md#seeding-model) for details.
+> other. See [Methodology — Seeding model](/methodology/methodology#seeding-model) for details.
 
 **CLI effective defaults** when running `llem run study.yaml` (if not set in YAML):
 
@@ -544,7 +544,7 @@ package version using the template `ghcr.io/henrycgbaker/llenergymeasure/{engine
 For example, with `llenergymeasure==0.9.0` and `engine=vllm`, the image
 `ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0` is pulled automatically.
 
-See [Docker Setup](docker-setup.md#image-management) for image pull behaviour and pre-fetching.
+See [Docker Setup](/docs/docker-setup#image-management) for image pull behaviour and pre-fetching.
 
 ---
 
@@ -663,7 +663,7 @@ Two modes: **fixed** (default) runs exactly `n_warmup` prompts; **CV convergence
 
 ### Energy Sampler (`energy_sampler:`)
 
-`energy_sampler` is a flat top-level field (not a nested section). See [Energy Measurement](energy-measurement.md) for full details on backends, accuracy, and what the harness resolves internally.
+`energy_sampler` is a flat top-level field (not a nested section). See [Energy Measurement](/methodology/energy-measurement) for full details on backends, accuracy, and what the harness resolves internally.
 
 | Value | Description |
 |-------|-------------|
@@ -694,7 +694,7 @@ The Parquet sidecar contains 1Hz downsampled data with 8 columns: `timestamp_s`,
 `sm_utilisation_pct`, `throttle_reasons`. File sizes are typically < 5KB per minute of
 inference per GPU.
 
-See [Energy Measurement](energy-measurement.md) for details on how NVML telemetry
+See [Energy Measurement](/methodology/energy-measurement) for details on how NVML telemetry
 relates to energy measurement.
 
 ### Transformers Engine (`pytorch:`)

@@ -48,7 +48,7 @@ sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plug
 ```
 
 **Verify Docker Compose and Buildx versions** (v2.32+ and v0.17+ recommended for
-[fast rebuilds](installation.md#fast-rebuilds-and-first-pull-cost)):
+[fast rebuilds](/docs/installation#fast-rebuilds-and-first-pull-cost)):
 
 ```bash
 docker compose version   # need v2.32+
@@ -213,7 +213,7 @@ llem config
 ```
 
 Expected output will show your GPU under the `GPU` section and Docker runner availability.
-See [Installation](installation.md) for the full `llem config` output format.
+See [Installation](/docs/installation) for the full `llem config` output format.
 
 **Run a vLLM experiment** by creating a YAML file:
 
@@ -233,7 +233,7 @@ llem run experiment.yaml
 ```
 
 `llem` will automatically pull the vLLM Docker image on first use, launch a container, run
-the experiment inside it, and return the results. See [Getting Started](getting-started.md) for
+the experiment inside it, and return the results. See [Getting Started](/docs/getting-started) for
 an annotated walkthrough.
 
 **Run a TensorRT-LLM experiment** by creating a YAML file:
@@ -254,7 +254,7 @@ llem run experiment.yaml
 ```
 
 `llem` will pull the TensorRT-LLM Docker image, compile a TensorRT engine (first run only —
-takes several minutes), cache the engine on disk, then run inference. See [Getting Started](getting-started.md)
+takes several minutes), cache the engine on disk, then run inference. See [Getting Started](/docs/getting-started)
 for the full TensorRT-LLM walkthrough.
 
 ---
@@ -360,7 +360,7 @@ docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0
 `make docker-build-all` is an alias for `make docker-build-transformers`
 (the only project-built image). It uses `docker compose build` under the
 hood and pulls cached layers from GHCR on first build (see
-[Fast rebuilds and first-pull cost](installation.md#fast-rebuilds-and-first-pull-cost)
+[Fast rebuilds and first-pull cost](/docs/installation#fast-rebuilds-and-first-pull-cost)
 for the full mechanism).
 
 > **Advanced.** Setting `COMPOSE_BAKE=true` routes builds through `buildx bake` for
@@ -390,7 +390,7 @@ behaviour. No additional setup is needed when SGLang ships.
 
 ### Layer cache sharing via GHCR registry
 
-See [installation.md — Fast rebuilds and first-pull cost](installation.md#fast-rebuilds-and-first-pull-cost)
+See [installation.md — Fast rebuilds and first-pull cost](/docs/installation#fast-rebuilds-and-first-pull-cost)
 for the user-facing walkthrough (mechanism, sizes, authentication, offline fallback)
 and the three-ref breakdown of what the build/push pipeline publishes
 (`-buildcache` ref, PR-time `transformers-cache:VER` ref, canonical
@@ -430,7 +430,7 @@ docker image inspect llenergymeasure:transformers \
 > and does not block. Removing the dead `version_handshake.py` code is
 > tracked separately.
 
-See [troubleshooting.md](troubleshooting.md#schema-skew-between-host-and-docker-image)
+See [troubleshooting.md](/docs/troubleshooting#schema-skew-between-host-and-docker-image)
 for the remediation flow when a mismatch is reported.
 
 ---
@@ -520,7 +520,7 @@ llem run experiment.yaml --skip-preflight
 When you update an engine version (by bumping the SSOT in
 `engine_versions/<engine>.yaml`), the vendored parameter schemas must be
 regenerated. This happens automatically via the
-[Parameter Discovery Pipeline](schema-refresh.md): `update-engine-schemas.yml`
+[Parameter Discovery Pipeline](/architecture/schema-refresh): `update-engine-schemas.yml`
 covers all three engines via per-job `if:` gating — the vllm + tensorrt
 cells fire on `pull_request: paths`; the transformers cell fires via
 `workflow_run` after `publish-engine-image.yml` completes (which itself
@@ -532,12 +532,12 @@ bumps, run:
 ./scripts/refresh_discovered_schemas.sh <engine>
 ```
 
-See [Parameter Discovery Pipeline](schema-refresh.md) for the full workflow.
+See [Parameter Discovery Pipeline](/architecture/schema-refresh) for the full workflow.
 
 ---
 
 ## Next Steps
 
-- [Getting Started](getting-started.md) — run your first vLLM or TensorRT-LLM experiment
-- [Engine Configuration](engines.md) — configure vLLM, TensorRT-LLM, and switch between engines
-- [Fast rebuilds and first-pull cost](installation.md#fast-rebuilds-and-first-pull-cost) — how the GHCR layer cache speeds up local Docker builds
+- [Getting Started](/docs/getting-started) — run your first vLLM or TensorRT-LLM experiment
+- [Engine Configuration](/architecture/engines) — configure vLLM, TensorRT-LLM, and switch between engines
+- [Fast rebuilds and first-pull cost](/docs/installation#fast-rebuilds-and-first-pull-cost) — how the GHCR layer cache speeds up local Docker builds
