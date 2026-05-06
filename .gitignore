@@ -33,6 +33,12 @@ emissions.csv
 .state
 /results
 
+# Docusaurus
+website/node_modules/
+website/.docusaurus/
+website/build/
+website/.cache-loader/
+
 # import-linter
 .import_linter_cache/
 

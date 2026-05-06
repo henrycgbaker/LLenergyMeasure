@@ -3,6 +3,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![Docs](https://img.shields.io/badge/docs-henrycgbaker.github.io-blue)](https://henrycgbaker.github.io/llenergymeasure/)
+
+📖 **Documentation site:** <https://henrycgbaker.github.io/llenergymeasure/>
 
 Measure the energy efficiency of LLM inference across different implementation configurations.
 
@@ -27,7 +30,7 @@ LLenergyMeasure is a Python framework for measuring the energy consumption, thro
 pip install llenergymeasure
 ```
 
-Engine code (Transformers, vLLM, TensorRT-LLM) runs inside per-engine Docker images; the host package is the orchestrator. See [docs/development.md](docs/development.md) for the build/run pattern.
+Engine code (Transformers, vLLM, TensorRT-LLM) runs inside per-engine Docker images; the host package is the orchestrator. See [docs/architecture/development.md](docs/architecture/development.md) for the build/run pattern.
 
 Run your first measurement (host dispatches the appropriate engine container):
 
@@ -35,7 +38,7 @@ Run your first measurement (host dispatches the appropriate engine container):
 llem run --model gpt2 --engine transformers
 ```
 
-See [Installation](docs/installation.md) for system requirements and Docker setup. See [Getting Started](docs/getting-started.md) to run and interpret your first experiment.
+See [Installation](docs/user/installation.md) for system requirements and Docker setup. See [Getting Started](docs/user/getting-started.md) to run and interpret your first experiment.
 
 ---
 
@@ -45,42 +48,42 @@ See [Installation](docs/installation.md) for system requirements and Docker setu
 
 | Guide | Description |
 |-------|-------------|
-| [Installation](docs/installation.md) | System requirements, pip install, Docker setup path |
-| [Getting Started](docs/getting-started.md) | First experiment, Transformers and Docker tracks |
-| [Docker Setup](docs/docker-setup.md) | NVIDIA Container Toolkit walkthrough for vLLM |
-| [Engine Configuration](docs/engines.md) | Transformers vs vLLM, parameter support matrix |
-| [Study & Experiment Configuration](docs/study-config.md) | YAML reference, sweeps, config schema |
-| [CLI Reference](docs/cli-reference.md) | `llem run`, `llem config`, and `llem doctor` flags and options |
-| [Energy Measurement](docs/energy-measurement.md) | NVML, Zeus, CodeCarbon backends, measurement mechanics |
-| [Measurement Methodology](docs/methodology.md) | Warmup, baseline, thermal management, reproducibility |
-| [Troubleshooting](docs/troubleshooting.md) | Common issues, invalid combinations, getting help |
+| [Installation](docs/user/installation.md) | System requirements, pip install, Docker setup path |
+| [Getting Started](docs/user/getting-started.md) | First experiment, Transformers and Docker tracks |
+| [Docker Setup](docs/user/docker-setup.md) | NVIDIA Container Toolkit walkthrough for vLLM |
+| [Engine Configuration](docs/architecture/engines.md) | Transformers vs vLLM, parameter support matrix |
+| [Study & Experiment Configuration](docs/user/study-config.md) | YAML reference, sweeps, config schema |
+| [CLI Reference](docs/user/cli-reference.md) | `llem run`, `llem config`, and `llem doctor` flags and options |
+| [Energy Measurement](docs/methodology/energy-measurement.md) | NVML, Zeus, CodeCarbon backends, measurement mechanics |
+| [Measurement Methodology](docs/methodology/methodology.md) | Warmup, baseline, thermal management, reproducibility |
+| [Troubleshooting](docs/user/troubleshooting.md) | Common issues, invalid combinations, getting help |
 
 ### Policy Maker Guides
 
 | Guide | Description |
 |-------|-------------|
-| [What We Measure](docs/guide-what-we-measure.md) | Plain-language explanation of energy, throughput, and FLOPs |
-| [Interpreting Results](docs/guide-interpreting-results.md) | How to read llenergymeasure output |
-| [Getting Started (Policy Maker)](docs/guide-getting-started.md) | Minimal path to running a measurement |
-| [Comparison with Other Benchmarks](docs/guide-comparison-context.md) | MLPerf, AI Energy Score, CodeCarbon, Zeus context |
+| [What We Measure](docs/methodology/what-we-measure.md) | Plain-language explanation of energy, throughput, and FLOPs |
+| [Interpreting Results](docs/methodology/interpreting-results.md) | How to read llenergymeasure output |
+| [Getting Started (Policy Maker)](docs/user/getting-started-policy.md) | Minimal path to running a measurement |
+| [Comparison with Other Benchmarks](docs/methodology/comparison-context.md) | MLPerf, AI Energy Score, CodeCarbon, Zeus context |
 
 ### Architecture and Internals
 
 | Guide | Description |
 |-------|-------------|
-| **Start here:** [Architecture Overview](docs/architecture-overview.md) | System diagram, pipeline overview, key concepts (entry point to the suite) |
-| [Invariant Miner Pipeline](docs/miner-pipeline.md) | How validation rules are extracted from engine library source |
-| [Config Validation Pipeline](docs/parameter-discovery.md) | How configs are validated before engine initialisation |
-| [Validation Rule Corpus Format](docs/validation-rule-corpus.md) | YAML schema reference for corpus rules |
-| [Extending the Miner](docs/extending-miners.md) | How to add a new engine to the invariant miner |
-| [Research Context](docs/research-context.md) | Academic positioning: Daikon, Houdini, NeuRI, and what is novel |
-| [Parameter Discovery Pipeline](docs/schema-refresh.md) | Renovate-driven engine schema refresh |
+| **Start here:** [Architecture Overview](docs/architecture/architecture-overview.md) | System diagram, pipeline overview, key concepts (entry point to the suite) |
+| [Invariant Miner Pipeline](docs/architecture/miner-pipeline.md) | How validation rules are extracted from engine library source |
+| [Config Validation Pipeline](docs/methodology/parameter-discovery.md) | How configs are validated before engine initialisation |
+| [Validation Rule Corpus Format](docs/architecture/validation-rule-corpus.md) | YAML schema reference for corpus rules |
+| [Extending the Miner](docs/architecture/extending-miners.md) | How to add a new engine to the invariant miner |
+| [Research Context](docs/methodology/research-context.md) | Academic positioning: Daikon, Houdini, NeuRI, and what is novel |
+| [Parameter Discovery Pipeline](docs/architecture/schema-refresh.md) | Renovate-driven engine schema refresh |
 
 ---
 
 ## Contributing
 
-Contributions welcome. See the [development install](docs/installation.md#install-from-source-development) instructions to set up a local environment.
+Contributions welcome. See the [development install](docs/user/installation.md#install-from-source-development) instructions to set up a local environment.
 
 ---
 
