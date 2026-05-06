@@ -15,12 +15,14 @@ on:
     paths:
       - "website/**"
       - "docs/**"
+      - "src/llenergymeasure/**"
       - ".github/workflows/docs.yml"
   push:
     branches: [main]
     paths:
       - "website/**"
       - "docs/**"
+      - "src/llenergymeasure/**"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -49,6 +51,19 @@ jobs:
           cache: npm
           cache-dependency-path: website/package-lock.json
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        # Base install only — no GPU extras needed. Brings in pyyaml,
+        # pydantic, etc. so llenergymeasure is importable by the generator.
+        run: pip install -e .
+
+      - name: Generate API reference
+        run: python scripts/generate_api_docs.py
+
       - name: Install dependencies
         working-directory: website
         run: npm ci
@@ -68,9 +83,10 @@ jobs:
 
   deploy:
     name: Deploy docs site
-    # `push:` is configured above to fire only on branches: [main], so
-    # `event_name == 'push'` is sufficient — no need to re-check the ref.
-    if: github.event_name == 'push'
+    # Fires on push to main (the standard publish path) and on
+    # workflow_dispatch (manual re-deploy lever, useful for emergency
+    # republish without a no-op commit). Skipped on pull_request.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     environment:

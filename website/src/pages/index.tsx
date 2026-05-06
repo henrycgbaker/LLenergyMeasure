@@ -4,7 +4,7 @@ import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 
-import {ROUTES} from '../constants';
+import {ROUTES, SITE_TITLE} from '../constants';
 import styles from './index.module.css';
 
 export default function Home(): ReactNode {
@@ -16,7 +16,7 @@ export default function Home(): ReactNode {
         <div className="container">
           <div className={styles.inner}>
             <Heading as="h1" className={styles.title}>
-              llenergymeasure
+              {SITE_TITLE}
             </Heading>
 
             <p className={styles.lead}>
@@ -35,12 +35,17 @@ export default function Home(): ReactNode {
               <Link
                 className="button button--primary button--lg"
                 to={ROUTES.userGuide}>
-                Read the docs
+                Docs
               </Link>
               <Link
                 className="button button--secondary button--lg"
                 to={ROUTES.methodology}>
                 Methodology
+              </Link>
+              <Link
+                className="button button--secondary button--lg"
+                to={ROUTES.api}>
+                API
               </Link>
               <Link
                 className="button button--secondary button--lg"
