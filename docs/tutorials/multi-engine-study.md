@@ -170,25 +170,12 @@ This is the right way to sweep parameters that travel in pairs.
 Before kicking off the real run, validate the config and see how many
 experiments will actually execute:
 
-<Tabs groupId="surface">
-<TabItem value="cli" label="CLI">
-
 ```bash
 llem run configs/tutorials/tutorial-multi-engine.yaml --dry-run
 ```
 
-</TabItem>
-<TabItem value="python" label="Python">
-
-```python
-from llenergymeasure import run_study
-
-# dry_run=True resolves the sweep and prints the manifest without running
-run_study("configs/tutorials/tutorial-multi-engine.yaml", dry_run=True)
-```
-
-</TabItem>
-</Tabs>
+Dry-run is a CLI-only path; the Python API does not currently expose an
+equivalent flag on `run_study`.
 
 The dry-run resolves the sweep, applies engine-scoped filtering,
 deduplicates equivalent cells, and prints a manifest. You should see

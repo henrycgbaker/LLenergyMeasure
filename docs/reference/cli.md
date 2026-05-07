@@ -240,24 +240,12 @@ result = run_experiment("experiment.yaml")
 
 ### Dry run (validate config, estimate VRAM)
 
-<Tabs groupId="surface">
-<TabItem value="cli" label="CLI">
-
 ```bash
 llem run experiment.yaml --dry-run
 ```
 
-</TabItem>
-<TabItem value="python" label="Python">
-
-```python
-from llenergymeasure import run_study
-
-run_study("experiment.yaml", dry_run=True)
-```
-
-</TabItem>
-</Tabs>
+Dry-run is a CLI-only path; `run_study` in the Python API does not
+currently take a `dry_run` flag.
 
 ### Study with cycle override
 
