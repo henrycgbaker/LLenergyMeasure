@@ -4,8 +4,8 @@ name: Engine pipeline
 # split (build-engine-image.yml + update-engine-{invariants,schemas}.yml +
 # the cross-workflow concurrency fix). Single workflow_run-graph:
 #
-#   filter ── mint-app-token
-#      │              │
+#   filter
+#      │
 #      ├── build-transformers ── invariants-transformers ──┐
 #      │                       └─ schemas-transformers ────┤
 #      ├── invariants-others (vllm + tensorrt matrix) ─────┤
@@ -18,8 +18,11 @@ name: Engine pipeline
 #   - D1: orchestrator-level permissions union; reusables inherit.
 #   - E1: secrets: inherit on every uses:.
 #   - F1-simple: single concurrency group; cancel-in-progress: false.
-#   - H4-fixed: orchestrator mints token once; cells upload writeback
-#     artefacts; ONE aggregate writeback job performs ONE git push gated
+#   - H4-fixed (revised post-CI run): each cell mints its own bot token
+#     (writeback too). Cross-job token forwarding via outputs is unviable:
+#     GitHub redacts secret-derived job outputs to empty when crossing
+#     job boundaries. Cells upload writeback artefacts; ONE aggregate
+#     writeback job performs ONE git push gated
 #     `if: always() && <any artefact>` (preserves per-cell availability).
 #   - Two-tier path filter: top-level `paths:` narrows to engine-pipeline
 #     concerns so non-engine PRs leave this workflow ABSENT (CLAUDE.md
@@ -229,23 +232,6 @@ jobs:
             echo "schemas_others_cells=${SCH_OTHERS}"
           } >> "$GITHUB_OUTPUT"
 
-  mint-app-token:
-    # Single token mint per orchestrator run (H4-fixed). Skipped on fork
-    # PRs (App secrets are not available cross-fork).
-    if: |
-      github.event_name == 'schedule'
-      || github.event_name == 'workflow_dispatch'
-      || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: ubuntu-latest
-    outputs:
-      token: ${{ steps.token.outputs.token }}
-    steps:
-      - id: token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
   build-transformers:
     # Builds transformers runtime image and pushes it to transformers-cache
     # for downstream cells to pull. Fires on (PR with build paths matched)
@@ -325,10 +311,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   invariants-transformers:
-    needs: [filter, mint-app-token, build-transformers]
+    needs: [filter, build-transformers]
     if: |
       always()
-      && needs.mint-app-token.result == 'success'
       && needs.filter.outputs.invariants_transformers == 'true'
       && (needs.build-transformers.result == 'success' || needs.build-transformers.result == 'skipped')
     uses: ./.github/workflows/_engine-invariants-cell.yml
@@ -338,14 +323,12 @@ jobs:
       image-source: ghcr-cache
       pr-number: ${{ needs.filter.outputs.pr_number }}
       pr-head-repo: ${{ needs.filter.outputs.pr_head_repo }}
-      app-token: ${{ needs.mint-app-token.outputs.token }}
     secrets: inherit
 
   invariants-others:
-    needs: [filter, mint-app-token]
+    needs: filter
     if: |
       always()
-      && needs.mint-app-token.result == 'success'
       && needs.filter.outputs.invariants_others_cells != '[]'
     strategy:
       fail-fast: false
@@ -358,14 +341,12 @@ jobs:
       image-source: ${{ matrix.cell.image-source }}
       pr-number: ${{ needs.filter.outputs.pr_number }}
       pr-head-repo: ${{ needs.filter.outputs.pr_head_repo }}
-      app-token: ${{ needs.mint-app-token.outputs.token }}
     secrets: inherit
 
   schemas-transformers:
-    needs: [filter, mint-app-token, build-transformers]
+    needs: [filter, build-transformers]
     if: |
       always()
-      && needs.mint-app-token.result == 'success'
       && needs.filter.outputs.schemas_transformers == 'true'
       && (needs.build-transformers.result == 'success' || needs.build-transformers.result == 'skipped')
     uses: ./.github/workflows/_engine-schemas-cell.yml
@@ -375,14 +356,12 @@ jobs:
       image-source: ghcr-cache
       pr-number: ${{ needs.filter.outputs.pr_number }}
       pr-head-repo: ${{ needs.filter.outputs.pr_head_repo }}
-      app-token: ${{ needs.mint-app-token.outputs.token }}
     secrets: inherit
 
   schemas-others:
-    needs: [filter, mint-app-token]
+    needs: filter
     if: |
       always()
-      && needs.mint-app-token.result == 'success'
       && needs.filter.outputs.schemas_others_cells != '[]'
     strategy:
       fail-fast: false
@@ -395,7 +374,6 @@ jobs:
       image-source: ${{ matrix.cell.image-source }}
       pr-number: ${{ needs.filter.outputs.pr_number }}
       pr-head-repo: ${{ needs.filter.outputs.pr_head_repo }}
-      app-token: ${{ needs.mint-app-token.outputs.token }}
     secrets: inherit
 
   writeback:
@@ -404,13 +382,16 @@ jobs:
     # as ANY cell uploaded its writeback artefact, so partial-success
     # PRs (vllm pass + tensorrt fail) still land vllm's changes — same
     # availability as today's per-cell writeback.
-    needs: [filter, mint-app-token, invariants-transformers, invariants-others, schemas-transformers, schemas-others]
+    #
+    # Mints its own bot token. Cross-job token forwarding via outputs
+    # is unviable: GitHub redacts secret-derived job outputs to empty
+    # when crossing job boundaries.
+    needs: [filter, invariants-transformers, invariants-others, schemas-transformers, schemas-others]
     if: |
       always()
       && github.event_name == 'pull_request'
       && needs.filter.outputs.pr_number != ''
       && needs.filter.outputs.pr_head_repo == github.repository
-      && needs.mint-app-token.result == 'success'
       && (
         needs.invariants-transformers.result == 'success'
         || needs.invariants-others.result == 'success'
@@ -420,12 +401,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Mint llem-ci-bot App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout PR branch
         uses: actions/checkout@v6
         with:
           ref: ${{ github.head_ref || github.ref }}
           fetch-depth: 0
-          token: ${{ needs.mint-app-token.outputs.token }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Download all writeback artefacts
         uses: actions/download-artifact@v4

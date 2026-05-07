@@ -30,21 +30,31 @@ on:
         description: PR head repo full_name; used to gate writeback contributions on same-repo PRs only
         required: true
         type: string
-      app-token:
-        description: GitHub App token forwarded from orchestrator (empty for fork PRs)
-        required: true
-        type: string
 
 jobs:
   cell:
     name: ${{ inputs.engine }}
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: ${{ inputs.runner == 'ubuntu-latest' && 30 || 60 }}
+    timeout-minutes: ${{ inputs.runner == 'ubuntu-latest' && 30 || 360 }}
     env:
       ENGINES_DIR: src/llenergymeasure/engines
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONPATH: "/repo/src:/repo"
     steps:
+      - name: Mint llem-ci-bot App token
+        # Per-cell mint (not forwarded from orchestrator) because GitHub
+        # masks secret-derived job outputs to empty when crossing job
+        # boundaries — see docs.github.com Security hardening: "If a
+        # secret was used in the job to create an output, the output is
+        # redacted and not accessible to a downstream job." Skipped on
+        # fork PRs (App secrets aren't available cross-fork).
+        id: app-token
+        if: inputs.pr-head-repo == github.repository || github.event_name == 'workflow_dispatch'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Clean workspace (fix root-owned files from prior Docker runs)
         if: inputs.runner == 'self-hosted'
         uses: ./.github/actions/clean-self-hosted-workspace
@@ -58,7 +68,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.head_ref || github.ref }}
           fetch-depth: 0
-          token: ${{ inputs.app-token != '' && inputs.app-token || secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Resolve engine version from SSOT
         id: version
@@ -403,7 +413,7 @@ jobs:
       - name: Probe-fail comment (skip downstream)
         if: steps.probe.outputs.verdict == 'fail' && inputs.pr-number != ''
         env:
-          GH_TOKEN: ${{ inputs.app-token != '' && inputs.app-token || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           PR: ${{ inputs.pr-number }}
           MARKER: "bot-id: invariants-${{ inputs.engine }}-probe-blocked"
           REPO: ${{ github.repository }}
@@ -441,7 +451,7 @@ jobs:
             /tmp/engine-invariants-diff/${{ inputs.engine }}.summary.md
 
       - name: Upload writeback artefact
-        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && inputs.app-token != '' && inputs.pr-number != '' && inputs.pr-head-repo == github.repository
+        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && inputs.pr-number != '' && inputs.pr-head-repo == github.repository
         uses: actions/upload-artifact@v4
         with:
           name: invariants-writeback-${{ inputs.engine }}
@@ -455,7 +465,7 @@ jobs:
       - name: Post per-pipeline comment
         if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
         env:
-          GH_TOKEN: ${{ inputs.app-token != '' && inputs.app-token || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           PR: ${{ inputs.pr-number }}
           MARKER: "bot-id: invariants-${{ inputs.engine }}-diff"
           REPO: ${{ github.repository }}
@@ -468,7 +478,7 @@ jobs:
       - name: Clean up stale probe-blocked comment (probe now passes)
         if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
         env:
-          GH_TOKEN: ${{ inputs.app-token != '' && inputs.app-token || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           PR: ${{ inputs.pr-number }}
           MARKER: "bot-id: invariants-${{ inputs.engine }}-probe-blocked"
           REPO: ${{ github.repository }}
@@ -478,7 +488,7 @@ jobs:
       - name: Apply per-pipeline label
         if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
         env:
-          GH_TOKEN: ${{ inputs.app-token != '' && inputs.app-token || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ inputs.pr-number }}
           CLASSIFICATION: ${{ steps.diff.outputs.classification }}
         run: |
@@ -490,6 +500,19 @@ jobs:
             safe)      gh pr edit "$PR_NUMBER" --add-label "invariants-safe" --add-label "invariants-changed" 2>/dev/null || true ;;
             no-changes) ;;
           esac
+
+      - name: Apply cross-pipeline rollup label
+        if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+          CLASSIFICATION: ${{ steps.diff.outputs.classification }}
+        run: |
+          if [[ "$CLASSIFICATION" != "breaking" ]]; then
+            gh pr edit "$PR_NUMBER" --add-label "safe-bump" 2>/dev/null || true
+          else
+            gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
+          fi
 
       - name: Probe-fail gate (red CI)
         # Probe-fail must show as a red CI check: PRs cannot merge with a
