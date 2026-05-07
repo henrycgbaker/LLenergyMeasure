@@ -31,6 +31,16 @@ dependencies = [
 # docs/development.md for the layer-split contract.
 zeus = ["zeus>=0.13.1"]
 codecarbon = ["codecarbon>=2.8"]
+# Docs extra: required only by the Docusaurus build pipeline (CI + CF
+# Pages). Drives scripts/generate_api_docs_sphinx.py, which renders the
+# Python API reference page from llenergymeasure.__all__ via Sphinx
+# autodoc + autodoc_pydantic, then converts the doctree to markdown via
+# sphinx-markdown-builder. Not needed for runtime measurement.
+docs = [
+    "sphinx>=7,<9",
+    "sphinx-markdown-builder>=0.6.10",
+    "autodoc-pydantic>=2.2",
+]
 
 [dependency-groups]
 dev = [
