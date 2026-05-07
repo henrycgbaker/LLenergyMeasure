@@ -6,12 +6,12 @@ import {ROUTES, GITHUB_REPO, EDIT_URL, SITE_TITLE} from './src/constants';
 
 // Runs in Node.js — no client-side code (no browser APIs, no JSX).
 //
-// Six-plugin IA (Diátaxis with Explanation split into research-vs-engineering):
+// Five+one-plugin IA (Get Started + Diátaxis pillars + Contributing):
+//   docs/get-started/  — onboarding: install, quick-start, concepts, audience routing
 //   docs/tutorials/    — guided learning (Tutorials sidebar; classic preset slot)
 //   docs/how-to/       — goal-driven recipes (How-to sidebar)
 //   docs/reference/    — exhaustive lookup: CLI, study config, Python API, engines
-//   docs/methodology/  — research voice: what we measure, energy methodology, comparison context
-//   docs/architecture/ — engineering voice: dataflow, validation pipeline, miner pipeline (with diagrams)
+//   docs/explanation/  — research + engineering voice: Methodology, Architecture, Why, Ecosystem
 //   docs/contributing/ — internals + developer docs (last on purpose)
 //
 // Content lives in docs/ at the repo root; this Docusaurus instance lives
@@ -79,6 +79,16 @@ const config: Config = {
     [
       '@docusaurus/plugin-content-docs',
       {
+        id: 'get-started',
+        path: '../docs/get-started',
+        routeBasePath: 'get-started',
+        sidebarPath: './sidebarsGetStarted.ts',
+        editUrl: EDIT_URL,
+      },
+    ],
+    [
+      '@docusaurus/plugin-content-docs',
+      {
         id: 'how-to',
         path: '../docs/how-to',
         routeBasePath: 'how-to',
@@ -104,20 +114,10 @@ const config: Config = {
     [
       '@docusaurus/plugin-content-docs',
       {
-        id: 'methodology',
-        path: '../docs/methodology',
-        routeBasePath: 'methodology',
-        sidebarPath: './sidebarsMethodology.ts',
-        editUrl: EDIT_URL,
-      },
-    ],
-    [
-      '@docusaurus/plugin-content-docs',
-      {
-        id: 'architecture',
-        path: '../docs/architecture',
-        routeBasePath: 'architecture',
-        sidebarPath: './sidebarsArchitecture.ts',
+        id: 'explanation',
+        path: '../docs/explanation',
+        routeBasePath: 'explanation',
+        sidebarPath: './sidebarsExplanation.ts',
         editUrl: EDIT_URL,
       },
     ],
@@ -137,19 +137,19 @@ const config: Config = {
         hashed: true,
         language: ['en'],
         docsDir: [
+          '../docs/get-started',
           '../docs/tutorials',
           '../docs/how-to',
           '../docs/reference',
-          '../docs/methodology',
-          '../docs/architecture',
+          '../docs/explanation',
           '../docs/contributing',
         ],
         docsRouteBasePath: [
+          'get-started',
           'tutorials',
           'how-to',
           'reference',
-          'methodology',
-          'architecture',
+          'explanation',
           'contributing',
         ],
         indexBlog: false,
@@ -164,11 +164,11 @@ const config: Config = {
     navbar: {
       title: SITE_TITLE,
       items: [
+        {to: ROUTES.getStarted, label: 'Get Started', position: 'left'},
         {to: ROUTES.tutorials, label: 'Tutorials', position: 'left'},
         {to: ROUTES.howTo, label: 'How-to', position: 'left'},
         {to: ROUTES.reference, label: 'Reference', position: 'left'},
-        {to: ROUTES.methodology, label: 'Methodology', position: 'left'},
-        {to: ROUTES.architecture, label: 'Architecture', position: 'left'},
+        {to: ROUTES.explanation, label: 'Explanation', position: 'left'},
         {to: ROUTES.contributing, label: 'Contributing', position: 'left'},
         {href: GITHUB_REPO, label: 'GitHub', position: 'right'},
       ],
@@ -179,17 +179,17 @@ const config: Config = {
         {
           title: 'Get started',
           items: [
+            {label: 'Install', to: ROUTES.getStarted},
             {label: 'First measurement', to: ROUTES.tutorials},
-            {label: 'Install', to: '/how-to/install'},
             {label: 'CLI reference', to: '/reference/cli'},
           ],
         },
         {
           title: 'Understand',
           items: [
-            {label: 'Methodology', to: ROUTES.methodology},
-            {label: 'Energy measurement', to: '/methodology/energy-measurement'},
-            {label: 'Architecture overview', to: '/architecture/architecture-overview'},
+            {label: 'Explanation', to: ROUTES.explanation},
+            {label: 'Energy measurement', to: '/explanation/methodology/energy-measurement'},
+            {label: 'Architecture overview', to: '/explanation/architecture/architecture-overview'},
           ],
         },
         {

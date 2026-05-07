@@ -8,11 +8,11 @@ export const SITE_TITLE = 'LLenergyMeasure';
 // page in that sidebar — clicking the corresponding navbar item or
 // landing-page card lands there.
 export const ROUTES = {
+  getStarted: '/get-started/install',
   tutorials: '/tutorials/first-measurement',
   howTo: '/how-to/install',
   reference: '/reference/cli',
-  methodology: '/methodology/methodology',
-  architecture: '/architecture/architecture-overview',
+  explanation: '/explanation/overview',
   contributing: '/contributing/development',
 } as const;
 

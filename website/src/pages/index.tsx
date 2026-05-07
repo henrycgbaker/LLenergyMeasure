@@ -34,8 +34,8 @@ export default function Home(): ReactNode {
             <div className={styles.cta}>
               <Link
                 className="button button--primary button--lg"
-                to={ROUTES.tutorials}>
-                Get started →
+                to={ROUTES.getStarted}>
+                Get Started →
               </Link>
             </div>
 
@@ -57,13 +57,8 @@ export default function Home(): ReactNode {
               </Link>
               <Link
                 className="button button--secondary button--lg"
-                to={ROUTES.methodology}>
-                Methodology
-              </Link>
-              <Link
-                className="button button--secondary button--lg"
-                to={ROUTES.architecture}>
-                Architecture
+                to={ROUTES.explanation}>
+                Explanation
               </Link>
             </div>
           </div>

@@ -161,7 +161,7 @@ comparable to other measurements run against the same dataset - including
 measurements on the AIEnergyScore leaderboard and in published research that
 uses this benchmark. Using a shared reference corpus is what enables
 cross-study comparability. See
-[Methodology: Dataset choice and measurement validity](/methodology/dataset-context)
+[Methodology: Dataset choice and measurement validity](/explanation/methodology/dataset-context)
 for a fuller discussion of this comparability property and its limits.
 
 To use it, either omit `task.dataset` entirely or set `source: aienergyscore`
@@ -308,4 +308,4 @@ All five checks raise `ValueError` with a descriptive message if violated.
 
 - [Reference: study config](/reference/study-config) - full YAML schema
 - [How to: interpret results](/how-to/interpret-results) - what `n_prompts` affects in output
-- [Methodology: Dataset choice and measurement validity](/methodology/dataset-context) - why dataset choice shapes energy numbers and how to use custom datasets in research workflows
+- [Methodology: Dataset choice and measurement validity](/explanation/methodology/dataset-context) - why dataset choice shapes energy numbers and how to use custom datasets in research workflows

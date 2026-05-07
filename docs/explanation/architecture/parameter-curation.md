@@ -1,6 +1,6 @@
 # Parameter Curation
 
-> **Note:** This document covers engine-API-parameter introspection and Pydantic-model curation (what fields each engine accepts, type information, drift detection). For the runtime validation of parameter *values* (how invalid combinations are caught before engine initialisation), see [parameter-discovery.md](/architecture/parameter-discovery).
+> **Note:** This document covers engine-API-parameter introspection and Pydantic-model curation (what fields each engine accepts, type information, drift detection). For the runtime validation of parameter *values* (how invalid combinations are caught before engine initialisation), see [parameter-discovery.md](/explanation/architecture/parameter-discovery).
 
 ---
 
@@ -91,6 +91,6 @@ These are listed in `LLEM_NATIVE_FIELDS` in the drift checker. Each entry suppre
 
 ## See also
 
-- [parameter-discovery.md](/architecture/parameter-discovery) - config validation pipeline (how invalid combinations are caught)
+- [parameter-discovery.md](/explanation/architecture/parameter-discovery) - config validation pipeline (how invalid combinations are caught)
 - [schema-refresh.md](/contributing/schema-refresh) - parameter-discovery pipeline (Renovate-driven schema refresh)
 - [engines.md](/reference/engines/configuration) - engine configuration reference

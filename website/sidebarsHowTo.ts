@@ -7,6 +7,7 @@ const sidebarsHowTo: SidebarsConfig = {
     'run-with-docker-vllm',
     'run-with-tensorrt-llm',
     'interpret-results',
+    'single-gpu-or-limited-hardware',
     'troubleshoot',
     'faq',
   ],

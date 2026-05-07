@@ -48,8 +48,8 @@ transformers:
 
 ### Transformers Parameters
 
-All `pytorch:` fields default to `null` — `null` means "use the engine's own default".
-Unknown fields under `pytorch:` are forwarded to HuggingFace APIs.
+All `transformers:` fields default to `null` — `null` means "use the engine's own default".
+Unknown fields under `transformers:` are forwarded to HuggingFace APIs.
 
 **Batching:**
 
@@ -514,7 +514,7 @@ runners:
   tensorrt: docker
 ```
 
-Changing `engine:` switches the inference engine. Engine-specific sections (`pytorch:`,
+Changing `engine:` switches the inference engine. Engine-specific sections (`transformers:`,
 `vllm:`, `tensorrt:`) are ignored when not running that engine. Universal parameters (`n`,
 `dtype`, `decoder:`, etc.) apply to all engines.
 ---
@@ -550,7 +550,7 @@ runners:
 
 **4. Default** — `local` for all engines if no runner is configured.
 
-**Auto-elevation.** A study that mixes engines (e.g., `pytorch` local + `vllm` local) is
+**Auto-elevation.** A study that mixes engines (e.g., `transformers` local + `vllm` local) is
 automatically elevated to use Docker for vLLM when Docker is available. This is logged at
 info level and requires no user action.
 

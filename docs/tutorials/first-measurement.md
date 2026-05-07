@@ -35,7 +35,7 @@ if any of the pre-flight checks fail.
 ## Step 2: Run your first experiment
 
 ```bash
-llem run --model gpt2 -e pytorch
+llem run --model gpt2 -e transformers
 ```
 
 This runs GPT-2 (124M parameters). On first run, the model downloads from
@@ -46,7 +46,7 @@ Default settings: 100 prompts, `aienergyscore` dataset, `bfloat16` dtype.
 You'll see a progress indicator on stderr, then results printed to stdout:
 
 ```
-Result: gpt2-pytorch-bf16-2026-05-07T14-32-08     ← unique experiment ID
+Result: gpt2-transformers-bf16-2026-05-07T14-32-08     ← unique experiment ID
 
 Energy                                          ← GPU energy consumed
   Total          847 J                          ← total joules for all 100 prompts
@@ -78,8 +78,8 @@ Each field maps to a measurement decision:
 
 Why subtract baseline? Because you're measuring **inference**, not "GPU
 plugged in." The full reasoning is on the
-[methodology page](/methodology/methodology) and the
-[energy-measurement explanation](/methodology/energy-measurement).
+[methodology page](/explanation/methodology/methodology) and the
+[energy-measurement explanation](/explanation/methodology/energy-measurement).
 
 ## Step 4: Inspect the output files
 
@@ -87,7 +87,7 @@ Results are written to `results/` by default:
 
 ```
 results/
-└── gpt2-pytorch-bf16-2026-05-07T14-32-08/
+└── gpt2-transformers-bf16-2026-05-07T14-32-08/
     └── result.json        # full record (all metrics, config, metadata)
 ```
 
@@ -98,7 +98,7 @@ config, timestamps, and any measurement warnings. See
 Specify a different output directory with `--output`:
 
 ```bash
-llem run --model gpt2 -e pytorch --output /data/experiments
+llem run --model gpt2 -e transformers --output /data/experiments
 ```
 
 ## What you've learned
