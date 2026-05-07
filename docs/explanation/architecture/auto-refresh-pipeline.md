@@ -5,17 +5,18 @@ description: How Renovate-driven version bumps keep engine schemas and invariant
 
 # Auto-refresh pipeline
 
-vLLM, TRT-LLM, and Transformers ship new versions monthly. Each release may
-add configuration parameters, change defaults, or retire flags. A measurement
-tool that hardcodes parameter metadata against one version becomes a liability
-for researchers running longitudinal studies: the tool's understanding of what
-parameters mean diverges from the library's actual behaviour.
+Inference engines release new versions monthly. Each release may add
+configuration parameters, change defaults, or retire flags. A measurement
+tool that hardcodes parameter metadata against one version becomes a
+liability for longitudinal studies: the tool's understanding of what
+parameters mean drifts from the library's actual behaviour.
 
-LLenergyMeasure solves this with an automated refresh loop. Version bumps from
-Renovate trigger CI jobs that re-run schema discovery and invariant mining
-inside the new engine container. The results are committed back to the PR
-branch by a bot. A human reviewer approves and merges. The artefacts on `main`
-always describe the current pinned version of each engine.
+LLenergyMeasure addresses this with an automated refresh loop. Renovate-driven
+version bumps trigger CI jobs that re-run schema discovery and invariant
+mining inside the updated engine container. The results are committed back
+to the PR branch by a bot; a human reviewer approves and merges. The
+artefacts on `main` always describe the current pinned version of each
+engine.
 
 For CI workflow mechanics, see [CI architecture](ci-architecture.md). For how a
 new engine plugs into this pipeline, see [Engine extensibility](engine-extensibility.md).
@@ -112,16 +113,15 @@ library version, the same artefacts are produced on every run.
 
 ## What this enables
 
-Researchers building measurement programmes that span model releases need to
-trust that the tool's parameter handling tracks upstream. The auto-refresh loop
-means:
+Researchers running studies that span engine releases need to trust that the
+tool's parameter handling tracks upstream. With the auto-refresh loop:
 
-- A vLLM 0.8 PR includes updated `invariants.validated.yaml` reflecting new
-  parameters introduced in 0.8. The reviewer can see exactly what changed.
+- A vLLM 0.8 PR includes an updated `invariants.validated.yaml` reflecting
+  parameters introduced in 0.8. The reviewer sees exactly what changed.
 - A `default_value` that shifts between releases is visible in the invariant
   diff comment on the Renovate PR before it reaches `main`.
-- Generated documentation (`invariants-vllm.md`, `schema-vllm.md`) is always
-  in sync with the pinned version on `main` - no documentation lag.
+- Generated documentation (`invariants-vllm.md`, `schema-vllm.md`) stays in
+  sync with the pinned version on `main`; there is no documentation lag.
 
 ## Limits
 

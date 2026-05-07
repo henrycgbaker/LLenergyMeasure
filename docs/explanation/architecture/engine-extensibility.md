@@ -5,10 +5,11 @@ description: What a new inference engine needs to contribute, and what is automa
 
 # Engine extensibility
 
-LLenergyMeasure is designed to track the inference stack as it evolves. Adding
-a new engine - SGLang, ExecuTorch, whatever ships next - should require minimal
-bespoke code. This page lists exactly what a contributor must produce and what
-the pipeline generates automatically.
+The inference stack evolves quickly: vLLM, TRT-LLM, and SGLang each ship
+multiple releases per quarter, and new engines appear regularly. Adding one
+to LLenergyMeasure should require as little bespoke code as possible. This
+page lists exactly what a contributor must produce and what the pipeline
+generates automatically.
 
 For the underlying protocol contract that makes this possible, see
 [Harness-plugin model](harness-plugin.md). For how schemas and invariants stay
@@ -178,8 +179,7 @@ The manual surface is three files. Everything downstream is automated.
 
 ## Why this matters
 
-The inference stack moves fast. vLLM, TRT-LLM, and SGLang each ship multiple
-releases per quarter. Keeping measurement methodology current with the upstream
-API requires that per-engine bespoke work be as small as possible. The
-harness-plugin boundary achieves this: engine authors write inference code, not
-measurement code. Methodology authors update the harness once, not three times.
+Keeping measurement methodology current with upstream engine APIs requires
+that per-engine bespoke work stay small. The harness-plugin boundary achieves
+this: engine authors write inference code, not measurement code; methodology
+authors update the harness once, not three times.

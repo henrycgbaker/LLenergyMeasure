@@ -20,19 +20,16 @@ Measuring inference energy sounds simple: start a counter, run the model, stop
 the counter. In practice the two activities have different lifecycle
 requirements:
 
-- **Inference** needs to load weights, warm up kernel caches, run a batch of
-  prompts, and release GPU memory. The exact steps are different for every
-  inference framework.
-- **Measurement** needs to synchronise CUDA before and after the measurement
-  window, poll NVML at a steady sample rate, subtract a baseline idle-power
-  reading, estimate FLOPs, collect environment metadata, and assemble a
-  structured result. These steps are identical regardless of which engine
-  produced the tokens.
+- **Inference** loads weights, warms up kernel caches, runs a batch of prompts,
+  and releases GPU memory. The exact steps differ for every inference engine.
+- **Measurement** synchronises CUDA around the measurement window, polls the
+  energy sampler at a steady rate, subtracts a baseline idle-power reading,
+  collects environment metadata, and assembles a structured result. These steps
+  are identical regardless of which engine produced the tokens.
 
-The naive approach is to interleave measurement code with engine code. The
-consequence: every engine reimplements (or copy-pastes) the same ~600 lines of
-measurement infrastructure. A bug in energy accounting requires a fix in every
-engine; methodology improvements cannot be rolled out atomically.
+Interleaving the two means every engine reimplements the same measurement
+infrastructure. A bug in energy accounting then needs fixing in every engine,
+and methodology improvements cannot roll out atomically.
 
 ## The plugin model
 
@@ -202,15 +199,15 @@ block - the harness guarantees teardown even when inference raises.
 
 ## Why this matters
 
-Adding a new engine requires implementing the `EnginePlugin` protocol. It does
-not require understanding NVML polling, CUDA synchronisation, FLOPs estimation,
-or result assembly. Methodology improvements - a new energy sampler, a change
-to the baseline measurement strategy, a new quality warning - deploy to all
-engines in a single commit.
+Adding a new engine means implementing the `EnginePlugin` protocol. It does
+not mean understanding NVML polling, CUDA synchronisation, or result assembly.
+A methodology improvement - say a new energy sampler, a different baseline
+strategy, an additional quality warning - lands once in the harness and
+applies to every engine.
 
 The existing three engines (`transformers`, `vllm`, `tensorrt`) each fit in a
-single file of around 200-300 lines. The harness is ~650 lines and does not
-grow when engines are added.
+single file of roughly 200-300 lines. The harness sits at around 650 lines
+and does not grow when engines are added.
 
 See [Engine extensibility](engine-extensibility.md) for the full checklist of
 what a new engine needs to contribute beyond the plugin class itself.
