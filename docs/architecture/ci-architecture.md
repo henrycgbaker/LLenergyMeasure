@@ -52,17 +52,19 @@ filter ── mint-app-token
   dynamic-engine-matrix mechanism — adding M5 SGLang as engine #4 means
   appending one line to the JSON-emit step rather than declaring new jobs.
 
-- **`mint-app-token`**: a single mint per orchestrator run, using
-  `actions/create-github-app-token@v1`. The token is forwarded to cells
-  via the `app-token` input; it's masked on emission so it's safe to
-  forward through `with:` parameters. Skipped on fork PRs (App secrets
-  aren't available cross-fork).
+- **Bot token mint** is per-cell + per-writeback (each consumer mints
+  its own via `actions/create-github-app-token@v1`). Cross-job
+  forwarding via `outputs:` is unviable: GitHub redacts secret-derived
+  job outputs to empty when crossing job boundaries. ~7 mints per
+  orchestrator run; well below App rate-limit. Skipped on fork PRs (App
+  secrets aren't available cross-fork) — cells fall back to read-only
+  `secrets.GITHUB_TOKEN`.
 
 - **`build-transformers`**: builds the transformers Docker image and pushes
   the runtime image to `ghcr.io/<repo>/transformers-cache:transformers-<VER>`,
   which downstream cells pull. Fires when (PR with `transformers_build`
   match) OR (schedule, weekly drift detection with `--no-cache`) OR
-  (workflow_dispatch).
+  (workflow_dispatch with `engine=transformers` or `engine=all`).
 
 - **`invariants-transformers` / `schemas-transformers`**: explicit jobs
   (not matrix), each `needs: [filter, mint-app-token, build-transformers]`

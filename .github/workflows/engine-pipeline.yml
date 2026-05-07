@@ -60,6 +60,18 @@ on:
     - cron: '37 5 * * 1'
   workflow_dispatch:
     inputs:
+      engine:
+        description: Engine subset to run
+        required: false
+        type: choice
+        default: all
+        options: [all, transformers, vllm, tensorrt]
+      pipeline:
+        description: Pipeline subset to run
+        required: false
+        type: choice
+        default: both
+        options: [both, invariants, schemas]
       pr_number:
         description: PR number for comments + writeback (optional)
         required: false
@@ -207,10 +219,31 @@ jobs:
           S_V: ${{ steps.changes.outputs.schemas_vllm }}
           S_R: ${{ steps.changes.outputs.schemas_tensorrt }}
         run: |
-          # On workflow_dispatch the dorny step is skipped; treat all flags
-          # as 'true' so a manual run exercises the full pipeline.
+          # On workflow_dispatch the dorny step is skipped; honour the
+          # engine + pipeline inputs to compute the same flag shape that
+          # paths-filter would produce. `all` / `both` defaults exercise
+          # the full pipeline; subsetting (e.g. engine=vllm pipeline=invariants)
+          # fires only the matching cell.
           if [[ "$EVENT" == "workflow_dispatch" ]]; then
-            T_BUILD=true; I_T=true; I_V=true; I_R=true; S_T=true; S_V=true; S_R=true
+            ENG="${{ inputs.engine }}"
+            PIP="${{ inputs.pipeline }}"
+            ENG="${ENG:-all}"
+            PIP="${PIP:-both}"
+
+            # Build trigger fires whenever transformers is in scope.
+            [[ "$ENG" == "transformers" || "$ENG" == "all" ]] && T_BUILD=true
+
+            if [[ "$PIP" == "invariants" || "$PIP" == "both" ]]; then
+              [[ "$ENG" == "transformers" || "$ENG" == "all" ]] && I_T=true
+              [[ "$ENG" == "vllm"         || "$ENG" == "all" ]] && I_V=true
+              [[ "$ENG" == "tensorrt"     || "$ENG" == "all" ]] && I_R=true
+            fi
+
+            if [[ "$PIP" == "schemas" || "$PIP" == "both" ]]; then
+              [[ "$ENG" == "transformers" || "$ENG" == "all" ]] && S_T=true
+              [[ "$ENG" == "vllm"         || "$ENG" == "all" ]] && S_V=true
+              [[ "$ENG" == "tensorrt"     || "$ENG" == "all" ]] && S_R=true
+            fi
           fi
 
           # Build cell objects for the "others" (vllm + tensorrt) matrix
@@ -235,13 +268,15 @@ jobs:
   build-transformers:
     # Builds transformers runtime image and pushes it to transformers-cache
     # for downstream cells to pull. Fires on (PR with build paths matched)
-    # OR (schedule) OR (workflow_dispatch).
+    # OR (workflow_dispatch with engine=transformers/all) OR schedule
+    # (drift detection). The filter job is the SSOT for the
+    # transformers_build flag in PR + dispatch cases; schedule bypasses
+    # filter (filter is skipped on schedule).
     needs: filter
     if: |
       always() && (
-        (github.event_name == 'pull_request' && needs.filter.outputs.transformers_build == 'true')
+        needs.filter.outputs.transformers_build == 'true'
         || github.event_name == 'schedule'
-        || github.event_name == 'workflow_dispatch'
       )
     runs-on: self-hosted
     timeout-minutes: 90
