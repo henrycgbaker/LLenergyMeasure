@@ -33,8 +33,6 @@ pip --version
 echo "::endgroup::"
 
 echo "::group::Install llenergymeasure (base deps)"
-# -e . is fine in CF's ephemeral build env; gives the API doc generator
-# access to llenergymeasure.* without copying into site-packages.
 pip install -e .
 echo "::endgroup::"
 
@@ -53,7 +51,5 @@ npm ci
 echo "::endgroup::"
 
 echo "::group::Build Docusaurus site"
-# onBrokenLinks: 'throw' in docusaurus.config.ts fails the build on
-# broken internal links — same gate as the GH Pages production build.
 npm run build
 echo "::endgroup::"
