@@ -64,6 +64,10 @@ Install multiple extras together:
 pip install "llenergymeasure[zeus,codecarbon]"
 ```
 
+:::tip Install both samplers to compare
+Running with `[zeus,codecarbon]` lets you select the sampler per-experiment via `energy_sampler: zeus` or `energy_sampler: codecarbon`, and compare their readings against the default NVML sampler. Useful for cross-validating energy numbers before committing to a method.
+:::
+
 ---
 
 ## Engine dependencies

@@ -69,8 +69,11 @@ Timing
 | `Duration` | Wall-clock time for the full experiment |
 | `Warmup` | Prompts excluded for thermal stabilisation |
 
-`Adjusted` is the most useful number when comparing configurations: it
-isolates the inference energy from idle-GPU draw.
+:::tip Use `Adjusted` for cross-experiment comparisons
+`Adjusted` isolates inference energy from idle-GPU draw. Use it whenever you are
+comparing two configurations - engine choice, dtype, batch size - so that ambient
+GPU power does not inflate the difference.
+:::
 
 For the full field list in `result.json`, see
 [Results schema](/reference/results-schema).

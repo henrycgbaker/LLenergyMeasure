@@ -73,6 +73,10 @@ These are the totals across all processes / GPUs (post-aggregation, post-warmup-
 | `mj_per_tok_total` | float &#124; null | Millijoules per token from raw (unadjusted) energy |
 | `mj_per_tok_adjusted` | float &#124; null | Millijoules per token from baseline-adjusted energy. `null` when no baseline was measured. **This is the right field for cross-experiment comparisons.** |
 
+:::note Why adjusted beats total for comparisons
+`mj_per_tok_adjusted` subtracts idle GPU power before dividing by token count. Two experiments running on hardware with different idle power (or at different thermal states) will show a spurious difference in `mj_per_tok_total` even when inference is identical. See [Energy measurement](/explanation/methodology/energy-measurement) for the full reasoning.
+:::
+
 ### FLOPs
 
 `total_flops` is an estimate (not measurable directly during inference). The derived per-token / per-second fields are `null` when the divisor is zero.
