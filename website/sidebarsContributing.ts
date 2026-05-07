@@ -7,6 +7,10 @@ const sidebarsContributing: SidebarsConfig = {
     'extending-miners',
     'schema-refresh',
     'validation-invariant-corpus',
+    'release-process',
+    'preview-deployments',
+    'citation',
+    'roadmap',
   ],
 };
 
