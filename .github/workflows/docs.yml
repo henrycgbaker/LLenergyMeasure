@@ -2,13 +2,12 @@ name: Build docs site
 
 # Builds the Docusaurus site under website/ and deploys to GitHub Pages
 # on push to main. PR-time previews are handled separately by Cloudflare
-# Pages (see docs/architecture/preview-deployments.md) — this workflow
+# Pages (see docs/architecture/preview-deployments.md) - this workflow
 # does not run on pull_request.
 #
 # Path-trigger self-test: this workflow's own filename is included in
 # `on.push.paths` below, so edits to this file fire the workflow on
-# merge and exercise its current behaviour (per the convention in
-# CLAUDE.md §"Path-trigger self-tests").
+# merge and exercise its current behaviour.
 
 on:
   push:
@@ -25,7 +24,7 @@ permissions:
   id-token: write
 
 concurrency:
-  # Read-only / stateless — safe to cancel in-flight runs.
+  # Read-only / stateless - safe to cancel in-flight runs.
   group: pages
   cancel-in-progress: true
 
@@ -50,7 +49,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install package
-        # Base install only — no GPU extras needed. Brings in pyyaml,
+        # Base install only - no GPU extras needed. Brings in pyyaml,
         # pydantic, etc. so llenergymeasure is importable by the generator.
         run: pip install -e .
 

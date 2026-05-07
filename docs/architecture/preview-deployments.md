@@ -45,7 +45,7 @@ from docstrings on every build (it's gitignored, so without this step the
 API reference pillar is empty in the preview).
 
 `onBrokenLinks: 'throw'` in `website/docusaurus.config.ts` gates the
-build — broken internal links fail the preview just as they fail the
+build - broken internal links fail the preview just as they fail the
 production build.
 
 ## Runtime versions
@@ -63,7 +63,7 @@ vars needed for version selection.
 ## One-time maintainer setup
 
 These steps activate the CF Pages integration. Until they're done, the
-build script and config files in this PR sit dormant — no preview URL is
+build script and config files in this PR sit dormant - no preview URL is
 generated. Once complete, every existing open PR (including ones merged
 in before this setup) gets previews on next push.
 
@@ -84,12 +84,12 @@ in before this setup) gets previews on next push.
    | Build command | `bash scripts/cloudflare-build.sh` |
    | Build output directory | `website/build` |
    | Root directory (advanced) | `/` (default) |
-   | Environment variables | *(none required — see Runtime versions)* |
+   | Environment variables | *(none required - see Runtime versions)* |
 
 4. **Verify** by triggering a manual deploy of `main` from the CF dashboard.
    Expected: ~40 s build, output URL serves the Docusaurus site.
 
-5. **Open or push to any docs-touching PR** — the CF GitHub App posts a
+5. **Open or push to any docs-touching PR** - the CF GitHub App posts a
    preview-URL comment within ~1 minute of build completion.
 
 No GitHub Actions secrets are needed; the GitHub App handles auth.
@@ -101,15 +101,15 @@ This setup intentionally does not migrate production to CF Pages.
 every push. The two paths are independent:
 
 ```
-PR push  ───────────────► CF Pages ────► <hash>.llenergymeasure-docs.pages.dev
-                                          (preview, comment on PR)
+PR push  --------------> CF Pages ----> <hash>.llenergymeasure-docs.pages.dev
+                                         (preview, comment on PR)
 
-main push ──► docs.yml ──► GitHub Pages ──► henrycgbaker.github.io/llenergymeasure
+main push --> docs.yml --> GitHub Pages --> henrycgbaker.github.io/llenergymeasure
                                             (production)
 ```
 
 If CF availability degrades, PRs lose preview URLs but production remains
-deployable — `docs.yml` runs only on push to `main` (not on PRs), so a
+deployable - `docs.yml` runs only on push to `main` (not on PRs), so a
 broken CF build doesn't block merging if the change is otherwise sound;
 the deploy job re-validates the build at merge time.
 
@@ -120,7 +120,7 @@ the deploy job re-validates the build at merge time.
   in CF dashboard at time of writing). Path-irrelevant PRs still get
   previews but the GitHub UI sometimes hides the deployment status until
   the comment is posted.
-- Check the PR's "Checks" tab for a `cloudflare-pages` entry — if the
+- Check the PR's "Checks" tab for a `cloudflare-pages` entry - if the
   build failed, click through to the CF dashboard logs.
 - If the GitHub App is mis-authorised, the comment won't post but the
   build may still succeed. Re-authorise from the repo's Settings →
@@ -133,10 +133,10 @@ the deploy job re-validates the build at merge time.
   is always fresh per commit.
 
 **"`pip install -e .` fails on CF"**
-- Verify `.python-version` resolves to a CF-supported Python (3.6–3.13
+- Verify `.python-version` resolves to a CF-supported Python (3.6-3.13
   are available in the V2 image).
 - Engine extras (`zeus`, `codecarbon`) are intentionally not installed
-  for previews — they're not needed to import `llenergymeasure` for the
+  for previews - they're not needed to import `llenergymeasure` for the
   API doc generator.
 
 **"Build succeeds but a page 404s in the preview"**
@@ -150,7 +150,7 @@ Free tier is sized for a project this size with margin:
 
 | Limit | Free tier | Project usage estimate |
 |---|---|---|
-| Builds | 500 / month | ~30–50 (generous PR cadence) |
+| Builds | 500 / month | ~30-50 (generous PR cadence) |
 | Bandwidth | unlimited | n/a |
 | Concurrent builds | 1 | sequential per PR |
 | Preview retention | unlimited | n/a |
