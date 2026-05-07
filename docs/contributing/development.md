@@ -53,7 +53,7 @@ fans out per-engine cells (the `_engine-invariants-cell.yml` and
 `_engine-schemas-cell.yml` reusables) plus an inline `build-transformers`
 job for the first-party transformers image. See "CI pipeline ordering"
 below for the full sequence and
-[`docs/architecture/ci-architecture.md`](ci-architecture.md) for the
+[Architecture &gt; CI architecture](/architecture/ci-architecture) for the
 topology + reusable-workflow contract.
 
 ## Engine image strategy
@@ -107,7 +107,7 @@ The principled rationale:
 
 The engine-coupling pipeline lives in `engine-pipeline.yml`, a single
 orchestrator workflow with a coherent dependency graph. See
-[`docs/architecture/ci-architecture.md`](ci-architecture.md) for the full
+[Architecture &gt; CI architecture](/architecture/ci-architecture) for the full
 topology, reusable-workflow contract, and expected-shape table.
 
 ```
