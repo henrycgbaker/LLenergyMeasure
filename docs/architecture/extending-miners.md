@@ -391,15 +391,15 @@ def test_landmark_checks_raise_on_missing():
 
 1. Decide the engine's CI shape:
    - **Upstream image consumer** (vllm / tensorrt pattern) — add a per-engine
-     job to `update-engine-invariants.yml` and `update-engine-schemas.yml` mirroring the
+     job to `engine-pipeline.yml` and `engine-pipeline.yml` mirroring the
      existing `invariants-vllm` / `schemas-vllm` (or `*-tensorrt`) jobs. The
      job pulls the upstream canonical image, then runs probe → mine →
      validate → doc-gen → atomic-writeback inline.
    - **First-party image (transformers pattern)** — split the build out into
-     a pair of workflows modelled on `build-engine-image.yml` (build + cache
+     a pair of workflows modelled on `engine-pipeline.yml` (build + cache
      export, no runtime push) and `publish-engine-image.yml` (workflow_run-
      triggered, pulls cache + pushes runtime tags per parent event). The
-     transformers cells in `update-engine-invariants.yml` + `update-engine-schemas.yml`
+     transformers cells in `engine-pipeline.yml` + `engine-pipeline.yml`
      then chain off Publish engine image success via `workflow_run`. The
      build/push split exists so push failures don't cost a full rebuild
      of the heavy from-source compile (e.g. ~30 min FA3 compile) on retry.
@@ -414,14 +414,14 @@ def test_landmark_checks_raise_on_missing():
    imports: the cell downloads the upstream release tarball on the runner
    host and bind-mounts it into the container at a stable path, decoupling
    source resolution from the image's internals. For the first-party-image
-   pattern, mirror `build-engine-image.yml` + `publish-engine-image.yml` + the
-   workflow_run-gated cell pair in update-engine-invariants.yml / update-engine-schemas.yml.
+   pattern, mirror `engine-pipeline.yml` + `publish-engine-image.yml` + the
+   workflow_run-gated cell pair in engine-pipeline.yml / engine-pipeline.yml.
 
 3. The validate step runs inside the engine's container in the same job as the miner — no separate validation workflow to update.
 
 4. Add a Renovate `packageRule` so library bumps trigger the appropriate
    workflow via the `engine_versions/{engine}.yaml` path filter (or, for
-   the first-party-image pattern, via `build-engine-image.yml`'s filter —
+   the first-party-image pattern, via `engine-pipeline.yml`'s filter —
    downstream `publish-engine-image.yml` and the workflow_run-gated cells fire
    automatically on its success).
 
@@ -545,7 +545,7 @@ Concrete scenario: a refactor in `_pydantic_lift.py` changes how it walks `Field
 
 **Mitigation: the proposed-vs-validated YAML pair (the trust seam).**
 
-The engine-invariants pipeline (`update-engine-invariants.yml`, with per-job `if:` gating selecting the right cell for each trigger source: `pull_request: paths` for vllm + tensorrt, `workflow_run` after Build engine image for transformers) mines the proposed corpus into `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` and then validates it into `src/llenergymeasure/engines/{engine}/invariants.validated.yaml` in the same job. Both YAMLs land in one atomic commit-back to the PR branch, and the per-pipeline diff comment includes both diffs.
+The engine-invariants pipeline (`engine-pipeline.yml`, with per-job `if:` gating selecting the right cell for each trigger source: `pull_request: paths` for vllm + tensorrt, `workflow_run` after Build engine image for transformers) mines the proposed corpus into `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` and then validates it into `src/llenergymeasure/engines/{engine}/invariants.validated.yaml` in the same job. Both YAMLs land in one atomic commit-back to the PR branch, and the per-pipeline diff comment includes both diffs.
 
 Because the proposed-corpus diff is emitted alongside the validated diff, a miner refactor that silently drops 18 invariants shows up as 18 deletions in the proposed-corpus diff - a maintainer reading the PR notices the regression even when the validation gate's verdict on the surviving invariants is green.
 

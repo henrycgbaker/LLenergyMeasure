@@ -8,8 +8,8 @@ The three engines run different pipelines in CI for a load-bearing reason. **Don
 
 | Engine | Image source | CI flow on PR |
 |---|---|---|
-| **transformers** | First-party `docker/Dockerfile.transformers` (FA3-included; no upstream provides this) | `build-engine-image` (rebuild) → `update-engine-{invariants,schemas}` (probe + mine/introspect) → [merge] → `publish-engine-image` (mirror to production tag) |
-| **vllm** | Upstream `vllm/vllm-openai:v<VER>` directly + bind-mount llem source | `update-engine-{invariants,schemas}` cells fire directly on `pull_request: paths` (no first-party build) |
+| **transformers** | First-party `docker/Dockerfile.transformers` (FA3-included; no upstream provides this) | `engine-pipeline :: build-transformers` (rebuild) → `engine-pipeline :: invariants-transformers + schemas-transformers` (probe + mine/introspect) → [merge] → `publish-engine-image` (mirror to production tag) |
+| **vllm** | Upstream `vllm/vllm-openai:v<VER>` directly + bind-mount llem source | `engine-pipeline :: invariants-others + schemas-others` matrix cells fire on `pull_request: paths` (no first-party build) |
 | **tensorrt** | Upstream `nvcr.io/nvidia/tensorrt-llm/release:<VER>` directly + bind-mount llem source | Same shape as vllm |
 
 **Why asymmetric.** vllm + tensorrt's upstream images empirically contain everything llem needs at runtime (PoC verified 2026-04-30: `pydantic`, `typer`, `pyarrow`, `rich`, `dotenv`, `pyyaml` all present transitively). Transformers' upstream images don't include FA3, which is non-negotiable for production-equivalent CI runs. So transformers gets a first-party Dockerfile; the others stay upstream-direct.
@@ -21,17 +21,17 @@ The three engines run different pipelines in CI for a load-bearing reason. **Don
 ```text
 PR opens (touches transformers paths: SSOT, Dockerfile, miner code, etc.)
   │
-  │  build-engine-image.yml fires (paths trigger:
+  │  engine-pipeline.yml fires (paths trigger:
   │  engine_versions/transformers.yaml, docker/Dockerfile.transformers,
-  │  .github/workflows/build-engine-image.yml)
+  │  .github/workflows/engine-pipeline.yml)
   ▼
 [Build transformers runtime image; cache hits ~10-15 min, cold FA3 ~60-90 min]
 [Push to ghcr.io/<repo>/transformers-cache:transformers-<VER>]
   │
-  │  workflow_run chain fires (Build engine image success)
+  │  Orchestrator's needs-graph fires the next stage on build success
   ▼
-update-engine-{invariants,schemas}.yml transformers cells run:
-  pull transformers-cache image → probe → mine/introspect → validate → writeback
+engine-pipeline.yml :: invariants-transformers + schemas-transformers cells run:
+  pull transformers-cache image → probe → mine/introspect → validate → upload writeback artefact
   │
   │  Probe-fail → CI red. The 'accept-probe-fail' PR label bypasses
   │  the gate for known-drift cases (admin escalation; see #547).
@@ -51,7 +51,7 @@ publish-engine-image.yml fires DIRECTLY on push (no rebuild):
 
 ### vllm + tensorrt PR-time CI flow (no rebuild; upstream-direct)
 
-The diagram below applies to vllm + tensorrt only — `update-engine-*.yml` cells fire directly on `pull_request: paths` (no `build-engine-image` chain). They pull the upstream image at the SSOT-pinned version, bind-mount llem source, and probe/mine/introspect inside the upstream container.
+The diagram below applies to vllm + tensorrt only — `engine-pipeline.yml`'s `invariants-others` + `schemas-others` matrix cells fire on `pull_request: paths` (no `build-transformers` dependency). They pull the upstream image at the SSOT-pinned version, bind-mount llem source, and probe/mine/introspect inside the upstream container.
 
 ```
 ================================================================================
@@ -80,7 +80,7 @@ LEGEND:  [auto]    fully automated, no human action
    ┌────────────────────────────┴─────────────────────────────┐
    ▼                                                           ▼
 ┌──────────────────────────────┐         ┌──────────────────────────────┐
-│  update-engine-invariants.yml│         │  update-engine-schemas.yml   │
+│  engine-pipeline.yml│         │  engine-pipeline.yml   │
 │  (per-engine matrix)         │         │  (engines matrix)            │
 │  Layers over: invariant-     │         │  Layers over: parameter-     │
 │   miner + invalidity-miner + │         │   discovery + typed-schema-  │
