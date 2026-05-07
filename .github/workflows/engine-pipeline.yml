@@ -1,0 +1,497 @@
+name: Engine pipeline
+
+# Orchestrator for the engine-coupling CI surface. Replaces the prior 4-file
+# split (build-engine-image.yml + update-engine-{invariants,schemas}.yml +
+# the cross-workflow concurrency fix). Single workflow_run-graph:
+#
+#   filter ── mint-app-token
+#      │              │
+#      ├── build-transformers ── invariants-transformers ──┐
+#      │                       └─ schemas-transformers ────┤
+#      ├── invariants-others (vllm + tensorrt matrix) ─────┤
+#      └── schemas-others (vllm + tensorrt matrix) ────────┤
+#                                                          ▼
+#                                                       writeback
+#                                            (aggregate; ONE git push)
+#
+# Properties (per .product/designs/ci-architecture-2026-05-05.md):
+#   - D1: orchestrator-level permissions union; reusables inherit.
+#   - E1: secrets: inherit on every uses:.
+#   - F1-simple: single concurrency group; cancel-in-progress: false.
+#   - H4-fixed: orchestrator mints token once; cells upload writeback
+#     artefacts; ONE aggregate writeback job performs ONE git push gated
+#     `if: always() && <any artefact>` (preserves per-cell availability).
+#   - Two-tier path filter: top-level `paths:` narrows to engine-pipeline
+#     concerns so non-engine PRs leave this workflow ABSENT (CLAUDE.md
+#     "Not fired" surface); job-level dorny is per-engine.
+#   - Schedule trigger fires only build-transformers (drift detection);
+#     cells + writeback skip (no PR to act on).
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'engine_versions/**'
+      - 'docker/Dockerfile.*'
+      - 'scripts/engine_miners/**'
+      - 'scripts/engine_introspectors/**'
+      - 'scripts/validate_invariants.py'
+      - 'scripts/_invariant_validation_common.py'
+      - 'scripts/refresh_invariant_rules.sh'
+      - 'scripts/_probe.py'
+      - 'scripts/update_last_probe.py'
+      - 'scripts/diff_engine_invariants.py'
+      - 'scripts/diff_discovered_schemas.py'
+      - 'scripts/generate_invariants_doc.py'
+      - 'scripts/generate_curation_doc.py'
+      - 'scripts/generate_schema_doc.py'
+      - 'src/llenergymeasure/engines/**'
+      - 'scripts/ci/upsert_pr_comment.sh'
+      - 'pyproject.toml'
+      - '.github/workflows/engine-pipeline.yml'
+      - '.github/workflows/_engine-invariants-cell.yml'
+      - '.github/workflows/_engine-schemas-cell.yml'
+      - '.github/actions/**'
+  schedule:
+    # Weekly Monday 05:37 UTC drift-detection rebuild (no-cache).
+    - cron: '37 5 * * 1'
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number for comments + writeback (optional)
+        required: false
+        type: string
+      no_cache:
+        description: Force --no-cache rebuild of transformers image
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
+concurrency:
+  group: engine-pipeline-${{ github.event.pull_request.head.ref || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  filter:
+    # Per-engine + per-pipeline change detection. Skipped on schedule
+    # (no PR to filter against). On workflow_dispatch, emits "all
+    # engines" so a manual run exercises the full pipeline.
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.context.outputs.pr_number }}
+      pr_head_repo: ${{ steps.context.outputs.pr_head_repo }}
+      transformers_build: ${{ steps.compute.outputs.transformers_build }}
+      invariants_transformers: ${{ steps.compute.outputs.invariants_transformers }}
+      schemas_transformers: ${{ steps.compute.outputs.schemas_transformers }}
+      invariants_others_cells: ${{ steps.compute.outputs.invariants_others_cells }}
+      schemas_others_cells: ${{ steps.compute.outputs.schemas_others_cells }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve PR context
+        id: context
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+            echo "pr_head_repo=${{ github.event.pull_request.head.repo.full_name }}" >> "$GITHUB_OUTPUT"
+          else
+            PR_NUMBER="${{ inputs.pr_number }}"
+            if [[ -n "$PR_NUMBER" ]]; then
+              echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+              echo "pr_head_repo=${{ github.repository }}" >> "$GITHUB_OUTPUT"
+            else
+              echo "pr_number=" >> "$GITHUB_OUTPUT"
+              echo "pr_head_repo=" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - uses: dorny/paths-filter@v3
+        if: github.event_name == 'pull_request'
+        id: changes
+        with:
+          # Each filter group MUST include the orchestrator file + cell
+          # reusables + composites + dedup helper, so workflow-level
+          # changes self-test all engines (issue #515 / #565).
+          filters: |
+            transformers_build:
+              - 'engine_versions/transformers.yaml'
+              - 'docker/Dockerfile.transformers'
+              - '.github/workflows/engine-pipeline.yml'
+            invariants_transformers:
+              - 'engine_versions/transformers.yaml'
+              - 'docker/Dockerfile.transformers'
+              - 'scripts/engine_miners/transformers_*.py'
+              - 'scripts/engine_miners/_*.py'
+              - 'scripts/engine_miners/build_corpus.py'
+              - 'scripts/validate_invariants.py'
+              - 'scripts/_invariant_validation_common.py'
+              - 'scripts/refresh_invariant_rules.sh'
+              - 'src/llenergymeasure/engines/transformers/invariants.*.yaml'
+              - '.github/workflows/engine-pipeline.yml'
+              - '.github/workflows/_engine-invariants-cell.yml'
+              - '.github/actions/**'
+              - 'scripts/ci/upsert_pr_comment.sh'
+            invariants_vllm:
+              - 'engine_versions/vllm.yaml'
+              - 'scripts/engine_miners/vllm_*.py'
+              - 'scripts/engine_miners/_*.py'
+              - 'scripts/engine_miners/build_corpus.py'
+              - 'scripts/validate_invariants.py'
+              - 'scripts/_invariant_validation_common.py'
+              - 'scripts/refresh_invariant_rules.sh'
+              - 'src/llenergymeasure/engines/vllm/invariants.*.yaml'
+              - '.github/workflows/engine-pipeline.yml'
+              - '.github/workflows/_engine-invariants-cell.yml'
+              - '.github/actions/**'
+              - 'scripts/ci/upsert_pr_comment.sh'
+            invariants_tensorrt:
+              - 'engine_versions/tensorrt.yaml'
+              - 'scripts/engine_miners/tensorrt_*.py'
+              - 'scripts/engine_miners/_*.py'
+              - 'scripts/engine_miners/build_corpus.py'
+              - 'scripts/validate_invariants.py'
+              - 'scripts/_invariant_validation_common.py'
+              - 'scripts/refresh_invariant_rules.sh'
+              - 'src/llenergymeasure/engines/tensorrt/invariants.*.yaml'
+              - '.github/workflows/engine-pipeline.yml'
+              - '.github/workflows/_engine-invariants-cell.yml'
+              - '.github/actions/**'
+              - 'scripts/ci/upsert_pr_comment.sh'
+            schemas_transformers:
+              - 'engine_versions/transformers.yaml'
+              - 'docker/Dockerfile.transformers'
+              - 'scripts/engine_introspectors/transformers_*.py'
+              - 'scripts/engine_introspectors/_*.py'
+              - 'src/llenergymeasure/engines/transformers/schema.discovered.json'
+              - '.github/workflows/engine-pipeline.yml'
+              - '.github/workflows/_engine-schemas-cell.yml'
+              - '.github/actions/**'
+              - 'scripts/ci/upsert_pr_comment.sh'
+            schemas_vllm:
+              - 'engine_versions/vllm.yaml'
+              - 'scripts/engine_introspectors/vllm_*.py'
+              - 'scripts/engine_introspectors/_*.py'
+              - 'src/llenergymeasure/engines/vllm/schema.discovered.json'
+              - '.github/workflows/engine-pipeline.yml'
+              - '.github/workflows/_engine-schemas-cell.yml'
+              - '.github/actions/**'
+              - 'scripts/ci/upsert_pr_comment.sh'
+            schemas_tensorrt:
+              - 'engine_versions/tensorrt.yaml'
+              - 'scripts/engine_introspectors/tensorrt_*.py'
+              - 'scripts/engine_introspectors/_*.py'
+              - 'src/llenergymeasure/engines/tensorrt/schema.discovered.json'
+              - '.github/workflows/engine-pipeline.yml'
+              - '.github/workflows/_engine-schemas-cell.yml'
+              - '.github/actions/**'
+              - 'scripts/ci/upsert_pr_comment.sh'
+
+      - name: Compute matrix outputs (#564 dynamic engine matrix)
+        id: compute
+        env:
+          EVENT: ${{ github.event_name }}
+          T_BUILD: ${{ steps.changes.outputs.transformers_build }}
+          I_T: ${{ steps.changes.outputs.invariants_transformers }}
+          I_V: ${{ steps.changes.outputs.invariants_vllm }}
+          I_R: ${{ steps.changes.outputs.invariants_tensorrt }}
+          S_T: ${{ steps.changes.outputs.schemas_transformers }}
+          S_V: ${{ steps.changes.outputs.schemas_vllm }}
+          S_R: ${{ steps.changes.outputs.schemas_tensorrt }}
+        run: |
+          # On workflow_dispatch the dorny step is skipped; treat all flags
+          # as 'true' so a manual run exercises the full pipeline.
+          if [[ "$EVENT" == "workflow_dispatch" ]]; then
+            T_BUILD=true; I_T=true; I_V=true; I_R=true; S_T=true; S_V=true; S_R=true
+          fi
+
+          # Build cell objects for the "others" (vllm + tensorrt) matrix
+          # via #564's discover-engines-from-SSOT pattern. Adding M5 SGLang
+          # = adding 'sglang' to the SSOT yaml + this list.
+          INV_OTHERS='[]'
+          [[ "$I_V" == "true" ]] && INV_OTHERS=$(jq -c '. + [{"engine":"vllm","runner":"self-hosted","image-source":"dockerhub"}]' <<<"$INV_OTHERS")
+          [[ "$I_R" == "true" ]] && INV_OTHERS=$(jq -c '. + [{"engine":"tensorrt","runner":"self-hosted","image-source":"ngc"}]' <<<"$INV_OTHERS")
+
+          SCH_OTHERS='[]'
+          [[ "$S_V" == "true" ]] && SCH_OTHERS=$(jq -c '. + [{"engine":"vllm","runner":"self-hosted","image-source":"dockerhub"}]' <<<"$SCH_OTHERS")
+          [[ "$S_R" == "true" ]] && SCH_OTHERS=$(jq -c '. + [{"engine":"tensorrt","runner":"self-hosted","image-source":"ngc"}]' <<<"$SCH_OTHERS")
+
+          {
+            echo "transformers_build=${T_BUILD:-false}"
+            echo "invariants_transformers=${I_T:-false}"
+            echo "schemas_transformers=${S_T:-false}"
+            echo "invariants_others_cells=${INV_OTHERS}"
+            echo "schemas_others_cells=${SCH_OTHERS}"
+          } >> "$GITHUB_OUTPUT"
+
+  mint-app-token:
+    # Single token mint per orchestrator run (H4-fixed). Skipped on fork
+    # PRs (App secrets are not available cross-fork).
+    if: |
+      github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    outputs:
+      token: ${{ steps.token.outputs.token }}
+    steps:
+      - id: token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+  build-transformers:
+    # Builds transformers runtime image and pushes it to transformers-cache
+    # for downstream cells to pull. Fires on (PR with build paths matched)
+    # OR (schedule) OR (workflow_dispatch).
+    needs: filter
+    if: |
+      always() && (
+        (github.event_name == 'pull_request' && needs.filter.outputs.transformers_build == 'true')
+        || github.event_name == 'schedule'
+        || github.event_name == 'workflow_dispatch'
+      )
+    runs-on: self-hosted
+    timeout-minutes: 90
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve transformers version from SSOT
+        id: version
+        run: |
+          VER=$(yq '.library.current_version' engine_versions/transformers.yaml)
+          if [[ -z "$VER" || "$VER" == "null" ]]; then
+            echo "Could not resolve transformers version from engine_versions/transformers.yaml" >&2
+            exit 1
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine cache + no-cache flag
+        id: targets
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            echo "no_cache=true" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "no_cache=${{ inputs.no_cache }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "no_cache=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build transformers image and push runtime tag for downstream cells
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile.transformers
+          target: runtime
+          tags: ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
+          push: true
+          no-cache: ${{ steps.targets.outputs.no_cache }}
+          build-args: |
+            TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache
+            type=registry,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
+            type=registry,ref=ghcr.io/${{ github.repository }}/transformers:latest
+            type=registry,ref=ghcr.io/${{ github.repository }}/transformers:transformers-${{ steps.version.outputs.version }}
+          cache-to: type=registry,mode=max,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache
+
+      - name: Emit build summary
+        run: |
+          {
+            echo "## Engine image build"
+            echo
+            echo "- Trigger: \`${{ github.event_name }}\`"
+            echo "- Transformers version: \`${{ steps.version.outputs.version }}\`"
+            echo "- Buildcache ref: \`ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache\`"
+            echo "- No-cache rebuild: \`${{ steps.targets.outputs.no_cache }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  invariants-transformers:
+    needs: [filter, mint-app-token, build-transformers]
+    if: |
+      always()
+      && needs.mint-app-token.result == 'success'
+      && needs.filter.outputs.invariants_transformers == 'true'
+      && (needs.build-transformers.result == 'success' || needs.build-transformers.result == 'skipped')
+    uses: ./.github/workflows/_engine-invariants-cell.yml
+    with:
+      engine: transformers
+      runner: ubuntu-latest
+      image-source: ghcr-cache
+      pr-number: ${{ needs.filter.outputs.pr_number }}
+      pr-head-repo: ${{ needs.filter.outputs.pr_head_repo }}
+      app-token: ${{ needs.mint-app-token.outputs.token }}
+    secrets: inherit
+
+  invariants-others:
+    needs: [filter, mint-app-token]
+    if: |
+      always()
+      && needs.mint-app-token.result == 'success'
+      && needs.filter.outputs.invariants_others_cells != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        cell: ${{ fromJSON(needs.filter.outputs.invariants_others_cells) }}
+    uses: ./.github/workflows/_engine-invariants-cell.yml
+    with:
+      engine: ${{ matrix.cell.engine }}
+      runner: ${{ matrix.cell.runner }}
+      image-source: ${{ matrix.cell.image-source }}
+      pr-number: ${{ needs.filter.outputs.pr_number }}
+      pr-head-repo: ${{ needs.filter.outputs.pr_head_repo }}
+      app-token: ${{ needs.mint-app-token.outputs.token }}
+    secrets: inherit
+
+  schemas-transformers:
+    needs: [filter, mint-app-token, build-transformers]
+    if: |
+      always()
+      && needs.mint-app-token.result == 'success'
+      && needs.filter.outputs.schemas_transformers == 'true'
+      && (needs.build-transformers.result == 'success' || needs.build-transformers.result == 'skipped')
+    uses: ./.github/workflows/_engine-schemas-cell.yml
+    with:
+      engine: transformers
+      runner: ubuntu-latest
+      image-source: ghcr-cache
+      pr-number: ${{ needs.filter.outputs.pr_number }}
+      pr-head-repo: ${{ needs.filter.outputs.pr_head_repo }}
+      app-token: ${{ needs.mint-app-token.outputs.token }}
+    secrets: inherit
+
+  schemas-others:
+    needs: [filter, mint-app-token]
+    if: |
+      always()
+      && needs.mint-app-token.result == 'success'
+      && needs.filter.outputs.schemas_others_cells != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        cell: ${{ fromJSON(needs.filter.outputs.schemas_others_cells) }}
+    uses: ./.github/workflows/_engine-schemas-cell.yml
+    with:
+      engine: ${{ matrix.cell.engine }}
+      runner: ${{ matrix.cell.runner }}
+      image-source: ${{ matrix.cell.image-source }}
+      pr-number: ${{ needs.filter.outputs.pr_number }}
+      pr-head-repo: ${{ needs.filter.outputs.pr_head_repo }}
+      app-token: ${{ needs.mint-app-token.outputs.token }}
+    secrets: inherit
+
+  writeback:
+    # Aggregate writeback (H4-fixed). Downloads all per-cell writeback
+    # artefacts and performs ONE git push. Lenient gating: runs as long
+    # as ANY cell uploaded its writeback artefact, so partial-success
+    # PRs (vllm pass + tensorrt fail) still land vllm's changes — same
+    # availability as today's per-cell writeback.
+    needs: [filter, mint-app-token, invariants-transformers, invariants-others, schemas-transformers, schemas-others]
+    if: |
+      always()
+      && github.event_name == 'pull_request'
+      && needs.filter.outputs.pr_number != ''
+      && needs.filter.outputs.pr_head_repo == github.repository
+      && needs.mint-app-token.result == 'success'
+      && (
+        needs.invariants-transformers.result == 'success'
+        || needs.invariants-others.result == 'success'
+        || needs.schemas-transformers.result == 'success'
+        || needs.schemas-others.result == 'success'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+          token: ${{ needs.mint-app-token.outputs.token }}
+
+      - name: Download all writeback artefacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '{invariants,schemas}-writeback-*'
+          merge-multiple: true
+          path: /tmp/writeback-staging
+
+      - name: Apply artefacts and emit single commit
+        env:
+          APP_ID: ${{ secrets.APP_ID }}
+        run: |
+          set -euo pipefail
+          if [[ ! -d /tmp/writeback-staging ]] || [[ -z "$(ls -A /tmp/writeback-staging 2>/dev/null)" ]]; then
+            echo "No writeback artefacts uploaded by any cell; nothing to commit."
+            exit 0
+          fi
+
+          # Compose a per-cell summary from the artefact directory shape.
+          # Each artefact is a folder named {invariants,schemas}-writeback-<engine>
+          # — but merge-multiple flattens it; we infer cells from the file
+          # paths themselves.
+          CONTRIBUTORS=()
+          for ENGINE in transformers vllm tensorrt; do
+            INV_FILES=(
+              "/tmp/writeback-staging/src/llenergymeasure/engines/${ENGINE}/invariants.proposed.yaml"
+              "/tmp/writeback-staging/src/llenergymeasure/engines/${ENGINE}/invariants.validated.yaml"
+            )
+            SCH_FILES=(
+              "/tmp/writeback-staging/src/llenergymeasure/engines/${ENGINE}/schema.discovered.json"
+            )
+            INV_PRESENT=false; SCH_PRESENT=false
+            for f in "${INV_FILES[@]}"; do [[ -f "$f" ]] && INV_PRESENT=true; done
+            for f in "${SCH_FILES[@]}"; do [[ -f "$f" ]] && SCH_PRESENT=true; done
+            $INV_PRESENT && CONTRIBUTORS+=("invariants:${ENGINE}")
+            $SCH_PRESENT && CONTRIBUTORS+=("schemas:${ENGINE}")
+          done
+
+          # Apply staging onto the working tree, preserving relative paths.
+          rsync -a /tmp/writeback-staging/ ./
+
+          git config user.name  "llem-ci-bot[bot]"
+          git config user.email "${APP_ID}+llem-ci-bot[bot]@users.noreply.github.com"
+
+          # Stage only the paths writeback artefacts may produce.
+          git add \
+            'src/llenergymeasure/engines/*/invariants.proposed.yaml' \
+            'src/llenergymeasure/engines/*/invariants.validated.yaml' \
+            'src/llenergymeasure/engines/*/schema.discovered.json' \
+            'engine_versions/*.yaml' \
+            'docs/user/generated/invariants-*.md' \
+            'docs/user/generated/curation-*.md' \
+            'docs/user/generated/schema-*.md' \
+            2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "No engine-pipeline artefact changes to commit."
+            exit 0
+          fi
+
+          # Pull in any rebased PR head (e.g., human pushed concurrently).
+          git pull --rebase --autostash || {
+            echo "::warning::rebase failed; aborting writeback to avoid corrupt history."
+            exit 0
+          }
+
+          CONTRIBUTORS_LIST="$(IFS=, ; echo "${CONTRIBUTORS[*]}")"
+          git commit -m "chore(bot): writeback from cells: ${CONTRIBUTORS_LIST}"
+          git push --force-with-lease
