@@ -1,3 +1,7 @@
+---
+slug: /methodology/methodology
+---
+
 # Measurement Methodology
 
 How LLenergyMeasure ensures reproducible, reliable energy measurements.
