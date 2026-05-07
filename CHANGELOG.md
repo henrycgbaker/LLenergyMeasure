@@ -1,410 +1,461 @@
 # Changelog
 
 All notable changes to this project are documented here.
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (0.x pre-release series).
+Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can occur between any 0.x release.
 
 ## [Unreleased]
 
+## [v0.10.0] - TBD
+
+Post-v0.9.0 work: engine-coupling restructure, engine-invariants pipeline, Docusaurus docs site, Z-engines layout, and CI hardening.
+
 ### Breaking Changes
 
-- **`engine: pytorch` → `engine: transformers` rename (YAML / API / engine identifier).** The `pytorch` engine identifier has been renamed to `transformers` throughout. The engine runs HuggingFace Transformers `.generate()` — PyTorch is the tensor substrate, not the engine. This aligns the identifier with `pip install transformers` and the library that owns the inference API.
+- **`engine: pytorch` renamed to `engine: transformers`** throughout YAML, CLI, and Python API.
+  The `pytorch` identifier has been renamed to `transformers` - the engine runs HuggingFace
+  Transformers `.generate()`. PyTorch is the tensor substrate, not the engine, and renaming aligns
+  with `pip install transformers` and the library that owns the inference API.
 
-  **Migrate YAML configs** (one-liner):
+  Migrate with:
   ```bash
   sed -i 's/engine: pytorch/engine: transformers/g; s/^pytorch:/transformers:/g' your-study.yaml
   ```
 
-  **Affected identifiers:**
-  - YAML engine value: `engine: pytorch` → `engine: transformers`
-  - YAML section key: `pytorch:` → `transformers:`
-  - Python class: `PyTorchConfig` → `TransformersConfig`
-  - Python constant: `ENGINE_PYTORCH = "pytorch"` → `ENGINE_TRANSFORMERS = "transformers"`
-  - PyPI extra: `pip install llenergymeasure[pytorch]` → `llenergymeasure[transformers]`
-  - Env vars: `LLEM_RUNNER_PYTORCH` → `LLEM_RUNNER_TRANSFORMERS`, `LLEM_IMAGE_PYTORCH` → `LLEM_IMAGE_TRANSFORMERS`
-  - Docker image tags: `llenergymeasure:pytorch` → `llenergymeasure:transformers`, `Dockerfile.pytorch` → `Dockerfile.transformers`
+  Affected: YAML engine value, YAML section key, `PyTorchConfig` class, `ENGINE_PYTORCH` constant,
+  `[pytorch]` extra, `LLEM_RUNNER_PYTORCH`/`LLEM_IMAGE_PYTORCH` env vars, Docker image tags.
+  Preserved (PyTorch the library - unchanged): `import torch`, `torch_dtype`, `pytorch/pytorch:*`
+  base image, `PYTORCH_VERSION` build args, `torch_compile_backend` field. ([#261])
 
-  **Preserved** (PyTorch the library — unchanged):
-  - `import torch` and all `torch.*` API references
-  - `torch_dtype` field
-  - `FROM pytorch/pytorch:...` Docker base image tag
-  - `PYTORCH_VERSION` / `PYTORCH_DEVEL_VERSION` build args
-  - `torch_compile_backend` field (PyTorch's `torch.compile(backend=...)` parameter)
+- **`backend:` field and `--backend` flag renamed to `engine:`** in YAML configs, CLI, and result
+  JSON. Aligns terminology with how vLLM, TRT-LLM, and HuggingFace use "engine" natively.
 
-- **`backend:` → `engine:` rename (YAML / CLI / API).** The experiment configuration field, CLI flag, and all public symbols now use "engine" instead of "backend" throughout. This aligns terminology with how vLLM, TRT-LLM, and HuggingFace themselves use "engine" (EngineArgs, LLM engine, etc.) and removes ambiguity with tensor/compute/attention backends.
-
-  **Migrate YAML configs** (one-liner):
+  Migrate with:
   ```bash
   sed -i 's/^\(\s*\)backend:/\1engine:/g' your-study.yaml
   ```
 
-  **Affected identifiers:**
-  - YAML field: `backend: pytorch/vllm/tensorrt` → `engine: transformers/vllm/tensorrt`
-  - CLI flag: `llem run --backend` → `llem run --engine` (short: `-b` → `-e`)
-  - Result JSON fields: `"backend"` / `"backend_version"` → `"engine"` / `"engine_version"`
-  - Python symbols: `BackendPlugin` → `EnginePlugin`, `BackendError` → `EngineError`, `BACKEND_*` constants → `ENGINE_*`, `get_backend()` → `get_engine()`, `detect_default_backend()` → `detect_default_engine()`
+  Affected: YAML field, CLI flag (`-b` becomes `-e`), result JSON fields `"backend"` and
+  `"backend_version"`, Python symbols `BackendPlugin`, `BackendError`, `BACKEND_*` constants,
+  `get_backend()`, `detect_default_backend()`. ([#260])
 
-  **Preserved** (these are kernel/compute backends, not inference engines — unchanged):
-  - `vllm.attention.backend` — vLLM's attention kernel selector (Flash/FlashInfer/SDPA)
-  - `transformers.torch_compile_backend` — PyTorch `torch.compile(backend=...)` parameter
-  - `TensorRTConfig.backend` — TRT-LLM's internal `LLM(backend=...)` parameter
-  - Energy measurement backends (Zeus, NVML, CodeCarbon)
+- **`tensorrt.tp_size` renamed to `tensorrt.tensor_parallel_size`** to match `TrtLlmArgs` native
+  naming. `transformers.tp_size` is unchanged (follows the `accelerate` convention). ([#269])
 
-### Fixed
+- **Typed-field curation for engine configs.** Applies the maximalist rubric "type anything with a
+  plausible energy/throughput/latency path" to each engine's Pydantic surface. Dropped fields
+  remain settable via YAML (`extra="allow"` passthrough unless noted). ([#270])
 
-- **`Dockerfile.transformers` stale references.** The Dockerfile was renamed in #261 but still installed the now-nonexistent `[pytorch]` extra and carried header comments referencing the old `Dockerfile.pytorch` file and `llenergymeasure-pytorch` tag. Updated to install `.[transformers]` and corrected all header comments. The `pytorch/pytorch:*` base image tags are preserved - PyTorch the library is unchanged, only the engine identifier was renamed.
+  Transformers: drops `revision` (reproducibility metadata) and `trust_remote_code` (security
+  toggle); adds `allow_tf32`, `autocast_enabled`, `autocast_dtype`, `low_cpu_mem_usage`.
 
-- **`tensorrt.tp_size` → `tensorrt.tensor_parallel_size`.** Aligns the TensorRT-LLM Pydantic field name with `TrtLlmArgs.tensor_parallel_size`. `transformers.tp_size` is **preserved** — it follows the `accelerate` convention and HF has no single native `tensor_parallel_size` equivalent.
+  vLLM: drops `sampling.max_tokens` and `beam_search.max_tokens` (duplicates of
+  `ExperimentConfig.max_output_tokens`); adds `num_scheduler_steps`, `max_seq_len_to_capture`,
+  `distributed_executor_backend`; replaces flat speculative fields with nested `VLLMSpeculativeConfig`.
 
-  **Migrate YAML configs** (scope-limited — manual edit is safer as `tp_size` also appears legitimately under `transformers:`; in your `tensorrt:` section rename `tp_size: N` → `tensor_parallel_size: N`).
+  TensorRT-LLM: drops `engine_path`, `TensorRTCalibConfig`, `TensorRTBuildCacheConfig`,
+  `sampling.return_perf_metrics`, and `backend: Literal["trt"]`; adds `pipeline_parallel_size`
+  and `max_num_tokens`.
 
-  **Affected identifiers:**
-  - YAML field: `tensorrt.tp_size` → `tensorrt.tensor_parallel_size`
-  - Python: `TensorRTConfig(tp_size=N)` → `TensorRTConfig(tensor_parallel_size=N)`
-  - Sweep key: `"tensorrt.tp_size"` → `"tensorrt.tensor_parallel_size"`
+- **Engines (vLLM, TensorRT-LLM) now run exclusively inside Docker.** Host extras `[vllm]` and
+  `[tensorrt]` removed. Only `[transformers]` remains host-installable. ([#498])
 
-  **Preserved:**
-  - `transformers.tp_size` — HF accelerate convention, unchanged
-  - `vllm.engine.tensor_parallel_size` — already native name, unchanged
+- **`dtype:` and `decoder:` fields migrated into per-engine sub-configs.** Top-level
+  `ExperimentConfig.dtype` and `ExperimentConfig.decoder` have moved to each engine's own
+  configuration section. ([#290], [#291])
 
-- **Typed-field curation for engine configs (maximalist rubric).** Applies the rubric "type anything with a plausible energy/throughput/latency path" to each engine's Pydantic surface. Dropped fields remain settable via YAML (`extra="allow"` passthrough unless noted).
+- **`--dtype` and `--batch-size` CLI flags removed.** Both fields are now set via YAML config only.
+  ([#292])
 
-  **Transformers** — drops 2 typed fields, adds 4:
-  - Dropped: `revision` (D1 reproducibility metadata), `trust_remote_code` (D1 security toggle). Both remain settable via `extra="allow"`.
-  - Added: `allow_tf32`, `autocast_enabled`, `autocast_dtype`, `low_cpu_mem_usage`.
-  - Also adds `tp_plan` and `tp_size` to the introspection param list (were missing).
-
-  **vLLM** — drops 4 typed fields, adds 3, replaces 2 with typed sub-config:
-  - Dropped: `sampling.max_tokens`, `beam_search.max_tokens` (R2 dups of `ExperimentConfig.max_output_tokens`; bridged in adapter). `speculative_model` and `num_speculative_tokens` replaced (not simply dropped).
-  - Added: `num_scheduler_steps`, `max_seq_len_to_capture`, `distributed_executor_backend`.
-  - Replaced: flat `speculative_model` + `num_speculative_tokens` → typed nested `VLLMSpeculativeConfig` sub-config (mirrors vLLM native shape; sweepable via dotted paths). Migration: `{speculative_model: m, num_speculative_tokens: k}` → `{speculative: {model: m, num_speculative_tokens: k}}`.
-  - `VLLMAttentionConfig` stays nested; all 10 fields (including `use_trtllm_attention`, `use_trtllm_ragged_deepseek_prefill`) remain typed.
-
-  **TensorRT-LLM** — drops 9 typed fields (incl. 2 sub-config classes), adds 2:
-  - Dropped: `backend: Literal["trt"]` (D2), `engine_path` (D1), entire `TensorRTCalibConfig` (D3 build-only PTQ), entire `TensorRTBuildCacheConfig` (D1 cache plumbing), `sampling.return_perf_metrics` (D1). All remain passable via `extra="allow"`.
-  - Added: `pipeline_parallel_size` (MLPerf v5.0 Blackwell), `max_num_tokens` (trtllm-bench axis).
-  - `fast_build` kept typed — build-time knob with runtime consequences.
+- **`precision:` field renamed to `dtype:`** with standard value strings (e.g. `float16`, `bfloat16`
+  instead of the prior enum). ([#196])
 
 ### Added
 
-- **Host/container schema fingerprint verification.** Docker images are now stamped at build time with a `llem.expconf.schema.fingerprint` OCI label (SHA-256 of `ExperimentConfig.model_json_schema()`) plus `org.opencontainers.image.version`. `StudyRunner._prepare_images` compares the label to the host fingerprint before any experiment runs and aborts with an actionable rebuild hint on mismatch. The check is bypassable via `LLEM_SKIP_IMAGE_CHECK=1`.
-- **`llem doctor` CLI command.** Reports per-backend image status (OK / MISMATCH / UNVERIFIED / UNREACHABLE) and exits non-zero on mismatch for CI-friendly gating.
-- **Inline schema status in the image-prep progress line** (`schema: ok` / `schema: mismatch` / `schema: unverified` / `schema: bypassed`), rendered via the existing metadata display with no changes to the progress protocol.
-- **Engine parameter discovery (`scripts/discover_engine_schemas.py`).** Introspects installed engine packages inside their Docker images and emits JSON schemas describing every configurable parameter (types, defaults, descriptions where available, discovery limitations). Supports `vllm`, `tensorrt`, and `transformers`; `--all` discovers every engine found in the current image.
-- **Vendored engine schemas at `src/llenergymeasure/config/discovered_schemas/{vllm,tensorrt,transformers}.json`.** These are the canonical SSOT for "what CAN I configure per engine", shipped inside the wheel. Regenerate with `make discover-schema ENGINE=<engine>` (writes to the vendored path and prints `git diff`; committing is the review gate).
-- **`make discover-schema` / `make discover-schemas-all` targets.** Rebuild vendored engine schemas via `./scripts/update_engine_schema.sh`.
-- **`SchemaLoader` class (`llenergymeasure.config.SchemaLoader`).** Reads vendored engine schemas via `importlib.resources` with per-instance caching and major-version envelope validation. Raises `UnsupportedSchemaVersionError` on envelope breaking changes. Exports `DiscoveredSchema`, `DiscoveryLimitation`, and `UnsupportedSchemaVersionError` from `llenergymeasure.config`.
+- `llem doctor` CLI command reports per-engine image status (OK / MISMATCH / UNVERIFIED /
+  UNREACHABLE) and exits non-zero on mismatch for CI gating. ([#256])
+- Host/container schema fingerprint verification: Docker images stamped at build time with a
+  `llem.expconf.schema.fingerprint` OCI label. Mismatches abort with a rebuild hint. Bypassable
+  via `LLEM_SKIP_IMAGE_CHECK=1`. ([#256])
+- `SchemaLoader` class (`llenergymeasure.config.SchemaLoader`) reads vendored engine schemas via
+  `importlib.resources` with per-instance caching and major-version envelope validation. ([#268])
+- Engine parameter discovery script (`scripts/discover_engine_schemas.py`) introspects installed
+  engine packages inside their Docker images. Supports `vllm`, `tensorrt`, `transformers`, and
+  `--all`. ([#266])
+- Vendored engine parameter schemas at `src/llenergymeasure/engines/{vllm,tensorrt,transformers}/`.
+  Regenerate with `make discover-schema ENGINE=<engine>`. ([#266])
+- Per-engine sub-package layout (`src/llenergymeasure/engines/<engine>/`) co-locating runtime data,
+  schema JSON, and engine invariants YAML. ([#570])
+- Per-engine SSOT for library version pins (`engine_versions/`) used by Renovate, Dockerfiles,
+  and the invariant-mining pipeline. ([#477])
+- Engine invariants mining pipeline: static and dynamic miners for all three engines extract
+  validation rules as a reproducible corpus. ([#375], [#434], [#444])
+- Vendor-replay CI gate validates corpus against live engine packages; TensorRT gate runs on
+  self-hosted GPU runner. ([#414], [#440], [#447])
+- `probe` primitive for binary miner reusability check. ([#482])
+- `ConfigProbe` protocol and per-engine `probe_config()` implementations. ([#293])
+- Configurable per-experiment timeout via `study_execution.experiment_timeout_seconds` (default
+  600 s), replacing the previous `max(n_prompts * 2, 600)` heuristic. Both local and Docker paths
+  honour the same field. ([#250])
+- Disk-persisted baseline power cache with configurable strategy and TTL enforcement. ([#242], [#243])
+- Per-study JSONL log capturing runtime warnings and container stderr. ([#395])
+- `llem report-gaps` command proposes corpus rules from runtime observations. ([#397])
+- Study robustness features: circuit breaker, resume-on-failure, GPU locks, container lifecycle
+  management. ([#214])
+- Live per-experiment progress display with Rich panels and sub-bullet heartbeats. ([#152], [#165])
+- `.env`-based runtime config and configurable `device_map` default. ([#275])
+- `trust_remote_code` opt-in via `LLEM_TRUST_REMOTE_CODE` env var. ([#274])
+- TRT-LLM build cache configurable via `LLEM_TRT_BUILD_CACHE_{ENABLED,DIR}` env vars. ([#277])
+- Tensor parallelism fields (`tp_plan`, `tp_size`) for the Transformers engine. ([#161])
+- Cross-field operators in vendored-rules loader. ([#410])
+- Docusaurus documentation site at `website/` serving user, methodology, API, and architecture
+  docs. ([#566])
+- Per-engine discovered-schema Markdown digest rendered to `docs/`. ([#560])
+- Architecture documentation suite in `docs/architecture/`. ([#433])
+- Per-engine engine-invariants and engine-schemas CI workflows with cross-pipeline coordination
+  (consolidated from predecessor mine + vendor + parameter-discovery workflows). ([#484], [#486])
+- Engine-pipeline orchestrator (`engine-pipeline.yml`) as single reusable workflow entry point.
+  ([#514], [#573])
+- Cloudflare Pages PR preview deploy workflow. ([#575])
+- SSOT audit trail and GHCR image retention policies. ([#546])
 
 ### Changed
 
-- **Per-experiment timeout is now configurable** via `study_execution.experiment_timeout_seconds` (default 600s). Replaces the previous `max(n_prompts*2, 600)` heuristic. Both the local subprocess path and the Docker container path honour the same field, and Docker-path timeouts are normalised to `TimeoutError` so the circuit breaker counts them consistently across both paths.
-- **Re-typed `tensorrt.backend` as `Literal["trt", "pytorch", "_autodeploy"] | None`.** Reverses the prior curation-pass drop for this one field — the original `D2 single-option enum` verdict was incorrect for TRT-LLM >= 0.13, where `backend` selects between three runtime paths with distinct measurement signatures (`trt` = AOT-compiled engine, `pytorch` = eager runtime with the same scheduler/KV cache, `_autodeploy` = experimental). Default `None` lets TRT-LLM auto-pick. The consumer side no longer hardcodes `"backend": "trt"`; the kwarg is only set when the typed field is explicitly provided.
+- Re-typed `tensorrt.backend` as `Literal["trt", "pytorch", "_autodeploy"] | None` (reverses a
+  prior incorrect curation-pass drop; `None` lets TRT-LLM auto-pick the runtime path). ([#276])
+- Engine-invariants pipeline consolidated from separate mine + vendor + parameter-discovery
+  workflows into a single orchestrated flow with sequential downstream pipelines. ([#484], [#573])
+- `study_execution` field names updated (execution fields renamed, `reverse`/`latin_square`
+  ordering modes added). ([#190])
+- Dataset restructured into nested `DatasetConfig` sub-model. ([#195])
+- `OutputConfig` extracted from `ExperimentConfig` as a separate sub-model. ([#203])
+- `EnergyConfig` flattened to `energy_sampler` + `gpu_telemetry` fields. ([#201])
+- `study_name` field replaces generic `name` field in study configs. ([#182])
+- `n_prompts` default reduced to 50; `max_output_tokens` default bumped to 256. ([#175], [#213])
+- Renovate customManager retargeted from Dockerfile ARGs to `engine_versions/` SSOT. ([#481])
+- First-party `Dockerfile.vllm` and `Dockerfile.tensorrt` replaced with upstream-direct images
+  plus volume mounts. ([#509])
 
 ### Fixed
 
-- **`ImportError: cuKernelGetName` when importing `tensorrt_llm` in our image.** `docker/Dockerfile.tensorrt` prepended `/usr/local/tensorrt/lib` to `LD_LIBRARY_PATH` but left the NGC-inherited ordering intact, placing `/usr/local/cuda/compat/lib.real` (the image-bundled compat library, CUDA 12.2) ahead of `/usr/local/cuda/compat/lib` (where nvidia-container-toolkit bind-mounts the host driver at `--gpus` time). `libtensorrt_llm.so` therefore resolved `libcuda.so.1` against the bundled library and failed to find `cuKernelGetName`, a symbol added in CUDA 12.4. Fix: prepend `/usr/local/cuda/compat/lib` so the host-driver mount takes precedence.
+- `ImportError: cuKernelGetName` when importing `tensorrt_llm`: LD_LIBRARY_PATH ordering placed
+  the bundled compat CUDA 12.2 library ahead of the host-driver mount. Fixed by prepending
+  `/usr/local/cuda/compat/lib` so the host-driver mount takes precedence. ([#264])
+- Miner `added_at` timestamp lost on re-mine; f-string `message_template` fields now rendered
+  correctly. ([#523])
+- `Dockerfile.transformers` stale references to the old `[pytorch]` extra and header comments
+  corrected. ([#265])
+- Config hash mismatch in Docker study runs resolved. ([#176])
+- Non-matching engine sections stripped correctly during multi-engine grid expansion. ([#171])
+- Docker auto-elevation enforced for multi-engine studies. ([#172])
+- Baseline cache path resolved before Docker bind-mount. ([#248])
 
 ### Removed
 
-- Internal helper `llenergymeasure.study.runner._calculate_timeout` (replaced by direct config reads; also removes a layer-boundary import from `api/_impl.py`).
+- Internal helper `llenergymeasure.study.runner._calculate_timeout` (replaced by direct config
+  reads). ([#529])
+- First-party `Dockerfile.vllm` and `Dockerfile.tensorrt` engine images. ([#509])
+- Predecessor CI workflows: `auto-mine.yml`, `vendor-tensorrt.yml`, `vendor-vllm.yml`,
+  `parameter-discovery.yml`, and predecessors. ([#483], [#485])
 
-## [v2.0.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v2.0.0) (2026-01-14)
 
-Refactored CLI-based tool with clean architecture, comprehensive documentation, and improved configuration UX.
+## [v0.9.0] - 2026-03-20
+
+Docker infrastructure, vLLM engine, TensorRT-LLM engine, package restructure, test hardening, and CI.
 
 ### Added
 
-- **Architectural Refactor**
-  - Dependency injection via protocol-based components (`EnergyBackend`, `ModelLoader`, `InferenceEngine`)
-  - `ExperimentOrchestrator` manages lifecycle with injected dependencies
-  - Late aggregation pattern: raw per-process results saved separately, aggregated on-demand
-  - Pydantic models throughout for validated configs and results
-  - Modular package structure: `config/`, `core/`, `domain/`, `orchestration/`, `results/`, `state/`
-
-- **Documentation Overhaul**
-  - New `docs/` directory with user-facing guides: `quickstart.md`, `cli.md`, `deployment.md`
-  - Comprehensive CLI reference with all commands, flags, and examples
-  - Implemented testing parameters table in README for quick reference
-  - Streamlined README focusing on essentials; detailed docs moved to dedicated files
-
-- **Enhanced Configuration UX**
-  - Intuitive YAML field names: `gpus`, `batching`, `decoder`, `quantization` (legacy names still supported)
-  - `config show` displays resolved config with colour-coded sections
-  - Grid config validation with `--validate` and `--strict` flags
-  - Config param wiring tests ensuring all YAML options reach their targets
-
-- **Decoder Sampling Presets**
-  - `preset` field: `deterministic`, `standard`, `creative`, `factual`
-  - Presets expand to appropriate temperature/top_p/top_k combinations
-  - Additional decoder params: `min_p`, `no_repeat_ngram_size`
-
-- **Multi-Cycle Experiments** for statistical robustness
-  - `--cycles N` flag runs the same experiment N times (1–10)
-  - Statistical aggregation: mean, standard deviation, 95% confidence intervals
-  - Coefficient of variation (CV) for measurement stability assessment
-  - Uses t-distribution for small sample confidence intervals
-
-- **Scheduled Experiments** (daemon mode) for temporal variation studies
-  - Interval-based: `--interval 6h`, time-of-day: `--at 09:00`
-  - Day filtering: `--days mon,wed,fri` or `--days weekdays`
-  - Graceful shutdown on SIGINT/SIGTERM with progress tracking
-
-- **MLPerf-Style Traffic Simulation**
-  - `TrafficSimulation` config with Poisson and constant arrival modes
-  - `target_qps` parameter for queries-per-second arrival rate
-  - Poisson mode uses exponential inter-arrival times (statistically realistic)
-
-- **Industry-Standard Batching Strategies** (MLPerf/vLLM terminology)
-  - `strategy` field: `static`, `dynamic`, `sorted_static`, `sorted_dynamic`
-  - `max_tokens_per_batch` for dynamic token-aware batching
-  - Length sorting reduces padding waste
-
-- **MIG GPU Support**
-  - Topology detection and UUID handling for NVIDIA MIG instances
-  - Correct energy attribution per MIG partition
-
-- **Proper Multi-GPU Parallelism** (replaces v1.x naive `device_map="auto"` approach)
-  - v1.x used `accelerate launch` with `CUDA_VISIBLE_DEVICES` for multi-GPU, which auto-distributed layers but without coordinated parallel execution
-  - v2.0 adds explicit parallelism strategies with proper distributed execution
-
-- **Tensor Parallelism (TP)** for large model inference
-  - Native HuggingFace tensor parallelism via `tp_plan="auto"`
-  - Splits layers horizontally so GPUs compute in parallel
-  - Supported models: Llama, Mistral, Mixtral, Qwen, Phi, Gemma, Falcon, MPT, BLOOM, OPT
-  - Uses `torchrun` launcher for distributed initialisation
-
-- **Pipeline Parallelism (PP)** for multi-GPU inference
-  - Splits model vertically into sequential stages across GPUs
-  - Each GPU holds a subset of layers (e.g., layers 0-15 on GPU 0, 16-31 on GPU 1)
-  - Useful when model doesn't fit on single GPU but TP isn't supported
-
-- **Parallelism Configuration** via `sharding` config
-  - `strategy`: `none`, `tensor_parallel`, `pipeline_parallel`
-  - `num_shards`: Number of GPUs for parallelism
-  - `tp_plan`: HuggingFace native tensor parallel plan
-  - Validation for GPU count, model compatibility, and configuration conflicts
-
-- **E2E Experiment Workflow**
-  - Auto-aggregation on experiment completion
-  - Experiment resumption for interrupted runs
+- NVML GPU memory residual check before experiment dispatch (threshold 1 GB), preventing
+  stale-process contamination. ([#24], [#26])
+- Docker runner infrastructure: container lifecycle management, volume mounts, GPU index
+  resolution. ([#27], [#124])
+- Docker pre-flight environment checks. ([#28])
+- TensorRT-LLM Docker image rewrite with CUDA 12.6.2 upgrade. ([#114])
+- `TensorRTConfig` expanded to full TRT-LLM parameter schema. ([#115])
+- `mpirun` injection for TensorRT-LLM tensor parallelism. ([#116])
+- `BackendPlugin.validate_config` protocol method. ([#121])
+- `TensorRTBackend` implementation registered in `get_backend()`. ([#122])
+- `TensorRTConfig.engine_path` for pre-compiled engine loading. ([#143])
+- 9-layer import-linter architecture enforcement in CI. ([#135], [#144])
 
 ### Changed
 
-- YAML config uses shorter, intuitive field names (backwards-compatible aliases preserved)
-- Traffic simulation uses proper Poisson arrival process instead of simple delays
-- Batching config uses explicit `strategy` field instead of boolean `dynamic_batching`
+- Package restructured with file moves, import rewrites, and layer boundary fixes. ([#133], [#134])
+- Prompt loading moved outside the NVML measurement window. ([#145])
+- Shared backend helpers extracted; dead warmup code removed. ([#140])
+- Test suite restructured; `importorskip` guards added for optional dependencies. ([#137], [#138])
 
-### Dropped (From v1.x Plans)
+### Fixed
 
-- **FSDP Support**: Confirmed as training-only; `device_map="auto"` is correct for inference
-- **Scenario Metadata**: Covered by existing `extra_metadata` field
+- `accelerate` restored as a `[pytorch]` optional dependency (accidentally dropped). ([#132])
+- Runner mode auto-detection (local vs Docker) on startup. ([#146])
+- Silent `NVMLError`, payload detection, and empty `gpu_indices` guard. ([#141])
 
-### References
+### Removed
 
-- [MLPerf Inference](https://docs.mlcommons.org/inference/) — Traffic simulation patterns
-- [vLLM](https://blog.vllm.ai/) — Batching strategies
-- [TokenPowerBench](https://arxiv.org/html/2512.03024v1) — Statistical robustness methodology
+- Dead code, stale type annotations, and unused dependencies. ([#130])
+
+
+## [v0.8.0] - 2026-02-27
+
+Multi-experiment study sweeps.
+
+### Added
+
+- `run_study()` public API for multi-experiment studies. ([#23])
+- `StudyConfig` with sweep grammar (grid and cycle ordering). ([#23])
+- YAML-driven parameter sweeps across models, engines, and precisions. ([#23])
+- `StudyRunner` with sequential experiment dispatch. ([#23])
+- Study-level aggregation and result collection. ([#23])
+- Manifest-based progress tracking with resume support. ([#23])
+
+
+## [v0.7.0] - 2026-02-27
+
+First end-to-end single-experiment release.
+
+### Added
+
+- `run_experiment()` public API. ([#22])
+- `ExperimentConfig` to `ExperimentResult` pipeline. ([#22])
+- Energy measurement via CodeCarbon and Zeus backends. ([#22])
+- Extended metrics: TPOT, TEI, memory efficiency. ([#22])
+- Streaming latency measurement (TTFT / ITL). ([#22])
+- Results persistence in Parquet format. ([#22])
+
 
 ---
 
-## [v1.16.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v1.16.0) (2025-01-07)
+## Historical (pre-0.x)
+
+> The entries below predate the current 0.x versioning scheme introduced in early 2026.
+> They describe the research prototype and early CLI rewrites that were restructured and
+> re-versioned starting from v0.1.0. Version numbers v1.x and v2.0.0 referenced here are
+> legacy labels from that era; they do not correspond to any published release under the
+> current scheme. The 2026-03-04 history reset remapped these to sequential 0.x tags
+> (v0.1.0-v0.6.0) for consistency with the current versioning scheme.
+
+### v0.6.0 (2025-12-29) - formerly v1.16.0
 
 Production-ready containerisation with full GPU support and streamlined developer experience.
 
-### Added
-- **Multi-stage Dockerfile** with `nvidia/cuda:12.4.1-runtime-ubuntu22.04` base image
-  - Builder stage for dependency compilation
-  - Runtime stage for production deployment (~3GB image)
-  - Dev stage for local development with editable installs
-- **Docker Compose profiles** separating production and development workflows
-  - `lem-app`: Production service with baked-in package
-  - `lem-dev`: Development service with source mounting
-- **VS Code devcontainer** configuration for seamless IDE integration
-  - GPU passthrough with `--gpus all`
-  - Privileged mode for NVML energy metrics
-  - Pre-configured Python extensions (Pylance, Ruff)
-- **Makefile targets** for common Docker operations (`make docker-build`, `make experiment`, `make datasets`)
+#### Added
 
-### Improved
-- CI workflow reliability with concurrency groups preventing parallel releases
-- Test runner now validates both `src/` and `tests/` directories
-- Dev container runs as root, eliminating permission complexity with virtual environments
-- Documentation expanded with "Running the Tool" section covering all four execution modes
+- Multi-stage Dockerfile with `nvidia/cuda:12.4.1-runtime-ubuntu22.04` base image (builder,
+  runtime, and dev stages).
+- Docker Compose profiles separating production and development workflows (`lem-app`, `lem-dev`).
+- VS Code devcontainer configuration with GPU passthrough and Ruff/Pylance extensions.
+- Makefile targets for common Docker operations (`make docker-build`, `make experiment`,
+  `make datasets`).
 
-### Fixed
-- Docker CUDA 12.4 base image now matches host driver requirements
-- Volume permission errors resolved by running dev containers as root
-- Deprecated `torch_dtype` parameter replaced with `dtype` in model loading
-- Removed obsolete `TRANSFORMERS_CACHE` environment variable (superseded by `HF_HOME`)
-- CodeCarbon pandas `FutureWarning` suppressed via targeted filter
-- `nvidia-smi` GPU utilisation parsing handles `[N/A]` values gracefully
+#### Changed
+
+- CI workflow reliability improved with concurrency groups preventing parallel releases.
+- Dev container runs as root, eliminating permission complexity with virtual environments.
+
+#### Fixed
+
+- Docker CUDA 12.4 base image aligned with host driver requirements.
+- Volume permission errors resolved by running dev containers as root.
+- Deprecated `torch_dtype` parameter replaced with `dtype` in model loading.
+- Removed obsolete `TRANSFORMERS_CACHE` environment variable (superseded by `HF_HOME`).
+- CodeCarbon pandas `FutureWarning` suppressed.
+- `nvidia-smi` GPU utilisation parsing handles `[N/A]` values gracefully.
 
 ---
 
-## [v1.15.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v1.15.0) (2025-12-21)
+### v0.5.0 (2025-12-21) - formerly v1.15.0
 
 Comprehensive test coverage ensuring reliability across all components.
 
-### Added
-- **End-to-end CLI tests** (8 tests) validating complete benchmark workflows
-  - Config validation through to results aggregation
-  - Dataset listing and prompt source configuration
-  - Error handling for invalid inputs
-- **Integration tests** (47 tests) covering non-GPU workflows
-  - Configuration loading with inheritance chains
-  - Results repository file operations lifecycle
-  - CLI command parsing and execution
-  - Aggregation pipeline from raw results to exports
-- **Methodology documentation** (`docs/methodology.md`) explaining measurement approach
-  - Energy tracking via CodeCarbon with NVML backend
-  - FLOPs estimation strategies and confidence levels
-  - Distributed GPU result aggregation logic
+#### Added
 
-### Changed
-- Total test count: **416 passing tests** (unit + integration + e2e)
-- All tests run without GPU access using mocked/simulated data
+- End-to-end CLI tests (8 tests) validating complete benchmark workflows.
+- Integration tests (47 tests) covering non-GPU workflows.
+- Methodology documentation (`docs/methodology.md`) explaining measurement approach.
 
-### Removed
-- `requirements.txt` (306 frozen packages) — all dependencies now managed via Poetry lockfile
+#### Changed
+
+- Total test count: 416 passing tests (unit + integration + e2e).
+- All tests run without GPU access using mocked/simulated data.
+
+#### Removed
+
+- `requirements.txt` (306 frozen packages) - all dependencies now managed via Poetry lockfile.
 
 ---
 
-## [v1.13.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v1.13.0) (2025-12-21)
+### v0.4.0 (2025-12-21) - formerly v1.13.0
 
 User-friendly command-line interface replacing legacy entry points.
 
-### Added
-- **Typer-based CLI** (`lem`) with intuitive subcommands:
-  - `experiment <config> --dataset <name> -n <samples>`: Run experiments with automatic `accelerate launch` wrapping
-  - `aggregate <exp_id> | --all [--force]`: Combine raw per-process JSON results into aggregated metrics
-  - `config validate <file>`: Check configuration syntax and required fields
-  - `config show <file>`: Display resolved configuration with inheritance applied
-  - `results list [--all]`: Show available experiment runs
-  - `results show <exp_id> [--raw] [--json]`: Inspect experiment results
-  - `datasets`: List built-in HuggingFace datasets (alpaca, gsm8k, mmlu, sharegpt)
-- **ExperimentOrchestrator** (~100 lines) with clean dependency injection
-  - Accepts protocol-based components for energy backend, model loader, inference engine
-  - Manages experiment lifecycle from config loading through result persistence
-- **ExperimentContext** dataclass encapsulating runtime state
-  - Accelerator instance, model, tokenizer, prompts
-  - Automatic cleanup of distributed resources on context exit
-- **Accelerate launcher** with configurable retry logic for transient failures
-- **25 CLI tests** and **27 orchestration unit tests**
+#### Added
 
-### Removed
-- Legacy `MAIN_*.py` entry points (6 files) — all functionality now accessible via CLI
+- Typer-based CLI (`lem`) with subcommands: `experiment`, `aggregate`, `config validate`,
+  `config show`, `results list`, `results show`, `datasets`.
+- `ExperimentOrchestrator` with protocol-based dependency injection.
+- `ExperimentContext` dataclass for runtime state management.
+- Accelerate launcher with configurable retry logic.
+- 25 CLI tests and 27 orchestration unit tests.
 
-### Usage Examples
-```bash
-# Run experiment with built-in dataset
-lem experiment configs/llama2-7b.yaml --dataset alpaca -n 1000
+#### Removed
 
-# Aggregate all pending results
-lem aggregate --all
-
-# Export results as JSON
-lem results show exp_20240115_123456 --json
-```
+- Legacy `MAIN_*.py` entry points (6 files).
 
 ---
 
-## [v1.10.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v1.10.0) (2025-12-20)
+### v0.3.0 (2025-12-20) - formerly v1.10.0
 
 Major architectural refactor establishing clean module boundaries.
 
-### Breaking Changes
-- **Package renamed**: `llm-bench` → `lem`
-- All imports now use `llenergymeasure` instead of `llm_bench`
+#### Breaking Changes
 
-### Added
-- **Energy backend plugin registry** with automatic CodeCarbon registration
-  - `register_backend()`, `get_backend()`, `list_backends()` API
-  - Protocol-based interface for custom energy tracking backends
-- **FlopsEstimator** with three-strategy fallback chain:
-  1. `calflops` (high confidence) — direct computation graph measurement
-  2. `architecture` (medium confidence) — calculation from `model.config` parameters
-  3. `parameter_estimate` (low confidence) — approximation via `2 × params × seq_len`
-  - Returns `FlopsResult` with value, method, confidence level, and precision
-- **Results aggregation** with verification checks:
-  - Temporal overlap detection (ensures concurrent GPU execution)
-  - GPU attribution verification (prevents double-counting across processes)
-  - Derived efficiency metrics (tokens/joule, FLOPs/watt)
-- **Export functionality** for CSV and JSON formats
-  - Flattened Pydantic models with logical column ordering
-  - `ResultsExporter` class for unified export interface
-- **Core modules** migrated from legacy `experiment_core_utils`:
-  - `distributed.py`: Accelerator setup, unique ID generation, barrier synchronisation
-  - `model_loader.py`: HuggingFace model/tokeniser loading with BitsAndBytes quantisation
-  - `prompts.py`: Prompt filtering, sorting, tokenisation, batching strategies
-  - `inference.py`: Batch inference engine with memory-efficient generation
-  - `compute_metrics.py`: FLOPs calculation, peak memory stats, GPU utilisation tracking
-  - `energy_backends/codecarbon.py`: CodeCarbon wrapper implementing `EnergyBackend` protocol
-- **Pydantic domain models** for all configurations and results
-  - `ExperimentConfig`, `BatchingOptions`, `DecoderConfig`, `QuantisationConfig`
-  - `EnergyMetrics`, `InferenceMetrics`, `ComputeMetrics`, `RawProcessResult`, `AggregatedResult`
-- **296 unit tests** covering all new modules
+- Package renamed: `llm-bench` to `lem`. All imports now use `llenergymeasure`.
 
-### Changed
-- Replaced `print()` statements with Loguru structured logging throughout
-- Comprehensive type hints and docstrings on all public interfaces
-- BitsAndBytes quantisation correctly reports fp16 precision in FLOPs calculations
+#### Added
+
+- Energy backend plugin registry with automatic CodeCarbon registration.
+- `FlopsEstimator` with three-strategy fallback chain (calflops, architecture, parameter
+  estimate), each returning a confidence level.
+- Results aggregation with temporal overlap detection and GPU attribution verification.
+- Export functionality for CSV and JSON formats.
+- 296 unit tests covering all new modules.
+
+#### Changed
+
+- Replaced `print()` statements with Loguru structured logging.
 
 ---
 
-## [v1.0.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v1.0.0) (2025-12-16)
+### v0.2.0 (2025-05-17) - formerly v1.0.0
 
-Research phase complete — stable multi-model benchmarking validated on production hardware.
+Research phase complete - stable multi-model benchmarking validated on production hardware.
 
-### Features
-- **Multi-model experiment support** with scenario-based configuration
-  - Run sequential experiments across model families (Llama, Mistral, Phi, etc.)
-  - Scenario configs defining model × precision × batch size combinations
-- **Experiment suite CSV export** with consistent naming conventions
-  - Timestamped output files with model name and config hash
-  - Append mode for incremental experiment runs
-- **Failed experiment detection** with cycle tracking
-  - Automatic retry on transient failures
-  - Quarantine of consistently failing configurations
-- **Minimum output token enforcement** ensuring comparable generation lengths
-- **Large model stability improvements**
-  - Gradient checkpointing for memory-constrained runs
-  - Proper CUDA cache clearing between experiments
+#### Added
 
-### Research Capabilities
-- **Data wrangling pipelines** for experiment result analysis
-  - Pandas-based cleaning and normalisation
-  - Outlier detection and filtering
-- **Plotting functionality** for efficiency metrics visualisation
-  - Tokens/second vs energy consumption scatter plots
-  - Model size vs efficiency Pareto frontiers
-- **FLOPs caching** preventing redundant calculations for repeated model runs
-
-### Validation
-- Tested with 1B and 3B parameter models on A100 GPUs
-- Verified energy measurements against manual nvidia-smi readings
-- Cross-validated FLOPs estimates with published model specifications
+- Multi-model experiment support with scenario-based configuration.
+- Experiment suite CSV export with consistent naming conventions.
+- Failed experiment detection with cycle tracking and automatic retry.
+- Minimum output token enforcement for comparable generation lengths.
+- Large model stability improvements (gradient checkpointing, CUDA cache clearing).
+- Data wrangling pipelines for experiment result analysis (Pandas-based).
+- Plotting functionality for efficiency metrics visualisation.
+- FLOPs caching preventing redundant calculations.
 
 ---
 
-## [v0.5.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v0.5.0) (2025-03-22)
+### v0.1.0 (2025-03-22) - formerly v0.5.0
 
 Core measurement functionality establishing the foundation for all subsequent development.
 
-### Added
-- **Distributed results aggregation** across multiple GPUs
-  - Per-process JSON result files with process rank metadata
-  - Aggregation logic summing energy, averaging throughput
-  - Support for 1-8 GPU configurations
-- **FLOPs calculation** with quantisation awareness
-  - Correct handling of INT8/INT4 operations
-  - Integration with `calflops` library
-- **Robust process cleanup** preventing zombie processes
-  - Signal handlers for graceful shutdown
-  - Distributed barrier synchronisation before exit
-- **Optimum benchmark integration** for standardised measurements
+#### Added
 
-### Improved
-- **Distributed execution stability**
-  - Proper NCCL initialisation and teardown
-  - Timeout handling for stalled processes
-- **Code organisation** with major directory restructuring
-  - Separation of config, core, and result handling
-  - Modular utility functions
+- Distributed results aggregation across multiple GPUs with per-process JSON files.
+- FLOPs calculation with quantisation awareness and `calflops` integration.
+- Robust process cleanup with signal handlers and distributed barrier synchronisation.
+- Optimum benchmark integration for standardised measurements.
+
+#### Changed
+
+- Distributed execution stability improved: proper NCCL initialisation and teardown.
+- Major directory restructuring separating config, core, and result handling.
+
+
+[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.9.0...HEAD
+[v0.10.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.10.0
+[v0.9.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.9.0
+[v0.8.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.8.0
+[v0.7.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.7.0
+
+[#22]: https://github.com/henrycgbaker/llenergymeasure/pull/22
+[#23]: https://github.com/henrycgbaker/llenergymeasure/pull/23
+[#24]: https://github.com/henrycgbaker/llenergymeasure/pull/24
+[#26]: https://github.com/henrycgbaker/llenergymeasure/pull/26
+[#27]: https://github.com/henrycgbaker/llenergymeasure/pull/27
+[#28]: https://github.com/henrycgbaker/llenergymeasure/pull/28
+[#113]: https://github.com/henrycgbaker/llenergymeasure/pull/113
+[#114]: https://github.com/henrycgbaker/llenergymeasure/pull/114
+[#115]: https://github.com/henrycgbaker/llenergymeasure/pull/115
+[#116]: https://github.com/henrycgbaker/llenergymeasure/pull/116
+[#121]: https://github.com/henrycgbaker/llenergymeasure/pull/121
+[#122]: https://github.com/henrycgbaker/llenergymeasure/pull/122
+[#124]: https://github.com/henrycgbaker/llenergymeasure/pull/124
+[#130]: https://github.com/henrycgbaker/llenergymeasure/pull/130
+[#132]: https://github.com/henrycgbaker/llenergymeasure/pull/132
+[#133]: https://github.com/henrycgbaker/llenergymeasure/pull/133
+[#134]: https://github.com/henrycgbaker/llenergymeasure/pull/134
+[#135]: https://github.com/henrycgbaker/llenergymeasure/pull/135
+[#137]: https://github.com/henrycgbaker/llenergymeasure/pull/137
+[#138]: https://github.com/henrycgbaker/llenergymeasure/pull/138
+[#140]: https://github.com/henrycgbaker/llenergymeasure/pull/140
+[#141]: https://github.com/henrycgbaker/llenergymeasure/pull/141
+[#143]: https://github.com/henrycgbaker/llenergymeasure/pull/143
+[#144]: https://github.com/henrycgbaker/llenergymeasure/pull/144
+[#145]: https://github.com/henrycgbaker/llenergymeasure/pull/145
+[#146]: https://github.com/henrycgbaker/llenergymeasure/pull/146
+[#147]: https://github.com/henrycgbaker/llenergymeasure/pull/147
+[#152]: https://github.com/henrycgbaker/llenergymeasure/pull/152
+[#161]: https://github.com/henrycgbaker/llenergymeasure/pull/161
+[#165]: https://github.com/henrycgbaker/llenergymeasure/pull/165
+[#171]: https://github.com/henrycgbaker/llenergymeasure/pull/171
+[#172]: https://github.com/henrycgbaker/llenergymeasure/pull/172
+[#175]: https://github.com/henrycgbaker/llenergymeasure/pull/175
+[#176]: https://github.com/henrycgbaker/llenergymeasure/pull/176
+[#182]: https://github.com/henrycgbaker/llenergymeasure/pull/182
+[#190]: https://github.com/henrycgbaker/llenergymeasure/pull/190
+[#195]: https://github.com/henrycgbaker/llenergymeasure/pull/195
+[#196]: https://github.com/henrycgbaker/llenergymeasure/pull/196
+[#201]: https://github.com/henrycgbaker/llenergymeasure/pull/201
+[#203]: https://github.com/henrycgbaker/llenergymeasure/pull/203
+[#213]: https://github.com/henrycgbaker/llenergymeasure/pull/213
+[#214]: https://github.com/henrycgbaker/llenergymeasure/pull/214
+[#242]: https://github.com/henrycgbaker/llenergymeasure/pull/242
+[#243]: https://github.com/henrycgbaker/llenergymeasure/pull/243
+[#248]: https://github.com/henrycgbaker/llenergymeasure/pull/248
+[#250]: https://github.com/henrycgbaker/llenergymeasure/pull/250
+[#256]: https://github.com/henrycgbaker/llenergymeasure/pull/256
+[#260]: https://github.com/henrycgbaker/llenergymeasure/pull/260
+[#261]: https://github.com/henrycgbaker/llenergymeasure/pull/261
+[#264]: https://github.com/henrycgbaker/llenergymeasure/pull/264
+[#265]: https://github.com/henrycgbaker/llenergymeasure/pull/265
+[#266]: https://github.com/henrycgbaker/llenergymeasure/pull/266
+[#268]: https://github.com/henrycgbaker/llenergymeasure/pull/268
+[#269]: https://github.com/henrycgbaker/llenergymeasure/pull/269
+[#270]: https://github.com/henrycgbaker/llenergymeasure/pull/270
+[#274]: https://github.com/henrycgbaker/llenergymeasure/pull/274
+[#275]: https://github.com/henrycgbaker/llenergymeasure/pull/275
+[#276]: https://github.com/henrycgbaker/llenergymeasure/pull/276
+[#277]: https://github.com/henrycgbaker/llenergymeasure/pull/277
+[#290]: https://github.com/henrycgbaker/llenergymeasure/pull/290
+[#291]: https://github.com/henrycgbaker/llenergymeasure/pull/291
+[#292]: https://github.com/henrycgbaker/llenergymeasure/pull/292
+[#293]: https://github.com/henrycgbaker/llenergymeasure/pull/293
+[#375]: https://github.com/henrycgbaker/llenergymeasure/pull/375
+[#395]: https://github.com/henrycgbaker/llenergymeasure/pull/395
+[#397]: https://github.com/henrycgbaker/llenergymeasure/pull/397
+[#410]: https://github.com/henrycgbaker/llenergymeasure/pull/410
+[#414]: https://github.com/henrycgbaker/llenergymeasure/pull/414
+[#433]: https://github.com/henrycgbaker/llenergymeasure/pull/433
+[#434]: https://github.com/henrycgbaker/llenergymeasure/pull/434
+[#440]: https://github.com/henrycgbaker/llenergymeasure/pull/440
+[#444]: https://github.com/henrycgbaker/llenergymeasure/pull/444
+[#447]: https://github.com/henrycgbaker/llenergymeasure/pull/447
+[#477]: https://github.com/henrycgbaker/llenergymeasure/pull/477
+[#481]: https://github.com/henrycgbaker/llenergymeasure/pull/481
+[#482]: https://github.com/henrycgbaker/llenergymeasure/pull/482
+[#483]: https://github.com/henrycgbaker/llenergymeasure/pull/483
+[#484]: https://github.com/henrycgbaker/llenergymeasure/pull/484
+[#485]: https://github.com/henrycgbaker/llenergymeasure/pull/485
+[#486]: https://github.com/henrycgbaker/llenergymeasure/pull/486
+[#498]: https://github.com/henrycgbaker/llenergymeasure/pull/498
+[#509]: https://github.com/henrycgbaker/llenergymeasure/pull/509
+[#514]: https://github.com/henrycgbaker/llenergymeasure/pull/514
+[#523]: https://github.com/henrycgbaker/llenergymeasure/pull/523
+[#529]: https://github.com/henrycgbaker/llenergymeasure/pull/529
+[#546]: https://github.com/henrycgbaker/llenergymeasure/pull/546
+[#560]: https://github.com/henrycgbaker/llenergymeasure/pull/560
+[#566]: https://github.com/henrycgbaker/llenergymeasure/pull/566
+[#570]: https://github.com/henrycgbaker/llenergymeasure/pull/570
+[#573]: https://github.com/henrycgbaker/llenergymeasure/pull/573
+[#575]: https://github.com/henrycgbaker/llenergymeasure/pull/575

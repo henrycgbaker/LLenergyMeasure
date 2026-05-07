@@ -10,6 +10,9 @@ import {ROUTES, GITHUB_REPO, EDIT_URL, SITE_TITLE} from './src/constants';
 // docs/methodology/ (measurement methodology + interpretation),
 // docs/api/ (auto-generated Python library reference),
 // docs/architecture/ (pipeline internals + contributor onboarding).
+// Changelog: served as a standalone React page (src/pages/changelog.tsx)
+// importing CHANGELOG.md directly; symlinked at docs/changelog.md for
+// direct-GitHub viewing.
 //
 // Content lives in docs/ at the repo root; this Docusaurus instance lives
 // in website/ and points its plugins at ../docs/<subdir>. .product/ is
@@ -131,6 +134,7 @@ const config: Config = {
         {to: ROUTES.methodology, label: 'Methodology', position: 'left'},
         {to: ROUTES.api, label: 'API', position: 'left'},
         {to: ROUTES.architecture, label: 'Architecture', position: 'left'},
+        {to: '/changelog', label: 'Changelog', position: 'left'},
         {href: GITHUB_REPO, label: 'GitHub', position: 'right'},
       ],
     },
