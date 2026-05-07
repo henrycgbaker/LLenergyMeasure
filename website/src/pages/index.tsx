@@ -269,14 +269,6 @@ const AUDIENCE_CARDS: AudienceCardProps[] = [
     ctaLabel: 'Plain-language overview',
     to: '/get-started/for-policy-readers',
   },
-  {
-    title: 'Citing',
-    description:
-      'Using LLenergyMeasure in published research? ' +
-      'Copy the BibTeX reference from the citation page.',
-    ctaLabel: 'Cite this work',
-    to: '/contributing/citation',
-  },
 ];
 
 function AudienceCards(): ReactNode {
