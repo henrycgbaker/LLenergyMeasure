@@ -8,6 +8,7 @@ const sidebarsArchitecture: SidebarsConfig = {
     'extending-miners',
     'engines',
     'development',
+    'preview-deployments',
     'schema-refresh',
     'validation-invariant-corpus',
   ],
