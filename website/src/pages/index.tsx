@@ -27,7 +27,10 @@ function Hero(): ReactNode {
           </p>
 
           <p className={styles.subTag}>
-            Multi-engine, methodology-first, parametrically extensible.
+            A CLI-first framework that supports energy, throughput, and FLOPs
+            measurement - with extensible multi-engine-introspected parameter
+            spaces, structured sweep logic, experiment deduplication and
+            sampling.
           </p>
 
           <div className={styles.heroCtas}>
@@ -44,11 +47,6 @@ function Hero(): ReactNode {
             </Link>
             <Link
               className="button button--secondary"
-              to="/explanation/methodology/methodology">
-              Read the methodology
-            </Link>
-            <Link
-              className="button button--secondary"
               to="/contributing/citation">
               Cite this work
             </Link>
@@ -56,26 +54,6 @@ function Hero(): ReactNode {
         </div>
       </div>
     </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Disambiguation strip
-// ---------------------------------------------------------------------------
-
-function DisambiguationStrip(): ReactNode {
-  return (
-    <div className={styles.disambig}>
-      <div className="container">
-        <p className={styles.disambigText}>
-          Zeus and CodeCarbon are integrated as samplers, not replaced.
-          {' '}lm-evaluation-harness measures capability; this measures
-          efficiency, and the two pair naturally.
-          {' '}MLPerf is a fixed-rule benchmark; this is researcher-extensible
-          measurement whose outputs inform benchmark design.
-        </p>
-      </div>
-    </div>
   );
 }
 
@@ -430,7 +408,6 @@ export default function Home(): ReactNode {
     <Layout title={siteConfig.title} description={siteConfig.tagline}>
       <main>
         <Hero />
-        <DisambiguationStrip />
         <WhatIsThis />
         <CodePreview />
         <MethodologyBlock />
