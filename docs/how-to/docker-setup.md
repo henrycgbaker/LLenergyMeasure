@@ -4,7 +4,7 @@
 isolated containers with GPU access. This guide walks through setting up Docker with GPU support
 from scratch on a Linux host.
 
-> **Recommended path.** Docker is the recommended way to run llenergymeasure. The PyTorch
+> **Recommended path.** Docker is the recommended way to run LLenergyMeasure. The PyTorch
 > engine can run locally for quick tests, but Docker gives you vLLM and reproducible
 > container-isolated measurements.
 
@@ -204,7 +204,7 @@ the container.
 
 ---
 
-## Step 5: Verify with llenergymeasure
+## Step 5: Verify with LLenergyMeasure
 
 With Docker and NVIDIA CT installed, verify that `llem` sees the GPU:
 
@@ -301,8 +301,8 @@ they are cached or need pulling:
 Runners
   vllm              docker
     ↳ llenergymeasure:vllm                              ← local build
-  pytorch           docker
-    ↳ ghcr.io/henrycgbaker/llenergymeasure/pytorch:v0.9.0  ← registry
+  transformers      docker
+    ↳ ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.9.0  ← registry
 ```
 
 ### Study-level image preparation
@@ -324,7 +324,7 @@ make docker-pull
 # Or pull individually
 docker pull ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0
 docker pull ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0
-docker pull ghcr.io/henrycgbaker/llenergymeasure/pytorch:v0.9.0
+docker pull ghcr.io/henrycgbaker/llenergymeasure/transformers:v0.9.0
 ```
 
 Replace `0.9.0` with your installed version (`llem --version`).
@@ -341,7 +341,7 @@ Output shows local vs registry source for each engine:
 
 ```
 === Image resolution ===
-  pytorch    -> llenergymeasure:transformers  (local_build)
+  transformers -> llenergymeasure:transformers  (local_build)
   tensorrt   -> ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0  (registry)
   vllm       -> llenergymeasure:vllm  (local_build)
 ```

@@ -7,7 +7,7 @@ description: Field-by-field reference for everything llem writes to disk after a
 
 Reference for everything `llem` writes to disk after a measurement. Three artefacts ship per study: a per-experiment `result.json`, a study-level `manifest.json`, and an optional `timeseries.parquet` sidecar.
 
-For a guided walkthrough of how to *read* these files (with worked examples), see [How to interpret results](/how-to/interpret-results). For the methodology behind each metric, see [What we measure](/methodology/what-we-measure) and [Energy measurement](/methodology/energy-measurement).
+For a guided walkthrough of how to *read* these files (with worked examples), see [How to interpret results](/how-to/interpret-results). For the methodology behind each metric, see [What we measure](/explanation/methodology/what-we-measure) and [Energy measurement](/explanation/methodology/energy-measurement).
 
 ## Output layout
 
@@ -92,7 +92,7 @@ These are the totals across all processes / GPUs (post-aggregation, post-warmup-
 | `energy_adjusted_j` | float &#124; null | Total energy minus `baseline_power_w &times; total_inference_time_sec`. The "net inference work" energy figure. |
 | `energy_per_device_j` | list[float] &#124; null | Per-GPU energy breakdown (length = `num_processes`) |
 
-For the methodology that motivates baseline subtraction, see [Methodology &gt; Baseline power](/methodology/methodology#baseline-power).
+For the methodology that motivates baseline subtraction, see [Methodology &gt; Baseline power](/explanation/methodology/methodology#baseline-power).
 
 ### Sidecar reference
 
@@ -144,7 +144,7 @@ Written when `output.save_timeseries: true` (the default). One Parquet file per 
 | `memory_used_mib` | float64 | GPU memory used in MiB |
 | `sm_clock_mhz` | float64 | SM clock in MHz (when available) |
 
-NVML samples at ~1 s intervals (driver-dependent). Thermal-throttle events shorter than ~100 ms may be missed &mdash; see [Methodology &gt; Known limitations](/methodology/methodology#known-limitations).
+NVML samples at ~1 s intervals (driver-dependent). Thermal-throttle events shorter than ~100 ms may be missed &mdash; see [Methodology &gt; Known limitations](/explanation/methodology/methodology#known-limitations).
 
 ## `StudyResult` &mdash; final return value (Python API)
 
@@ -166,7 +166,7 @@ Returned by `run_study(...)`. Distinct from `manifest.json`: this is the fully-a
 import json
 from pathlib import Path
 
-study = Path("results/tutorial-multi-backend_2026-05-07T14-32-08")
+study = Path("results/tutorial-multi-engine_2026-05-07T14-32-08")
 
 # Load study manifest
 with (study / "manifest.json").open() as f:
@@ -191,6 +191,6 @@ For the Python API equivalent (`StudyResult` object), see [Reference &gt; Librar
 
 ## See also
 
-- [Tutorial &mdash; Multi-backend study](/tutorials/multi-backend-study) walks through writing analysis code against this schema.
+- [Tutorial &mdash; Multi-engine study](/tutorials/multi-engine-study) walks through writing analysis code against this schema.
 - [How to &mdash; Interpret results](/how-to/interpret-results) reads a real `result.json` field by field with worked examples.
-- [Methodology &mdash; Energy measurement](/methodology/energy-measurement) explains where the numbers come from.
+- [Methodology &mdash; Energy measurement](/explanation/methodology/energy-measurement) explains where the numbers come from.

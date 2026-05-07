@@ -1,12 +1,12 @@
 # Energy Measurement
 
-What llenergymeasure measures and how it works.
+What LLenergyMeasure measures and how it works.
 
 ---
 
 ## What We Measure
 
-llenergymeasure collects three categories of metrics during inference:
+LLenergyMeasure collects three categories of metrics during inference:
 
 ### Energy (Joules)
 
@@ -14,7 +14,7 @@ GPU power draw integrated over inference time. This is the primary metric.
 
 Energy in Joules = integral of Power(t) dt over the inference window.
 
-llenergymeasure reports:
+LLenergyMeasure reports:
 - `inference_energy_joules` - total GPU energy during inference
 - `adjusted_energy_joules` - inference energy minus baseline idle power (isolates the
   inference-attributable component)
@@ -100,7 +100,7 @@ is the last resort (coarser sampling, lower accuracy). If no backend is availabl
 
 NVIDIA Management Library. Polls GPU power draw at 100ms intervals during inference.
 
-- Ships with llenergymeasure (no additional install) - `pynvml` is a base dependency
+- Ships with LLenergyMeasure (no additional install) - `pynvml` is a base dependency
 - Works on any NVIDIA GPU (Kepler and newer)
 - Measures GPU power only (not CPU or RAM)
 - Uses trapezoidal integration of power samples to compute energy in joules
@@ -196,7 +196,7 @@ Use `n >= 50` prompts to ensure sufficient measurement duration.
 
 ## Baseline Power
 
-Before inference, llenergymeasure measures idle GPU power draw. This baseline represents
+Before inference, LLenergyMeasure measures idle GPU power draw. This baseline represents
 the GPU's steady-state power consumption when not doing inference work.
 
 **Why baseline matters:** GPU power draw is never zero. A 300W GPU consuming 50W at idle
@@ -309,7 +309,7 @@ For publication-quality results, report energy with appropriate uncertainty boun
 mitigates this by accumulating continuously.
 
 **Multi-GPU measurement sums per-device energy.** For tensor-parallel runs across multiple
-GPUs, llenergymeasure sums per-device energy. All participating GPUs are automatically
+GPUs, LLenergyMeasure sums per-device energy. All participating GPUs are automatically
 monitored based on the backend's parallelism config.
 
 **Container isolation.** Inside Docker containers, pynvml accesses the same physical GPU

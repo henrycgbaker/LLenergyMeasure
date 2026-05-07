@@ -286,13 +286,13 @@ Invariant: a dormant rule matching `seed=-1`. The engine treats -1 as "no seed" 
 
 ### "UnsupportedSchemaVersionError"
 
-The validated YAML in the installed package was built with a schema major version the current loader does not understand. This indicates a library/package version mismatch. Update llenergymeasure to the version that matches your installed engines.
+The validated YAML in the installed package was built with a schema major version the current loader does not understand. This indicates a library/package version mismatch. Update LLenergyMeasure to the version that matches your installed engines.
 
 ---
 
 ## See also
 
-- [architecture-overview.md](/architecture/architecture-overview) - system overview
+- [architecture-overview.md](/explanation/architecture/architecture-overview) - system overview
 - [validation-invariant-corpus.md](/contributing/validation-invariant-corpus) - corpus YAML format reference
 - [miner-pipeline.md](/contributing/miner-pipeline) - how the corpus is built
 - [extending-miners.md](/contributing/extending-miners) - adding new rules

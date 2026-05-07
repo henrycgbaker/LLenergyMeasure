@@ -15,7 +15,7 @@ Three one-time costs hit on first run:
 
 1. **Model download** &mdash; HuggingFace weights pull on first reference (~500 MB for GPT-2; tens of GB for 7B+ models). Cached afterwards under `~/.cache/huggingface/`.
 2. **Docker image pull** &mdash; the engine container (~5&ndash;15 GB) downloads from GHCR or the upstream registry.
-3. **TensorRT-LLM compilation** &mdash; if you're on the TRT-LLM backend, the engine compiles from weights on first reference (5&ndash;15 minutes for a 7B model). The compiled engine is cached at `~/.cache/tensorrt_llm/` inside the container; subsequent runs of the same config skip compilation. See [How to: run with TensorRT-LLM](/how-to/run-with-tensorrt-llm).
+3. **TensorRT-LLM compilation** &mdash; if you're using the TRT-LLM engine, it compiles from weights on first reference (5&ndash;15 minutes for a 7B model). The compiled engine is cached at `~/.cache/tensorrt_llm/` inside the container; subsequent runs of the same config skip compilation. See [How to: run with TensorRT-LLM](/how-to/run-with-tensorrt-llm).
 
 ### Why does my run hang?
 
@@ -35,7 +35,7 @@ Partially. The Transformers (PyTorch) engine runs in `local` mode without Docker
 Several stochastic sources, in decreasing order of impact:
 
 1. **Thermal state** &mdash; a hot GPU clocks down. Use the default `study_execution.experiment_gap_seconds: 10` and `cycle_gap_seconds: 30` (or longer) so each cell starts from a comparable thermal floor.
-2. **Sampling RNG** &mdash; if `decoder.do_sample: true` and `random_seed` differs, generations vary. Pin `random_seed: 42`. See [Methodology &gt; Reproducibility](/methodology/methodology#reproducibility).
+2. **Sampling RNG** &mdash; if `decoder.do_sample: true` and `random_seed` differs, generations vary. Pin `random_seed: 42`. See [Methodology &gt; Reproducibility](/explanation/methodology/methodology#reproducibility).
 3. **System load** &mdash; other processes on the host affect baseline power and throttle the GPU. Run on a dedicated GPU when possible.
 4. **NVML sampling jitter** &mdash; ~1 % run-to-run from sampling-instant variability. This is below the &plusmn;5 % NVML accuracy floor and not actionable.
 
@@ -49,7 +49,7 @@ That's the design intent. **Adjusted energy is total energy minus the baseline c
 
 If adjusted energy comes out **negative** (rare but possible), the baseline measurement was higher than the inference's average power draw. Causes: a noisy baseline window, a thermal-throttled inference, or a mis-calibrated sampler. Treat this experiment as suspect and re-run with a longer `baseline.duration_seconds`.
 
-See [Methodology &gt; Baseline power](/methodology/methodology#baseline-power) for the full reasoning.
+See [Methodology &gt; Baseline power](/explanation/methodology/methodology#baseline-power) for the full reasoning.
 
 ### What does "FLOPs (roofline, medium)" mean?
 
@@ -58,7 +58,7 @@ See [Methodology &gt; Baseline power](/methodology/methodology#baseline-power) f
 - **Method** &mdash; how the estimate was computed. `roofline` uses the model's parameter count and a per-token forward-pass approximation. Future methods may include `cycle_count` (more accurate, requires Nsight integration) or `flop_counter` (PyTorch FlopCounterMode hook).
 - **Confidence** &mdash; `low | medium | high`. `medium` reflects published roofline-method accuracy across architectures. `low` is emitted when the estimator hits an architecture it doesn't fully recognise.
 
-Use `mj_per_tok_adjusted` (energy per token) or `total_inference_time_sec` (wall-clock) for cross-engine comparison; `flops_per_*` are reference metadata, useful for normalising across model sizes but not for headline efficiency claims. See [What we measure](/methodology/what-we-measure#flops).
+Use `mj_per_tok_adjusted` (energy per token) or `total_inference_time_sec` (wall-clock) for cross-engine comparison; `flops_per_*` are reference metadata, useful for normalising across model sizes but not for headline efficiency claims. See [What we measure](/explanation/methodology/what-we-measure#flops).
 
 ### Why does my study report `unique_configurations` lower than `total_experiments`?
 
@@ -83,7 +83,7 @@ See [Reference &gt; Study config](/reference/study-config) for the full YAML sch
 
 ### How do I sweep across implementation parameters without sweeping engines?
 
-Engine-scoped sweep keys: `transformers.batch_size: [1, 4, 16]` only applies to Transformers experiments; the same config running under vLLM ignores it. Use the engine-prefixed form for any engine-specific axis. See the [Multi-backend study tutorial](/tutorials/multi-backend-study) for a worked example.
+Engine-scoped sweep keys: `transformers.batch_size: [1, 4, 16]` only applies to Transformers experiments; the same config running under vLLM ignores it. Use the engine-prefixed form for any engine-specific axis. See the [Multi-engine study tutorial](/tutorials/multi-engine-study) for a worked example.
 
 ### Can I use a custom dataset (not `aienergyscore`)?
 
@@ -129,10 +129,10 @@ Minimum reproducibility set:
 5. `study_design_hash` from manifest.json
 6. Per-experiment effective configs (or the directory structure they live in)
 
-The shipped `manifest.json` plus the per-experiment `effective_config.json` files contain everything in items 3&ndash;6. See [Methodology &gt; Reproducibility](/methodology/methodology#reproducibility) for the full checklist.
+The shipped `manifest.json` plus the per-experiment `effective_config.json` files contain everything in items 3&ndash;6. See [Methodology &gt; Reproducibility](/explanation/methodology/methodology#reproducibility) for the full checklist.
 
 ## See also
 
 - [How to: troubleshoot](/how-to/troubleshoot) &mdash; specific error message catalogue
 - [Reference: results schema](/reference/results-schema) &mdash; every result.json field documented
-- [Methodology](/methodology/methodology) &mdash; warmup, baseline, thermal management, reproducibility
+- [Methodology](/explanation/methodology/methodology) &mdash; warmup, baseline, thermal management, reproducibility

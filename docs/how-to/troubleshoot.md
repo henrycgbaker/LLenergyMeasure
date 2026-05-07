@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Common issues and solutions for llenergymeasure.
+Common issues and solutions for LLenergyMeasure.
 
 ---
 
@@ -88,7 +88,7 @@ llem run study.yaml --skip-preflight
 1. Use a smaller model.
 2. Reduce `transformers.batch_size` (default is 1 — already minimal for Transformers).
 3. Switch to lower dtype: `dtype: float16` or `dtype: bfloat16`.
-4. Enable BitsAndBytes quantization: `pytorch: { load_in_4bit: true }`.
+4. Enable BitsAndBytes quantization: `transformers: { load_in_4bit: true }`.
 5. For vLLM: reduce `vllm.engine.gpu_memory_utilization` (e.g. 0.7 instead of 0.9).
 6. For vLLM: reduce `vllm.engine.max_model_len` to cap KV cache allocation.
 
@@ -116,7 +116,7 @@ Or prefix Docker commands with `sudo`. Permanent fix requires re-login.
 **Symptom:** A study run produces some results but not all. Some experiments are missing
 from the output directory.
 
-**Cause:** Individual experiments may fail while the study continues. llenergymeasure
+**Cause:** Individual experiments may fail while the study continues. LLenergyMeasure
 uses skip-and-continue: a failed experiment is recorded as an error in the study manifest,
 and execution continues with the remaining experiments.
 
@@ -170,7 +170,7 @@ is unavailable, energy measurement falls back gracefully to zero rather than cra
    enough samples for accurate integration. Use larger `n` values.
 
 Zeus and CodeCarbon are optional extras. If they are not installed, the tool falls back
-to NVML. See [energy-measurement.md](/methodology/energy-measurement) for backend details.
+to NVML. See [energy-measurement.md](/explanation/methodology/energy-measurement) for backend details.
 
 ---
 
@@ -197,7 +197,41 @@ llem run experiment.yaml  # add to YAML for testing
 ```
 
 For publication-quality measurements, leave warmup enabled. See
-[methodology.md](/methodology/methodology) for why warmup matters.
+[methodology.md](/explanation/methodology/methodology) for why warmup matters.
+
+---
+
+### Stalls or hangs {#stalls-or-hangs}
+
+**Symptom:** `llem run` appears to hang indefinitely - no progress output,
+no error, process does not return.
+
+**Cause:** Most hangs fall into four categories:
+
+1. **Docker image pull in progress** - the first run of an engine pulls a
+   multi-GB image. Check `docker pull` progress in a separate terminal:
+   `docker ps` and `docker images`.
+
+2. **TensorRT-LLM engine compilation** - TRT-LLM compiles a CUDA engine from
+   model weights on first use. For a 7B model this takes 5-15 minutes with no
+   visible progress. Re-run with `LLEM_LOG_LEVEL=DEBUG` to see compilation logs.
+
+3. **Pre-flight check stalled** - if the Docker daemon is unreachable or the GPU
+   is being held by another process, the pre-flight probe hangs. Run
+   `llem config --verbose` in a second terminal to check daemon and GPU state.
+
+4. **Inference timeout not triggered** - `study_execution.experiment_timeout_seconds`
+   defaults to 600 seconds. A model with a very long generation (e.g. high
+   `max_new_tokens` with a slow sampler) may legitimately exceed this. Increase
+   the timeout in the YAML if needed.
+
+**Fix:**
+
+- For Docker/TRT-LLM hangs: wait, then check `docker logs <container-id>` for progress.
+- For pre-flight hangs: run `docker run --gpus all nvidia/cuda:12.0-base-ubuntu22.04 nvidia-smi`
+  to verify GPU access from Docker, then re-run `llem run`.
+- For genuine inference hangs: raise `study_execution.experiment_timeout_seconds` or
+  reduce `max_new_tokens`.
 
 ---
 
@@ -211,14 +245,14 @@ These combinations are rejected at config load time with a clear error message.
 
 | Engine | Invalid Combination | Reason | Resolution |
 |---------|---------------------|--------|------------|
-| pytorch | `load_in_4bit=True + load_in_8bit=True` | Cannot use both 4-bit and 8-bit quantization simultaneously | Choose one: `transformers.load_in_4bit: true` OR `transformers.load_in_8bit: true` |
-| pytorch | `torch_compile_mode without torch_compile=True` | torch_compile_mode/torch_compile_backend only take effect when torch_compile=True | Set `transformers.torch_compile: true` when using `torch_compile_mode` or `torch_compile_backend` |
-| pytorch | `bnb_4bit_* without load_in_4bit=True` | BitsAndBytes 4-bit options require 4-bit quantization to be enabled | Set `transformers.load_in_4bit: true` when using `bnb_4bit_compute_dtype`, `bnb_4bit_quant_type`, or `bnb_4bit_use_double_quant` |
-| pytorch | `cache_implementation with use_cache=False` | Cannot specify a cache strategy when caching is explicitly disabled | Remove `use_cache: false` or remove `cache_implementation` |
-| all | `engine section mismatch` | Engine section must match the `engine:` field | Ensure `pytorch:` / `vllm:` / `tensorrt:` section matches `engine:` field |
+| transformers | `load_in_4bit=True + load_in_8bit=True` | Cannot use both 4-bit and 8-bit quantization simultaneously | Choose one: `transformers.load_in_4bit: true` OR `transformers.load_in_8bit: true` |
+| transformers | `torch_compile_mode without torch_compile=True` | torch_compile_mode/torch_compile_backend only take effect when torch_compile=True | Set `transformers.torch_compile: true` when using `torch_compile_mode` or `torch_compile_backend` |
+| transformers | `bnb_4bit_* without load_in_4bit=True` | BitsAndBytes 4-bit options require 4-bit quantization to be enabled | Set `transformers.load_in_4bit: true` when using `bnb_4bit_compute_dtype`, `bnb_4bit_quant_type`, or `bnb_4bit_use_double_quant` |
+| transformers | `cache_implementation with use_cache=False` | Cannot specify a cache strategy when caching is explicitly disabled | Remove `use_cache: false` or remove `cache_implementation` |
+| all | `engine section mismatch` | Engine section must match the `engine:` field | Ensure `transformers:` / `vllm:` / `tensorrt:` section matches `engine:` field |
 | all | `passthrough_kwargs key collision` | `passthrough_kwargs` keys must not collide with ExperimentConfig fields | Use named fields directly instead of `passthrough_kwargs` |
 | tensorrt | `dtype: float32` | TensorRT-LLM is optimised for lower precision inference | Use `dtype: float16` or `dtype: bfloat16` |
-| vllm | `transformers.load_in_4bit or pytorch.load_in_8bit` | vLLM does not support bitsandbytes quantization | Use `vllm.engine.quantization` (awq, gptq, fp8) for quantized inference |
+| vllm | `transformers.load_in_4bit or transformers.load_in_8bit` | vLLM does not support bitsandbytes quantization | Use `vllm.engine.quantization` (awq, gptq, fp8) for quantized inference |
 
 ### Runtime Limitations
 
@@ -227,8 +261,8 @@ model, or package requirements.
 
 | Engine | Parameter | Limitation | Resolution |
 |---------|-----------|------------|------------|
-| pytorch | `transformers.attn_implementation: flash_attention_2` | flash-attn requires Ampere+ GPU; may fail on older architectures | Use `attn_implementation: sdpa` on pre-Ampere GPUs |
-| pytorch | `transformers.attn_implementation: flash_attention_3` | FA3 requires the `flash_attn_3` package (built from flash-attn `hopper/` directory) and Ampere+ GPU (SM80+). Included in the Docker image by default | Install locally from source if not using Docker. See [Installation - FA3](/how-to/install#flashattention-3) |
+| transformers | `transformers.attn_implementation: flash_attention_2` | flash-attn requires Ampere+ GPU; may fail on older architectures | Use `attn_implementation: sdpa` on pre-Ampere GPUs |
+| transformers | `transformers.attn_implementation: flash_attention_3` | FA3 requires the `flash_attn_3` package (built from flash-attn `hopper/` directory) and Ampere+ GPU (SM80+). Included in the Docker image by default | Install locally from source if not using Docker. See [Installation - FA3](/how-to/install#flashattention-3) |
 | vllm | `vllm.engine.kv_cache_dtype: fp8` | FP8 KV cache requires Hopper (H100) or newer GPU | Use `kv_cache_dtype: auto` for automatic selection |
 | vllm | `vllm.engine.attention.backend: FLASHINFER` | FlashInfer requires JIT compilation on first use | Use `attention.backend: auto` or `FLASH_ATTN` |
 | vllm | `vllm.engine.attention.backend: TORCH_SDPA` | TORCH_SDPA not registered in vLLM attention backends | Use `attention.backend: auto` or `FLASH_ATTN` |

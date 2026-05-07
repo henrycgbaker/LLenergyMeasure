@@ -4,7 +4,7 @@ This document is the deep-dive reference for the invariant miner pipeline: how i
 
 **Audience:** engine extenders, CI maintainers, and research readers interested in the technical approach.
 
-For the runtime side of the pipeline (how the corpus is consumed at validation time), see [parameter-discovery.md](/architecture/parameter-discovery).
+For the runtime side of the pipeline (how the corpus is consumed at validation time), see [parameter-discovery.md](/explanation/architecture/parameter-discovery).
 
 ---
 
@@ -403,7 +403,7 @@ The gate runs inside the Docker container for each engine so that the live libra
 
 ## Renovate-driven refresh loop
 
-Library version bumps trigger corpus regeneration automatically. The flow described below reflects what was empirically observed during the Phase B.6 forced E2E run on PR #459 (transformers 4.57.3 → 4.57.6); see ["Phase B.6 observed flow"](#phase-b6-observed-flow) below for the actual commit timeline.
+Library version bumps trigger corpus regeneration automatically. The flow described below reflects what was empirically observed during the Phase B.6 forced E2E run on PR #459 (transformers 4.57.3 → 4.57.6); see ["Phase B.6 observed flow"](#phase-b6-observed-flow-historical) below for the actual commit timeline.
 
 ```
   ┌───────────────────────────────────────────────────────────────────┐
@@ -585,7 +585,7 @@ mining stage must run in the matching container.
 
 The single-tier model mirrors the project's broader principle that
 engine-touching activity runs inside the same image the user's
-multi-backend orchestration uses (multi-backend without Docker is a hard
+multi-engine orchestration uses (multi-engine without Docker is a hard
 error). TRT-LLM is pinned at v0.21.0 (CUDA 12.6.x) because v1.x requires
 CUDA 13.x, which is not available on the current A100 (SM80) runner fleet.
 
@@ -617,10 +617,10 @@ The templates NOT adopted from Daikon's full library: linear arithmetic ternary 
 
 ## See also
 
-- [architecture-overview.md](/architecture/architecture-overview) - system overview and data-flow
+- [architecture-overview.md](/explanation/architecture/architecture-overview) - system overview and data-flow
 - [validation-invariant-corpus.md](/contributing/validation-invariant-corpus) - corpus YAML format reference
 - [extending-miners.md](/contributing/extending-miners) - how to add a new engine miner
-- [parameter-discovery.md](/architecture/parameter-discovery) - runtime validation pipeline
-- [research-context.md](/methodology/research-context) - academic positioning
+- [parameter-discovery.md](/explanation/architecture/parameter-discovery) - runtime validation pipeline
+- [comparison-context.md](/explanation/methodology/comparison-context) - how results relate to other benchmarks and prior art
 - [engines.md](/reference/engines/configuration) - engine configuration reference
 - [schema-refresh.md](/contributing/schema-refresh) - parameter-discovery pipeline (Renovate-driven schema refresh)

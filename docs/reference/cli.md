@@ -29,7 +29,7 @@ Run an experiment or study. Detects study mode automatically when the YAML confi
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--model` | `-m` | str | — | Model name or HuggingFace path |
-| `--engine` | `-e` | str | — | Inference engine (`pytorch`, `vllm`, `tensorrt`) |
+| `--engine` | `-e` | str | — | Inference engine (`transformers`, `vllm`, `tensorrt`) |
 | `--dataset` | `-d` | str | — | Dataset source (`aienergyscore` or `.jsonl` file path) |
 | `-n` | | int | — | Number of prompts to run (`dataset.n_prompts`) |
 | `--batch-size` | | int | — | Batch size (Transformers engine only) |
@@ -109,9 +109,9 @@ from the host.
 
 | Column | Meaning |
 |--------|---------|
-| `Engine` | Engine identifier (`pytorch`, `vllm`, `tensorrt`) |
+| `Engine` | Engine identifier (`transformers`, `vllm`, `tensorrt`) |
 | `Image` | Resolved image tag (local or GHCR) |
-| `Pkg ver` | `org.opencontainers.image.version` label (llenergymeasure release) |
+| `Pkg ver` | `org.opencontainers.image.version` label (LLenergyMeasure release) |
 | `Img FP` | First 12 chars of `llem.expconf.schema.fingerprint` label |
 | `Host FP` | First 12 chars of host `ExperimentConfig` fingerprint |
 | `Status` | `OK` / `MISMATCH` / `UNVERIFIED` (pre-handshake image) / `UNREACHABLE` (no such image) |
@@ -129,7 +129,7 @@ llem doctor
 ```
 Engine     Image                          Pkg ver     Img FP          Host FP         Status
 ---------------------------------------------------------------------------------------------
-pytorch     llenergymeasure:transformers        0.9.0       a1b2c3d4e5f6    a1b2c3d4e5f6    OK
+transformers llenergymeasure:transformers        0.9.0       a1b2c3d4e5f6    a1b2c3d4e5f6    OK
 vllm        llenergymeasure:vllm           0.9.0       9988776655ff    a1b2c3d4e5f6    MISMATCH
             └─ repull: docker pull vllm/vllm-openai:0.7.3
 tensorrt    llenergymeasure:tensorrt       0.9.0       a1b2c3d4e5f6    a1b2c3d4e5f6    OK
@@ -165,7 +165,7 @@ llem report-gaps \
 
 **Output:** writes a multi-document YAML file at `--out`. Each document is a candidate corpus entry with `# TODO: human` markers on placeholder fields the reviewer must fill in. The file is *not* automatically merged into the corpus — review and apply manually.
 
-**See also:** [Architecture > parameter discovery](/architecture/parameter-discovery) for the runtime-observation pipeline; [Architecture > parameter curation](/architecture/parameter-curation) for the curation review flow.
+**See also:** [Architecture > parameter discovery](/explanation/architecture/parameter-discovery) for the runtime-observation pipeline; [Architecture > parameter curation](/explanation/architecture/parameter-curation) for the curation review flow.
 
 ---
 
@@ -190,7 +190,7 @@ llem v0.9.0
 ### Single experiment via flags
 
 ```bash
-llem run --model gpt2 -e pytorch
+llem run --model gpt2 -e transformers
 ```
 
 ### Single experiment via YAML

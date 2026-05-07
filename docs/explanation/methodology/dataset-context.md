@@ -58,7 +58,7 @@ run against the same dataset (given matching hardware, dtype, and prompt count).
 This is the same principle that makes benchmark suites like MLPerf useful for
 hardware comparison: the shared stimulus enables fair comparison.
 
-llenergymeasure ships the dataset bundled in the package (no network call at
+LLenergyMeasure ships the dataset bundled in the package (no network call at
 run time) at the pinned commit `2dc92b2`. See
 [Reference: Dataset format](/reference/dataset-format) for full provenance
 details, licence, and file composition.
@@ -88,7 +88,7 @@ per-model verbosity, not just per-model computational efficiency.
 
 **Snapshot.** The bundled file is a fixed snapshot of the upstream dataset at a
 specific commit. It does not update automatically with upstream changes.
-Measurements across different llenergymeasure releases that bundle different
+Measurements across different LLenergyMeasure releases that bundle different
 upstream commits are not strictly comparable on this dimension. The pinned
 commit is recorded in the provenance header of the JSONL file.
 
@@ -140,7 +140,7 @@ This has two implications:
 
 ## Bring your own dataset
 
-llenergymeasure accepts any JSONL file as a prompt source. Set `source` to a
+LLenergyMeasure accepts any JSONL file as a prompt source. Set `source` to a
 file path in the `task.dataset` block:
 
 ```yaml
@@ -176,7 +176,7 @@ length (and therefore energy) responds to prompt type.
 
 **Reproducible custom baselines.** If you want cross-study comparability
 against colleagues using the same custom corpus (rather than the AIEnergyScore
-benchmark), agree on a shared JSONL file and pin it by hash. llenergymeasure
+benchmark), agree on a shared JSONL file and pin it by hash. LLenergyMeasure
 does not currently validate dataset file hashes, but you can record the SHA-256
 of your corpus in your study config comments as a reproducibility convention.
 
@@ -221,10 +221,10 @@ difference. This is more informative than either number alone.
 
 **Report dataset provenance.** When publishing results, always include the
 dataset source, `n_prompts`, ordering mode, and (for the bundled dataset) the
-llenergymeasure version, which determines which snapshot of AIEnergyScore is
+LLenergyMeasure version, which determines which snapshot of AIEnergyScore is
 bundled. The full set of reproducibility fields is documented in
-[Measurement methodology](/methodology/methodology) and
-[Comparison with other benchmarks](/methodology/comparison-context).
+[Measurement methodology](/explanation/methodology/methodology) and
+[Comparison with other benchmarks](/explanation/methodology/comparison-context).
 
 ---
 
@@ -244,8 +244,8 @@ bundled. The full set of reproducibility fields is documented in
 
 - [Reference: Dataset format](/reference/dataset-format) - JSONL schema, field
   descriptions, and full AIEnergyScore provenance
-- [Measurement methodology](/methodology/methodology) - warmup, baseline power,
+- [Measurement methodology](/explanation/methodology/methodology) - warmup, baseline power,
   multi-cycle execution, and reproducibility
-- [Comparison with other benchmarks](/methodology/comparison-context) - how
-  llenergymeasure results relate to MLPerf, AIEnergyScore leaderboard, and
+- [Comparison with other benchmarks](/explanation/methodology/comparison-context) - how
+  LLenergyMeasure results relate to MLPerf, AIEnergyScore leaderboard, and
   other measurement tools

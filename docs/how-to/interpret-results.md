@@ -1,8 +1,8 @@
-# How to Read llenergymeasure Output
+# How to Read LLenergyMeasure Output
 
-When llenergymeasure runs a measurement, it prints a summary to the terminal and saves a detailed result file. This guide explains what each number means — in plain language.
+When LLenergyMeasure runs a measurement, it prints a summary to the terminal and saves a detailed result file. This guide explains what each number means — in plain language.
 
-If you have not yet run a measurement, see [Running Your First Measurement](/tutorials/non-technical/what-llem-shows) first.
+If you have not yet run a measurement, see [Running Your First Measurement](/get-started/for-policy-readers) first.
 
 ---
 
@@ -11,7 +11,7 @@ If you have not yet run a measurement, see [Running Your First Measurement](/tut
 After running a measurement, the terminal prints output like this:
 
 ```
-Result: gpt2-pytorch-bf16-2026-05-07T14-32-08
+Result: gpt2-transformers-bf16-2026-05-07T14-32-08
 
 Energy
   Total          847 J
@@ -34,13 +34,13 @@ A full result file is also saved to the `results/` folder. The sections below ex
 ## The Experiment ID
 
 ```
-Result: gpt2-pytorch-bf16-2026-05-07T14-32-08
+Result: gpt2-transformers-bf16-2026-05-07T14-32-08
 ```
 
 This is a unique identifier for this specific measurement. It encodes:
 
 - `gpt2` — the model measured
-- `pytorch` — the inference engine used
+- `transformers` — the inference engine used
 - `bfloat16` — the model dtype
 - `2026-05-07T14-32-08` — the date and time the experiment ran
 
@@ -167,6 +167,6 @@ These figures vary significantly with hardware, prompt length, and configuration
 
 ## Further Reading
 
-- [What We Measure and Why It Matters](/methodology/what-we-measure) — conceptual background on the three metrics
-- [Running Your First Measurement](/tutorials/non-technical/what-llem-shows) — step-by-step guide to running measurements
-- [Comparison with Other Benchmarks](/methodology/comparison-context) — how these results relate to MLPerf, AI Energy Score, and other benchmarks
+- [What We Measure and Why It Matters](/explanation/methodology/what-we-measure) — conceptual background on the three metrics
+- [Running Your First Measurement](/get-started/for-policy-readers) — step-by-step guide to running measurements
+- [Comparison with Other Benchmarks](/explanation/methodology/comparison-context) — how these results relate to MLPerf, AI Energy Score, and other benchmarks

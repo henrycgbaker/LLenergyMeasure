@@ -53,7 +53,7 @@ fans out per-engine cells (the `_engine-invariants-cell.yml` and
 `_engine-schemas-cell.yml` reusables) plus an inline `build-transformers`
 job for the first-party transformers image. See "CI pipeline ordering"
 below for the full sequence and
-[Architecture &gt; CI architecture](/architecture/ci-architecture) for the
+[Architecture &gt; CI architecture](/explanation/architecture/ci-architecture) for the
 topology + reusable-workflow contract.
 
 ## Engine image strategy
@@ -84,9 +84,9 @@ The principled rationale:
    compiled from source). `docker/Dockerfile.transformers` ships transformers
    plus FA2 (PyPI wheel) plus FA3 (compiled from source) plus accelerate /
    bitsandbytes / calflops / sentencepiece / einops pre-installed, plus
-   llenergymeasure's runtime non-engine deps (pydantic, typer, pyyaml,
+   LLenergyMeasure's runtime non-engine deps (pydantic, typer, pyyaml,
    platformdirs, nvidia-ml-py, numpy, pyarrow, tqdm, rich, python-dotenv,
-   filelock). The llenergymeasure package itself is NOT installed into the
+   filelock). The `llenergymeasure` package itself is NOT installed into the
    image — it is bind-mounted at runtime via `-v <repo>:/llem-src` +
    `PYTHONPATH=/llem-src`, identically to the vllm + tensorrt cells. This
    keeps image rebuilds dependent only on the engine substrate, not on
@@ -107,7 +107,7 @@ The principled rationale:
 
 The engine-coupling pipeline lives in `engine-pipeline.yml`, a single
 orchestrator workflow with a coherent dependency graph. See
-[Architecture &gt; CI architecture](/architecture/ci-architecture) for the full
+[Architecture &gt; CI architecture](/explanation/architecture/ci-architecture) for the full
 topology, reusable-workflow contract, and expected-shape table.
 
 ```

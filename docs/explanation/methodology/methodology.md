@@ -1,6 +1,6 @@
 # Measurement Methodology
 
-How llenergymeasure ensures reproducible, reliable energy measurements.
+How LLenergyMeasure ensures reproducible, reliable energy measurements.
 
 ---
 
@@ -13,7 +13,7 @@ these initial measurements.
 
 ### Two warmup modes
 
-llenergymeasure has two warmup modes, controlled by `convergence_detection` (default: `false`):
+LLenergyMeasure has two warmup modes, controlled by `convergence_detection` (default: `false`):
 
 #### Fixed mode (default)
 
@@ -160,7 +160,7 @@ and TensorRT-LLM — each engine behaves as if it had its own independent
 baseline session:
 
 - **`cached` TTL:** each engine's baseline ages out independently after
-  `baseline.cache_ttl_seconds`. A stale pytorch cache does not force a
+  `baseline.cache_ttl_seconds`. A stale transformers cache does not force a
   re-measure of vllm, and vice versa. Cache files live at
   `{study_dir}/_study-artefacts/baseline_cache_{key}.json`.
 - **`validated` interval:** `baseline.validation_interval` counts
@@ -309,7 +309,7 @@ performs differently from one at 60°C. Without thermal gaps between experiments
 experiments heat the GPU, causing later experiments to run at a higher baseline
 temperature — introducing a systematic bias across sweep positions.
 
-By default, llenergymeasure inserts thermal gaps between experiments in a study. These
+By default, LLenergyMeasure inserts thermal gaps between experiments in a study. These
 gaps allow the GPU to return toward its baseline temperature before the next experiment
 starts.
 
@@ -319,7 +319,7 @@ Disable thermal gaps for speed-oriented testing (at the cost of measurement qual
 llem run study.yaml --no-gaps
 ```
 
-llenergymeasure also monitors thermal throttle events during measurement. If the GPU
+LLenergyMeasure also monitors thermal throttle events during measurement. If the GPU
 throttled during an experiment, `thermal_throttle_detected: true` is set in that
 experiment's result, and the throttle duration and trigger reason are recorded.
 
@@ -329,7 +329,7 @@ experiment's result, and the throttle duration and trigger reason are recorded.
 
 ### Seeding model
 
-llenergymeasure uses two independent seeds that control reproducibility at different
+LLenergyMeasure uses two independent seeds that control reproducibility at different
 scopes:
 
 **`random_seed`** (ExperimentConfig) — per-experiment stochasticity:
@@ -372,7 +372,7 @@ To maximise reproducibility across runs and machines:
 4. **Control system load.** External processes sharing the GPU affect energy readings.
    For the most reproducible results, run on a dedicated GPU with no other CUDA processes.
 
-5. **Report the effective config.** llenergymeasure stores the full resolved experiment
+5. **Report the effective config.** LLenergyMeasure stores the full resolved experiment
    config in `effective_config` in the result JSON. This captures every parameter value
    used, including engine defaults. Sharing the result JSON is sufficient for full
    reproduction.
@@ -380,7 +380,7 @@ To maximise reproducibility across runs and machines:
 6. **Pin model revision.** HuggingFace models update. To ensure the same weights across
    runs, pin the model revision:
    ```yaml
-   pytorch:
+   transformers:
      revision: "abc1234"   # commit hash or tag from HuggingFace Hub
    ```
 
@@ -397,14 +397,14 @@ Each experiment result JSON includes:
 
 ## Universal-to-Engine Parameter Mapping
 
-llenergymeasure uses engine-native field names wherever possible. each engine library
+LLenergyMeasure uses engine-native field names wherever possible. Each engine library
 (HuggingFace Transformers, vLLM, TensorRT-LLM) has its own naming conventions. A thin
 mapping layer translates the handful of universal `ExperimentConfig` and `DecoderConfig`
 fields to each engine's native API parameters.
 
 ### Design principle
 
-Engine-specific configuration sections (`pytorch:`, `vllm:`, `tensorrt:`) always use the
+Engine-specific configuration sections (`transformers:`, `vllm:`, `tensorrt:`) always use the
 engine library's native names directly - no translation. The mapping layer only applies to
 shared (universal) fields that have identical semantics across all engines but different
 API names.

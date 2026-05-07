@@ -1,6 +1,6 @@
 # What We Measure and Why It Matters
 
-This guide explains what llenergymeasure measures — energy, throughput, and FLOPs — in plain language. No programming knowledge required.
+This guide explains what LLenergyMeasure measures - energy, throughput, and FLOPs - in plain language. No programming knowledge required.
 
 ---
 
@@ -8,7 +8,7 @@ This guide explains what llenergymeasure measures — energy, throughput, and FL
 
 Artificial intelligence models run on computers. Those computers consume electricity. As AI becomes more widely used — in search, in healthcare, in government services, in consumer products — the energy cost of running these systems has become a significant policy concern.
 
-Data centres that host AI infrastructure already account for a growing share of global electricity demand. Training a large AI model once can consume as much electricity as a transatlantic flight. But training happens once; *inference* — using a trained model to generate answers — happens millions or billions of times per day across deployed systems. That repeated cost is what llenergymeasure measures.
+Data centres that host AI infrastructure already account for a growing share of global electricity demand. Training a large AI model once can consume as much electricity as a transatlantic flight. But training happens once; *inference* — using a trained model to generate answers — happens millions or billions of times per day across deployed systems. That repeated cost is what LLenergyMeasure measures.
 
 Understanding the energy cost of AI inference enables:
 
@@ -17,7 +17,7 @@ Understanding the energy cost of AI inference enables:
 - **Policy design** — setting energy efficiency standards or disclosure requirements for AI systems
 - **Comparative research** — evaluating whether a more capable AI system is worth its higher energy cost
 
-llenergymeasure makes this measurement rigorous, reproducible, and comparable across different models and deployment configurations.
+LLenergyMeasure makes this measurement rigorous, reproducible, and comparable across different models and deployment configurations.
 
 ---
 
@@ -29,7 +29,7 @@ llenergymeasure makes this measurement rigorous, reproducible, and comparable ac
 
 **The unit:** Joules. One joule is one watt of power used for one second. A GPU might draw 300 watts of power; if an inference takes 2 seconds, that is 600 joules. For context, a typical smartphone battery stores roughly 15,000 joules.
 
-**What llenergymeasure reports:**
+**What LLenergyMeasure reports:**
 
 - **Total energy** — the raw GPU energy consumed during the experiment
 - **Baseline power** — the idle power the GPU draws even when doing nothing (like a car engine idling)
@@ -53,7 +53,7 @@ The adjusted figure is the most meaningful for comparison, because it isolates t
 
 ---
 
-## FLOPs (Floating Point Operations): How Much Computational Work Does the Model Do?
+## FLOPs (Floating Point Operations): How Much Computational Work Does the Model Do? {#flops}
 
 **What it is:** A count of the number of mathematical calculations the AI model performs during inference.
 
@@ -67,7 +67,7 @@ The adjusted figure is the most meaningful for comparison, because it isolates t
 - Estimating theoretical efficiency limits (a model using many FLOPs but little energy is running efficiently; a model using few FLOPs but high energy suggests hardware or configuration inefficiency)
 - Normalising comparisons across different GPU hardware
 
-FLOPs are estimated by llenergymeasure based on the model architecture. They cannot be measured directly during inference but can be calculated from model properties.
+FLOPs are estimated by LLenergyMeasure based on the model architecture. They cannot be measured directly during inference but can be calculated from model properties.
 
 ---
 
@@ -89,12 +89,12 @@ Together, the three metrics enable meaningful comparisons:
 | Is this hardware being used efficiently? | FLOPs vs energy (FLOPs/joule) |
 | Is this model worth its higher energy cost? | All three, combined with accuracy |
 
-The goal of llenergymeasure is to make these comparisons rigorous and reproducible — giving policy makers and researchers the data they need to evaluate AI systems beyond their headline capabilities.
+The goal of LLenergyMeasure is to make these comparisons rigorous and reproducible - giving policy makers and researchers the data they need to evaluate AI systems beyond their headline capabilities.
 
 ---
 
 ## Further Reading
 
-- [How to Read llenergymeasure Output](/how-to/interpret-results) — what the numbers mean in practice
-- [Running Your First Measurement](/tutorials/non-technical/what-llem-shows) — a step-by-step guide for running your first measurement
-- [Comparison with Other Benchmarks](/methodology/comparison-context) — how llenergymeasure relates to MLPerf, AI Energy Score, and other tools
+- [How to Read LLenergyMeasure Output](/how-to/interpret-results) - what the numbers mean in practice
+- [Running Your First Measurement](/get-started/for-policy-readers) — a step-by-step guide for running your first measurement
+- [Comparison with Other Benchmarks](/explanation/methodology/comparison-context) - how LLenergyMeasure relates to MLPerf, AI Energy Score, and other tools

@@ -1,6 +1,6 @@
 # Comparison with Other Benchmarks
 
-This guide explains how llenergymeasure relates to other AI benchmarking and energy measurement tools. It is intended for policy analysts and researchers who want to contextualise llenergymeasure results within the broader AI measurement landscape.
+This guide explains how LLenergyMeasure relates to other AI benchmarking and energy measurement tools. It is intended for policy analysts and researchers who want to contextualise LLenergyMeasure results within the broader AI measurement landscape.
 
 ---
 
@@ -8,9 +8,9 @@ This guide explains how llenergymeasure relates to other AI benchmarking and ene
 
 Several tools and benchmarks exist for measuring AI performance and energy use. They differ in purpose, scope, and methodology.
 
-llenergymeasure focuses specifically on **inference energy efficiency** — measuring how much energy an AI system uses to generate responses, across different model sizes, deployment configurations, and inference engines. It is designed for reproducible, comparable measurements that can inform research, procurement, and policy.
+LLenergyMeasure focuses specifically on **inference energy efficiency** - measuring how much energy an AI system uses to generate responses, across different model sizes, deployment configurations, and inference engines. It is designed for reproducible, comparable measurements that can inform research, procurement, and policy.
 
-The key distinction from performance benchmarks: most AI benchmarks measure *how capable* or *how fast* a model is. llenergymeasure measures *how efficiently* it uses energy. The two questions are related but different.
+The key distinction from performance benchmarks: most AI benchmarks measure *how capable* or *how fast* a model is. LLenergyMeasure measures *how efficiently* it uses energy. The two questions are related but different.
 
 ---
 
@@ -24,13 +24,13 @@ The key distinction from performance benchmarks: most AI benchmarks measure *how
 
 **What it does not measure:** Energy consumption is not a primary MLPerf metric, though some MLPerf Power results are published separately. MLPerf also requires fixed, certified hardware configurations and uses proprietary model weights in some divisions, limiting its applicability to research settings.
 
-**How llenergymeasure complements MLPerf:**
+**How LLenergyMeasure complements MLPerf:**
 
-- MLPerf answers "how fast is this hardware?"; llenergymeasure answers "how efficiently does this deployment use energy?"
-- llenergymeasure works with any NVIDIA GPU and any HuggingFace model, not just certified configurations
-- llenergymeasure's adjusted energy metric provides finer-grained efficiency analysis than MLPerf Power's system-level measurement
+- MLPerf answers "how fast is this hardware?"; LLenergyMeasure answers "how efficiently does this deployment use energy?"
+- LLenergyMeasure works with any NVIDIA GPU and any HuggingFace model, not just certified configurations
+- LLenergyMeasure's adjusted energy metric provides finer-grained efficiency analysis than MLPerf Power's system-level measurement
 
-If you have MLPerf throughput results, you can run llenergymeasure on the same model and hardware to add the energy dimension to the comparison.
+If you have MLPerf throughput results, you can run LLenergyMeasure on the same model and hardware to add the energy dimension to the comparison.
 
 ---
 
@@ -40,19 +40,19 @@ If you have MLPerf throughput results, you can run llenergymeasure on the same m
 
 **What it measures:** Energy per unit of useful output (e.g., joules per token or joules per task completion) on standardised tasks, intended to be comparable across models and hardware.
 
-**How llenergymeasure relates:**
+**How LLenergyMeasure relates:**
 
-llenergymeasure includes the AI Energy Score benchmark dataset as a built-in option. When you run:
+LLenergyMeasure includes the AI Energy Score benchmark dataset as a built-in option. When you run:
 
 ```bash
-llem run --model gpt2 -e pytorch
+llem run --model gpt2 -e transformers
 ```
 
-the default dataset used is the AI Energy Score prompt set. This means llenergymeasure results are directly comparable to AI Energy Score benchmarks run on the same hardware.
+the default dataset used is the AI Energy Score prompt set. This means LLenergyMeasure results are directly comparable to AI Energy Score benchmarks run on the same hardware.
 
-llenergymeasure is a *measurement tool* that produces the raw energy data; AI Energy Score is a *benchmark standard* that defines the tasks and comparison framework. They are complementary: you use llenergymeasure to generate measurements, and AI Energy Score to interpret and compare them.
+LLenergyMeasure is a *measurement tool* that produces the raw energy data; AI Energy Score is a *benchmark standard* that defines the tasks and comparison framework. They are complementary: you use LLenergyMeasure to generate measurements, and AI Energy Score to interpret and compare them.
 
-**Citing results:** If you run llenergymeasure with the default AI Energy Score dataset and want to compare or contribute to the AI Energy Score leaderboard, ensure you report the hardware configuration (GPU model and memory), the dtype setting, and the exact llenergymeasure version — these all affect comparability.
+**Citing results:** If you run LLenergyMeasure with the default AI Energy Score dataset and want to compare or contribute to the AI Energy Score leaderboard, ensure you report the hardware configuration (GPU model and memory), the dtype setting, and the exact LLenergyMeasure version - these all affect comparability.
 
 ---
 
@@ -62,17 +62,17 @@ llenergymeasure is a *measurement tool* that produces the raw energy data; AI En
 
 **What it measures:** Full-system energy and estimated carbon emissions. It uses a combination of hardware power monitoring (where available) and regional electricity grid data.
 
-**How llenergymeasure uses it:**
+**How LLenergyMeasure uses it:**
 
-CodeCarbon is one of the optional energy measurement engines in llenergymeasure. You can install it with:
+CodeCarbon is one of the optional energy samplers in LLenergyMeasure. You can install it with:
 
 ```bash
 pip install "llenergymeasure[codecarbon]"
 ```
 
-When CodeCarbon is active, llenergymeasure reports both GPU-specific energy (via NVML) and CodeCarbon's broader system estimate, including the carbon conversion.
+When CodeCarbon is active, LLenergyMeasure reports both GPU-specific energy (via NVML) and CodeCarbon's broader system estimate, including the carbon conversion.
 
-**The difference from the default:** llenergymeasure's default energy measurement (NVML) is GPU-specific and precise. CodeCarbon's estimate includes the whole system but uses estimation methods that are less precise for GPU workloads. For comparing inference efficiency across models, NVML is preferred; for carbon footprint reporting, CodeCarbon adds the CO₂ dimension.
+**The difference from the default:** LLenergyMeasure's default energy measurement (NVML) is GPU-specific and precise. CodeCarbon's estimate includes the whole system but uses estimation methods that are less precise for GPU workloads. For comparing inference efficiency across models, NVML is preferred; for carbon footprint reporting, CodeCarbon adds the CO₂ dimension.
 
 ---
 
@@ -82,15 +82,15 @@ When CodeCarbon is active, llenergymeasure reports both GPU-specific energy (via
 
 **What it measures:** GPU energy at a finer granularity than NVML polling, with lower measurement overhead.
 
-**How llenergymeasure uses it:**
+**How LLenergyMeasure uses it:**
 
-Zeus is an optional energy measurement backend in llenergymeasure:
+Zeus is an optional energy sampler in LLenergyMeasure:
 
 ```bash
 pip install "llenergymeasure[zeus]"
 ```
 
-When Zeus is installed, llenergymeasure can use it instead of the default NVML polling, providing more accurate energy attribution for short inferences where polling granularity matters.
+When Zeus is installed, LLenergyMeasure can use it instead of the default NVML polling, providing more accurate energy attribution for short inferences where polling granularity matters.
 
 **The difference from the default:** NVML polling measures GPU power approximately every 100 milliseconds. Zeus measures energy more continuously, reducing the error for experiments that run for only a few seconds. For experiments running many prompts (100+), the difference is small; for single-prompt measurements, Zeus improves accuracy.
 
@@ -100,7 +100,7 @@ When Zeus is installed, llenergymeasure can use it instead of the default NVML p
 
 | Tool | Type | Measures | Scope |
 |------|------|----------|-------|
-| **llenergymeasure** | Measurement tool | Inference energy, throughput, FLOPs | Any HF model, any NVIDIA GPU |
+| **LLenergyMeasure** | Measurement tool | Inference energy, throughput, FLOPs | Any HF model, any NVIDIA GPU |
 | **MLPerf** | Benchmark standard | Inference throughput, accuracy | Certified hardware + model configurations |
 | **AI Energy Score** | Benchmark standard | Energy per unit output | Standardised tasks across models |
 | **CodeCarbon** | Measurement library | Full-system energy + CO₂ | Any Python code |
@@ -108,28 +108,28 @@ When Zeus is installed, llenergymeasure can use it instead of the default NVML p
 
 ---
 
-## How to Use llenergymeasure Results in Reports and Policy Documents
+## How to Use LLenergyMeasure Results in Reports and Policy Documents
 
-**Citing a result:** Include the following with any llenergymeasure result:
+**Citing a result:** Include the following with any LLenergyMeasure result:
 
 - Model name and version (e.g., `gpt2`, `meta-llama/Llama-3-8B`)
 - Hardware (GPU model, e.g., NVIDIA A100 80GB)
 - Precision setting (e.g., `bf16`)
 - Number of prompts
-- llenergymeasure version (from `llem --version`)
+- LLenergyMeasure version (from `llem --version`)
 - Dataset (default: AI Energy Score prompts)
 
 **Comparing across studies:** Results are only comparable if the hardware, dataset, number of prompts, and dtype setting are identical. Hardware differences are the largest source of non-comparability — an A100 and a consumer GPU will produce very different energy figures even for the same model.
 
 **Energy per token:** When comparing models of different sizes or with different output lengths, use the derived metric of joules per output token (`inference_energy_joules ÷ total_output_tokens`). This normalises for the amount of useful output produced.
 
-**Reporting for sustainability:** If you are including AI energy use in an organisation's carbon accounting or sustainability report, pair llenergymeasure energy figures with the electricity carbon intensity of the data centre where the model runs, or use the CodeCarbon backend to get CO₂ estimates directly.
+**Reporting for sustainability:** If you are including AI energy use in an organisation's carbon accounting or sustainability report, pair LLenergyMeasure energy figures with the electricity carbon intensity of the data centre where the model runs, or use the CodeCarbon backend to get CO₂ estimates directly.
 
 ---
 
 ## Further Reading
 
-- [What We Measure and Why It Matters](/methodology/what-we-measure) — plain-language explanation of energy, throughput, and FLOPs
-- [How to Read llenergymeasure Output](/how-to/interpret-results) — interpreting the numbers
-- [Running Your First Measurement](/tutorials/non-technical/what-llem-shows) — getting started with a measurement
-- [Energy Measurement](/methodology/energy-measurement) — technical depth on measurement backends (for researchers)
+- [What We Measure and Why It Matters](/explanation/methodology/what-we-measure) — plain-language explanation of energy, throughput, and FLOPs
+- [How to Read LLenergyMeasure Output](/how-to/interpret-results) - interpreting the numbers
+- [Running Your First Measurement](/get-started/for-policy-readers) — getting started with a measurement
+- [Energy Measurement](/explanation/methodology/energy-measurement) — technical depth on measurement backends (for researchers)

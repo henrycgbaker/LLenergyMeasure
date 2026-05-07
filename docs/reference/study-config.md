@@ -1,6 +1,6 @@
 # Study and Experiment Configuration
 
-llenergymeasure uses YAML files to define experiments and studies. `llem run` auto-detects
+LLenergyMeasure uses YAML files to define experiments and studies. `llem run` auto-detects
 whether a YAML file is an **experiment** (single run) or a **study** (sweep or multi-experiment
 run) by inspecting its top-level keys. Files with a `sweep:` or `experiments:` key are loaded
 as studies; all others are loaded as single experiments.
@@ -149,7 +149,7 @@ model: gpt2
 engine: transformers
 
 sweep:
-  pytorch.batch_size: [1, 2, 4, 8]
+  transformers.batch_size: [1, 2, 4, 8]
 
 study_execution:
   n_cycles: 3
@@ -157,7 +157,7 @@ study_execution:
 ```
 
 Produces 4 configs × 3 cycles = 12 runs. The `transformers.batch_size` path expands to a
-`pytorch: { batch_size: N }` section in each generated experiment config.
+`transformers: { batch_size: N }` section in each generated experiment config.
 
 ---
 
@@ -311,12 +311,12 @@ engine: transformers
 
 sweep:
   dtype: [float16, bfloat16]                     # independent axis (2 values)
-  pytorch.compilation:                            # dependent group (3 variants)
-    - pytorch.torch_compile: false
-    - pytorch.torch_compile: true
-      pytorch.torch_compile_mode: default
-    - pytorch.torch_compile: true
-      pytorch.torch_compile_mode: max-autotune
+  transformers.compilation:                       # dependent group (3 variants)
+    - transformers.torch_compile: false
+    - transformers.torch_compile: true
+      transformers.torch_compile_mode: default
+    - transformers.torch_compile: true
+      transformers.torch_compile_mode: max-autotune
 ```
 
 The group name (`transformers.compilation`) is an abstract label - it doesn't map to a config
@@ -331,11 +331,11 @@ Use an empty dict `{}` as a group entry to include a "no override" baseline:
 
 ```yaml
 sweep:
-  pytorch.quantization:
+  transformers.quantization:
     - {}                              # baseline: no quantisation
-    - pytorch.load_in_8bit: true
-    - pytorch.load_in_4bit: true
-      pytorch.bnb_4bit_quant_type: nf4
+    - transformers.load_in_8bit: true
+    - transformers.load_in_4bit: true
+      transformers.bnb_4bit_quant_type: nf4
 ```
 
 Produces 3 variants: unquantised baseline, 8-bit, and 4-bit.
@@ -349,10 +349,10 @@ mini Cartesian product within that entry:
 
 ```yaml
 sweep:
-  pytorch.caching:
+  transformers.caching:
     - {}                              # baseline
-    - pytorch.use_cache: true
-      pytorch.cache_implementation: [static, offloaded_static, sliding_window]
+    - transformers.use_cache: true
+      transformers.cache_implementation: [static, offloaded_static, sliding_window]
 ```
 
 Produces 4 variants: 1 baseline + 3 cache implementations (all with `use_cache: true`).
@@ -365,12 +365,12 @@ Group entries can override fields outside their engine section, such as decoder 
 
 ```yaml
 sweep:
-  pytorch.decoding:
+  transformers.decoding:
     - {}                              # baseline: use shared decoder settings
     - decoder.do_sample: false
       decoder.temperature: 0.0
-      pytorch.num_beams: 4
-      pytorch.early_stopping: true
+      transformers.num_beams: 4
+      transformers.early_stopping: true
 ```
 
 ---
@@ -402,15 +402,15 @@ axes):
 # 2 dtype × 2 compilation × 3 quantisation = 12 configs
 sweep:
   dtype: [float16, bfloat16]
-  pytorch.compilation:
-    - pytorch.torch_compile: false
-    - pytorch.torch_compile: true
-      pytorch.torch_compile_mode: default
-  pytorch.quantization:
+  transformers.compilation:
+    - transformers.torch_compile: false
+    - transformers.torch_compile: true
+      transformers.torch_compile_mode: default
+  transformers.quantization:
     - {}
-    - pytorch.load_in_8bit: true
-    - pytorch.load_in_4bit: true
-      pytorch.bnb_4bit_quant_type: nf4
+    - transformers.load_in_8bit: true
+    - transformers.load_in_4bit: true
+      transformers.bnb_4bit_quant_type: nf4
 ```
 
 ---
@@ -460,7 +460,7 @@ study_execution:
 
 > **Note:** `shuffle_seed` (study-level scheduling) and `random_seed` (per-experiment
 > inference/dataset RNG) are independent by design. Changing one does not affect the
-> other. See [Methodology — Seeding model](/methodology/methodology#seeding-model) for details.
+> other. See [Methodology — Seeding model](/explanation/methodology/methodology#seeding-model) for details.
 
 **CLI effective defaults** when running `llem run study.yaml` (if not set in YAML):
 
@@ -567,7 +567,7 @@ All fields except `model` are optional and have sensible defaults.
 - [Baseline (`baseline:`)](#baseline-baseline)
 - [Energy Sampler (`energy_sampler:`)](#energy-sampler-energy_sampler)
 - [GPU Telemetry (`gpu_telemetry:`)](#gpu-telemetry-gpu_telemetry)
-- [PyTorch Engine (`pytorch:`)](#pytorch-engine-pytorch)
+- [Transformers Engine (`transformers:`)](#transformers-engine-transformers)
 - [vLLM Engine (`vllm.engine:`)](#vllm-engine-vllm-engine)
 - [vLLM Sampling (`vllm.sampling:`)](#vllm-sampling-vllm-sampling)
 - [vLLM Beam Search (`vllm.beam_search:`)](#vllm-beam-search-vllm-beam_search)
@@ -579,7 +579,7 @@ All fields except `model` are optional and have sensible defaults.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `model` | string | *(required)* | HuggingFace model ID or local path |
-| `engine` | 'pytorch' | 'vllm' | 'tensorrt' | `pytorch` | Inference engine |
+| `engine` | 'transformers' | 'vllm' | 'tensorrt' | `transformers` | Inference engine |
 | `dataset` | DatasetConfig | *(see below)* | Dataset configuration (nested sub-object) |
 | `dtype` | 'float32' | 'float16' | 'bfloat16' | `bfloat16` | Model dtype for inference |
 | `random_seed` | integer | `42` | Per-experiment seed: inference RNG and dataset ordering |
@@ -588,9 +588,9 @@ All fields except `model` are optional and have sensible defaults.
 | `decoder` | DecoderConfig | *(see section)* | Universal decoder/generation configuration |
 | `warmup` | WarmupConfig | *(see section)* | Warmup phase configuration |
 | `baseline` | BaselineConfig | *(see section)* | Baseline power measurement configuration |
-| `energy_sampler` | 'auto' | 'nvml' | 'zeus' | 'codecarbon' | None | `auto` | Energy measurement backend. auto=best available (Zeus>NVML>CodeCarbon). null disables. |
+| `energy_sampler` | 'auto' | 'nvml' | 'zeus' | 'codecarbon' | None | `auto` | Energy sampler. auto=best available (Zeus>NVML>CodeCarbon). null disables. |
 | `gpu_telemetry` | boolean | `true` | Persist GPU power/thermal/memory timeseries to Parquet sidecar. NVML always runs for throttle detection; this controls disk output. |
-| `pytorch` | TransformersConfig | None | `null` | PyTorch-specific configuration (only used when engine=transformers) |
+| `transformers` | TransformersConfig | None | `null` | Transformers engine configuration (only used when engine=transformers) |
 | `vllm` | VLLMConfig | None | `null` | vLLM-specific configuration (only used when engine=vllm) |
 | `tensorrt` | TensorRTConfig | None | `null` | TensorRT-LLM configuration (only used when engine=tensorrt) |
 | `lora` | LoRAConfig | None | `null` | LoRA adapter configuration |
@@ -622,7 +622,7 @@ dataset:
   order: shuffled
 ```
 
-### Decoder / Sampling (`decoder:`)
+### Decoder / Sampling (`decoder:`) {#decoder-sampling-decoder}
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -663,7 +663,7 @@ Two modes: **fixed** (default) runs exactly `n_warmup` prompts; **CV convergence
 
 ### Energy Sampler (`energy_sampler:`)
 
-`energy_sampler` is a flat top-level field (not a nested section). See [Energy Measurement](/methodology/energy-measurement) for full details on backends, accuracy, and what the harness resolves internally.
+`energy_sampler` is a flat top-level field (not a nested section). See [Energy Measurement](/explanation/methodology/energy-measurement) for full details on backends, accuracy, and what the harness resolves internally.
 
 | Value | Description |
 |-------|-------------|
@@ -694,10 +694,10 @@ The Parquet sidecar contains 1Hz downsampled data with 8 columns: `timestamp_s`,
 `sm_utilisation_pct`, `throttle_reasons`. File sizes are typically < 5KB per minute of
 inference per GPU.
 
-See [Energy Measurement](/methodology/energy-measurement) for details on how NVML telemetry
+See [Energy Measurement](/explanation/methodology/energy-measurement) for details on how NVML telemetry
 relates to energy measurement.
 
-### Transformers Engine (`pytorch:`)
+### Transformers Engine (`transformers:`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -727,7 +727,7 @@ relates to energy measurement.
 | `tp_plan` | string | None | `null` | Tensor parallelism plan for native HF TP (None -> disabled). Only 'auto' is currently supported by Transformers. Mutually exclusive with device_map. Requires torchrun launch. |
 | `tp_size` | integer | None | `null` | Number of tensor parallel ranks (None -> WORLD_SIZE). Only used when tp_plan is set. |
 
-### vLLM Engine (`vllm.engine:`)
+### vLLM Engine (`vllm.engine:`) {#vllm-engine-vllm-engine}
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -758,7 +758,7 @@ relates to energy measurement.
 | `compilation_config` | dict | None | `null` | Full passthrough to vLLM CompilationConfig (~30 fields). No validation — passed directly. |
 | `attention` | VLLMAttentionConfig | None | `null` | Attention implementation configuration. |
 
-### vLLM Sampling (`vllm.sampling:`)
+### vLLM Sampling (`vllm.sampling:`) {#vllm-sampling-vllm-sampling}
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -769,7 +769,7 @@ relates to energy measurement.
 | `ignore_eos` | boolean | None | `null` | Continue generating past EOS token (None -> False). Forces max_tokens generation every time — affects total token count. |
 | `n` | integer | None | `null` | Number of output sequences per prompt (None -> 1). |
 
-### vLLM Beam Search (`vllm.beam_search:`)
+### vLLM Beam Search (`vllm.beam_search:`) {#vllm-beam-search-vllm-beam_search}
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -778,7 +778,7 @@ relates to energy measurement.
 | `early_stopping` | boolean | None | `null` | Stop when beam_width complete sequences found (None -> False). |
 | `max_tokens` | integer | None | `null` | Max output tokens for beam search (None -> max_output_tokens). |
 
-### vLLM Attention (`vllm.engine.attention:`)
+### vLLM Attention (`vllm.engine.attention:`) {#vllm-attention-vllm-engine-attention}
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -818,7 +818,7 @@ relates to energy measurement.
 
 ## User Config File
 
-llenergymeasure reads per-user defaults from `~/.config/llenergymeasure/config.yaml`
+LLenergyMeasure reads per-user defaults from `~/.config/llenergymeasure/config.yaml`
 (XDG base directory, detected via `platformdirs`). This file is optional — all settings
 have sensible defaults.
 

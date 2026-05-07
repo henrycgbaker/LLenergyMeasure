@@ -8,9 +8,9 @@ This document is the entry point to the LLenergyMeasure architecture documentati
 
 ## Who this is for
 
-- **End users** running experiments: read the "Why configs are rejected" section and the [parameter-discovery](/architecture/parameter-discovery) guide.
-- **Engine extenders** adding a new backend: read this overview, then [miner-pipeline](/contributing/miner-pipeline) and [extending-miners](/contributing/extending-miners).
-- **Researchers and paper readers**: read this overview, then [research-context](/methodology/research-context) for academic positioning.
+- **End users** running experiments: read the "Why configs are rejected" section and the [parameter-discovery](/explanation/architecture/parameter-discovery) guide.
+- **Engine extenders** adding a new engine: read this overview, then [miner-pipeline](/contributing/miner-pipeline) and [extending-miners](/contributing/extending-miners).
+- **Researchers and paper readers**: read this overview, then [comparison-context](/explanation/methodology/comparison-context) for how results relate to other benchmarks.
 
 ---
 
@@ -71,7 +71,7 @@ Deep-dive: [miner-pipeline.md](/contributing/miner-pipeline)
 - Loader grammar - the predicate DSL (`type_is`, `@field_ref`, `not_divisible_by`, etc.).
 - Gap reporting - flags when a config combination the corpus has no rule for is encountered.
 
-Deep-dive: [parameter-discovery.md](/architecture/parameter-discovery)
+Deep-dive: [parameter-discovery.md](/explanation/architecture/parameter-discovery)
 
 ---
 
@@ -207,10 +207,10 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 ## See also
 
 - [miner-pipeline.md](/contributing/miner-pipeline) - invariant miner deep-dive
-- [parameter-discovery.md](/architecture/parameter-discovery) - runtime validation pipeline
+- [parameter-discovery.md](/explanation/architecture/parameter-discovery) - runtime validation pipeline
 - [validation-invariant-corpus.md](/contributing/validation-invariant-corpus) - corpus YAML format reference
 - [extending-miners.md](/contributing/extending-miners) - how to add a new engine miner
-- [research-context.md](/methodology/research-context) - academic positioning
+- [comparison-context.md](/explanation/methodology/comparison-context) - how results relate to other benchmarks
 - [engines.md](/reference/engines/configuration) - engine configuration reference
-- [methodology.md](/methodology/methodology) - energy measurement methodology
+- [methodology.md](/explanation/methodology/methodology) - energy measurement methodology
 - [schema-refresh.md](/contributing/schema-refresh) - parameter-discovery pipeline (Renovate-driven schema refresh)

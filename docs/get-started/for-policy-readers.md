@@ -1,8 +1,13 @@
-# Running Your First Measurement (Policy Maker Guide)
+---
+title: For policy readers
+description: A step-by-step guide to running your first energy measurement - no programming required.
+---
 
-This guide walks you through installing llenergymeasure and running your first energy measurement — step by step, with explanations along the way. It assumes basic familiarity with a terminal (command line) but no programming knowledge.
+# For policy readers
 
-If you want to understand *what* the measurements mean before you run them, read [What We Measure and Why It Matters](/methodology/what-we-measure) first.
+This guide walks you through installing LLenergyMeasure and running your first energy measurement - step by step, with explanations along the way. It assumes basic familiarity with a terminal (command line) but no programming knowledge.
+
+If you want to understand *what* the measurements mean before you run them, read [What We Measure and Why It Matters](/explanation/methodology/what-we-measure) first.
 
 ---
 
@@ -12,7 +17,7 @@ Before you start, you need:
 
 | Requirement | What it means |
 |-------------|---------------|
-| Python 3.10 or later | A programming language runtime — the engine that runs llenergymeasure |
+| Python 3.10 or later | A programming language runtime - the engine that runs LLenergyMeasure |
 | An NVIDIA GPU | A graphics card for running AI models. Required for energy measurement. |
 | Linux operating system | Required for the full measurement stack. macOS/Windows work for Transformers-only measurements. |
 | Terminal access | A command-line interface (Terminal on macOS/Linux, PowerShell or Command Prompt on Windows) |
@@ -25,7 +30,7 @@ For a detailed system requirements reference, see the [Installation Guide](/how-
 
 ---
 
-## Step 1: Install llenergymeasure
+## Step 1: Install LLenergyMeasure
 
 In your terminal, run:
 
@@ -33,7 +38,7 @@ In your terminal, run:
 pip install llenergymeasure
 ```
 
-**What this does:** Downloads and installs llenergymeasure — the
+**What this does:** Downloads and installs LLenergyMeasure - the
 host-side orchestrator that drives experiments and reads results. The AI
 inference engines themselves (Transformers, vLLM, TensorRT-LLM) run
 inside Docker containers, not on your host. You will need Docker
@@ -46,7 +51,7 @@ slower step is building (or pulling) the Docker image for the engine you
 want to use.
 
 **What you should see:** Lines of text as packages download and install,
-ending with `Successfully installed llenergymeasure-...`.
+ending with `Successfully installed llenergymeasure-...` (the package name is `llenergymeasure`).
 
 If you see a `pip: command not found` error, try `pip3` instead of `pip`,
 or `python -m pip`.
@@ -61,7 +66,7 @@ Run:
 llem config
 ```
 
-**What this does:** Checks your environment and prints a summary of what llenergymeasure can see — your GPU, which software components are installed, and the energy measurement method it will use.
+**What this does:** Checks your environment and prints a summary of what LLenergyMeasure can see - your GPU, which software components are installed, and the energy measurement method it will use.
 
 **Example output:**
 
@@ -83,7 +88,7 @@ Python
 
 **What to look for:**
 
-- **GPU section** shows your graphics card. If it says "No GPU detected", llenergymeasure will not be able to measure energy. Check that your NVIDIA drivers are installed.
+- **GPU section** shows your graphics card. If it says "No GPU detected", LLenergyMeasure will not be able to measure energy. Check that your NVIDIA drivers are installed.
 - **Engines section** lists each engine with its host-import status. Engines run inside Docker, so "not installed" against an engine name is expected — the suffix in brackets points at the Docker workflow. Docker images are what actually run the inference.
 - **Energy section** shows `nvml` — this is the energy measurement method. NVML reads directly from the GPU hardware and is the default.
 - **Python section** confirms your Python version.
@@ -97,14 +102,14 @@ If the GPU is not detected, you may need to install NVIDIA drivers — see the [
 Run:
 
 ```bash
-llem run --model gpt2 -e pytorch
+llem run --model gpt2 -e transformers
 ```
 
 **What this does:**
 
 - `llem run` — starts a measurement experiment
 - `--model gpt2` — uses GPT-2, a small AI language model made freely available by OpenAI. It is tiny compared to modern AI systems (124 million parameters vs the billions in GPT-4 or Claude), which makes it fast to download and run.
-- `-e pytorch` — uses the PyTorch inference engine (what you installed in Step 1)
+- `-e transformers` — uses the Transformers inference engine (what you installed in Step 1)
 
 **On first run:** The model downloads from HuggingFace (about 500 MB). This happens once; subsequent runs use a local cache.
 
@@ -121,7 +126,7 @@ Running experiment (100 prompts)...  [████████░░] 80%
 **What you will see when it finishes:**
 
 ```
-Result: gpt2-pytorch-bf16-2026-05-07T14-32-08
+Result: gpt2-transformers-bf16-2026-05-07T14-32-08
 
 Energy
   Total          847 J
@@ -159,7 +164,7 @@ Here is what each section means:
 - **Duration** — how long the experiment took, wall-clock time.
 - **Warmup** — how many prompts were excluded from the results to let the hardware reach a stable temperature. The metrics are based on the remaining prompts only.
 
-For a detailed explanation of every metric, including what numbers are "normal" and how to compare results across models, see [How to Read llenergymeasure Output](/how-to/interpret-results).
+For a detailed explanation of every metric, including what numbers are "normal" and how to compare results across models, see [How to Read LLenergyMeasure Output](/how-to/interpret-results).
 
 ---
 
@@ -169,7 +174,7 @@ Results are automatically saved to a `results/` folder in the directory where yo
 
 ```
 results/
-└── gpt2-pytorch-bf16-2026-05-07T14-32-08/
+└── gpt2-transformers-bf16-2026-05-07T14-32-08/
     └── result.json
 ```
 
@@ -184,5 +189,5 @@ You have run your first energy measurement. From here:
 - **Compare models:** Change `--model gpt2` to a different model name (e.g., `--model facebook/opt-125m`) and compare the results. Larger models will use more energy.
 - **Compare dtypes:** Add `--dtype float32` to run at full precision and compare energy use against the default `bfloat16`.
 - **Run a sweep:** Define a YAML configuration file to automatically run multiple configurations and compare them. See the [Researcher Getting Started Guide](/tutorials/first-measurement) for the next step up.
-- **Understand the numbers:** Read [How to Read llenergymeasure Output](/how-to/interpret-results) for a deeper explanation of each metric.
-- **See how this compares to other benchmarks:** Read [Comparison with Other Benchmarks](/methodology/comparison-context).
+- **Understand the numbers:** Read [How to Read LLenergyMeasure Output](/how-to/interpret-results) for a deeper explanation of each metric.
+- **See how this compares to other benchmarks:** Read [Comparison with Other Benchmarks](/explanation/methodology/comparison-context).

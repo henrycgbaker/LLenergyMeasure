@@ -1,11 +1,11 @@
 ---
 title: Run an experiment with vLLM (Docker)
-description: Use the vLLM backend for high-throughput inference measurements.
+description: Use the vLLM engine for high-throughput inference measurements.
 ---
 
 # Run an experiment with vLLM (Docker)
 
-This recipe runs a single measurement against the vLLM backend. Use it
+This recipe runs a single measurement against the vLLM engine. Use it
 when you want to measure inference under vLLM's continuous-batching
 runtime rather than HuggingFace `transformers`.
 
@@ -55,5 +55,5 @@ walkthrough.
 ## Related
 
 - [Tutorial: Your first measurement](/tutorials/first-measurement) — start here if you've never run `llem`
-- [How to: run with TensorRT-LLM](/how-to/run-with-tensorrt-llm) — sister recipe for the TRT-LLM backend
+- [How to: run with TensorRT-LLM](/how-to/run-with-tensorrt-llm) — sister recipe for the TRT-LLM engine
 - [Reference: engine configuration](/reference/engines/configuration) — every vLLM-specific config field

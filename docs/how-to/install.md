@@ -1,11 +1,22 @@
-# Installation
+---
+title: Advanced install topics
+description: Offline install, locked-down environments, custom CUDA, and other advanced scenarios.
+---
+
+# Advanced install topics
+
+For a friendly first install, see [Get Started: Install](/get-started/install).
+This page covers offline install, locked-down environments, custom CUDA, and
+other advanced scenarios.
+
+---
 
 ## System Requirements
 
 | Requirement | Minimum | Notes |
 |-------------|---------|-------|
 | Python | 3.10+ | Hard requirement (TensorRT-LLM compatibility) |
-| OS | Linux | Required for vLLM and TensorRT-LLM backends |
+| OS | Linux | Required for vLLM and TensorRT-LLM engines |
 | GPU | NVIDIA with CUDA 12.x | Required for all inference engines |
 | CUDA (host) | 12.x | For container image compatibility |
 | Docker + NVIDIA Container Toolkit | Latest | Required for vLLM and TensorRT-LLM |
@@ -75,7 +86,7 @@ llem v0.9.0
 
 ## Docker Setup
 
-For vLLM or TensorRT-LLM backends, Docker with NVIDIA Container Toolkit is required. See the [Docker Setup Guide](/how-to/docker-setup) for a complete walkthrough covering driver installation, toolkit setup, and verification.
+For vLLM or TensorRT-LLM engines, Docker with NVIDIA Container Toolkit is required. See the [Docker Setup Guide](/how-to/docker-setup) for a complete walkthrough covering driver installation, toolkit setup, and verification.
 
 ---
 
@@ -182,7 +193,7 @@ machines cold builds scale roughly with `MAX_JOBS` (FA3 compile is CPU-bound).
   contributor gets after `make docker-builder-setup`.
 - **Warm local rebuild** — second and subsequent local builds. The transformers
   image is a kernel substrate (FA3 + engine deps + runtime deps); the
-  llenergymeasure project source is bind-mounted at runtime, never baked in.
+  LLenergyMeasure project source is bind-mounted at runtime, never baked in.
   Source-only edits never invalidate any image layer for any engine.
 
 **Why does the GHCR cache only help Transformers?** vLLM and TensorRT-LLM use

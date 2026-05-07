@@ -1,9 +1,9 @@
 ---
-title: Multi-backend implementation-parameter study
+title: Multi-engine implementation-parameter study
 description: Measure how four implementation choices change energy and efficiency for the same model across three inference engines.
 ---
 
-# Multi-backend implementation-parameter study
+# Multi-engine implementation-parameter study
 
 This is the flagship tutorial. We'll measure how four implementation choices —
 **numerical precision, batching, attention backend, KV-cache reuse** —
@@ -61,11 +61,11 @@ them. But **writing them down before running** is what separates
 ## Step 2 — Read the study config
 
 The shipped config lives at
-[`configs/tutorials/tutorial-multi-backend.yaml`](https://github.com/henrycgbaker/llenergymeasure/blob/main/configs/tutorials/tutorial-multi-backend.yaml).
+[`configs/tutorials/tutorial-multi-engine.yaml`](https://github.com/henrycgbaker/llenergymeasure/blob/main/configs/tutorials/tutorial-multi-engine.yaml).
 Walk through it section by section.
 
 ```yaml
-study_name: tutorial-multi-backend
+study_name: tutorial-multi-engine
 
 runners:
   transformers: docker
@@ -73,7 +73,7 @@ runners:
   tensorrt: docker
 ```
 
-All three backends in Docker. `runners` is what pins each engine to its
+All three engines in Docker. `runners` is what pins each engine to its
 isolated image, so the host doesn't need to import any engine. This is
 the only correct way to compare engines side-by-side — without
 isolation, library-version conflicts (e.g. transformers ↔ vllm pinned
@@ -122,7 +122,7 @@ The sweep section is where the implementation parameters live:
 
 ```yaml
 sweep:
-  # 1. Numerical precision — applies to all three backends.
+  # 1. Numerical precision — applies to all three engines.
   transformers.dtype: [float16, bfloat16]
   vllm.dtype: [float16, bfloat16]
   tensorrt.dtype: [float16, bfloat16]
@@ -164,7 +164,7 @@ Before kicking off the real run, validate the config and see how many
 experiments will actually execute:
 
 ```bash
-llem run configs/tutorials/tutorial-multi-backend.yaml --dry-run
+llem run configs/tutorials/tutorial-multi-engine.yaml --dry-run
 ```
 
 The dry-run resolves the sweep, applies engine-scoped filtering,
@@ -172,7 +172,7 @@ deduplicates equivalent cells, and prints a manifest. You should see
 something like:
 
 ```text
-Study: tutorial-multi-backend
+Study: tutorial-multi-engine
   Resolved: 36 experiments (84 expanded → 36 after dedup)
   Per-engine breakdown:
     transformers: 16 (dtype × batch_size × attn × cycles)
@@ -190,19 +190,19 @@ If the resolved count and per-engine breakdown match your expectation,
 launch the real run:
 
 ```bash
-llem run configs/tutorials/tutorial-multi-backend.yaml
+llem run configs/tutorials/tutorial-multi-engine.yaml
 ```
 
 You'll see a progress indicator with experiment counters and the
 running cell's identifier. Each result lands in
-`results/tutorial-multi-backend_<timestamp>/<NNN_cN_*>/result.json`.
+`results/tutorial-multi-engine_<timestamp>/<NNN_cN_*>/result.json`.
 
 ## Step 4 — Inspect the manifest and a single result
 
 After the run completes, the study directory looks roughly like this:
 
 ```text
-results/tutorial-multi-backend_2026-05-07T14-32-08/
+results/tutorial-multi-engine_2026-05-07T14-32-08/
 ├── manifest.json                       # study-level: timing, config, completion
 ├── 001_c0_qwen-transformers_a1b2c3.../ # one experiment cell
 │   ├── result.json                     # all metrics + resolved config
@@ -248,10 +248,10 @@ The two energy-per-token figures are the headline:
 For cross-cell comparison the **adjusted** figure is the right pick —
 it isolates inference work from the cost of having a GPU plugged in.
 The full reasoning is on the
-[methodology page](/methodology/methodology) and the
-[energy-measurement explanation](/methodology/energy-measurement).
+[methodology page](/explanation/methodology/methodology) and the
+[energy-measurement explanation](/explanation/methodology/energy-measurement).
 
-## Step 5 — Compare across backends in Python
+## Step 5 — Compare across engines in Python
 
 Loading and grouping results uses the public API. Drop this snippet
 into a Python file alongside your study directory:
@@ -261,7 +261,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-study_dir = Path("results/tutorial-multi-backend_2026-05-07T14-32-08")
+study_dir = Path("results/tutorial-multi-engine_2026-05-07T14-32-08")
 
 # Load every result.json under the study.
 results = []
@@ -313,7 +313,7 @@ You've now exercised the full `llem` workflow:
   axes and dependent groups
 - **Resolving** that sweep with `--dry-run` to validate the
   experiment count and VRAM estimates before running
-- **Running** a multi-backend study with isolated Docker per engine
+- **Running** a multi-engine study with isolated Docker per engine
 - **Inspecting** both the study-level manifest and individual
   result.json files
 - **Comparing** results in Python using the universal output metrics
@@ -338,7 +338,7 @@ your question.
 
 ### Conceptual depth (Explanation)
 
-- [Methodology](/methodology/methodology) — warmup, baseline, thermal management
-- [What we measure](/methodology/what-we-measure) — energy / throughput / FLOPs
-- [Parameter discovery](/architecture/parameter-discovery) — how the engine-introspected parameter spaces are mined
-- [Comparison context](/methodology/comparison-context) — relationship to MLPerf, AI Energy Score
+- [Methodology](/explanation/methodology/methodology) — warmup, baseline, thermal management
+- [What we measure](/explanation/methodology/what-we-measure) — energy / throughput / FLOPs
+- [Parameter discovery](/explanation/architecture/parameter-discovery) — how the engine-introspected parameter spaces are mined
+- [Comparison context](/explanation/methodology/comparison-context) — relationship to MLPerf, AI Energy Score
