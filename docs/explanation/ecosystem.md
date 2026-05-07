@@ -82,7 +82,7 @@ error; consider Zeus.
 ### Zeus
 
 [Zeus](https://ml.energy/zeus/)
-([Chung et al., 2023](https://www.usenix.org/conference/nsdi23/presentation/you))
+([You et al., 2023](https://www.usenix.org/conference/nsdi23/presentation/you))
 is a research-cited GPU energy measurement library from the
 ML.ENERGY group at the University of Michigan. It samples energy more
 continuously than NVML and is the most-cited energy measurement library
@@ -207,10 +207,10 @@ overlapping mechanism.
 ### AIEnergyScore
 
 [AIEnergyScore](https://huggingface.github.io/AIEnergyScore/) (HuggingFace,
-[Luccioni et al.](https://huggingface.co/blog/sasha/ai-energy-score-leaderboard))
-is the benchmark initiative that standardises energy-efficiency ratings
-for AI models. The bundled prompt corpus that LLenergyMeasure uses by
-default is from this project; the methodology DNA is shared.
+launched [February 2025](https://huggingface.co/blog/sasha/announcing-ai-energy-score))
+is a benchmark initiative that standardises energy-efficiency ratings for
+AI models. The bundled prompt corpus that LLenergyMeasure uses by default
+is from this project; the methodology DNA is shared.
 
 Where the contrast lies: AIEnergyScore produces ratings on a fixed
 prompt set for a fixed task class, oriented toward standardised model

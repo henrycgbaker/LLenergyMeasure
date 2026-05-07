@@ -66,13 +66,13 @@ The engineering design behind the measurement pipeline.
 
 ### Why
 
-The motivation for LLenergyMeasure - what problem it solves and why existing
-tools leave a gap.
+- **[Why LLenergyMeasure](/explanation/why)** - the research gap, what the
+  tool does that is distinctive, and where its design is heading.
 
 ### Ecosystem
 
-Where LLenergyMeasure sits relative to adjacent tools, benchmarks, and research
-initiatives. Coming soon.
+- **[Ecosystem](/explanation/ecosystem)** - where LLenergyMeasure sits
+  relative to energy samplers, capability harnesses, and benchmark suites.
 
 ---
 

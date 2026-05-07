@@ -36,10 +36,10 @@ nor batch size at the prefill / decode split. These choices interact, and
 their interactions are not well-characterised in published comparisons.
 
 Existing tools cover adjacent layers. Energy samplers like NVML, Zeus
-([Chung et al., 2023](https://www.usenix.org/conference/nsdi23/presentation/you))
-and CodeCarbon ([Schmidt et al., 2021](https://codecarbon.io/)) measure
-power and energy at the GPU or system level; they do not orchestrate
-inference experiments or reason about implementation parameters.
+([You et al., 2023](https://www.usenix.org/conference/nsdi23/presentation/you))
+and [CodeCarbon](https://codecarbon.io/) measure power and energy at the
+GPU or system level; they do not orchestrate inference experiments or
+reason about implementation parameters.
 Capability harnesses like
 [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)
 measure quality (accuracy, perplexity) at fixed implementation; they do
