@@ -8,19 +8,19 @@
 #   1. install llenergymeasure (base deps only) so generate_api_docs.py
 #      can `import llenergymeasure` to render the API reference page
 #   2. run the API docs generator (writes docs/api/llenergymeasure.md,
-#      which is gitignored — must be regenerated on every build)
+#      which is gitignored - must be regenerated on every build)
 #   3. install Docusaurus deps + build the static site to website/build/
 #
 # Runtime versions are pinned in .nvmrc (Node) and .python-version
 # (Python); the CF V2 build image auto-activates them via nvm/pyenv.
-# CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not used here — direct
+# CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not used here - direct
 # GitHub App integration handles auth, this script only builds.
 
 set -euo pipefail
 
 # CF Pages serves at root (*.pages.dev), unlike GH Pages which serves
 # under the /llenergymeasure/ subpath. Override docusaurus.config.ts's
-# default baseUrl here rather than via dashboard env vars — the new
+# default baseUrl here rather than via dashboard env vars - the new
 # Workers Builds UI doesn't expose a clean Production/Preview-scoped
 # build-time env-var panel. Hardcoding here is unambiguous and only
 # affects CF builds (GH Pages uses .github/workflows/docs.yml, which
