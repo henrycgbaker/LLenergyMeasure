@@ -42,7 +42,11 @@ function Hero(): ReactNode {
           </div>
 
           <div className={styles.heroSecondary}>
-            <Link className="button button--secondary" href={GITHUB_REPO}>
+            <Link
+              className="button button--secondary"
+              href={GITHUB_REPO}
+              target="_blank"
+              rel="noopener noreferrer">
               GitHub
             </Link>
             <Link
