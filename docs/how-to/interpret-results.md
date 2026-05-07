@@ -167,6 +167,6 @@ These figures vary significantly with hardware, prompt length, and configuration
 
 ## Further Reading
 
-- [What We Measure and Why It Matters](/explanation/what-we-measure) — conceptual background on the three metrics
+- [What We Measure and Why It Matters](/methodology/what-we-measure) — conceptual background on the three metrics
 - [Running Your First Measurement](/tutorials/non-technical/what-llem-shows) — step-by-step guide to running measurements
-- [Comparison with Other Benchmarks](/explanation/comparison-context) — how these results relate to MLPerf, AI Energy Score, and other benchmarks
+- [Comparison with Other Benchmarks](/methodology/comparison-context) — how these results relate to MLPerf, AI Energy Score, and other benchmarks

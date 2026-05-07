@@ -4,14 +4,15 @@
 
 export const SITE_TITLE = 'LLenergyMeasure';
 
-// Route entry points per Diátaxis sidebar. Each value is the URL of the
-// FIRST page in that sidebar — clicking the corresponding navbar item or
+// Route entry points per pillar. Each value is the URL of the FIRST
+// page in that sidebar — clicking the corresponding navbar item or
 // landing-page card lands there.
 export const ROUTES = {
   tutorials: '/tutorials/first-measurement',
   howTo: '/how-to/install',
   reference: '/reference/cli',
-  explanation: '/explanation/methodology',
+  methodology: '/methodology/methodology',
+  architecture: '/architecture/architecture-overview',
   contributing: '/contributing/development',
 } as const;
 

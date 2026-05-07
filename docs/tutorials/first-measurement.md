@@ -78,8 +78,8 @@ Each field maps to a measurement decision:
 
 Why subtract baseline? Because you're measuring **inference**, not "GPU
 plugged in." The full reasoning is on the
-[methodology page](/explanation/methodology) and the
-[energy-measurement explanation](/explanation/energy-measurement).
+[methodology page](/methodology/methodology) and the
+[energy-measurement explanation](/methodology/energy-measurement).
 
 ## Step 4: Inspect the output files
 

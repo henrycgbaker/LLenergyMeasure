@@ -248,8 +248,8 @@ The two energy-per-token figures are the headline:
 For cross-cell comparison the **adjusted** figure is the right pick —
 it isolates inference work from the cost of having a GPU plugged in.
 The full reasoning is on the
-[methodology page](/explanation/methodology) and the
-[energy-measurement explanation](/explanation/energy-measurement).
+[methodology page](/methodology/methodology) and the
+[energy-measurement explanation](/methodology/energy-measurement).
 
 ## Step 5 — Compare across backends in Python
 
@@ -338,7 +338,7 @@ your question.
 
 ### Conceptual depth (Explanation)
 
-- [Methodology](/explanation/methodology) — warmup, baseline, thermal management
-- [What we measure](/explanation/what-we-measure) — energy / throughput / FLOPs
-- [Parameter discovery](/explanation/parameter-discovery) — how the engine-introspected parameter spaces are mined
-- [Comparison context](/explanation/comparison-context) — relationship to MLPerf, AI Energy Score
+- [Methodology](/methodology/methodology) — warmup, baseline, thermal management
+- [What we measure](/methodology/what-we-measure) — energy / throughput / FLOPs
+- [Parameter discovery](/architecture/parameter-discovery) — how the engine-introspected parameter spaces are mined
+- [Comparison context](/methodology/comparison-context) — relationship to MLPerf, AI Energy Score

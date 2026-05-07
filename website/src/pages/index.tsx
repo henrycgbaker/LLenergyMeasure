@@ -57,8 +57,13 @@ export default function Home(): ReactNode {
               </Link>
               <Link
                 className="button button--secondary button--lg"
-                to={ROUTES.explanation}>
-                Explanation
+                to={ROUTES.methodology}>
+                Methodology
+              </Link>
+              <Link
+                className="button button--secondary button--lg"
+                to={ROUTES.architecture}>
+                Architecture
               </Link>
             </div>
           </div>

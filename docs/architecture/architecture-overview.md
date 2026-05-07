@@ -8,9 +8,9 @@ This document is the entry point to the LLenergyMeasure architecture documentati
 
 ## Who this is for
 
-- **End users** running experiments: read the "Why configs are rejected" section and the [parameter-discovery](/explanation/parameter-discovery) guide.
+- **End users** running experiments: read the "Why configs are rejected" section and the [parameter-discovery](/architecture/parameter-discovery) guide.
 - **Engine extenders** adding a new backend: read this overview, then [miner-pipeline](/contributing/miner-pipeline) and [extending-miners](/contributing/extending-miners).
-- **Researchers and paper readers**: read this overview, then [research-context](/explanation/research-context) for academic positioning.
+- **Researchers and paper readers**: read this overview, then [research-context](/methodology/research-context) for academic positioning.
 
 ---
 
@@ -71,7 +71,7 @@ Deep-dive: [miner-pipeline.md](/contributing/miner-pipeline)
 - Loader grammar - the predicate DSL (`type_is`, `@field_ref`, `not_divisible_by`, etc.).
 - Gap reporting - flags when a config combination the corpus has no rule for is encountered.
 
-Deep-dive: [parameter-discovery.md](/explanation/parameter-discovery)
+Deep-dive: [parameter-discovery.md](/architecture/parameter-discovery)
 
 ---
 
@@ -207,10 +207,10 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 ## See also
 
 - [miner-pipeline.md](/contributing/miner-pipeline) - invariant miner deep-dive
-- [parameter-discovery.md](/explanation/parameter-discovery) - runtime validation pipeline
+- [parameter-discovery.md](/architecture/parameter-discovery) - runtime validation pipeline
 - [validation-invariant-corpus.md](/contributing/validation-invariant-corpus) - corpus YAML format reference
 - [extending-miners.md](/contributing/extending-miners) - how to add a new engine miner
-- [research-context.md](/explanation/research-context) - academic positioning
+- [research-context.md](/methodology/research-context) - academic positioning
 - [engines.md](/reference/engines/configuration) - engine configuration reference
-- [methodology.md](/explanation/methodology) - energy measurement methodology
+- [methodology.md](/methodology/methodology) - energy measurement methodology
 - [schema-refresh.md](/contributing/schema-refresh) - parameter-discovery pipeline (Renovate-driven schema refresh)

@@ -340,7 +340,7 @@ The CI pipeline enforces these invariants on every corpus file:
 
 ## See also
 
-- [parameter-discovery.md](/explanation/parameter-discovery) - how the corpus is consumed at runtime
+- [parameter-discovery.md](/architecture/parameter-discovery) - how the corpus is consumed at runtime
 - [miner-pipeline.md](/contributing/miner-pipeline) - how the corpus is built
 - [extending-miners.md](/contributing/extending-miners) - adding rules for new engines
-- [architecture-overview.md](/explanation/architecture-overview) - system overview
+- [architecture-overview.md](/architecture/architecture-overview) - system overview

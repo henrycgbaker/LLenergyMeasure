@@ -4,7 +4,7 @@ This document is the deep-dive reference for the invariant miner pipeline: how i
 
 **Audience:** engine extenders, CI maintainers, and research readers interested in the technical approach.
 
-For the runtime side of the pipeline (how the corpus is consumed at validation time), see [parameter-discovery.md](/explanation/parameter-discovery).
+For the runtime side of the pipeline (how the corpus is consumed at validation time), see [parameter-discovery.md](/architecture/parameter-discovery).
 
 ---
 
@@ -617,10 +617,10 @@ The templates NOT adopted from Daikon's full library: linear arithmetic ternary 
 
 ## See also
 
-- [architecture-overview.md](/explanation/architecture-overview) - system overview and data-flow
+- [architecture-overview.md](/architecture/architecture-overview) - system overview and data-flow
 - [validation-invariant-corpus.md](/contributing/validation-invariant-corpus) - corpus YAML format reference
 - [extending-miners.md](/contributing/extending-miners) - how to add a new engine miner
-- [parameter-discovery.md](/explanation/parameter-discovery) - runtime validation pipeline
-- [research-context.md](/explanation/research-context) - academic positioning
+- [parameter-discovery.md](/architecture/parameter-discovery) - runtime validation pipeline
+- [research-context.md](/methodology/research-context) - academic positioning
 - [engines.md](/reference/engines/configuration) - engine configuration reference
 - [schema-refresh.md](/contributing/schema-refresh) - parameter-discovery pipeline (Renovate-driven schema refresh)

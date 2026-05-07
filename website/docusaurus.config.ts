@@ -6,11 +6,12 @@ import {ROUTES, GITHUB_REPO, EDIT_URL, SITE_TITLE} from './src/constants';
 
 // Runs in Node.js — no client-side code (no browser APIs, no JSX).
 //
-// Five-plugin Diátaxis IA:
+// Six-plugin IA (Diátaxis with Explanation split into research-vs-engineering):
 //   docs/tutorials/    — guided learning (Tutorials sidebar; classic preset slot)
 //   docs/how-to/       — goal-driven recipes (How-to sidebar)
 //   docs/reference/    — exhaustive lookup: CLI, study config, Python API, engines
-//   docs/explanation/  — methodology, conceptual architecture, glossary
+//   docs/methodology/  — research voice: what we measure, energy methodology, comparison context
+//   docs/architecture/ — engineering voice: dataflow, validation pipeline, miner pipeline (with diagrams)
 //   docs/contributing/ — internals + developer docs (last on purpose)
 //
 // Content lives in docs/ at the repo root; this Docusaurus instance lives
@@ -98,10 +99,20 @@ const config: Config = {
     [
       '@docusaurus/plugin-content-docs',
       {
-        id: 'explanation',
-        path: '../docs/explanation',
-        routeBasePath: 'explanation',
-        sidebarPath: './sidebarsExplanation.ts',
+        id: 'methodology',
+        path: '../docs/methodology',
+        routeBasePath: 'methodology',
+        sidebarPath: './sidebarsMethodology.ts',
+        editUrl: EDIT_URL,
+      },
+    ],
+    [
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'architecture',
+        path: '../docs/architecture',
+        routeBasePath: 'architecture',
+        sidebarPath: './sidebarsArchitecture.ts',
         editUrl: EDIT_URL,
       },
     ],
@@ -124,14 +135,16 @@ const config: Config = {
           '../docs/tutorials',
           '../docs/how-to',
           '../docs/reference',
-          '../docs/explanation',
+          '../docs/methodology',
+          '../docs/architecture',
           '../docs/contributing',
         ],
         docsRouteBasePath: [
           'tutorials',
           'how-to',
           'reference',
-          'explanation',
+          'methodology',
+          'architecture',
           'contributing',
         ],
         indexBlog: false,
@@ -149,7 +162,8 @@ const config: Config = {
         {to: ROUTES.tutorials, label: 'Tutorials', position: 'left'},
         {to: ROUTES.howTo, label: 'How-to', position: 'left'},
         {to: ROUTES.reference, label: 'Reference', position: 'left'},
-        {to: ROUTES.explanation, label: 'Explanation', position: 'left'},
+        {to: ROUTES.methodology, label: 'Methodology', position: 'left'},
+        {to: ROUTES.architecture, label: 'Architecture', position: 'left'},
         {to: ROUTES.contributing, label: 'Contributing', position: 'left'},
         {href: GITHUB_REPO, label: 'GitHub', position: 'right'},
       ],
@@ -168,9 +182,9 @@ const config: Config = {
         {
           title: 'Understand',
           items: [
-            {label: 'Methodology', to: ROUTES.explanation},
-            {label: 'Energy measurement', to: '/explanation/energy-measurement'},
-            {label: 'Architecture overview', to: '/explanation/architecture-overview'},
+            {label: 'Methodology', to: ROUTES.methodology},
+            {label: 'Energy measurement', to: '/methodology/energy-measurement'},
+            {label: 'Architecture overview', to: '/architecture/architecture-overview'},
           ],
         },
         {

@@ -578,8 +578,8 @@ The fail-loud envelope and the YAML diff together cover the failure modes that t
 
 - [miner-pipeline.md](/contributing/miner-pipeline) - pipeline architecture reference
 - [validation-invariant-corpus.md](/contributing/validation-invariant-corpus) - corpus format
-- [parameter-discovery.md](/explanation/parameter-discovery) - runtime validation
-- [architecture-overview.md](/explanation/architecture-overview) - system overview
+- [parameter-discovery.md](/architecture/parameter-discovery) - runtime validation
+- [architecture-overview.md](/architecture/architecture-overview) - system overview
 - `scripts/engine_miners/transformers_static_miner.py` - gold-standard static miner
 - `scripts/engine_miners/transformers_dynamic_miner.py` - gold-standard dynamic miner
 - `scripts/engine_miners/_base.py` - shared infrastructure

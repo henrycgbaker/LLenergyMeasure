@@ -170,7 +170,7 @@ is unavailable, energy measurement falls back gracefully to zero rather than cra
    enough samples for accurate integration. Use larger `n` values.
 
 Zeus and CodeCarbon are optional extras. If they are not installed, the tool falls back
-to NVML. See [energy-measurement.md](/explanation/energy-measurement) for backend details.
+to NVML. See [energy-measurement.md](/methodology/energy-measurement) for backend details.
 
 ---
 
@@ -197,7 +197,7 @@ llem run experiment.yaml  # add to YAML for testing
 ```
 
 For publication-quality measurements, leave warmup enabled. See
-[methodology.md](/explanation/methodology) for why warmup matters.
+[methodology.md](/methodology/methodology) for why warmup matters.
 
 ---
 

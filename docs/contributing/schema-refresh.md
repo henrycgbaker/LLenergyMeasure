@@ -202,4 +202,4 @@ via path-based triggers (`docker/Dockerfile.*`).
 - [Docker Setup](/how-to/docker-setup) - building engine images locally
 - [Engine Configuration](/reference/engines/configuration) - configuring engine parameters
 - [Miner Pipeline](/contributing/miner-pipeline) - how the validation-rule corpus is regenerated alongside parameter schemas on library bumps
-- [Architecture Overview](/explanation/architecture-overview) - full system context
+- [Architecture Overview](/architecture/architecture-overview) - full system context

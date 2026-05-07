@@ -2,7 +2,7 @@
 
 This guide walks you through installing llenergymeasure and running your first energy measurement — step by step, with explanations along the way. It assumes basic familiarity with a terminal (command line) but no programming knowledge.
 
-If you want to understand *what* the measurements mean before you run them, read [What We Measure and Why It Matters](/explanation/what-we-measure) first.
+If you want to understand *what* the measurements mean before you run them, read [What We Measure and Why It Matters](/methodology/what-we-measure) first.
 
 ---
 
@@ -185,4 +185,4 @@ You have run your first energy measurement. From here:
 - **Compare dtypes:** Add `--dtype float32` to run at full precision and compare energy use against the default `bfloat16`.
 - **Run a sweep:** Define a YAML configuration file to automatically run multiple configurations and compare them. See the [Researcher Getting Started Guide](/tutorials/first-measurement) for the next step up.
 - **Understand the numbers:** Read [How to Read llenergymeasure Output](/how-to/interpret-results) for a deeper explanation of each metric.
-- **See how this compares to other benchmarks:** Read [Comparison with Other Benchmarks](/explanation/comparison-context).
+- **See how this compares to other benchmarks:** Read [Comparison with Other Benchmarks](/methodology/comparison-context).
