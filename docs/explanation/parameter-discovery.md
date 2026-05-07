@@ -18,46 +18,22 @@ llem evaluates each submitted `ExperimentConfig` against a pre-computed corpus o
 
 ## Data flow: user config to validation result
 
-```
-  User submits config
-  (YAML file, CLI flags, or Python API)
-               │
-               ▼
-  ExperimentConfig (Pydantic model)
-  parsed and validated by Pydantic
-               │
-               ▼
-  _apply_invariants in config/models.py
-  calls EngineInvariantsLoader().load_invariants(engine)
-               │
-               ▼
-  loader.py: parse validated YAML
-  ┌─────────────────────────────────────────┐
-  │  EngineInvariants                        │
-  │  engine: "transformers"                 │
-  │  schema_version: "1.0.0"               │
-  │  invariants: [Invariant, Invariant, ...]  │
-  └─────────────────────────────────────────┘
-               │
-               ▼
-  for each Invariant in invariants:
-    Invariant.try_match(config)
-               │
-               ├── None (predicate did not fire) → skip
-               │
-               └── RuleMatch (predicate fired)
-                       │
-                       ├── severity: "error"
-                       │   → raise ValueError (Pydantic surfaces it
-                       │     as ValidationError) with message
-                       │
-                       ├── severity: "warn"
-                       │   → emit warning to user
-                       │
-                       └── severity: "dormant"
-                           → annotate config
-                           → log "field X will be silently
-                              ignored or normalised by the engine"
+```mermaid
+flowchart TB
+    user[User submits config<br/>YAML / CLI flags / Python API]
+    pydantic[ExperimentConfig parsed by Pydantic]
+    apply[_apply_invariants &#40;config/models.py&#41;<br/>EngineInvariantsLoader&#40;&#41;.load_invariants&#40;engine&#41;]
+    inv[(EngineInvariants<br/>engine + schema_version + invariants[])]
+
+    user --> pydantic --> apply --> inv
+
+    inv --> rule[For each Invariant:<br/>try_match&#40;config&#41;]
+    rule -->|None &mdash; predicate did not fire| skip([skip])
+    rule -->|RuleMatch fired| match{severity?}
+
+    match -->|error| err["raise ValueError<br/>(Pydantic surfaces as<br/>ValidationError)"]
+    match -->|warn| warn[emit warning to user]
+    match -->|dormant| dormant["annotate config<br/>log: field X will be silently<br/>ignored / normalised"]
 ```
 
 ---
