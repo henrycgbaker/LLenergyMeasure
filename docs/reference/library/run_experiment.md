@@ -105,7 +105,7 @@ Used when `config` is `None` (omitted):
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `model` | `str` | _(required)_ | HuggingFace Hub ID or local path (e.g. `"gpt2"`, `"meta-llama/Llama-3.1-8B"`). |
-| `engine` | `str \| None` | `"transformers"` | Inference engine: `"transformers"`, `"vllm"`, or `"tensorrt"`. |
+| `engine` | `str \| None` | `None` | Inference engine: `"transformers"`, `"vllm"`, or `"tensorrt"`. `None` falls back to the `ExperimentConfig` default (`"transformers"`). |
 | `n_prompts` | `int` | `100` | Number of prompts to run. Matches `DatasetConfig.n_prompts` default. |
 | `dataset` | `str` | `"aienergyscore"` | Dataset source: built-in alias or path to a `.jsonl` file. |
 | `**kwargs` | `Any` | - | Additional `ExperimentConfig` fields. Task-level fields (`max_input_tokens`, `max_output_tokens`, `random_seed`) and measurement-level fields (`energy_sampler`, etc.) are routed automatically. |
@@ -193,13 +193,13 @@ multiple times to get a stable mean, or sweeping over a parameter axis, use
 [`run_study`](./run_study). Calling `run_experiment` in a loop bypasses study-level
 gap controls, cycle ordering, circuit-breaker logic, and the result manifest.
 
-**Engine extras must be installed.** `engine="transformers"` requires the `[pytorch]` extra
-(`pip install llenergymeasure[pytorch]`). `engine="vllm"` or `engine="tensorrt"` require Docker -
-the engine is never run on the host. See [engine configuration](/reference/engines/configuration).
-
-**vLLM and TensorRT-LLM always use Docker.** Passing `engine="vllm"` or
-`engine="tensorrt"` without Docker running raises `PreFlightError` at preflight, before
-any inference starts.
+**Engines run in Docker.** Engine libraries are not installed on the host;
+each engine runs inside its own Docker image. Docker with the NVIDIA Container
+Toolkit must be available, and the engine image must be present locally or
+pullable. See [Docker setup](/how-to/docker-setup) and
+[engine configuration](/reference/engines/configuration). When Docker is
+unavailable, `run_experiment` raises `PreFlightError` at preflight, before any
+inference starts.
 
 **kwargs routing is automatic but transparent.** When using the kwargs form, known
 `TaskConfig` fields (`max_input_tokens`, `max_output_tokens`, `random_seed`) and
