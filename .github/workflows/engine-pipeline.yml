@@ -207,7 +207,9 @@ jobs:
               - '.github/actions/**'
               - 'scripts/ci/upsert_pr_comment.sh'
 
-      - name: Compute matrix outputs (#564 dynamic engine matrix)
+      # Computes per-cell flags + JSON arrays for the matrix fan-out
+      # (rationale: #564 dynamic engine matrix from SSOT).
+      - name: Compute matrix outputs
         id: compute
         env:
           EVENT: ${{ github.event_name }}
@@ -346,6 +348,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   invariants-transformers:
+    name: update invariants
     needs: [filter, build-transformers]
     if: |
       always()
@@ -361,6 +364,7 @@ jobs:
     secrets: inherit
 
   invariants-others:
+    name: update invariants
     needs: filter
     if: |
       always()
@@ -379,6 +383,7 @@ jobs:
     secrets: inherit
 
   schemas-transformers:
+    name: update schemas
     needs: [filter, build-transformers]
     if: |
       always()
@@ -394,6 +399,7 @@ jobs:
     secrets: inherit
 
   schemas-others:
+    name: update schemas
     needs: filter
     if: |
       always()
