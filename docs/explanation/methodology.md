@@ -50,10 +50,18 @@ the system never stabilises.
 
 ### Execution order
 
-1. **Warmup prompts** - heat the GPU to steady state (fixed or CV mode).
-2. **Thermal floor wait** - sleep `thermal_floor_seconds` (default 60s) for GPU
+```mermaid
+flowchart LR
+    A[**Warmup**<br/>heat GPU to steady state<br/>fixed n_warmup OR CV-converged] --> B[**Thermal floor wait**<br/>sleep thermal_floor_seconds<br/>default 60s] --> C[**Measurement**<br/>energy tracking begins<br/>per-prompt power + latency]
+    style A fill:#fff4e6,stroke:#ff9800
+    style B fill:#e3f2fd,stroke:#2196f3
+    style C fill:#e8f5e9,stroke:#4caf50
+```
+
+1. **Warmup prompts** — heat the GPU to steady state (fixed or CV mode).
+2. **Thermal floor wait** — sleep `thermal_floor_seconds` (default 60s) for GPU
    temperature to plateau after warmup.
-3. **Measurement** - energy tracking begins.
+3. **Measurement** — energy tracking begins.
 
 The thermal floor wait occurs *after* warmup, not before. This ensures the GPU has
 reached operating temperature from warmup but has stabilised before measurement starts.
@@ -174,33 +182,22 @@ independence of each engine's adjusted energy figures.
 For `cached` / `validated` strategies, a Docker experiment is dispatched
 as **two sequential containers** of the same engine image:
 
-```text
-          ┌────────────────────────────────────────────────┐
-          │ Host runner (study/runner.py)                  │
-          │                                                │
-          │  1. dispatch Container A ─┐                    │
-          │                           ▼                    │
-          │    ┌────────────────────────────────────────┐  │
-          │    │ Container A  (baseline_measure)        │  │
-          │    │ · init CUDA runtime                    │  │
-          │    │ · seed torch memory pool               │  │
-          │    │ · sample NVML power for duration_s     │  │
-          │    │ · write BaselineCache to JSON          │  │
-          │    │ · exit                                 │  │
-          │    └────────────────────────────────────────┘  │
-          │                           │                    │
-          │  2. bind-mount JSON ◀─────┘                    │
-          │                                                │
-          │  3. dispatch Container B                       │
-          │                           ▼                    │
-          │    ┌────────────────────────────────────────┐  │
-          │    │ Container B  (experiment harness)      │  │
-          │    │ · mount baseline_cache.json read-only  │  │
-          │    │ · load baseline via harness Branch A   │  │
-          │    │ · run warmup + measurement + save      │  │
-          │    └────────────────────────────────────────┘  │
-          │                                                │
-          └────────────────────────────────────────────────┘
+```mermaid
+sequenceDiagram
+    participant Host as Host runner<br/>(study/runner.py)
+    participant A as Container A<br/>(baseline_measure)
+    participant FS as baseline_cache.json<br/>(bind-mount)
+    participant B as Container B<br/>(experiment harness)
+
+    Host->>+A: dispatch (engine image)
+    Note over A: init CUDA runtime<br/>seed torch memory pool<br/>sample NVML power for duration_s
+    A->>FS: write BaselineCache JSON
+    A-->>-Host: exit
+
+    Host->>+B: dispatch (same engine image)
+    FS-->>B: mount read-only at /run/llem/
+    Note over B: load baseline via harness Branch A<br/>run warmup + measurement + save
+    B-->>-Host: exit
 ```
 
 **Key properties:**
