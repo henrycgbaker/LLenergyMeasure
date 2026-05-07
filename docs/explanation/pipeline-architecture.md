@@ -101,7 +101,7 @@ LEGEND:  [auto]    fully automated, no human action
 │   validate_invariants.py + the      │         │  STEP 3 [auto]: DIFF vs HEAD │
 │   compare_expected_vs_       │         │                              │
 │   observed contract from     │         │  STEP 4 [auto]: REGENERATE   │
-│   _invariant_validation_common.py│         │   docs/generated/            │
+│   _invariant_validation_common.py│         │   docs/reference/engines/            │
 │   replays kwargs_positive +  │         │     curation-{engine}.md     │
 │   kwargs_negative against    │         │   (Parameters section —      │
 │   live library; classifies   │         │    fact base for human       │
@@ -116,7 +116,7 @@ LEGEND:  [auto]    fully automated, no human action
 │   validated.yaml artefacts    │         │  with 3 routes (per §3 of    │
 │                              │         │   the design doc: patch      │
 │  STEP 5 [auto]: REGENERATE   │         │   code / /approve-reuse /    │
-│   docs/generated/            │         │   escalate). Apply           │
+│   docs/reference/engines/            │         │   escalate). Apply           │
 │     invariants-{engine}.md   │         │   probe-blocked label.       │
 │   (Invariants section — fact │         │   exit 0 (not CI failure)    │
 │   base; encompasses dormancy │         │                              │
@@ -148,8 +148,8 @@ LEGEND:  [auto]    fully automated, no human action
               │             src/llenergymeasure/engines/{engine}/invariants.validated.yaml    │
               │             src/llenergymeasure/src/llenergymeasure/engines/      │
               │                  {engine}/schema.discovered.json                                  │
-              │             docs/generated/curation-{engine}.md                 │
-              │             docs/generated/invariants-{engine}.md               │
+              │             docs/reference/engines/curation-{engine}.md                 │
+              │             docs/reference/engines/invariants-{engine}.md               │
               │             engine_versions/{engine}.compat.json                │
               │             engine_versions/{engine}.yaml (if /approve-reuse    │
               │                                            fired during cycle)  │
@@ -183,10 +183,10 @@ LEGEND:  [auto]    fully automated, no human action
    ║   src/llenergymeasure/config/engine_configs.py.                    ║
    ║                                                                    ║
    ║   Dev consumes auto-generated digests:                             ║
-   ║     docs/generated/curation-{engine}.md                            ║
+   ║     docs/reference/engines/curation-{engine}.md                            ║
    ║       Section 1: Parameters (discovered fields × Pydantic-curated  ║
    ║                  yes/no, deltas vs previous SSOT version)          ║
-   ║     docs/generated/invariants-{engine}.md                          ║
+   ║     docs/reference/engines/invariants-{engine}.md                          ║
    ║       Section 1: Invariants (corpus rules added/changed/removed,   ║
    ║                  classified by added_by; encompasses dormancy +    ║
    ║                  invalidity + miner output + introspection +      ║

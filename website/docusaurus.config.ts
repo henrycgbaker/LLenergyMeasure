@@ -38,10 +38,13 @@ const config: Config = {
     // standard markdown features only — HTML comments, GFM tables, code
     // blocks — and don't need JSX. CommonMark mode is more permissive.
     format: 'md',
+    mermaid: true,
     hooks: {
       onBrokenMarkdownLinks: 'throw',
     },
   },
+
+  themes: ['@docusaurus/theme-mermaid'],
 
   i18n: {
     defaultLocale: 'en',

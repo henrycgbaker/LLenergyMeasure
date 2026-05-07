@@ -1,0 +1,87 @@
+# Tutorial: multi-backend implementation-parameter study.
+#
+# Goal: measure how four implementation choices — dtype, batching,
+# attention backend, KV-cache reuse — affect energy and efficiency for
+# the same model across three inference engines (Transformers, vLLM,
+# TensorRT-LLM).
+#
+# Walkthrough: docs/tutorials/multi-backend-study.md
+#
+# Run:
+#   llem run configs/tutorials/tutorial-multi-backend.yaml
+#
+# Expected experiment count: ~36 (after dedup; depends on engine availability).
+# Wall-clock: ~30 min on a single A100-class GPU once images are pulled
+# (TensorRT-LLM compilation adds ~5 min on first run).
+
+study_name: tutorial-multi-backend
+
+runners:
+  transformers: docker
+  vllm: docker
+  tensorrt: docker
+
+study_execution:
+  n_cycles: 1
+  experiment_order: shuffle
+  experiment_gap_seconds: 10.0
+  cycle_gap_seconds: 30.0
+  max_consecutive_failures: 3
+  experiment_timeout_seconds: 600.0
+
+# Same model across all three backends; small enough to compile + run quickly.
+task:
+  model: Qwen/Qwen2.5-0.5B
+  random_seed: 42
+  dataset:
+    source: aienergyscore
+    n_prompts: 30
+    order: interleaved
+  max_input_tokens: 256
+  max_output_tokens: 256
+
+measurement:
+  energy_sampler: auto
+  baseline:
+    enabled: true
+    duration_seconds: 30.0
+  warmup:
+    enabled: true
+    n_warmup: 3
+    thermal_floor_seconds: 30.0
+
+output:
+  results_dir: ./results
+  save_timeseries: true
+
+# ---------------------------------------------------------------------
+# Sweep — four implementation-parameter axes, expanded per engine.
+# ---------------------------------------------------------------------
+# Independent axes (lists of scalars) are crossed; engines for which an
+# axis has no meaning are simply omitted from that axis. Cross-engine
+# comparison uses the universal output metrics (mJ/token, tokens/sec).
+sweep:
+  # 1. Numerical precision — applies to all three backends.
+  transformers.dtype: [float16, bfloat16]
+  vllm.dtype: [float16, bfloat16]
+  tensorrt.dtype: [float16, bfloat16]
+
+  # 2. Batching strategy — engine-native parameter names.
+  #    Transformers: explicit batch_size at generation time.
+  #    vLLM: max_num_seqs (continuous batching cap).
+  #    TensorRT-LLM: max_batch_size (compile-time engine parameter).
+  transformers.batch_size: [4, 16]
+  vllm.engine.max_num_seqs: [64, 256]
+  tensorrt.max_batch_size: [4, 16]
+
+  # 3. Attention backend — measurable energy effect on prefill-heavy work.
+  transformers.attn_implementation: [sdpa, flash_attention_2]
+  vllm.attention.backend: [flash_attn, flashinfer]
+  # TensorRT-LLM uses its own fused attention; no axis here.
+
+  # 4. KV-cache reuse — affects steady-state throughput and energy.
+  vllm.engine.enable_prefix_caching: [true, false]
+  tensorrt.kv_cache_reuse:
+    - {}                                              # baseline
+    - tensorrt.kv_cache_config.enable_block_reuse: true
+      tensorrt.kv_cache_config.free_gpu_memory_fraction: 0.9

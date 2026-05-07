@@ -18,67 +18,25 @@ This document is the entry point to the LLenergyMeasure architecture documentati
 
 LLenergyMeasure has two pipelines that work together to give users early, actionable feedback when their configs are invalid before an expensive engine initialisation takes place.
 
-```
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │  COMPILE-TIME (CI / Renovate-driven library bumps)                  │
-  │                                                                     │
-  │   Engine library source                                             │
-  │   (transformers, vLLM, TRT-LLM)                                    │
-  │              │                                                      │
-  │              ▼                                                      │
-  │   ┌─────────────────────────┐                                       │
-  │   │   Invariant Miner       │  scripts/engine_miners/              │
-  │   │   Pipeline              │                                       │
-  │   │  ┌──────────────┐       │                                       │
-  │   │  │ static miner │       │  AST walking of validator methods    │
-  │   │  └──────────────┘       │                                       │
-  │   │  ┌──────────────┐       │                                       │
-  │   │  │dynamic miner │       │  combinatorial probing               │
-  │   │  └──────────────┘       │                                       │
-  │   │  ┌──────────────┐       │                                       │
-  │   │  │  lift modules│       │  pydantic / msgspec / dataclass      │
-  │   │  └──────────────┘       │                                       │
-  │   │         │               │                                       │
-  │   │    staging files        │                                       │
-  │   │         │               │                                       │
-  │   │    build_corpus.py      │  merge + dedup + fingerprint         │
-  │   │         │               │                                       │
-  │   │    validate_invariants.py      │  replay against live library         │
-  │   │         │               │                                       │
-  │   │  proposed corpus YAML   │  src/llenergymeasure/engines/          │
-  │   │                          │  {e}.proposed.yaml                   │
-  │   │  validated corpus YAML   │  src/llenergymeasure/engines/          │
-  │   │                          │  {e}.validated.yaml                   │
-  │   └─────────────────────────┘                                       │
-  └─────────────────────────────────────────────────────────────────────┘
-                      │
-                      │ validated YAML ships with package
-                      │
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │  RUNTIME (user submits ExperimentConfig)                            │
-  │                                                                     │
-  │   User YAML / Python API                                            │
-  │              │                                                      │
-  │              ▼                                                      │
-  │   ┌─────────────────────────┐                                       │
-  │   │  Config Validation      │  src/.../config/engine_invariants/      │
-  │   │  Pipeline               │  loader.py                           │
-  │   │                         │                                       │
-  │   │  ┌───────────────┐      │                                       │
-  │   │  │ loader.py     │      │  parse corpus + evaluate predicates  │
-  │   │  └───────────────┘      │                                       │
-  │   │  ┌───────────────┐      │                                       │
-  │   │  │ rule match    │      │  try_match() per rule per engine     │
-  │   │  └───────────────┘      │                                       │
-  │   │         │               │                                       │
-  │   │    error / warn /       │                                       │
-  │   │    dormant annotation   │                                       │
-  │   └─────────────────────────┘                                       │
-  │              │                                                      │
-  │              ▼                                                      │
-  │   User sees rejection BEFORE engine initialisation                  │
-  │   (engine initialisation is expensive; this saves GPU time)         │
-  └─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph compile["COMPILE-TIME &mdash; CI, Renovate-driven library bumps"]
+        direction TB
+        src[Engine library source<br/>transformers, vLLM, TensorRT-LLM]
+        miner[Invariant miner pipeline<br/>scripts/engine_miners/<br/>static + dynamic + lift]
+        validated[(validated corpus YAML<br/>engines/&lt;e&gt;/invariants.validated.yaml)]
+        src --> miner --> validated
+    end
+
+    subgraph runtime["RUNTIME &mdash; user submits ExperimentConfig"]
+        direction TB
+        user[User YAML / Python API]
+        loader[Config validation pipeline<br/>config/engine_invariants/loader.py]
+        rejected[Rejection surfaced BEFORE<br/>engine initialisation<br/>saves GPU + researcher time]
+        user --> loader --> rejected
+    end
+
+    validated -. corpus ships with package .-> loader
 ```
 
 ---
@@ -146,66 +104,25 @@ The invariant miner pipeline lives in `scripts/engine_miners/` - it is a build-t
 
 ## Data flow: end-to-end
 
-```
-  Library version bump (e.g. transformers 4.56.0 → 4.57.0)
-               │
-               ▼
-  Renovate opens PR bumping engine_versions/{engine}.yaml
-  (Dockerfile ARG default is derived at build time from the SSOT)
-               │
-               ▼
-  Engine-invariants pipeline fires (probe + mine + validate)
-               │
-               ├──► transformers: engine-pipeline.yml builds the
-               │    image (cache export only, no runtime push), then
-               │    publish-engine-image.yml fires via workflow_run and
-               │    pushes runtime tags (canonical for main/schedule, PR-
-               │    time tag for PR builds). On its success, the
-               │    invariants-transformers job in engine-pipeline.yml
-               │    fires via workflow_run on GH-hosted ubuntu-latest.
-               │
-               ├──► vLLM: engine-pipeline.yml runs inside
-               │    llenergymeasure:vllm-${VER} on a self-hosted GPU
-               │    runner (Docker isolates from the unified uv.lock;
-               │    see #437/#464).
-               │
-               ├──► TRT-LLM: engine-pipeline.yml runs inside
-               │    llenergymeasure:tensorrt-${VER} on a self-hosted GPU
-               │    runner (CUDA-aware import).
-               │
-               ▼
-  Per-engine step sequence inside one job:
-    1. Probe — scripts._probe checks landmarks; `fail` skips downstream.
-    2. Mine — build_corpus.py writes
-       src/llenergymeasure/engines/{engine}/invariants.proposed.yaml.
-       (lift modules — pydantic / msgspec / dataclass — run inside
-        build_corpus.py; static miner wins on match.fields, dynamic miner
-        wins on message_template.)
-    3. Vendor-replay — validate_invariants.py replays every rule against the
-       live library (checks: kwargs_positive raises, message matches
-       template, kwargs_negative does NOT raise). Confirmed cases write
-       to src/llenergymeasure/engines/{engine}/invariants.validated.yaml; divergent
-       rules surface as a non-zero exit when --fail-on-divergence is set.
-    4. Doc-gen — generate_invariants_doc.py refreshes
-       docs/generated/invariants-{engine}.md.
-    5. Atomic writeback — one bot commit covers proposed.yaml,
-       validated.yaml, the digest doc, and engine_versions/{engine}.compat.json.
-               │
-               ▼
-  CI must be green before merge
-               │
-               ▼
-  Package ships with updated corpus
-               │
-               ▼
-  User submits ExperimentConfig
-               │
-               ▼
-  loader.py evaluates rules against config
-               │
-               ▼
-  Invalid combination caught BEFORE engine initialisation
-  User sees: "config rejected: num_beams must be divisible by num_beam_groups"
+```mermaid
+flowchart TB
+    bump[Library version bump<br/>e.g. transformers 4.56.0 → 4.57.0]
+    renovate[Renovate opens PR bumping<br/>engine_versions/&lt;engine&gt;.yaml]
+    pipeline[engine-pipeline.yml fires:<br/>probe + mine + validate]
+
+    bump --> renovate --> pipeline
+
+    pipeline --> tf["transformers:<br/>engine-pipeline.yml builds the image →<br/>publish-engine-image.yml pushes →<br/>invariants cell runs on GH-hosted ubuntu-latest"]
+    pipeline --> vllm["vLLM:<br/>engine-pipeline.yml runs inside llem:vllm-VER<br/>on self-hosted GPU runner (Docker isolates uv.lock)"]
+    pipeline --> trt["TRT-LLM:<br/>engine-pipeline.yml runs inside llem:tensorrt-VER<br/>on self-hosted GPU runner (CUDA-aware import)"]
+
+    tf & vllm & trt --> steps["Per-engine step sequence:<br/>1. Probe &mdash; scripts._probe checks landmarks<br/>2. Mine &mdash; build_corpus.py writes proposed.yaml<br/>3. Validate-replay &mdash; validate_invariants.py replays every rule<br/>4. Doc-gen &mdash; generate_invariants_doc.py refreshes docs/reference/engines/invariants-&lt;engine&gt;.md<br/>5. Atomic writeback &mdash; one bot commit covers all artefacts"]
+
+    steps --> green[CI must be green before merge]
+    green --> ship[Package ships with updated corpus]
+    ship --> submit[User submits ExperimentConfig]
+    submit --> evaluate[loader.py evaluates rules against config]
+    evaluate --> caught["Invalid combination caught BEFORE engine initialisation<br/><br/><i>config rejected: num_beams must be<br/>divisible by num_beam_groups</i>"]
 ```
 
 ---

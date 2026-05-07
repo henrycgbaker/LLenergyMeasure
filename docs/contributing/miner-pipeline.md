@@ -459,7 +459,7 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │      engine's Docker container; confirmed cases write to          │
   │      src/llenergymeasure/engines/{engine}/invariants.validated.yaml.            │
   │   4. Doc-gen — generate_invariants_doc.py refreshes               │
-  │      docs/generated/invariants-{engine}.md.                       │
+  │      docs/reference/engines/invariants-{engine}.md.                       │
   │   5. Atomic writeback — one bot commit covers proposed.yaml,      │
   │      validated.yaml, the digest doc, and engine_versions/          │
   │      {engine}.compat.json. Pushed with --force-with-lease.        │
@@ -469,7 +469,7 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │  scripts/engine_introspectors introspects engine config classes   │
   │  inside Docker, regenerates engines/{engine}/schema.discovered.json;                │
   │  generate_curation_doc.py + generate_schema_doc.py refresh        │
-  │  docs/generated/{curation,schema}-{engine}.md, bot commits        │
+  │  docs/reference/engines/{curation,schema}-{engine}.md, bot commits        │
   │  and posts a diff comment.                                        │
   │                       │                                           │
   │                       ▼                                           │
