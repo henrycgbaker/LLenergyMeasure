@@ -23,8 +23,13 @@ const config: Config = {
     v4: true,
   },
 
+  // baseUrl defaults to GH Pages subpath (henrycgbaker.github.io/llenergymeasure/);
+  // override via DOCUSAURUS_BASE_URL=/ for hosts that serve at root (CF Pages
+  // previews + production at *.pages.dev). url is left as the GH Pages origin
+  // so canonical URLs always point at the production source of truth, even
+  // when rendered on a preview host.
   url: 'https://henrycgbaker.github.io',
-  baseUrl: '/llenergymeasure/',
+  baseUrl: process.env.DOCUSAURUS_BASE_URL ?? '/llenergymeasure/',
 
   organizationName: 'henrycgbaker',
   projectName: 'llenergymeasure',
