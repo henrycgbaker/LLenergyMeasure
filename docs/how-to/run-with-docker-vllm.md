@@ -3,11 +3,20 @@ title: Run an experiment with vLLM (Docker)
 description: Use the vLLM engine for high-throughput inference measurements.
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Run an experiment with vLLM (Docker)
 
 This recipe runs a single measurement against the vLLM engine. Use it
 when you want to measure inference under vLLM's continuous-batching
 runtime rather than HuggingFace `transformers`.
+
+:::caution vLLM requires Docker
+The vLLM engine runs inside a Docker container. Attempting to run vLLM
+without Docker raises a `PreFlightError` at preflight. Ensure Docker and
+the NVIDIA Container Toolkit are installed before proceeding.
+:::
 
 ## Prerequisites
 
@@ -16,6 +25,9 @@ runtime rather than HuggingFace `transformers`.
 - vLLM Docker image built or pullable from GHCR — see [Contributing > Development](/contributing/development)
 
 ## 1. Create a config file
+
+<Tabs groupId="surface">
+<TabItem value="yaml" label="YAML">
 
 Create `experiment.yaml`:
 
@@ -30,11 +42,43 @@ runners:
   vllm: docker
 ```
 
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from llenergymeasure import run_experiment
+
+result = run_experiment(
+    model="gpt2",
+    engine="vllm",
+    n_prompts=50,
+)
+print(result)
+```
+
+</TabItem>
+</Tabs>
+
 ## 2. Run the experiment
+
+<Tabs groupId="surface">
+<TabItem value="cli" label="CLI">
 
 ```bash
 llem run experiment.yaml
 ```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from llenergymeasure import run_experiment
+
+result = run_experiment("experiment.yaml")
+```
+
+</TabItem>
+</Tabs>
 
 What happens:
 

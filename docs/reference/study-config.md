@@ -1,8 +1,14 @@
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Study and Experiment Configuration
 
-LLenergyMeasure uses YAML files to define experiments and studies. `llem run` auto-detects
-whether a YAML file is an **experiment** (single run) or a **study** (sweep or multi-experiment
-run) by inspecting its top-level keys. Files with a `sweep:` or `experiments:` key are loaded
+The study-config YAML is the primary way to specify what LLenergyMeasure
+measures and how it runs. A single YAML file can describe one experiment
+or an entire sweep across multiple engines, models, and parameter axes.
+`llem run` auto-detects whether a YAML file is an **experiment** (single
+run) or a **study** (sweep or multi-experiment run) by inspecting its
+top-level keys. Files with a `sweep:` or `experiments:` key are loaded
 as studies; all others are loaded as single experiments.
 
 ## Single Experiment
@@ -69,11 +75,24 @@ vllm:
     max_tokens: 128
 ```
 
-Run either with:
+<Tabs groupId="surface">
+<TabItem value="cli" label="CLI">
 
 ```bash
 llem run experiment.yaml
 ```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from llenergymeasure import run_experiment
+
+result = run_experiment("experiment.yaml")
+```
+
+</TabItem>
+</Tabs>
 
 ## Study / Sweep
 
@@ -113,7 +132,26 @@ study_execution:
   experiment_order: shuffle
 ```
 
-Run with `llem run dtype-sweep.yaml`. Produces 2 configs × 3 cycles = 6 runs.
+<Tabs groupId="surface">
+<TabItem value="cli" label="CLI">
+
+```bash
+llem run dtype-sweep.yaml
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from llenergymeasure import run_study
+
+study_result = run_study("dtype-sweep.yaml")
+```
+
+</TabItem>
+</Tabs>
+
+Produces 2 configs × 3 cycles = 6 runs.
 
 ---
 
@@ -511,10 +549,29 @@ environment handles GPU scheduling externally.
 
 Interrupted studies (Ctrl-C, timeout, circuit breaker) can be resumed:
 
+<Tabs groupId="surface">
+<TabItem value="cli" label="CLI">
+
 ```bash
 llem run study.yaml --resume           # auto-detect most recent
 llem run study.yaml --resume-dir PATH  # specific study directory
 ```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from llenergymeasure import run_study
+
+# auto-detect most recent
+study_result = run_study("study.yaml", resume=True)
+
+# specific study directory
+study_result = run_study("study.yaml", resume_dir="results/my-study_<timestamp>/")
+```
+
+</TabItem>
+</Tabs>
 
 Resume skips completed experiments and re-runs failed, skipped, pending, and interrupted
 ones. Config drift (changed sweep axes or model) raises a hard error to prevent mixing

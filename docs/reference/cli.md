@@ -1,4 +1,13 @@
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # CLI Reference
+
+`llem` is the command-line interface for LLenergyMeasure. It exposes four
+commands - `run`, `config`, `doctor`, and `report-gaps` - plus a `--version`
+flag. Every operation available from the CLI is also available through the
+[Python library API](/reference/library/run_experiment); the CLI is a thin
+driver over the same underlying harness.
 
 `llem` has four commands (`run`, `config`, `doctor`, `report-gaps`) and one flag (`--version`).
 
@@ -187,23 +196,68 @@ llem v0.9.0
 
 ## Examples
 
-### Single experiment via flags
+### Single experiment
+
+<Tabs groupId="surface">
+<TabItem value="cli" label="CLI">
 
 ```bash
 llem run --model gpt2 -e transformers
 ```
 
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from llenergymeasure import run_experiment
+
+result = run_experiment(model="gpt2", engine="transformers")
+```
+
+</TabItem>
+</Tabs>
+
 ### Single experiment via YAML
+
+<Tabs groupId="surface">
+<TabItem value="cli" label="CLI">
 
 ```bash
 llem run experiment.yaml
 ```
 
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from llenergymeasure import run_experiment
+
+result = run_experiment("experiment.yaml")
+```
+
+</TabItem>
+</Tabs>
+
 ### Dry run (validate config, estimate VRAM)
+
+<Tabs groupId="surface">
+<TabItem value="cli" label="CLI">
 
 ```bash
 llem run experiment.yaml --dry-run
 ```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from llenergymeasure import run_study
+
+run_study("experiment.yaml", dry_run=True)
+```
+
+</TabItem>
+</Tabs>
 
 ### Study with cycle override
 
@@ -226,6 +280,9 @@ llem run study.yaml --skip-preflight
 
 ### Resume an interrupted study
 
+<Tabs groupId="surface">
+<TabItem value="cli" label="CLI">
+
 ```bash
 # Auto-detect most recent resumable study
 llem run study.yaml --resume
@@ -233,6 +290,22 @@ llem run study.yaml --resume
 # Resume a specific study directory
 llem run study.yaml --resume-dir results/full-suite-all-engines_20260329_1716/
 ```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from llenergymeasure import run_study
+
+# Auto-detect most recent resumable study
+study_result = run_study("study.yaml", resume=True)
+
+# Resume a specific study directory
+study_result = run_study("study.yaml", resume_dir="results/full-suite-all-engines_20260329_1716/")
+```
+
+</TabItem>
+</Tabs>
 
 ### Fail-fast mode (abort on first failure)
 

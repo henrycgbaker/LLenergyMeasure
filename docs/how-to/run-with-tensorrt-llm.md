@@ -3,6 +3,9 @@ title: Run an experiment with TensorRT-LLM (Docker)
 description: Use the TensorRT-LLM engine for compiled-engine inference measurements.
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Run an experiment with TensorRT-LLM (Docker)
 
 TensorRT-LLM compiles models into optimised TensorRT engines, then runs
@@ -10,14 +13,23 @@ inference against those engines. The first run compiles the engine
 (several minutes); subsequent runs with the same config load the cached
 engine and start inference immediately.
 
+:::caution TensorRT-LLM requires Docker and an Ampere-or-newer GPU
+The engine runs inside a Docker container and requires an NVIDIA GPU with
+SM >= 7.5 (Turing or newer). FP8 quantisation requires SM >= 8.9 (Ada
+Lovelace or newer); on A100 (SM 8.0), use INT8 or W4A16_AWQ instead.
+:::
+
 ## Prerequisites
 
 - `llenergymeasure` installed (host-side orchestrator)
 - Docker + NVIDIA Container Toolkit — see [Docker setup](/how-to/docker-setup)
 - TensorRT-LLM Docker image built or pullable from GHCR — see [Contributing > Development](/contributing/development)
-- NVIDIA GPU with SM ≥ 7.5 (Turing or newer; e.g. RTX 2000-series, A100, H100)
+- NVIDIA GPU with SM >= 7.5 (Turing or newer; e.g. RTX 2000-series, A100, H100)
 
 ## 1. Create a config file
+
+<Tabs groupId="surface">
+<TabItem value="yaml" label="YAML">
 
 Minimal:
 
@@ -52,11 +64,43 @@ tensorrt:
     max_cache_storage_gb: 100
 ```
 
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from llenergymeasure import run_experiment
+
+result = run_experiment(
+    model="meta-llama/Llama-2-7b-hf",
+    engine="tensorrt",
+    n_prompts=50,
+)
+print(result)
+```
+
+</TabItem>
+</Tabs>
+
 ## 2. Run the experiment
+
+<Tabs groupId="surface">
+<TabItem value="cli" label="CLI">
 
 ```bash
 llem run experiment.yaml
 ```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from llenergymeasure import run_experiment
+
+result = run_experiment("experiment.yaml")
+```
+
+</TabItem>
+</Tabs>
 
 What happens:
 
