@@ -46,7 +46,7 @@ Default settings: 100 prompts, `aienergyscore` dataset, `bfloat16` dtype.
 You'll see a progress indicator on stderr, then results printed to stdout:
 
 ```
-Result: gpt2-pytorch-bf16-20240305-143022     ← unique experiment ID
+Result: gpt2-pytorch-bf16-2026-05-07T14-32-08     ← unique experiment ID
 
 Energy                                          ← GPU energy consumed
   Total          847 J                          ← total joules for all 100 prompts
@@ -87,7 +87,7 @@ Results are written to `results/` by default:
 
 ```
 results/
-└── gpt2-pytorch-bf16-20240305-143022/
+└── gpt2-pytorch-bf16-2026-05-07T14-32-08/
     └── result.json        # full record (all metrics, config, metadata)
 ```
 

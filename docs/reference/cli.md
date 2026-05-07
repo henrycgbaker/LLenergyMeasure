@@ -1,11 +1,12 @@
 # CLI Reference
 
-`llem` has three commands (`run`, `config`, `doctor`) and one flag (`--version`).
+`llem` has four commands (`run`, `config`, `doctor`, `report-gaps`) and one flag (`--version`).
 
 ```
 llem run [CONFIG] [OPTIONS]   # run an experiment or study
 llem config [OPTIONS]         # show environment and configuration status
 llem doctor                   # verify Docker images match the host schema
+llem report-gaps [OPTIONS]    # propose corpus rules from runtime observations
 llem --version                # print version and exit
 ```
 
@@ -136,6 +137,35 @@ tensorrt    llenergymeasure:tensorrt       0.9.0       a1b2c3d4e5f6    a1b2c3d4e
 Host llenergymeasure version: 0.9.0
 Host ExperimentConfig fingerprint: a1b2c3d4e5f6…
 ```
+
+---
+
+## `llem report-gaps`
+
+Propose new invariant-corpus entries from observations captured during a study run. Use this when a researcher hits a runtime warning or unexpected outcome that the corpus doesn't yet describe — `report-gaps` synthesises a YAML fragment you can review and merge into the validated corpus.
+
+```bash
+llem report-gaps \
+  --study-dir results/<study-name>_<timestamp> \
+  --out proposed-rules.yaml \
+  [--source runtime-warnings] \
+  [--engine vllm] \
+  [--include-exceptions]
+```
+
+**Options:**
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `--study-dir PATH` | yes | — | Study directory to scan. Repeat the flag to pass multiple study directories. |
+| `--out PATH` | yes | — | Output path for proposed YAML fragments (one YAML document per gap, separated by `---`). |
+| `--source NAME` | no | `runtime-warnings` | Feedback source to scan. Only `runtime-warnings` is wired in this release. |
+| `--engine NAME` | no | (all) | Filter: only propose rules for this engine (`transformers` / `vllm` / `tensorrt`). |
+| `--include-exceptions` | no | false | Also propose rules from runtime *exceptions*. Off by default — exceptions ship through a different review path. |
+
+**Output:** writes a multi-document YAML file at `--out`. Each document is a candidate corpus entry with `# TODO: human` markers on placeholder fields the reviewer must fill in. The file is *not* automatically merged into the corpus — review and apply manually.
+
+**See also:** [Architecture > parameter discovery](/architecture/parameter-discovery) for the runtime-observation pipeline; [Architecture > parameter curation](/architecture/parameter-curation) for the curation review flow.
 
 ---
 

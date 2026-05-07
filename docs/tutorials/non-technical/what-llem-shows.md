@@ -121,7 +121,7 @@ Running experiment (100 prompts)...  [████████░░] 80%
 **What you will see when it finishes:**
 
 ```
-Result: gpt2-pytorch-bf16-20240305-143022
+Result: gpt2-pytorch-bf16-2026-05-07T14-32-08
 
 Energy
   Total          847 J
@@ -169,7 +169,7 @@ Results are automatically saved to a `results/` folder in the directory where yo
 
 ```
 results/
-└── gpt2-pytorch-bf16-20240305-143022/
+└── gpt2-pytorch-bf16-2026-05-07T14-32-08/
     └── result.json
 ```
 

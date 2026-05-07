@@ -12,7 +12,7 @@ llem exposes engine parameters to users through hand-authored Pydantic models. T
 
 ```
   programmatic discovery                  Pydantic curation
-  (scripts/discover_*.py)                 (config/engine_configs.py)
+  (scripts/engine_introspectors/)                 (config/engine_configs.py)
   introspect engine APIs                  hand-authored sub-config models
   → engines/*/schema.discovered.json      expose typed, documented fields
             │                                         │
@@ -33,7 +33,7 @@ llem exposes engine parameters to users through hand-authored Pydantic models. T
 
 ## Programmatic discovery
 
-`scripts/discover_*.py` introspects each engine's public Python API (e.g. `inspect.signature(vllm.LLM.__init__)`, `inspect.signature(AutoModelForCausalLM.from_pretrained)`) and writes the result to `src/llenergymeasure/src/llenergymeasure/engines/{engine}/schema.discovered.json`.
+`scripts/engine_introspectors/` introspects each engine's public Python API (e.g. `inspect.signature(vllm.LLM.__init__)`, `inspect.signature(AutoModelForCausalLM.from_pretrained)`) and writes the result to `src/llenergymeasure/engines/{engine}/schema.discovered.json`.
 
 These JSON files are the ground truth for "what parameters does this engine version accept". They are stored in the repo and regenerated via the parameter-discovery pipeline when an engine version bumps (see [schema-refresh.md](/contributing/schema-refresh)).
 

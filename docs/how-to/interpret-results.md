@@ -11,7 +11,7 @@ If you have not yet run a measurement, see [Running Your First Measurement](/tut
 After running a measurement, the terminal prints output like this:
 
 ```
-Result: gpt2-pytorch-bf16-20240305-143022
+Result: gpt2-pytorch-bf16-2026-05-07T14-32-08
 
 Energy
   Total          847 J
@@ -34,7 +34,7 @@ A full result file is also saved to the `results/` folder. The sections below ex
 ## The Experiment ID
 
 ```
-Result: gpt2-pytorch-bf16-20240305-143022
+Result: gpt2-pytorch-bf16-2026-05-07T14-32-08
 ```
 
 This is a unique identifier for this specific measurement. It encodes:
@@ -42,7 +42,7 @@ This is a unique identifier for this specific measurement. It encodes:
 - `gpt2` — the model measured
 - `pytorch` — the inference engine used
 - `bfloat16` — the model dtype
-- `20240305-143022` — the date and time the experiment ran
+- `2026-05-07T14-32-08` — the date and time the experiment ran
 
 The experiment ID helps you trace results back to the exact configuration that produced them.
 

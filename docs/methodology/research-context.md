@@ -180,11 +180,6 @@ The nearest citation cluster: Daikon (inference), Houdini (guess-and-check archi
 
 ## See also
 
-- [architecture-overview.md](/architecture/architecture-overview) - system overview
-- [miner-pipeline.md](/contributing/miner-pipeline) - implementation details
-- [validation-invariant-corpus.md](/contributing/validation-invariant-corpus) - corpus format
-
-Internal-only design artefacts (not in the public package):
-
-- `.product/research/miners-redo/research-prior-art-miners-2026-04-26.md` - full prior-art survey
-- `.product/designs/invariant-miner-design-2026-04-26.md` - locked design
+- [architecture-overview.md](/architecture/architecture-overview) &mdash; system overview
+- [miner-pipeline.md](/contributing/miner-pipeline) &mdash; implementation details
+- [validation-invariant-corpus.md](/contributing/validation-invariant-corpus) &mdash; corpus format

@@ -20,9 +20,12 @@ runtime rather than HuggingFace `transformers`.
 Create `experiment.yaml`:
 
 ```yaml
-model: gpt2
 engine: vllm
-n: 50
+task:
+  model: gpt2
+  dataset:
+    source: aienergyscore
+    n_prompts: 50
 runners:
   vllm: docker
 ```

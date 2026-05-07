@@ -98,7 +98,7 @@ The study YAML also accepts a `base:` key pointing to a base experiment config f
 
 ```yaml
 # 2 configs: dtype=float16 and dtype=bfloat16
-name: dtype-sweep
+study_name: dtype-sweep
 model: gpt2
 engine: transformers
 
@@ -121,7 +121,7 @@ Run with `llem run dtype-sweep.yaml`. Produces 2 configs × 3 cycles = 6 runs.
 
 ```yaml
 # 4 configs: fp16+50, fp16+100, bf16+50, bf16+100
-name: dtype-n-sweep
+study_name: dtype-n-sweep
 model: gpt2
 engine: transformers
 
@@ -144,7 +144,7 @@ Use dotted paths (`engine.param`) to sweep a Engine-specific parameter:
 
 ```yaml
 # 4 configs: batch_size 1, 2, 4, 8 — all with engine=transformers
-name: batch-size-sweep
+study_name: batch-size-sweep
 model: gpt2
 engine: transformers
 
@@ -167,7 +167,7 @@ For nested engine configs (e.g. vLLM's `engine` sub-section):
 
 ```yaml
 # 6 configs: 3 block_sizes × 2 kv_cache_dtypes
-name: kv-cache-sweep
+study_name: kv-cache-sweep
 model: gpt2
 engine: vllm
 
@@ -192,7 +192,7 @@ Produces 6 configs × 3 cycles = 18 runs. The path `vllm.engine.block_size` expa
 Use dotted paths for nested config fields like `dataset.n_prompts` or `dataset.source`:
 
 ```yaml
-name: dataset-size-sweep
+study_name: dataset-size-sweep
 model: gpt2
 engine: transformers
 
@@ -218,7 +218,7 @@ Use `experiments:` when the configurations are not a regular grid:
 
 ```yaml
 # 2 explicit configs
-name: compare-engines
+study_name: compare-engines
 
 dataset:
   n_prompts: 50
@@ -247,7 +247,7 @@ Use `base:` to load a base experiment config file and sweep on top of it:
 
 ```yaml
 # base-experiment.yaml is a normal experiment YAML
-name: dtype-sweep
+study_name: dtype-sweep
 base: base-experiment.yaml
 
 sweep:
@@ -271,7 +271,7 @@ first, then explicit entries are appended:
 
 ```yaml
 # 2 sweep configs + 1 explicit config = 3 total
-name: mixed-study
+study_name: mixed-study
 model: gpt2
 
 sweep:
@@ -305,7 +305,7 @@ entries *within* a group are alternatives (unioned, not crossed).
 
 ```yaml
 # 6 configs: 2 dtype × 3 compilation variants
-name: compile-sweep
+study_name: compile-sweep
 model: gpt2
 engine: transformers
 

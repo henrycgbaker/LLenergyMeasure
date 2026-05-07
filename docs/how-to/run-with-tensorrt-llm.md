@@ -22,9 +22,12 @@ engine and start inference immediately.
 Minimal:
 
 ```yaml
-model: meta-llama/Llama-2-7b-hf
 engine: tensorrt
-n: 50
+task:
+  model: meta-llama/Llama-2-7b-hf
+  dataset:
+    source: aienergyscore
+    n_prompts: 50
 runners:
   tensorrt: docker
 ```
@@ -32,9 +35,12 @@ runners:
 With explicit quantisation and engine caching:
 
 ```yaml
-model: meta-llama/Llama-2-7b-hf
 engine: tensorrt
-n: 50
+task:
+  model: meta-llama/Llama-2-7b-hf
+  dataset:
+    source: aienergyscore
+    n_prompts: 50
 runners:
   tensorrt: docker
 tensorrt:

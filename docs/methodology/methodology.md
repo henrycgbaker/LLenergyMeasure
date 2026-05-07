@@ -134,9 +134,8 @@ will be in just before inference starts.
 idle power by ~8.7 W per A100 because the host has no CUDA context and no GPU
 memory pool allocated. On a 4-GPU 120 s A100 experiment this is a ~4.2 kJ
 under-subtraction (~19 % of typical adjusted energy). Measuring in the
-matching CUDA environment eliminates this bias. See
-`.product/research/baseline-measurement-location.md` for the controlled
-experiment and statistics.
+matching CUDA environment eliminates this bias. The figures above come from
+a controlled host-vs-container comparison on A100-PCIE-40GB hardware.
 
 **Baseline strategies and where they run:**
 

@@ -248,18 +248,18 @@ from llenergymeasure.config.engine_invariants.loader import (
     EngineInvariants,
     EngineInvariantsLoader,
     Invariant,
-    RuleMatch,
+    InvariantMatch,
 )
 
-# Load corpus for an engine
+# Load the corpus for an engine
 loader = EngineInvariantsLoader()
-invariants = loader.load_invariants("transformers")
+corpus = loader.load_invariants("transformers")
 
 # Match against a config
-for rule in rules.rules:
-    match = rule.try_match(config)
+for inv in corpus.invariants:
+    match = inv.try_match(config)
     if match is not None:
-        print(rule.severity, rule.render_message(match))
+        print(inv.severity, inv.render_message(match))
 ```
 
 For higher-level use cases, see `llenergymeasure.api.report_gaps.load_engine_invariants`, which loads all configured engines via a shared loader. Per-instance caching in `EngineInvariantsLoader` ensures the corpus JSON is parsed once per engine per process; tests can construct a fresh loader for isolation.

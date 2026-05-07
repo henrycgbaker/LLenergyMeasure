@@ -219,9 +219,12 @@ See [Installation](/how-to/install) for the full `llem config` output format.
 
 ```yaml
 # experiment.yaml
-model: gpt2
 engine: vllm
-n: 50
+task:
+  model: gpt2
+  dataset:
+    source: aienergyscore
+    n_prompts: 50
 runners:
   vllm: docker
 ```
@@ -240,9 +243,12 @@ an annotated walkthrough.
 
 ```yaml
 # experiment.yaml
-model: meta-llama/Llama-2-7b-hf
 engine: tensorrt
-n: 50
+task:
+  model: meta-llama/Llama-2-7b-hf
+  dataset:
+    source: aienergyscore
+    n_prompts: 50
 runners:
   tensorrt: docker
 ```

@@ -285,12 +285,11 @@ NVML polling is kept as a fallback because:
 - The `PowerThermalSampler` still runs during measurement for thermal monitoring
   and timeseries telemetry regardless of which energy sampler is active
 
-### Research references
+### External references
 
-Detailed research documents are available in `.product/research/`:
-- `energy-nvml-parameters.md` - NVML hardware sensor architecture, polling intervals, power reading modes
-- `energy-zeus-parameters.md` - Zeus API, hardware counters, CPU/DRAM measurement, overhead comparison
-- `energy-codecarbon-parameters.md` - CodeCarbon parameters, accuracy validation, tracking modes
+- **NVML** &mdash; [NVIDIA Management Library Reference](https://docs.nvidia.com/deploy/nvml-api/index.html) (hardware sensor architecture, polling intervals, power reading modes)
+- **Zeus** &mdash; [Zeus: Understanding and Optimizing GPU Energy Consumption (NSDI '23)](https://www.usenix.org/conference/nsdi23/presentation/you) and the [Zeus repo](https://github.com/ml-energy/zeus) (hardware counters, CPU/DRAM measurement)
+- **CodeCarbon** &mdash; [CodeCarbon docs](https://mlco2.github.io/codecarbon/) (estimation modes, accuracy validation, regional carbon intensity)
 
 ---
 
