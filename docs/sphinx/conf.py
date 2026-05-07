@@ -39,15 +39,24 @@ extensions = [
 #   down to llenergymeasure.__all__ for the top-level module.
 # - "show-inheritance" surfaces base classes (BaseModel for Pydantic
 #   configs), useful for navigating Pydantic v2 surfaces.
-# - typehints are rendered in the signature, not in a separate field
-#   list, to match the existing renderer's "fenced signature" output.
+# - typehints render in a separate description block, not inline in
+#   the signature heading. Two reasons: (1) sphinx-markdown-builder
+#   drops the bare `*` keyword-only separator when serialising a
+#   signature into a heading, leaving a stray comma between positional
+#   and keyword-only args (e.g. `(config = None, , model = None)`).
+#   (2) `**kwargs` gets emphasis-escaped to `\*\*kwargs` because
+#   markdown's `**` is bold. Pulling types into a structured Parameters
+#   list below the heading sidesteps both rendering quirks - types
+#   render correctly per-parameter, and the heading reduces to a clean
+#   `func(config=None, *, model=None, ...)`.
 autodoc_default_options = {
     "members": True,
     "undoc-members": False,
     "show-inheritance": True,
 }
-autodoc_typehints = "signature"
+autodoc_typehints = "description"
 autodoc_typehints_format = "short"
+autodoc_typehints_description_target = "documented_params"
 autodoc_member_order = "bysource"
 
 # autodoc_pydantic: render Pydantic v2 model fields with the metadata
@@ -88,3 +97,34 @@ markdown_docinfo = False
 # quotes; turning it off keeps the rendered docstrings byte-identical
 # to the source.
 smartquotes = False
+
+
+import re
+
+
+# autodoc-process-signature hook: scrub Markdown-writer rendering
+# artefacts before the signature reaches the heading.
+#
+# sphinx-markdown-builder serialises signatures into Markdown
+# headings without escaping asterisks the way reST/HTML output does:
+#   - the bare `*` keyword-only separator gets dropped, leaving
+#     a stray `, ,` between positional and keyword-only args
+#   - `**kwargs` becomes `\*\*kwargs` (visible escape) because
+#     `**` is Markdown bold
+#   - `*args` similarly mangles
+#
+# The cleanest fix is to strip these markers from the heading
+# entirely - the per-parameter description block below the heading
+# already documents which parameters are keyword-only, varargs,
+# or **kwargs via prose, so heading omission is lossless.
+def _scrub_signature(app, what, name, obj, options, signature, return_annotation):
+    if signature is None:
+        return None
+    cleaned = re.sub(r", \*,", ",", signature)  # keyword-only separator
+    cleaned = re.sub(r"\*\*(\w+)", r"\1", cleaned)  # **kwargs -> kwargs
+    cleaned = re.sub(r"(?<![*\w])\*(\w+)", r"\1", cleaned)  # *args -> args
+    return (cleaned, return_annotation)
+
+
+def setup(app):
+    app.connect("autodoc-process-signature", _scrub_signature)

@@ -38,6 +38,34 @@ from pathlib import Path
 # link wrapping and keep only the visible text.
 _INTERNAL_XREF_RE = re.compile(r"\[([^\]]+)\]\(#llenergymeasure\.[^\)]+\)")
 
+# Sphinx's RST parser interprets a non-section colon-terminated line
+# followed by an indented block as a definition list (term + body).
+# sphinx-markdown-builder serialises this as a leading `:` on the
+# body line. Docusaurus does not parse `:` as a definition-list
+# marker, so the colon renders as visible junk:
+#
+#     Three call forms:
+#     : run_experiment("config.yaml")
+#       run_experiment(ExperimentConfig(...))
+#
+# Common cases come from free-form prose in docstrings ("Three call
+# forms:", "Example:" etc.) where the developer-intent is a literal
+# block, not a definition. Strip the leading `: ` from any line that
+# follows a non-empty line ending in `:`. Conservative: only fires
+# inside paragraph runs where the previous non-blank line is a
+# colon-terminated label.
+_DEF_LIST_RE = re.compile(
+    r"(^[^\n]+:\n): ([^\n]*\n(?:  [^\n]*\n)*)",
+    re.MULTILINE,
+)
+
+
+def _strip_def_list_artefacts(body: str) -> str:
+    return _DEF_LIST_RE.sub(
+        lambda m: m.group(1) + "    " + m.group(2).replace("\n  ", "\n    "), body
+    )
+
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _SPHINX_CONFIG_DIR = _PROJECT_ROOT / "docs" / "sphinx"
 _OUT_PATH = _PROJECT_ROOT / "docs" / "api" / "llenergymeasure.md"
@@ -135,6 +163,7 @@ def main() -> int:
 
     cleaned = "\n".join(lines).lstrip("\n")
     cleaned = _INTERNAL_XREF_RE.sub(r"`\1`", cleaned)
+    cleaned = _strip_def_list_artefacts(cleaned)
 
     # Synthesise a __version__ section: autodoc renders __version__ as the
     # `str` class docstring (not useful), so inject a one-line block at
