@@ -8,6 +8,7 @@ const sidebarsHowTo: SidebarsConfig = {
     'run-with-tensorrt-llm',
     'interpret-results',
     'troubleshoot',
+    'faq',
   ],
 };
 

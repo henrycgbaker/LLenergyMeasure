@@ -4,6 +4,7 @@ const sidebarsReference: SidebarsConfig = {
   referenceSidebar: [
     'cli',
     'study-config',
+    'results-schema',
     {
       type: 'category',
       label: 'Library API (pre-1.0, unstable)',
