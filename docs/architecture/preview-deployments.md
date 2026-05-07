@@ -109,15 +109,17 @@ main push ──► docs.yml ──► GitHub Pages ──► henrycgbaker.githu
 ```
 
 If CF availability degrades, PRs lose preview URLs but production remains
-deployable. The GH Actions build job in `docs.yml` still runs on PRs, so
-build correctness is verified independently of CF.
+deployable — `docs.yml` runs only on push to `main` (not on PRs), so a
+broken CF build doesn't block merging if the change is otherwise sound;
+the deploy job re-validates the build at merge time.
 
 ## Troubleshooting
 
 **"Preview URL doesn't appear on my PR"**
-- Confirm the PR diff touches `docs/**`, `website/**`, `src/llenergymeasure/**`,
-  or `scripts/cloudflare-build.sh`. CF rebuilds on every push regardless,
-  but path-irrelevant PRs don't always get prominent UI.
+- CF rebuilds on every push regardless of paths (no path filter applied
+  in CF dashboard at time of writing). Path-irrelevant PRs still get
+  previews but the GitHub UI sometimes hides the deployment status until
+  the comment is posted.
 - Check the PR's "Checks" tab for a `cloudflare-pages` entry — if the
   build failed, click through to the CF dashboard logs.
 - If the GitHub App is mis-authorised, the comment won't post but the
