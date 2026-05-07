@@ -117,7 +117,6 @@ clean:
 # Generate documentation from SSOT sources
 generate-docs:
 	python scripts/generate_invalid_combos_doc.py
-	python scripts/generate_param_matrix.py
 	python scripts/generate_config_docs.py
 	@echo "Generated docs in docs/reference/"
 

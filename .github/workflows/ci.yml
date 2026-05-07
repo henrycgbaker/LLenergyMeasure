@@ -36,6 +36,7 @@ jobs:
       src: ${{ steps.changes.outputs.src }}
       docker: ${{ steps.changes.outputs.docker }}
       workflows: ${{ steps.changes.outputs.workflows }}
+      docs_inputs: ${{ steps.changes.outputs.docs_inputs }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v4
@@ -55,12 +56,25 @@ jobs:
               - 'pyproject.toml'
             workflows:
               - '.github/workflows/**'
+            docs_inputs:
+              # Inputs to the docs-freshness job: Pydantic models the
+              # generators introspect, anything under scripts/ (generators
+              # plus their transitive helpers like engine_miners/_ssot.py),
+              # and this workflow file (self-test). pyproject/uv.lock
+              # excluded: env-break would surface in lint / type-check /
+              # test / package-validation before docs-freshness anyway.
+              - 'src/**'
+              - 'scripts/**'
+              - '.github/workflows/ci.yml'
 
   lint:
+    needs: filter
     if: >-
-      github.event_name != 'workflow_dispatch'
-      || inputs.job == 'all'
-      || inputs.job == 'lint'
+      always()
+      && (
+        (github.event_name == 'workflow_dispatch' && (inputs.job == 'all' || inputs.job == 'lint'))
+        || needs.filter.outputs.src == 'true'
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -78,10 +92,13 @@ jobs:
         run: uv run lint-imports
 
   type-check:
+    needs: filter
     if: >-
-      github.event_name != 'workflow_dispatch'
-      || inputs.job == 'all'
-      || inputs.job == 'type-check'
+      always()
+      && (
+        (github.event_name == 'workflow_dispatch' && (inputs.job == 'all' || inputs.job == 'type-check'))
+        || needs.filter.outputs.src == 'true'
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -134,10 +151,13 @@ jobs:
         run: uv run python -c "from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult; print('OK')"
 
   package-validation:
+    needs: filter
     if: >-
-      github.event_name != 'workflow_dispatch'
-      || inputs.job == 'all'
-      || inputs.job == 'package-validation'
+      always()
+      && (
+        (github.event_name == 'workflow_dispatch' && (inputs.job == 'all' || inputs.job == 'package-validation'))
+        || needs.filter.outputs.src == 'true'
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -164,10 +184,13 @@ jobs:
           [ "$PYPROJECT_VER" = "$VERSION_VER" ] || { echo "ERROR: Version mismatch: pyproject.toml=${PYPROJECT_VER}, _version.py=${VERSION_VER}"; exit 1; }
 
   docs-freshness:
+    needs: filter
     if: >-
-      github.event_name != 'workflow_dispatch'
-      || inputs.job == 'all'
-      || inputs.job == 'docs-freshness'
+      always()
+      && (
+        (github.event_name == 'workflow_dispatch' && (inputs.job == 'all' || inputs.job == 'docs-freshness'))
+        || needs.filter.outputs.docs_inputs == 'true'
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
