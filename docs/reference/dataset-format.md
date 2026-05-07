@@ -5,9 +5,14 @@ description: Reference for the task.dataset configuration block, built-in datase
 
 # Dataset format
 
-This page documents the `task.dataset` configuration block: every field, type,
-default, and validation rule. It also describes the built-in `aienergyscore`
-dataset and the JSONL format for custom prompt files.
+The `task.dataset` block controls which prompts LLenergyMeasure loads and
+sends to the inference engine. It selects the dataset source (built-in or
+custom JSONL), the number of prompts, and the ordering strategy. Prompt
+selection is resolved before any inference runs - the resolved prompt list
+is fixed for the lifetime of an experiment, making measurements reproducible.
+
+This page documents every field in the block, the built-in `aienergyscore`
+dataset, and the JSONL format for custom prompt files.
 
 ---
 
