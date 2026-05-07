@@ -3,6 +3,9 @@ title: Your first measurement
 description: Measure GPT-2 energy in five minutes — install, run, read the result.
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Your first measurement
 
 In the next five minutes you'll install `llenergymeasure`, run a measurement on GPT-2, and read the result file. By the end you'll know:
@@ -34,9 +37,24 @@ if any of the pre-flight checks fail.
 
 ## Step 2: Run your first experiment
 
+<Tabs groupId="surface">
+<TabItem value="cli" label="CLI">
+
 ```bash
 llem run --model gpt2 -e transformers
 ```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from llenergymeasure import run_experiment
+
+result = run_experiment(model="gpt2", engine="transformers")
+```
+
+</TabItem>
+</Tabs>
 
 This runs GPT-2 (124M parameters). On first run, the model downloads from
 HuggingFace (~500 MB). Subsequent runs use the cache.
@@ -100,6 +118,10 @@ Specify a different output directory with `--output`:
 ```bash
 llem run --model gpt2 -e transformers --output /data/experiments
 ```
+
+:::tip Reproducibility
+Keep the `result.json` and `effective_config.json` together. The config file records every resolved parameter value - including engine defaults you didn't set - so you can reproduce the exact run later.
+:::
 
 ## What you've learned
 

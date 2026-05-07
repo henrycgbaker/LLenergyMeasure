@@ -3,6 +3,9 @@ title: Multi-engine implementation-parameter study
 description: Measure how four implementation choices change energy and efficiency for the same model across three inference engines.
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Multi-engine implementation-parameter study
 
 This is the flagship tutorial. We'll measure how four implementation choices —
@@ -78,6 +81,10 @@ isolated image, so the host doesn't need to import any engine. This is
 the only correct way to compare engines side-by-side — without
 isolation, library-version conflicts (e.g. transformers ↔ vllm pinned
 versions) cross-contaminate the measurement.
+
+:::caution Multi-engine studies require Docker
+Running a multi-engine study without Docker raises a `PreFlightError` before any inference starts. Each engine needs its own isolated image to prevent library-version conflicts from affecting the measurements. See [Docker setup](/how-to/docker-setup) if your environment is not yet configured.
+:::
 
 ```yaml
 task:
@@ -163,9 +170,25 @@ This is the right way to sweep parameters that travel in pairs.
 Before kicking off the real run, validate the config and see how many
 experiments will actually execute:
 
+<Tabs groupId="surface">
+<TabItem value="cli" label="CLI">
+
 ```bash
 llem run configs/tutorials/tutorial-multi-engine.yaml --dry-run
 ```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from llenergymeasure import run_study
+
+# dry_run=True resolves the sweep and prints the manifest without running
+run_study("configs/tutorials/tutorial-multi-engine.yaml", dry_run=True)
+```
+
+</TabItem>
+</Tabs>
 
 The dry-run resolves the sweep, applies engine-scoped filtering,
 deduplicates equivalent cells, and prints a manifest. You should see
@@ -189,9 +212,25 @@ Study: tutorial-multi-engine
 If the resolved count and per-engine breakdown match your expectation,
 launch the real run:
 
+<Tabs groupId="surface">
+<TabItem value="cli" label="CLI">
+
 ```bash
 llem run configs/tutorials/tutorial-multi-engine.yaml
 ```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from llenergymeasure import run_study
+
+study_result = run_study("configs/tutorials/tutorial-multi-engine.yaml")
+print(f"Completed {study_result.summary.completed} experiments")
+```
+
+</TabItem>
+</Tabs>
 
 You'll see a progress indicator with experiment counters and the
 running cell's identifier. Each result lands in

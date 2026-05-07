@@ -3,17 +3,22 @@ title: Quick start
 description: Run your first energy measurement in 60 seconds.
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Quick start
 
 ## Run your first measurement
 
-From the CLI:
+<Tabs groupId="surface">
+<TabItem value="cli" label="CLI">
 
 ```bash
 llem run --model gpt2 --engine transformers
 ```
 
-Or from Python:
+</TabItem>
+<TabItem value="python" label="Python">
 
 ```python
 from llenergymeasure import run_experiment
@@ -21,6 +26,9 @@ from llenergymeasure import run_experiment
 result = run_experiment(model="gpt2", engine="transformers")
 print(result)
 ```
+
+</TabItem>
+</Tabs>
 
 On first run, GPT-2 (around 500 MB) downloads from HuggingFace and the
 engine Docker image is resolved. Subsequent runs use the local cache and
