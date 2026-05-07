@@ -58,23 +58,23 @@ jobs:
               - '.github/workflows/**'
             docs_inputs:
               # Inputs to the docs-freshness job: Pydantic models the
-              # generators introspect, the generator scripts themselves,
+              # generators introspect, anything under scripts/ (generators
+              # plus their transitive helpers like engine_miners/_ssot.py),
               # and this workflow file (self-test). pyproject/uv.lock
-              # excluded: env-break would surface in lint/type-check/test
-              # before docs-freshness anyway.
+              # excluded: env-break would surface in lint / type-check /
+              # test / package-validation before docs-freshness anyway.
               - 'src/**'
-              - 'scripts/generate_config_docs.py'
-              - 'scripts/generate_cli_reference.py'
-              - 'scripts/generate_invalid_combos_doc.py'
-              - 'scripts/generate_curation_doc.py'
-              - 'scripts/check_pydantic_matches_discovered.py'
+              - 'scripts/**'
               - '.github/workflows/ci.yml'
 
   lint:
+    needs: filter
     if: >-
-      github.event_name != 'workflow_dispatch'
-      || inputs.job == 'all'
-      || inputs.job == 'lint'
+      always()
+      && (
+        (github.event_name == 'workflow_dispatch' && (inputs.job == 'all' || inputs.job == 'lint'))
+        || needs.filter.outputs.src == 'true'
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -92,10 +92,13 @@ jobs:
         run: uv run lint-imports
 
   type-check:
+    needs: filter
     if: >-
-      github.event_name != 'workflow_dispatch'
-      || inputs.job == 'all'
-      || inputs.job == 'type-check'
+      always()
+      && (
+        (github.event_name == 'workflow_dispatch' && (inputs.job == 'all' || inputs.job == 'type-check'))
+        || needs.filter.outputs.src == 'true'
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -148,10 +151,13 @@ jobs:
         run: uv run python -c "from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult; print('OK')"
 
   package-validation:
+    needs: filter
     if: >-
-      github.event_name != 'workflow_dispatch'
-      || inputs.job == 'all'
-      || inputs.job == 'package-validation'
+      always()
+      && (
+        (github.event_name == 'workflow_dispatch' && (inputs.job == 'all' || inputs.job == 'package-validation'))
+        || needs.filter.outputs.src == 'true'
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -180,13 +186,10 @@ jobs:
   docs-freshness:
     needs: filter
     if: >-
-      (
-        github.event_name != 'workflow_dispatch'
-        && needs.filter.outputs.docs_inputs == 'true'
-      )
-      || (
-        github.event_name == 'workflow_dispatch'
-        && (inputs.job == 'all' || inputs.job == 'docs-freshness')
+      always()
+      && (
+        (github.event_name == 'workflow_dispatch' && (inputs.job == 'all' || inputs.job == 'docs-freshness'))
+        || needs.filter.outputs.docs_inputs == 'true'
       )
     runs-on: ubuntu-latest
     steps:
