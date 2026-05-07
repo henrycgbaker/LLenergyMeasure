@@ -18,6 +18,15 @@
 
 set -euo pipefail
 
+# CF Pages serves at root (*.pages.dev), unlike GH Pages which serves
+# under the /llenergymeasure/ subpath. Override docusaurus.config.ts's
+# default baseUrl here rather than via dashboard env vars — the new
+# Workers Builds UI doesn't expose a clean Production/Preview-scoped
+# build-time env-var panel. Hardcoding here is unambiguous and only
+# affects CF builds (GH Pages uses .github/workflows/docs.yml, which
+# doesn't invoke this script and inherits the config default).
+export DOCUSAURUS_BASE_URL=/
+
 echo "::group::Python environment"
 python --version
 pip --version
