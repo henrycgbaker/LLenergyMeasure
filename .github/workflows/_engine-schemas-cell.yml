@@ -1,0 +1,39 @@
+name: Engine schemas cell
+
+# Reusable workflow invoked from engine-pipeline.yml's matrix fan-out.
+# Runs probe + discover-schema for ONE engine, parameterised by inputs.
+# Body skeleton only in this commit; full step migration in commit 3.
+
+on:
+  workflow_call:
+    inputs:
+      engine:
+        description: Engine name (transformers, vllm, tensorrt)
+        required: true
+        type: string
+      runner:
+        description: Runner kind (ubuntu-latest, self-hosted)
+        required: true
+        type: string
+      image-source:
+        description: Image source mode (ghcr-cache, dockerhub, ngc)
+        required: true
+        type: string
+      pr-number:
+        description: PR number for comment / label / artefact targeting
+        required: true
+        type: string
+      app-token:
+        description: GitHub App token forwarded from orchestrator
+        required: true
+        type: string
+
+jobs:
+  cell:
+    name: ${{ inputs.engine }}
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Skeleton placeholder (real body migrates in commit 3)
+        shell: bash
+        run: |
+          echo "skeleton for engine=${{ inputs.engine }} runner=${{ inputs.runner }} image-source=${{ inputs.image-source }}"
