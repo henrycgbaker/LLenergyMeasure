@@ -4,12 +4,27 @@ const sidebarsReference: SidebarsConfig = {
   referenceSidebar: [
     'cli',
     'study-config',
+    'dataset-format',
     'results-schema',
     {
       type: 'category',
       label: 'Library API (pre-1.0, unstable)',
       collapsed: false,
-      items: ['api/llenergymeasure'],
+      items: [
+        {
+          type: 'category',
+          label: 'Entry points',
+          collapsed: false,
+          items: [
+            'library/run_experiment',
+            'library/run_study',
+            'library/ExperimentConfig',
+            'library/StudyConfig',
+            'library/ExperimentResult',
+          ],
+        },
+        'api/llenergymeasure',
+      ],
     },
     {
       type: 'category',
