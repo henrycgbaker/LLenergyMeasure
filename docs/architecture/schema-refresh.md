@@ -24,11 +24,11 @@ e.g. engine_versions/vllm.yaml current_version: 0.7.3 -> 0.8.0
                       |
                       v
 For vllm + tensorrt: schemas-vllm / schemas-tensorrt jobs in
-                     update-engine-schemas.yml auto-fire on pull_request
-For transformers: build-engine-image.yml builds the image, then
+                     engine-pipeline.yml auto-fire on pull_request
+For transformers: engine-pipeline.yml builds the image, then
                   publish-engine-image.yml publishes it (chained via
                   workflow_run), then the schemas-transformers job in
-                  update-engine-schemas.yml fires via workflow_run on push
+                  engine-pipeline.yml fires via workflow_run on push
                       |
                       v
 +------------------------------------------+
@@ -61,15 +61,15 @@ Maintainer reviews PR:
    3-day stability window before opening a PR.
 2. When Renovate opens a PR:
    - **vllm + tensorrt**: the `schemas-vllm` / `schemas-tensorrt` jobs in
-     `update-engine-schemas.yml` auto-fire on the self-hosted GPU runner
+     `engine-pipeline.yml` auto-fire on the self-hosted GPU runner
      (path-filtered on `engine_versions/vllm.yaml` /
      `engine_versions/tensorrt.yaml`).
-   - **transformers**: `build-engine-image.yml` fires first (builds the
+   - **transformers**: `engine-pipeline.yml` fires first (builds the
      transformers Docker image and exports the layer cache to
      `:transformers-<VER>-buildcache`); on success, `publish-engine-image.yml`
      fires via `workflow_run` and pushes the runtime image (canonical tags
      for main/schedule, PR-time tag on `transformers-cache` for PR builds).
-     On push success, the `schemas-transformers` job in `update-engine-schemas.yml`
+     On push success, the `schemas-transformers` job in `engine-pipeline.yml`
      fires via `workflow_run`, pulls the just-pushed image, and runs
      discovery against it.
 3. The workflow runs `./scripts/refresh_discovered_schemas.sh <engine>`
@@ -98,9 +98,9 @@ Compares ARG version in Dockerfile vs engine_version in schema JSON
 
 On failure, the developer can either:
 - Run locally: `./scripts/refresh_discovered_schemas.sh <engine>`
-- Trigger remotely: `gh workflow run update-engine-schemas.yml --field engine=<engine> --field pr_number=<N>`
-  (for transformers, run `build-engine-image.yml` instead — the
-  `schemas-transformers` job in `update-engine-schemas.yml` is `workflow_run`-gated
+- Trigger remotely: `gh workflow run engine-pipeline.yml --field engine=<engine> --field pr_number=<N>`
+  (for transformers, run `engine-pipeline.yml` instead — the
+  `schemas-transformers` job in `engine-pipeline.yml` is `workflow_run`-gated
   on Publish engine image success, which itself chains off Build engine image,
   so the chain re-fires automatically once the build completes)
 
@@ -110,14 +110,14 @@ For ad-hoc refreshes outside the Renovate flow:
 
 ```bash
 # vllm or tensorrt
-gh workflow run update-engine-schemas.yml \
+gh workflow run engine-pipeline.yml \
   --field engine=vllm \
   --field pr_number=123
 
 # transformers: trigger Build engine image. Publish engine image fires on
 # its success (workflow_run); schemas-transformers + invariants-transformers
 # then fire on the push's success (also workflow_run).
-gh workflow run build-engine-image.yml
+gh workflow run engine-pipeline.yml
 ```
 
 ---

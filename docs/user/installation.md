@@ -214,8 +214,8 @@ separate answers:
 
 | Ref | Kind | Written by | Consumed by |
 |---|---|---|---|
-| `transformers-cache:transformers-<VER>-buildcache` | BuildKit cache manifest (`mode=max`, intermediate layer metadata — **not a runnable image**) | `build-engine-image.yml` on every successful build (PR, main, schedule, dispatch) | Future `docker build` invocations as `cache-from` |
-| `transformers-cache:transformers-<VER>` | Runnable PR-time runtime image | `publish-engine-image.yml` when parent build was a `pull_request` | `update-engine-invariants.yml` + `update-engine-schemas.yml` for PR-time validation against the PR's Dockerfile |
+| `transformers-cache:transformers-<VER>-buildcache` | BuildKit cache manifest (`mode=max`, intermediate layer metadata — **not a runnable image**) | `engine-pipeline.yml` on every successful build (PR, main, schedule, dispatch) | Future `docker build` invocations as `cache-from` |
+| `transformers-cache:transformers-<VER>` | Runnable PR-time runtime image | `publish-engine-image.yml` when parent build was a `pull_request` | `engine-pipeline.yml` + `engine-pipeline.yml` for PR-time validation against the PR's Dockerfile |
 | `transformers:transformers-<VER>` + `transformers:latest` | Runnable canonical runtime image | `publish-engine-image.yml` when parent build was a push to `main`, a schedule, or a `workflow_dispatch` | End users (`docker pull`), `make docker-pull`, main-branch invariants/schemas, downstream Renovate consumers |
 
 The three axes encoded:
@@ -242,12 +242,12 @@ Why not collapse them? Two tempting simplifications both lose value:
 
 Pipeline mechanics:
 
-- `build-engine-image.yml` runs `build-push-action` with `cache-from` /
+- `engine-pipeline.yml` runs `build-push-action` with `cache-from` /
   `cache-to` pointing at the buildcache ref. Builds run on every PR, push to
   `main`, schedule, and dispatch. `push: false` — this workflow only exports
   cache, never publishes runnable images.
 - `publish-engine-image.yml` is `workflow_run`-triggered on successful
-  `build-engine-image.yml`. It rebuilds (warming off the just-exported
+  `engine-pipeline.yml`. It rebuilds (warming off the just-exported
   buildcache, so it's seconds), tags per parent-event (PR → cache repo;
   main / schedule / dispatch → canonical repo), and pushes. The build/push
   split exists so a registry permission failure during push doesn't burn

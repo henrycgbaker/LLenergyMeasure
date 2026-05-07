@@ -52,7 +52,7 @@ The subsystem that introspects engine parameter APIs and writes JSON schema file
 | Term | Definition | Do NOT use |
 |---|---|---|
 | **Discovered schema** | `schema.discovered.json` — introspected parameter metadata for one engine version. | "vendored schema", "vendored JSON" |
-| **Discovery pipeline** | `scripts/engine_introspectors/` + `update-engine-schemas.yml`. | "schema vendoring" |
+| **Discovery pipeline** | `scripts/engine_introspectors/` + `engine-pipeline.yml`. | "schema vendoring" |
 | **`SchemaLoader`** | Python class that loads and caches discovered schemas. | — |
 
 ---

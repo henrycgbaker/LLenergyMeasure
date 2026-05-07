@@ -1,0 +1,479 @@
+name: Engine schemas cell
+
+# Reusable workflow invoked from engine-pipeline.yml's matrix fan-out.
+# Runs probe + discover-schema for ONE engine, parameterised by inputs.
+# Writeback is centralised in the orchestrator (per H4-fixed); this cell
+# uploads its writeback content as an artefact and the orchestrator's
+# aggregate writeback job collects all cell artefacts and performs a
+# single git push.
+
+on:
+  workflow_call:
+    inputs:
+      engine:
+        description: Engine name (transformers, vllm, tensorrt)
+        required: true
+        type: string
+      runner:
+        description: Runner kind (ubuntu-latest, self-hosted)
+        required: true
+        type: string
+      image-source:
+        description: Image source mode (ghcr-cache, dockerhub, ngc)
+        required: true
+        type: string
+      pr-number:
+        description: PR number for comment / label / artefact targeting (empty if not applicable)
+        required: true
+        type: string
+      pr-head-repo:
+        description: PR head repo full_name; used to gate writeback contributions on same-repo PRs only
+        required: true
+        type: string
+
+jobs:
+  cell:
+    name: ${{ inputs.engine }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.runner == 'ubuntu-latest' && 30 || 360 }}
+    env:
+      ENGINES_DIR: src/llenergymeasure/engines
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: "/repo/src:/repo"
+    steps:
+      - name: Mint llem-ci-bot App token
+        # Per-cell mint (not forwarded from orchestrator) because GitHub
+        # masks secret-derived job outputs to empty when crossing job
+        # boundaries. Skipped on fork PRs (App secrets aren't available
+        # cross-fork).
+        id: app-token
+        if: inputs.pr-head-repo == github.repository || github.event_name == 'workflow_dispatch'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Clean workspace (fix root-owned files from prior Docker runs)
+        if: inputs.runner == 'self-hosted'
+        uses: ./.github/actions/clean-self-hosted-workspace
+
+      - name: Synthesize passwd/group for non-root container runs
+        if: inputs.runner == 'self-hosted'
+        uses: ./.github/actions/synthesize-passwd
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Resolve engine version from SSOT
+        id: version
+        env:
+          ENGINE: ${{ inputs.engine }}
+        run: |
+          VER=$(yq '.library.current_version' "engine_versions/${ENGINE}.yaml")
+          if [[ -z "$VER" || "$VER" == "null" ]]; then
+            echo "Could not resolve ${ENGINE} version from engine_versions/${ENGINE}.yaml" >&2
+            exit 1
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "image=llenergymeasure:${ENGINE}-${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR (read-only, for image pull)
+        if: inputs.image-source == 'ghcr-cache'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect Docker Hub auth availability
+        if: inputs.image-source == 'dockerhub'
+        id: dockerhub_auth
+        env:
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [[ -n "$DH_TOKEN" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Authenticate Docker Hub (if token configured)
+        if: inputs.image-source == 'dockerhub' && steps.dockerhub_auth.outputs.available == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Pull engine image and tag locally
+        env:
+          IMAGE_TAG: ${{ steps.version.outputs.image }}
+          VER: ${{ steps.version.outputs.version }}
+          ENGINE: ${{ inputs.engine }}
+          IMAGE_SOURCE: ${{ inputs.image-source }}
+          REPO: ${{ github.repository }}
+        run: |
+          case "$IMAGE_SOURCE" in
+            ghcr-cache)
+              UPSTREAM="ghcr.io/${REPO}/${ENGINE}-cache:${ENGINE}-${VER}"
+              ;;
+            dockerhub)
+              UPSTREAM="vllm/vllm-openai:v${VER}"
+              ;;
+            ngc)
+              UPSTREAM="nvcr.io/nvidia/tensorrt-llm/release:${VER}"
+              ;;
+            *)
+              echo "Unknown image-source: ${IMAGE_SOURCE}" >&2
+              exit 1
+              ;;
+          esac
+          if ! docker image inspect "$UPSTREAM" >/dev/null 2>&1; then
+            docker pull "$UPSTREAM"
+          else
+            echo "Image $UPSTREAM already cached locally; skipping pull."
+          fi
+          docker tag "$UPSTREAM" "$IMAGE_TAG"
+
+      - name: Fetch tensorrt-llm source tarball (host)
+        if: inputs.engine == 'tensorrt'
+        env:
+          VER: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          DEST="/tmp/trt-llm-${VER}"
+          if [[ -d "${DEST}/tensorrt_llm" ]]; then
+            echo "Source tree already present at ${DEST}; skipping fetch."
+            exit 0
+          fi
+          URL_TEMPLATE=$(yq '.source_tarball.url_template' engine_versions/tensorrt.yaml)
+          if [[ -z "$URL_TEMPLATE" || "$URL_TEMPLATE" == "null" ]]; then
+            echo "Could not resolve source_tarball.url_template from engine_versions/tensorrt.yaml" >&2
+            exit 1
+          fi
+          URL="${URL_TEMPLATE//\{version\}/${VER}}"
+          mkdir -p "${DEST}"
+          curl -fsSL "${URL}" \
+            | tar -xz -C "${DEST}" --strip-components=1
+          test -d "${DEST}/tensorrt_llm"
+
+      - name: Compute stable discovery anchor
+        id: anchor
+        env:
+          ENGINE: ${{ inputs.engine }}
+        run: |
+          BASE_PATHS=(
+            "engine_versions/${ENGINE}.yaml"
+            "scripts/engine_introspectors/_common.py"
+            "scripts/engine_introspectors/__init__.py"
+            "scripts/engine_introspectors/__main__.py"
+            "scripts/engine_introspectors/${ENGINE}_introspector.py"
+          )
+          ENGINE_PATHS=()
+          if [[ "$ENGINE" == "transformers" ]]; then
+            ENGINE_PATHS=( "docker/Dockerfile.transformers" )
+          fi
+          PATHS=("${BASE_PATHS[@]}" "${ENGINE_PATHS[@]}")
+          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          if [[ -z "${DATE}" ]]; then
+            echo "::error::No git history found for any anchor input path; refusing to use wallclock fallback (would break determinism)." >&2
+            exit 1
+          fi
+          echo "date=${DATE}" >> "$GITHUB_OUTPUT"
+
+      - name: Probe — landmark resolution check (in container)
+        id: probe
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          ENGINE: ${{ inputs.engine }}
+          VER: ${{ steps.version.outputs.version }}
+          RUNNER: ${{ inputs.runner }}
+        run: |
+          mkdir -p /tmp/llem-probe-out
+          DOCKER_FLAGS=()
+          if [[ "$RUNNER" == "self-hosted" ]]; then
+            DOCKER_FLAGS+=(
+              --gpus all
+              --user "$(id -u):$(id -g)"
+              -v /tmp/llem-passwd-synth:/etc/passwd:ro
+              -v /tmp/llem-group-synth:/etc/group:ro
+              -e LD_LIBRARY_PATH
+            )
+          fi
+          if [[ "$ENGINE" == "tensorrt" ]]; then
+            DOCKER_FLAGS+=( -v "/tmp/trt-llm-${VER}:/tmp/trt-llm-${VER}:ro" )
+          fi
+          docker run --rm "${DOCKER_FLAGS[@]}" \
+            -v "${GITHUB_WORKSPACE}:/repo" \
+            -v /tmp/llem-probe-out:/llem-probe-out:rw \
+            -w /repo \
+            -e PYTHONPATH \
+            -e PYTHONDONTWRITEBYTECODE \
+            --entrypoint python3 \
+            "$IMAGE" \
+            -m scripts._probe --engine "$ENGINE" --producer schemas \
+              --output "/llem-probe-out/probe-${ENGINE}.json"
+          VERDICT=$(jq -r '.verdict' "/tmp/llem-probe-out/probe-${ENGINE}.json")
+          echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
+
+      - name: Update last_probe in SSOT
+        if: always() && steps.probe.outcome == 'success'
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          ENGINE: ${{ inputs.engine }}
+          RUNNER: ${{ inputs.runner }}
+        run: |
+          DOCKER_FLAGS=()
+          if [[ "$RUNNER" == "self-hosted" ]]; then
+            DOCKER_FLAGS+=(
+              --user "$(id -u):$(id -g)"
+              -v /tmp/llem-passwd-synth:/etc/passwd:ro
+              -v /tmp/llem-group-synth:/etc/group:ro
+              -e LD_LIBRARY_PATH
+            )
+          fi
+          docker run --rm "${DOCKER_FLAGS[@]}" \
+            -v "${GITHUB_WORKSPACE}:/repo" \
+            -v /tmp/llem-probe-out:/llem-probe-out:ro \
+            -w /repo \
+            -e PYTHONPATH \
+            --entrypoint bash \
+            "$IMAGE" \
+            -c "python3 scripts/update_last_probe.py --engine ${ENGINE} < /llem-probe-out/probe-${ENGINE}.json"
+
+      - name: Save current schema for diffing
+        if: steps.probe.outputs.verdict == 'pass'
+        env:
+          ENGINE: ${{ inputs.engine }}
+        run: |
+          mkdir -p /tmp/engine-schemas-diff
+          OLD="${ENGINES_DIR}/${ENGINE}/schema.discovered.json"
+          DEST="/tmp/engine-schemas-diff/${ENGINE}.old.json"
+          if [[ -f "$OLD" ]]; then
+            cp "$OLD" "$DEST"
+          else
+            echo '{}' > "$DEST"
+          fi
+
+      - name: Discover schema inside container
+        if: steps.probe.outputs.verdict == 'pass'
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          ENGINE: ${{ inputs.engine }}
+          VER: ${{ steps.version.outputs.version }}
+          ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
+          RUNNER: ${{ inputs.runner }}
+        run: |
+          DOCKER_FLAGS=()
+          if [[ "$RUNNER" == "self-hosted" ]]; then
+            DOCKER_FLAGS+=(
+              --gpus all
+              --user "$(id -u):$(id -g)"
+              -v /tmp/llem-passwd-synth:/etc/passwd:ro
+              -v /tmp/llem-group-synth:/etc/group:ro
+              -e LD_LIBRARY_PATH
+            )
+          fi
+          if [[ "$ENGINE" == "tensorrt" ]]; then
+            DOCKER_FLAGS+=( -v "/tmp/trt-llm-${VER}:/tmp/trt-llm-${VER}:ro" )
+          fi
+          docker run --rm "${DOCKER_FLAGS[@]}" \
+            -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
+            -e PYTHONDONTWRITEBYTECODE \
+            -e PYTHONPATH \
+            -v "${GITHUB_WORKSPACE}:/repo" \
+            -w /repo \
+            --entrypoint python3 \
+            "$IMAGE" \
+            -m scripts.engine_introspectors \
+              --engine "${ENGINE}" \
+              --image-ref "${IMAGE}" \
+              --output "${ENGINES_DIR}/${ENGINE}/schema.discovered.json"
+
+      - name: Set up Python (host) for doc-gen + diff
+        if: steps.probe.outputs.verdict == 'pass'
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: engine-schemas-${{ inputs.engine }}-docgen-3.12
+          python-version: "3.12"
+
+      - name: Install lean host project for doc-gen
+        if: steps.probe.outputs.verdict == 'pass'
+        run: uv sync --dev
+
+      - name: Regenerate schemas digest
+        if: steps.probe.outputs.verdict == 'pass'
+        env:
+          ENGINE: ${{ inputs.engine }}
+        run: |
+          uv run python scripts/generate_curation_doc.py \
+            --engine "${ENGINE}" \
+            --out "docs/user/generated/curation-${ENGINE}.md"
+
+      - name: Regenerate schema doc
+        if: steps.probe.outputs.verdict == 'pass'
+        env:
+          ENGINE: ${{ inputs.engine }}
+        run: |
+          uv run python scripts/generate_schema_doc.py \
+            --engine "${ENGINE}" \
+            --out "docs/user/generated/schema-${ENGINE}.md"
+
+      - name: Classify diff
+        if: steps.probe.outputs.verdict == 'pass'
+        id: diff
+        env:
+          ENGINE: ${{ inputs.engine }}
+        run: |
+          set +e
+          uv run python scripts/diff_discovered_schemas.py \
+            "/tmp/engine-schemas-diff/${ENGINE}.old.json" \
+            "${ENGINES_DIR}/${ENGINE}/schema.discovered.json" \
+            > "/tmp/engine-schemas-diff/${ENGINE}.diff.json"
+          DIFF_EXIT=$?
+          set -e
+
+          if diff -q "/tmp/engine-schemas-diff/${ENGINE}.old.json" \
+                    "${ENGINES_DIR}/${ENGINE}/schema.discovered.json" >/dev/null 2>&1; then
+            CLASSIFICATION="no-changes"
+          elif [[ $DIFF_EXIT -eq 1 ]]; then
+            CLASSIFICATION="breaking"
+          else
+            CLASSIFICATION="safe"
+          fi
+          echo "classification=${CLASSIFICATION}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Engine schemas — ${ENGINE}"
+            echo
+            if [[ "$CLASSIFICATION" == "no-changes" ]]; then
+              echo "_No changes to discovered schema._"
+            else
+              SUMMARY=$(jq -r '.summary // "schema diff produced"' "/tmp/engine-schemas-diff/${ENGINE}.diff.json" 2>/dev/null || echo "schema diff produced")
+              echo "${SUMMARY}"
+              echo
+              echo "<details><summary>Structured diff</summary>"
+              echo
+              echo '```json'
+              jq '.' "/tmp/engine-schemas-diff/${ENGINE}.diff.json" 2>/dev/null | head -n 200 || true
+              echo '```'
+              echo
+              echo "</details>"
+            fi
+          } > "/tmp/engine-schemas-diff/${ENGINE}.summary.md"
+
+      - name: Probe-fail comment (skip downstream)
+        if: steps.probe.outputs.verdict == 'fail' && inputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ inputs.pr-number }}
+          MARKER: "bot-id: schemas-${{ inputs.engine }}-probe-blocked"
+          REPO: ${{ github.repository }}
+          ENGINE: ${{ inputs.engine }}
+        run: |
+          {
+            echo "<!-- ${MARKER} -->"
+            echo "## Engine schemas — ${ENGINE} (probe-blocked)"
+            echo
+            echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
+            echo
+            echo "**Missing landmarks:**"
+            echo
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' "/tmp/llem-probe-out/probe-${ENGINE}.json"
+            echo
+            echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
+            echo
+            echo "**To unblock,** choose one of:"
+            echo
+            echo "- **Patch the introspector module's landmarks** — required when the library has genuinely renamed or removed the missing symbols. The introspector code needs updating to match the new library API."
+            echo "- **Run \`@llem-ci-bot /approve-reuse ${ENGINE} schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
+            echo
+            echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
+          } | scripts/ci/upsert_pr_comment.sh
+          gh pr edit "$PR" --add-label "probe-blocked" 2>/dev/null || true
+
+      - name: Upload diff artefact
+        if: steps.probe.outputs.verdict == 'pass'
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-schemas-diff-${{ inputs.engine }}
+          path: |
+            /tmp/engine-schemas-diff/${{ inputs.engine }}.old.json
+            /tmp/engine-schemas-diff/${{ inputs.engine }}.diff.json
+            /tmp/engine-schemas-diff/${{ inputs.engine }}.summary.md
+
+      - name: Upload writeback artefact
+        if: steps.probe.outputs.verdict == 'pass' && steps.diff.outputs.classification != 'no-changes' && steps.app-token.outputs.token != '' && inputs.pr-number != '' && inputs.pr-head-repo == github.repository
+        uses: actions/upload-artifact@v4
+        with:
+          name: schemas-writeback-${{ inputs.engine }}
+          path: |
+            ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/schema.discovered.json
+            engine_versions/${{ inputs.engine }}.yaml
+            docs/user/generated/curation-${{ inputs.engine }}.md
+            docs/user/generated/schema-${{ inputs.engine }}.md
+          if-no-files-found: error
+
+      - name: Post per-pipeline comment
+        if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ inputs.pr-number }}
+          MARKER: "bot-id: schemas-${{ inputs.engine }}-diff"
+          REPO: ${{ github.repository }}
+        run: |
+          {
+            echo "<!-- ${MARKER} -->"
+            cat "/tmp/engine-schemas-diff/${{ inputs.engine }}.summary.md"
+          } | scripts/ci/upsert_pr_comment.sh
+
+      - name: Clean up stale probe-blocked comment (probe now passes)
+        if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ inputs.pr-number }}
+          MARKER: "bot-id: schemas-${{ inputs.engine }}-probe-blocked"
+          REPO: ${{ github.repository }}
+          MODE: delete
+        run: scripts/ci/upsert_pr_comment.sh
+
+      - name: Apply per-pipeline label
+        if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+          CLASSIFICATION: ${{ steps.diff.outputs.classification }}
+        run: |
+          for L in schemas-changed schemas-breaking schemas-safe probe-blocked; do
+            gh pr edit "$PR_NUMBER" --remove-label "$L" 2>/dev/null || true
+          done
+          case "$CLASSIFICATION" in
+            breaking)  gh pr edit "$PR_NUMBER" --add-label "schemas-breaking" --add-label "schemas-changed" 2>/dev/null || true ;;
+            safe)      gh pr edit "$PR_NUMBER" --add-label "schemas-safe" --add-label "schemas-changed" 2>/dev/null || true ;;
+            no-changes) ;;
+          esac
+
+      - name: Apply cross-pipeline rollup label
+        if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+          CLASSIFICATION: ${{ steps.diff.outputs.classification }}
+        run: |
+          if [[ "$CLASSIFICATION" != "breaking" ]]; then
+            gh pr edit "$PR_NUMBER" --add-label "safe-bump" 2>/dev/null || true
+          else
+            gh pr edit "$PR_NUMBER" --remove-label "safe-bump" 2>/dev/null || true
+          fi
+
+      - name: Probe-fail gate (red CI)
+        # The 'accept-probe-fail' PR label bypasses this gate for
+        # known-drift cases (admin escalation; tracked in #547 etc.).
+        if: steps.probe.outputs.verdict == 'fail' && !contains(github.event.pull_request.labels.*.name, 'accept-probe-fail')
+        run: |
+          echo "::error::Probe failed; downstream mining was skipped. CI is red until the probe-blocked comment is resolved."
+          exit 1

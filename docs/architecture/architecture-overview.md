@@ -156,20 +156,20 @@ The invariant miner pipeline lives in `scripts/engine_miners/` - it is a build-t
                ▼
   Engine-invariants pipeline fires (probe + mine + validate)
                │
-               ├──► transformers: build-engine-image.yml builds the
+               ├──► transformers: engine-pipeline.yml builds the
                │    image (cache export only, no runtime push), then
                │    publish-engine-image.yml fires via workflow_run and
                │    pushes runtime tags (canonical for main/schedule, PR-
                │    time tag for PR builds). On its success, the
-               │    invariants-transformers job in update-engine-invariants.yml
+               │    invariants-transformers job in engine-pipeline.yml
                │    fires via workflow_run on GH-hosted ubuntu-latest.
                │
-               ├──► vLLM: update-engine-invariants.yml runs inside
+               ├──► vLLM: engine-pipeline.yml runs inside
                │    llenergymeasure:vllm-${VER} on a self-hosted GPU
                │    runner (Docker isolates from the unified uv.lock;
                │    see #437/#464).
                │
-               ├──► TRT-LLM: update-engine-invariants.yml runs inside
+               ├──► TRT-LLM: engine-pipeline.yml runs inside
                │    llenergymeasure:tensorrt-${VER} on a self-hosted GPU
                │    runner (CUDA-aware import).
                │

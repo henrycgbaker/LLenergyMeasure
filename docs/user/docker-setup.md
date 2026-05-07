@@ -520,11 +520,11 @@ llem run experiment.yaml --skip-preflight
 When you update an engine version (by bumping the SSOT in
 `engine_versions/<engine>.yaml`), the discovered parameter schemas must be
 regenerated. This happens automatically via the
-[Parameter Discovery Pipeline](/architecture/schema-refresh): `update-engine-schemas.yml`
+[Parameter Discovery Pipeline](/architecture/schema-refresh): `engine-pipeline.yml`
 covers all three engines via per-job `if:` gating — the vllm + tensorrt
 cells fire on `pull_request: paths`; the transformers cell fires via
 `workflow_run` after `publish-engine-image.yml` completes (which itself
-chains off `build-engine-image.yml` via workflow_run — the build/push
+chains off `engine-pipeline.yml` via workflow_run — the build/push
 split exists so push failures don't burn the FA3 compile). For manual
 bumps, run:
 
