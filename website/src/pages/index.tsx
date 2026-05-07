@@ -34,7 +34,7 @@ function Hero(): ReactNode {
             <Link
               className="button button--primary button--lg"
               to={ROUTES.getStarted}>
-              Get Started - 5 min to first measurement
+              Get Started
             </Link>
           </div>
 
@@ -65,17 +65,17 @@ function Hero(): ReactNode {
 
 function DisambiguationStrip(): ReactNode {
   return (
-    <aside className={styles.disambig}>
+    <div className={styles.disambig}>
       <div className="container">
         <p className={styles.disambigText}>
-          Not Zeus or CodeCarbon - LLenergyMeasure uses them as plugins.
-          {' '}Not lm-evaluation-harness - that measures capability; this measures
-          efficiency.
-          {' '}Not MLPerf - LLenergyMeasure is researcher-extensible measurement,
-          not a fixed-rule benchmark.
+          Zeus and CodeCarbon are integrated as samplers, not replaced.
+          {' '}lm-evaluation-harness measures capability; this measures
+          efficiency, and the two pair naturally.
+          {' '}MLPerf is a fixed-rule benchmark; this is researcher-extensible
+          measurement whose outputs inform benchmark design.
         </p>
       </div>
-    </aside>
+    </div>
   );
 }
 
@@ -136,8 +136,8 @@ duration:    3.18 s`}</code></pre>
 
 result = run_experiment(model="gpt2", engine="transformers")
 
-print(result.energy.adjusted_joules)   # 12.43
-print(result.throughput.tokens_per_sec) # 47.2`}</code></pre>
+print(result.total_energy_j)            # 12.43
+print(result.avg_tokens_per_second)     # 47.2`}</code></pre>
             </TabItem>
           </Tabs>
         </div>
@@ -160,7 +160,7 @@ function MethodologyBlock(): ReactNode {
           </Heading>
           <ul className={styles.methodologyList}>
             <li>
-              GPU power sampled via NVML at 200 ms intervals (default sampler)
+              GPU power sampled via NVML at 100 ms intervals (default sampler)
             </li>
             <li>
               Baseline idle-power subtracted via two-container baseline measurement
@@ -170,7 +170,8 @@ function MethodologyBlock(): ReactNode {
               window opens
             </li>
             <li>
-              Energy reported in joules with explicit uncertainty
+              Energy reported in joules; reproducibility notes attached to every
+              result
             </li>
             <li>
               Sampler plugins: NVML, Zeus, CodeCarbon
@@ -382,10 +383,11 @@ const BIBTEX = `@software{baker2026llenergymeasure,
   author    = {Baker, Henry C. G.},
   title     = {{LLenergyMeasure}: Energy and efficiency measurement for LLM inference},
   year      = {2026},
-  version   = {0.10.0},
+  version   = {0.9.0},
   url       = {https://github.com/henrycgbaker/llenergymeasure},
-  note      = {Pre-1.0 release. CLI-first measurement framework for LLM inference
-               efficiency across heterogeneous runtimes.}
+  note      = {Pre-1.0 release. See GitHub releases for the current version.
+               CLI-first measurement framework for LLM inference efficiency
+               across heterogeneous runtimes.}
 }`;
 
 function ContributorFooter(): ReactNode {
