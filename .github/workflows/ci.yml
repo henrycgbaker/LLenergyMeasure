@@ -36,6 +36,7 @@ jobs:
       src: ${{ steps.changes.outputs.src }}
       docker: ${{ steps.changes.outputs.docker }}
       workflows: ${{ steps.changes.outputs.workflows }}
+      docs_inputs: ${{ steps.changes.outputs.docs_inputs }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v4
@@ -55,6 +56,19 @@ jobs:
               - 'pyproject.toml'
             workflows:
               - '.github/workflows/**'
+            docs_inputs:
+              # Inputs to the docs-freshness job: Pydantic models the
+              # generators introspect, the generator scripts themselves,
+              # and this workflow file (self-test). pyproject/uv.lock
+              # excluded: env-break would surface in lint/type-check/test
+              # before docs-freshness anyway.
+              - 'src/**'
+              - 'scripts/generate_config_docs.py'
+              - 'scripts/generate_cli_reference.py'
+              - 'scripts/generate_invalid_combos_doc.py'
+              - 'scripts/generate_curation_doc.py'
+              - 'scripts/check_pydantic_matches_discovered.py'
+              - '.github/workflows/ci.yml'
 
   lint:
     if: >-
@@ -164,10 +178,16 @@ jobs:
           [ "$PYPROJECT_VER" = "$VERSION_VER" ] || { echo "ERROR: Version mismatch: pyproject.toml=${PYPROJECT_VER}, _version.py=${VERSION_VER}"; exit 1; }
 
   docs-freshness:
+    needs: filter
     if: >-
-      github.event_name != 'workflow_dispatch'
-      || inputs.job == 'all'
-      || inputs.job == 'docs-freshness'
+      (
+        github.event_name != 'workflow_dispatch'
+        && needs.filter.outputs.docs_inputs == 'true'
+      )
+      || (
+        github.event_name == 'workflow_dispatch'
+        && (inputs.job == 'all' || inputs.job == 'docs-freshness')
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
