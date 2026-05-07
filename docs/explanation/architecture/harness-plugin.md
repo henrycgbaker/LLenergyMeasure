@@ -142,7 +142,7 @@ A plugin implements exactly six concerns:
 
 The plugin never touches energy samplers, FLOPs estimators, timeseries writers,
 or result models. It receives an `ExperimentConfig` and returns an
-`InferenceOutput` or `None`. Everything else is the harness's problem.
+`InferenceOutput`. Everything else is the harness's problem.
 
 ## Call sequence
 
