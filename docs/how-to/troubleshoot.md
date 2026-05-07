@@ -18,7 +18,7 @@ environment, or the system is CPU-only.
 2. Run `llem config` to see what the tool detects.
 3. If `nvidia-smi` works but the engine does not, you may be running outside a container
    that has CUDA — for vLLM and TensorRT-LLM, use `llem run study.yaml` with Docker runners
-   (see [docker-setup.md](/docs/docker-setup)).
+   (see [docker-setup.md](/how-to/docker-setup)).
 4. If `nvidia-smi` fails, install or reinstall the NVIDIA drivers for your OS.
 
 ---
@@ -33,7 +33,7 @@ Docker images. A host import of `transformers`, `vllm`, or `tensorrt_llm`
 will always fail by design.
 
 **Fix:** Build the engine image and dispatch via the Docker runner. The
-canonical pattern is in [development.md](/architecture/development); the short form
+canonical pattern is in [development.md](/contributing/development); the short form
 is:
 
 ```bash
@@ -45,7 +45,7 @@ docker build -f docker/Dockerfile.transformers \
 
 Replace `transformers` with `vllm` or `tensorrt` (and add `--gpus all` for
 those two) for the other engines. Then run `llem run` with a Docker runner
-configured for the engine — see [docker-setup.md](/docs/docker-setup).
+configured for the engine — see [docker-setup.md](/how-to/docker-setup).
 
 Run `llem config` to see the current status of each engine.
 
@@ -66,7 +66,7 @@ Run `llem config` to see the current status of each engine.
 **Fix:** Read the error message — it identifies which check failed.
 
 - `Docker not found`: install Docker Engine ([docs.docker.com/engine/install/](https://docs.docker.com/engine/install/)).
-- `NVIDIA Container Toolkit not found`: follow [docker-setup.md](/docs/docker-setup).
+- `NVIDIA Container Toolkit not found`: follow [docker-setup.md](/how-to/docker-setup).
 - `GPU not visible inside container`: check that `--gpus all` works with `docker run --gpus all nvidia/cuda:12.0-base-ubuntu22.04 nvidia-smi`.
 - `CUDA/driver mismatch`: update the host NVIDIA driver to be compatible with the container's CUDA version.
 
@@ -147,7 +147,7 @@ docker build -f docker/Dockerfile.transformers -t ghcr.io/henrycgbaker/llenergym
 ```
 
 Replace `v0.9.0` with your installed version (`llem --version`). See
-[Installation - Getting Engine Images](/docs/installation#getting-engine-images)
+[Installation - Getting Engine Images](/how-to/install#getting-engine-images)
 for full instructions.
 
 ---
@@ -170,7 +170,7 @@ is unavailable, energy measurement falls back gracefully to zero rather than cra
    enough samples for accurate integration. Use larger `n` values.
 
 Zeus and CodeCarbon are optional extras. If they are not installed, the tool falls back
-to NVML. See [energy-measurement.md](/methodology/energy-measurement) for backend details.
+to NVML. See [energy-measurement.md](/explanation/energy-measurement) for backend details.
 
 ---
 
@@ -197,7 +197,7 @@ llem run experiment.yaml  # add to YAML for testing
 ```
 
 For publication-quality measurements, leave warmup enabled. See
-[methodology.md](/methodology/methodology) for why warmup matters.
+[methodology.md](/explanation/methodology) for why warmup matters.
 
 ---
 
@@ -228,7 +228,7 @@ model, or package requirements.
 | Engine | Parameter | Limitation | Resolution |
 |---------|-----------|------------|------------|
 | pytorch | `transformers.attn_implementation: flash_attention_2` | flash-attn requires Ampere+ GPU; may fail on older architectures | Use `attn_implementation: sdpa` on pre-Ampere GPUs |
-| pytorch | `transformers.attn_implementation: flash_attention_3` | FA3 requires the `flash_attn_3` package (built from flash-attn `hopper/` directory) and Ampere+ GPU (SM80+). Included in the Docker image by default | Install locally from source if not using Docker. See [Installation - FA3](/docs/installation#flashattention-3) |
+| pytorch | `transformers.attn_implementation: flash_attention_3` | FA3 requires the `flash_attn_3` package (built from flash-attn `hopper/` directory) and Ampere+ GPU (SM80+). Included in the Docker image by default | Install locally from source if not using Docker. See [Installation - FA3](/how-to/install#flashattention-3) |
 | vllm | `vllm.engine.kv_cache_dtype: fp8` | FP8 KV cache requires Hopper (H100) or newer GPU | Use `kv_cache_dtype: auto` for automatic selection |
 | vllm | `vllm.engine.attention.backend: FLASHINFER` | FlashInfer requires JIT compilation on first use | Use `attention.backend: auto` or `FLASH_ATTN` |
 | vllm | `vllm.engine.attention.backend: TORCH_SDPA` | TORCH_SDPA not registered in vLLM attention backends | Use `attention.backend: auto` or `FLASH_ATTN` |

@@ -67,7 +67,7 @@ Note: `flash_attention_3` requires the `flash_attn_3` package (built separately 
 flash-attn repo's `hopper/` directory) and an Ampere+ GPU (SM80+, e.g. A100 or H100).
 The Docker Transformers image includes FA3 by default. To skip it (e.g. for faster CI builds),
 rebuild with `--build-arg INSTALL_FA3=false`. See
-[Installation - FlashAttention-3](/docs/installation#flashattention-3) for details.
+[Installation - FlashAttention-3](/how-to/install#flashattention-3) for details.
 
 **Compilation:**
 
@@ -150,7 +150,7 @@ device placement. When `tp_plan='auto'`, `device_map` is automatically omitted.
 ## vLLM (Docker)
 
 A high-throughput inference engine using PagedAttention and continuous batching. Requires
-Docker with NVIDIA Container Toolkit. See [Docker Setup Guide](/docs/docker-setup) for
+Docker with NVIDIA Container Toolkit. See [Docker Setup Guide](/how-to/docker-setup) for
 installation instructions.
 
 **Minimal config:**
@@ -314,7 +314,7 @@ vllm:
 A maximum-performance inference engine using NVIDIA TensorRT engine compilation. TRT-LLM
 compiles a model into an optimised TensorRT engine on first use, then runs inference
 against that engine. Engines are cached on disk so subsequent runs skip compilation.
-Requires Docker with NVIDIA Container Toolkit. See [Docker Setup Guide](/docs/docker-setup)
+Requires Docker with NVIDIA Container Toolkit. See [Docker Setup Guide](/how-to/docker-setup)
 for installation instructions.
 
 **Minimal config:**

@@ -4,7 +4,7 @@ This document covers the runtime config-validation pipeline: how a user's `Exper
 
 **Audience:** end users debugging a rejected config; extenders writing new corpus rules; anyone wanting to understand the error messages llem produces.
 
-For the compile-time side (how the corpus is built), see [miner-pipeline.md](/architecture/miner-pipeline).
+For the compile-time side (how the corpus is built), see [miner-pipeline.md](/contributing/miner-pipeline).
 
 ---
 
@@ -239,7 +239,7 @@ When a user submits a config combination that no rule in the corpus addresses, n
 
 Gap reporting surfaces these at the `dormant` level or via a separate gap-detection pipeline. When a `gap_detected: true` group appears in experiment results, it indicates the config combination triggered a library-side normalisation that the corpus did not yet describe.
 
-Extending the corpus to cover new gap classes is done by adding a miner cluster or a `manual_seed` rule. See [extending-miners.md](/architecture/extending-miners).
+Extending the corpus to cover new gap classes is done by adding a miner cluster or a `manual_seed` rule. See [extending-miners.md](/contributing/extending-miners).
 
 ---
 
@@ -316,9 +316,9 @@ The validated YAML in the installed package was built with a schema major versio
 
 ## See also
 
-- [architecture-overview.md](/architecture/architecture-overview) - system overview
-- [validation-invariant-corpus.md](/architecture/validation-invariant-corpus) - corpus YAML format reference
-- [miner-pipeline.md](/architecture/miner-pipeline) - how the corpus is built
-- [extending-miners.md](/architecture/extending-miners) - adding new rules
-- [engines.md](/architecture/engines) - engine configuration reference
-- [troubleshooting.md](/docs/troubleshooting) - general troubleshooting guide
+- [architecture-overview.md](/explanation/architecture-overview) - system overview
+- [validation-invariant-corpus.md](/contributing/validation-invariant-corpus) - corpus YAML format reference
+- [miner-pipeline.md](/contributing/miner-pipeline) - how the corpus is built
+- [extending-miners.md](/contributing/extending-miners) - adding new rules
+- [engines.md](/reference/engines/configuration) - engine configuration reference
+- [troubleshooting.md](/how-to/troubleshoot) - general troubleshooting guide

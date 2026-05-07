@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the invariants digest doc for one engine.
 
-Produces ``docs/generated/invariants-{engine}.md`` from the corpus + validated
+Produces ``docs/reference/engines/invariants-{engine}.md`` from the corpus + validated
 artefacts under ``src/llenergymeasure/engines/<engine>/`` and the previous corpus state
 in git history. Per the engine-coupling design doc §6, this digest is
 section 2 of the per-engine curation digest (sections 1 + 3 are produced
@@ -10,7 +10,7 @@ by ``generate_curation_doc.py`` + an on-demand runtime-gaps renderer).
 Run::
 
     python scripts/generate_invariants_doc.py --engine transformers \\
-        --out docs/generated/invariants-transformers.md
+        --out docs/reference/engines/invariants-transformers.md
 """
 
 from __future__ import annotations

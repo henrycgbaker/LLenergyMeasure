@@ -30,6 +30,12 @@
   line-height: 1.6;
 }
 
+.cta {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2.5rem;
+}
+
 .actions {
   display: flex;
   gap: 0.75rem;

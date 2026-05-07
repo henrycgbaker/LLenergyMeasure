@@ -24,33 +24,41 @@ export default function Home(): ReactNode {
             </p>
 
             <p className={styles.description}>
-              CLI-first measurement framework for energy, throughput, and
-              FLOPs across multiple inference engines (Transformers, vLLM,
-              TensorRT-LLM). Reproducible study configs, curated
-              measurement-relevant parameters, and engine-introspected
-              schemas.
+              A CLI-first benchmarking framework for evaluation of LLM
+              inference efficiency across heterogeneous runtimes. Supports
+              energy, throughput, and FLOPs measurement, with
+              engine-introspected parameter spaces, intelligent experiment
+              deduplication and sampling, and structured sweep design.
             </p>
+
+            <div className={styles.cta}>
+              <Link
+                className="button button--primary button--lg"
+                to={ROUTES.tutorials}>
+                Get started →
+              </Link>
+            </div>
 
             <div className={styles.actions}>
               <Link
-                className="button button--primary button--lg"
-                to={ROUTES.userGuide}>
-                Docs
+                className="button button--secondary button--lg"
+                to={ROUTES.tutorials}>
+                Tutorials
               </Link>
               <Link
                 className="button button--secondary button--lg"
-                to={ROUTES.methodology}>
-                Methodology
+                to={ROUTES.howTo}>
+                How-to
               </Link>
               <Link
                 className="button button--secondary button--lg"
-                to={ROUTES.api}>
-                API
+                to={ROUTES.reference}>
+                Reference
               </Link>
               <Link
                 className="button button--secondary button--lg"
-                to={ROUTES.architecture}>
-                Architecture
+                to={ROUTES.explanation}>
+                Explanation
               </Link>
             </div>
           </div>

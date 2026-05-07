@@ -2,7 +2,7 @@
 
 This guide walks you through installing llenergymeasure and running your first energy measurement — step by step, with explanations along the way. It assumes basic familiarity with a terminal (command line) but no programming knowledge.
 
-If you want to understand *what* the measurements mean before you run them, read [What We Measure and Why It Matters](/methodology/what-we-measure) first.
+If you want to understand *what* the measurements mean before you run them, read [What We Measure and Why It Matters](/explanation/what-we-measure) first.
 
 ---
 
@@ -21,7 +21,7 @@ Before you start, you need:
 
 **Not sure about GPU?** Type `nvidia-smi` in your terminal. If it shows a table of GPU information, you have an NVIDIA GPU. If it says "command not found", you do not have a compatible GPU.
 
-For a detailed system requirements reference, see the [Installation Guide](/docs/installation).
+For a detailed system requirements reference, see the [Installation Guide](/how-to/install).
 
 ---
 
@@ -38,8 +38,8 @@ host-side orchestrator that drives experiments and reads results. The AI
 inference engines themselves (Transformers, vLLM, TensorRT-LLM) run
 inside Docker containers, not on your host. You will need Docker
 installed and a Docker image built before running an experiment; see
-the [Installation Guide](/docs/installation) and the
-[development guide](/architecture/development) for the build/run pattern.
+the [Installation Guide](/how-to/install) and the
+[development guide](/contributing/development) for the build/run pattern.
 
 **How long it takes:** A minute or two — the host package is small. The
 slower step is building (or pulling) the Docker image for the engine you
@@ -88,7 +88,7 @@ Python
 - **Energy section** shows `nvml` — this is the energy measurement method. NVML reads directly from the GPU hardware and is the default.
 - **Python section** confirms your Python version.
 
-If the GPU is not detected, you may need to install NVIDIA drivers — see the [Installation Guide](/docs/installation) for guidance.
+If the GPU is not detected, you may need to install NVIDIA drivers — see the [Installation Guide](/how-to/install) for guidance.
 
 ---
 
@@ -159,7 +159,7 @@ Here is what each section means:
 - **Duration** — how long the experiment took, wall-clock time.
 - **Warmup** — how many prompts were excluded from the results to let the hardware reach a stable temperature. The metrics are based on the remaining prompts only.
 
-For a detailed explanation of every metric, including what numbers are "normal" and how to compare results across models, see [How to Read llenergymeasure Output](/methodology/interpreting-results).
+For a detailed explanation of every metric, including what numbers are "normal" and how to compare results across models, see [How to Read llenergymeasure Output](/how-to/interpret-results).
 
 ---
 
@@ -183,6 +183,6 @@ You have run your first energy measurement. From here:
 
 - **Compare models:** Change `--model gpt2` to a different model name (e.g., `--model facebook/opt-125m`) and compare the results. Larger models will use more energy.
 - **Compare dtypes:** Add `--dtype float32` to run at full precision and compare energy use against the default `bfloat16`.
-- **Run a sweep:** Define a YAML configuration file to automatically run multiple configurations and compare them. See the [Researcher Getting Started Guide](/docs/getting-started) for the next step up.
-- **Understand the numbers:** Read [How to Read llenergymeasure Output](/methodology/interpreting-results) for a deeper explanation of each metric.
-- **See how this compares to other benchmarks:** Read [Comparison with Other Benchmarks](/methodology/comparison-context).
+- **Run a sweep:** Define a YAML configuration file to automatically run multiple configurations and compare them. See the [Researcher Getting Started Guide](/tutorials/first-measurement) for the next step up.
+- **Understand the numbers:** Read [How to Read llenergymeasure Output](/how-to/interpret-results) for a deeper explanation of each metric.
+- **See how this compares to other benchmarks:** Read [Comparison with Other Benchmarks](/explanation/comparison-context).

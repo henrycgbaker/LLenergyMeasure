@@ -1,0 +1,52 @@
+import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
+
+const sidebarsReference: SidebarsConfig = {
+  referenceSidebar: [
+    'cli',
+    'study-config',
+    {
+      type: 'category',
+      label: 'Library API (pre-1.0, unstable)',
+      collapsed: false,
+      items: ['api/llenergymeasure'],
+    },
+    {
+      type: 'category',
+      label: 'Engines',
+      collapsed: false,
+      items: [
+        'engines/configuration',
+        {
+          type: 'category',
+          label: 'Schema (discovered)',
+          items: [
+            'engines/schema-transformers',
+            'engines/schema-vllm',
+            'engines/schema-tensorrt',
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Curated parameters',
+          items: [
+            'engines/curation-transformers',
+            'engines/curation-vllm',
+            'engines/curation-tensorrt',
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Invariants (mined)',
+          items: [
+            'engines/invariants-transformers',
+            'engines/invariants-vllm',
+            'engines/invariants-tensorrt',
+          ],
+        },
+        'engines/invalid-combos',
+      ],
+    },
+  ],
+};
+
+export default sidebarsReference;

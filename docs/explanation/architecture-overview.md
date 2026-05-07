@@ -8,9 +8,9 @@ This document is the entry point to the LLenergyMeasure architecture documentati
 
 ## Who this is for
 
-- **End users** running experiments: read the "Why configs are rejected" section and the [parameter-discovery](/methodology/parameter-discovery) guide.
-- **Engine extenders** adding a new backend: read this overview, then [miner-pipeline](/architecture/miner-pipeline) and [extending-miners](/architecture/extending-miners).
-- **Researchers and paper readers**: read this overview, then [research-context](/methodology/research-context) for academic positioning.
+- **End users** running experiments: read the "Why configs are rejected" section and the [parameter-discovery](/explanation/parameter-discovery) guide.
+- **Engine extenders** adding a new backend: read this overview, then [miner-pipeline](/contributing/miner-pipeline) and [extending-miners](/contributing/extending-miners).
+- **Researchers and paper readers**: read this overview, then [research-context](/explanation/research-context) for academic positioning.
 
 ---
 
@@ -98,7 +98,7 @@ LLenergyMeasure has two pipelines that work together to give users early, action
 - Dynamic miner - instantiates config classes with combinatorial probe values; observes raise/no-raise patterns.
 - Lift modules (`_pydantic_lift.py`, `_msgspec_lift.py`, `_dataclass_lift.py`) - extract constraints directly from type-system metadata (Pydantic `FieldInfo`, msgspec `Meta`, stdlib `Literal[...]`).
 
-Deep-dive: [miner-pipeline.md](/architecture/miner-pipeline)
+Deep-dive: [miner-pipeline.md](/contributing/miner-pipeline)
 
 ### 2. The parameter-discovery / config-validation pipeline
 
@@ -113,7 +113,7 @@ Deep-dive: [miner-pipeline.md](/architecture/miner-pipeline)
 - Loader grammar - the predicate DSL (`type_is`, `@field_ref`, `not_divisible_by`, etc.).
 - Gap reporting - flags when a config combination the corpus has no rule for is encountered.
 
-Deep-dive: [parameter-discovery.md](/methodology/parameter-discovery)
+Deep-dive: [parameter-discovery.md](/explanation/parameter-discovery)
 
 ---
 
@@ -224,7 +224,7 @@ The corpus complements, rather than replaces, engine-side validation: it capture
 
 Live introspection at runtime would require importing each engine at startup - which on vLLM and TRT-LLM means initialising CUDA contexts. The corpus is pre-computed and ships as a JSON file that loads in a few milliseconds with no GPU dependency.
 
-The trade-off is staleness risk: the corpus must be regenerated when the engine library changes. The Renovate-driven refresh loop and the validation-CI gate together enforce this discipline. See [miner-pipeline.md - Renovate refresh loop](/architecture/miner-pipeline#renovate-driven-refresh-loop).
+The trade-off is staleness risk: the corpus must be regenerated when the engine library changes. The Renovate-driven refresh loop and the validation-CI gate together enforce this discipline. See [miner-pipeline.md - Renovate refresh loop](/contributing/miner-pipeline#renovate-driven-refresh-loop).
 
 ---
 
@@ -240,7 +240,7 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 | **Validated YAML** | The CI-observed version of the corpus that ships with the package |
 | **Validation-CI gate** | The step that replays every invariant against the live library; divergences fail CI |
 | **Fixpoint contract** | `_fixpoint_test.py` - asserts dormant invariants converge to a stable state under repeated application |
-| **AddedBy** | Provenance field on each invariant: `static_miner`, `dynamic_miner`, `pydantic_lift`, `msgspec_lift`, `dataclass_lift`, `manual_seed`, `runtime_warning`, `observed_collision` (full reference in [validation-invariant-corpus.md](/architecture/validation-invariant-corpus#added_by)) |
+| **AddedBy** | Provenance field on each invariant: `static_miner`, `dynamic_miner`, `pydantic_lift`, `msgspec_lift`, `dataclass_lift`, `manual_seed`, `runtime_warning`, `observed_collision` (full reference in [validation-invariant-corpus.md](/contributing/validation-invariant-corpus#added_by)) |
 | **MinerSource** | The `{path, method, line_at_scan}` record pointing back to the library source line that produced an invariant |
 | **Loader grammar** | The predicate DSL used in `match.fields`: `in`, `not_in`, `@field_ref`, `not_divisible_by`, `type_is`, etc. |
 
@@ -289,11 +289,11 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 
 ## See also
 
-- [miner-pipeline.md](/architecture/miner-pipeline) - invariant miner deep-dive
-- [parameter-discovery.md](/methodology/parameter-discovery) - runtime validation pipeline
-- [validation-invariant-corpus.md](/architecture/validation-invariant-corpus) - corpus YAML format reference
-- [extending-miners.md](/architecture/extending-miners) - how to add a new engine miner
-- [research-context.md](/methodology/research-context) - academic positioning
-- [engines.md](/architecture/engines) - engine configuration reference
-- [methodology.md](/methodology/methodology) - energy measurement methodology
-- [schema-refresh.md](/architecture/schema-refresh) - parameter-discovery pipeline (Renovate-driven schema refresh)
+- [miner-pipeline.md](/contributing/miner-pipeline) - invariant miner deep-dive
+- [parameter-discovery.md](/explanation/parameter-discovery) - runtime validation pipeline
+- [validation-invariant-corpus.md](/contributing/validation-invariant-corpus) - corpus YAML format reference
+- [extending-miners.md](/contributing/extending-miners) - how to add a new engine miner
+- [research-context.md](/explanation/research-context) - academic positioning
+- [engines.md](/reference/engines/configuration) - engine configuration reference
+- [methodology.md](/explanation/methodology) - energy measurement methodology
+- [schema-refresh.md](/contributing/schema-refresh) - parameter-discovery pipeline (Renovate-driven schema refresh)

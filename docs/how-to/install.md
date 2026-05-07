@@ -31,7 +31,7 @@ Each engine (Transformers, vLLM, TensorRT-LLM) runs inside its own image,
 built from the SSOT in `engine_versions/{engine}.yaml`. There is no host
 extra for engines: `import transformers`, `import vllm`, and
 `import tensorrt_llm` will fail on host by design. See
-[docs/development.md](/architecture/development) for the build/run pattern.
+[docs/development.md](/contributing/development) for the build/run pattern.
 
 ### Available extras
 
@@ -62,7 +62,7 @@ uv run llem --version
 ```
 
 Engine libraries are not installed on host. See
-[docs/development.md](/architecture/development) for how to build and run engine
+[docs/development.md](/contributing/development) for how to build and run engine
 images locally.
 
 Expected output:
@@ -75,7 +75,7 @@ llem v0.9.0
 
 ## Docker Setup
 
-For vLLM or TensorRT-LLM backends, Docker with NVIDIA Container Toolkit is required. See the [Docker Setup Guide](/docs/docker-setup) for a complete walkthrough covering driver installation, toolkit setup, and verification.
+For vLLM or TensorRT-LLM backends, Docker with NVIDIA Container Toolkit is required. See the [Docker Setup Guide](/how-to/docker-setup) for a complete walkthrough covering driver installation, toolkit setup, and verification.
 
 ---
 
@@ -91,7 +91,7 @@ make docker-builder-setup
 
 This creates a `llem-builder` with a 200 GiB GC limit. To use it, set
 `BUILDX_BUILDER=llem-builder` in your `.env` file or export it in your shell. Run once per
-machine. See [Docker Setup - BuildKit](/docs/docker-setup#buildkit-builder-setup-recommended)
+machine. See [Docker Setup - BuildKit](/how-to/docker-setup#buildkit-builder-setup-recommended)
 for details.
 
 ## Getting Engine Images
@@ -127,7 +127,7 @@ docker build -f docker/Dockerfile.transformers -t llenergymeasure:transformers .
 
 Local Transformers builds produce an image tagged `llenergymeasure:transformers`.
 When present, `llem` prefers it over the registry image. See
-[Image Management](/docs/docker-setup#image-management) for the full resolution
+[Image Management](/how-to/docker-setup#image-management) for the full resolution
 chain.
 
 > **When to rebuild Transformers.** The Transformers image bundles
@@ -270,7 +270,7 @@ under `BUILDKIT_PROGRESS=plain` and emits a one-line summary when it finishes:
 - `✓ transformers build: 4m 18s — GHCR cache imported, 27 layers reused` — cache hit,
   FA3 layer not recompiled.
 - `⚠ transformers build: 18m 03s — no GHCR cache imported (cold build)` — silent fallback.
-  Cross-check [troubleshooting → Docker rebuild is slow](/docs/troubleshooting#docker-rebuild-is-slow--recompiling-flash-attn).
+  Cross-check [troubleshooting → Docker rebuild is slow](/how-to/troubleshoot#docker-rebuild-is-slow--recompiling-flash-attn).
 
 The full BuildKit log for the most recent build is at `/tmp/llem-build-{engine}.log`.
 
@@ -383,4 +383,4 @@ Run `llem config --verbose` for driver version, engine versions, and full config
 
 ## Next Steps
 
-Follow [Getting Started](/docs/getting-started) to run your first experiment.
+Follow [Getting Started](/tutorials/first-measurement) to run your first experiment.

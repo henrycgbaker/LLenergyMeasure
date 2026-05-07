@@ -95,6 +95,6 @@ The goal of llenergymeasure is to make these comparisons rigorous and reproducib
 
 ## Further Reading
 
-- [How to Read llenergymeasure Output](/methodology/interpreting-results) — what the numbers mean in practice
-- [Running Your First Measurement](/docs/getting-started-policy) — a step-by-step guide for running your first measurement
-- [Comparison with Other Benchmarks](/methodology/comparison-context) — how llenergymeasure relates to MLPerf, AI Energy Score, and other tools
+- [How to Read llenergymeasure Output](/how-to/interpret-results) — what the numbers mean in practice
+- [Running Your First Measurement](/tutorials/non-technical/what-llem-shows) — a step-by-step guide for running your first measurement
+- [Comparison with Other Benchmarks](/explanation/comparison-context) — how llenergymeasure relates to MLPerf, AI Energy Score, and other tools
