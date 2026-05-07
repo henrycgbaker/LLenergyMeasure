@@ -25,7 +25,7 @@ export LLEM_EXPCONF_SCHEMA_FINGERPRINT := $(shell python3 scripts/compute_expcon
 # Quick Start
 #   Local:  make setup       (pip install + pre-commit)
 #   Docker: make docker-setup (above + docker compose build)
-#   Dev:    make dev          (poetry install + pre-commit)
+#   Dev:    make dev          (uv sync --dev + pre-commit)
 # =============================================================================
 
 setup:

@@ -5,6 +5,7 @@ const sidebarsArchitecture: SidebarsConfig = {
     'architecture-overview',
     'pipeline-architecture',
     'ci-architecture',
+    'preview-deployments',
     'parameter-curation',
     'parameter-discovery',
   ],
