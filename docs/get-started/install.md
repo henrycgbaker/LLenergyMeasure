@@ -5,21 +5,18 @@ description: Install LLenergyMeasure in two minutes.
 
 # Install
 
-## Install
-
 ```bash
 pip install llenergymeasure
 ```
 
-This installs the host orchestrator - the part that drives experiments,
-collects results, and writes output files. It is small and has no GPU
-dependencies.
+This installs the host orchestrator: the part that drives experiments,
+collects results, and writes output files. It is small and has no GPU or
+engine dependencies.
 
-The inference engines (Transformers, vLLM, TensorRT-LLM) run inside
-per-engine Docker containers. The host package coordinates them but does
-not import them directly. This means the base install works on any
-Python 3.10+ environment - GPU and Docker are only needed when you
-actually run an experiment.
+Inference engines (transformers, vLLM, TensorRT-LLM) run inside per-engine
+Docker containers. The host package coordinates them but does not import
+them. The base install therefore works on any Python 3.10+ environment;
+GPU and Docker are only needed when you actually run an experiment.
 
 ---
 
@@ -71,10 +68,10 @@ pip install "llenergymeasure[zeus,codecarbon]"
 
 ## Engine dependencies
 
-Engine libraries (PyTorch/Transformers, vLLM, TensorRT-LLM) are
+Engine libraries (PyTorch and transformers, vLLM, TensorRT-LLM) are
 intentionally absent from the host package. They run inside Docker
-images that the orchestrator launches automatically. There is no
-`[transformers]`, `[vllm]`, or `[tensorrt]` extra to install.
+images that the orchestrator launches. There is no `[transformers]`,
+`[vllm]`, or `[tensorrt]` extra to install.
 
 To get engine images:
 

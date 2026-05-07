@@ -7,13 +7,13 @@ description: Run your first energy measurement in 60 seconds.
 
 ## Run your first measurement
 
-#### CLI
+From the CLI:
 
 ```bash
-llem run --model gpt2 -e transformers
+llem run --model gpt2 --engine transformers
 ```
 
-#### Python
+Or from Python:
 
 ```python
 from llenergymeasure import run_experiment
@@ -22,30 +22,29 @@ result = run_experiment(model="gpt2", engine="transformers")
 print(result)
 ```
 
----
+On first run, GPT-2 (around 500 MB) downloads from HuggingFace and the
+engine Docker image is resolved. Subsequent runs use the local cache and
+typically complete in under two minutes.
 
-On first run, GPT-2 (~500 MB) downloads from HuggingFace and the
-Docker image is resolved. Subsequent runs use the local cache and
-complete in under two minutes.
-
-You will see a progress indicator on stderr. When the experiment
-finishes, the result prints to stdout:
+A progress indicator prints to stderr. When the experiment finishes, a
+short summary prints to stdout and a structured `result.json` is written
+under `results/`. Numeric values vary by hardware; the shape is:
 
 ```
-Result: gpt2-transformers-bf16-2026-05-07T14-32-08
+Result: gpt2-transformers-bf16-<timestamp>
 
 Energy
-  Total          847 J
-  Baseline       12.3 W
-  Adjusted       723 J
+  Total          <joules>
+  Baseline       <watts>
+  Adjusted       <joules - baseline * duration>
 
 Performance
-  Throughput     312 tok/s
-  FLOPs          4.21e+11 (roofline, medium)
+  Throughput     <tokens/sec>
+  FLOPs          <estimate>
 
 Timing
-  Duration       1m 38s
-  Warmup         5 prompts excluded
+  Duration       <wall-clock>
+  Warmup         <n prompts excluded>
 ```
 
 ---
@@ -54,19 +53,19 @@ Timing
 
 | Field | What it means |
 |-------|---------------|
-| `Total` (J) | Raw GPU energy for all 100 prompts |
+| `Total` (J) | Raw GPU energy across the prompt set |
 | `Baseline` (W) | Idle GPU power measured before the run |
-| `Adjusted` (J) | Total minus `Baseline x Duration` - net inference energy |
+| `Adjusted` (J) | `Total` minus `Baseline x Duration`: the energy attributable to inference |
 | `Throughput` (tok/s) | Output tokens per second across all prompts |
-| `FLOPs` | Estimated floating-point operations (method + confidence shown) |
+| `FLOPs` | Estimated floating-point operations (validity check, not a headline metric) |
 | `Duration` | Wall-clock time for the full experiment |
 | `Warmup` | Prompts excluded for thermal stabilisation |
 
-The most useful number for comparing models is `Adjusted` - it isolates
-the energy attributable to inference rather than the GPU sitting idle.
+`Adjusted` is the most useful number when comparing configurations: it
+isolates the inference energy from idle-GPU draw.
 
-For the full schema of every field in the result JSON, see
-[Reference: results schema](/reference/results-schema).
+For the full field list in `result.json`, see
+[Results schema](/reference/results-schema).
 
 ---
 
@@ -76,11 +75,11 @@ Results are written to `results/` in your working directory:
 
 ```
 results/
-└── gpt2-transformers-bf16-2026-05-07T14-32-08/
+└── gpt2-transformers-bf16-<timestamp>/
     └── result.json
 ```
 
-The experiment ID encodes the model, engine, dtype, and timestamp.
+The experiment ID encodes the model, engine, dtype, and a timestamp.
 
 ---
 
