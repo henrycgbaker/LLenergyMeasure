@@ -209,14 +209,28 @@ jobs:
               ;;
           esac
           PATHS=("${BASE_PATHS[@]}" "${ENGINE_PATHS[@]}")
-          SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
-          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          # Exclude bot writeback commits from anchor calculation. The
+          # writeback bot updates engine_versions/<engine>.yaml's last_probe
+          # block (and canonical mining outputs) on every successful run,
+          # producing a fresh git author timestamp. Without this filter, the
+          # anchor shifts on each writeback, mining produces a different
+          # mined_at timestamp, the diff classifier fires, writeback fires,
+          # loop. Filtering bot commits anchors mining to the latest
+          # substantive change instead.
+          SHA=$(git log -1 --format=%H \
+            --invert-grep --grep='^chore(bot): writeback' \
+            -- "${PATHS[@]}")
+          DATE=$(git log -1 --format=%aI \
+            --invert-grep --grep='^chore(bot): writeback' \
+            -- "${PATHS[@]}")
           if [[ -z "${DATE}" ]]; then
             echo "::error::No git history found for any anchor input path; refusing to use wallclock fallback (would break determinism)." >&2
             exit 1
           fi
-          echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
-          echo "date=${DATE}" >> "$GITHUB_OUTPUT"
+          {
+            echo "sha=${SHA:-${GITHUB_SHA}}"
+            echo "date=${DATE}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Probe - landmark resolution check (in container)
         id: probe

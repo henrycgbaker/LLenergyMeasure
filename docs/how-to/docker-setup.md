@@ -1,8 +1,9 @@
 # Docker Setup Guide
 
-`llenergymeasure` uses Docker to run vLLM and TensorRT-LLM (and future SGLang) engines in
-isolated containers with GPU access. This guide walks through setting up Docker with GPU support
-from scratch on a Linux host.
+
+`llenergymeasure` uses Docker to run experiments in containers with GPU access. This provides isolation and reproducibility, and lets `llenergymeasure` run engines whose dependency requirements are mutually incompatible (for example, vLLM and TensorRT-LLM pin different CUDA and `transformers` versions and cannot coexist in a single Python environment).
+
+This guide walks through setting up Docker with GPU support from scratch on a Linux host.
 
 > **Docker is the supported path.** All published measurements run in containers - that is
 > what gives you reproducibility, dependency isolation between engines, and access to vLLM

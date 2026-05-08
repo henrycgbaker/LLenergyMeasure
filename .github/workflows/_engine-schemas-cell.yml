@@ -183,7 +183,12 @@ jobs:
             ENGINE_PATHS=( "docker/Dockerfile.transformers" )
           fi
           PATHS=("${BASE_PATHS[@]}" "${ENGINE_PATHS[@]}")
-          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          # Exclude bot writeback commits from anchor calculation. See
+          # _engine-invariants-cell.yml for the full rationale; same loop-
+          # breaking pattern applies here.
+          DATE=$(git log -1 --format=%aI \
+            --invert-grep --grep='^chore(bot): writeback' \
+            -- "${PATHS[@]}")
           if [[ -z "${DATE}" ]]; then
             echo "::error::No git history found for any anchor input path; refusing to use wallclock fallback (would break determinism)." >&2
             exit 1
