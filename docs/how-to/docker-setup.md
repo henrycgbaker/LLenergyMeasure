@@ -4,9 +4,11 @@
 isolated containers with GPU access. This guide walks through setting up Docker with GPU support
 from scratch on a Linux host.
 
-> **Recommended path.** Docker is the recommended way to run LLenergyMeasure. The
-> Transformers engine can run locally for quick tests, but Docker gives you vLLM,
-> TensorRT-LLM, and reproducible container-isolated measurements.
+> **Docker is the supported path.** All published measurements run in containers - that is
+> what gives you reproducibility, dependency isolation between engines, and access to vLLM
+> and TensorRT-LLM. The Transformers engine still has a `local` runner mode, but it is a
+> developer convenience for smoke-testing on a host with a working CUDA toolchain, not a
+> recommended way to produce results.
 
 ---
 
