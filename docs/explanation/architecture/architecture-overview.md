@@ -20,7 +20,7 @@ LLenergyMeasure has two pipelines that work together to give users early, action
 
 ```mermaid
 flowchart TB
-    subgraph compile["COMPILE-TIME &mdash; CI, Renovate-driven library bumps"]
+    subgraph compile["COMPILE-TIME - CI, Renovate-driven library bumps"]
         direction TB
         src[Engine library source<br/>transformers, vLLM, TensorRT-LLM]
         miner[Invariant miner pipeline<br/>scripts/engine_miners/<br/>static + dynamic + lift]
@@ -28,7 +28,7 @@ flowchart TB
         src --> miner --> validated
     end
 
-    subgraph runtime["RUNTIME &mdash; user submits ExperimentConfig"]
+    subgraph runtime["RUNTIME - user submits ExperimentConfig"]
         direction TB
         user[User YAML / Python API]
         loader[Config validation pipeline<br/>config/engine_invariants/loader.py]
@@ -88,7 +88,7 @@ Both pipelines sit inside the larger LLenergyMeasure architecture. The config-va
                │
   Layer 3  harness/        MeasurementHarness, energy sampling
                │
-  Layer 2  engines/        PyTorch, vLLM, TensorRT-LLM plugins
+  Layer 2  engines/        transformers, vLLM, TensorRT-LLM plugins
                │
   Layer 1  infra/          Docker runner, container entrypoint
                │
@@ -116,7 +116,7 @@ flowchart TB
     pipeline --> vllm["vLLM:<br/>engine-pipeline.yml runs inside llem:vllm-VER<br/>on self-hosted GPU runner (Docker isolates uv.lock)"]
     pipeline --> trt["TRT-LLM:<br/>engine-pipeline.yml runs inside llem:tensorrt-VER<br/>on self-hosted GPU runner (CUDA-aware import)"]
 
-    tf & vllm & trt --> steps["Per-engine step sequence:<br/>1. Probe &mdash; scripts._probe checks landmarks<br/>2. Mine &mdash; build_corpus.py writes proposed.yaml<br/>3. Validate-replay &mdash; validate_invariants.py replays every rule<br/>4. Doc-gen &mdash; generate_invariants_doc.py refreshes docs/reference/engines/invariants-&lt;engine&gt;.md<br/>5. Atomic writeback &mdash; one bot commit covers all artefacts"]
+    tf & vllm & trt --> steps["Per-engine step sequence:<br/>1. Probe - scripts._probe checks landmarks<br/>2. Mine - build_corpus.py writes proposed.yaml<br/>3. Validate-replay - validate_invariants.py replays every rule<br/>4. Doc-gen - generate_invariants_doc.py refreshes docs/reference/engines/invariants-&lt;engine&gt;.md<br/>5. Atomic writeback - one bot commit covers all artefacts"]
 
     steps --> green[CI must be green before merge]
     green --> ship[Package ships with updated corpus]
@@ -139,7 +139,7 @@ The corpus complements, rather than replaces, engine-side validation: it capture
 
 ## Why a versioned corpus instead of live introspection?
 
-Live introspection at runtime would require importing each engine at startup - which on vLLM and TRT-LLM means initialising CUDA contexts. The corpus is pre-computed and ships as a JSON file that loads in a few milliseconds with no GPU dependency.
+Live introspection at runtime would require importing each engine at startup - which on vLLM and TRT-LLM means initialising CUDA contexts. The corpus is pre-computed and ships as a YAML file that loads in a few milliseconds with no GPU dependency.
 
 The trade-off is staleness risk: the corpus must be regenerated when the engine library changes. The Renovate-driven refresh loop and the validation-CI gate together enforce this discipline. See [miner-pipeline.md - Renovate refresh loop](/contributing/miner-pipeline#renovate-driven-refresh-loop).
 
@@ -167,7 +167,7 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 
 ```
   scripts/
-  └── miners/                     Invariant miner pipeline (build-time)
+  └── engine_miners/              Invariant miner pipeline (build-time)
       ├── _base.py                Shared infrastructure: RuleCandidate, MinerError types,
       │                           AST primitives, pattern detectors
       ├── _pydantic_lift.py       Pydantic v2 sub-library lift
@@ -177,20 +177,20 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
       ├── transformers_miner.py   Transformers orchestration entry
       ├── transformers_static_miner.py
       ├── transformers_dynamic_miner.py
-      ├── vllm_static_miner.py    (in flight)
-      ├── vllm_dynamic_miner.py   (in flight)
-      ├── tensorrt_static_miner.py  (in flight)
+      ├── vllm_static_miner.py
+      ├── vllm_dynamic_miner.py
+      ├── tensorrt_miner.py       TensorRT-LLM orchestration entry
+      ├── tensorrt_static_miner.py
       └── build_corpus.py         Merge + dedup + validation-gate orchestration
 
   scripts/
   ├── validate_invariants.py             Replay invariants against live library; write validated YAML
   └── _invariant_validation_common.py Shared capture + comparison utilities
 
-  configs/
-  └── engine_invariants/
-      ├── transformers.proposed.yaml   Authoritative corpus post-mine (transformers)
-      ├── transformers.validated.yaml   Validated observations post-replay (transformers)
-      └── _staging/                    Per-miner staging output (not committed)
+  src/llenergymeasure/engines/
+  └── {engine}/                        Per-engine sub-package, ships with the wheel
+      ├── invariants.proposed.yaml     Authoritative corpus post-mine
+      └── invariants.validated.yaml    Validated observations post-replay
 
   src/llenergymeasure/config/
   └── engine_invariants/

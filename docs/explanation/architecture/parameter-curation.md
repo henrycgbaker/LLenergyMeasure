@@ -26,7 +26,7 @@ llem exposes engine parameters to users through hand-authored Pydantic models. T
                            │
                     LLEM_NATIVE_FIELDS
               the "yes, this divergence is intentional"
-              allowlist — suppresses known-good exceptions
+              allowlist - suppresses known-good exceptions
 ```
 
 ---
@@ -45,7 +45,7 @@ These JSON files are the ground truth for "what parameters does this engine vers
 
 - **Field names match native engine names.** A field called `quant_config` maps directly to the engine kwarg `quant_config`. No translation layer, no llem aliases.
 - **Sub-configs group related parameters.** e.g. `TensorRTKvCacheConfig` groups all kv-cache knobs under `tensorrt.kv_cache_config.*`. The sub-config name matches the native engine kwarg name.
-- **Types may be narrowed.** A field typed `str` in discovery might become `Literal["bfloat16", "float16", "float32"]` in curation — this is intentional and allowed by the drift checker.
+- **Types may be narrowed.** A field typed `str` in discovery might become `Literal["bfloat16", "float16", "float32"]` in curation - this is intentional and allowed by the drift checker.
 - **Descriptions are added.** Pydantic `Field(description=...)` docs are user-facing; discovery has none.
 
 ---
@@ -56,7 +56,7 @@ These JSON files are the ground truth for "what parameters does this engine vers
 
 | Kind | Meaning |
 |------|---------|
-| `pydantic_only` | Pydantic has a field that discovery doesn't — likely a stale field that was removed from the engine, or a kwargs-passed field invisible to signature inspection |
+| `pydantic_only` | Pydantic has a field that discovery doesn't - likely a stale field that was removed from the engine, or a kwargs-passed field invisible to signature inspection |
 | `type_mismatch` | Both sides have the field but with different types (beyond intentional narrowing) |
 
 Run it locally:
@@ -75,7 +75,7 @@ Some Pydantic fields legitimately have no discovered counterpart. Common reasons
 
 | Reason | Example |
 |--------|---------|
-| Passed via `**kwargs`, invisible to `inspect.signature` | `transformers.dtype` — `from_pretrained` accepts it as a kwarg alias |
+| Passed via `**kwargs`, invisible to `inspect.signature` | `transformers.dtype` - `from_pretrained` accepts it as a kwarg alias |
 | llem surfaces a sub-config field that the engine accepts as a flat kwarg at a different nesting level | `tensorrt.quant_algo` inside `TensorRTQuantConfig` |
 | Beam-search or speculative-decoding params from a separate params class | `vllm.beam_width` (from `BeamSearchParams`, not `LLM.__init__`) |
 
@@ -83,7 +83,7 @@ These are listed in `LLEM_NATIVE_FIELDS` in the drift checker. Each entry suppre
 
 **When to add an entry:** when the drift checker flags a `pydantic_only` field and you have confirmed it is intentionally in the Pydantic model but unreachable by signature-based discovery. Add a comment explaining why.
 
-**When to remove an entry:** when the corresponding Pydantic field is deleted. Stale entries are harmless but misleading — remove them during the same PR that removes the field.
+**When to remove an entry:** when the corresponding Pydantic field is deleted. Stale entries are harmless but misleading - remove them during the same PR that removes the field.
 
 **Never add an entry to paper over a naming divergence.** If a Pydantic field is named differently from the engine kwarg, rename the field instead.
 

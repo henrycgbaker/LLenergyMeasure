@@ -1,9 +1,9 @@
 # CI architecture
 
-This document describes the CI surface — what runs, when, why, and how the
-pieces compose. It complements `docs/architecture/pipeline-architecture.md`
-(per-engine ordering) and `docs/architecture/miner-pipeline.md` (mining
-internals); this file focuses on the workflow shapes themselves.
+This document describes the CI surface - what runs, when, why, and how the
+pieces compose. It complements [Pipeline architecture](/explanation/architecture/pipeline-architecture)
+(per-engine ordering) and [Miner pipeline](/contributing/miner-pipeline)
+(mining internals); this file focuses on the workflow shapes themselves.
 
 ## Three-pattern catalogue
 
@@ -49,7 +49,7 @@ filter ── mint-app-token
   two JSON arrays of cell-objects for the vllm + tensorrt matrix. The
   arrays are the
   [#564](https://github.com/henrycgbaker/llenergymeasure/issues/564)
-  dynamic-engine-matrix mechanism — adding M5 SGLang as engine #4 means
+  dynamic-engine-matrix mechanism - adding M5 SGLang as engine #4 means
   appending one line to the JSON-emit step rather than declaring new jobs.
 
 - **Bot token mint** is per-cell + per-writeback (each consumer mints
@@ -57,7 +57,7 @@ filter ── mint-app-token
   forwarding via `outputs:` is unviable: GitHub redacts secret-derived
   job outputs to empty when crossing job boundaries. ~7 mints per
   orchestrator run; well below App rate-limit. Skipped on fork PRs (App
-  secrets aren't available cross-fork) — cells fall back to read-only
+  secrets aren't available cross-fork) - cells fall back to read-only
   `secrets.GITHUB_TOKEN`.
 
 - **`build-transformers`**: builds the transformers Docker image and pushes
@@ -103,7 +103,7 @@ Internally the cell:
 2. Pulls the engine image per `image-source`.
 3. (tensorrt only) fetches the tensorrt-llm source tarball.
 4. Computes the deterministic mining/discovery anchor.
-5. **Probes** the producer module's landmarks — preserved as its own
+5. **Probes** the producer module's landmarks - preserved as its own
    step for failure-clarity in the GitHub UI.
 6. Updates `last_probe:` in the engine SSOT.
 7. Runs the producer (mine + validate, or discover-schema) inside the
@@ -148,13 +148,13 @@ concerns) AND an inner `dorny/paths-filter@v3` per-engine. The two tiers
 serve different purposes:
 
 - **Top-level `paths:`**: triggers the workflow. PRs that touch only
-  `ci.yml` or `docs/` don't fire engine-pipeline at all — workflow is
+  `ci.yml` or `docs/` don't fire engine-pipeline at all - workflow is
   ABSENT in the PR check matrix (not skipped).
 - **Inner dorny filter**: per-engine + per-pipeline. When the workflow
   fires, the filter emits the JSON arrays of cells that should expand.
   Engines whose paths didn't change are absent from the matrix.
 
-Together they preserve the "not fired (absent)" surface (CLAUDE.md)
+Together they preserve the "not fired (absent)" surface for unrelated PRs
 while still allowing fine-grained per-engine gating.
 
 ## Expected workflow behaviour per PR shape
@@ -167,8 +167,8 @@ audit unexpected shapes against this table.
 | **Workflow-only edit** (only `engine-pipeline.yml` or `_*-cell.yml` or `.github/actions/**` changed) | Yes (self-test) | All 6 cells (filter file in every group) + build-transformers | Yes if any cell changed an artefact |
 | **One-engine SSOT bump** (e.g. `engine_versions/vllm.yaml`) | Yes | `invariants-vllm` + `schemas-vllm` only | Yes if either cell changed an artefact |
 | **Miner-code change** (`scripts/engine_miners/<engine>_*.py`) | Yes | `invariants-<engine>` only | Yes if cell changed an artefact |
-| **Hand-edit corpus** (`engines/<engine>/invariants.proposed.yaml`) | Yes | `invariants-<engine>` only (vendor-revalidates) | Yes if cell changed validated yaml |
-| **Pure ci.yml / docs change** | **Absent** | — | — |
+| **Hand-edit corpus** (`engines/<engine>/invariants.proposed.yaml`) | Yes | `invariants-<engine>` only (re-validates) | Yes if cell changed validated yaml |
+| **Pure ci.yml / docs change** | **Absent** | - | - |
 
 `engine-pipeline` absent on the last shape is the load-bearing observation:
 PRs that touch only ci.yml-relevant paths leave `engine-pipeline` out of
@@ -202,12 +202,12 @@ coverage:
    `ci.yml`, which fires on edits to ANY `.github/workflows/**` file.
 
 Workflows that CAN'T self-test runtime:
-- `gpu-ci.yml` — label-gated (`gpu-ci` PR label).
-- `publish-engine-image.yml` — `workflow_run` trigger (spec disallows `paths:`).
-- `docker-publish.yml` — `workflow_call` / `workflow_dispatch` only.
-- `auto-release.yml` — `pull_request: closed` only.
-- `release.yml` — `push: tags` only.
-- `approve-reuse-bot.yml` — `issue_comment` only.
+- `gpu-ci.yml` - label-gated (`gpu-ci` PR label).
+- `publish-engine-image.yml` - `workflow_run` trigger (spec disallows `paths:`).
+- `docker-publish.yml` - `workflow_call` / `workflow_dispatch` only.
+- `auto-release.yml` - `pull_request: closed` only.
+- `release.yml` - `push: tags` only.
+- `approve-reuse-bot.yml` - `issue_comment` only.
 
 ## Bot-comment dedup
 
@@ -231,7 +231,7 @@ otherwise POSTs a new one. To clean up a stale marker, invoke with
 `MODE=delete`.
 
 NOTE: do NOT gate the upsert on "is there a non-empty diff?". The dedup
-helper handles the no-change case naturally — the existing comment is
+helper handles the no-change case naturally - the existing comment is
 updated in-place to reflect current state. Suppression-on-empty-diff
 combined with dedup creates stale-comment edge cases.
 
@@ -247,7 +247,7 @@ combined with dedup creates stale-comment edge cases.
 ### Workflow `name:` field
 
 - Imperative or noun phrase: `Engine pipeline`, `Build engine image`.
-- Reusable workflows: descriptive — `Engine invariants cell`,
+- Reusable workflows: descriptive - `Engine invariants cell`,
   `Engine schemas cell`.
 - Single-word workflows: bare noun, Title-Case: `CI`, `GPU CI`, `Security`.
 
@@ -264,7 +264,7 @@ combined with dedup creates stale-comment edge cases.
   version from SSOT`.
 - Standardised forms (use these exactly):
   - `Checkout PR branch`
-  - `Probe — landmark resolution check (in container)`
+  - `Probe - landmark resolution check (in container)`
   - `Mine + validate inside container`
   - `Discover schema inside container`
   - `Regenerate <artefact> digest`
@@ -325,11 +325,8 @@ The cell reusables don't change.
 
 ## Cross-references
 
-- `.product/designs/ci-architecture-2026-05-05.md` (gitignored,
-  per-machine) — design rationale + adversarial-review log.
-- `docs/architecture/pipeline-architecture.md` — per-engine pipeline
-  ordering at the Renovate → Docker → cells level.
-- `docs/architecture/miner-pipeline.md` — mining internals.
-- `docs/architecture/engines.md` — per-engine architecture.
-- CLAUDE.md `## CI workflow conventions` — the short conventions index;
-  links here for full reference.
+- [Pipeline architecture](/explanation/architecture/pipeline-architecture) -
+  per-engine pipeline ordering at the Renovate -> Docker -> cells level.
+- [Miner pipeline](/contributing/miner-pipeline) - mining internals.
+- [Engine configuration reference](/reference/engines/configuration) - per-engine
+  configuration surface.

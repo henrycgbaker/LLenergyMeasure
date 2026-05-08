@@ -4,7 +4,7 @@ This doc is the chain-diagram reference for the engine-coupling pipeline. SSOT-d
 
 ## Asymmetric engine architecture (locked design choice)
 
-The three engines run different pipelines in CI for a load-bearing reason. **Don't undo this asymmetry without re-reading [`#518`](https://github.com/henrycgbaker/llenergymeasure/issues/518) — the conclusion has held across re-litigations 2026-04-30, 2026-05-01, and 2026-05-05.**
+The three engines run different pipelines in CI for a load-bearing reason. **Don't undo this asymmetry without re-reading [`#518`](https://github.com/henrycgbaker/llenergymeasure/issues/518) - the conclusion has held across re-litigations 2026-04-30, 2026-05-01, and 2026-05-05.**
 
 | Engine | Image source | CI flow on PR |
 |---|---|---|
@@ -44,14 +44,14 @@ publish-engine-image.yml fires DIRECTLY on push (no rebuild):
   Tag-copy via `docker buildx imagetools create`:
     transformers-cache:transformers-<VER>  →  transformers:transformers-<VER>
                                            →  transformers:latest
-  Registry-side metadata op only — seconds, no build infra.
+  Registry-side metadata op only - seconds, no build infra.
   Production image is bit-identical to the cache image validated
   by CI on the PR that just merged.
 ```
 
 ### vllm + tensorrt PR-time CI flow (no rebuild; upstream-direct)
 
-The diagram below applies to vllm + tensorrt only — `engine-pipeline.yml`'s `invariants-others` + `schemas-others` matrix cells fire on `pull_request: paths` (no `build-transformers` dependency). They pull the upstream image at the SSOT-pinned version, bind-mount llem source, and probe/mine/introspect inside the upstream container.
+The diagram below applies to vllm + tensorrt only - `engine-pipeline.yml`'s `invariants-others` + `schemas-others` matrix cells fire on `pull_request: paths` (no `build-transformers` dependency). They pull the upstream image at the SSOT-pinned version, bind-mount llem source, and probe/mine/introspect inside the upstream container.
 
 ```
 ================================================================================
@@ -61,7 +61,7 @@ coordination via wait-on-check-action.
 ================================================================================
 
 LEGEND:  [auto]    fully automated, no human action
-         [chk]     HUMAN CHECKPOINT — required dev input
+         [chk]     HUMAN CHECKPOINT - required dev input
          [info]    informational artefact, advisory
          { }       input
          [→...]    automated transition
@@ -70,7 +70,7 @@ LEGEND:  [auto]    fully automated, no human action
                                 │  [auto]
                                 ▼
    Custom regex manager bumps:
-     engine_versions/{engine}.yaml:library.current_version  (SSOT — canonical)
+     engine_versions/{engine}.yaml:library.current_version  (SSOT - canonical)
      docker/Dockerfile.{engine} ARG (derived; auto-templated from SSOT)
                                 │  [auto]
                                 ▼
@@ -103,7 +103,7 @@ LEGEND:  [auto]    fully automated, no human action
 │   observed contract from     │         │  STEP 4 [auto]: REGENERATE   │
 │   _invariant_validation_common.py│         │   docs/reference/engines/            │
 │   replays kwargs_positive +  │         │     curation-{engine}.md     │
-│   kwargs_negative against    │         │   (Parameters section —      │
+│   kwargs_negative against    │         │   (Parameters section -      │
 │   live library; classifies   │         │    fact base for human       │
 │   outcomes (positive_        │         │    curator; pre-existing     │
 │   confirmed, negative_       │         │    behaviour preserved)      │
@@ -118,7 +118,7 @@ LEGEND:  [auto]    fully automated, no human action
 │  STEP 5 [auto]: REGENERATE   │         │   code / /approve-reuse /    │
 │   docs/reference/engines/            │         │   escalate). Apply           │
 │     invariants-{engine}.md   │         │   probe-blocked label.       │
-│   (Invariants section — fact │         │   exit 0 (not CI failure)    │
+│   (Invariants section - fact │         │   exit 0 (not CI failure)    │
 │   base; encompasses dormancy │         │                              │
 │   + invalidity + miner      │         │                              │
 │   output + introspection +   │         │                              │
@@ -146,8 +146,7 @@ LEGEND:  [auto]    fully automated, no human action
               │  - LAST-FINISHING workflow performs ATOMIC WRITEBACK in-line:   │
               │     git add src/llenergymeasure/engines/{engine}/invariants.proposed.yaml    │
               │             src/llenergymeasure/engines/{engine}/invariants.validated.yaml    │
-              │             src/llenergymeasure/src/llenergymeasure/engines/      │
-              │                  {engine}/schema.discovered.json                                  │
+              │             src/llenergymeasure/engines/{engine}/schema.discovered.json       │
               │             docs/reference/engines/curation-{engine}.md                 │
               │             docs/reference/engines/invariants-{engine}.md               │
               │             engine_versions/{engine}.compat.json                │
@@ -213,7 +212,7 @@ LEGEND:  [auto]    fully automated, no human action
    ║                                                                    ║
    ║   GUIDED CURATION UX (RFC-style YAML decision file + libcst        ║
    ║   applier) is DEFERRED to issue #475. Current redesign ships       ║
-   ║   self-serve curation only — devs hand-edit engine_configs.py      ║
+   ║   self-serve curation only - devs hand-edit engine_configs.py      ║
    ║   based on digest. After 2-3 Renovate cycles of operational data,  ║
    ║   #475 reactivation will evaluate whether guided UX pays off.      ║
    ╚═══════════════════════════════════════════════════════════════════╝
@@ -244,7 +243,7 @@ When a probe fails (inline step 1 of either workflow), three resolution routes:
   ├─ ROUTE 2 [chk → auto]: Approve reuse via slash command
   │   Dev posts `@llem-ci-bot /approve-reuse <engine> <producer>` as
   │   PR comment. Producer ∈ {invariants, schemas} (per-producer
-  │   granularity — vllm invariants might be reusable while vllm
+  │   granularity - vllm invariants might be reusable while vllm
   │   schemas are not).
   │                            │  [auto]
   │                            ▼
@@ -305,4 +304,4 @@ ADJACENT PIPELINES (independent of per-PR Renovate cycle)
 ================================================================================
 ```
 
-For the full design rationale (including the resolution of the per-engine vs per-concern split, the wait-for-sibling coordination decision, and the rejected summariser-workflow alternative), see the engine-coupling design discussion captured across PRs #477–#492.
+For the full design rationale (including the resolution of the per-engine vs per-concern split, the wait-for-sibling coordination decision, and the rejected summariser-workflow alternative), see the engine-coupling design discussion captured across PRs #477-#492.
