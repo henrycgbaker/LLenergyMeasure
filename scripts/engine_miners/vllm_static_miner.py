@@ -66,7 +66,7 @@ from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.
     find_method,
     first_string_arg,
 )
-from scripts.engine_miners._ssot import load_miner_pin  # noqa: E402
+from scripts.engine_miners._ssot import load_miner_pin, load_ssot  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Engine + namespace conventions
@@ -88,37 +88,52 @@ NS_ENGINE = "vllm.engine"
 
 # Symbols this miner relies on resolving inside the live ``vllm`` package.
 # Read by ``scripts._probe`` before mining runs; a missing landmark flips
-# the probe verdict to ``fail`` and skips downstream stages. Mirrors the
-# ``_AST_TARGETS`` rows below at the dotted-path level so the probe can
-# detect upstream class / method renames without re-parsing the AST.
-LANDMARKS: tuple[str, ...] = (
-    "vllm.sampling_params.SamplingParams",
-    "vllm.sampling_params.SamplingParams._verify_args",
-    "vllm.sampling_params.SamplingParams.__post_init__",
-    "vllm.sampling_params.SamplingParams._verify_greedy_sampling",
-    "vllm.sampling_params.StructuredOutputsParams",
-    "vllm.sampling_params.StructuredOutputsParams.__post_init__",
-    "vllm.config.parallel.ParallelConfig",
-    "vllm.config.parallel.ParallelConfig._validate_parallel_config",
-    "vllm.config.parallel.ParallelConfig._verify_args",
-    "vllm.config.parallel.ParallelConfig.__post_init__",
-    "vllm.config.parallel.EPLBConfig",
-    "vllm.config.parallel.EPLBConfig._validate_eplb_config",
-    "vllm.config.lora.LoRAConfig",
-    "vllm.config.lora.LoRAConfig._validate_lora_config",
-    "vllm.config.multimodal.MultiModalConfig",
-    "vllm.config.multimodal.MultiModalConfig._validate_multimodal_config",
-    "vllm.config.structured_outputs.StructuredOutputsConfig",
-    "vllm.config.structured_outputs.StructuredOutputsConfig._validate_structured_output_config",
-    "vllm.config.cache.CacheConfig",
-    "vllm.config.cache.CacheConfig._validate_cache_dtype",
-    "vllm.config.model.ModelConfig",
-    "vllm.config.model.ModelConfig.__post_init__",
-    "vllm.config.compilation.CompilationConfig",
-    "vllm.config.compilation.CompilationConfig.__post_init__",
-    "vllm.config.scheduler.SchedulerConfig",
-    "vllm.config.scheduler.SchedulerConfig.__post_init__",
-)
+# the probe verdict to ``fail`` and skips downstream stages.
+#
+# Sourced from the version-pinned archive at
+# ``llenergymeasure._engine_archive.vllm.<safe_version>.machinery.static``.
+# PEP 562 ``__getattr__`` defers the archive import + SSOT parse until the
+# probe (or in-module code) accesses ``LANDMARKS``.
+#
+# NOTE: ``_AST_TARGETS`` below remains hardcoded in this module for now.
+# Vendoring it into the per-version archive is deferred to chunk-1 (the
+# vllm 0.7.3 -> 0.16.0 PR), where the AST_TARGETS rewrite is the heart of
+# the work anyway. Until then, ``_check_landmarks()`` continues to do
+# AST-level verification against this in-module ``_AST_TARGETS`` registry.
+
+
+def _get_landmarks() -> tuple[str, ...]:
+    """Resolve LANDMARKS for the current SSOT ``library.current_version``.
+
+    Caches in module ``globals()`` after first call so subsequent in-module
+    references read directly from the module dict without re-dispatching.
+    """
+    cached = globals().get("LANDMARKS")
+    if cached is not None:
+        return cached  # type: ignore[no-any-return]
+    from llenergymeasure._engine_archive._dispatcher import load_machinery
+
+    ssot = load_ssot("vllm")
+    library = ssot.get("library")
+    if not isinstance(library, dict) or "current_version" not in library:
+        raise ValueError(
+            "engine_versions/vllm.yaml is missing library.current_version; "
+            "cannot resolve archived LANDMARKS."
+        )
+    landmarks = load_machinery(
+        engine="vllm",
+        version=str(library["current_version"]),
+        producer="static",
+    ).LANDMARKS
+    globals()["LANDMARKS"] = landmarks
+    return landmarks  # type: ignore[no-any-return]
+
+
+def __getattr__(name: str) -> object:
+    """PEP 562 hook: lazy LANDMARKS export from the per-version archive."""
+    if name == "LANDMARKS":
+        return _get_landmarks()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # ---------------------------------------------------------------------------

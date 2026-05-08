@@ -13,14 +13,46 @@ from scripts.engine_introspectors._common import (
     dataclass_fields_to_specs,
     make_envelope,
 )
+from scripts.engine_miners._ssot import load_ssot
 
 # Symbols this introspector relies on inside the live ``vllm`` package.
 # Read by ``scripts._probe`` before discovery runs; a missing landmark
 # flips the probe verdict to ``fail`` and skips downstream discovery.
-LANDMARKS: tuple[str, ...] = (
-    "vllm.SamplingParams",
-    "vllm.engine.arg_utils.EngineArgs",
-)
+#
+# Sourced from the version-pinned archive at
+# ``llenergymeasure._engine_archive.vllm.<safe_version>.machinery.discovery``.
+# PEP 562 ``__getattr__`` defers the archive import + SSOT parse until
+# accessed.
+
+
+def _get_landmarks() -> tuple[str, ...]:
+    """Resolve LANDMARKS for the current SSOT ``library.current_version``."""
+    cached = globals().get("LANDMARKS")
+    if cached is not None:
+        return cached  # type: ignore[no-any-return]
+    from llenergymeasure._engine_archive._dispatcher import load_machinery
+
+    ssot = load_ssot("vllm")
+    library = ssot.get("library")
+    if not isinstance(library, dict) or "current_version" not in library:
+        raise ValueError(
+            "engine_versions/vllm.yaml is missing library.current_version; "
+            "cannot resolve archived LANDMARKS."
+        )
+    landmarks = load_machinery(
+        engine="vllm",
+        version=str(library["current_version"]),
+        producer="discovery",
+    ).LANDMARKS
+    globals()["LANDMARKS"] = landmarks
+    return landmarks  # type: ignore[no-any-return]
+
+
+def __getattr__(name: str) -> object:
+    """PEP 562 hook: lazy LANDMARKS export from the per-version archive."""
+    if name == "LANDMARKS":
+        return _get_landmarks()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
