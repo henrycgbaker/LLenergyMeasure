@@ -6,7 +6,7 @@ import Heading from '@theme/Heading';
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-import {ROUTES, GITHUB_REPO, SITE_TITLE} from '../constants';
+import {ROUTES, SITE_TITLE} from '../constants';
 import styles from './index.module.css';
 
 // ---------------------------------------------------------------------------
@@ -39,20 +39,10 @@ function Hero(): ReactNode {
               to={ROUTES.getStarted}>
               Get Started
             </Link>
-          </div>
-
-          <div className={styles.heroSecondary}>
             <Link
-              className="button button--secondary"
-              href={GITHUB_REPO}
-              target="_blank"
-              rel="noopener noreferrer">
-              GitHub
-            </Link>
-            <Link
-              className="button button--secondary"
-              to="/contributing/citation">
-              Cite this work
+              className="button button--secondary button--lg"
+              to="/explanation/why">
+              Why this exists
             </Link>
           </div>
         </div>
@@ -156,15 +146,125 @@ function MethodologyBlock(): ReactNode {
               result
             </li>
             <li>
-              Sampler plugins: NVML, Zeus, CodeCarbon
+              Per-engine Docker isolation - dependency stacks pinned and
+              isolated; runs reproduce bit-identically against the same
+              pinned versions
             </li>
             <li>
-              Engine plugins: transformers, vLLM, TensorRT-LLM
+              Sampler plugins:{' '}
+              <a
+                href="https://docs.nvidia.com/deploy/nvml-api/"
+                target="_blank"
+                rel="noreferrer">
+                NVML
+              </a>
+              ,{' '}
+              <a
+                href="https://ml.energy/zeus/"
+                target="_blank"
+                rel="noreferrer">
+                Zeus
+              </a>
+              ,{' '}
+              <a
+                href="https://codecarbon.io/"
+                target="_blank"
+                rel="noreferrer">
+                CodeCarbon
+              </a>
+            </li>
+            <li>
+              Engine plugins (extensible via{' '}
+              <Link to="/explanation/architecture/engine-extensibility">
+                plugin protocol
+              </Link>
+              ; ships with{' '}
+              <a
+                href="https://huggingface.co/docs/transformers"
+                target="_blank"
+                rel="noreferrer">
+                transformers
+              </a>
+              ,{' '}
+              <a
+                href="https://docs.vllm.ai/"
+                target="_blank"
+                rel="noreferrer">
+                vLLM
+              </a>
+              ,{' '}
+              <a
+                href="https://nvidia.github.io/TensorRT-LLM/"
+                target="_blank"
+                rel="noreferrer">
+                TensorRT-LLM
+              </a>
+              )
             </li>
           </ul>
           <p>
             <Link to="/explanation/methodology/methodology">
               Read the full methodology -&gt;
+            </Link>
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Built for a moving target (extensibility / introspection / sweep tractability)
+// ---------------------------------------------------------------------------
+
+function ExtensibilityBlock(): ReactNode {
+  return (
+    <section className={styles.section}>
+      <div className="container">
+        <div className={styles.sectionNarrow}>
+          <Heading as="h2" className={styles.sectionHeading}>
+            Built for a moving target
+          </Heading>
+          <p className={styles.pitch}>
+            The inference stack moves quickly: vLLM, TensorRT-LLM, and
+            SGLang ship new versions on a monthly cadence, each adding
+            tens to hundreds of configuration parameters. Manual curation
+            does not keep up.
+          </p>
+          <p className={styles.pitch}>
+            llem handles this through three coupled mechanisms:
+          </p>
+          <ul className={styles.methodologyList}>
+            <li>
+              <strong>Programmatic introspection.</strong> Each engine&#39;s
+              full parameter surface is discovered automatically from
+              Pydantic schemas and class signatures, not from a
+              hand-curated list.
+            </li>
+            <li>
+              <strong>Invariant mining.</strong> Validation constraints -
+              which parameter combinations the engine rejects, warns on, or
+              silently normalises - are mined automatically from each
+              library&#39;s source via AST walking of validator methods and
+              dynamic probing. Mined rules deduplicate across engines by
+              fingerprint.
+            </li>
+            <li>
+              <strong>Renovate-driven refresh.</strong> When an engine
+              version bumps upstream, CI re-runs introspection and mining
+              inside the new image, regenerates the schema and invariants
+              artefacts, and posts the diff for review.
+            </li>
+          </ul>
+          <p className={styles.pitch}>
+            Together these make sweeps tractable across an otherwise-vast
+            parameter space. A study can request thousands of cells;
+            deduplication collapses semantically-identical configs; the
+            resolved plan is reviewable before any GPU time is spent.
+          </p>
+          <p>
+            <Link to="/explanation/architecture/engine-introspection-pipelines">
+              Engine introspection pipelines -&gt;
             </Link>
           </p>
         </div>
@@ -183,14 +283,14 @@ function BoundariesBlock(): ReactNode {
       <div className="container">
         <div className={styles.sectionNarrow}>
           <Heading as="h2" className={styles.sectionHeading}>
-            Explicit boundaries
+            What this isn&#39;t
           </Heading>
           <ul className={styles.boundaryList}>
             <li>
-              We measure inference, not training.
+              Inference, not training. Training accounting belongs elsewhere.
             </li>
             <li>
-              We measure efficiency, not capability - pair with{' '}
+              Efficiency, not capability - pair with{' '}
               <a
                 href="https://github.com/EleutherAI/lm-evaluation-harness"
                 target="_blank"
@@ -200,12 +300,18 @@ function BoundariesBlock(): ReactNode {
               for the capability side.
             </li>
             <li>
-              We are not a fixed-rule benchmark - pair with MLPerf for
-              standardised comparison.
+              Measurement, not benchmark - pair with{' '}
+              <a
+                href="https://mlcommons.org/benchmarks/inference-datacenter/"
+                target="_blank"
+                rel="noreferrer">
+                MLPerf Inference
+              </a>{' '}
+              for standardised inter-model comparison.
             </li>
             <li>
-              Our outputs inform benchmark design and policy; we are not the
-              benchmark.
+              Outputs inform benchmark design and policy; llem is not the
+              benchmark itself.
             </li>
           </ul>
           <p>
@@ -407,6 +513,7 @@ export default function Home(): ReactNode {
         <WhatIsThis />
         <CodePreview />
         <MethodologyBlock />
+        <ExtensibilityBlock />
         <BoundariesBlock />
         <AudienceCards />
         <PillarCards />
