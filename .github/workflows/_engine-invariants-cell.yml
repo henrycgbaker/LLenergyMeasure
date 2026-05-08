@@ -80,8 +80,14 @@ jobs:
             echo "Could not resolve ${ENGINE} version from engine_versions/${ENGINE}.yaml" >&2
             exit 1
           fi
-          echo "version=${VER}" >> "$GITHUB_OUTPUT"
-          echo "image=llenergymeasure:${ENGINE}-${VER}" >> "$GITHUB_OUTPUT"
+          # Python-identifier-safe form (dots and hyphens -> underscores) used as the
+          # subpackage name under src/llenergymeasure/_engine_archive/<engine>/.
+          SAFE_VER="v${VER//[.-]/_}"
+          {
+            echo "version=${VER}"
+            echo "safe_version=${SAFE_VER}"
+            echo "image=llenergymeasure:${ENGINE}-${VER}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR (read-only, for image pull)
         if: inputs.image-source == 'ghcr-cache'
@@ -203,14 +209,28 @@ jobs:
               ;;
           esac
           PATHS=("${BASE_PATHS[@]}" "${ENGINE_PATHS[@]}")
-          SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
-          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          # Exclude bot writeback commits from anchor calculation. The
+          # writeback bot updates engine_versions/<engine>.yaml's last_probe
+          # block (and canonical mining outputs) on every successful run,
+          # producing a fresh git author timestamp. Without this filter, the
+          # anchor shifts on each writeback, mining produces a different
+          # mined_at timestamp, the diff classifier fires, writeback fires,
+          # loop. Filtering bot commits anchors mining to the latest
+          # substantive change instead.
+          SHA=$(git log -1 --format=%H \
+            --invert-grep --grep='^chore(bot): writeback' \
+            -- "${PATHS[@]}")
+          DATE=$(git log -1 --format=%aI \
+            --invert-grep --grep='^chore(bot): writeback' \
+            -- "${PATHS[@]}")
           if [[ -z "${DATE}" ]]; then
             echo "::error::No git history found for any anchor input path; refusing to use wallclock fallback (would break determinism)." >&2
             exit 1
           fi
-          echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
-          echo "date=${DATE}" >> "$GITHUB_OUTPUT"
+          {
+            echo "sha=${SHA:-${GITHUB_SHA}}"
+            echo "date=${DATE}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Probe - landmark resolution check (in container)
         id: probe
@@ -410,6 +430,30 @@ jobs:
             fi
           } > "/tmp/engine-invariants-diff/${ENGINE}.summary.md"
 
+      - name: Mirror canonical invariants to versioned archive (if engine vendored)
+        if: steps.probe.outputs.verdict == 'pass'
+        env:
+          ENGINE: ${{ inputs.engine }}
+          SAFE_VER: ${{ steps.version.outputs.safe_version }}
+        run: |
+          # Derivative dual-write: the archive is always a byte-identical
+          # mirror of the canonical mining outputs. Gated on the engine's
+          # versioned archive being present (i.e. the per-engine vendor PR
+          # has landed). When an engine is not yet vendored at this version,
+          # the archive mirror is a no-op — the producer modules still use
+          # hardcoded LANDMARKS until the engine's vendor PR refactors them.
+          # The per-engine __init__.py is the canonical "engine vendored at
+          # this version" marker.
+          ARCHIVE_INIT="src/llenergymeasure/_engine_archive/${ENGINE}/${SAFE_VER}/__init__.py"
+          if [[ ! -f "$ARCHIVE_INIT" ]]; then
+            echo "Engine ${ENGINE} not yet vendored at ${SAFE_VER}; skipping archive mirror." >&2
+            exit 0
+          fi
+          ARCHIVE_DIR="src/llenergymeasure/_engine_archive/${ENGINE}/${SAFE_VER}/outputs"
+          mkdir -p "${ARCHIVE_DIR}"
+          cp "${ENGINES_DIR}/${ENGINE}/invariants.proposed.yaml" "${ARCHIVE_DIR}/invariants.proposed.yaml"
+          cp "${ENGINES_DIR}/${ENGINE}/invariants.validated.yaml" "${ARCHIVE_DIR}/invariants.validated.yaml"
+
       - name: Probe-fail comment (skip downstream)
         if: steps.probe.outputs.verdict == 'fail' && inputs.pr-number != ''
         env:
@@ -458,9 +502,17 @@ jobs:
           path: |
             ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/invariants.proposed.yaml
             ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/invariants.validated.yaml
+            src/llenergymeasure/_engine_archive/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/invariants.proposed.yaml
+            src/llenergymeasure/_engine_archive/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/invariants.validated.yaml
             engine_versions/${{ inputs.engine }}.yaml
             docs/user/generated/invariants-${{ inputs.engine }}.md
-          if-no-files-found: error
+          # ``warn`` rather than ``error``: canonical paths always exist by
+          # the time this step runs (mining produced them), but the archive
+          # mirror is gated on the engine being vendored at this version.
+          # Until the engine's vendor PR lands, the archive paths under
+          # _engine_archive/<engine>/<safe>/ are absent — the upload should
+          # bundle whatever exists rather than fail.
+          if-no-files-found: warn
 
       - name: Post per-pipeline comment
         if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''
