@@ -1,8 +1,13 @@
-# Validation Rule Corpus Format
+# Invariants corpus format
 
-This document is the reference for the YAML corpus format: what each field means, valid values, and how to read an existing rule.
+Format specification for the YAML invariants corpus: top-level envelope,
+per-rule fields, valid values, schema-version history, and example.
 
-**Audience:** maintainers writing or reviewing corpus rules; extenders adding rules for new engines; anyone debugging a rule that behaves unexpectedly.
+The corpus is the artefact emitted by the invariant-mining pipeline. For
+the conceptual treatment of how the pipeline produces it (and how it
+parallels schema discovery), see [engine introspection pipelines](/explanation/architecture/engine-introspection-pipelines).
+For the runtime side that consumes the corpus at config-validation time,
+see [parameter discovery](/explanation/architecture/parameter-discovery).
 
 ---
 
@@ -345,7 +350,9 @@ The CI pipeline enforces these invariants on every corpus file:
 
 ## See also
 
-- [parameter-discovery.md](/explanation/architecture/parameter-discovery) - how the corpus is consumed at runtime
-- [miner-pipeline.md](/contributing/miner-pipeline) - how the corpus is built
-- [extending-miners.md](/contributing/extending-miners) - adding rules for new engines
-- [architecture-overview.md](/explanation/architecture/architecture-overview) - system overview
+- [Schema discovered format](/reference/schema-discovered-format) - the parallel format spec for the schema-discovery artefact
+- [Engine introspection pipelines](/explanation/architecture/engine-introspection-pipelines) - how the corpus is produced
+- [Parameter discovery](/explanation/architecture/parameter-discovery) - how the corpus is consumed at runtime
+- [Miner pipeline (debugging guide)](/contributing/miner-pipeline) - practical debugging reference for the mining pipeline
+- [Extending miners](/contributing/extending-miners) - adding rules for new engines
+- [Architecture overview](/explanation/architecture/architecture-overview) - system overview

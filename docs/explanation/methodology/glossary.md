@@ -8,7 +8,7 @@ this page.
 For canonical naming decisions internal to the engine-invariants pipeline
 (e.g. "invariant" not "rule", "validated corpus" not "vendored corpus"), see
 [Contributing: miner pipeline](/contributing/miner-pipeline) and
-[Contributing: validation invariant corpus](/contributing/validation-invariant-corpus).
+[Reference: invariants corpus format](/reference/invariants-corpus-format).
 
 ---
 
@@ -380,7 +380,7 @@ The engine-invariants corpus after the validation-CI gate has replayed each
 invariant against the live library. Stored as `invariants.validated.yaml`. Not
 to be confused with the proposed corpus (`invariants.proposed.yaml`), which
 contains declared expectations before CI observation. See
-[Contributing: validation invariant corpus](/contributing/validation-invariant-corpus)
+[Reference: invariants corpus format](/reference/invariants-corpus-format)
 for the full format specification.
 
 ---
@@ -397,7 +397,7 @@ See [thermal stabilisation / warmup](#thermal-stabilisation--warmup).
 
 For terminology specific to the miner pipeline, validation gate, and corpus
 naming, see [Contributing: miner pipeline](/contributing/miner-pipeline) and
-[Contributing: validation invariant corpus](/contributing/validation-invariant-corpus).
+[Reference: invariants corpus format](/reference/invariants-corpus-format).
 Those pages are the canonical definition source and must be consulted before
 introducing new names in code or documentation.
 

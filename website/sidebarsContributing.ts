@@ -6,7 +6,6 @@ const sidebarsContributing: SidebarsConfig = {
     'miner-pipeline',
     'extending-miners',
     'schema-refresh',
-    'validation-invariant-corpus',
     'release-process',
     'preview-deployments',
     'citation',

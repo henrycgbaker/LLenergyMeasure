@@ -6,6 +6,7 @@ const sidebarsReference: SidebarsConfig = {
     'study-config',
     'dataset-format',
     'results-schema',
+    'invariants-corpus-format',
     {
       type: 'category',
       label: 'Library API (pre-1.0, unstable)',
