@@ -1,0 +1,54 @@
+"""Per-engine LANDMARKS resolution tests for tensorrt-llm v0.21.0.
+
+Engine-specific complement to ``tests/_engine_archive/test_dispatcher.py``:
+asserts the two tensorrt producer modules expose ``LANDMARKS`` lazily via
+PEP 562 ``__getattr__`` and that the resolved tuple matches the machinery
+loaded directly through the dispatcher.
+
+Mirror style of ``test_dispatcher.py``: keep imports lazy where the
+assertion target is the module attribute, fail loud otherwise. Note the
+miner module name is ``tensorrt_static_miner`` (not ``tensorrt_miner``) -
+see ``scripts/_probe.py`` ``_PRODUCER_MODULES`` for the canonical mapping.
+"""
+
+from __future__ import annotations
+
+import importlib
+
+from llenergymeasure._engine_archive._dispatcher import load_machinery
+
+_TENSORRT_VERSION = "0.21.0"
+
+
+def _assert_landmark_shape(landmarks: object) -> tuple[str, ...]:
+    """Shared shape contract: non-empty tuple of dotted ``tensorrt_llm.*`` paths."""
+    assert isinstance(landmarks, tuple), f"LANDMARKS must be tuple, got {type(landmarks)!r}"
+    assert len(landmarks) > 0, "LANDMARKS must be non-empty"
+    for entry in landmarks:
+        assert isinstance(entry, str), f"LANDMARKS entry must be str, got {type(entry)!r}"
+        assert entry.startswith("tensorrt_llm."), (
+            f"LANDMARKS entry {entry!r} must start with 'tensorrt_llm.'"
+        )
+    return landmarks  # type: ignore[return-value]
+
+
+def test_tensorrt_static_miner_landmarks_resolve_lazily() -> None:
+    """``scripts.engine_miners.tensorrt_static_miner.LANDMARKS`` resolves via PEP 562."""
+    module = importlib.import_module("scripts.engine_miners.tensorrt_static_miner")
+    landmarks = _assert_landmark_shape(module.LANDMARKS)
+
+    archived = load_machinery(
+        engine="tensorrt", version=_TENSORRT_VERSION, producer="static"
+    ).LANDMARKS
+    assert landmarks == archived
+
+
+def test_tensorrt_introspector_landmarks_resolve_lazily() -> None:
+    """``scripts.engine_introspectors.tensorrt_introspector.LANDMARKS`` resolves via PEP 562."""
+    module = importlib.import_module("scripts.engine_introspectors.tensorrt_introspector")
+    landmarks = _assert_landmark_shape(module.LANDMARKS)
+
+    archived = load_machinery(
+        engine="tensorrt", version=_TENSORRT_VERSION, producer="discovery"
+    ).LANDMARKS
+    assert landmarks == archived
