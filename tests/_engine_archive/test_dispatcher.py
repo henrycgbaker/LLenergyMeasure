@@ -89,3 +89,19 @@ def test_unknown_producer_raises_loud() -> None:
     with pytest.raises(ModuleNotFoundError):
         # ``introspector`` is the user-facing name; the SSOT key is ``discovery``.
         load_machinery(engine="vllm", version="0.7.3", producer="introspector")  # type: ignore[arg-type]
+
+
+def test_dispatcher_error_message_names_file_to_create() -> None:
+    """Missing-machinery diagnostic must name the exact file path.
+
+    This is the primary signal a maintainer sees when a Renovate-driven SSOT
+    bump outpaces the per-version vendoring. The error must point them at
+    the file to create so the next chunk PR is unblocked without spelunking.
+    """
+    with pytest.raises(ModuleNotFoundError) as exc_info:
+        load_machinery(engine="vllm", version="0.16.0", producer="static")
+    msg = str(exc_info.value)
+    assert "vllm" in msg
+    assert "0.16.0" in msg
+    assert "src/llenergymeasure/_engine_archive/vllm/v0_16_0/machinery/static.py" in msg
+    assert "LANDMARKS" in msg

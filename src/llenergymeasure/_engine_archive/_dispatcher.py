@@ -47,7 +47,10 @@ def load_machinery(*, engine: str, version: str, producer: ProducerKind) -> Modu
         etc.) from it.
 
     Raises:
-        ModuleNotFoundError: if the versioned subpackage does not exist.
+        ModuleNotFoundError: if the versioned subpackage does not exist. The
+            error message names the exact file path to create — this is the
+            primary signal a maintainer sees when a Renovate-driven SSOT bump
+            outpaces the per-version vendoring (the chunk PR hasn't landed yet).
     """
     # Late import: ``_ssot`` imports yaml/packaging which we'd rather not
     # pay at every ``__getattr__`` call site. Importing here keeps module-
@@ -56,4 +59,18 @@ def load_machinery(*, engine: str, version: str, producer: ProducerKind) -> Modu
 
     safe = safe_version(version)
     qualified = f"llenergymeasure._engine_archive.{engine}.{safe}.machinery.{producer}"
-    return importlib.import_module(qualified)
+    try:
+        return importlib.import_module(qualified)
+    except ModuleNotFoundError as exc:
+        # The import may fail because the engine subpackage, the version
+        # subpackage, or the producer module is missing. All three cases
+        # share the same remediation: vendor this version's machinery.
+        raise ModuleNotFoundError(
+            f"No archived machinery for {engine}=={version} ({producer}). "
+            f"Expected to import `{qualified}`. Create "
+            f"src/llenergymeasure/_engine_archive/{engine}/{safe}/machinery/{producer}.py "
+            f"(with sibling __init__.py files as needed) by copying the prior "
+            f"version's machinery and rewriting LANDMARKS for the new library "
+            f"API. See the version-bump chunk pattern in the engine archive "
+            f"package docstring."
+        ) from exc
