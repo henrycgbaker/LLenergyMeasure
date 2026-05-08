@@ -512,12 +512,12 @@ When Renovate bumps an engine library, the miner pipeline must catch behavioural
 The miner pipeline's import-time contract (Step 1 above) raises hard CI errors when the library has drifted out of the envelope the miner was written against:
 
 - **`MinerVersionMismatchError`** - installed library version is outside the miner's pinned envelope (read from `engine_versions/{engine}.yaml miner_pins.{producer}` via `load_miner_pin`). Forces the maintainer to read release notes and either widen the envelope or update the miner to match new validator semantics.
-  - Example: vLLM 0.7.3 against an SSOT pin of `>=0.17,<0.18` raises `MinerVersionMismatchError` at import. Observed empirically on PR #459's `mine-vllm` job.
+  - Example: a vLLM version outside an SSOT pin of `>=0.17,<0.18` raises `MinerVersionMismatchError` at import. Forces the maintainer to update the SSOT envelope or upgrade the miner.
 
 - **`MinerLandmarkMissingError`** - an expected class or method symbol is no longer present in the library source. Catches refactors where a class was renamed, moved to a different module, or an API was deprecated and removed.
   - Example: a hypothetical vLLM release dropping `vllm.sampling_params.StructuredOutputsParams` would raise `MinerLandmarkMissingError` at the landmark-check step before any AST walking begins.
 
-- **`ImportError` / `AttributeError`** - propagated raw if the miner uses a library symbol that has been refactored without a landmark guard. The fail-loud principle requires letting these propagate; never wrap landmark imports in a `try/except` that returns `[]`. The Haiku-era TRT-LLM extractor was reverted in #423 specifically because it caught `ImportError` and silently degraded.
+- **`ImportError` / `AttributeError`** - propagated raw if the miner uses a library symbol that has been refactored without a landmark guard. The fail-loud principle requires letting these propagate; never wrap landmark imports in a `try/except` that returns `[]`. A previous TRT-LLM extractor was reverted specifically because it caught `ImportError` and silently degraded; the fail-loud contract prevents this class of regression.
 
 These three errors all surface as red CI on the Renovate PR, blocking merge until the miner is updated.
 
