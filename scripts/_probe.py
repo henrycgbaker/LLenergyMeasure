@@ -214,8 +214,24 @@ def _compat_path(engine: str) -> Path:
     return ssot_path(engine).parent / f"{engine}.compat.json"
 
 
-def _read_cached_fingerprint(engine: str, producer: ProducerKind) -> str | None:
-    """Return the previous-run fingerprint for this (engine, producer), or ``None``."""
+def _read_cached_fingerprint(
+    engine: str, producer: ProducerKind, library_version: str
+) -> str | None:
+    """Return the previous-run fingerprint for this (engine, producer), or ``None``.
+
+    Returns ``None`` when:
+
+    - The cache file does not exist or is malformed.
+    - The cached entry is missing a ``library_version`` field.
+    - The cached entry's ``library_version`` differs from the *current*
+      library version. This is the cross-version skip: bumping
+      ``library.current_version`` invalidates the prior fingerprint by
+      definition (it was computed against a different installed library),
+      so reporting "every landmark drifted" would be noise. Returning
+      ``None`` here causes ``probe()`` to treat this as a first-run
+      fingerprint and emit empty ``fingerprint_drift``; the next run at
+      the bumped version writes a fresh cache entry.
+    """
     path = _compat_path(engine)
     try:
         text = path.read_text()
@@ -226,7 +242,13 @@ def _read_cached_fingerprint(engine: str, producer: ProducerKind) -> str | None:
     except json.JSONDecodeError:
         return None
     entry = (cache.get(producer) if isinstance(cache, dict) else None) or {}
-    fp = entry.get("fingerprint") if isinstance(entry, dict) else None
+    if not isinstance(entry, dict):
+        return None
+    cached_library_version = entry.get("library_version")
+    if cached_library_version != library_version:
+        # Cache was written against a different library version; treat as miss.
+        return None
+    fp = entry.get("fingerprint")
     return str(fp) if isinstance(fp, str) else None
 
 
@@ -312,7 +334,7 @@ def probe(*, engine: str, producer: ProducerKind) -> ProbeReport:
             missing.append(landmark)
 
     fingerprint = _fingerprint(resolved)
-    cached = _read_cached_fingerprint(engine, producer)
+    cached = _read_cached_fingerprint(engine, producer, library_version)
     drift: list[str] = []
     if cached is not None and cached != fingerprint:
         # Per-landmark drift would require caching per-landmark hashes;

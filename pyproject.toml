@@ -144,7 +144,7 @@ layers = [
     "llenergymeasure.infra",
     "llenergymeasure.device",
     "llenergymeasure.config | llenergymeasure.domain",
-    "llenergymeasure.utils",
+    "llenergymeasure.utils | llenergymeasure._engine_archive",
 ]
 ignore_imports = [
     # Phase 50 M4: config.loader.load_study_config invokes resolve_library_effective
@@ -208,3 +208,25 @@ ignore_imports = [
     # Phase 50 M4: see matching ignore on main-layers contract above.
     "llenergymeasure.config.loader -> llenergymeasure.study.library_resolution",
 ]
+
+[[tool.importlinter.contracts]]
+id = "engine-archive-tooling-only"
+name = "_engine_archive is for CI-time tooling; runtime layers must not import it"
+type = "forbidden"
+source_modules = [
+    "llenergymeasure.cli",
+    "llenergymeasure.entrypoints",
+    "llenergymeasure.api",
+    "llenergymeasure.study",
+    "llenergymeasure.harness",
+    "llenergymeasure.results",
+    "llenergymeasure.engines",
+    "llenergymeasure.energy",
+    "llenergymeasure.datasets",
+    "llenergymeasure.infra",
+    "llenergymeasure.device",
+    "llenergymeasure.config",
+    "llenergymeasure.domain",
+    "llenergymeasure.utils",
+]
+forbidden_modules = ["llenergymeasure._engine_archive"]
