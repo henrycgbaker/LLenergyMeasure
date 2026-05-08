@@ -10,24 +10,22 @@ llem exposes engine parameters to users through hand-authored Pydantic models. T
 
 ## Overview
 
+```mermaid
+flowchart TD
+    discovery[programmatic discovery<br/>scripts/engine_introspectors/]
+    pydantic[Pydantic curation<br/>config/engine_configs.py]
+    drift[drift checker<br/>scripts/check_pydantic_matches_discovered.py]
+    allowlist[LLEM_NATIVE_FIELDS<br/>intentional-divergence allowlist]
+
+    discovery --> drift
+    pydantic --> drift
+    drift --> allowlist
 ```
-  programmatic discovery                  Pydantic curation
-  (scripts/engine_introspectors/)                 (config/engine_configs.py)
-  introspect engine APIs                  hand-authored sub-config models
-  → engines/*/schema.discovered.json      expose typed, documented fields
-            │                                         │
-            └──────────────┬──────────────────────────┘
-                           ▼
-                     drift checker
-              (scripts/check_pydantic_matches_discovered.py)
-                           │
-               flags Pydantic fields with no
-               corresponding discovered entry
-                           │
-                    LLEM_NATIVE_FIELDS
-              the "yes, this divergence is intentional"
-              allowlist - suppresses known-good exceptions
-```
+
+- **Programmatic discovery** introspects engine APIs and writes `engines/*/schema.discovered.json` (the ground truth for "what parameters does this engine accept").
+- **Pydantic curation** is the hand-authored set of sub-config models that expose typed, documented fields to users.
+- **Drift checker** flags Pydantic fields with no corresponding discovered entry.
+- **`LLEM_NATIVE_FIELDS`** is the "yes, this divergence is intentional" allowlist - it suppresses known-good exceptions so the drift checker only reports unexpected divergence.
 
 ---
 

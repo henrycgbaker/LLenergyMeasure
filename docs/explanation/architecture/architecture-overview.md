@@ -79,24 +79,23 @@ Deep-dive: [parameter-discovery.md](/explanation/architecture/parameter-discover
 
 Both pipelines sit inside the larger LLenergyMeasure architecture. The config-validation pipeline plugs into Layer 0 (`config/`), which the rest of the stack builds on.
 
+```mermaid
+flowchart TD
+    L6["Layer 6 - cli/<br/>llem run, llem config"]
+    L5["Layer 5 - api/<br/>run_experiment&#40;&#41;, run_study&#40;&#41;"]
+    L4["Layer 4 - study/<br/>StudyRunner, sweep expansion"]
+    L3["Layer 3 - harness/<br/>MeasurementHarness, energy sampling"]
+    L2["Layer 2 - engines/<br/>transformers, vLLM, TensorRT-LLM plugins"]
+    L1["Layer 1 - infra/<br/>Docker runner, container entrypoint"]
+    L0["Layer 0 - config/ + domain/ + device/ + utils/<br/>config validation pipeline lives here<br/>engine_invariants/loader.py"]
+
+    L6 --> L5 --> L4 --> L3 --> L2 --> L1 --> L0
+
+    classDef target fill:#fffae6,stroke:#b58900,stroke-width:2px;
+    class L0 target;
 ```
-  Layer 6  cli/            llem run, llem config
-               │
-  Layer 5  api/            run_experiment(), run_study()
-               │
-  Layer 4  study/          StudyRunner, sweep expansion
-               │
-  Layer 3  harness/        MeasurementHarness, energy sampling
-               │
-  Layer 2  engines/        transformers, vLLM, TensorRT-LLM plugins
-               │
-  Layer 1  infra/          Docker runner, container entrypoint
-               │
-  Layer 0  config/  ◄──── config validation pipeline lives here
-           domain/         engine_invariants/loader.py
-           device/
-           utils/
-```
+
+The config-validation pipeline lives in Layer 0 (highlighted). Higher layers build on it: every `ExperimentConfig` constructed by the API or CLI passes through `engine_invariants/loader.py` before reaching the harness.
 
 The invariant miner pipeline lives in `scripts/engine_miners/` - it is a build-time tool, not a library module. Its output is the validated corpus that ships with the package.
 
