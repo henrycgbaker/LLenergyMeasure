@@ -7,6 +7,13 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Set to true to allow irreversible steps (GitHub Release creation, Docker publish). Defaults to false (dry-run: lint, type-check, and test only)."
+        required: false
+        default: "false"
+        type: boolean
 
 env:
   UV_FROZEN: "true"
@@ -42,6 +49,7 @@ jobs:
         run: uv run mypy src/
 
   validate-version:
+    if: inputs.confirm == true || github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -90,6 +98,7 @@ jobs:
 
   release:
     needs: [lint, type-check, test, validate-version]
+    if: inputs.confirm == true || github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -110,6 +119,7 @@ jobs:
 
   docker:
     needs: release
+    if: inputs.confirm == true || github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/docker-publish.yml
     with:
       version: ${{ github.ref_name }}
