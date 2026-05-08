@@ -100,12 +100,18 @@ This setup intentionally does not migrate production to CF Pages.
 `.github/workflows/docs.yml` continues to deploy `main` to GH Pages on
 every push. The two paths are independent:
 
-```
-PR push  --------------> CF Pages ----> <hash>.llenergymeasure-docs.pages.dev
-                                         (preview, comment on PR)
+```mermaid
+flowchart LR
+    prpush[PR push]
+    mainpush[main push]
+    cf[CF Pages]
+    docs[docs.yml]
+    gh[GitHub Pages]
+    preview["&lt;hash&gt;.llenergymeasure-docs.pages.dev<br/>preview, comment on PR"]
+    prod["henrycgbaker.github.io/llenergymeasure<br/>production"]
 
-main push --> docs.yml --> GitHub Pages --> henrycgbaker.github.io/llenergymeasure
-                                            (production)
+    prpush --> cf --> preview
+    mainpush --> docs --> gh --> prod
 ```
 
 If CF availability degrades, PRs lose preview URLs but production remains

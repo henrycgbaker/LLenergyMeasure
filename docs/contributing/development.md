@@ -110,16 +110,29 @@ orchestrator workflow with a coherent dependency graph. See
 [Architecture &gt; CI architecture](/explanation/architecture/ci-architecture) for the full
 topology, reusable-workflow contract, and expected-shape table.
 
-```
-filter ── mint-app-token
-   │              │
-   ├── build-transformers ── invariants-transformers ──┐
-   │                       └─ schemas-transformers ────┤
-   ├── invariants-others (vllm + tensorrt matrix) ─────┤
-   └── schemas-others (vllm + tensorrt matrix) ────────┤
-                                                       ▼
-                                                    writeback
-                                          (aggregate; ONE git push)
+```mermaid
+flowchart LR
+    filter[filter]
+    token[mint-app-token]
+    build[build-transformers]
+    inv_tf[invariants-transformers]
+    sch_tf[schemas-transformers]
+    inv_other[invariants-others<br/>vllm + tensorrt matrix]
+    sch_other[schemas-others<br/>vllm + tensorrt matrix]
+    writeback[writeback<br/>aggregate; ONE git push]
+
+    filter --> build --> inv_tf
+    build --> sch_tf
+    filter --> inv_other
+    filter --> sch_other
+    token -.token.-> inv_tf
+    token -.token.-> sch_tf
+    token -.token.-> inv_other
+    token -.token.-> sch_other
+    inv_tf --> writeback
+    sch_tf --> writeback
+    inv_other --> writeback
+    sch_other --> writeback
 ```
 
 When Renovate (or a maintainer) bumps `engine_versions/transformers.yaml`

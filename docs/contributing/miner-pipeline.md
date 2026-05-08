@@ -22,58 +22,30 @@ The output is a corpus of invariants, each describing one constraint on a config
 
 ## Component overview
 
+```mermaid
+flowchart TD
+    static[STATIC MINER<br/>inspect.getsource&#40;&#41; + ast.parse&#40;&#41;<br/>conditional detectors]
+    dynamic[DYNAMIC MINER<br/>class constructors + validate&#40;&#41; calls<br/>Cartesian probe grid + predicate inference]
+    lift[LIFT MODULES<br/>_pydantic_lift / _msgspec_lift / _dataclass_lift]
+    staging[(staging files<br/>src/llenergymeasure/engines/_staging/)]
+    build[build_corpus.py<br/>merge + dedup + fingerprint]
+    replay[validate_invariants.py<br/>replay against live library]
+    confirmed[(confirmed rules<br/>engines/&lt;e&gt;/invariants.proposed.yaml<br/>engines/&lt;e&gt;/invariants.validated.yaml)]
+    quarantined[(quarantined rules<br/>engines/&lt;e&gt;/_staging/_failed_*.yaml)]
+
+    static --> staging
+    dynamic --> staging
+    lift --> staging
+    staging --> build --> replay
+    replay --> confirmed
+    replay --> quarantined
 ```
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │  INVARIANT MINER PIPELINE                                           │
-  │                                                                     │
-  │  ┌─────────────────────────┐   ┌─────────────────────────┐         │
-  │  │    STATIC MINER         │   │    DYNAMIC MINER        │         │
-  │  │                         │   │                         │         │
-  │  │  inspect.getsource()    │   │  class constructors     │         │
-  │  │     + ast.parse()       │   │  + validate() calls     │         │
-  │  │         │               │   │         │               │         │
-  │  │  ConditionalRaiseDetector   │  Cartesian probe grid   │         │
-  │  │  ConditionalSelfAssign  │   │         │               │         │
-  │  │  ConditionalWarnDetector│   │  predicate inference    │         │
-  │  │  (etc.)                 │   │                         │         │
-  │  └──────────┬──────────────┘   └──────────┬──────────────┘         │
-  │             │                              │                        │
-  │             └──────────────┬───────────────┘                        │
-  │                            │                                        │
-  │  ┌─────────────────────────▼─────────────────────────┐             │
-  │  │              LIFT MODULES                          │             │
-  │  │                                                    │             │
-  │  │  _pydantic_lift.py   model_json_schema()           │             │
-  │  │                      FieldInfo.metadata            │             │
-  │  │                                                    │             │
-  │  │  _msgspec_lift.py    msgspec.inspect.type_info()   │             │
-  │  │                      Meta(ge=, le=, ...)           │             │
-  │  │                                                    │             │
-  │  │  _dataclass_lift.py  dataclasses.fields()          │             │
-  │  │                      Literal[...] annotations      │             │
-  │  └─────────────────────────┬─────────────────────────┘             │
-  │                            │                                        │
-  │                            ▼                                        │
-  │                   staging files                                     │
-  │              src/llenergymeasure/engines/_staging/                    │
-  │                            │                                        │
-  │                            ▼                                        │
-  │                    build_corpus.py                                  │
-  │                (merge + dedup + fingerprint)                        │
-  │                            │                                        │
-  │                            ▼                                        │
-  │                    validate_invariants.py                                  │
-  │              (replay against live library)                          │
-  │                            │                                        │
-  │           ┌────────────────┴──────────────────┐                    │
-  │           ▼                                   ▼                    │
-  │  confirmed rules                   quarantined rules               │
-  │  src/llenergymeasure/engines/        src/llenergymeasure/engines/       │
-  │  {engine}/invariants.proposed.yaml            _staging/_failed_*.yaml          │
-  │  src/llenergymeasure/engines/                                         │
-  │  {engine}/invariants.validated.yaml                                             │
-  └─────────────────────────────────────────────────────────────────────┘
-```
+
+- **Static miner** walks the AST of validator methods. Detectors include `ConditionalRaiseDetector`, `ConditionalSelfAssignDetector`, `ConditionalWarningsWarnDetector`, and a few more (full list under [`_base.py` shared infrastructure](#_basepy-shared-infrastructure)).
+- **Dynamic miner** instantiates config classes with combinatorial probe values, observes raise/no-raise patterns, and runs predicate inference on the resulting table.
+- **Lift modules** extract type-system constraints. `_pydantic_lift.py` reads `model_json_schema()` and `FieldInfo.metadata`. `_msgspec_lift.py` reads `msgspec.inspect.type_info()` plus `Meta(ge=, le=, ...)`. `_dataclass_lift.py` reads `dataclasses.fields()` plus `Literal[...]` annotations.
+- **`build_corpus.py`** merges per-miner staging files, deduplicates by fingerprint, and hands off to validation.
+- **`validate_invariants.py`** replays each rule against the live library; confirmed rules ship in the proposed and validated YAMLs, quarantined rules land in `_staging/_failed_*.yaml`.
 
 ---
 
@@ -91,33 +63,26 @@ Example: the rule `not_divisible_by` can only be expressed in the corpus because
 
 ### AST primitives (in `_base.py`)
 
+```mermaid
+flowchart TD
+    parse["ast.parse&#40;source&#41;"]
+    findcls["find_class&#40;module, GenerationConfig&#41;"]
+    findmethod["find_method&#40;cls, validate&#41;"]
+    walk[for stmt in if_body]
+    detectors[Run pattern detectors]
+
+    parse --> findcls --> findmethod --> walk --> detectors
 ```
-  ast.parse(source)
-       │
-       ▼
-  find_class(module, "GenerationConfig")
-       │
-       ▼
-  find_method(cls, "validate")
-       │
-       ▼
-  for stmt in if_body:
-       │
-       ├── ConditionalRaiseDetector      → severity: "error"
-       │   "if X: raise SomeException(msg)"
-       │
-       ├── ConditionalSelfAssignDetector → severity: "dormant"
-       │   "if X: self.A = B" (silent normalisation)
-       │
-       ├── ConditionalWarningsWarnDetector → severity: "warn"
-       │   "if X: warnings.warn(msg)"
-       │
-       ├── ConditionalLoggerWarningDetector → severity: "warn"
-       │   "if X: logger.warning(msg)"
-       │
-       └── MinorIssuesDictAssignDetector → severity: "dormant"
-           HF-specific: "if X: minor_issues[key] = msg"
-```
+
+For each `if` body, the miner runs five pattern detectors. Each detector targets a specific source pattern and emits a rule of a specific severity.
+
+| Detector | Pattern matched | Emitted severity |
+|---|---|---|
+| `ConditionalRaiseDetector` | `if X: raise SomeException(msg)` | `error` |
+| `ConditionalSelfAssignDetector` | `if X: self.A = B` (silent normalisation) | `dormant` |
+| `ConditionalWarningsWarnDetector` | `if X: warnings.warn(msg)` | `warn` |
+| `ConditionalLoggerWarningDetector` | `if X: logger.warning(msg)` | `warn` |
+| `MinorIssuesDictAssignDetector` | HF-specific: `if X: minor_issues[key] = msg` | `dormant` |
 
 ### Filters (false-positive guards)
 
@@ -141,35 +106,36 @@ The dynamic miner instantiates config classes with combinatorial probe values an
 
 ### Probe strategy: Cartesian primary, Hypothesis supplement
 
+```mermaid
+flowchart TD
+    cluster[cluster definition<br/>e.g. beam-search:<br/>num_beams, num_beam_groups, diversity_penalty]
+    values[representative values per field<br/>e.g. num_beams=&#91;1,2,4&#93;<br/>num_beam_groups=&#91;1,2,3&#93;]
+    cart[Cartesian product]
+    size{cluster size}
+    full[Cartesian probe<br/>runs every combination]
+    hyp[Hypothesis from_type<br/>deterministic value generator<br/>fixed seed, no randomness]
+    loop[For each combination:<br/>try construct + validate&#40;strict=True&#41;]
+    table[(probe-row table:<br/>list&lt;kwargs, error_message or None&gt;)]
+
+    cluster --> values --> cart --> size
+    size -->|small| full
+    size -->|large| hyp
+    full --> loop
+    hyp --> loop
+    loop --> table
 ```
-  cluster definition
-  (e.g. beam-search: num_beams, num_beam_groups, diversity_penalty)
-               │
-               ▼
-  representative values per field
-  (e.g. num_beams=[1, 2, 4], num_beam_groups=[1, 2, 3])
-               │
-               ▼
-  Cartesian product of values
-               │
-               ├── cluster size ≤ threshold
-               │   Cartesian probe runs every combination
-               │
-               └── cluster size > threshold (e.g. 8 fields × 5 values)
-                   Hypothesis from_type generates values deterministically
-                   (fixed seed, no randomness; Hypothesis as value generator only)
-               │
-               ▼
-  for each combination:
-    try:
-      ClassName(**kwargs)
-      .validate(strict=True) if applicable
-      → record (kwargs, None)
-    except Exception as e:
-      → record (kwargs, str(e))
-               │
-               ▼
-  probe-row table: list[(kwargs, error_message | None)]
+
+The probe-row table is what predicate inference reads downstream. The branch threshold is a soft heuristic - small clusters (e.g. 3 fields, 3 values each) get full Cartesian coverage; large clusters (e.g. 8 fields, 5 values each) fall back to Hypothesis's `from_type` value generator with a fixed seed.
+
+For each combination the miner runs:
+
+```python
+try:
+    ClassName(**kwargs)
+    .validate(strict=True) if applicable
+    -> record (kwargs, None)
+except Exception as e:
+    -> record (kwargs, str(e))
 ```
 
 **Important:** Hypothesis is used here only as a deterministic value generator with a fixed seed, not as a property-based test runner. The miner pipeline must be deterministic: the same library version + miner code must produce the same corpus. Randomness would break Renovate-driven library bump diffs.
@@ -196,18 +162,11 @@ The dynamic miner errs toward recall: when multiple templates fit the evidence, 
 
 The three lift modules extract constraints from type-system metadata without requiring probe rounds. They are independent stages that run alongside AST walking and probing.
 
-```
-  Type-system axis         Lift module              Engines using it
-  ──────────────────────   ─────────────────────    ────────────────────────────
-  pydantic.BaseModel       _pydantic_lift.py         vLLM (27 pydantic-dataclasses)
-  pydantic.dataclasses                               TRT-LLM (TrtLlmArgs)
-                                                     (Literal-typed enum fields)
-  msgspec.Struct           _msgspec_lift.py          vLLM (SamplingParams)
-  stdlib @dataclass        _dataclass_lift.py        transformers (GenerationConfig,
-                                                     BitsAndBytesConfig)
-                                                     vLLM (EngineArgs, 175 fields)
-                                                     TRT-LLM (BuildConfig, QuantConfig)
-```
+| Type-system axis | Lift module | Engines using it |
+|---|---|---|
+| `pydantic.BaseModel` / `pydantic.dataclasses` | `_pydantic_lift.py` | vLLM (27 pydantic-dataclasses); TRT-LLM (`TrtLlmArgs`, including `Literal`-typed enum fields) |
+| `msgspec.Struct` | `_msgspec_lift.py` | vLLM (`SamplingParams`) |
+| stdlib `@dataclass` | `_dataclass_lift.py` | transformers (`GenerationConfig`, `BitsAndBytesConfig`); vLLM (`EngineArgs`, 175 fields); TRT-LLM (`BuildConfig`, `QuantConfig`) |
 
 ### Pydantic lift (`_pydantic_lift.py`)
 
@@ -215,18 +174,16 @@ Walks `model_json_schema()` and `FieldInfo.metadata` (Pydantic v2). Emits one ru
 
 Operator vocabulary aligns with the `annotated-types` standard:
 
-```
-  annotated-types predicate   corpus operator key
-  ─────────────────────────   ───────────────────
-  Gt(value)                   ">"
-  Ge(value)                   ">="
-  Lt(value)                   "<"
-  Le(value)                   "<="
-  MultipleOf(value)           "multiple_of"
-  MinLen(value)               "min_len"
-  MaxLen(value)               "max_len"
-  Literal[a, b, c]            "in": [a, b, c]
-```
+| `annotated-types` predicate | Corpus operator key |
+|---|---|
+| `Gt(value)` | `">"` |
+| `Ge(value)` | `">="` |
+| `Lt(value)` | `"<"` |
+| `Le(value)` | `"<="` |
+| `MultipleOf(value)` | `"multiple_of"` |
+| `MinLen(value)` | `"min_len"` |
+| `MaxLen(value)` | `"max_len"` |
+| `Literal[a, b, c]` | `"in": [a, b, c]` |
 
 ### msgspec lift (`_msgspec_lift.py`)
 
@@ -244,34 +201,19 @@ Walks `dataclasses.fields()` and extracts `Literal[a, b, c]` annotations. Plain 
 
 The three engines have structurally different config surfaces, which determines which components each miner uses.
 
-```
-  ┌──────────────┬─────────────────────┬──────────────┬─────────────────────────┐
-  │ Engine       │ Static miner        │ Dynamic miner│ Lift modules            │
-  ├──────────────┼─────────────────────┼──────────────┼─────────────────────────┤
-  │ transformers │ GenerationConfig     │ Cartesian    │ dataclass_lift          │
-  │              │ .validate(), BNB    │ cluster      │ (GenerationConfig,      │
-  │              │ .post_init()        │ probing      │ BitsAndBytesConfig)     │
-  │              │ ~1700 LoC walked    │              │                         │
-  ├──────────────┼─────────────────────┼──────────────┼─────────────────────────┤
-  │ vLLM         │ SamplingParams      │ Cartesian    │ pydantic_lift (27       │
-  │              │ ._verify_args()     │ + Hypothesis │ vllm.config.* classes)  │
-  │              │ ~20 validator       │ supplement   │ msgspec_lift            │
-  │              │ methods             │              │ (SamplingParams)        │
-  │              │                     │              │ dataclass_lift          │
-  │              │                     │              │ (EngineArgs)            │
-  ├──────────────┼─────────────────────┼──────────────┼─────────────────────────┤
-  │ TRT-LLM      │ BaseLlmArgs         │ SKIPPED      │ pydantic_lift           │
-  │              │ .validate_*()       │ (constructor │ (TrtLlmArgs)            │
-  │              │ ~11 validator       │ yields zero  │ dataclass_lift          │
-  │              │ methods             │ raises)      │ (BuildConfig,           │
-  │              │                     │              │  QuantConfig)           │
-  └──────────────┴─────────────────────┴──────────────┴─────────────────────────┘
+| Engine | Static miner | Dynamic miner | Lift modules |
+|---|---|---|---|
+| transformers | `GenerationConfig.validate()`, `BitsAndBytesConfig.post_init()`; ~1700 LoC walked | Cartesian cluster probing | `dataclass_lift` (`GenerationConfig`, `BitsAndBytesConfig`) |
+| vLLM | `SamplingParams._verify_args()`; ~20 validator methods | Cartesian + Hypothesis supplement | `pydantic_lift` (27 `vllm.config.*` classes); `msgspec_lift` (`SamplingParams`); `dataclass_lift` (`EngineArgs`) |
+| TRT-LLM | `BaseLlmArgs.validate_*()`; ~11 validator methods | SKIPPED (constructor yields zero raises) | `pydantic_lift` (`TrtLlmArgs`); `dataclass_lift` (`BuildConfig`, `QuantConfig`) |
 
-  Target rule count after validation-CI gate:
-    transformers:  46 rules (shipped)
-    vLLM:          80-110 rules (target)
-    TRT-LLM:       20-28 rules (target)
-```
+**Target rule count after validation-CI gate:**
+
+| Engine | Rule count |
+|---|---|
+| transformers | 46 rules (shipped) |
+| vLLM | 80-110 rules (target) |
+| TRT-LLM | 20-28 rules (target) |
 
 **Why no dynamic miner for TRT-LLM:** empirical probing of `TrtLlmArgs(**kwargs)` constructors produced zero raises. TRT-LLM performs construction-time validation in a much more permissive way than transformers or vLLM; its constraints are primarily enforced in validator methods (covered by the static miner) and at engine build time (hardware-gated, not corpus rules).
 
@@ -304,18 +246,20 @@ If the installed library version falls outside the envelope, the miner raises `M
 
 If an expected class or method is missing from the library source (e.g. a class was renamed in a library refactor), the miner raises `MinerLandmarkMissingError` - also a hard CI failure.
 
-```
-  check_installed_version()
-       │
-       ├── version inside SSOT envelope → continue
-       │
-       └── version out of range → MinerVersionMismatchError (CI fatal)
+```mermaid
+flowchart LR
+    cv["check_installed_version&#40;&#41;"]
+    cv --> cvok{version inside<br/>SSOT envelope?}
+    cvok -->|yes| cvcont[continue]
+    cvok -->|no| cverr[MinerVersionMismatchError<br/>CI fatal]
 
-  find_class(module, "GenerationConfig")
-       │
-       ├── class found → continue
-       │
-       └── None → MinerLandmarkMissingError (CI fatal)
+    fc["find_class&#40;module, GenerationConfig&#41;"]
+    fc --> fcok{class found?}
+    fcok -->|yes| fccont[continue]
+    fcok -->|no| fcerr[MinerLandmarkMissingError<br/>CI fatal]
+
+    classDef fatal fill:#ffe4e1,stroke:#c00,stroke-width:2px;
+    class cverr,fcerr fatal;
 ```
 
 **Why this matters:** the Haiku-era TRT-LLM extractor (PRs #415-#417, reverted in #423) silently degraded when it encountered an import error - it caught `ImportError` and returned `[]` instead of failing. The silent degradation was indistinguishable from "no rules found for this engine", which masked a broken extractor. The fail-loud contract makes that impossible.
@@ -370,27 +314,27 @@ When static and dynamic miners both emit a rule with the same fingerprint, the f
 
 The validation-CI gate runs after merge. It replays every rule's `kwargs_positive` and `kwargs_negative` against the live library inside the engine's Docker container and compares observed behaviour against the declared `expected_outcome`.
 
+```mermaid
+flowchart TD
+    rule[For each rule in merged corpus]
+    pos["run_case&#40;kwargs_positive, native_type&#41; -> CaptureBuffers"]
+    c1[CHECK positive_raises]
+    c2[CHECK message_template_match]
+    c3[CHECK negative_does_not_raise]
+    verdict{all checks pass?}
+    confirmed[rule confirmed<br/>write to corpus]
+    quarantined[rule quarantined<br/>_failed_validation_*.yaml]
+
+    rule --> pos --> c1 --> c2 --> c3 --> verdict
+    verdict -->|yes| confirmed
+    verdict -->|no| quarantined
 ```
-  for each rule in merged corpus:
-       │
-       ▼
-  run_case(kwargs_positive, native_type) → CaptureBuffers
-       │
-       ├── CHECK positive_raises
-       │   CaptureBuffers.exception_type must not be None
-       │
-       ├── CHECK message_template_match
-       │   CaptureBuffers.exception_message must contain
-       │   rule.message_template (static fragment)
-       │
-       └── CHECK negative_does_not_raise
-           run_case(kwargs_negative, native_type)
-           CaptureBuffers.exception_type must be None
-       │
-       ├── all checks pass → rule confirmed → write to corpus
-       │
-       └── any check fails → rule quarantined to _failed_validation_*.yaml
-```
+
+Each check has a precise contract:
+
+- **`positive_raises`** - `CaptureBuffers.exception_type` must not be `None` after running with `kwargs_positive`.
+- **`message_template_match`** - `CaptureBuffers.exception_message` must contain `rule.message_template` (the static fragment, with template variables removed).
+- **`negative_does_not_raise`** - running `run_case(kwargs_negative, native_type)` must produce a `CaptureBuffers` with `exception_type is None`.
 
 The gate runs inside the Docker container for each engine so that the live library version used for validation matches the version the miner was built against.
 
@@ -405,85 +349,52 @@ The gate runs inside the Docker container for each engine so that the live libra
 
 Library version bumps trigger corpus regeneration automatically. The flow described below reflects what was empirically observed during the Phase B.6 forced E2E run on PR #459 (transformers 4.57.3 → 4.57.6); see ["Phase B.6 observed flow"](#phase-b6-observed-flow-historical) below for the actual commit timeline.
 
+```mermaid
+flowchart TD
+    upstream[Upstream library releases new version<br/>e.g. transformers 4.57.3 -> 4.57.6]
+    detect[Renovate detects version bump<br/>weekly schedule, before 9am Monday;<br/>Dashboard #446 checkbox bypasses on demand]
+    pr[Renovate opens PR bumping<br/>engine_versions/&lt;engine&gt;.yaml library.current_version<br/>Dockerfile ARG derived via --build-arg]
+    fanout{Per-engine<br/>trigger shape}
+    direct[vllm + tensorrt:<br/>invariants/schemas cells fire in parallel<br/>via pull_request: paths]
+    chained[transformers:<br/>engine-pipeline.yml builds + cache-exports;<br/>publish-engine-image.yml publishes via workflow_run;<br/>invariants + schemas cells fire on push success]
+    inv[engine-invariants per-engine job]
+    sch[engine-schemas per-engine job]
+    cigreen[CI green required before merge<br/>--fail-on-divergence -> P0 incidents]
+    review[Maintainer reviews proposed YAML diff,<br/>validated YAML diff, schema diff<br/>proposed YAML is the trust seam]
+
+    upstream --> detect --> pr --> fanout
+    fanout --> direct
+    fanout --> chained
+    direct --> inv
+    direct --> sch
+    chained --> inv
+    chained --> sch
+    inv --> cigreen
+    sch --> cigreen
+    cigreen --> review
 ```
-  ┌───────────────────────────────────────────────────────────────────┐
-  │                    RENOVATE REFRESH LOOP                          │
-  │                                                                   │
-  │  Upstream library releases new version                            │
-  │  (e.g. transformers 4.57.3 → 4.57.6)                              │
-  │               │                                                   │
-  │               ▼                                                   │
-  │  Renovate detects version bump                                    │
-  │  (weekly schedule, "before 9am on Monday";                        │
-  │   Dashboard #446 checkbox bypasses on demand)                     │
-  │               │                                                   │
-  │               ▼                                                   │
-  │  Renovate opens PR bumping engine_versions/{engine}.yaml          │
-  │  (library.current_version; Dockerfile ARG default is derived at   │
-  │   build time via --build-arg from the SSOT)                       │
-  │               │                                                   │
-  │  Per-engine trigger shape (within a single engine-pipeline.yml  │
-  │  + engine-pipeline.yml pair, gated by per-job `if:` clauses):      │
-  │   - vllm + tensorrt: invariants-vllm / schemas-vllm /                    │
-  │     invariants-tensorrt / schemas-tensorrt fire in parallel via          │
-  │     pull_request: paths.                                                  │
-  │   - transformers: engine-pipeline.yml fires first (build +            │
-  │     cache export, no runtime push), then publish-engine-image.yml        │
-  │     publishes runtime tags via workflow_run, then invariants-            │
-  │     transformers + schemas-transformers (in the same two workflow        │
-  │     files) fire via workflow_run on the push's success.                  │
-  │     See docs/development.md "CI pipeline ordering" for detail.     │
-  │               │                                                   │
-  │  ──────────── engine-invariants per-engine job ────────────────   │
-  │         ┌─────────────────┬────────────────────┐                  │
-  │         ▼                 ▼                    ▼                  │
-  │  GH-hosted ubuntu-  Self-hosted GPU      Self-hosted GPU          │
-  │  latest pulling     inside llenergy-     inside llenergy-         │
-  │  pre-built image    measure:vllm-${VER}  measure:tensorrt-${VER}  │
-  │  llenergymeasure:   - vLLM static        - TRT-LLM static         │
-  │  transformers-${V}  - vLLM dynamic         miner (CUDA-aware      │
-  │  - transformers     (Docker isolates       import required)       │
-  │    static miner     from cross-engine                             │
-  │  - transformers     constraints; #437)                            │
-  │    dynamic miner                                                  │
-  │         │                 │                    │                  │
-  │         └─────────────────┴────────────────────┘                  │
-  │                       ▼                                           │
-  │  Per-engine step sequence inside one job:                         │
-  │   1. Probe - scripts._probe checks landmarks; `fail` skips        │
-  │      downstream and posts a `probe-blocked` comment + label.      │
-  │   2. Mine - build_corpus.py merges staging into                   │
-  │      src/llenergymeasure/engines/{engine}/invariants.proposed.yaml.            │
-  │   3. Validate-replay - validate_invariants.py --fail-on-divergence         │
-  │      replays each rule against the live library inside the        │
-  │      engine's Docker container; confirmed cases write to          │
-  │      src/llenergymeasure/engines/{engine}/invariants.validated.yaml.            │
-  │   4. Doc-gen - generate_invariants_doc.py refreshes               │
-  │      docs/reference/engines/invariants-{engine}.md.                       │
-  │   5. Atomic writeback - one bot commit covers proposed.yaml,      │
-  │      validated.yaml, the digest doc, and engine_versions/          │
-  │      {engine}.compat.json. Pushed with --force-with-lease.        │
-  │                       │                                           │
-  │  ─────────────── engine-schemas (per-engine) ──────────────       │
-  │                       ▼                                           │
-  │  scripts/engine_introspectors introspects engine config classes   │
-  │  inside Docker, regenerates engines/{engine}/schema.discovered.json;                │
-  │  generate_curation_doc.py + generate_schema_doc.py refresh        │
-  │  docs/reference/engines/{curation,schema}-{engine}.md, bot commits        │
-  │  and posts a diff comment.                                        │
-  │                       │                                           │
-  │                       ▼                                           │
-  │  CI green required before merge.                                  │
-  │  Divergences from --fail-on-divergence are P0 incidents.          │
-  │                       │                                           │
-  │                       ▼                                           │
-  │  Maintainer reviews proposed YAML diff, validated YAML diff, and   │
-  │  schema diff in the PR. The proposed YAML commit is the trust     │
-  │  seam: recall regressions show up as rule drops in the diff       │
-  │  emitted before the validation gate's verdict lands in the same       │
-  │  commit.                                                          │
-  └───────────────────────────────────────────────────────────────────┘
-```
+
+#### Runtime fan-out per engine
+
+| Engine | Runner | Image | Producer steps |
+|---|---|---|---|
+| transformers | GH-hosted `ubuntu-latest` | `llenergymeasure:transformers-${VER}` (pre-built) | transformers static miner; transformers dynamic miner |
+| vLLM | Self-hosted GPU | `llenergymeasure:vllm-${VER}` | vLLM static + dynamic (Docker isolates from cross-engine constraints; [#437](https://github.com/henrycgbaker/llenergymeasure/issues/437)) |
+| TRT-LLM | Self-hosted GPU | `llenergymeasure:tensorrt-${VER}` | TRT-LLM static miner (CUDA-aware import required) |
+
+#### Per-engine step sequence (inside one job)
+
+1. **Probe** - `scripts._probe` checks landmarks. `fail` skips downstream stages and posts a `probe-blocked` comment + label.
+2. **Mine** - `build_corpus.py` merges staging into `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`.
+3. **Validate-replay** - `validate_invariants.py --fail-on-divergence` replays each rule against the live library inside the engine's Docker container; confirmed cases write to `src/llenergymeasure/engines/{engine}/invariants.validated.yaml`.
+4. **Doc-gen** - `generate_invariants_doc.py` refreshes `docs/reference/engines/invariants-{engine}.md`.
+5. **Atomic writeback** - one bot commit covers `proposed.yaml`, `validated.yaml`, the digest doc, and `engine_versions/{engine}.compat.json`. Pushed with `--force-with-lease`.
+
+#### engine-schemas (per-engine)
+
+`scripts/engine_introspectors` introspects engine config classes inside Docker, regenerates `engines/{engine}/schema.discovered.json`; `generate_curation_doc.py` + `generate_schema_doc.py` refresh `docs/reference/engines/{curation,schema}-{engine}.md`. The bot commits and posts a diff comment.
+
+See `docs/development.md` "CI pipeline ordering" for the full transformers chain detail.
 
 ### Version mismatch as CI signal
 
@@ -502,42 +413,17 @@ The update workflow:
 
 The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transformers v4.57.3 → v4.57.6) was the first naturally-Renovate-authored exercise of the full chain. It pre-dates the merge of mining + validate into `engine-invariants.yml` and the rename of the schema workflow to `engine-schemas.yml`; the workflow names below (`auto-mine.yml`, `invariant-miner.yml`, `parameter-discovery.yml`) are historical and reflect the predecessor pipeline shape that has since collapsed/renamed. The structural lessons (commit-back determinism, self-hosted runner serialisation) carry over to the merged workflow. The actual commit sequence on the PR branch:
 
-```
-  Commit (PR #459 branch)   Author       Producing workflow / event
-  ──────────────────────    ─────────    ──────────────────────────────────────
-  2599ef21                  renovate     Renovate's initial Dockerfile bump
-                                         (TRANSFORMERS_VERSION → 4.57.6)
-                                                  │
-                                                  ▼
-  a77aa185                  llem-ci-bot  invariant-miner.yml - validate-tensorrt
-                                         (first cycle; replays existing
-                                          tensorrt invariants against live library)
-                                                  │
-                                                  ▼
-  ae22d224                  llem-ci-bot  parameter-discovery.yml
-                                         (first cycle; rediscovered transformers
-                                          schema, 1 safe change)
-                                                  │
-                                                  ▼
-  45e0d75a                  llem-ci-bot  invariant-miner.yml - validate-transformers
-                                         (first cycle; replays existing
-                                          transformers invariants against new library)
-                                                  │
-                                                  ▼
-  96d811fb                  llem-ci-bot  auto-mine.yml - mine-transformers
-                                         (Stage 1: regenerated YAML corpus
-                                          from miners against new library)
-                                                  │
-                                                  ▼  (chain validation re-fire)
-  fb473a22                  llem-ci-bot  invariant-miner.yml - validate-transformers
-                                         (Stage 2 RE-FIRES on auto-mine's
-                                          new YAML; validates against new YAML)
-                                                  │
-                                                  ▼  (delayed; serial runner)
-  75d4c0c1                  llem-ci-bot  invariant-miner.yml - validate-vllm
-                                         (delayed: self-hosted GPU runner is
-                                          serial, vLLM job queued behind others)
-```
+| # | Commit (PR #459) | Author | Producing workflow / event | Notes |
+|---|---|---|---|---|
+| 1 | `2599ef21` | renovate | Renovate's initial Dockerfile bump (`TRANSFORMERS_VERSION` -> 4.57.6) | Triggers the chain |
+| 2 | `a77aa185` | llem-ci-bot | `invariant-miner.yml` - validate-tensorrt | First cycle; replays existing tensorrt invariants against the live library |
+| 3 | `ae22d224` | llem-ci-bot | `parameter-discovery.yml` | First cycle; rediscovered transformers schema, 1 safe change |
+| 4 | `45e0d75a` | llem-ci-bot | `invariant-miner.yml` - validate-transformers | First cycle; replays existing transformers invariants against new library |
+| 5 | `96d811fb` | llem-ci-bot | `auto-mine.yml` - mine-transformers | Stage 1: regenerated YAML corpus from miners against new library |
+| 6 | `fb473a22` | llem-ci-bot | `invariant-miner.yml` - validate-transformers | Stage 2 RE-FIRES on auto-mine's new YAML (chain validation re-fire); validates against new YAML |
+| 7 | `75d4c0c1` | llem-ci-bot | `invariant-miner.yml` - validate-vllm | Delayed (serial runner): self-hosted GPU runner is serial, vLLM job queued behind others |
+
+The events ran in the listed order. Two arrows are load-bearing for the structural lessons: commit 5 -> 6 is the **chain validation re-fire** (auto-mine's writeback re-triggers validate against the new YAML), and commit 6 -> 7 is **delayed** because the self-hosted GPU runner is serial.
 
 **What this proved empirically (carries over to the merged workflow):**
 

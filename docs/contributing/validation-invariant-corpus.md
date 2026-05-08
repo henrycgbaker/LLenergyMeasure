@@ -196,42 +196,46 @@ Examples:
 
 The provenance of the rule - which pipeline component produced it.
 
-```
-  AddedBy values and their sources:
-  ─────────────────────────────────────────────────────────────────────
-  static_miner       AST walking of validator methods
-  dynamic_miner      combinatorial probing (raise/no-raise observation)
-  pydantic_lift      model_json_schema() + FieldInfo.metadata
-  msgspec_lift       msgspec.inspect.type_info() + Meta constraints
-  dataclass_lift     dataclasses.fields() + Literal[...] annotations
-  manual_seed        hand-written by a maintainer (pipeline-failure debt;
-                     use sparingly, add justification comment)
-  runtime_warning    proposed by feedback loop from observed logger.warning_once
-                     emissions (needs human generalisation before landing)
-  observed_collision proposed by feedback loop from config-hash collision
-                     detection (needs human generalisation before landing)
-```
+| `added_by` value | Source |
+|---|---|
+| `static_miner` | AST walking of validator methods |
+| `dynamic_miner` | Combinatorial probing (raise/no-raise observation) |
+| `pydantic_lift` | `model_json_schema()` + `FieldInfo.metadata` |
+| `msgspec_lift` | `msgspec.inspect.type_info()` + `Meta` constraints |
+| `dataclass_lift` | `dataclasses.fields()` + `Literal[...]` annotations |
+| `manual_seed` | Hand-written by a maintainer (pipeline-failure debt; use sparingly, add justification comment) |
+| `runtime_warning` | Proposed by the feedback loop from observed `logger.warning_once` emissions (needs human generalisation before landing) |
+| `observed_collision` | Proposed by the feedback loop from config-hash collision detection (needs human generalisation before landing) |
 
-```
-  Provenance flow diagram:
+```mermaid
+flowchart LR
+    src[Engine library source]
+    ast["AST walk"]
+    probes[Combinatorial probes]
+    pyd["pydantic.BaseModel.model_json_schema&#40;&#41;"]
+    msg["msgspec.inspect.type_info&#40;&#41;"]
+    dc["dataclasses.fields&#40;&#41; + Literal&#91;...&#93;"]
+    maintainer[Maintainer<br/>coverage gap, justified]
+    rwloop[Runtime warning feedback loop]
+    cloop[Observed-collision feedback loop]
 
-  Engine library source
-         │
-         ├──► AST walk ──────────────────────────────────► static_miner
-         │
-         ├──► Combinatorial probes ──────────────────────► dynamic_miner
-         │
-         ├──► pydantic.BaseModel.model_json_schema() ────► pydantic_lift
-         │
-         ├──► msgspec.inspect.type_info() ───────────────► msgspec_lift
-         │
-         ├──► dataclasses.fields() + Literal[...] ───────► dataclass_lift
-         │
-         ├──► Maintainer (coverage gap, justified) ──────► manual_seed
-         │
-         ├──► Runtime warning feedback loop ─────────────► runtime_warning
-         │
-         └──► Observed-collision feedback loop ───────────► observed_collision
+    sm[static_miner]
+    dm[dynamic_miner]
+    pl[pydantic_lift]
+    ml[msgspec_lift]
+    dl[dataclass_lift]
+    ms[manual_seed]
+    rw[runtime_warning]
+    oc[observed_collision]
+
+    src --> ast --> sm
+    src --> probes --> dm
+    src --> pyd --> pl
+    src --> msg --> ml
+    src --> dc --> dl
+    maintainer --> ms
+    rwloop --> rw
+    cloop --> oc
 ```
 
 ### `miner_source`
