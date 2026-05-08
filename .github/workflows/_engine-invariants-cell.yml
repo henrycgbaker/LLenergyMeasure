@@ -83,9 +83,11 @@ jobs:
           # Python-identifier-safe form (dots and hyphens -> underscores) used as the
           # subpackage name under src/llenergymeasure/_engine_archive/<engine>/.
           SAFE_VER="v${VER//[.-]/_}"
-          echo "version=${VER}" >> "$GITHUB_OUTPUT"
-          echo "safe_version=${SAFE_VER}" >> "$GITHUB_OUTPUT"
-          echo "image=llenergymeasure:${ENGINE}-${VER}" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=${VER}"
+            echo "safe_version=${SAFE_VER}"
+            echo "image=llenergymeasure:${ENGINE}-${VER}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR (read-only, for image pull)
         if: inputs.image-source == 'ghcr-cache'
