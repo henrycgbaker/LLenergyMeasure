@@ -23,7 +23,7 @@ flowchart TB
     user[User submits config<br/>YAML / CLI flags / Python API]
     pydantic[ExperimentConfig parsed by Pydantic]
     apply[_apply_invariants &#40;config/models.py&#41;<br/>EngineInvariantsLoader&#40;&#41;.load_invariants&#40;engine&#41;]
-    inv[(EngineInvariants<br/>engine + schema_version + invariants[])]
+    inv[(EngineInvariants<br/>engine + schema_version + invariants&lsqb;&rsqb;)]
 
     user --> pydantic --> apply --> inv
 
