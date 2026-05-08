@@ -4,7 +4,7 @@
 # Reads body from stdin, looks up an existing PR comment by the marker,
 # PATCHes if found, otherwise POSTs new. Byte-compares before PATCH so
 # re-runs that produce identical bodies are no-ops (no `updated_at`
-# churn). Requires the body itself be deterministic across re-runs —
+# churn). Requires the body itself be deterministic across re-runs -
 # diff-emitting workflows must use `diff -u --label <stable> --label
 # <stable>` (or equivalent) to suppress filesystem timestamps.
 #

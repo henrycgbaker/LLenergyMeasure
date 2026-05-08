@@ -11,13 +11,13 @@ Measurement lifecycle orchestration for any inference engine. Layer 3 in the six
 | Module | Description |
 |--------|-------------|
 | `__init__.py` | `MeasurementHarness` class, re-exports |
-| `warmup.py` | `warmup_until_converged()` — CV-based adaptive warmup; `thermal_floor_wait()` |
-| `baseline.py` | `measure_baseline_power()` — idle GPU power baseline with session cache |
-| `flops.py` | `estimate_flops_palm()`, `estimate_flops_palm_from_config()` — FLOPs estimation |
-| `extended_metrics.py` | `compute_extended_metrics()` — derived efficiency metrics |
-| `timeseries.py` | `write_timeseries_parquet()` — power/thermal timeseries sidecar |
-| `measurement_warnings.py` | `collect_measurement_warnings()` — quality flag generation |
-| `state.py` | `ExperimentState`, `ExperimentPhase` — experiment lifecycle state machine |
+| `warmup.py` | `warmup_until_converged()` - CV-based adaptive warmup; `thermal_floor_wait()` |
+| `baseline.py` | `measure_baseline_power()` - idle GPU power baseline with session cache |
+| `flops.py` | `estimate_flops_palm()`, `estimate_flops_palm_from_config()` - FLOPs estimation |
+| `extended_metrics.py` | `compute_extended_metrics()` - derived efficiency metrics |
+| `timeseries.py` | `write_timeseries_parquet()` - power/thermal timeseries sidecar |
+| `measurement_warnings.py` | `collect_measurement_warnings()` - quality flag generation |
+| `state.py` | `ExperimentState`, `ExperimentPhase` - experiment lifecycle state machine |
 
 ## MeasurementHarness
 
@@ -39,7 +39,7 @@ result = harness.run(engine, config, gpu_indices=[0])
 5. Run warmup via `engine.run_warmup_prompt()` + `warmup_until_converged()`
 6. Thermal floor wait (let GPU cool after warmup)
 7. Select energy sampler
-8. CUDA sync (before inference — Zeus best practice)
+8. CUDA sync (before inference - Zeus best practice)
 9. Start energy tracking
 10. Run inference via `engine.run_inference(config, model)`
 11. CUDA sync (after inference, before stopping energy)
@@ -71,7 +71,7 @@ Measures idle GPU power before model load. Session-level cache keyed by GPU indi
 from llenergymeasure.harness.baseline import measure_baseline_power
 
 baseline = measure_baseline_power(duration_sec=10.0, gpu_indices=[0])
-# baseline.power_w — idle power in watts
+# baseline.power_w - idle power in watts
 ```
 
 Energy breakdown uses baseline adjustment: `adjusted_j = total_j - baseline_j` where `baseline_j = baseline.power_w * inference_duration_sec`.
@@ -81,8 +81,8 @@ Energy breakdown uses baseline adjustment: `adjusted_j = total_j - baseline_j` w
 PaLM/Chinchilla formula: `FLOPs = 2 * N_non_embedding_params * total_tokens`
 
 Two paths:
-1. `estimate_flops_palm_from_config(model_name, ...)` — uses HuggingFace `AutoConfig` (no weights loaded, works for all engines)
-2. `estimate_flops_palm(model, ...)` — uses loaded model object (higher confidence, PyTorch only)
+1. `estimate_flops_palm_from_config(model_name, ...)` - uses HuggingFace `AutoConfig` (no weights loaded, works for all engines)
+2. `estimate_flops_palm(model, ...)` - uses loaded model object (higher confidence, PyTorch only)
 
 ## State machine (state.py)
 
@@ -94,7 +94,7 @@ from llenergymeasure.harness.state import ExperimentPhase, ExperimentState
 
 ## Layer constraints
 
-- Layer 3 — may import from layers 0–2
+- Layer 3 - may import from layers 0-2
 - Can import from: `config/`, `domain/`, `device/`, `utils/`, `energy/`, `backends/`, `datasets/`, `infra/`
 - Cannot import from: `study/`, `api/`, `cli/`, `results/`
 

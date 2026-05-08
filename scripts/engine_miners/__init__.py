@@ -7,10 +7,10 @@ invariant candidates.
 
 Two extraction mechanisms are in scope:
 
-- **Dynamic mining** — when the library exposes a structured validation method
+- **Dynamic mining** - when the library exposes a structured validation method
   (e.g. HF transformers' ``GenerationConfig.validate(strict=True)``), the
   dynamic miner wraps the call and infers predicates from probe results.
-- **Static mining** — when no such API exists (vLLM, TRT-LLM), the static
+- **Static mining** - when no such API exists (vLLM, TRT-LLM), the static
   miner parses the library source AST using the primitives in
   :mod:`scripts.engine_miners._base`.
 

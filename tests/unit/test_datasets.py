@@ -148,7 +148,7 @@ def test_load_prompts_grouped_ordering() -> None:
         assert len(prompts) == 100
         return
 
-    # Dataset has source column — verify grouped ordering
+    # Dataset has source column - verify grouped ordering
     config = ExperimentConfig(
         task={
             "model": "x",

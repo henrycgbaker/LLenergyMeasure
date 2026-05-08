@@ -1,7 +1,7 @@
 # Invalid Parameter Combinations
 
 > Auto-generated from config validators and test results.
-> Last updated: 2026-04-20 23:10 UTC
+> Last updated: 2026-05-08 16:10 UTC
 
 This document lists parameter combinations that will fail validation or runtime.
 The tool validates these at config load time and provides clear error messages.
@@ -64,20 +64,20 @@ due to hardware, model, or package requirements.
 
 | Feature | Transformers | vLLM | TensorRT |
 |---------|---------|------|----------|
-| Tensor Parallel | Yes | No | Yes |
+| Tensor Parallel | Yes | Yes | No |
 | Data Parallel | No | No | No |
-| BitsAndBytes (4-bit) | No | Yes | No |
-| BitsAndBytes (8-bit) | No | Yes | No |
-| Native Quantization | AWQ/GPTQ/FP8 | No | INT8/W4A16_AWQ/W4A16_GPTQ/FP8 |
-| float32 precision | Yes | Yes | No |
+| BitsAndBytes (4-bit) | No | No | Yes |
+| BitsAndBytes (8-bit) | No | No | Yes |
+| Native Quantization | INT8/W4A16_AWQ/W4A16_GPTQ/FP8 | AWQ/GPTQ/FP8 | No |
+| float32 precision | No | Yes | Yes |
 | float16 precision | Yes | Yes | Yes |
 | bfloat16 precision | Yes | Yes | Yes |
-| Prefix Caching | Yes | No | No |
-| LoRA Adapters | No | Yes | No |
-| torch.compile | No | Yes | No |
-| Beam Search | Yes | Yes | No |
-| Speculative Decoding | No | Yes | No |
-| Static KV Cache | No | Yes | No |
+| Prefix Caching | No | Yes | No |
+| LoRA Adapters | No | No | Yes |
+| torch.compile | No | No | Yes |
+| Beam Search | No | Yes | Yes |
+| Speculative Decoding | No | No | Yes |
+| Static KV Cache | No | No | Yes |
 
 **Notes:**
 - vLLM supports 4-bit via AWQ/GPTQ quantized models, not bitsandbytes

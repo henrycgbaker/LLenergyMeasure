@@ -1,7 +1,7 @@
 """Environment metadata collection for experiment reproducibility.
 
 Collects GPU, CUDA, driver, thermal, CPU, and container information via NVML.
-Gracefully degrades when NVML is unavailable — returns EnvironmentMetadata
+Gracefully degrades when NVML is unavailable - returns EnvironmentMetadata
 with reasonable defaults instead of crashing.
 """
 

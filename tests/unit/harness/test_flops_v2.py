@@ -121,7 +121,7 @@ def test_count_non_embedding_params_embed_case_insensitive() -> None:
 
 
 # =============================================================================
-# estimate_flops_palm — formula correctness
+# estimate_flops_palm - formula correctness
 # =============================================================================
 
 
@@ -205,7 +205,7 @@ def test_estimate_flops_palm_zero_tokens() -> None:
 
 
 # =============================================================================
-# FlopsResult — palm_formula literal
+# FlopsResult - palm_formula literal
 # =============================================================================
 
 
@@ -295,7 +295,7 @@ def test_flops_derived_fields_none_when_zero() -> None:
 
 
 # =============================================================================
-# _count_params_from_config — AutoConfig-based parameter extraction
+# _count_params_from_config - AutoConfig-based parameter extraction
 # =============================================================================
 
 

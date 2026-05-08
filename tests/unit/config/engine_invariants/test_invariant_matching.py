@@ -181,7 +181,7 @@ def test_in_and_not_in_reject_string_spec() -> None:
         ({"type_is_not": "bool"}, "yes", True),
         ({"type_is_not": "bool"}, True, False),
         ({"type_is_not": "str"}, 1, True),
-        # None is never typed as anything — predicate does not fire on absent fields
+        # None is never typed as anything - predicate does not fire on absent fields
         ({"type_is": "bool"}, None, False),
         ({"type_is_not": "bool"}, None, False),
     ],
@@ -265,7 +265,7 @@ def test_resolve_field_path_pydantic_field_wins_over_method_name() -> None:
 
 
 def test_resolve_field_path_dataclass_field_wins_over_method_name() -> None:
-    # Dataclasses expose __dataclass_fields__ — same treatment.
+    # Dataclasses expose __dataclass_fields__ - same treatment.
     from dataclasses import dataclass as _dc
 
     @_dc
@@ -309,7 +309,7 @@ def test_try_match_returns_match_object_when_all_predicates_hold() -> None:
     )
     match = invariant.try_match(config)
     assert match is not None
-    # declared_value is the last field's value — the subject the user cares about.
+    # declared_value is the last field's value - the subject the user cares about.
     assert match.declared_value == 0.9
     assert match.matched_fields == {
         "transformers.sampling.do_sample": False,

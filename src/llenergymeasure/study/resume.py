@@ -1,4 +1,4 @@
-"""Study resume capability — skip completed experiments and re-run the rest."""
+"""Study resume capability - skip completed experiments and re-run the rest."""
 
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ def load_resume_state(
     }
 
     logger.info(
-        "Resume: loaded manifest from %s — %d completed, %d to re-run",
+        "Resume: loaded manifest from %s - %d completed, %d to re-run",
         study_dir,
         len(skip_set),
         len(manifest.experiments) - len(skip_set),
@@ -184,7 +184,7 @@ def prepare_resume_manifest(study_dir: Path, manifest: StudyManifest) -> Manifes
     writer._write()
 
     logger.info(
-        "Resume: prepared manifest in %s — %d pending, %d completed (skipping)",
+        "Resume: prepared manifest in %s - %d pending, %d completed (skipping)",
         study_dir,
         updated_manifest.pending,
         updated_manifest.completed,

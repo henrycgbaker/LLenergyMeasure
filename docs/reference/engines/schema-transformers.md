@@ -11,23 +11,23 @@ Schema version: 1.0.0
 
 > **Discovery limitations**
 > 
-> - **`engine_params`** — from_pretrained accepts **kwargs; kwargs are not in the signature (documented kwargs live in the class docstring only)
+> - **`engine_params`** - from_pretrained accepts **kwargs; kwargs are not in the signature (documented kwargs live in the class docstring only)
 >   Affected fields: `AutoModelForCausalLM.from_pretrained.**model_args`, `AutoModelForCausalLM.from_pretrained.**kwargs`, `PreTrainedModel.from_pretrained.**model_args`, `PreTrainedModel.from_pretrained.**kwargs`
-> - **`sampling_params`** — GenerationConfig has no type annotations; None defaults yield type='unknown'
+> - **`sampling_params`** - GenerationConfig has no type annotations; None defaults yield type='unknown'
 >   Affected fields: `max_new_tokens`, `min_new_tokens`, `max_time`, `stop_strings`, `cache_implementation`, `cache_config`, `return_legacy_cache`, `prefill_chunk_size`, `min_p`, `bad_words_ids`, `forced_bos_token_id`, `forced_eos_token_id`, `exponential_decay_length_penalty`, `suppress_tokens`, `begin_suppress_tokens`, `sequence_bias`, `guidance_scale`, `watermarking_config`, `output_logits`, `pad_token_id`, `bos_token_id`, `eos_token_id`, `decoder_start_token_id`, `prompt_lookup_num_tokens`, `max_matching_ngram_size`, `assistant_early_exit`, `low_memory`, `penalty_alpha`, `dola_layers`, `constraints`, `force_words_ids`
 
 ## Engine Parameters
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `config` | `PretrainedConfig | str | PathLike | None` | — |  |
-| `cache_dir` | `str | PathLike | None` | — |  |
+| `config` | `PretrainedConfig | str | PathLike | None` | - |  |
+| `cache_dir` | `str | PathLike | None` | - |  |
 | `ignore_mismatched_sizes` | `bool` | `false` |  |
 | `force_download` | `bool` | `false` |  |
 | `local_files_only` | `bool` | `false` |  |
-| `token` | `str | bool | None` | — |  |
+| `token` | `str | bool | None` | - |  |
 | `revision` | `str` | `main` |  |
-| `use_safetensors` | `bool | None` | — |  |
+| `use_safetensors` | `bool | None` | - |  |
 | `weights_only` | `bool` | `true` |  |
 
 ## Sampling Parameters
@@ -35,23 +35,23 @@ Schema version: 1.0.0
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `max_length` | `int` | `20` |  |
-| `max_new_tokens` | `unknown` | — |  |
+| `max_new_tokens` | `unknown` | - |  |
 | `min_length` | `int` | `0` |  |
-| `min_new_tokens` | `unknown` | — |  |
+| `min_new_tokens` | `unknown` | - |  |
 | `early_stopping` | `bool` | `false` |  |
-| `max_time` | `unknown` | — |  |
-| `stop_strings` | `unknown` | — |  |
+| `max_time` | `unknown` | - |  |
+| `stop_strings` | `unknown` | - |  |
 | `do_sample` | `bool` | `false` |  |
 | `num_beams` | `int` | `1` |  |
 | `use_cache` | `bool` | `true` |  |
-| `cache_implementation` | `unknown` | — |  |
-| `cache_config` | `unknown` | — |  |
-| `return_legacy_cache` | `unknown` | — |  |
-| `prefill_chunk_size` | `unknown` | — |  |
+| `cache_implementation` | `unknown` | - |  |
+| `cache_config` | `unknown` | - |  |
+| `return_legacy_cache` | `unknown` | - |  |
+| `prefill_chunk_size` | `unknown` | - |  |
 | `temperature` | `float` | `1.0` |  |
 | `top_k` | `int` | `50` |  |
 | `top_p` | `float` | `1.0` |  |
-| `min_p` | `unknown` | — |  |
+| `min_p` | `unknown` | - |  |
 | `typical_p` | `float` | `1.0` |  |
 | `epsilon_cutoff` | `float` | `0.0` |  |
 | `eta_cutoff` | `float` | `0.0` |  |
@@ -59,46 +59,46 @@ Schema version: 1.0.0
 | `encoder_repetition_penalty` | `float` | `1.0` |  |
 | `length_penalty` | `float` | `1.0` |  |
 | `no_repeat_ngram_size` | `int` | `0` |  |
-| `bad_words_ids` | `unknown` | — |  |
+| `bad_words_ids` | `unknown` | - |  |
 | `renormalize_logits` | `bool` | `false` |  |
-| `forced_bos_token_id` | `unknown` | — |  |
-| `forced_eos_token_id` | `unknown` | — |  |
+| `forced_bos_token_id` | `unknown` | - |  |
+| `forced_eos_token_id` | `unknown` | - |  |
 | `remove_invalid_values` | `bool` | `false` |  |
-| `exponential_decay_length_penalty` | `unknown` | — |  |
-| `suppress_tokens` | `unknown` | — |  |
-| `begin_suppress_tokens` | `unknown` | — |  |
-| `sequence_bias` | `unknown` | — |  |
+| `exponential_decay_length_penalty` | `unknown` | - |  |
+| `suppress_tokens` | `unknown` | - |  |
+| `begin_suppress_tokens` | `unknown` | - |  |
+| `sequence_bias` | `unknown` | - |  |
 | `token_healing` | `bool` | `false` |  |
-| `guidance_scale` | `unknown` | — |  |
-| `watermarking_config` | `unknown` | — |  |
+| `guidance_scale` | `unknown` | - |  |
+| `watermarking_config` | `unknown` | - |  |
 | `num_return_sequences` | `int` | `1` |  |
 | `output_attentions` | `bool` | `false` |  |
 | `output_hidden_states` | `bool` | `false` |  |
 | `output_scores` | `bool` | `false` |  |
-| `output_logits` | `unknown` | — |  |
+| `output_logits` | `unknown` | - |  |
 | `return_dict_in_generate` | `bool` | `false` |  |
-| `pad_token_id` | `unknown` | — |  |
-| `bos_token_id` | `unknown` | — |  |
-| `eos_token_id` | `unknown` | — |  |
+| `pad_token_id` | `unknown` | - |  |
+| `bos_token_id` | `unknown` | - |  |
+| `eos_token_id` | `unknown` | - |  |
 | `encoder_no_repeat_ngram_size` | `int` | `0` |  |
-| `decoder_start_token_id` | `unknown` | — |  |
+| `decoder_start_token_id` | `unknown` | - |  |
 | `is_assistant` | `bool` | `false` |  |
 | `num_assistant_tokens` | `int` | `20` |  |
 | `num_assistant_tokens_schedule` | `str` | `constant` |  |
 | `assistant_confidence_threshold` | `float` | `0.4` |  |
-| `prompt_lookup_num_tokens` | `unknown` | — |  |
-| `max_matching_ngram_size` | `unknown` | — |  |
-| `assistant_early_exit` | `unknown` | — |  |
+| `prompt_lookup_num_tokens` | `unknown` | - |  |
+| `max_matching_ngram_size` | `unknown` | - |  |
+| `assistant_early_exit` | `unknown` | - |  |
 | `assistant_lookbehind` | `int` | `10` |  |
 | `target_lookbehind` | `int` | `10` |  |
 | `disable_compile` | `bool` | `false` |  |
-| `low_memory` | `unknown` | — |  |
-| `penalty_alpha` | `unknown` | — |  |
-| `dola_layers` | `unknown` | — |  |
+| `low_memory` | `unknown` | - |  |
+| `penalty_alpha` | `unknown` | - |  |
+| `dola_layers` | `unknown` | - |  |
 | `diversity_penalty` | `float` | `0.0` |  |
 | `num_beam_groups` | `int` | `1` |  |
-| `constraints` | `unknown` | — |  |
-| `force_words_ids` | `unknown` | — |  |
+| `constraints` | `unknown` | - |  |
+| `force_words_ids` | `unknown` | - |  |
 | `_from_model_config` | `bool` | `false` |  |
 | `transformers_version` | `str` | `4.57.3` |  |
 

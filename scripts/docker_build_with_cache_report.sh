@@ -36,13 +36,13 @@ cached_steps=$(grep -cE "^#[0-9]+ CACHED$" "${log}" 2>/dev/null || echo 0)
 
 echo
 if [[ "${rc}" -ne 0 ]]; then
-    echo "✗ ${engine} build FAILED after ${human} (exit ${rc}) — see ${log}"
+    echo "✗ ${engine} build FAILED after ${human} (exit ${rc}) - see ${log}"
 elif [[ "${imported}" -gt 0 && "${cached_steps}" -gt 0 ]]; then
-    echo "✓ ${engine} build: ${human} — GHCR cache imported, ${cached_steps} layers reused"
+    echo "✓ ${engine} build: ${human} - GHCR cache imported, ${cached_steps} layers reused"
 elif [[ "${imported}" -gt 0 ]]; then
-    echo "✓ ${engine} build: ${human} — GHCR cache reachable but no layers reused (source changed)"
+    echo "✓ ${engine} build: ${human} - GHCR cache reachable but no layers reused (source changed)"
 else
-    echo "⚠ ${engine} build: ${human} — no GHCR cache imported (cold build)"
+    echo "⚠ ${engine} build: ${human} - no GHCR cache imported (cold build)"
     echo "  see docs/troubleshooting.md → 'Docker rebuild is slow' for diagnosis"
 fi
 

@@ -1,4 +1,4 @@
-"""StudyRunner — subprocess dispatch core for experiment isolation.
+"""StudyRunner - subprocess dispatch core for experiment isolation.
 
 Each experiment in a study runs in a freshly spawned subprocess with a clean CUDA
 context. Results travel parent←child via multiprocessing.Pipe. The parent survives
@@ -195,7 +195,7 @@ def _save_and_record(
                         _json.dumps(_payload, indent=2, default=str),
                         result_path.parent / "config.json",
                     )
-                except Exception as exc:  # pragma: no cover — best-effort
+                except Exception as exc:  # pragma: no cover - best-effort
                     import logging as _logging
 
                     _logging.getLogger(__name__).debug("config.json sidecar move failed: %s", exc)
@@ -498,7 +498,7 @@ def _collect_result(
     config_hash = compute_declared_config_hash(config)
 
     if p.is_alive():
-        # Timed out — kill with SIGKILL
+        # Timed out - kill with SIGKILL
         # SIGKILL: SIGTERM may be ignored by hung CUDA operations
         _kill_process_group(p.pid, signal.SIGKILL)
         p.join()
@@ -509,7 +509,7 @@ def _collect_result(
         }
 
     if p.exitcode != 0:
-        # Non-zero exit — try to read error payload from pipe
+        # Non-zero exit - try to read error payload from pipe
         # Use pre-drained payload if available; otherwise poll/recv
         if pipe_payload is not _UNSET:
             payload = pipe_payload
@@ -531,7 +531,7 @@ def _collect_result(
             "config_hash": config_hash,
         }
 
-    # Success path — use pre-drained payload if available
+    # Success path - use pre-drained payload if available
     if pipe_payload is not _UNSET:
         try:
             payload = pipe_payload
@@ -578,7 +578,7 @@ def _collect_result(
 class StudyRunner:
     """Dispatcher: runs each experiment in a freshly spawned subprocess.
 
-    Uses multiprocessing.get_context('spawn') — never fork.
+    Uses multiprocessing.get_context('spawn') - never fork.
     Results travel via Pipe. Failures are structured and non-fatal.
     Handles SIGINT (Ctrl+C) with two-stage escalation: SIGTERM → 2s grace → SIGKILL.
     """
@@ -612,13 +612,13 @@ class StudyRunner:
         # Built from study.experiments (post-dedup unique configs) so _save_and_record
         # can patch the resolved_config_hash into each config.json sidecar.
         self._resolved_hashes: dict[str, str] = self._build_resolved_hashes(study)
-        # SIGINT state — initialised here, set live in run()
+        # SIGINT state - initialised here, set live in run()
         self._interrupt_event: threading.Event = threading.Event()
         self._active_process: Any = None  # multiprocessing.Process | None
         self._interrupt_count: int = 0
-        # Per-config_hash cycle counters — reset at the start of each run()
+        # Per-config_hash cycle counters - reset at the start of each run()
         self._cycle_counters: dict[str, int] = {}
-        # Study-level environment snapshot cache — collected once, reused across experiments
+        # Study-level environment snapshot cache - collected once, reused across experiments
         self._env_snapshot_future: Future[EnvironmentSnapshot] | None = None
         # Study-level baseline cache, keyed per runner target ("local" or
         # "image_<sanitized>") so multi-engine studies don't cross-contaminate.
@@ -648,7 +648,7 @@ class StudyRunner:
 
         Note: study.experiments is already the fully-ordered execution sequence produced
         by apply_cycles() in load_study_config(). The runner must not call apply_cycles()
-        again — doing so would multiply the count by n_cycles a second time.
+        again - doing so would multiply the count by n_cycles a second time.
         """
         from llenergymeasure.domain.experiment import compute_declared_config_hash
         from llenergymeasure.study.circuit_breaker import CircuitBreaker
@@ -657,7 +657,7 @@ class StudyRunner:
         ordered = self.study.experiments
 
         # n_unique: count of distinct configs (for cycle-gap detection).
-        # Do not use len(ordered) — that includes repetitions.
+        # Do not use len(ordered) - that includes repetitions.
         seen_hashes = {compute_declared_config_hash(c) for c in self.study.experiments}
         n_unique = len(seen_hashes)
 
@@ -681,7 +681,7 @@ class StudyRunner:
                 if self._active_process is not None and self._active_process.is_alive():
                     _kill_process_group(
                         self._active_process.pid, signal.SIGTERM
-                    )  # SIGTERM — gentle first attempt
+                    )  # SIGTERM - gentle first attempt
             else:
                 print("\nForce-killing experiment subprocess...")
                 if self._active_process is not None and self._active_process.is_alive():
@@ -798,7 +798,7 @@ class StudyRunner:
                         # Next loop iteration is the probe experiment.
 
                     elif action == "abort":
-                        # Probe failed — abort the study immediately.
+                        # Probe failed - abort the study immediately.
                         self._mark_remaining_skipped(ordered, i + 1, compute_declared_config_hash)
                         self.manifest.mark_study_circuit_breaker()
                         logger.error("Circuit breaker: probe experiment failed, aborting study")
@@ -813,7 +813,7 @@ class StudyRunner:
             # Mark study completed on clean exit (no interrupt, timeout, or circuit break).
             if not self._interrupt_event.is_set() and not _aborted:
                 self.manifest.mark_study_completed()
-                # Write equivalence_groups.json — post-run observed-config-hash groups.
+                # Write equivalence_groups.json - post-run observed-config-hash groups.
                 self._write_equivalence_groups_sidecar()
 
         finally:
@@ -846,7 +846,7 @@ class StudyRunner:
         - Post-run observed-config-hash collision groups built by scanning all ``config.json``
           sidecars in the study directory.
 
-        Best-effort — failures are logged at DEBUG to avoid masking study results.
+        Best-effort - failures are logged at DEBUG to avoid masking study results.
         """
         try:
             import json as _json
@@ -909,7 +909,7 @@ class StudyRunner:
         computes each experiment's resolved hash via the same resolved-config
         pipeline used at sweep-expansion time.
 
-        Returns an empty dict on any failure — _save_and_record treats a
+        Returns an empty dict on any failure - _save_and_record treats a
         missing resolved_config_hash as best-effort and writes ``None``.
         """
         try:
@@ -1107,7 +1107,7 @@ class StudyRunner:
                 self._progress.on_substep_done(
                     STEP_BASELINE,
                     text=(
-                        f"measurement failed after {elapsed:.1f}s — see log warnings "
+                        f"measurement failed after {elapsed:.1f}s - see log warnings "
                         f"(experiment container will re-measure fresh)"
                     ),
                     elapsed_sec=elapsed,
@@ -1188,7 +1188,7 @@ class StudyRunner:
         inside ``measure_baseline_power``). This answers "why did a 30s
         measurement take 37.7s?" without the user having to dig through logs.
 
-        For in-memory and disk-loaded reuse we only emit the result summary —
+        For in-memory and disk-loaded reuse we only emit the result summary -
         there is no sampling window to describe.
         """
         if self._progress is None:
@@ -1239,7 +1239,7 @@ class StudyRunner:
 
         Args:
             config: Experiment config with baseline settings.
-            cache_key: "local" or "image_<slug>" — chooses dispatch path.
+            cache_key: "local" or "image_<slug>" - chooses dispatch path.
             on_stage: Optional callback forwarded to ``run_baseline_container``
                 for streaming stage markers. Ignored on the local path (there
                 is no subprocess to stream from).
@@ -1428,7 +1428,7 @@ class StudyRunner:
                     raise mismatch_error
                 continue
 
-            # Image not found locally — try to pull
+            # Image not found locally - try to pull
             logger.info("Image %s not found locally, pulling...", image)
             try:
                 pull = subprocess.run(
@@ -1583,7 +1583,7 @@ class StudyRunner:
 
         if status in (SchemaStatus.UNVERIFIED, SchemaStatus.UNREACHABLE):
             logger.warning(
-                "Image %s has no %s label — schema skew check skipped "
+                "Image %s has no %s label - schema skew check skipped "
                 "(image predates the handshake feature; rebuild to enable)",
                 image,
                 LABEL_SCHEMA_FINGERPRINT,
@@ -1640,7 +1640,7 @@ class StudyRunner:
         self._cycle_counters[config_hash] = current
         cycle = current
 
-        # Docker dispatch path — check runner spec for this engine
+        # Docker dispatch path - check runner spec for this engine
         spec = self._runner_specs.get(config.engine) if self._runner_specs else None
         if spec is not None and spec.mode == RUNNER_DOCKER:
             return self._run_one_docker(
@@ -1669,10 +1669,10 @@ class StudyRunner:
         save_ts = self.study.output.save_timeseries
         ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES)) if save_ts else None
 
-        # Resolve cached snapshot in parent — serialised to subprocess via Pipe
+        # Resolve cached snapshot in parent - serialised to subprocess via Pipe
         snapshot = self._get_env_snapshot()
 
-        # Resolve cached baseline in parent — avoids 30s re-measurement per subprocess
+        # Resolve cached baseline in parent - avoids 30s re-measurement per subprocess
         baseline = self._get_baseline(config) if config.measurement.baseline.enabled else None
 
         parent_conn, child_conn = mp_ctx.Pipe(duplex=False)
@@ -1713,7 +1713,7 @@ class StudyRunner:
 
         # Drain pipe BEFORE join to prevent buffer deadlock (H5).
         # If pickled ExperimentResult > 64 KB, child blocks on conn.send()
-        # while parent blocks in p.join() — classic deadlock.
+        # while parent blocks in p.join() - classic deadlock.
         pipe_payload = _UNSET
         if parent_conn.poll(timeout=timeout):
             try:
@@ -1734,14 +1734,14 @@ class StudyRunner:
 
         self._active_process = None
 
-        # Sentinel stops consumer thread — covers SIGKILL path too
+        # Sentinel stops consumer thread - covers SIGKILL path too
         progress_queue.put(None)
         consumer.join()
 
         result = _collect_result(p, parent_conn, config, timeout, pipe_payload=pipe_payload)
         parent_conn.close()
 
-        # Parent writes the sentinel record for SIGKILL / timeout — the
+        # Parent writes the sentinel record for SIGKILL / timeout - the
         # worker's context manager can't flush when its ``__exit__`` never
         # ran. ``write_sentinel`` is itself best-effort and swallows OSError.
         if isinstance(result, dict) and result.get("type") in {
@@ -1867,7 +1867,7 @@ class StudyRunner:
     ) -> Any:
         """Dispatch one experiment to a Docker container via DockerRunner.
 
-        Blocking dispatch — no subprocess or thread overhead.
+        Blocking dispatch - no subprocess or thread overhead.
         DockerErrors are caught and converted to non-fatal failure dicts so the
         study continues even when a container fails.
 
@@ -1922,7 +1922,7 @@ class StudyRunner:
                 steps,
                 runner_info=spec.to_runner_info(),
             )
-            # Host-side preflight doesn't run in Docker path — checked inside container
+            # Host-side preflight doesn't run in Docker path - checked inside container
             self._progress.on_step_skip("preflight", "checked inside container")
 
         extra_mounts = list(spec.extra_mounts) if spec.extra_mounts else []
@@ -1960,7 +1960,7 @@ class StudyRunner:
         result: Any
         docker_ts_dir: Path | None = None
         try:
-            # Pass study progress as step callback — DockerRunner calls on_step_*
+            # Pass study progress as step callback - DockerRunner calls on_step_*
             # skip_image_check=True when images were verified at study level.
             result, docker_ts_dir = docker_runner.run(
                 config,

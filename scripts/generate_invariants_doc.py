@@ -71,7 +71,7 @@ def _invariant_summary(invariant: dict[str, Any]) -> str:
     under_test = str(under_test).replace("\n", " ").strip()
     if len(under_test) > 100:
         under_test = under_test[:97] + "..."
-    return f"- `{invariant_id}` [{severity}] — {under_test}"
+    return f"- `{invariant_id}` [{severity}] - {under_test}"
 
 
 def _group_by_added_by(invariants: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:

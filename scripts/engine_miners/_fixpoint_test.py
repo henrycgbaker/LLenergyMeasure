@@ -2,10 +2,10 @@
 
 Enforces three invariants the dormant library-resolution mechanism will depend on:
 
-1. **Idempotent** — applying the same invariant twice leaves the state unchanged.
-2. **Order-independent at fixpoint** — multiple random application orderings
+1. **Idempotent** - applying the same invariant twice leaves the state unchanged.
+2. **Order-independent at fixpoint** - multiple random application orderings
    converge to the same canonical form.
-3. **Cycle-free** — no invariant pair alternates values indefinitely.
+3. **Cycle-free** - no invariant pair alternates values indefinitely.
 
 The test operates on a declarative projection: a dormant invariant declares
 ``normalised_fields`` in ``expected_outcome``, and the "fix" is setting each
@@ -37,7 +37,7 @@ order-dependence without false-positive cycle detection.
 """
 
 _DEFAULT_SHUFFLE_COUNT = 5
-"""Number of random orderings to try per input state — empirically enough to
+"""Number of random orderings to try per input state - empirically enough to
 catch cycles without meaningfully slowing CI. Raise via ``shuffle_count`` if
 a future corpus exhibits rare order-dependent modes."""
 
@@ -116,12 +116,12 @@ class _ProjectedInvariant:
 
 
 def _evaluate(actual: Any, spec: Any) -> bool:
-    """Minimal predicate evaluator — supports the operator shapes in the corpus.
+    """Minimal predicate evaluator - supports the operator shapes in the corpus.
 
     Inequality operators (``<`` / ``<=`` / ``>`` / ``>=``) treat type
     mismatches between ``actual`` and the invariant's threshold as "predicate
     does not hold" rather than raising. Cross-invariant seed pollution is
-    real — one invariant seeds ``pad_token_id`` with a string sentinel from
+    real - one invariant seeds ``pad_token_id`` with a string sentinel from
     a ``not_in`` predicate, and a second invariant with ``{"<": 0}`` then
     runs against that state. Comparing a string with an int raises in
     Python 3, but the invariant simply does not apply.
@@ -215,7 +215,7 @@ def load_dormant_invariants(corpus: dict[str, Any]) -> list[_ProjectedInvariant]
 def construct_seed_states(invariants: Iterable[_ProjectedInvariant]) -> list[dict[str, Any]]:
     """One representative input state per invariant, sufficient to activate its match.
 
-    Builds the minimal state from each invariant's match predicates — for each
+    Builds the minimal state from each invariant's match predicates - for each
     field, picks a concrete value that satisfies the spec. This keeps the
     fixpoint sweep from needing real ``ExperimentConfig`` objects.
     """
@@ -341,7 +341,7 @@ def fixpoint_test_corpus(
     seeds = construct_seed_states(invariants)
     for invariant, seed in zip(invariants, seeds, strict=False):
         assert_idempotent(invariant, seed)
-    # Shuffle stability runs against each seed — a single failure anywhere
+    # Shuffle stability runs against each seed - a single failure anywhere
     # surfaces the corpus problem regardless of which invariant triggered it.
     for seed in seeds:
         assert_shuffle_stable(invariants, seed, shuffle_count=shuffle_count)

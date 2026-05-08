@@ -79,7 +79,7 @@ class SchemaLoader:
     """Load and cache discovered engine schemas.
 
     Uses a per-instance dict cache (rather than ``functools.lru_cache``) so
-    multiple SchemaLoader instances don't share state — convenient for tests
+    multiple SchemaLoader instances don't share state - convenient for tests
     and for isolating reloads after a schema refresh.
     """
 
@@ -120,7 +120,7 @@ class SchemaLoader:
     def load_all_schemas(self) -> dict[str, DiscoveredSchema]:
         """Load all known engines' schemas.
 
-        Does not skip missing files — every engine in ``_KNOWN_ENGINES`` must
+        Does not skip missing files - every engine in ``_KNOWN_ENGINES`` must
         have a discovered schema. Callers that need tolerance should iterate and
         catch ``FileNotFoundError`` themselves.
         """
@@ -167,7 +167,7 @@ def _parse_envelope(*, engine: str, raw_text: str) -> DiscoveredSchema:
         # discovered envelope (vllm and tensorrt no longer derive it from a
         # first-party Dockerfile). Treat both as "fall back to image_ref"
         # so the loader contract stays "always populated". Empty string is
-        # NOT treated as null — surface it as a config error via the
+        # NOT treated as null - surface it as a config error via the
         # subsequent ``image_ref`` indexing rather than silently masking.
         base_image_ref=(
             data["base_image_ref"] if data.get("base_image_ref") is not None else data["image_ref"]

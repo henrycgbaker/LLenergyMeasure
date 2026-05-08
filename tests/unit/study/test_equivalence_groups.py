@@ -112,7 +112,7 @@ class TestFindObservedCollisions:
             {
                 "engine": "transformers",
                 "library_version": "4.56.0",
-                "resolved_config_hash": "resolved_b",  # Distinct resolved — gap!
+                "resolved_config_hash": "resolved_b",  # Distinct resolved - gap!
                 "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_b",
             },
@@ -122,7 +122,7 @@ class TestFindObservedCollisions:
         assert groups[0].gap_detected is True
 
     def test_no_flag_when_resolved_same(self):
-        # Same resolved-config collapsing on the library side is not a gap — the
+        # Same resolved-config collapsing on the library side is not a gap - the
         # library-resolution mechanism already saw them as equivalent.
         sidecars = [
             {
@@ -182,7 +182,7 @@ class TestFindObservedCollisions:
             },
         ]
         groups = find_observed_collisions(sidecars)
-        # Version mismatch — grouped separately, each with len=1, so no gap.
+        # Version mismatch - grouped separately, each with len=1, so no gap.
         assert groups == []
 
     def test_sidecar_missing_observed_skipped(self):

@@ -1,7 +1,7 @@
-"""Unit tests for cli/report_gaps.py — Typer smoke tests.
+"""Unit tests for cli/report_gaps.py - Typer smoke tests.
 
 All tests use ``typer.testing.CliRunner``. Fixture study dirs are built
-through the same helpers as ``tests/unit/api/test_report_gaps.py`` — we
+through the same helpers as ``tests/unit/api/test_report_gaps.py`` - we
 stay deliberately close to the real JSONL shape so a future schema bump
 surfaces here too.
 """
@@ -90,7 +90,7 @@ def test_report_gaps_empty_emits_no_file(tmp_path: Path) -> None:
     """When no gaps are found the CLI does not write the out file and exits 0."""
     study = tmp_path / "empty-study"
     study.mkdir()
-    # Create the JSONL file but with no emissions — no templates → no gaps.
+    # Create the JSONL file but with no emissions - no templates → no gaps.
     _write_jsonl_record(study, config_hash=_fake_hash("empty"), warnings_emitted=[])
 
     out = tmp_path / "proposals.yaml"

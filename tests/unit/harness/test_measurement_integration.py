@@ -1,6 +1,6 @@
 """Unit tests for measurement integration: timeseries, warnings, and TransformersEngine wiring.
 
-All tests are mocked — no GPU or real model required.
+All tests are mocked - no GPU or real model required.
 """
 
 from __future__ import annotations
@@ -206,7 +206,7 @@ def test_warnings_low_sample_count() -> None:
 def test_warnings_clean_measurement() -> None:
     """With nvml_sample_count > 0, only the throttle-subsampling methodology warning fires.
 
-    The throttle-subsampling warning is always present when NVML is active — it is an
+    The throttle-subsampling warning is always present when NVML is active - it is an
     all other conditions optimal and nvml_sample_count=600, no warnings fire.
     """
     warnings = collect_measurement_warnings(

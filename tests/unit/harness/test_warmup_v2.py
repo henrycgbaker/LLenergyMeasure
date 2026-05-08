@@ -90,7 +90,7 @@ def test_warmup_config_max_prompts_default() -> None:
 
 
 # =============================================================================
-# warmup_until_converged — fixed mode
+# warmup_until_converged - fixed mode
 # =============================================================================
 
 
@@ -128,7 +128,7 @@ def test_warmup_fixed_mode_respects_n_warmup() -> None:
 
 
 # =============================================================================
-# warmup_until_converged — CV mode
+# warmup_until_converged - CV mode
 # =============================================================================
 
 
@@ -171,7 +171,7 @@ def test_warmup_disabled_skips() -> None:
 
 
 # =============================================================================
-# warmup_until_converged — on_substep callback
+# warmup_until_converged - on_substep callback
 # =============================================================================
 
 
@@ -239,7 +239,7 @@ def test_warmup_substep_callback_no_progress_without_callback() -> None:
 
 
 # =============================================================================
-# WarmupResult — thermal_floor_wait_s field
+# WarmupResult - thermal_floor_wait_s field
 # =============================================================================
 
 

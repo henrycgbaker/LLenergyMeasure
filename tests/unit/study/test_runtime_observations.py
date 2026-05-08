@@ -95,7 +95,7 @@ class TestEngineLoggerName:
 
 
 # ---------------------------------------------------------------------------
-# Success path — empty record
+# Success path - empty record
 # ---------------------------------------------------------------------------
 
 
@@ -368,7 +368,7 @@ class TestSentinel:
             raise OSError("disk-full")
 
         monkeypatch.setattr("llenergymeasure.study.runtime_observations.os.open", _boom)
-        # Must not raise — feedback loop never fails a study.
+        # Must not raise - feedback loop never fails a study.
         write_sentinel(
             cfg,
             study_dir=tmp_path,
@@ -414,7 +414,7 @@ class TestCacheWriteResilience:
 
 
 def _spawn_target(study_dir: str, study_run_id: str, cycle: int, config_hash: str) -> None:
-    """Run inside a spawned child — imports everything from scratch.
+    """Run inside a spawned child - imports everything from scratch.
 
     Emits one warning and one log record through each channel, then exits.
     """

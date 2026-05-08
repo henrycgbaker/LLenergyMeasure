@@ -1,4 +1,4 @@
-"""Unit tests for api/report_gaps.py — predicate inference, partitioning, YAML round-trip.
+"""Unit tests for api/report_gaps.py - predicate inference, partitioning, YAML round-trip.
 
 All tests synthesise fixture study directories under ``tmp_path``. No GPU, no
 real JSONL from a live run. JSONL schema matches
@@ -123,7 +123,7 @@ def test_predicate_inference_range_fails_safely() -> None:
         {"temperature": 1.0, "top_p": 1.0},
     ]
     # Every collision_configs config has a distinct temperature, so no single tuple is
-    # shared — arity-1, 2, 3 all fail. present:true fallback is also False
+    # shared - arity-1, 2, 3 all fail. present:true fallback is also False
     # because top_p is set in both partitions.
     assert _infer_predicate(collision_configs, contrast_configs) is None
     evidence = _field_value_distribution(collision_configs, contrast_configs)
@@ -163,7 +163,7 @@ def test_sentinel_records_excluded_from_b(tmp_path: Path) -> None:
     study.mkdir()
 
     # 2 collision_configs configs + 1 not-collision_configs, all on do_sample=False.
-    # Sentinel config has do_sample=False too — would collide with collision_configs if B included it.
+    # Sentinel config has do_sample=False too - would collide with collision_configs if B included it.
     hashes = {
         "fire_a": _fake_hash("fire_a"),
         "fire_b": _fake_hash("fire_b"),
@@ -210,7 +210,7 @@ def test_sentinel_records_excluded_from_b(tmp_path: Path) -> None:
     assert len(gaps) == 1
     gap = gaps[0]
     assert gap.collision_count == 2
-    # B partition contains only the notfire config — the sentinel is excluded.
+    # B partition contains only the notfire config - the sentinel is excluded.
     assert gap.contrast_count == 1
     assert gap.match_fields == {"do_sample": False}
 
@@ -301,7 +301,7 @@ def test_engine_filter(tmp_path: Path) -> None:
         warnings_emitted=["vllm-only warning"],
     )
 
-    # No corpus for vllm — engines without a corpus still allow proposals
+    # No corpus for vllm - engines without a corpus still allow proposals
     # through (the loader returns no suppressing invariant).
     gaps = find_runtime_gaps([study], engine_invariants={}, engine="vllm")
     assert len(gaps) == 1

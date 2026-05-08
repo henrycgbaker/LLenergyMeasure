@@ -13,7 +13,7 @@ Used by:
 Coverage scope
 --------------
 Plain ``@dataclasses.dataclass`` carries **no numeric-bound metadata** by
-default — bounds aren't part of the dataclass spec. The only structural axis
+default - bounds aren't part of the dataclass spec. The only structural axis
 the lift can derive from a stdlib dataclass is:
 
 - ``Literal[a, b, c]`` annotations → value-allowlist invariants.
@@ -24,7 +24,7 @@ the lift can derive from a stdlib dataclass is:
 
 If a target dataclass mixes in ``annotated-types`` constraints via
 ``Annotated[int, Gt(0)]`` (rare but valid), this lift treats them as opaque
-type metadata — those constraints belong in the ``_pydantic_lift`` /
+type metadata - those constraints belong in the ``_pydantic_lift`` /
 ``_msgspec_lift`` paths if the library uses one of those frameworks.
 
 Determinism
@@ -101,7 +101,7 @@ def lift(
 
     # Use ``get_type_hints`` so string annotations from
     # ``from __future__ import annotations`` resolve to real types. ``field.type``
-    # alone is a string under PEP 563 — ``Literal[...]`` would not parse.
+    # alone is a string under PEP 563 - ``Literal[...]`` would not parse.
     try:
         hints = get_type_hints(target_type, include_extras=True)
     except Exception:
@@ -162,7 +162,7 @@ def _build_literal(
             "normalised_fields": [],
         },
         message_template=f"`{field_name}` must be one of {list(values)!r}",
-        references=[f"{library}.{type_name} — dataclass Literal annotation"],
+        references=[f"{library}.{type_name} - dataclass Literal annotation"],
         added_by="dataclass_lift",
         added_at=today,
     )

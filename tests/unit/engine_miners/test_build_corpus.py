@@ -3,7 +3,7 @@
 The merger orchestrates the per-engine staging extractors, dedups by
 fingerprint with cross-validation provenance, and emits the canonical
 :file:`src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`. These tests exercise each
-contract behaviour in isolation against synthetic staging files — no live
+contract behaviour in isolation against synthetic staging files - no live
 extractors, no real library dependencies.
 
 Coverage:
@@ -115,7 +115,7 @@ def _introspection_rule(
             **({"observed_messages": observed_messages} if observed_messages else {}),
         },
         "message_template": message,
-        "references": ["transformers.GenerationConfig — observed via construction-time ValueError"],
+        "references": ["transformers.GenerationConfig - observed via construction-time ValueError"],
         "added_by": "dynamic_miner",
         "added_at": "2026-04-25",
     }
@@ -181,7 +181,7 @@ class TestFingerprint:
 
     def test_fingerprint_excludes_id_and_message(self) -> None:
         # Two invariants with the same constraint but different ids / messages
-        # still bucket together — the corpus is about the constraint.
+        # still bucket together - the corpus is about the constraint.
         invariant_a = _ast_rule(invariant_id="foo", message="msg A")
         invariant_b = _ast_rule(invariant_id="bar", message="msg B")
         assert build_corpus.fingerprint_invariant(
@@ -394,7 +394,7 @@ class TestStability:
         # LLENERGY_MINER_FROZEN_AT is set, the merged envelope's ``mined_at``
         # MUST equal that exact value, regardless of staging timestamps. This
         # is the anchor that keeps re-runs on unchanged source byte-identical
-        # — without it the workflow's commit-back synchronize-loops.
+        # - without it the workflow's commit-back synchronize-loops.
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(
             staging,
@@ -463,7 +463,7 @@ class TestCheckMode:
         _write_staging(
             staging,
             "transformers_static_miner.yaml",
-            _envelope([_ast_rule(message="Different message — drift!")]),
+            _envelope([_ast_rule(message="Different message - drift!")]),
         )
         code, diff = build_corpus.check_drift("transformers", tmp_path, skip_validation=True)
         assert code == 1
@@ -472,7 +472,7 @@ class TestCheckMode:
     def test_check_returns_2_when_canonical_corpus_missing(self, tmp_path: Path) -> None:
         staging = tmp_path / "transformers" / "_staging"
         _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
-        # No write_corpus call — canonical YAML missing.
+        # No write_corpus call - canonical YAML missing.
         code, msg = build_corpus.check_drift("transformers", tmp_path, skip_validation=True)
         assert code == 2
         assert "not found" in msg
@@ -490,7 +490,7 @@ class TestEmptyStaging:
 
     def test_no_staging_does_not_touch_existing_corpus(self, tmp_path: Path) -> None:
         # A pre-existing corpus must NOT be wiped if the merger fails to
-        # find staging — the canonical file stays untouched.
+        # find staging - the canonical file stays untouched.
         canonical = tmp_path / "transformers" / "invariants.proposed.yaml"
         canonical.parent.mkdir(parents=True, exist_ok=True)
         canonical.write_text("schema_version: 1.0.0\nengine: transformers\nrules: []\n")
@@ -502,7 +502,7 @@ class TestEmptyStaging:
 
 
 # ---------------------------------------------------------------------------
-# Loader round-trip — cross_validated_by parses correctly
+# Loader round-trip - cross_validated_by parses correctly
 # ---------------------------------------------------------------------------
 
 
@@ -525,7 +525,7 @@ class TestLoaderRoundTrip:
 
     def test_loader_rejects_unknown_cross_validated_by_value(self, tmp_path: Path) -> None:
         # Bypass the merger's single-source normalisation by writing a
-        # corpus YAML directly with a bad cross_validated_by entry — the
+        # corpus YAML directly with a bad cross_validated_by entry - the
         # loader must reject it, since the closed-enum guard is the
         # whole point of validating cross-validation provenance.
         from llenergymeasure.config.engine_invariants import UnknownAddedByError
@@ -576,7 +576,7 @@ class TestAddedAtPreservation:
     def test_preserve_added_at_keeps_today_when_no_match(self) -> None:
         invariant = _ast_rule()
         invariant["added_at"] = "2026-04-30"
-        # Different fingerprint in prior — no match expected.
+        # Different fingerprint in prior - no match expected.
         other = _ast_rule(fields={"transformers.sampling.top_p": {"<": 0.0}})
         prior = {build_corpus.fingerprint_invariant(other): "2026-04-01"}
         build_corpus._preserve_added_at([invariant], prior)
@@ -627,7 +627,7 @@ def _stub_validate_engine(
 ):
     """Return a callable mirroring :func:`scripts.validate_invariants.validate_engine`.
 
-    The stub doesn't run the real library — it returns synthetic divergences
+    The stub doesn't run the real library - it returns synthetic divergences
     keyed off invariant ids. Tests monkeypatch ``scripts.validate_invariants.validate_engine``
     onto this stub so the merger's validation wiring runs without needing the
     transformers package available in the test environment.
@@ -724,7 +724,7 @@ class TestVendorValidationGate:
         import scripts.validate_invariants as vr
 
         # If validate_engine were called, this stub would mark ALL invariants as
-        # divergent — but skip_validation should prevent the call entirely.
+        # divergent - but skip_validation should prevent the call entirely.
         monkeypatch.setattr(
             vr,
             "validate_engine",

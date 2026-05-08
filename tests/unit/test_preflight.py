@@ -1,7 +1,7 @@
 """GPU-free unit tests for the pre-flight validation module.
 
 All tests run without a GPU. torch, pynvml, and huggingface_hub are never
-directly imported — access is always via monkeypatch.
+directly imported - access is always via monkeypatch.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def test_preflight_passes_when_all_ok(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test: collect-all pattern — multiple failures reported in one error
+# Test: collect-all pattern - multiple failures reported in one error
 # ---------------------------------------------------------------------------
 
 
@@ -136,7 +136,7 @@ def test_preflight_gated_model(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         llenergymeasure.harness.preflight,
         "_check_model_accessible",
-        lambda model_id: f"{model_id} gated model — no HF_TOKEN → export HF_TOKEN=<your_token>",
+        lambda model_id: f"{model_id} gated model - no HF_TOKEN → export HF_TOKEN=<your_token>",
     )
 
     config = make_config(model="meta-llama/Llama-2-7b-hf")
@@ -182,7 +182,7 @@ def test_preflight_local_model_path(monkeypatch: pytest.MonkeyPatch, tmp_path: P
         llenergymeasure.harness.preflight, "_warn_if_persistence_mode_off", lambda: None
     )
 
-    # Provide a real path — shouldn't raise
+    # Provide a real path - shouldn't raise
     config = make_config(model=str(tmp_path))
     run_preflight(config)  # Should not raise
 
@@ -198,7 +198,7 @@ def test_preflight_local_model_missing(monkeypatch: pytest.MonkeyPatch) -> None:
         llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
     )
 
-    # Do NOT monkeypatch _check_model_accessible — use real implementation
+    # Do NOT monkeypatch _check_model_accessible - use real implementation
     non_existent = "/definitely/does/not/exist/model"
     config = make_config(model=non_existent)
     with pytest.raises(PreFlightError) as exc_info:
@@ -225,7 +225,7 @@ def test_preflight_persistence_mode_warning_not_blocking(
         llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None
     )
 
-    # Simulate pynvml reporting persistence mode off — do NOT reload the module.
+    # Simulate pynvml reporting persistence mode off - do NOT reload the module.
     # Instead we mock _warn_if_persistence_mode_off to log the expected warning.
     def fake_warn() -> None:
         logging.getLogger("llenergymeasure.harness.preflight").warning(
@@ -558,7 +558,7 @@ def test_run_preflight_handles_engine_import_error(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr("llenergymeasure.engines.get_engine", raise_error)
 
     config = ExperimentConfig(task={"model": "test-model"}, engine="tensorrt")
-    # Should not raise — the try/except in preflight catches ImportError from get_engine
+    # Should not raise - the try/except in preflight catches ImportError from get_engine
     run_preflight(config)
 
 
@@ -591,12 +591,12 @@ def test_run_preflight_hardware_errors_counted_correctly(
 
 
 # ---------------------------------------------------------------------------
-# get_compute_capability — basic contract test
+# get_compute_capability - basic contract test
 # ---------------------------------------------------------------------------
 
 
 def test_get_compute_capability_returns_tuple_or_none() -> None:
-    """get_compute_capability returns (major, minor) tuple or None — never raises."""
+    """get_compute_capability returns (major, minor) tuple or None - never raises."""
     from llenergymeasure.device.gpu_info import get_compute_capability
 
     result = get_compute_capability()

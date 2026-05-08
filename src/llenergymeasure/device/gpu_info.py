@@ -39,7 +39,7 @@ def nvml_context() -> Generator[None, None, None]:
         finally:
             pynvml.nvmlShutdown()
     except Exception:
-        yield  # pynvml absent or nvmlInit failed — caller proceeds without NVML
+        yield  # pynvml absent or nvmlInit failed - caller proceeds without NVML
 
 
 @dataclass
@@ -563,7 +563,7 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
         and config.transformers is not None
         and config.transformers.device_map is not None
     ):
-        # Model will shard across all visible GPUs — measure all of them.
+        # Model will shard across all visible GPUs - measure all of them.
         # Best-effort: if pynvml is absent or no NVIDIA GPU, fall through to [0].
         try:
             import pynvml
@@ -573,5 +573,5 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
             if count > 1:
                 return list(range(count))
         except Exception:
-            pass  # pynvml absent or no NVIDIA GPU — fall through to [0]
+            pass  # pynvml absent or no NVIDIA GPU - fall through to [0]
     return [0]

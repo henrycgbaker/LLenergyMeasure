@@ -142,7 +142,7 @@ class TestRunContainerExperiment:
 
 
 # ---------------------------------------------------------------------------
-# Error handling — main() writes error JSON on failure
+# Error handling - main() writes error JSON on failure
 # ---------------------------------------------------------------------------
 
 
@@ -408,7 +408,7 @@ class TestContainerBaselineLoading:
 
 
 # ---------------------------------------------------------------------------
-# __main__ guard — MPI safety contract
+# __main__ guard - MPI safety contract
 # ---------------------------------------------------------------------------
 
 

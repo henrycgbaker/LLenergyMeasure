@@ -63,7 +63,7 @@ def test_lift_returns_empty_on_non_dataclass() -> None:
     """Edge case: non-dataclass yields ``[]``.
 
     This is the contract that lets ``transformers_dynamic_miner.py`` call
-    ``_dataclass_lift(GenerationConfig)`` without raising — the lift just
+    ``_dataclass_lift(GenerationConfig)`` without raising - the lift just
     no-ops on non-dataclass targets.
     """
 

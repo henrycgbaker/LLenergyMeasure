@@ -1,4 +1,4 @@
-"""Unit tests for cli/_step_display.py — StepDisplay and StudyStepDisplay.
+"""Unit tests for cli/_step_display.py - StepDisplay and StudyStepDisplay.
 
 All tests run GPU-free. Uses mock Console for predictable output.
 """
@@ -379,7 +379,7 @@ def test_study_display_finish_total_elapsed_parameter():
     """finish(total_elapsed=...) uses the provided value, not the internal clock."""
     console, buf = _make_console()
     display = StudyStepDisplay(total_experiments=1, console=console)
-    # Never call start() — simulate post-hoc construction
+    # Never call start() - simulate post-hoc construction
     display.end_experiment_ok(1, elapsed=10.0)
     display.finish(total_elapsed=15.5)
 
@@ -521,7 +521,7 @@ def test_substep_non_tty_prints_immediately():
     display.on_substep("measure", "CUDA sync (pre)")
     display.on_substep("measure", "energy tracker started")
 
-    # Check output BEFORE step is done — substeps should already be printed
+    # Check output BEFORE step is done - substeps should already be printed
     mid_output = buf.getvalue()
     assert "· CUDA sync (pre)" in mid_output
     assert "· energy tracker started" in mid_output
@@ -818,7 +818,7 @@ def test_image_prep_failure_named_fields():
 
 
 # ---------------------------------------------------------------------------
-# mj_per_tok fallback removal — null mj_per_tok shows "-", no recomputation
+# mj_per_tok fallback removal - null mj_per_tok shows "-", no recomputation
 # ---------------------------------------------------------------------------
 
 

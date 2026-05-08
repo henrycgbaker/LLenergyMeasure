@@ -184,7 +184,7 @@ jobs:
           fi
           echo "date=${DATE}" >> "$GITHUB_OUTPUT"
 
-      - name: Probe — landmark resolution check (in container)
+      - name: Probe - landmark resolution check (in container)
         id: probe
         env:
           IMAGE: ${{ steps.version.outputs.image }}
@@ -348,7 +348,7 @@ jobs:
           echo "classification=${CLASSIFICATION}" >> "$GITHUB_OUTPUT"
 
           {
-            echo "## Engine schemas — ${ENGINE}"
+            echo "## Engine schemas - ${ENGINE}"
             echo
             if [[ "$CLASSIFICATION" == "no-changes" ]]; then
               echo "_No changes to discovered schema._"
@@ -377,7 +377,7 @@ jobs:
         run: |
           {
             echo "<!-- ${MARKER} -->"
-            echo "## Engine schemas — ${ENGINE} (probe-blocked)"
+            echo "## Engine schemas - ${ENGINE} (probe-blocked)"
             echo
             echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
             echo
@@ -389,10 +389,10 @@ jobs:
             echo
             echo "**To unblock,** choose one of:"
             echo
-            echo "- **Patch the introspector module's landmarks** — required when the library has genuinely renamed or removed the missing symbols. The introspector code needs updating to match the new library API."
-            echo "- **Run \`@llem-ci-bot /approve-reuse ${ENGINE} schemas\`** — widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
+            echo "- **Patch the introspector module's landmarks** - required when the library has genuinely renamed or removed the missing symbols. The introspector code needs updating to match the new library API."
+            echo "- **Run \`@llem-ci-bot /approve-reuse ${ENGINE} schemas\`** - widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
             echo
-            echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
+            echo "**The probe is the canonical gate** - \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
           } | scripts/ci/upsert_pr_comment.sh
           gh pr edit "$PR" --add-label "probe-blocked" 2>/dev/null || true
 

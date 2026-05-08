@@ -1,6 +1,6 @@
 """Unit tests for GPU memory residual check.
 
-All tests mock pynvml — no GPU hardware required.
+All tests mock pynvml - no GPU hardware required.
 """
 
 from __future__ import annotations

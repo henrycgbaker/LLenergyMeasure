@@ -94,7 +94,7 @@ def test_get_shared_params_returns_model_field():
 
 
 def test_get_shared_params_does_not_contain_dtype():
-    """get_shared_params() does not expose 'dtype' — it's per-engine."""
+    """get_shared_params() does not expose 'dtype' - it's per-engine."""
     params = get_shared_params()
     assert "dtype" not in params
 
@@ -106,7 +106,7 @@ def test_get_shared_params_contains_n():
 
 
 def test_get_shared_params_no_longer_contains_decoder():
-    """Sampling params live per-engine — they're not in get_shared_params()."""
+    """Sampling params live per-engine - they're not in get_shared_params()."""
     params = get_shared_params()
     assert "decoder.temperature" not in params
     assert "decoder.top_k" not in params

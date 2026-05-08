@@ -1,7 +1,7 @@
 """Tests for :mod:`scripts.engine_miners._base`.
 
 Covers AST primitives, pattern detectors, filters, confidence scoring,
-class/method finders, and structured error types — all on synthetic AST
+class/method finders, and structured error types - all on synthetic AST
 fixtures so the tests never depend on a specific library version.
 """
 
@@ -133,7 +133,7 @@ def test_first_string_arg_fstring_no_python_source_leak() -> None:
 
 
 def test_first_string_arg_format_call_literal_template() -> None:
-    """``"literal {x}".format(...)`` — extract the LHS template literal
+    """``"literal {x}".format(...)`` - extract the LHS template literal
     rather than returning the unparsed call source."""
     call = _parse_expr('logger.warning("val={v}".format(v=1))')
     assert isinstance(call, ast.Call)
@@ -319,7 +319,7 @@ def test_minor_issues_dict_assign_detector() -> None:
 
 
 def test_default_detectors_registered_and_ordered() -> None:
-    # The default bundle ordering matters — walkers that use
+    # The default bundle ordering matters - walkers that use
     # default_detectors() get the most-specific detector first on each
     # statement. Raise before self-assign (so raise+rollback chains are
     # attributed to the raise); minor_issues before generic self-assign

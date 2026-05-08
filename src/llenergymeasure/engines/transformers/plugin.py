@@ -1,4 +1,4 @@
-"""HuggingFace Transformers inference engine — thin EnginePlugin.
+"""HuggingFace Transformers inference engine - thin EnginePlugin.
 
 Implements the 4-method EnginePlugin protocol:
   load_model, warmup, run_inference, cleanup
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class TransformersEngine:
-    """HuggingFace Transformers inference engine — thin plugin.
+    """HuggingFace Transformers inference engine - thin plugin.
 
     Implements EnginePlugin:
     - load_model: Load HuggingFace model + tokenizer, apply torch.compile
@@ -219,7 +219,7 @@ class TransformersEngine:
                     hint="reduce batch_size, use dtype=float16, or use a smaller model.",
                 )
 
-        # Track peak GPU memory (inference window only — reset above)
+        # Track peak GPU memory (inference window only - reset above)
         from llenergymeasure.engines._helpers import get_cuda_peak_memory_mb
 
         peak_memory_mb = get_cuda_peak_memory_mb()
@@ -279,7 +279,7 @@ class TransformersEngine:
 
             gen_cfg = GenerationConfig(**generate_kwargs)
             sampling = extract_observed_params(gen_cfg)
-        except Exception as exc:  # pragma: no cover — best-effort capture
+        except Exception as exc:  # pragma: no cover - best-effort capture
             logger.debug("transformers GenerationConfig capture failed: %s", exc)
 
         engine_params: dict[str, Any] = {}
@@ -289,7 +289,7 @@ class TransformersEngine:
                 bnb = getattr(hf_model, "quantization_config", None)
                 if bnb is not None:
                     engine_params["quantization_config"] = extract_observed_params(bnb)
-            except Exception as exc:  # pragma: no cover — best-effort capture
+            except Exception as exc:  # pragma: no cover - best-effort capture
                 logger.debug("transformers BitsAndBytesConfig capture failed: %s", exc)
 
         return assemble_observed_params(engine_params, sampling, "transformers")
@@ -360,13 +360,13 @@ class TransformersEngine:
         from llenergymeasure.utils.env_config import default_device_map
         from llenergymeasure.utils.security import trust_remote_code_enabled
 
-        # Device placement / tensor parallelism — mutually exclusive
+        # Device placement / tensor parallelism - mutually exclusive
         if pt is not None and pt.tp_plan is not None:
             # Tensor parallelism: tp_plan replaces device_map entirely
             kwargs["tp_plan"] = pt.tp_plan
             if pt.tp_size is not None:
                 kwargs["tp_size"] = pt.tp_size
-            # Do NOT set device_map — TP handles device placement
+            # Do NOT set device_map - TP handles device placement
         elif pt is not None and pt.device_map is not None:
             kwargs["device_map"] = pt.device_map
         else:
@@ -383,7 +383,7 @@ class TransformersEngine:
                     pt.attn_implementation
                 )
 
-            # BitsAndBytes quantization — use BitsAndBytesConfig, not raw kwargs
+            # BitsAndBytes quantization - use BitsAndBytesConfig, not raw kwargs
             if pt.load_in_4bit or pt.load_in_8bit:
                 from transformers import BitsAndBytesConfig
 

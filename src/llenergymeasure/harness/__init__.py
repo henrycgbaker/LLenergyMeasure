@@ -42,14 +42,14 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Module-level helpers (extracted from both engines — byte-identical copies)
+# Module-level helpers (extracted from both engines - byte-identical copies)
 # ---------------------------------------------------------------------------
 
 
 def _cuda_sync() -> None:
     """Synchronise CUDA at measurement boundary.
 
-    Best-effort — failures are non-fatal and silently ignored.
+    Best-effort - failures are non-fatal and silently ignored.
     """
     if importlib.util.find_spec("torch") is not None:
         try:
@@ -58,7 +58,7 @@ def _cuda_sync() -> None:
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
         except Exception:
-            pass  # Non-fatal — best effort sync
+            pass  # Non-fatal - best effort sync
 
 
 def _capture_observed_params_into_output(
@@ -117,7 +117,7 @@ def _check_persistence_mode(gpu_indices: list[int] | None = None) -> bool:
                     return False
         return True
     except Exception:
-        return True  # Unknown — don't generate spurious warning
+        return True  # Unknown - don't generate spurious warning
 
 
 # ---------------------------------------------------------------------------
@@ -270,7 +270,7 @@ class MeasurementHarness:
             if _p:
                 _p.on_substep(step, text, elapsed)
 
-        # 1. Environment snapshot — start background thread (before model loading)
+        # 1. Environment snapshot - start background thread (before model loading)
         snapshot_future: Future[EnvironmentSnapshot] | None = None
         if snapshot is None:
             logger.debug("Collecting environment snapshot (background thread)")
@@ -324,7 +324,7 @@ class MeasurementHarness:
         if _p:
             _p.on_step_done("model", time.perf_counter() - t0)
 
-        # 3b. Join snapshot future — collection hidden behind model loading
+        # 3b. Join snapshot future - collection hidden behind model loading
         if snapshot_future is not None:
             snapshot = snapshot_future.result(timeout=TIMEOUT_ENV_SNAPSHOT)
 
@@ -334,7 +334,7 @@ class MeasurementHarness:
         if model_memory_mb > 0:
             _substep("model", f"model memory: {model_memory_mb:.0f}MB")
 
-        # 4b. Load prompts — BEFORE measurement window (methodology fix)
+        # 4b. Load prompts - BEFORE measurement window (methodology fix)
         if _p:
             _p.on_step_start(
                 "prompts",
@@ -401,7 +401,7 @@ class MeasurementHarness:
                 + (f"  CV={warmup_result.final_cv:.1%}" if warmup_result.final_cv > 0 else ""),
             )
 
-            # 6. Thermal floor — show step before sleeping
+            # 6. Thermal floor - show step before sleeping
             floor_secs = (
                 config.measurement.warmup.thermal_floor_seconds
                 if config.measurement.warmup.enabled
@@ -463,7 +463,7 @@ class MeasurementHarness:
             _substep("measure", "CUDA sync (post)")
 
             # 11a. Capture observed params post-window (outside NVML sampling).
-            # Must run here — model is still alive; capture overhead (~5-50 ms pure
+            # Must run here - model is still alive; capture overhead (~5-50 ms pure
             # Python) must not land inside the PowerThermalSampler context above.
             _capture_observed_params_into_output(engine, config, model, output)
 
@@ -473,7 +473,7 @@ class MeasurementHarness:
             thermal_info = thermal_sampler.get_thermal_throttle_info()
             timeseries_samples = thermal_sampler.get_samples()
 
-            # Harness sets canonical inference timer — overrides engine's elapsed_time_sec
+            # Harness sets canonical inference timer - overrides engine's elapsed_time_sec
             output.inference_time_sec = t_inference_end - t_inference_start
 
             # 12. Stop energy tracking
@@ -581,7 +581,7 @@ class MeasurementHarness:
         ``_save_and_record`` moves this file to the per-experiment directory alongside
         ``result.json``.
 
-        Best-effort — failures are logged at DEBUG to avoid masking measurement results.
+        Best-effort - failures are logged at DEBUG to avoid masking measurement results.
         """
         try:
             from llenergymeasure.domain.hashing import build_observed_view, hash_config
@@ -648,11 +648,11 @@ class MeasurementHarness:
         """Estimate FLOPs from model and token counts.
 
         Fallback chain:
-        1. AutoConfig path — uses estimate_flops_palm_from_config(config.task.model).
+        1. AutoConfig path - uses estimate_flops_palm_from_config(config.task.model).
            Works for all engines (no model weights needed).
-        2. hf_model path — uses estimate_flops_palm(hf_model) when extras['hf_model'] is set.
+        2. hf_model path - uses estimate_flops_palm(hf_model) when extras['hf_model'] is set.
            Higher-confidence since it counts actual loaded parameters.
-        3. None — FLOPs unavailable.
+        3. None - FLOPs unavailable.
         """
         # Step 1: AutoConfig path (works without loaded model weights)
         try:
@@ -666,7 +666,7 @@ class MeasurementHarness:
         except Exception as e:
             logger.debug("AutoConfig FLOPs estimation failed: %s", e)
 
-        # Step 2: hf_model path (higher confidence — uses actual loaded parameters)
+        # Step 2: hf_model path (higher confidence - uses actual loaded parameters)
         model_obj = output.extras.get("hf_model")
         if model_obj is not None:
             try:
@@ -769,7 +769,7 @@ class MeasurementHarness:
 
         # Real energy values from energy sampler
         total_energy_j = energy_measurement.total_j if energy_measurement is not None else 0.0
-        # duration_sec is passed in from run() — computed once, not recalculated here
+        # duration_sec is passed in from run() - computed once, not recalculated here
 
         # Energy per token: output tokens only (input tokens are not "generated")
         output_tokens = output.output_tokens if output.output_tokens > 0 else output.total_tokens

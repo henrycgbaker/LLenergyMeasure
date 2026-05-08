@@ -277,7 +277,7 @@ def test_from_json_missing_sidecar_loads_successfully(
         warnings.simplefilter("ignore", UserWarning)
         loaded = load_result(result_path)
 
-    # timeseries field is preserved (not set to None) — it's what was stored
+    # timeseries field is preserved (not set to None) - it's what was stored
     assert loaded.timeseries == "timeseries.parquet"
     # But the file itself is not there
     assert not (result_path.parent / "timeseries.parquet").exists()

@@ -10,7 +10,7 @@ for the controlled experiment.
 This helper deliberately does not use ``infra.docker_runner.DockerRunner``:
 baseline dispatch needs none of DockerRunner's experiment-specific machinery
 (config-hash indirection, streamed stdout progress, timeseries rescue, result
-deserialisation) — just a spec file in, a result file out, single subprocess
+deserialisation) - just a spec file in, a result file out, single subprocess
 invocation.
 """
 
@@ -133,7 +133,7 @@ def run_baseline_container(
             the baseline container sees exactly the same GPUs the experiment
             container will.
         timeout_sec: Subprocess timeout. Defaults to
-            ``max(duration_sec * 2 + 60, 120)`` — enough for cold-start,
+            ``max(duration_sec * 2 + 60, 120)`` - enough for cold-start,
             sampling, and teardown with headroom.
         on_stage: Optional callback invoked for each stage marker streamed on
             the container's stdout (``container_ready``, ``cuda_primed``,
@@ -191,7 +191,7 @@ def run_baseline_container(
         return None
 
     start = time.monotonic()
-    # Bounded tail — only the last 10 lines are logged on failure; torch/CUDA
+    # Bounded tail - only the last 10 lines are logged on failure; torch/CUDA
     # init can emit thousands of lines we never read.
     output_tail: deque[str] = deque(maxlen=64)
 

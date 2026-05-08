@@ -1,4 +1,4 @@
-"""Tests for SchemaLoader — loads discovered engine schemas from discovered_schemas/."""
+"""Tests for SchemaLoader - loads discovered engine schemas from discovered_schemas/."""
 
 from __future__ import annotations
 

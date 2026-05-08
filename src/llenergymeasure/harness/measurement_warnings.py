@@ -13,12 +13,12 @@ def collect_measurement_warnings(
     temp_start_c: float | None,
     temp_end_c: float | None,
     nvml_sample_count: int,
-    # thermal_drift_threshold default 10C — confidence LOW, no peer citation, flagged for validation
+    # thermal_drift_threshold default 10C - confidence LOW, no peer citation, flagged for validation
     thermal_drift_threshold_c: float = 10.0,
 ) -> list[str]:
     """Collect measurement quality warnings for a completed experiment.
 
-    All four warnings are purely informational — they never block experiments.
+    All four warnings are purely informational - they never block experiments.
     Each includes actionable remediation advice.
 
     Args:
@@ -28,13 +28,13 @@ def collect_measurement_warnings(
         temp_end_c: GPU temperature at measurement end, or None if unavailable.
         nvml_sample_count: Number of NVML power samples collected during measurement.
         thermal_drift_threshold_c: Maximum acceptable temperature change in Celsius.
-            Default 10C — confidence LOW (engineering judgement, no peer citation,
+            Default 10C - confidence LOW (engineering judgement, no peer citation,
             flagged for validation).
 
     Returns:
         List of warning strings (empty list = clean measurement).
     """
-    # baseline_duration 30s — confidence MEDIUM (similar to VILE paper 22-33s windows)
+    # baseline_duration 30s - confidence MEDIUM (similar to VILE paper 22-33s windows)
     warnings: list[str] = []
 
     # 1. Short measurement duration

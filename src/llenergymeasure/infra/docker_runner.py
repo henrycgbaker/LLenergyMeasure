@@ -1,4 +1,4 @@
-"""DockerRunner — dispatches a single experiment to an ephemeral Docker container.
+"""DockerRunner - dispatches a single experiment to an ephemeral Docker container.
 
 The DockerRunner manages the full container lifecycle:
 
@@ -161,7 +161,7 @@ class DockerRunner:
                  stdout/stderr line arrives within this window. None or 0
                  disables the silence watchdog (wall-clock only). Values
                  >= ``timeout`` are accepted but redundant with the
-                 wall-clock — the watchdog raises whichever fires first.
+                 wall-clock - the watchdog raises whichever fires first.
         source:  Runner resolution source string (e.g. ``"yaml"``, ``"auto_detected"``).
                  Recorded in result effective_config for traceability.
     """
@@ -274,7 +274,7 @@ class DockerRunner:
                 t0_container = time.perf_counter()
 
             # Secrets are passed via a temp env-file (mode 0600) that is deleted after
-            # the container exits — they never appear in the command argument list.
+            # the container exits - they never appear in the command argument list.
             with _env_file(secrets) as env_path:
                 cmd = self._build_docker_cmd(
                     config, config_hash, str(exchange_dir), env_path=env_path
@@ -347,7 +347,7 @@ class DockerRunner:
                     error = translate_docker_error(returncode, stderr_text, self.image)
 
                 error.exchange_dir = str(exchange_dir)
-                # Do NOT clean up — preserve for debugging
+                # Do NOT clean up - preserve for debugging
                 exchange_dir = None  # type: ignore[assignment]
                 raise error
 
@@ -376,7 +376,7 @@ class DockerRunner:
 
         finally:
             # Exchange dir is set to None when we've handed off or already cleaned up.
-            # If it's still set here, an unexpected exception occurred — preserve for debugging.
+            # If it's still set here, an unexpected exception occurred - preserve for debugging.
             if exchange_dir is not None:
                 logger.debug("Preserving exchange dir for debugging: %s", exchange_dir)
 
@@ -412,7 +412,7 @@ class DockerRunner:
         if progress:
             progress.on_step_done("image_check", time.perf_counter() - t0)
 
-        # Image not cached — pull it
+        # Image not cached - pull it
         if progress:
             progress.on_step_start("pull", "Pulling", self.image)
         t0_pull = time.perf_counter()
@@ -537,7 +537,7 @@ class DockerRunner:
         # can wake up periodically to check both timeout budgets even
         # when the container is producing nothing. The blocking
         # ``for line in proc.stdout`` shape this replaces would hang
-        # indefinitely on a stuck CUDA / NCCL / compile step — the
+        # indefinitely on a stuck CUDA / NCCL / compile step - the
         # wall-clock proc.wait() never gets a chance to fire because we
         # never exit the for-loop. See issue #366.
         stdout_q: queue.Queue[str | None] = queue.Queue()
@@ -693,7 +693,7 @@ class DockerRunner:
         Used by the unified watchdog when a timeout fires. Mirrors the
         existing wall-clock kill path: best-effort terminate, then kill,
         then a final wait so the process group is fully reaped. Any
-        exception from the cleanup path is logged at debug level — the
+        exception from the cleanup path is logged at debug level - the
         watchdog's responsibility is to *raise the right error*, not to
         handle a cooperatively-shutting-down container.
         """
@@ -867,7 +867,7 @@ class DockerRunner:
         container_version = result.llenergymeasure_version
         if container_version is None or container_version != __version__:
             logger.warning(
-                "Container result version %s differs from host %s — rebuild Docker images",
+                "Container result version %s differs from host %s - rebuild Docker images",
                 container_version,
                 __version__,
             )
@@ -877,7 +877,7 @@ class DockerRunner:
     def _cleanup_exchange_dir(self, exchange_dir: Path) -> None:
         """Remove the temporary exchange directory.
 
-        Logs a warning on failure but never raises — cleanup must not mask
+        Logs a warning on failure but never raises - cleanup must not mask
         real errors from the caller.
 
         Args:

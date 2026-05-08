@@ -115,22 +115,25 @@ every push. The pipelines on each git event:
 flowchart LR
     prpush[PR push]
     mainpush[main push]
-    cf[CF Pages]
+    cfPR[CF Pages]
+    cfMain[CF Pages]
     docsPR["docs.yml<br/>build-only gate"]
     docsMain[docs.yml]
     gh[GitHub Pages]
     preview["&lt;hash&gt;.llenergymeasure-docs.pages.dev<br/>preview, comment on PR"]
-    prod["henrycgbaker.github.io/llenergymeasure<br/>production"]
+    prod["henrycgbaker.github.io/llenergymeasure<br/>canonical production"]
+    mirror["llenergymeasure-docs.pages.dev<br/>secondary prod mirror"]
 
     prpush --> docsPR
-    prpush --> cf --> preview
+    prpush --> cfPR --> preview
     mainpush --> docsMain --> gh --> prod
+    mainpush --> cfMain --> mirror
 ```
 
 If CF availability degrades, PRs lose the clickable preview URL but the
 GH Actions build still gates merge correctness. If GH Pages degrades,
-the CF mirror at `*.pages.dev` still serves prod. Neither single failure
-blocks the other.
+the CF mirror at `llenergymeasure-docs.pages.dev` still serves prod.
+Neither single failure blocks the other.
 
 Path filters on `docs.yml` are asymmetric on purpose. PRs include
 `scripts/generate_api_docs.py` (the custom stdlib API renderer can
@@ -141,10 +144,7 @@ docs/website push, avoiding republish on every src commit.
 ## Troubleshooting
 
 **"Preview URL doesn't appear on my PR"**
-- CF rebuilds on every push regardless of paths (no path filter applied
-  in CF dashboard at time of writing). Path-irrelevant PRs still get
-  previews but the GitHub UI sometimes hides the deployment status until
-  the comment is posted.
+- CF builds are gated by the dashboard's "Include paths" filter.
 - Check the PR's "Checks" tab for a `cloudflare-pages` entry - if the
   build failed, click through to the CF dashboard logs.
 - If the GitHub App is mis-authorised, the comment won't post but the

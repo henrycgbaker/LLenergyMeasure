@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 # Keys that belong to the study YAML structure, not to individual experiments.
 # These are stripped from base: files and excluded from the fixed dict.
-# "runners" is study-level metadata (per-engine runner config) — not an experiment field.
+# "runners" is study-level metadata (per-engine runner config) - not an experiment field.
 _STUDY_ONLY_KEYS = frozenset(
     {
         "sweep",
@@ -115,7 +115,7 @@ def expand_grid(
     # Step 1: Load base: inheritance
     base_dict = _load_base(raw_study.get("base"), study_yaml_path)
 
-    # Step 2: Fixed dict — experiment-level fields shared across all grid points
+    # Step 2: Fixed dict - experiment-level fields shared across all grid points
     fixed = _extract_fixed(raw_study)
     merged_fixed = {**base_dict, **fixed}  # inline fields override base
 
@@ -166,7 +166,7 @@ def expand_grid(
     if len(valid) == 0:
         first_reasons = "; ".join(s.reason[:120] for s in skipped[:5])
         raise ConfigError(
-            f"nothing to run — all {total} generated config(s) are invalid. "
+            f"nothing to run - all {total} generated config(s) are invalid. "
             f"First failures: {first_reasons}"
         )
 
@@ -236,10 +236,10 @@ def apply_cycles(
 ) -> list[ExperimentConfig]:
     """Return the ordered execution sequence for n_cycles repetitions.
 
-    sequential:    [A, A, A, B, B, B]  — all cycles of each experiment together
-    interleave:    [A, B, A, B, A, B]  — one cycle of each experiment, repeated
+    sequential:    [A, A, A, B, B, B]  - all cycles of each experiment together
+    interleave:    [A, B, A, B, A, B]  - one cycle of each experiment, repeated
     shuffle:       random per-cycle order, seeded from study_design_hash by default
-    reverse:       alternating forward/backward per cycle — [A, B, B, A, A, B]
+    reverse:       alternating forward/backward per cycle - [A, B, B, A, A, B]
     latin_square:  Williams balanced latin square (counterbalances carryover effects)
     """
     if experiment_order == ExperimentOrder.SEQUENTIAL:
@@ -315,7 +315,7 @@ def format_preflight_summary(
         Order: interleave
         Skipping 2/6: (per-skip log line with reason)
           - transformers, fp32: [Pydantic message]
-        WARNING: 67% of sweep configs are invalid — check your sweep dimensions.
+        WARNING: 67% of sweep configs are invalid - check your sweep dimensions.
 
     Args:
         study_config: Resolved StudyConfig (after load_study_config).
@@ -667,7 +667,7 @@ def _load_base(base_path_str: str | None, study_yaml_path: Path | None) -> dict[
     with base_path.open() as fh:
         raw = yaml.safe_load(fh) or {}
 
-    # Strip study-only keys — base: accepts experiment config files only
+    # Strip study-only keys - base: accepts experiment config files only
     return {k: v for k, v in raw.items() if k not in _STUDY_ONLY_KEYS}
 
 
@@ -891,12 +891,12 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
         applicable_groups: dict[str, list[dict[str, Any]]] = dict(universal_groups)
         applicable_groups.update(scoped_groups.get(engine, {}))
 
-        # Collect applicable axes — reconstruct fully-qualified keys for routing
+        # Collect applicable axes - reconstruct fully-qualified keys for routing
         engine_scoped = scoped_dims.get(engine, {})
         fq_dim_keys = list(universal_dims.keys()) + [f"{engine}.{p}" for p in engine_scoped]
         all_dim_values = list(universal_dims.values()) + list(engine_scoped.values())
 
-        # Cross all group variant lists with each other (lazy — iterated once)
+        # Cross all group variant lists with each other (lazy - iterated once)
         group_combos: Iterable[tuple[Any, ...]]
         if applicable_groups:
             group_names = list(applicable_groups.keys())
@@ -906,7 +906,7 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
             group_combos = [()]  # single empty combo → no group overlays
 
         if not fq_dim_keys and not applicable_groups:
-            # No dimensions or groups for this engine — produce one config
+            # No dimensions or groups for this engine - produce one config
             config_dict: dict[str, Any] = _strip_other_engine_sections(dict(fixed), engine)
             config_dict["engine"] = engine
             results.append(config_dict)
@@ -916,7 +916,7 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
         base_config = _strip_other_engine_sections(dict(fixed), engine)
         base_config["engine"] = engine
 
-        # axis_combos materialised — reused across group combos
+        # axis_combos materialised - reused across group combos
         axis_combos = list(itertools.product(*all_dim_values)) if fq_dim_keys else [()]
 
         for group_combo in group_combos:

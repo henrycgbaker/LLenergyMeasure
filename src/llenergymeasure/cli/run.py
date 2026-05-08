@@ -1,4 +1,4 @@
-"""llem run — primary command for running LLM efficiency experiments."""
+"""llem run - primary command for running LLM efficiency experiments."""
 
 from __future__ import annotations
 
@@ -211,8 +211,8 @@ def _run_impl(
     no_lock: bool = False,
     no_dedup: bool = False,
 ) -> None:
-    """Core implementation — separated for clean error handling in run()."""
-    # Build CLI overrides dict — only include flags the user explicitly passed
+    """Core implementation - separated for clean error handling in run()."""
+    # Build CLI overrides dict - only include flags the user explicitly passed
     cli_overrides: dict[str, Any] = {}
     if model is not None:
         cli_overrides["task.model"] = model
@@ -242,7 +242,7 @@ def _run_impl(
             if isinstance(raw, dict) and ("sweep" in raw or "experiments" in raw):
                 is_study = True
         except Exception:
-            pass  # Fall through to normal experiment path — loader will raise if invalid
+            pass  # Fall through to normal experiment path - loader will raise if invalid
 
     # Route to study execution path
     if is_study:
@@ -415,7 +415,7 @@ def _run_study_impl(
     no_lock: bool = False,
     no_dedup: bool = False,
 ) -> None:
-    """Study execution path — separated for clean error handling."""
+    """Study execution path - separated for clean error handling."""
     import yaml
 
     from llenergymeasure.cli._display import print_study_dry_run
@@ -430,7 +430,7 @@ def _run_study_impl(
     if resume_dir is not None:
         if not (resume_dir / "manifest.json").exists():
             raise typer.BadParameter(
-                f"No manifest.json in {resume_dir} — not a valid study directory.",
+                f"No manifest.json in {resume_dir} - not a valid study directory.",
                 param_hint="--resume-dir",
             )
         try:
@@ -499,7 +499,7 @@ def _run_study_impl(
     if exec_overrides:
         study_cli_overrides["study_execution"] = exec_overrides
 
-    # Load study config with overrides — show step-format spinner during expansion
+    # Load study config with overrides - show step-format spinner during expansion
     from rich.console import Console as _ExpandConsole
     from rich.live import Live as _ExpandLive
     from rich.text import Text as _ExpandText
@@ -586,7 +586,7 @@ def _run_study_impl(
     n_explicit = len(raw.get("experiments", []) or [])
 
     # ---------------------------------------------------------------
-    # Resolve runners and compute study dir preview — shared by both
+    # Resolve runners and compute study dir preview - shared by both
     # dry-run and actual-run so both show the same preflight panel.
     # ---------------------------------------------------------------
     from datetime import datetime, timezone
@@ -653,7 +653,7 @@ def _run_study_impl(
         if study_config.skipped_configs:
             n_skip = len(study_config.skipped_configs)
             _stderr_console.print(
-                f"Skipped {n_skip} invalid config(s) — details in skipped_configs.log"
+                f"Skipped {n_skip} invalid config(s) - details in skipped_configs.log"
             )
 
         study_display = StudyStepDisplay(
@@ -729,7 +729,7 @@ def _run_study_impl(
             cli_overrides=cli_overrides or None,
         )
     finally:
-        # Safety stop — ensures Rich Live is torn down even on exceptions
+        # Safety stop - ensures Rich Live is torn down even on exceptions
         if study_display is not None:
             study_display.stop()
 

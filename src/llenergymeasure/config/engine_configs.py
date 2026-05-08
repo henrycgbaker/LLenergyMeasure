@@ -44,7 +44,7 @@ class TransformersSamplingConfig(BaseModel):
     Maps to model.generate() kwargs. Field names mirror HuggingFace native
     conventions (do_sample, min_new_tokens, top_k=0 for disabled).
 
-    All fields default to None — None means "use HF's own default at execution".
+    All fields default to None - None means "use HF's own default at execution".
     Unknown fields are forwarded to generate() via extra="allow" (the engine
     builder picks up values from this section and merges them into generate_kwargs).
     """
@@ -82,7 +82,7 @@ class TransformersSamplingConfig(BaseModel):
 class TransformersConfig(BaseModel):
     """HuggingFace Transformers engine configuration.
 
-    All fields default to None — None means "use the engine's own default".
+    All fields default to None - None means "use the engine's own default".
     This distinguishes explicit researcher choices from engine defaults,
     which is important for result reproducibility and experiment attribution.
 
@@ -207,7 +207,7 @@ class TransformersConfig(BaseModel):
     )
 
     # -------------------------------------------------------------------------
-    # Speculative decoding (prompt-lookup — draft model via passthrough_kwargs)
+    # Speculative decoding (prompt-lookup - draft model via passthrough_kwargs)
     # -------------------------------------------------------------------------
 
     prompt_lookup_num_tokens: int | None = Field(
@@ -365,7 +365,7 @@ class VLLMSpeculativeConfig(BaseModel):
         default=None,
         description=(
             "Speculative-decoding method (e.g. 'draft_model', 'ngram', 'medusa', 'eagle'). "
-            "Kept as str because the Literal has drifted across vLLM releases — verify against "
+            "Kept as str because the Literal has drifted across vLLM releases - verify against "
             "EngineArgs.speculative_config.method in the discovered schema before narrowing."
         ),
     )
@@ -375,7 +375,7 @@ class VLLMAttentionConfig(BaseModel):
     """vLLM attention implementation configuration.
 
     Nested under VLLMEngineConfig.attention. Mirrors vLLM's AttentionConfig.
-    All fields default to None — None means "use vLLM's own default".
+    All fields default to None - None means "use vLLM's own default".
     Uses extra="allow" for forward compatibility with new vLLM attention options.
     """
 
@@ -426,7 +426,7 @@ class VLLMAttentionConfig(BaseModel):
 class VLLMEngineConfig(BaseModel):
     """vLLM engine-level configuration (vllm.LLM() constructor arguments).
 
-    All fields default to None — None means "use vLLM's own default".
+    All fields default to None - None means "use vLLM's own default".
     These parameters are loaded once at model initialisation time.
     Unknown fields are forwarded to vllm.LLM() via extra="allow".
     """
@@ -542,13 +542,13 @@ class VLLMEngineConfig(BaseModel):
         default=None,
         ge=1,
         description=(
-            "Tensor parallel degree — number of GPUs to shard the model across (None -> 1)."
+            "Tensor parallel degree - number of GPUs to shard the model across (None -> 1)."
         ),
     )
     pipeline_parallel_size: int | None = Field(
         default=None,
         ge=1,
-        description=("Pipeline parallel stages — memory per GPU changes with PP (None -> 1)."),
+        description=("Pipeline parallel stages - memory per GPU changes with PP (None -> 1)."),
     )
     distributed_executor_backend: Literal["mp", "ray"] | None = Field(
         default=None,
@@ -646,7 +646,7 @@ class VLLMEngineConfig(BaseModel):
         default=None,
         description=(
             "Full passthrough to vLLM CompilationConfig (~30 fields). "
-            "No validation — passed directly."
+            "No validation - passed directly."
         ),
     )
 
@@ -696,10 +696,10 @@ class VLLMSamplingConfig(BaseModel):
     repetition_penalty, min_p) and vLLM-specific ones (presence_penalty,
     frequency_penalty, ignore_eos, n, min_tokens).
 
-    All fields default to None — None means "use vLLM's own default".
+    All fields default to None - None means "use vLLM's own default".
     Unknown fields are forwarded to vllm.SamplingParams() via extra="allow".
 
-    Note: max_tokens is intentionally absent — it is bridged from
+    Note: max_tokens is intentionally absent - it is bridged from
     ExperimentConfig.max_output_tokens in _build_sampling_kwargs().
     top_k uses vLLM's -1-for-disabled convention (not the HF 0-for-disabled one).
     """
@@ -752,7 +752,7 @@ class VLLMSamplingConfig(BaseModel):
         default=None,
         description=(
             "Continue generating past EOS token (None -> False). "
-            "Forces max_tokens generation every time — affects total token count."
+            "Forces max_tokens generation every time - affects total token count."
         ),
     )
     n: int | None = Field(
@@ -767,10 +767,10 @@ class VLLMBeamSearchConfig(BaseModel):
 
     When set, the engine uses BeamSearchParams instead of SamplingParams.
     Nested under VLLMConfig.beam_search.
-    All fields default to None — None means "use vLLM's own default".
+    All fields default to None - None means "use vLLM's own default".
     Uses extra="allow" for forward compatibility with new vLLM beam search options.
 
-    Note: max_tokens is intentionally absent — it is bridged from
+    Note: max_tokens is intentionally absent - it is bridged from
     ExperimentConfig.max_output_tokens in _build_beam_search_kwargs().
     """
 
@@ -995,12 +995,12 @@ class TensorRTConfig(BaseModel):
     - sampling: SamplingParams (both universal and TRT-LLM-specific)
 
     Dropped (falls through extra="allow"):
-    - engine_path — D1 deployment path, not a measurement axis
-    - calib sub-config — D3 build-only PTQ calibration (we consume pre-quantised checkpoints)
-    - build_cache sub-config — D1 engine-cache housekeeping
+    - engine_path - D1 deployment path, not a measurement axis
+    - calib sub-config - D3 build-only PTQ calibration (we consume pre-quantised checkpoints)
+    - build_cache sub-config - D1 engine-cache housekeeping
 
     Re-added after audit:
-    - backend: Literal["trt","pytorch","_autodeploy"] — measurement-relevant
+    - backend: Literal["trt","pytorch","_autodeploy"] - measurement-relevant
       axis in TRT-LLM >=0.13. "trt" is the AOT-compiled engine; "pytorch" is
       TRT-LLM's eager runtime (same scheduler/KV cache, no compile); "_autodeploy"
       is the experimental model-porter. Original drop rubric (D2 single-option
@@ -1031,7 +1031,7 @@ class TensorRTConfig(BaseModel):
         default=None,
         ge=1,
         description=(
-            "Tensor parallel size — number of GPUs to shard across (None -> 1). "
+            "Tensor parallel size - number of GPUs to shard across (None -> 1). "
             "Aligns with TrtLlmArgs.tensor_parallel_size. "
             "Note: TransformersConfig.tp_size follows accelerate convention and is preserved."
         ),
@@ -1069,7 +1069,7 @@ class TensorRTConfig(BaseModel):
     backend: Literal["trt", "pytorch", "_autodeploy"] | None = Field(
         default=None,
         description=(
-            "TRT-LLM runtime backend — a measurement axis, not a per-host knob. "
+            "TRT-LLM runtime backend - a measurement axis, not a per-host knob. "
             "'trt' = AOT-compiled TensorRT engine (best steady-state, minutes-hours "
             "compile); 'pytorch' = TRT-LLM's eager runtime (same scheduler/KV cache, "
             "no compile, supports newer model archs without hand-written converters); "

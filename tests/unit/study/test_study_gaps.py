@@ -99,7 +99,7 @@ def test_run_gap_interrupt_event_set_during_gap() -> None:
     t.start()
     # Signal interrupt immediately after thread starts
     interrupt_event.set()
-    # Safety net: wait up to 2s — the assertion is that the event was set, not how long it took
+    # Safety net: wait up to 2s - the assertion is that the event was set, not how long it took
     returned = returned_event.wait(timeout=2.0)
     assert returned, "run_gap did not return after interrupt_event was set"
     t.join(timeout=1.0)

@@ -10,7 +10,7 @@ on their own:
    …) and per ``Literal[...]`` allowlist annotation.
 2. **msgspec lift** over ``vllm.SamplingParams``. Per the research doc,
    vLLM ships zero ``msgspec.Meta(...)`` annotations on SamplingParams, so
-   this currently emits zero candidates — wired so that any future vLLM
+   this currently emits zero candidates - wired so that any future vLLM
    release adopting msgspec.Meta is captured automatically.
 
 A stdlib **dataclass lift** over ``vllm.engine.arg_utils.EngineArgs`` is
@@ -18,11 +18,11 @@ DELIBERATELY OMITTED: the lift would emit ~23 invariant candidates from
 ``Literal[...]`` annotations, but stdlib dataclass does not enforce
 ``Literal`` types at construction (``EngineArgs(runner="bogus")`` only
 warns at runtime). The real validation site for those fields is the
-depth-1 ``vllm.config.*`` pydantic-dataclasses — already covered by the
+depth-1 ``vllm.config.*`` pydantic-dataclasses - already covered by the
 pydantic lift. Emitting the dataclass-lift invariants would just bloat the
 quarantine file with invariants that validation-CI cannot get to fire.
 
-Plus a runtime probe pass over ``SamplingParams`` cluster grids — small
+Plus a runtime probe pass over ``SamplingParams`` cluster grids - small
 Cartesian sweeps that surface cross-field invariants (``min_tokens > max_tokens``,
 ``stop AND not detokenize``) the AST static miner already catches but
 re-confirms via observed library behaviour.
@@ -145,7 +145,7 @@ _PYDANTIC_LIFT_TARGETS: tuple[_LiftTarget, ...] = (
 class _Cluster:
     """One probe cluster.
 
-    ``probe_class_factory`` constructs the probe target — vLLM has multiple
+    ``probe_class_factory`` constructs the probe target - vLLM has multiple
     probe classes (SamplingParams, vllm.config.* dataclasses), so unlike
     transformers we pass a callable that takes a kwargs dict and returns
     a constructed instance (or raises).
@@ -250,7 +250,7 @@ class _ProbeRow:
 def _silence_vllm_loggers() -> tuple[logging.Logger, int]:
     """Quiet the noisy vLLM init loggers during probing.
 
-    Returns (logger, prev_level) so caller can restore — vLLM emits warnings
+    Returns (logger, prev_level) so caller can restore - vLLM emits warnings
     on every greedy-clamp probe, which spams the miner's stderr.
     """
     lg = logging.getLogger("vllm")
@@ -272,7 +272,7 @@ def _run_cluster(cluster: _Cluster) -> list[_ProbeRow]:
             full_kwargs = {**cluster.preconditions, **kwargs}
             try:
                 cluster.probe_class_factory(full_kwargs)
-            except Exception as exc:  # pragma: no cover — vLLM raises broadly
+            except Exception as exc:  # pragma: no cover - vLLM raises broadly
                 rows.append(
                     _ProbeRow(
                         kwargs=kwargs,
@@ -322,7 +322,7 @@ def _explains(
     """True iff ``pred`` fires on ``err_rows`` and on NO clean rows.
 
     Other-class errored rows (errors that aren't in ``err_rows``) are
-    skipped from the consistency check — they're not evidence for or
+    skipped from the consistency check - they're not evidence for or
     against this class's predicate. Without this skip, divisibility and
     range predicates inside one cluster would contaminate each other.
     """
@@ -466,7 +466,7 @@ def _cluster_rules(
     in the cluster gets its own inference pass. Without grouping, a cluster
     that hits multiple validators (``temperature < 0`` AND ``top_p > 1``)
     fails to find any single predicate explaining all errors and emits zero
-    invariants — the symptom this grouping fixes.
+    invariants - the symptom this grouping fixes.
     """
     err_rows, ok_rows = _split(rows)
     if not err_rows or not ok_rows:
@@ -566,7 +566,7 @@ def _make_cluster_rule(
         },
         message_template=message_template,
         references=[
-            f"vllm.{cluster.native_type.rsplit('.', 1)[-1]} — observed via combinatorial probing"
+            f"vllm.{cluster.native_type.rsplit('.', 1)[-1]} - observed via combinatorial probing"
         ],
         added_by="dynamic_miner",
         added_at=today,
@@ -576,7 +576,7 @@ def _make_cluster_rule(
 # Operator inversion: the lift modules emit ``match_fields`` shaped as the
 # *constraint* the field must satisfy (e.g. ``{">": 0}`` for ``Gt(0)``). The
 # corpus loader's convention is that ``match_fields`` encodes the invariant's
-# *firing condition* — i.e. the violation predicate. The transformers static
+# *firing condition* - i.e. the violation predicate. The transformers static
 # miner emits violation-shape predicates because it walks ``if X: raise``
 # AST. The lift modules emit constraint-shape predicates and we invert here
 # at the per-engine driver level (per the brief: do not modify the lifts
@@ -598,14 +598,14 @@ def _invert_match_fields(match_fields: dict[str, Any]) -> dict[str, Any]:
 
     For each path, replace operator keys with their loader-vocabulary
     inverse. Length operators (``min_len`` / ``max_len``) and the
-    ``multiple_of`` predicate have no clean single-op inverse — we leave
+    ``multiple_of`` predicate have no clean single-op inverse - we leave
     those entries as-is and let validation-CI prune them; that's the lift's
     edge case to fix at the type-system level.
     """
     out: dict[str, Any] = {}
     for path, spec in match_fields.items():
         if not isinstance(spec, dict):
-            # Bare value spec — equality. The inverted form is ``!=`` against
+            # Bare value spec - equality. The inverted form is ``!=`` against
             # the same value, but bare-equality lift output is the Literal
             # path which already uses ``in`` not ``==``; leave alone.
             out[path] = spec
@@ -716,7 +716,7 @@ def walk_vllm_dynamic(*, today: str | None = None) -> tuple[list[InvariantCandid
         today = frozen if frozen else dt.date.today().isoformat()
     candidates: list[InvariantCandidate] = []
 
-    # Lift 1: msgspec — SamplingParams. (``vllm.SamplingParams`` re-export
+    # Lift 1: msgspec - SamplingParams. (``vllm.SamplingParams`` re-export
     # exists, so the lift's default native_type is dotted-importable.)
     from vllm import SamplingParams  # type: ignore
 
@@ -741,9 +741,9 @@ def walk_vllm_dynamic(*, today: str | None = None) -> tuple[list[InvariantCandid
         cand.match_fields = _invert_match_fields(cand.match_fields)
     candidates.extend(sp_lifted)
 
-    # Lift 2: pydantic — vllm.config.* family. The lift sets
+    # Lift 2: pydantic - vllm.config.* family. The lift sets
     # ``native_type=f"{library}.{type_name}"`` from ``cls.__module__.split('.', 1)[0]``,
-    # which yields ``"vllm.CacheConfig"`` — but the actual import path is
+    # which yields ``"vllm.CacheConfig"`` - but the actual import path is
     # ``vllm.config.cache.CacheConfig`` (re-exported as ``vllm.config.CacheConfig``).
     # Fixing this in ``_pydantic_lift`` would change every other engine's
     # behaviour (the lift is library-agnostic). Instead, rewrite the
@@ -763,7 +763,7 @@ def walk_vllm_dynamic(*, today: str | None = None) -> tuple[list[InvariantCandid
             source_path=cls_rel,
         )
         # Use the ``vllm.config.<Name>`` re-export form (rather than the
-        # deeper ``vllm.config.parallel.ParallelConfig`` actual location) —
+        # deeper ``vllm.config.parallel.ParallelConfig`` actual location) -
         # vLLM re-exports every config class from ``vllm.config`` and this
         # is the form the static miner uses, so cross-validation /
         # fingerprint readability stays uniform.
@@ -776,11 +776,11 @@ def walk_vllm_dynamic(*, today: str | None = None) -> tuple[list[InvariantCandid
             cand.match_fields = _invert_match_fields(cand.match_fields)
         candidates.extend(lifted)
 
-    # Lift 3: stdlib dataclass — DELIBERATELY OMITTED for EngineArgs.
+    # Lift 3: stdlib dataclass - DELIBERATELY OMITTED for EngineArgs.
     #
     # ``EngineArgs`` is a 175-field stdlib dataclass with rich
     # ``Literal[...]`` annotations. Calling ``_dataclass_lift`` over it
-    # produces ~23 candidate invariants — all of which fail validation-CI because
+    # produces ~23 candidate invariants - all of which fail validation-CI because
     # stdlib dataclass does NOT enforce Literal types at construction:
     # ``EngineArgs(runner="bogus")`` succeeds and only triggers a runtime
     # warning. Real validation lives on the depth-1 ``vllm.config.*``

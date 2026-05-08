@@ -1,4 +1,4 @@
-"""``llem report-gaps`` — propose corpus rules from captured runtime observations.
+"""``llem report-gaps`` - propose corpus rules from captured runtime observations.
 
 Thin Typer command that delegates everything interesting to
 :mod:`llenergymeasure.api.report_gaps`. CLI-boundary contract: imports only

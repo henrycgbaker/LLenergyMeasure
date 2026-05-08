@@ -48,7 +48,7 @@ def _make_pynvml_mock(
     mock = MagicMock()
 
     if use_deprecated_names:
-        # Only deprecated names present — no nvmlClocksEventReason* attrs
+        # Only deprecated names present - no nvmlClocksEventReason* attrs
         del mock.nvmlClocksEventReasonHwThermalSlowdown
         del mock.nvmlClocksEventReasonSwThermalSlowdown
         del mock.nvmlClocksEventReasonSwPowerCap
@@ -243,7 +243,7 @@ def _make_full_pynvml_mock() -> MagicMock:
 
 
 # =============================================================================
-# Test 5: Sampler lifecycle — pynvml available
+# Test 5: Sampler lifecycle - pynvml available
 # =============================================================================
 
 
@@ -264,7 +264,7 @@ def test_sampler_lifecycle_pynvml_available():
 
 
 # =============================================================================
-# Test 6: Sampler — pynvml unavailable (ImportError)
+# Test 6: Sampler - pynvml unavailable (ImportError)
 # =============================================================================
 
 
@@ -281,7 +281,7 @@ def test_sampler_pynvml_unavailable():
 
 
 # =============================================================================
-# Test 7: Sampler — device handle failure
+# Test 7: Sampler - device handle failure
 # =============================================================================
 
 
@@ -299,7 +299,7 @@ def test_sampler_device_handle_failure():
 
 
 # =============================================================================
-# Test 8: Context manager — __enter__ starts, __exit__ stops, thread is None after
+# Test 8: Context manager - __enter__ starts, __exit__ stops, thread is None after
 # =============================================================================
 
 

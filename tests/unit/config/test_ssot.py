@@ -6,7 +6,7 @@ from llenergymeasure.config.ssot import ALL_ENGINES, Engine
 
 
 def test_engine_is_str_enum() -> None:
-    # Engine uses (str, Enum) for Python 3.10 compatibility — not StrEnum (3.11+).
+    # Engine uses (str, Enum) for Python 3.10 compatibility - not StrEnum (3.11+).
     # Assert the same behavioural guarantees: it is an Enum and a str subclass.
     assert issubclass(Engine, Enum)
     assert issubclass(Engine, str)

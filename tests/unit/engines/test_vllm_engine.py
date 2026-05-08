@@ -1,7 +1,7 @@
 """Unit tests for VLLMEngine.
 
 All tests run without GPU hardware and without vLLM installed.
-vLLM imports inside VLLMEngine methods are lazy — the module is importable on
+vLLM imports inside VLLMEngine methods are lazy - the module is importable on
 any host. Tests that exercise SamplingParams construction pass a mock class so
 no real vLLM import occurs.
 
@@ -41,7 +41,7 @@ _VLLM_DEFAULTS = {"model": "test-model", "engine": "vllm"}
 
 @dataclass
 class _FakeSamplingParams:
-    """Minimal stand-in for vllm.SamplingParams — captures kwargs for inspection."""
+    """Minimal stand-in for vllm.SamplingParams - captures kwargs for inspection."""
 
     temperature: float = 1.0
     max_tokens: int = 128
@@ -60,7 +60,7 @@ class _FakeSamplingParams:
 
 @dataclass
 class _FakeBeamSearchParams:
-    """Minimal stand-in for vllm.BeamSearchParams — captures kwargs for inspection."""
+    """Minimal stand-in for vllm.BeamSearchParams - captures kwargs for inspection."""
 
     beam_width: int = 1
     length_penalty: float = 1.0
@@ -125,14 +125,14 @@ class TestBuildLlmKwargs:
     def test_minimal_config_has_required_keys(self):
         """With no VLLMConfig, kwargs contains model, trust_remote_code, seed.
 
-        dtype is omitted when the user hasn't set it — vLLM uses its own default.
+        dtype is omitted when the user hasn't set it - vLLM uses its own default.
         """
         config = make_config(**_VLLM_DEFAULTS)
         engine = VLLMEngine()
         kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs["model"] == "test-model"
-        # HF default — env var LLEM_TRUST_REMOTE_CODE not set
+        # HF default - env var LLEM_TRUST_REMOTE_CODE not set
         assert kwargs["trust_remote_code"] is False
         assert kwargs["seed"] == 42
         # dtype is only forwarded when explicitly set in VLLMConfig
@@ -176,7 +176,7 @@ class TestBuildLlmKwargs:
         assert kwargs["quantization"] == "awq"
 
     def test_none_vllm_config_fields_are_omitted(self):
-        """None VLLMEngineConfig fields are NOT added to kwargs — engine uses its own default."""
+        """None VLLMEngineConfig fields are NOT added to kwargs - engine uses its own default."""
         vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(tensor_parallel_size=2))  # only TP set
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         engine = VLLMEngine()
@@ -327,21 +327,21 @@ class TestBuildSamplingParams:
 
 class TestNoStreamingCode:
     def test_no_run_streaming_method(self):
-        """VLLMEngine has no _run_streaming method — offline batch path only (CM-07)."""
+        """VLLMEngine has no _run_streaming method - offline batch path only (CM-07)."""
         assert not hasattr(VLLMEngine, "_run_streaming"), (
-            "VLLMEngine must not have a _run_streaming method — streaming is resolved "
+            "VLLMEngine must not have a _run_streaming method - streaming is resolved "
             "structurally by using offline batch inference exclusively"
         )
 
     def test_no_async_engine_attribute(self):
-        """VLLMEngine has no async_engine attribute — no streaming engine (CM-07)."""
+        """VLLMEngine has no async_engine attribute - no streaming engine (CM-07)."""
         assert not hasattr(VLLMEngine, "async_engine"), (
-            "VLLMEngine must not have an async_engine attribute — offline batch only"
+            "VLLMEngine must not have an async_engine attribute - offline batch only"
         )
 
 
 # =============================================================================
-# Test Group 6: VLLM-03 — --shm-size 8g in DockerRunner
+# Test Group 6: VLLM-03 - --shm-size 8g in DockerRunner
 # =============================================================================
 
 
@@ -676,7 +676,7 @@ class TestPassthroughKwargs:
         assert params._kwargs["n"] == 4
 
     def test_engine_extra_overrides_explicit_when_colliding(self):
-        """model_extra is merged LAST — if user passes a known field name as extra, it overrides."""
+        """model_extra is merged LAST - if user passes a known field name as extra, it overrides."""
         # This tests the edge case: user deliberately passes a known field via passthrough
         vllm_cfg = VLLMConfig(
             engine=VLLMEngineConfig(**{"enforce_eager": True, "enforce_eager_override": "test"})
@@ -697,7 +697,7 @@ class TestBeamSearchParams:
         """When beam_search is set, config structure reflects beam search mode."""
         vllm_cfg = VLLMConfig(beam_search=VLLMBeamSearchConfig(beam_width=4))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        # The beam search path imports BeamSearchParams from vllm — we can't call it without vLLM.
+        # The beam search path imports BeamSearchParams from vllm - we can't call it without vLLM.
         # Instead, verify the beam_search branch would be taken by checking config structure.
         assert config.vllm is not None
         assert config.vllm.beam_search is not None
@@ -776,7 +776,7 @@ class TestMultiOutputTokenCounting:
         assert output_count == 5  # 3 + 2
 
     def test_multiple_outputs_per_request_all_counted(self):
-        """n=2 produces 2 outputs per request — both must be counted."""
+        """n=2 produces 2 outputs per request - both must be counted."""
         outputs = [
             self._make_fake_output([1, 2], [[10, 11, 12], [20, 21]]),  # 3 + 2 = 5
             self._make_fake_output([3], [[30, 31], [40, 41, 42]]),  # 2 + 3 = 5
@@ -789,9 +789,9 @@ class TestMultiOutputTokenCounting:
         outputs = [
             self._make_fake_output([1, 2], [[10, 11, 12], [20, 21]]),  # 3 + 2 tokens
         ]
-        # Old (wrong) approach — only first output
+        # Old (wrong) approach - only first output
         old_count = sum(len(o.outputs[0].token_ids) for o in outputs if o.outputs)
-        # New (correct) approach — all outputs
+        # New (correct) approach - all outputs
         new_count = sum(len(out.token_ids) for o in outputs if o.outputs for out in o.outputs)
         assert old_count == 3  # undercounts: misses the 2nd output's 2 tokens
         assert new_count == 5  # correct: 3 + 2
@@ -810,7 +810,7 @@ class TestMultiOutputTokenCounting:
         assert output_count == 0
 
     def test_beam_search_four_beams_counted(self):
-        """Beam search with beam_width=4 produces 4 outputs — all 4 counted."""
+        """Beam search with beam_width=4 produces 4 outputs - all 4 counted."""
         outputs = [
             self._make_fake_output([1, 2, 3], [[10] * 8, [20] * 7, [30] * 9, [40] * 6]),
         ]
@@ -819,7 +819,7 @@ class TestMultiOutputTokenCounting:
 
 
 # =============================================================================
-# Test Group 16: M15 — VRAM query uses current_device(), not hardcoded 0
+# Test Group 16: M15 - VRAM query uses current_device(), not hardcoded 0
 # =============================================================================
 
 
@@ -841,12 +841,12 @@ class TestVramCurrentDevice:
             "run_inference must call torch.cuda.current_device() for VRAM query, not hardcode 0"
         )
         assert "get_device_properties(0)" not in source, (
-            "run_inference must not hardcode device 0 — use current_device()"
+            "run_inference must not hardcode device 0 - use current_device()"
         )
 
 
 # =============================================================================
-# Test Group 17: M1 — flash_attn fields wired in _build_llm_kwargs
+# Test Group 17: M1 - flash_attn fields wired in _build_llm_kwargs
 # =============================================================================
 
 

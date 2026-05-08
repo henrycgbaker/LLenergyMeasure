@@ -9,7 +9,7 @@
 # guaranteed by the upstream image.
 #
 # The llenergymeasure package itself is NOT installed into this image. The
-# project source is bind-mounted at runtime by the caller — see the engine-
+# project source is bind-mounted at runtime by the caller - see the engine-
 # invariants/engine-schemas workflows and docs/development.md for the canonical
 # `docker run -v $(pwd):/llem-src -e PYTHONPATH=/llem-src --entrypoint python3`
 # pattern. Symmetric with the vllm + tensorrt cells, which mount the same way
@@ -58,19 +58,19 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # FA3: build hopper extensions from source (produces flash_attn_interface + flash_attn_3_cuda).
 # MAX_JOBS = ninja -j (parallel nvcc invocations).
 # NVCC_THREADS = threads per nvcc; flash-attention/hopper/setup.py defaults to 2,
-# which silently caps total parallelism even at high MAX_JOBS — set explicitly.
+# which silently caps total parallelism even at high MAX_JOBS - set explicitly.
 # Skipped when INSTALL_FA3=false.
 ARG MAX_JOBS=32
 ARG NVCC_THREADS=4
 ENV MAX_JOBS=${MAX_JOBS}
 ENV NVCC_THREADS=${NVCC_THREADS}
 # apt cache mounts persist /var/cache/apt + /var/lib/apt/lists between
-# builds on the same BuildKit instance — subsequent builds reuse the
+# builds on the same BuildKit instance - subsequent builds reuse the
 # fetched .deb packages and Packages metadata without hitting the mirror.
 # Eliminates the dominant build-flake mode (Ubuntu archive intermittently
 # returning incomplete or malformed package lists). The trailing
 # `rm -rf /var/lib/apt/lists/*` is a no-op when the cache mount is in
-# place — it scrubs the in-image copy after the install layer commits,
+# place - it scrubs the in-image copy after the install layer commits,
 # but the mount-backed cache survives.
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -106,7 +106,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 ENV UV_LINK_MODE=copy
 
 # Same apt-retry + cache-mount resilience as the builder stage. Cache mounts
-# persist /var/cache/apt + /var/lib/apt/lists across builds — subsequent
+# persist /var/cache/apt + /var/lib/apt/lists across builds - subsequent
 # builds reuse cached .debs and metadata, avoiding mirror-flake exposure.
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
 
@@ -121,7 +121,7 @@ COPY --from=builder /flash-attn-staging/ /opt/conda/lib/python3.11/site-packages
 WORKDIR /app
 
 # Install the transformers engine substrate plus llenergymeasure's runtime
-# non-engine deps. The project source itself is NOT installed — it is bind-
+# non-engine deps. The project source itself is NOT installed - it is bind-
 # mounted at runtime via PYTHONPATH (see header).
 #
 # Engine deps (transformers/accelerate/bitsandbytes/calflops + sentencepiece/einops)
@@ -151,13 +151,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         "python-dotenv>=1.0" \
         filelock
 
-# HuggingFace cache — writable for non-root users
+# HuggingFace cache - writable for non-root users
 ENV HF_HOME=/app/.cache/huggingface
 RUN mkdir -p /app/.cache/huggingface && chmod 777 /app/.cache/huggingface
 
 LABEL org.opencontainers.image.source="https://github.com/henrycgbaker/llenergymeasure"
 
-# Dev stage — adds development tools for local iteration
+# Dev stage - adds development tools for local iteration
 FROM runtime AS dev
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system ruff mypy pytest pytest-cov

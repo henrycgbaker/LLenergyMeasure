@@ -1,4 +1,4 @@
-"""Unit tests for core/baseline.py — baseline power measurement and cache logic.
+"""Unit tests for core/baseline.py - baseline power measurement and cache logic.
 
 Covers:
 - Cache hit path (returns cached without calling pynvml)
@@ -46,7 +46,7 @@ from tests.unit.harness.conftest import make_pynvml_mock
 
 @contextmanager
 def _noop_nvml_context():
-    """No-op replacement for nvml_context() — skips nvmlInit/nvmlShutdown."""
+    """No-op replacement for nvml_context() - skips nvmlInit/nvmlShutdown."""
     yield
 
 
@@ -110,7 +110,7 @@ def test_cache_hit_respects_ttl():
     fresh_entry = _make_fresh_cache_entry(gpu_indices=[0], power_w=99.0)
     _baseline_cache[(0,)] = fresh_entry
 
-    # Very short TTL — should still hit because timestamp is "now"
+    # Very short TTL - should still hit because timestamp is "now"
     with (
         patch(f"{_MODULE}.nvml_context", _noop_nvml_context),
         patch(f"{_MODULE}.importlib.util.find_spec", return_value=MagicMock()),
@@ -325,7 +325,7 @@ def test_multi_gpu_cache_keyed_by_sorted_tuple():
         patch(f"{_MODULE}.nvml_context", _noop_nvml_context),
         patch(f"{_MODULE}.importlib.util.find_spec", return_value=MagicMock()),
     ):
-        # Same GPUs different order — should hit cache
+        # Same GPUs different order - should hit cache
         result = measure_baseline_power(gpu_indices=[1, 0], cache_ttl_sec=3600.0)
 
     assert result.from_cache is True
@@ -597,7 +597,7 @@ def test_load_baseline_cache_expired(tmp_path):
 
     save_baseline_cache(cache_path, original)
 
-    # TTL of 1800s (30 min) — 2-hour-old cache should be expired
+    # TTL of 1800s (30 min) - 2-hour-old cache should be expired
     result = load_baseline_cache(cache_path, ttl=1800.0)
     assert result is None
 

@@ -6,15 +6,15 @@ per-engine miners will compose to extract validation invariants from pinned
 library source. No concrete miner ships today; they land as independent
 PRs per engine.
 
-- :class:`InvariantCandidate` — the miner output type, serialised to the YAML
+- :class:`InvariantCandidate` - the miner output type, serialised to the YAML
   corpus entry shape in :mod:`llenergymeasure.config.engine_invariants.loader`.
-- :class:`MinerVersionMismatchError`, :class:`MinerLandmarkMissingError` —
+- :class:`MinerVersionMismatchError`, :class:`MinerLandmarkMissingError` -
   fail-loud exceptions CI treats as fatal.
-- :func:`check_installed_version` — version-envelope guard for each miner;
+- :func:`check_installed_version` - version-envelope guard for each miner;
   reads the pin from the engine SSOT (``engine_versions/{engine}.yaml``).
 - AST helpers (:func:`extract_condition_fields`, :func:`resolve_local_assign`,
-  etc.) — deterministic, stateless primitives for AST-based miners.
-- Pattern detectors (``ConditionalRaiseDetector``, etc.) — one class per
+  etc.) - deterministic, stateless primitives for AST-based miners.
+- Pattern detectors (``ConditionalRaiseDetector``, etc.) - one class per
   known library invariant shape; each fires on one ``ast.If`` body at a time.
 
 Tests cover each primitive on synthetic AST fixtures; the per-engine miners
@@ -196,15 +196,15 @@ def first_string_arg(call: ast.Call) -> str | None:
     Returns a substitution-template string for the corpus's
     ``message_template`` field. Recognised input shapes:
 
-    - ``ast.Constant(str)`` — returned as-is.
-    - ``ast.JoinedStr`` (f-string) — interpolations rendered to ``{name}``
+    - ``ast.Constant(str)`` - returned as-is.
+    - ``ast.JoinedStr`` (f-string) - interpolations rendered to ``{name}``
       placeholders matching the runtime substitution vocabulary; ``self.X``
       collapses to ``{X}``.
-    - ``"literal {x}".format(...)`` — the LHS literal returned as the template.
+    - ``"literal {x}".format(...)`` - the LHS literal returned as the template.
       Variable-template forms (``template_var.format(...)``) need scope
       resolution unavailable at this layer; they fall through to ``None``.
 
-    All three avoid returning literal Python source — validation-CI substring
+    All three avoid returning literal Python source - validation-CI substring
     matching against the live library's rendered string fails on source.
     """
     for arg in call.args:
@@ -267,7 +267,7 @@ def render_binop_concat_template(node: ast.expr) -> str | None:
     Walks an ``ast.BinOp`` Add chain (or any leaf operand): ``Constant(str)``
     parts kept verbatim; ``self.X`` and ``str(self.X)`` / ``repr(self.X)``
     render as ``{X}`` placeholders. Returns ``None`` if any operand can't be
-    rendered cleanly — preferable to leaking literal Python source via
+    rendered cleanly - preferable to leaking literal Python source via
     ``ast.unparse``, which breaks validation-CI substring matching.
     """
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
@@ -326,13 +326,13 @@ def extract_assign_target(stmt: ast.Assign) -> str | None:
 def resolve_local_assign(func: ast.FunctionDef, name: str) -> str | None:
     """Find the first ``name = <string-literal>`` inside ``func`` and return the literal.
 
-    Used for HF's ``greedy_wrong_parameter_msg`` pattern — the message template
+    Used for HF's ``greedy_wrong_parameter_msg`` pattern - the message template
     is a local variable defined earlier in the same function body.
 
     **Scope limitation:** only scans top-level statements in ``func.body``.
     Assignments nested in ``if`` / ``try`` / ``with`` / ``for`` blocks are
     not followed. Returns the *first* matching assignment, so a function
-    that rebinds the name later will still surface the earliest value —
+    that rebinds the name later will still surface the earliest value -
     fine for message templates that are constant per function call,
     brittle for names the function reassigns. Suits current HF validate()
     shape; if a future library uses branch-local message templates, the
@@ -387,7 +387,7 @@ class DetectedPattern:
 
 
 class ConditionalRaiseDetector:
-    """``if X: raise SomeException(...)`` — error invariant."""
+    """``if X: raise SomeException(...)`` - error invariant."""
 
     def detect(self, stmt: ast.stmt) -> DetectedPattern | None:
         if not isinstance(stmt, ast.Raise) or stmt.exc is None:
@@ -406,10 +406,10 @@ class ConditionalRaiseDetector:
 
 
 class ConditionalSelfAssignDetector:
-    """``if X: self.A = B`` — silent dormancy invariant.
+    """``if X: self.A = B`` - silent dormancy invariant.
 
     The affected field is ``A``. Represents the library silently normalising
-    the user's declared value — no warning, no error, but the effective state
+    the user's declared value - no warning, no error, but the effective state
     differs from the declared state. vLLM epsilon-clamp is the canonical case.
     """
 
@@ -430,7 +430,7 @@ class ConditionalSelfAssignDetector:
 
 
 class ConditionalWarningsWarnDetector:
-    """``if X: warnings.warn(...)`` — announced warn invariant."""
+    """``if X: warnings.warn(...)`` - announced warn invariant."""
 
     def detect(self, stmt: ast.stmt) -> DetectedPattern | None:
         if not isinstance(stmt, ast.Expr) or not isinstance(stmt.value, ast.Call):
@@ -448,11 +448,11 @@ class ConditionalWarningsWarnDetector:
 
 
 class ConditionalLoggerWarningDetector:
-    """``if X: logger.warning(...)`` / ``logger.warning_once(...)`` — announced.
+    """``if X: logger.warning(...)`` / ``logger.warning_once(...)`` - announced.
 
     Strictly matches two-element paths (``logger.<method>``). Patterns like
     ``logger.sub.warning(...)`` or ``self.logger.warning(...)`` do NOT match
-    — if a real library invariant uses a non-top-level logger attribute, the
+    - if a real library invariant uses a non-top-level logger attribute, the
     miner for that library must supply its own detector.
     """
 
@@ -480,7 +480,7 @@ class ConditionalLoggerWarningDetector:
 class MinorIssuesDictAssignDetector:
     """HF-specific: ``if X: minor_issues[key] = msg.format(...)``.
 
-    Represents HF's announced-dormancy pattern — the library composes a
+    Represents HF's announced-dormancy pattern - the library composes a
     ``minor_issues`` dict during ``GenerationConfig.validate()`` and later
     emits it via ``logger.warning_once`` (or raises if ``strict=True``).
     """
@@ -524,7 +524,7 @@ _DEFAULT_DETECTORS: tuple[
     ConditionalLoggerWarningDetector(),
     MinorIssuesDictAssignDetector(),
 )
-"""Private default detector bundle — ordered by specificity.
+"""Private default detector bundle - ordered by specificity.
 
 Per-engine miners are expected to assemble their own tuple from the
 individual detector classes, so this constant is not part of the public
@@ -543,7 +543,7 @@ def default_detectors() -> tuple[
     | MinorIssuesDictAssignDetector,
     ...,
 ]:
-    """Return the default detector tuple — miners copy / slice this to taste.
+    """Return the default detector tuple - miners copy / slice this to taste.
 
     **Stability contract:** the tuple's *contents* and *ordering* may grow
     or shift as new detectors are added to cover additional libraries.
@@ -581,7 +581,7 @@ def filter_condition_references_self(condition: ast.expr, public_fields: frozens
 def filter_target_is_public_field(pattern: DetectedPattern, public_fields: frozenset[str]) -> bool:
     """For self-assign patterns, ``affected_field`` must be a public field."""
     if pattern.affected_field is None:
-        # Not a self-assign — filter doesn't apply (neutral pass).
+        # Not a self-assign - filter doesn't apply (neutral pass).
         return True
     return pattern.affected_field in public_fields
 
@@ -611,11 +611,11 @@ def filter_kwargs_positive_derivable(condition: ast.expr) -> bool:
         if path is None:
             return False
         if path[0] == "self":
-            # self.<method>(...) — accept (helper-call; tracer may expand).
+            # self.<method>(...) - accept (helper-call; tracer may expand).
             continue
         if path[-1] in safe_call_names:
             continue
-        # Opaque external call (e.g., importlib.util.find_spec) — not
+        # Opaque external call (e.g., importlib.util.find_spec) - not
         # mechanically derivable into positive kwargs.
         return False
     return True

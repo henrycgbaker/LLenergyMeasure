@@ -136,7 +136,7 @@ class AggregationMetadata(BaseModel):
 
 
 class ExperimentResult(BaseModel):
-    """Experiment result — the user-visible output of a measurement run.
+    """Experiment result - the user-visible output of a measurement run.
 
     Combines raw results from all processes into a single result with proper
     aggregation (sum energy, average throughput). For single-GPU experiments,
@@ -164,7 +164,7 @@ class ExperimentResult(BaseModel):
 
     # Methodology
     measurement_methodology: Literal["total", "steady_state", "windowed"] = Field(
-        ..., description="What was measured — total run, steady-state window, or explicit window"
+        ..., description="What was measured - total run, steady-state window, or explicit window"
     )
     steady_state_window: tuple[float, float] | None = Field(
         default=None,

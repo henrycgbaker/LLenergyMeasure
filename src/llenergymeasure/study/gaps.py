@@ -37,14 +37,14 @@ def run_gap(seconds: float, label: str, interrupt_event: threading.Event) -> Non
         "Config gap: 47s remaining (Enter to skip)"
 
     Enter-to-skip: only active in TTY environments. Degrades gracefully in
-    non-TTY (e.g., CI, piped output) — gap runs for the full duration.
+    non-TTY (e.g., CI, piped output) - gap runs for the full duration.
 
     Ctrl+C (SIGINT) during a gap: interrupt_event is set by the StudyRunner
     SIGINT handler. gap exits immediately without printing "done".
 
     Args:
         seconds: Gap duration in seconds.
-        label: Display label — "Config gap" or "Cycle gap".
+        label: Display label - "Config gap" or "Cycle gap".
         interrupt_event: threading.Event set by SIGINT handler; if set on
                          entry or during the gap, abort immediately.
 
@@ -80,7 +80,7 @@ def run_gap(seconds: float, label: str, interrupt_event: threading.Event) -> Non
 
         # Hard stop: SIGINT received
         if interrupt_event.is_set():
-            # Clear line without printing "done" — caller handles exit output
+            # Clear line without printing "done" - caller handles exit output
             sys.stdout.write("\r" + " " * 60 + "\r")
             sys.stdout.flush()
             return

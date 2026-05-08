@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts.engine_miners.tensorrt_miner` — orchestrator surface.
+"""Tests for :mod:`scripts.engine_miners.tensorrt_miner` - orchestrator surface.
 
 The orchestrator is a thin wrapper around the static miner; it exists to
 match the per-engine ``{engine}_miner.py`` shape that ``transformers_miner.py``

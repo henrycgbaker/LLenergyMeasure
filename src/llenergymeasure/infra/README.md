@@ -10,13 +10,13 @@ Manages the full container lifecycle for Docker-isolated experiment execution. A
 
 | Module | Description |
 |--------|-------------|
-| `docker_runner.py` | `DockerRunner` — dispatches a single experiment to an ephemeral container |
+| `docker_runner.py` | `DockerRunner` - dispatches a single experiment to an ephemeral container |
 | `container_entrypoint.py` | Container-side entry point (invoked inside Docker) |
-| `runner_resolution.py` | `resolve_runner()`, `resolve_study_runners()` — local vs Docker selection |
-| `docker_preflight.py` | `run_docker_preflight()` — GPU visibility, CUDA/driver compat checks |
+| `runner_resolution.py` | `resolve_runner()`, `resolve_study_runners()` - local vs Docker selection |
+| `docker_preflight.py` | `run_docker_preflight()` - GPU visibility, CUDA/driver compat checks |
 | `docker_errors.py` | `translate_docker_error()`, typed Docker error classes |
-| `image_registry.py` | `get_default_image()`, `parse_runner_value()` — Docker image registry |
-| `environment.py` | `collect_environment_metadata()` — hardware/software snapshot |
+| `image_registry.py` | `get_default_image()`, `parse_runner_value()` - Docker image registry |
+| `environment.py` | `collect_environment_metadata()` - hardware/software snapshot |
 | `__init__.py` | Package marker |
 
 ## DockerRunner
@@ -152,17 +152,17 @@ runner_type, image_override = parse_runner_value("docker:my/custom-image:v1")
 from llenergymeasure.infra.environment import collect_environment_metadata
 
 metadata = collect_environment_metadata(device_index=0)
-# metadata.gpu — GPUEnvironment (name, memory, compute capability)
-# metadata.cuda — CUDAEnvironment (version, driver)
-# metadata.cpu — CPUEnvironment
-# metadata.container — ContainerEnvironment (is_docker, image)
+# metadata.gpu - GPUEnvironment (name, memory, compute capability)
+# metadata.cuda - CUDAEnvironment (version, driver)
+# metadata.cpu - CPUEnvironment
+# metadata.container - ContainerEnvironment (is_docker, image)
 ```
 
 Gracefully degrades when NVML is unavailable.
 
 ## Layer constraints
 
-- Layer 1 — may import from layer 0 only
+- Layer 1 - may import from layer 0 only
 - Can import from: `config/`, `domain/`, `device/`, `utils/`
 - Cannot import from: `energy/`, `engines/`, `harness/`, `study/`, `api/`, `cli/`, `results/`
 

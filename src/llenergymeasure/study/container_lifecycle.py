@@ -60,7 +60,7 @@ def generate_container_labels(study_id: str) -> dict[str, str]:
     """Return Docker labels that enable targeted cleanup and reaper identification.
 
     Labels:
-        ``llem.study_id``:   Study design hash — used to filter containers by study.
+        ``llem.study_id``:   Study design hash - used to filter containers by study.
         ``llem.parent_pid``: PID of the host process that launched the container.
         ``llem.started_at``: UTC ISO-8601 timestamp when the labels were generated.
 
@@ -84,7 +84,7 @@ def cleanup_study_containers(study_id: str) -> None:
     containers with the matching ``llem.study_id`` label, then sends a
     graceful ``docker stop -t 5`` to each.
 
-    This function must never raise — atexit handlers that raise produce
+    This function must never raise - atexit handlers that raise produce
     confusing output and may mask the original exception.
 
     Args:
@@ -111,7 +111,7 @@ def cleanup_study_containers(study_id: str) -> None:
 def register_container_cleanup(study_id: str) -> None:
     """Register an atexit handler that stops containers for this study.
 
-    Calling this multiple times with the same study_id is safe — Python's
+    Calling this multiple times with the same study_id is safe - Python's
     atexit module allows multiple registrations and runs them LIFO.
 
     Args:
@@ -155,7 +155,7 @@ def reap_orphaned_containers() -> int:
     Containers whose parent is dead are stopped with ``docker stop -t 5``.
     Containers whose parent is alive (or owned by another user) are skipped.
 
-    This function never raises — errors are swallowed so they cannot block
+    This function never raises - errors are swallowed so they cannot block
     study start.
 
     Returns:
@@ -192,7 +192,7 @@ def reap_orphaned_containers() -> int:
                 )
                 reaped += 1
             except PermissionError:
-                pass  # Process exists but owned by another user — not orphaned
+                pass  # Process exists but owned by another user - not orphaned
     except Exception:
         pass  # Never block study start
     return reaped

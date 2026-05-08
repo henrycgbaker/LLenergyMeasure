@@ -63,7 +63,7 @@ def _escape_pipe(value: str) -> str:
 def _format_default(value: Any) -> str:
     """Render a default value for display in a markdown table cell."""
     if value is None:
-        return "—"
+        return "-"
     if isinstance(value, bool):
         return "`true`" if value else "`false`"
     if isinstance(value, (int, float)):
@@ -91,7 +91,7 @@ def _render_table(params: dict[str, Any]) -> list[str]:
     for name, meta in params.items():
         if not isinstance(meta, dict):
             continue
-        type_str = str(meta.get("type", "—"))
+        type_str = str(meta.get("type", "-"))
         default_str = _format_default(meta.get("default"))
         description = str(meta.get("description") or "").strip()
         description = _escape_pipe(description.replace("\n", " "))
@@ -117,7 +117,7 @@ def _render_limitations(limitations: list[Any]) -> list[str]:
         reason = str(entry.get("reason", "")).strip()
         fields = entry.get("fields") or []
         field_strs = [f"`{f}`" for f in fields if isinstance(f, str)]
-        lines.append(f"> - **`{section}`** — {reason}")
+        lines.append(f"> - **`{section}`** - {reason}")
         if field_strs:
             lines.append(f">   Affected fields: {', '.join(field_strs)}")
     lines.append("")

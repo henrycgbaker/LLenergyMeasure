@@ -4,15 +4,19 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 import {ROUTES, GITHUB_REPO, EDIT_URL, SITE_TITLE} from './src/constants';
 
-// Runs in Node.js — no client-side code (no browser APIs, no JSX).
+// Runs in Node.js - no client-side code (no browser APIs, no JSX).
 //
-// Five+one-plugin IA (Get Started + Diátaxis pillars + Contributing):
-//   docs/get-started/  — onboarding: install, quick-start, concepts, audience routing
-//   docs/tutorials/    — guided learning (Tutorials sidebar; classic preset slot)
-//   docs/how-to/       — goal-driven recipes (How-to sidebar)
-//   docs/reference/    — exhaustive lookup: CLI, study config, Python API, engines
-//   docs/explanation/  — research + engineering voice: Methodology, Architecture, Why, Ecosystem
-//   docs/contributing/ — internals + developer docs (last on purpose)
+// Five+one-plugin IA (Get Started + Diataxis pillars + Contributing):
+//   docs/get-started/  - onboarding: install, quick-start, concepts, audience routing
+//   docs/tutorials/    - guided learning (Tutorials sidebar; classic preset slot)
+//   docs/how-to/       - goal-driven recipes (How-to sidebar)
+//   docs/reference/    - exhaustive lookup: CLI, study config, Python API, engines
+//   docs/explanation/  - research + engineering voice: Methodology, Architecture, Why, Ecosystem
+//   docs/contributing/ - internals + developer docs (last on purpose)
+//
+// Changelog: served as a standalone React page (src/pages/changelog.tsx)
+// importing CHANGELOG.md directly; symlinked at docs/changelog.md for
+// direct-GitHub viewing.
 //
 // Content lives in docs/ at the repo root; this Docusaurus instance lives
 // in website/ and points its plugins at ../docs/<subdir>. .product/ is
@@ -41,8 +45,8 @@ const config: Config = {
 
   markdown: {
     // Treat .md files as plain CommonMark (not MDX). Docs in this repo use
-    // standard markdown features only — HTML comments, GFM tables, code
-    // blocks — and don't need JSX. CommonMark mode is more permissive.
+    // standard markdown features only - HTML comments, GFM tables, code
+    // blocks - and don't need JSX. CommonMark mode is more permissive.
     format: 'md',
     mermaid: true,
     hooks: {
@@ -249,6 +253,7 @@ const config: Config = {
             {label: 'Roadmap', to: '/contributing/roadmap'},
           ],
         },
+        {to: '/changelog', label: 'Changelog', position: 'left'},
         {href: GITHUB_REPO, label: 'GitHub', position: 'right'},
       ],
     },

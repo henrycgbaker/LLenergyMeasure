@@ -1,9 +1,9 @@
 """Unit tests for config.engine_detection.py.
 
 Covers:
-- is_engine_available() — tries importing the engine package
-- get_available_engines() — filters KNOWN_ENGINES by availability
-- get_engine_install_hint() — returns correct install hint strings
+- is_engine_available() - tries importing the engine package
+- get_available_engines() - filters KNOWN_ENGINES by availability
+- get_engine_install_hint() - returns correct install hint strings
 
 All import-level side effects are mocked via unittest.mock.patch; no real
 engine packages are imported or required.
@@ -182,7 +182,7 @@ class TestGetEngineInstallHint:
     def test_pytorch_hint_is_base_install(self):
         hint = get_engine_install_hint("transformers")
         assert "llenergymeasure" in hint
-        # pytorch ships with the base package — no extra bracket needed
+        # pytorch ships with the base package - no extra bracket needed
         assert "[" not in hint
 
     def test_vllm_hint_recommends_docker(self):

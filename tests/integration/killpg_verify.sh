@@ -6,7 +6,7 @@
 #   1. Records baseline GPU memory
 #   2. Launches llem run with a vLLM config (facebook/opt-125m)
 #   3. Polls until GPU memory exceeds baseline + threshold (model loaded)
-#   4. Sends SIGINT — triggers _sigint_handler -> _kill_process_group(SIGTERM)
+#   4. Sends SIGINT - triggers _sigint_handler -> _kill_process_group(SIGTERM)
 #   5. Asserts GPU memory returns to baseline (all vLLM workers released GPU)
 #
 # Requires: GPU hardware (CUDA), facebook/opt-125m cached, llem installed
@@ -25,7 +25,7 @@ MEMORY_RETURN_TIMEOUT=30
 # Delta tolerance in MB: current <= baseline + tolerance counts as "returned"
 MEMORY_TOLERANCE_MB=100
 
-# Force local runner — inside a container, we already have CUDA.
+# Force local runner - inside a container, we already have CUDA.
 export LLEM_RUNNER_VLLM=local
 
 # Use llem directly if available (container), else uv run (host)
@@ -104,7 +104,7 @@ fi
 # --- Step 4: Send SIGINT to trigger os.killpg via _sigint_handler ---
 # This exercises the exact code path: _sigint_handler -> _kill_process_group(pid, SIGTERM)
 # The worker called os.setpgrp(), so killpg sends SIGTERM to the whole process group
-# (vLLM workers, ray workers, etc.) — not just the parent.
+# (vLLM workers, ray workers, etc.) - not just the parent.
 echo "Sending SIGINT to PID $LLEM_PID"
 kill -INT "$LLEM_PID"
 
@@ -116,7 +116,7 @@ set -e
 
 echo "Exit code: $EXIT_CODE"
 
-# Disarm the EXIT trap — llem is already gone
+# Disarm the EXIT trap - llem is already gone
 trap - EXIT
 
 # Assertion 1: Exit code must be 130 (SIGINT convention: 128 + 2)

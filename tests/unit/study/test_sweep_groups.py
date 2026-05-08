@@ -83,7 +83,7 @@ class TestGroupBackendScope:
 
 
 # =============================================================================
-# _expand_group_entry() — mini-grid within entries
+# _expand_group_entry() - mini-grid within entries
 # =============================================================================
 
 
@@ -131,7 +131,7 @@ class TestExpandGroupEntry:
 
 
 # =============================================================================
-# _expand_group() — union of variants
+# _expand_group() - union of variants
 # =============================================================================
 
 
@@ -157,7 +157,7 @@ class TestExpandGroup:
 
 
 # =============================================================================
-# _apply_group_overlay() — key routing
+# _apply_group_overlay() - key routing
 # =============================================================================
 
 
@@ -222,7 +222,7 @@ class TestApplyGroupOverlay:
 
 
 # =============================================================================
-# _validate_sweep_groups() — collision detection
+# _validate_sweep_groups() - collision detection
 # =============================================================================
 
 
@@ -240,7 +240,7 @@ class TestValidateSweepGroups:
 
 
 # =============================================================================
-# expand_grid() — integration tests with groups
+# expand_grid() - integration tests with groups
 # =============================================================================
 
 

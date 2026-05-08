@@ -1,4 +1,4 @@
-"""Runtime observation capture — feedback channel #1 for the invariants corpus.
+"""Runtime observation capture - feedback channel #1 for the invariants corpus.
 
 Wraps an experiment's worker body in a context manager that captures:
 
@@ -8,12 +8,12 @@ Wraps an experiment's worker body in a context manager that captures:
   ``tensorrt_llm``). Attaching at engine-level captures all submodule
   emissions by propagation.
 - Structured ``outcome: "exception"`` records with truncated tracebacks when
-  inference raises. Runtime rejection is a distinct feedback class — the
+  inference raises. Runtime rejection is a distinct feedback class - the
   library rejecting a config at runtime is announced behaviour, just via a
   different channel than ``warnings.warn``.
 
 Writes one JSONL record per experiment to ``{study_dir}/runtime_observations.jsonl``.
-The wrapper is a **discovery** mechanism, not a gate — it never blocks,
+The wrapper is a **discovery** mechanism, not a gate - it never blocks,
 retries, or modifies runs. Cache-write failures log a warning and are swallowed.
 
 A parent-side :func:`write_sentinel` records the subprocess-died case
@@ -111,13 +111,13 @@ def capture_runtime_observations(
     engine libraries are captured.
 
     On success: writes ``outcome: "success"`` record (with empty arrays if
-    nothing was emitted — the empty arrays are load-bearing evidence for
+    nothing was emitted - the empty arrays are load-bearing evidence for
     predicate inference downstream).
 
     On exception: writes ``outcome: "exception"`` record with serialised
     traceback, then re-raises.
 
-    Cache-write errors are logged at WARNING and swallowed — a broken cache
+    Cache-write errors are logged at WARNING and swallowed - a broken cache
     must never fail a study.
     """
     target = Path(study_dir) / RUNTIME_OBSERVATIONS_FILENAME
@@ -127,15 +127,15 @@ def capture_runtime_observations(
     logger_name = engine_logger_name(config.engine)
     engine_logger = logging.getLogger(logger_name)
 
-    # Handler-level DEBUG only — leaves the library logger's own level
+    # Handler-level DEBUG only - leaves the library logger's own level
     # untouched so we don't mutate user-visible logging state. Records
     # emitted below the logger's effective level won't reach handlers
-    # either way, which is fine — they aren't user-visible warnings.
+    # either way, which is fine - they aren't user-visible warnings.
     engine_logger.addHandler(handler)
 
     warn_ctx = warnings.catch_warnings(record=True)
     captured = warn_ctx.__enter__()
-    # Deliberately no ``warnings.simplefilter("always")`` — RT-0 PoC
+    # Deliberately no ``warnings.simplefilter("always")`` - RT-0 PoC
     # confirmed ``catch_warnings(record=True)`` alone captures one record
     # per unique ``(filename, lineno, category, message)`` on Python 3.10+.
     # Calling simplefilter perturbs the measurement window.
@@ -185,7 +185,7 @@ def write_sentinel(
     Called by :class:`StudyRunner` when the worker was killed before its
     context manager's ``__exit__`` could run (SIGKILL, OOM, timeout). Uses
     ``os.open + O_APPEND + os.write`` so the single record hits the kernel
-    as one atomic write — no torn-line risk with other writers.
+    as one atomic write - no torn-line risk with other writers.
     """
     target = Path(study_dir) / RUNTIME_OBSERVATIONS_FILENAME
     record = _build_record(
@@ -323,7 +323,7 @@ def _append_observation(path: Path, record: dict[str, Any]) -> None:
     """Append one JSONL record to ``path`` using buffered IO + flush + fsync.
 
     W1 pattern from RT-2 PoC: open in append mode, write, flush, fsync.
-    Torn-line-safe at 10 KiB records on Linux ext4. Best-effort — a
+    Torn-line-safe at 10 KiB records on Linux ext4. Best-effort - a
     write failure is logged at WARNING but never raises.
     """
     try:

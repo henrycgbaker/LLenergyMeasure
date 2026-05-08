@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts.update_last_probe` — the SSOT last_probe writer.
+"""Tests for :mod:`scripts.update_last_probe` - the SSOT last_probe writer.
 
 The helper is invoked from the engine-coupling probe-writeback workflow:
 it reads a ``ProbeReport`` JSON on stdin and rewrites the four mutable

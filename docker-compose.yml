@@ -21,12 +21,12 @@
 
 # BuildKit layer cache for the transformers image.
 # Two sources, in priority order:
-#   1. :v${LLEM_PKG_VERSION} — exact-version image layers from the matching
+#   1. :v${LLEM_PKG_VERSION} - exact-version image layers from the matching
 #      release. Note the literal `v`: published tags carry a `v` prefix (set by
 #      release.yml) but LLEM_PKG_VERSION is bare semver (from _version.py), so
 #      we have to add the prefix here. On dev versions (`vdev`) this entry
-#      silently misses, which is fine — the next entry catches it.
-#   2. :latest — rolling cache published by docker-publish.yml with mode=max,
+#      silently misses, which is fine - the next entry catches it.
+#   2. :latest - rolling cache published by docker-publish.yml with mode=max,
 #      which exports intermediate layers (including the flash-attn compile).
 x-cache-transformers: &cache-transformers
   cache_from:

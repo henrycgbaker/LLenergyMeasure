@@ -1,4 +1,4 @@
-# Pending validation-gate operationalisation — see issue #445
+# Pending validation-gate operationalisation - see issue #445
 schema_version: 1.0.0
 engine: vllm
 engine_version: 0.7.3

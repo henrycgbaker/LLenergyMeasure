@@ -44,7 +44,7 @@ jobs:
       - name: Mint llem-ci-bot App token
         # Per-cell mint (not forwarded from orchestrator) because GitHub
         # masks secret-derived job outputs to empty when crossing job
-        # boundaries — see docs.github.com Security hardening: "If a
+        # boundaries - see docs.github.com Security hardening: "If a
         # secret was used in the job to create an output, the output is
         # redacted and not accessible to a downstream job." Skipped on
         # fork PRs (App secrets aren't available cross-fork).
@@ -212,7 +212,7 @@ jobs:
           echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
           echo "date=${DATE}" >> "$GITHUB_OUTPUT"
 
-      - name: Probe — landmark resolution check (in container)
+      - name: Probe - landmark resolution check (in container)
         id: probe
         env:
           IMAGE: ${{ steps.version.outputs.image }}
@@ -389,7 +389,7 @@ jobs:
           echo "classification=${CLASSIFICATION}" >> "$GITHUB_OUTPUT"
 
           {
-            echo "## Engine invariants — ${ENGINE}"
+            echo "## Engine invariants - ${ENGINE}"
             echo
             if [[ "$CLASSIFICATION" == "no-changes" ]]; then
               echo "_No changes to proposed or validated invariants._"
@@ -421,7 +421,7 @@ jobs:
         run: |
           {
             echo "<!-- ${MARKER} -->"
-            echo "## Engine invariants — ${ENGINE} (probe-blocked)"
+            echo "## Engine invariants - ${ENGINE} (probe-blocked)"
             echo
             echo "**Probe failed.** Producer landmarks no longer resolve under the installed library."
             echo
@@ -433,10 +433,10 @@ jobs:
             echo
             echo "**To unblock,** choose one of:"
             echo
-            echo "- **Patch the producer module's landmarks** — required when the library has genuinely renamed or removed the missing symbols. The miner code needs updating to match the new library API."
-            echo "- **Run \`@llem-ci-bot /approve-reuse ${ENGINE} invariants\`** — widens the SSOT pin envelope to declare \"the existing miner code is valid for this library version too.\" Only useful when the library bumped *past* the miner's previously-validated version range but the landmarks still resolve."
+            echo "- **Patch the producer module's landmarks** - required when the library has genuinely renamed or removed the missing symbols. The miner code needs updating to match the new library API."
+            echo "- **Run \`@llem-ci-bot /approve-reuse ${ENGINE} invariants\`** - widens the SSOT pin envelope to declare \"the existing miner code is valid for this library version too.\" Only useful when the library bumped *past* the miner's previously-validated version range but the landmarks still resolve."
             echo
-            echo "**The probe is the canonical gate** — \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only a producer-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
+            echo "**The probe is the canonical gate** - \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only a producer-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
           } | scripts/ci/upsert_pr_comment.sh
           gh pr edit "$PR" --add-label "probe-blocked" 2>/dev/null || true
 

@@ -14,7 +14,7 @@ Usage::
     # Explicit sampler (raises ConfigError if unavailable)
     sampler = select_energy_sampler("zeus")
 
-    # Intentional disable — returns None, no warnings
+    # Intentional disable - returns None, no warnings
     sampler = select_energy_sampler(None)
 
     if sampler is not None:
@@ -63,7 +63,7 @@ def select_energy_sampler(
     This is the primary API for sampler selection.
 
     Selection rules:
-    - ``None``: intentional disable — returns ``None`` immediately, no warnings.
+    - ``None``: intentional disable - returns ``None`` immediately, no warnings.
     - Specific name (``"nvml"``, ``"zeus"``, ``"codecarbon"``): instantiate that
       sampler; raise ``ConfigError`` with install guidance if unavailable.
     - ``"auto"``: probe in priority order (Zeus > NVML > CodeCarbon); return the
@@ -80,7 +80,7 @@ def select_energy_sampler(
     Raises:
         ConfigError: When an explicitly requested sampler is not available.
     """
-    # Intentional disable — null in YAML maps to Python None
+    # Intentional disable - null in YAML maps to Python None
     if explicit is None:
         return None
 
@@ -100,18 +100,18 @@ def select_energy_sampler(
 
 def _auto_select(gpu_indices: list[int] | None = None) -> EnergySampler | None:
     """Auto-select best available sampler: Zeus > NVML > CodeCarbon > None."""
-    # Zeus — preferred: hardware energy register accuracy
+    # Zeus - preferred: hardware energy register accuracy
     if importlib.util.find_spec("zeus") is not None:
         sampler = ZeusSampler(gpu_indices=gpu_indices)
         if sampler.is_available():
             return sampler
 
-    # NVML — always available on GPU machines (nvidia-ml-py is a base dep)
+    # NVML - always available on GPU machines (nvidia-ml-py is a base dep)
     nvml_sampler = NVMLSampler(gpu_indices=gpu_indices)
     if nvml_sampler.is_available():
         return nvml_sampler
 
-    # CodeCarbon — software fallback (no gpu_indices: CodeCarbon handles its own GPU detection)
+    # CodeCarbon - software fallback (no gpu_indices: CodeCarbon handles its own GPU detection)
     if importlib.util.find_spec("codecarbon") is not None:
         from llenergymeasure.energy.codecarbon import CodeCarbonSampler
 

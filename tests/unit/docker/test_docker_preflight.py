@@ -1,6 +1,6 @@
 """GPU-free unit tests for Docker pre-flight checks.
 
-All subprocess.run and shutil.which calls are mocked — no Docker or GPU needed.
+All subprocess.run and shutil.which calls are mocked - no Docker or GPU needed.
 """
 
 from __future__ import annotations
@@ -214,7 +214,7 @@ class TestTier1HostNvidiaSmi:
             ),
             caplog.at_level(logging.WARNING, logger="llenergymeasure.infra.docker_preflight"),
         ):
-            # Should NOT raise — missing nvidia-smi is warn-only
+            # Should NOT raise - missing nvidia-smi is warn-only
             run_docker_preflight()
 
         # Warning must be logged
@@ -397,7 +397,7 @@ class TestTier2GPUVisibilitySuccess:
             run_docker_preflight()
 
     def test_all_checks_pass_no_output(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Silent on success — no ERROR or WARNING logs when all checks pass."""
+        """Silent on success - no ERROR or WARNING logs when all checks pass."""
         with (
             patch(
                 "llenergymeasure.infra.docker_preflight.shutil.which",
@@ -945,7 +945,7 @@ class TestWiring:
                 side_effect=fake_docker_preflight,
             ),
         ):
-            # CLI says skip=True, YAML says False — CLI wins
+            # CLI says skip=True, YAML says False - CLI wins
             run_study_preflight(study, skip_preflight=True)
 
         assert received_skip == [True], f"Expected CLI flag to win (skip=True), got {received_skip}"

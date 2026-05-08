@@ -6,14 +6,14 @@ useful guidance to the researcher without them needing to understand Docker
 internals.
 
 Error categories:
-    DockerImagePullError       — image not found, pull failed
-    DockerGPUAccessError       — NVIDIA Container Toolkit / GPU access problem
-    DockerOOMError             — out-of-memory inside container
-    DockerPermissionError      — permission denied (docker daemon socket)
-    DockerTimeoutError         — container hit wall-clock timeout and was killed
-    DockerStdoutSilenceError   — container produced no output for the silence
+    DockerImagePullError       - image not found, pull failed
+    DockerGPUAccessError       - NVIDIA Container Toolkit / GPU access problem
+    DockerOOMError             - out-of-memory inside container
+    DockerPermissionError      - permission denied (docker daemon socket)
+    DockerTimeoutError         - container hit wall-clock timeout and was killed
+    DockerStdoutSilenceError   - container produced no output for the silence
                                  budget (stuck process detected by watchdog)
-    DockerContainerError       — generic fallback with stderr snippet
+    DockerContainerError       - generic fallback with stderr snippet
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ class DockerStdoutSilenceError(DockerError):
     Distinct from :class:`DockerTimeoutError`: the wall-clock timeout
     fires when the container has been running too long total. The
     silence error fires when the container *might* still be progressing
-    on the wall-clock budget but has gone quiet — typically a hung CUDA
+    on the wall-clock budget but has gone quiet - typically a hung CUDA
     kernel, a deadlocked NCCL collective, or a stuck compilation step.
 
     The watchdog tracks both budgets independently and reports which

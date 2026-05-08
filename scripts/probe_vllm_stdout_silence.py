@@ -11,7 +11,7 @@ Why this shape (not in-container instrumentation): the watchdog the
 default will protect lives in ``docker_runner.py:_run_container_streaming``
 on the *host* side, reading the container's stdout pipe. Measuring on
 that exact pipe (via host-side subprocess.Popen mirroring the runner)
-reflects what the watchdog actually observes — including container
+reflects what the watchdog actually observes - including container
 startup latency, NVML init, vLLM's torch.compile warmup, and steady-state
 inference output rate.
 
@@ -121,12 +121,12 @@ def _run_and_capture(config_path: Path) -> list[tuple[float, str]]:
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{REPO_ROOT}:{REPO_ROOT}/src"
     # Skew between host package version and pre-built image schema is fine for
-    # this PoC — we're measuring stdout pacing, not config-schema correctness.
+    # this PoC - we're measuring stdout pacing, not config-schema correctness.
     env["LLEM_SKIP_IMAGE_CHECK"] = "1"
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,  # merge — we want the *same* stream the watchdog will see
+        stderr=subprocess.STDOUT,  # merge - we want the *same* stream the watchdog will see
         text=True,
         bufsize=1,
         cwd=str(REPO_ROOT),

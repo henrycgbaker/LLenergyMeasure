@@ -149,14 +149,14 @@ def test_silent_ignore_invalid_float_carbon_intensity(tmp_path, monkeypatch):
     monkeypatch.setenv(ENV_CARBON_INTENSITY, "not_a_number")
     # Should not raise
     config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
-    # Value is not set (treated as None — same as not providing the env var)
+    # Value is not set (treated as None - same as not providing the env var)
     assert config.measurement.carbon_intensity_gco2_kwh is None
 
 
 def test_silent_ignore_invalid_float_datacenter_pue(tmp_path, monkeypatch):
     """LLEM_DATACENTER_PUE='abc' is silently ignored (treated as not set)."""
     monkeypatch.setenv(ENV_DATACENTER_PUE, "abc")
-    # Should not raise — value is silently ignored
+    # Should not raise - value is silently ignored
     config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
     # Falls back to default when invalid
     assert config.measurement.datacenter_pue == pytest.approx(1.0)

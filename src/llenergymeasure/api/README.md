@@ -11,8 +11,8 @@ Exposes `run_experiment()` and `run_study()` as the primary library interface. A
 | Module | Description |
 |--------|-------------|
 | `_impl.py` | `run_experiment()` and `run_study()` implementations; `_run()` dispatcher |
-| `_gpu.py` | `_resolve_gpu_indices()` — per-engine GPU index resolution |
-| `preflight.py` | `run_preflight()` and `run_study_preflight()` — pre-experiment checks |
+| `_gpu.py` | `_resolve_gpu_indices()` - per-engine GPU index resolution |
+| `preflight.py` | `run_preflight()` and `run_study_preflight()` - pre-experiment checks |
 | `__init__.py` | Re-exports `run_experiment`, `run_study` |
 
 ## Public API
@@ -62,7 +62,7 @@ result = run_experiment(model="gpt2", skip_preflight=True)
 1. CUDA available (`torch.cuda.is_available()`)
 2. Engine package installed (`transformers`, `vllm`, or `tensorrt_llm`)
 3. Model accessible (local path exists, or HuggingFace Hub reachable)
-4. `build_config_probe(config).errors` — host-GPU compatibility via `EnginePlugin.check_hardware` (e.g., FP8 on non-Ada GPUs)
+4. `build_config_probe(config).errors` - host-GPU compatibility via `EnginePlugin.check_hardware` (e.g., FP8 on non-Ada GPUs)
 
 All failures are collected and raised together as a single `PreFlightError` so the user sees all problems at once.
 
@@ -95,7 +95,7 @@ run_study(...)
 
 ## Layer constraints
 
-- Layer 5 — may import from layers 0–4
+- Layer 5 - may import from layers 0-4
 - Cannot be imported by: `harness/`, `engines/`, `energy/`, `infra/`, `study/`, `device/`, `utils/`, `config/`, `domain/`, `datasets/`, `results/`
 - The `cli/` layer is the only layer above `api/`
 

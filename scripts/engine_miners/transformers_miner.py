@@ -1,15 +1,15 @@
-"""Transformers validation-invariants miner — landmark-verified orchestrator.
+"""Transformers validation-invariants miner - landmark-verified orchestrator.
 
 Composes two extraction paths to emit a deterministic invariants corpus:
 
-1. **GenerationConfig invariants via library-API introspection** — delegated to
+1. **GenerationConfig invariants via library-API introspection** - delegated to
    :mod:`scripts.engine_miners.transformers_dynamic_miner`. Every dormancy
    invariant is discovered by probing ``GenerationConfig.validate(strict=True)``
    against a synthesised per-type probe value; every error-class invariant's
    message is lifted from the library's own ``ValueError``. Invariants emitted:
    ``added_by: dynamic_miner``.
 
-2. **BitsAndBytesConfig type-check invariants** — hand-curated here. BNB import
+2. **BitsAndBytesConfig type-check invariants** - hand-curated here. BNB import
    triggers a CUDA context on GPU-bearing hosts, which would make the miner
    unsafe to run CPU-only in CI. Keeping BNB invariants as landmark-verified
    manual seed preserves CPU-safety; the justification is the CUDA-context
@@ -21,7 +21,7 @@ exist. Missing landmark → :class:`MinerLandmarkMissingError`. Version
 envelope: :func:`check_installed_version` reads the dynamic miner pin from
 ``engine_versions/transformers.yaml`` (``miner_pins.dynamic``); a mismatch
 raises :class:`MinerVersionMismatchError` at CI time. Source paths and line
-numbers are derived via :func:`inspect.getsourcefile` and a text grep —
+numbers are derived via :func:`inspect.getsourcefile` and a text grep -
 informational only, not used for invariant matching.
 
 Flash-attention validation (``validate_transformers_flash_attn_dtype``) is
@@ -80,25 +80,25 @@ LANDMARKS: tuple[str, ...] = (
 )
 
 # ---------------------------------------------------------------------------
-# BitsAndBytesConfig type-check invariants (kept hand-curated — CPU-safe)
+# BitsAndBytesConfig type-check invariants (kept hand-curated - CPU-safe)
 # ---------------------------------------------------------------------------
 #
 # These invariants surface BNB's ``isinstance``-checking ``post_init`` TypeErrors
 # before BNB is actually constructed. BNB's ``import`` triggers a CUDA
 # context on GPU hosts; the miner stays CPU-safe by not importing it.
-# Predicate uses ``type_is_not`` — fires only when the field is set AND has
+# Predicate uses ``type_is_not`` - fires only when the field is set AND has
 # the wrong concrete type; a valid value (``True`` for a bool field) does
 # not match.
 #
 # Provenance: ``manual_seed``. Re-auditing on BNB library bumps is a
-# maintainer task — until a BNB-side introspection path is wired up (e.g.
+# maintainer task - until a BNB-side introspection path is wired up (e.g.
 # inside a CUDA-bearing container at CI time), the partition stays as-is.
 
 _BNB_TYPE_RULES: tuple[tuple[str, str, Any, Any], ...] = (
     # (field, expected_type_label, positive_value, negative_value)
     # type_label matches ``type(value).__name__`` (strict class-name match
     # used by the loader's ``type_is_not`` predicate). ``torch.dtype``
-    # instances have ``type(v).__name__ == "dtype"`` — not "torch.dtype".
+    # instances have ``type(v).__name__ == "dtype"`` - not "torch.dtype".
     ("load_in_4bit", "bool", "yes", False),
     ("load_in_8bit", "bool", 1, False),
     ("llm_int8_threshold", "float", "6.0", 6.0),
@@ -156,7 +156,7 @@ def _relative_source_path(abs_path: str) -> str:
     """Strip host-specific prefixes so the corpus is reproducible across machines.
 
     ``/home/alice/.local/lib/python3.10/site-packages/transformers/...``
-    → ``transformers/...`` — rooted at ``site-packages/``.
+    → ``transformers/...`` - rooted at ``site-packages/``.
     """
     marker = "site-packages/"
     idx = abs_path.find(marker)
@@ -213,7 +213,7 @@ def _make_bnb_type_invariant(
         message_template=(f"`{field}` must be a {type_label}, got {{declared_value}}."),
         references=[
             "transformers.utils.quantization_config.BitsAndBytesConfig.post_init() "
-            "— manually audited type-check raises"
+            "- manually audited type-check raises"
         ],
         added_by="manual_seed",
         added_at=today,
@@ -250,7 +250,7 @@ def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
 
 
 def walk() -> tuple[list[InvariantCandidate], dict[str, Any]]:
-    """Return ``(candidates, envelope_metadata)`` — full corpus for this engine.
+    """Return ``(candidates, envelope_metadata)`` - full corpus for this engine.
 
     Composes the introspection-derived GenerationConfig invariants with the
     hand-curated BNB invariants. Invariants in the returned list carry their own
@@ -276,12 +276,12 @@ def walk() -> tuple[list[InvariantCandidate], dict[str, Any]]:
         )
     )
 
-    # BitsAndBytesConfig invariants — source path is the quantization_config module.
+    # BitsAndBytesConfig invariants - source path is the quantization_config module.
     # Cheaply locate it without importing bnb (which may touch CUDA).
     bnb_source_path = source_path
     try:
         import transformers.utils.quantization_config as _qcfg  # type: ignore
-    except ImportError:  # pragma: no cover — landmark missing, handled upstream
+    except ImportError:  # pragma: no cover - landmark missing, handled upstream
         pass
     else:
         abs_bnb = inspect.getsourcefile(_qcfg)

@@ -5,7 +5,7 @@ sweep configs goes through ``load_study_config`` and the resulting
 ``StudyConfig`` records the pre-run equivalence groups + deduplicated
 canonical configs.
 
-Run time: < 1s — no GPU involved, all operations are on Pydantic models
+Run time: < 1s - no GPU involved, all operations are on Pydantic models
 and the engine-invariants loader.
 """
 
@@ -66,7 +66,7 @@ def test_no_dedup_preserves_all_configs(tmp_path: Path) -> None:
     study_config = load_study_config(path)
 
     assert study_config.dedup_mode == "off"
-    # All 6 declared configs run — library-resolution mechanism still populated the groups.
+    # All 6 declared configs run - library-resolution mechanism still populated the groups.
     assert len(study_config.experiments) == 6
     # Groups still computed for the sidecar trail.
     assert sum(g["member_count"] for g in study_config.pre_run_equivalence_groups) == 6

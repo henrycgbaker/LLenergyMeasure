@@ -13,9 +13,9 @@ Classes use `*Sampler` suffix to distinguish them from inference backends. The s
 | Module | Description |
 |--------|-------------|
 | `base.py` | `EnergySampler` protocol definition |
-| `nvml.py` | `NVMLSampler` — NVML power integration (default) |
-| `zeus.py` | `ZeusSampler` — Zeus hardware energy registers |
-| `codecarbon.py` | `CodeCarbonSampler` — software fallback |
+| `nvml.py` | `NVMLSampler` - NVML power integration (default) |
+| `zeus.py` | `ZeusSampler` - Zeus hardware energy registers |
+| `codecarbon.py` | `CodeCarbonSampler` - software fallback |
 | `__init__.py` | `select_energy_sampler()`, re-exports |
 
 ## EnergySampler protocol
@@ -38,12 +38,12 @@ from llenergymeasure.energy import select_energy_sampler
 # Auto-select best available sampler (Zeus > NVML > CodeCarbon > None)
 sampler = select_energy_sampler("auto")
 
-# Explicit sampler — raises ConfigError if unavailable
+# Explicit sampler - raises ConfigError if unavailable
 sampler = select_energy_sampler("nvml")
 sampler = select_energy_sampler("zeus")
 sampler = select_energy_sampler("codecarbon")
 
-# Intentional disable — returns None immediately, no warnings
+# Intentional disable - returns None immediately, no warnings
 sampler = select_energy_sampler(None)
 
 # With GPU indices
@@ -81,7 +81,7 @@ resolved internally by the harness. See `docs/energy-measurement.md` for full ra
 
 ## Layer constraints
 
-- Layer 2 — may import from layers 0–1 only
+- Layer 2 - may import from layers 0-1 only
 - Can import from: `config/`, `domain/`, `device/`, `utils/`
 - Cannot import from: `harness/`, `backends/`, `study/`, `api/`, `cli/`, `results/`
 

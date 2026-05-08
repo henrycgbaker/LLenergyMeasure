@@ -4,13 +4,13 @@
 #
 # Usage: ./scripts/refresh_invariants.sh {transformers|vllm|tensorrt}
 #
-# Mirror of scripts/refresh_discovered_schemas.sh — same idioms (Dockerfile ARG
-# lookup, image build fallback, diff-only-no-commit output) — different
+# Mirror of scripts/refresh_discovered_schemas.sh - same idioms (Dockerfile ARG
+# lookup, image build fallback, diff-only-no-commit output) - different
 # artifact. Run this locally to re-validate against the pinned image before
 # opening a PR; CI will re-run inside the same image on the PR branch.
 #
 # Output: src/llenergymeasure/engines/<engine>/invariants.validated.yaml
-# The YAML IS the canonical SSOT — authority comes from `git commit`, not
+# The YAML IS the canonical SSOT - authority comes from `git commit`, not
 # from who ran validation.
 #
 # Legitimate refresh (e.g. you bumped a Dockerfile FROM tag):
@@ -91,7 +91,7 @@ docker run --rm \
 
 cd "$REPO_ROOT"
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
-    echo "[$ENGINE] Not inside a git repo — skipping diff output." >&2
+    echo "[$ENGINE] Not inside a git repo - skipping diff output." >&2
     exit 0
 fi
 

@@ -119,12 +119,12 @@ def test_load_miner_pin_returns_specifier_set() -> None:
 
 
 def test_load_miner_pin_raises_on_unknown_engine() -> None:
-    """A missing engine SSOT surfaces as ``FileNotFoundError`` — no silent fallback."""
+    """A missing engine SSOT surfaces as ``FileNotFoundError`` - no silent fallback."""
     with pytest.raises(FileNotFoundError):
         _ssot.load_miner_pin("does_not_exist", "static")
 
 
 def test_load_miner_pin_raises_on_unknown_producer() -> None:
-    """An unknown ``miner_pins`` key surfaces as ``KeyError`` — no silent default."""
+    """An unknown ``miner_pins`` key surfaces as ``KeyError`` - no silent default."""
     with pytest.raises(KeyError):
         _ssot.load_miner_pin("transformers", "not_a_producer")  # type: ignore[arg-type]

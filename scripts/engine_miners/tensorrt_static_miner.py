@@ -1,4 +1,4 @@
-"""TensorRT-LLM static miner — source-driven AST extraction.
+"""TensorRT-LLM static miner - source-driven AST extraction.
 
 Parses ``tensorrt_llm`` 0.21.0 source via ``ast.parse`` and emits validation-invariant
 candidates for the AST validators on :class:`BaseLlmArgs`, :class:`TrtLlmArgs`,
@@ -19,13 +19,13 @@ Schema lift via AST
 ``_pydantic_lift`` is the standard sub-library lift for Pydantic v2 models,
 but it requires a live class import (``model_fields`` is a runtime attribute).
 For TRT-LLM we cannot import 0.21.0 on host, so this miner extracts the same
-information — ``Literal[...]`` allowlists on Pydantic ``Field``-defined
-attributes — from class-body AST. The shape it emits is byte-identical to
+information - ``Literal[...]`` allowlists on Pydantic ``Field``-defined
+attributes - from class-body AST. The shape it emits is byte-identical to
 ``_pydantic_lift``'s output for the equivalent fields, just sourced via AST.
 
 No dynamic miner
 ----------------
-TRT-LLM's ``TrtLlmArgs(...)`` constructor is permissive at construction —
+TRT-LLM's ``TrtLlmArgs(...)`` constructor is permissive at construction -
 zero raises observed across 32-trial parallelism / sequence / quantisation
 probes (research §7). All cross-field invariants fire at engine build inside C++,
 out of reach for Python-side construction probing. The adversarial review
@@ -34,7 +34,7 @@ out of reach for Python-side construction probing. The adversarial review
 Output
 ------
 Writes ``src/llenergymeasure/engines/tensorrt/_staging/tensorrt_static_miner.yaml``
-— consumed downstream by ``scripts/engine_miners/build_corpus.py``.
+- consumed downstream by ``scripts/engine_miners/build_corpus.py``.
 
 Run::
 
@@ -58,7 +58,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 # Strip the script directory and any "" entry from sys.path before any third-
-# party imports — same defensive measure as the transformers static miner.
+# party imports - same defensive measure as the transformers static miner.
 # A sibling ``transformers.py`` etc. inside scripts/engine_miners/ would
 # otherwise shadow the real installed packages.
 _SCRIPT_DIR = str(Path(__file__).resolve().parent)
@@ -84,12 +84,12 @@ ENGINE = "tensorrt"
 LIBRARY = "tensorrt_llm"
 
 # The miner does NOT call ``check_installed_version`` itself because it never
-# imports the library — the orchestrator :mod:`scripts.engine_miners.tensorrt_miner`
+# imports the library - the orchestrator :mod:`scripts.engine_miners.tensorrt_miner`
 # asserts the extracted source-tree version against
 # ``engine_versions/tensorrt.yaml miner_pins.static`` instead.
 
 # Project-side namespace for TRT-LLM config fields. Aligns with
-# ``TensorRTConfig`` in ``src/llenergymeasure/config/engine_configs.py`` —
+# ``TensorRTConfig`` in ``src/llenergymeasure/config/engine_configs.py`` -
 # fields are flat under ``tensorrt.``.
 NAMESPACE = "tensorrt"
 
@@ -272,7 +272,7 @@ def _extract_predicates(condition: ast.expr) -> list[_Predicate]:
 
     Only AND-combined predicates are extracted into the invariant's match.fields;
     OR / opaque calls / non-self conditions are silently dropped (recall-first
-    — the invariant still emits, just without those preconditions).
+    - the invariant still emits, just without those preconditions).
     """
     if isinstance(condition, ast.BoolOp) and isinstance(condition.op, ast.And):
         out: list[_Predicate] = []
@@ -426,7 +426,7 @@ def _detect_body(stmt: ast.stmt) -> _DetectedBody | None:
 
 
 # ---------------------------------------------------------------------------
-# AST traversal — model_validator / field_validator method bodies
+# AST traversal - model_validator / field_validator method bodies
 # ---------------------------------------------------------------------------
 
 
@@ -467,13 +467,13 @@ def _walk_for_block(for_node: ast.For, frame: _Frame, emit: _Emitter) -> None:
 
     For loops over a literal list/tuple of strings (the
     ``set_runtime_knobs_from_build_config`` pattern), expand the loop into
-    one invariant per literal — the loop variable's bound value gets recorded as
+    one invariant per literal - the loop variable's bound value gets recorded as
     extra context on each emitted invariant.
     """
     literals = _literal_iterable(for_node.iter)
     target_name = for_node.target.id if isinstance(for_node.target, ast.Name) else None
     if literals is None or target_name is None:
-        # Unparameterisable loop — descend into body anyway.
+        # Unparameterisable loop - descend into body anyway.
         for stmt in for_node.body:
             detected = _detect_body(stmt)
             if detected is not None:
@@ -551,7 +551,7 @@ class _Emitter:
             preds.append(_Predicate(field=subject_field, op="present", rhs=True))
 
         if not preds:
-            # No predicates at all — the invariant has nothing to match on. Skip
+            # No predicates at all - the invariant has nothing to match on. Skip
             # to avoid fingerprint collisions in the merger.
             return
 
@@ -783,7 +783,7 @@ def _other_type_default(label: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Validator-method miner — public entry
+# Validator-method miner - public entry
 # ---------------------------------------------------------------------------
 
 
@@ -802,7 +802,7 @@ def _walk_method(
         rel_source_path=rel_source_path,
         today=today,
     )
-    # Field validators are ``def validate_X(cls, v, info=None)`` — they raise on
+    # Field validators are ``def validate_X(cls, v, info=None)`` - they raise on
     # ``v`` (the new value), not ``self.X``. For these, we emit at most one
     # invariant per top-level raise, treating the field name as the implicit
     # subject. Detect by signature: first arg is ``cls`` and second is ``v``.
@@ -811,7 +811,7 @@ def _walk_method(
         emitter._loop_vars = []
         return _walk_field_validator(method, emitter, native_type, method_name)
 
-    # model_validator(mode="after") body — descend with no preconditions.
+    # model_validator(mode="after") body - descend with no preconditions.
     frame = _Frame()
     for stmt in method.body:
         if isinstance(stmt, ast.If):
@@ -916,12 +916,12 @@ def _extract_v_predicates(condition: ast.expr, target: str) -> list[_Predicate]:
     if isinstance(condition, ast.Compare) and len(condition.ops) == 1:
         op = condition.ops[0]
         op_name = _COMPARE_OP_NAMES.get(type(op))
-        # ``v op literal`` — the canonical shape.
+        # ``v op literal`` - the canonical shape.
         if isinstance(condition.left, ast.Name) and condition.left.id == "v" and op_name:
             ok, rhs = _literal_value(condition.comparators[0])
             if ok:
                 return [_Predicate(field=target, op=op_name, rhs=rhs)]
-        # ``literal op v`` — flip.
+        # ``literal op v`` - flip.
         if (
             isinstance(condition.comparators[0], ast.Name)
             and condition.comparators[0].id == "v"
@@ -955,7 +955,7 @@ def _extract_v_predicates(condition: ast.expr, target: str) -> list[_Predicate]:
 
 
 # ---------------------------------------------------------------------------
-# Pydantic schema lift — source-driven
+# Pydantic schema lift - source-driven
 # ---------------------------------------------------------------------------
 
 
@@ -969,7 +969,7 @@ def _walk_literal_fields(
     """Emit one allowlist invariant per ``Literal[...]``-typed Pydantic field.
 
     Equivalent to ``_pydantic_lift._from_literal`` but reads the AST instead
-    of importing the live class — needed because TRT-LLM 0.21.0 isn't
+    of importing the live class - needed because TRT-LLM 0.21.0 isn't
     importable on the host (the design's "source-driven" contract).
     """
     out: list[InvariantCandidate] = []
@@ -1021,7 +1021,7 @@ def _literal_args(annotation: ast.expr) -> list[Any] | None:
             out.append(v)
         return out
     if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
-        # ``Literal[...] | None`` — pull the Literal side.
+        # ``Literal[...] | None`` - pull the Literal side.
         for side in (annotation.left, annotation.right):
             inner = _literal_args(side)
             if inner is not None:
@@ -1161,7 +1161,7 @@ def _load_source(source_root: Path) -> _SourceTree:
     if not source_root.is_dir():
         raise MinerLandmarkMissingError(
             "tensorrt_llm source root",
-            detail=f"{source_root} not found — extract 0.21.0 source first",
+            detail=f"{source_root} not found - extract 0.21.0 source first",
         )
     llm_args_path = source_root / LLM_ARGS_REL
     builder_path = source_root / BUILDER_REL
@@ -1177,13 +1177,13 @@ def _load_source(source_root: Path) -> _SourceTree:
     llm_args = _read_module(llm_args_path)
     builder = _read_module(builder_path)
 
-    # Class landmarks — fail-loud if any are missing.
+    # Class landmarks - fail-loud if any are missing.
     for cls_name, rel in _CLASS_LANDMARKS:
         module = llm_args if rel == LLM_ARGS_REL else builder
         if find_class(module, cls_name) is None:
             raise MinerLandmarkMissingError(
                 f"{rel}::{cls_name}",
-                detail="class missing in 0.21.0 source — has the library upgraded?",
+                detail="class missing in 0.21.0 source - has the library upgraded?",
             )
 
     return _SourceTree(
@@ -1210,7 +1210,7 @@ def _verify_method_landmarks(tree: _SourceTree) -> None:
 def walk_tensorrt(source_root: Path | None = None) -> tuple[list[InvariantCandidate], str, str]:
     """Walk TRT-LLM source and return ``(candidates, version, llm_args_rel_path)``.
 
-    ``source_root`` defaults to ``/tmp/trt-llm-0.21.0/tensorrt_llm`` —
+    ``source_root`` defaults to ``/tmp/trt-llm-0.21.0/tensorrt_llm`` -
     overridable for tests / CI extraction in different paths.
     """
     root = source_root if source_root is not None else _DEFAULT_SOURCE_ROOT

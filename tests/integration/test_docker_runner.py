@@ -1,4 +1,4 @@
-"""Docker runner integration tests — real container dispatch.
+"""Docker runner integration tests - real container dispatch.
 
 These tests exercise the full Docker runner path: config serialisation →
 docker run → container entrypoint → result JSON → host read-back.

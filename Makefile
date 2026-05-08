@@ -14,7 +14,7 @@
 export PUID := $(shell id -u)
 export PGID := $(shell id -g)
 
-# Host/container schema handshake stamps — surfaced to docker compose build
+# Host/container schema handshake stamps - surfaced to docker compose build
 # via docker-compose.yml's build.args block so every locally-built image is
 # labelled with the same fingerprint llem computes at runtime. Falls back to
 # "dev"/"unknown" on any error (e.g. missing venv).
@@ -156,7 +156,7 @@ package-check:
 	 [ "$$PYPROJECT_VER" = "$$VERSION_VER" ] || { echo "ERROR: Version mismatch"; exit 1; }
 	@echo "Package validation OK"
 
-# Docker smoke tests — mirrors CI docker-smoke job
+# Docker smoke tests - mirrors CI docker-smoke job
 docker-smoke: docker-smoke-pytorch
 
 docker-smoke-pytorch:
@@ -164,7 +164,7 @@ docker-smoke-pytorch:
 	docker run --rm smoke-pytorch llem --version
 	docker run --rm smoke-pytorch llem config
 
-# CI targets — run the same checks as GitHub Actions
+# CI targets - run the same checks as GitHub Actions
 ci: lint typecheck test package-check docs-check
 
 ci-all: ci docker-smoke
@@ -195,7 +195,7 @@ ci-docker:
 		echo "=== CI-docker: all checks passed ==="'
 	@docker rmi $(CI_IMAGE) 2>/dev/null || true
 
-# GPU CI targets — mirrors .github/workflows/gpu-ci.yml
+# GPU CI targets - mirrors .github/workflows/gpu-ci.yml
 # Requires: Docker, NVIDIA GPUs, nvidia-container-toolkit
 gpu-ci: gpu-ci-pytorch
 
@@ -228,7 +228,7 @@ gpu-ci-pytorch:
 BUILDER_NAME := llem-builder
 
 # Create the BuildKit builder with tuned GC limits (200 GiB).
-# Idempotent — skips if builder already exists.
+# Idempotent - skips if builder already exists.
 docker-builder-setup:
 	@if docker buildx inspect $(BUILDER_NAME) >/dev/null 2>&1; then \
 		echo "Builder '$(BUILDER_NAME)' already exists"; \
@@ -249,7 +249,7 @@ docker-builder-rm:
 CACHE_HINT := @echo "First build pulls cache layers from ghcr.io; warm rebuilds < 5 min."
 BUILD_WITH_REPORT := scripts/docker_build_with_cache_report.sh
 
-# Build the Transformers engine image — the only first-party image we
+# Build the Transformers engine image - the only first-party image we
 # build. vLLM and TensorRT-LLM use upstream images directly
 # (vllm/vllm-openai, nvcr.io/nvidia/tensorrt-llm/release) with the
 # llenergymeasure source bind-mounted at runtime.
@@ -264,7 +264,7 @@ docker-build-transformers:
 # Intended for seeding the Transformers image cache (FA3 Hopper compile,
 # ~30 min but memory-intensive) when the CI hosted runner cannot complete
 # the build. Requires: docker login ghcr.io, llem-builder buildx builder.
-# Uses Dockerfile default MAX_JOBS=32 — matches local layer cache so FA3
+# Uses Dockerfile default MAX_JOBS=32 - matches local layer cache so FA3
 # is not recompiled if already built locally.
 docker-seed-transformers:
 	@version=$$(python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo "dev"); \

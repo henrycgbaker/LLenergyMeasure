@@ -1,6 +1,6 @@
 """Unit tests for DockerRunner dispatch lifecycle.
 
-All tests mock subprocess.run — no real Docker invocations.
+All tests mock subprocess.run - no real Docker invocations.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ def _subprocess_run_with_image_cached(*run_results: MagicMock):
     """Create a subprocess.run side_effect that handles _ensure_image's inspect call.
 
     The first subprocess.run call is always ``docker image inspect`` from
-    ``_ensure_image`` — returns exit 0 (image cached). Subsequent calls
+    ``_ensure_image`` - returns exit 0 (image cached). Subsequent calls
     return the provided results in order.
     """
     results = iter(
@@ -129,7 +129,7 @@ class TestSuccessPath:
             ),
             patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
         ):
-            # Write result under the clean hash — both host and container agree
+            # Write result under the clean hash - both host and container agree
             result_path = exchange_dir / f"{direct_hash}_result.json"
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
@@ -171,7 +171,7 @@ class TestSuccessPath:
 
 
 # ---------------------------------------------------------------------------
-# Test 2: Container failure — image not found
+# Test 2: Container failure - image not found
 # ---------------------------------------------------------------------------
 
 
@@ -219,7 +219,7 @@ class TestContainerFailure:
             with pytest.raises(DockerImagePullError):
                 runner.run(config)
 
-        # rmtree must NOT be called — dir preserved for debugging
+        # rmtree must NOT be called - dir preserved for debugging
         mock_rmtree.assert_not_called()
 
 
@@ -239,7 +239,7 @@ class TestOOMError:
         # Second call is the actual docker run → return 137 (OOM).
         calls = iter(
             [
-                make_subprocess_result(0),  # docker image inspect — image cached
+                make_subprocess_result(0),  # docker image inspect - image cached
                 make_subprocess_result(137, stderr="OOM killer invoked: killed by container OOM"),
             ]
         )
@@ -618,7 +618,7 @@ class TestCleanupWarning:
 
 
 # ---------------------------------------------------------------------------
-# Test 12: S1 security — HF_TOKEN env-file pattern
+# Test 12: S1 security - HF_TOKEN env-file pattern
 # ---------------------------------------------------------------------------
 
 
@@ -734,7 +734,7 @@ class TestHFTokenSecure:
         )
         assert result == f"docker run -e {ENV_HF_TOKEN}=***"
 
-        # Short values (<=4 chars) are NOT masked — avoids false positives
+        # Short values (<=4 chars) are NOT masked - avoids false positives
         result_short = _mask_secrets(
             "some text with abcd",
             {"KEY": "abcd"},
@@ -889,7 +889,7 @@ class TestExtraMounts:
         cmd = self._build_cmd(config, tmp_path, runner)
 
         # Two -v flags: the exchange dir + the llem-src bind mount (all engines
-        # now use mount-based dispatch — see docker_runner._build_docker_cmd).
+        # now use mount-based dispatch - see docker_runner._build_docker_cmd).
         v_count = cmd.count("-v")
         assert v_count == 2
         assert f"/tmp/llem-test:{CONTAINER_EXCHANGE_DIR}" in cmd
@@ -1357,7 +1357,7 @@ class TestVersionMismatchWarning:
 
 
 # ---------------------------------------------------------------------------
-# Test: mount-pivot — host package source bind-mounted into container (#511)
+# Test: mount-pivot - host package source bind-mounted into container (#511)
 # ---------------------------------------------------------------------------
 
 

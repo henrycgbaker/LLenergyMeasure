@@ -1,4 +1,4 @@
-"""``llem doctor`` — verify that Docker images match the host schema.
+"""``llem doctor`` - verify that Docker images match the host schema.
 
 Focused purely on image health (host/container schema-fingerprint handshake).
 The existing ``llem config`` command still covers env / GPU / engine probes;
@@ -45,7 +45,7 @@ def doctor_command() -> None:
     typer.echo(f"Host ExperimentConfig SHA-256: {report.host_fingerprint}")
     if report.skip_check_active:
         typer.echo(
-            "WARNING: LLEM_SKIP_IMAGE_CHECK=1 is active — runtime schema handshake is bypassed."
+            "WARNING: LLEM_SKIP_IMAGE_CHECK=1 is active - runtime schema handshake is bypassed."
         )
 
     if report.any_mismatch:

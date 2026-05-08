@@ -79,7 +79,7 @@ measurement:
 # --- Sampling preset (expands into the active engine's sampling section) ---
 # sampling_preset: deterministic   # deterministic | standard | creative | factual
 # Explicit values written under <engine>.sampling override preset values.
-# Sampling params now live per-engine — see `{transformers|vllm|tensorrt}.sampling`
+# Sampling params now live per-engine - see `{transformers|vllm|tensorrt}.sampling`
 # in the engine-specific experiments below.
 
 # --- LoRA adapter (optional, applies to all experiments) ---
@@ -119,7 +119,7 @@ output:
 #   - transformers.torch_compile=true  x  bitsandbytes load_in_{4,8}bit
 #     (dequant ops trigger per-call recompilation; see transformers.compile_quant group)
 #   - transformers.torch_compile_mode=max-autotune  x  transformers.cache_implementation=static/sliding_window
-#     (per-shape kernel autotune on every cache reshape; slow but correct — follow-up)
+#     (per-shape kernel autotune on every cache reshape; slow but correct - follow-up)
 #   - Any engine x dataset.n_prompts > ~200 without raising
 #     study_execution.experiment_timeout_seconds above its 600s default
 # When in doubt, merge axes into a single group with hand-picked variants:
@@ -142,7 +142,7 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   # dequant ops that trigger torch.compile recompilation on every call, and
   # max-autotune compounds this with per-shape kernel search. Within-group
   # variants are unioned (not crossed), so the variants below are exactly
-  # what runs — no bnb-with-compile cells exist.
+  # what runs - no bnb-with-compile cells exist.
   transformers.compile_quant:
     # Baseline: no compile, no quantisation
     - {}
@@ -157,7 +157,7 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
       transformers.bnb_4bit_compute_dtype: float16
       transformers.bnb_4bit_quant_type: nf4
       transformers.bnb_4bit_use_double_quant: true
-    # torch.compile on unquantised weights — all three modes safe here
+    # torch.compile on unquantised weights - all three modes safe here
     - transformers.torch_compile: true
       transformers.torch_compile_backend: inductor
       transformers.torch_compile_mode: [default, reduce-overhead, max-autotune]

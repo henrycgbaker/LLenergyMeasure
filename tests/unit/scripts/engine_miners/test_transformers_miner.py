@@ -90,7 +90,7 @@ def test_relative_source_path_falls_back_to_basename() -> None:
 
 def test_emit_yaml_deterministic_ordering() -> None:
     # Two candidates in reverse order should serialise the same regardless of
-    # input order — the miner sorts by (method, id).
+    # input order - the miner sorts by (method, id).
     candidates = [_sample_candidate()]
     envelope = {
         "schema_version": "1.0.0",
@@ -151,7 +151,7 @@ def test_walk_extracts_expected_rule_count() -> None:
     pytest.importorskip("transformers")
     candidates, envelope = tf_walker.walk()
     assert len(candidates) >= 20, (
-        f"miner produced only {len(candidates)} invariants — extractor regression?"
+        f"miner produced only {len(candidates)} invariants - extractor regression?"
     )
     assert envelope["engine"] == "transformers"
     assert envelope["schema_version"] == "1.0.0"
@@ -184,7 +184,7 @@ def test_walk_extracts_beam_dormancy_rules() -> None:
     pytest.importorskip("transformers")
     candidates, _ = tf_walker.walk()
     beam_ids = {c.id for c in candidates if "single_beam_strips" in c.id}
-    # Exact set — adding a new single-beam invariant must update this list.
+    # Exact set - adding a new single-beam invariant must update this list.
     expected = {
         f"transformers_single_beam_strips_{f}"
         for f in (

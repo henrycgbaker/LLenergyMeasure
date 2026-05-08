@@ -156,13 +156,13 @@ class ImageSource(StrEnum):
 
 
 _IMAGE_SOURCE_LABELS: dict[ImageSource, str] = {
-    ImageSource.LOCAL_BUILD: "LOCAL BUILD — current source tree (via docker compose build)",
-    ImageSource.REGISTRY: "REGISTRY — versioned release image",
-    ImageSource.REGISTRY_CACHED: "REGISTRY — cached locally from prior pull",
-    ImageSource.ENV: "OVERRIDE — image set via environment variable",
-    ImageSource.YAML: "OVERRIDE — image set in study YAML images: section",
-    ImageSource.RUNNER_OVERRIDE: "OVERRIDE — image set via docker:<image> in runners:",
-    ImageSource.USER_CONFIG: "OVERRIDE — image set in user config (~/.config/llenergymeasure/config.yaml)",
+    ImageSource.LOCAL_BUILD: "LOCAL BUILD - current source tree (via docker compose build)",
+    ImageSource.REGISTRY: "REGISTRY - versioned release image",
+    ImageSource.REGISTRY_CACHED: "REGISTRY - cached locally from prior pull",
+    ImageSource.ENV: "OVERRIDE - image set via environment variable",
+    ImageSource.YAML: "OVERRIDE - image set in study YAML images: section",
+    ImageSource.RUNNER_OVERRIDE: "OVERRIDE - image set via docker:<image> in runners:",
+    ImageSource.USER_CONFIG: "OVERRIDE - image set in user config (~/.config/llenergymeasure/config.yaml)",
 }
 
 _RUNNER_SOURCE_LABELS: dict[str, str] = {
@@ -187,7 +187,7 @@ def _render_runner_info(lines: Text, info: dict[str, str | None]) -> None:
     if mode == "local":
         lines.append(f"       mode:    local ({source_label})\n", style="dim")
         lines.append(
-            "               no container isolation — running directly on host\n", style="dim"
+            "               no container isolation - running directly on host\n", style="dim"
         )
     elif mode == "docker" and image:
         lines.append(f"       mode:    docker ({source_label})\n", style="dim")
@@ -249,7 +249,7 @@ class StepDisplay:
 
         # Substeps per step: list of (text, elapsed_sec) tuples
         self._substeps: dict[str, list[tuple[str, float]]] = {}
-        # Active substep per step: (text, start_monotonic) — drives the
+        # Active substep per step: (text, start_monotonic) - drives the
         # heartbeat spinner for long-running sub-operations (e.g. CUDA init
         # inside the baseline container) so Rich Live animates them.
         self._active_substep: dict[str, tuple[str, float]] = {}
@@ -460,7 +460,7 @@ class StepDisplay:
         with self._lock:
             active = self._active_substep.pop(step, None)
             if active is None:
-                # No matching start — fall through as a regular completed substep.
+                # No matching start - fall through as a regular completed substep.
                 final_text = text or ""
                 final_elapsed = elapsed_sec if elapsed_sec is not None else 0.0
             else:
@@ -524,7 +524,7 @@ class StepDisplay:
         """Build current display state as a Rich Text renderable.
 
         Docker BuildKit-style: only show steps that have started, completed,
-        or been skipped. Pending steps are NOT shown — they appear progressively
+        or been skipped. Pending steps are NOT shown - they appear progressively
         as the harness reaches them. This gives a growing output that shows
         exactly where execution is.
 
@@ -657,7 +657,7 @@ class StudyStepDisplay:
 
     Completed experiments appear as table rows with Config, Time, Energy, tok/s columns.
     The active experiment shows nested step progress below the table (deferred for
-    multi-process study runs — see module docstring).
+    multi-process study runs - see module docstring).
 
     Thread-safe: event methods may be called from worker threads.
     """
@@ -701,7 +701,7 @@ class StudyStepDisplay:
         self._inner_steps: list[str] = []
         self._inner_skipped: dict[str, str] = {}  # step -> reason
         self._inner_substeps: dict[str, list[tuple[str, float]]] = {}
-        # Active substep per step: (text, start_monotonic) — same spinner
+        # Active substep per step: (text, start_monotonic) - same spinner
         # heartbeat treatment as StepDisplay, used for live baseline stages.
         self._inner_active_substep: dict[str, tuple[str, float]] = {}
         self._runner_info: dict[str, str | None] | None = None
@@ -816,7 +816,7 @@ class StudyStepDisplay:
     ) -> None:
         """Mark experiment as successfully completed."""
         # Prefer mj_per_tok_adjusted (baseline-subtracted) when available,
-        # fall back to mj_per_tok_total. No recomputation — show "-" if both null.
+        # fall back to mj_per_tok_total. No recomputation - show "-" if both null.
         mj_tok: float | None
         if mj_per_tok_adjusted is not None:
             mj_tok = mj_per_tok_adjusted
@@ -884,7 +884,7 @@ class StudyStepDisplay:
             save_path: Optional path to saved results directory.
             total_elapsed: Total elapsed time in seconds. If None, falls back to
                 monotonic clock delta from start() (which may be wrong if start()
-                was never called — callers constructing post-hoc should always pass this).
+                was never called - callers constructing post-hoc should always pass this).
         """
         was_live = self._live is not None
         self.stop()
@@ -896,7 +896,7 @@ class StudyStepDisplay:
             total = 0.0
         self._console.print(f"\nStudy completed in {_format_elapsed(total)}", highlight=False)
 
-        # Only print table in post-hoc mode — Live already shows it on screen
+        # Only print table in post-hoc mode - Live already shows it on screen
         if not was_live and self._completed_rows:
             table, _hidden = self._build_table()
             self._console.print(table)
@@ -905,7 +905,7 @@ class StudyStepDisplay:
         if save_path:
             self._console.print(f"\n  Results: {save_path}", style="dim", highlight=False)
 
-        # Print per-experiment save paths (only in TTY mode — non-TTY prints inline)
+        # Print per-experiment save paths (only in TTY mode - non-TTY prints inline)
         if was_live and self._saved_paths:
             for idx, host_path, container_path in self._saved_paths:
                 if container_path:
@@ -924,7 +924,7 @@ class StudyStepDisplay:
             # means "this step is running again" (e.g. host dispatch failed and
             # the experiment container fell back to in-harness measurement), so
             # stale state from a prior attempt must not mask the new active
-            # spinner — the renderer checks completed_map before _inner_active
+            # spinner - the renderer checks completed_map before _inner_active
             # and would otherwise hide the re-run.
             self._inner_completed = [c for c in self._inner_completed if c[0] != step]
             self._inner_skipped.pop(step, None)

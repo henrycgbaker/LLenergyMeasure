@@ -1,4 +1,4 @@
-"""Transformers library-API introspection miner — combinatorial-probe edition.
+"""Transformers library-API introspection miner - combinatorial-probe edition.
 
 Derives validation invariants from HF's runtime machinery by combinatorially
 sweeping related kwargs and inferring predicates from the raise/no-raise
@@ -24,21 +24,21 @@ Three extraction paths, all observe the library at walk time:
    rows by message-class and emits one invariant per inferred predicate.
 
 3. **Validate-time self-triggered dormant probes** (kept). The
-   ``pad_token_id < 0`` family — dormancy gated by the field's own value
+   ``pad_token_id < 0`` family - dormancy gated by the field's own value
    rather than a mode flag.
 
 Predicate inference (cluster path) covers, in order of preference:
 
-- **Cross-field divisibility** — error rows align with ``a % b != 0``.
-- **Cross-field comparison** — error rows align with ``a > b`` (or any of
+- **Cross-field divisibility** - error rows align with ``a % b != 0``.
+- **Cross-field comparison** - error rows align with ``a > b`` (or any of
   ``<, <=, >=, ==, !=``).
-- **Cross-field equality predicate** — error rows correlate with
+- **Cross-field equality predicate** - error rows correlate with
   ``kwargs[a] == V`` AND ``kwargs[b] == W`` (multi-field gate).
-- **Type allowlist** — error rows correlate with the type of one kwarg's
+- **Type allowlist** - error rows correlate with the type of one kwarg's
   value not being in an allowed set.
-- **Single-field range** — error rows correlate with one kwarg crossing a
+- **Single-field range** - error rows correlate with one kwarg crossing a
   threshold (``< 0``, ``<= 0``, etc.).
-- **Single-field equality** — error rows correlate with one kwarg taking
+- **Single-field equality** - error rows correlate with one kwarg taking
   one specific value.
 
 Recall over precision: when multiple predicates fit, the inferrer emits
@@ -58,7 +58,7 @@ miner (:mod:`scripts.engine_miners.transformers`, deregistered) hand-curated
 nine BNB invariants; that path was lost in the refactor.
 
 Coverage is restored structurally by :mod:`scripts.engine_miners.transformers_static_miner`,
-which AST-walks ``BitsAndBytesConfig.post_init`` directly — the
+which AST-walks ``BitsAndBytesConfig.post_init`` directly - the
 ``if not isinstance(self.X, T): raise`` pattern is exactly what its
 ``type_is_not`` predicate path already handles. The AST miner reads
 ``transformers.utils.quantization_config`` source via
@@ -70,7 +70,7 @@ keeps the miner fast and dependency-free.
 CUDA libs at module load and emits a warning on CPU-only hosts but
 returns successfully; ``BitsAndBytesConfig(**kwargs).post_init()`` is
 pure Python type-checking with no CUDA calls. Probing BNB construction
-is therefore CI-runner-agnostic — fits cleanly on the GH-hosted
+is therefore CI-runner-agnostic - fits cleanly on the GH-hosted
 ``requires_gpu: false`` runner pool. The reason this extractor doesn't
 yet probe BNB is **scope** (the cluster wasn't added in the refactor),
 not CUDA.
@@ -79,7 +79,7 @@ If/when BNB probing becomes useful (cross-validation against the AST
 miner, or to catch ``__init__``-time gates the AST miner doesn't
 currently walk like ``load_in_4bit AND load_in_8bit``), add a
 ``bitsandbytes_quant`` cluster: the ``_Cluster`` pattern below
-generalises directly to ``BitsAndBytesConfig`` — swap the constructor
+generalises directly to ``BitsAndBytesConfig`` - swap the constructor
 in :func:`_probe_cluster` and supply representative kwargs per BNB
 field.
 """
@@ -106,7 +106,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 # When run as a script (``python scripts/engine_miners/transformers_dynamic_miner.py``),
-# Python prepends the script's directory to ``sys.path`` — that directory contains
+# Python prepends the script's directory to ``sys.path`` - that directory contains
 # ``transformers.py`` (the sibling miner module), which shadows the third-party
 # ``transformers`` package import. Drop the miners dir so HF's ``transformers``
 # resolves correctly. Module-style invocation
@@ -119,7 +119,7 @@ from scripts.engine_miners._base import InvariantCandidate, MinerSource  # noqa:
 from scripts.engine_miners._dataclass_lift import lift as _dataclass_lift  # noqa: E402
 
 # ---------------------------------------------------------------------------
-# Trigger classes (dormancy auto-enumeration — unchanged from prior impl)
+# Trigger classes (dormancy auto-enumeration - unchanged from prior impl)
 # ---------------------------------------------------------------------------
 
 
@@ -130,8 +130,8 @@ class _DormancyTrigger:
     HF 4.49-4.56 exposes three trigger classes: greedy (``do_sample=False``),
     single-beam (``num_beams=1``), and scalar-output
     (``return_dict_in_generate=False``). Each trigger ships an
-    ``isolation_kwargs`` payload — values for the OTHER triggers that DON'T
-    activate them — so the auto-enumerator can attribute a firing invariant to
+    ``isolation_kwargs`` payload - values for the OTHER triggers that DON'T
+    activate them - so the auto-enumerator can attribute a firing invariant to
     exactly one trigger class even though the three categories overlap.
     """
 
@@ -376,7 +376,7 @@ class _Cluster:
 
     ``values_per_field`` maps each kwarg in the cluster to the list of
     representative values to sweep. The probe runner takes the Cartesian
-    product. Keep matrix size sensible — three fields x five values each
+    product. Keep matrix size sensible - three fields x five values each
     = 125 trials, well under the 200-per-cluster cap.
 
     ``preconditions`` are kwargs held constant across every trial in the
@@ -396,7 +396,7 @@ class _Cluster:
 
 
 def _watermarking_probe_values() -> list[Any]:
-    """Probe values for ``watermarking_config`` — includes a real instance.
+    """Probe values for ``watermarking_config`` - includes a real instance.
 
     Without a real ``WatermarkingConfig`` instance, the type-allowlist
     inference has no positive example to anchor against (every "wrong type"
@@ -413,7 +413,7 @@ def _watermarking_probe_values() -> list[Any]:
 
 
 def _compile_config_probe_values() -> list[Any]:
-    """Probe values for ``compile_config`` — includes a real ``CompileConfig``."""
+    """Probe values for ``compile_config`` - includes a real ``CompileConfig``."""
     try:
         from transformers.generation.configuration_utils import CompileConfig  # type: ignore
 
@@ -423,7 +423,7 @@ def _compile_config_probe_values() -> list[Any]:
     return [valid_instance, None, "oops", 42, [1, 2]]
 
 
-# Cluster definitions — small, representative value sets per kwarg. Adding a
+# Cluster definitions - small, representative value sets per kwarg. Adding a
 # new cluster is a one-liner; tests can parametrise over CLUSTERS so probe
 # coverage is auditable.
 #
@@ -469,7 +469,7 @@ CLUSTERS: tuple[_Cluster, ...] = (
         name="watermarking_type",
         values_per_field={
             # Probe values whose types vary across the type-allowlist axis.
-            # First element is a real ``WatermarkingConfig`` instance — the
+            # First element is a real ``WatermarkingConfig`` instance - the
             # only present-value that doesn't error, anchoring the allowlist.
             "watermarking_config": _watermarking_probe_values(),
         },
@@ -523,7 +523,7 @@ def _run_cluster_probes(cluster: _Cluster) -> list[_ProbeRow]:
     ``validate(strict=True)`` and capture any composed raise.
 
     State diffs are not yet tabulated (would catch silent normalisation but
-    silent normalisations don't surface as introspection invariants in HF — they'd
+    silent normalisations don't surface as introspection invariants in HF - they'd
     need vLLM-style detection, out of scope here).
     """
     import logging
@@ -633,7 +633,7 @@ def _row_field_value(row: _ProbeRow, field_name: str) -> Any:
 
 
 def _split_error_rows(rows: list[_ProbeRow]) -> tuple[list[_ProbeRow], list[_ProbeRow]]:
-    """Split rows into (errored, ok) — ok = no construct_error AND no validate_strict_error."""
+    """Split rows into (errored, ok) - ok = no construct_error AND no validate_strict_error."""
     errored: list[_ProbeRow] = []
     ok: list[_ProbeRow] = []
     for row in rows:
@@ -680,7 +680,7 @@ def _check_predicate_explains_errors(
       - every "clean" row (no error of any kind) does NOT satisfy the predicate
 
     Rows that errored in a *different* error class are skipped from the
-    consistency check — they contribute neither evidence for nor against
+    consistency check - they contribute neither evidence for nor against
     the predicate, since the predicate is only claiming to explain THIS
     class's errors. Without this, divisibility predicates and diversity
     predicates contaminate each other inside the beam-search cluster.
@@ -705,7 +705,7 @@ def _check_predicate_explains_errors(
         except (TypeError, KeyError):
             continue
         if holds and not is_this_class_error:
-            return False  # predicate fires on a clean row — not explaining errors
+            return False  # predicate fires on a clean row - not explaining errors
         if not holds and is_this_class_error:
             return False  # predicate fails to fire on a known error row
         if holds and is_this_class_error:
@@ -830,7 +830,7 @@ def _infer_single_field_threshold(
     ``(field, op, value, predicate_dict)`` or ``None``.
     """
     for a, vals in cluster.values_per_field.items():
-        # Numeric thresholds — try 0 first as the most common HF guard.
+        # Numeric thresholds - try 0 first as the most common HF guard.
         thresholds: list[tuple[str, Any, Callable[[Any], bool]]] = []
         if any(isinstance(v, (int, float)) and not isinstance(v, bool) for v in vals):
             thresholds.extend(
@@ -893,7 +893,7 @@ def _infer_type_allowlist(
             is_any_error = bool(row.construct_error or row.validate_strict_error)
             is_other_class_error = is_any_error and not is_this_class_error
             if is_other_class_error:
-                # Skip — neutral for this class's predicate inference.
+                # Skip - neutral for this class's predicate inference.
                 continue
             if is_this_class_error:
                 err_types.add(t)
@@ -977,8 +977,8 @@ def _infer_multi_field_equality_gate(
     """Find a multi-field equality / range gate that explains errors.
 
     Two cases per field:
-    1. **Equality** — all error rows share one value for the field.
-    2. **Range comparator** — all error rows have ``field op V`` for the
+    1. **Equality** - all error rows share one value for the field.
+    2. **Range comparator** - all error rows have ``field op V`` for the
        same threshold. Only emitted when the gate is non-trivial (the
        threshold actually discriminates ok rows from error rows). Useful
        when an error class is gated by ``num_beam_groups > 1`` even though
@@ -1048,7 +1048,7 @@ def _is_yaml_safe(value: Any) -> bool:
 
     Pure-Python literals (str/int/float/bool/None/list/dict/tuple) are safe.
     Library class instances (``WatermarkingConfig``, ``CompileConfig``) are
-    not — they need a synthesised replacement value (``None`` or a literal
+    not - they need a synthesised replacement value (``None`` or a literal
     dict that round-trips into the same kwarg semantics).
     """
     if not isinstance(value, _SAFE_YAML_TYPES):
@@ -1066,7 +1066,7 @@ def _yaml_safe_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     The corpus needs to round-trip through ``yaml.safe_dump`` so the merger
     and the loader can re-parse it. Dropping the live instance to ``None``
     is lossy for the kwargs-positive / kwargs-negative pair, but the invariant's
-    *match predicate* still expresses the correct invariant — the consumer
+    *match predicate* still expresses the correct invariant - the consumer
     re-runs kwargs_positive to confirm the invariant fires, kwargs_negative to
     confirm it doesn't, and library classes are typically representable as
     ``{}`` (empty kwargs) or ``None`` (absent) for the negative case.
@@ -1084,7 +1084,7 @@ def _pick_positive_negative_for_predicate(
 
     Positive: an error row's kwargs (subset to fields in the cluster).
     Negative: a non-error row's kwargs that differs MINIMALLY from the
-    positive — to keep the test plausible.
+    positive - to keep the test plausible.
 
     Yaml-unsafe values (library class instances) are replaced with ``None``;
     callers re-run the kwargs against the live library and library classes
@@ -1190,9 +1190,9 @@ def _infer_rules_for_group(
     divisibility → cross-field comparison → type allowlist → value allowlist
     → single-field threshold. Results are emitted with confidence:
 
-    - ``high``  — exactly one inference shape fits.
-    - ``medium`` — two shapes fit (likely overlap, validation CI prunes losers).
-    - ``low``   — three or more shapes fit (ambiguous).
+    - ``high``  - exactly one inference shape fits.
+    - ``medium`` - two shapes fit (likely overlap, validation CI prunes losers).
+    - ``low``   - three or more shapes fit (ambiguous).
 
     Inference-shape order is also the invariant-id suffix order, which keeps
     invariant IDs stable across reruns.
@@ -1228,7 +1228,7 @@ def _infer_rules_for_group(
                     for op_name, threshold in spec.items():
                         op_fn = dict(_COMPARATORS).get(op_name)
                         if op_fn is None:
-                            # Other operator types — give up gating for this row.
+                            # Other operator types - give up gating for this row.
                             return False
                         if not op_fn(v, threshold):
                             return False
@@ -1285,7 +1285,7 @@ def _infer_rules_for_group(
         )
 
     # If nothing more specific fits but we have a multi-field gate, emit it
-    # as a pure gate-equality / range invariant. Lowest confidence — validation CI
+    # as a pure gate-equality / range invariant. Lowest confidence - validation CI
     # is the safety net.
     if not inferences and common_match_addition:
         if common_assignment:
@@ -1502,8 +1502,8 @@ _OUTCOME_BY_SEVERITY: dict[str, dict[str, Any]] = {
 
 
 _REFERENCE_BY_METHOD: dict[str, str] = {
-    "construct": "transformers.GenerationConfig — observed via construction-time ValueError",
-    "validate": "transformers.GenerationConfig.validate() — observed via validate(strict=True)",
+    "construct": "transformers.GenerationConfig - observed via construction-time ValueError",
+    "validate": "transformers.GenerationConfig.validate() - observed via validate(strict=True)",
 }
 
 
@@ -1574,7 +1574,7 @@ def _make_dormant_probe_candidate(
         expected_outcome=_OUTCOME_BY_SEVERITY["dormant"],
         message_template=template,
         references=[
-            "transformers.GenerationConfig.validate() — observed via validate(strict=True)"
+            "transformers.GenerationConfig.validate() - observed via validate(strict=True)"
         ],
         added_by="dynamic_miner",
         added_at=today,
@@ -1587,7 +1587,7 @@ def _make_dormant_probe_candidate(
 
 
 class IntrospectionProbeDisappeared(RuntimeError):
-    """A hardcoded validate-dormant probe stopped firing — library drift signal."""
+    """A hardcoded validate-dormant probe stopped firing - library drift signal."""
 
 
 def _walk_combinatorial(
@@ -1609,7 +1609,7 @@ def _walk_combinatorial(
                 cluster, invariant, abs_source_path, rel_source_path, today
             )
             if cand.id in seen_ids:
-                # Same invariant discovered in multiple clusters — keep the
+                # Same invariant discovered in multiple clusters - keep the
                 # first (deterministic by CLUSTERS iteration order).
                 continue
             seen_ids.add(cand.id)
@@ -1631,7 +1631,7 @@ def walk_generation_config_invariants(
     3. Validate-time self-triggered dormant invariants.
 
     Raises :class:`IntrospectionProbeDisappeared` when a hardcoded probe
-    silently stops firing — preserves the "silent coverage loss becomes a
+    silently stops firing - preserves the "silent coverage loss becomes a
     visible CI failure" contract for the small set of probes that aren't
     auto-discovered.
     """
@@ -1649,7 +1649,7 @@ def walk_generation_config_invariants(
     # Composes the generic stdlib-dataclass lift over GenerationConfig and
     # surfaces any Literal[...] allowlist invariants. GenerationConfig is not a
     # dataclass on transformers 4.x (its fields live in ``__init__`` as
-    # ``**kwargs``-stuffed self-assigns), so this returns ``[]`` today —
+    # ``**kwargs``-stuffed self-assigns), so this returns ``[]`` today -
     # the call is wired to validate the abstraction's plumbing on the gold
     # standard before vLLM and TRT-LLM consume it. If a future transformers
     # release rebases ``GenerationConfig`` onto dataclasses, this picks up
@@ -1713,7 +1713,7 @@ def walk_generation_config_invariants(
 
 
 def discover_dormancy_fields() -> dict[str, set[str]]:
-    """Return ``{trigger.id_prefix: {field, ...}}`` — auto-discovered dormancy fields."""
+    """Return ``{trigger.id_prefix: {field, ...}}`` - auto-discovered dormancy fields."""
     result: dict[str, set[str]] = {t.id_prefix: set() for t in TRIGGERS}
     for trigger, field_name, _default, _probe, _msg in _enumerate_dormancy_candidates():
         result[trigger.id_prefix].add(field_name)
@@ -1721,7 +1721,7 @@ def discover_dormancy_fields() -> dict[str, set[str]]:
 
 
 # ---------------------------------------------------------------------------
-# Standalone driver — writes the staging YAML for the corpus merger
+# Standalone driver - writes the staging YAML for the corpus merger
 # ---------------------------------------------------------------------------
 
 
@@ -1765,7 +1765,7 @@ def _candidate_to_dict(c: InvariantCandidate) -> dict[str, Any]:
 def _resolve_source_paths() -> tuple[str, str, str]:
     """Locate transformers' GenerationConfig source on disk.
 
-    Returns ``(version, abs_path, rel_path)`` — the latter rooted at
+    Returns ``(version, abs_path, rel_path)`` - the latter rooted at
     ``site-packages/`` for reproducibility.
     """
     import inspect

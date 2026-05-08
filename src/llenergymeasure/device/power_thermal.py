@@ -109,7 +109,7 @@ class PowerThermalSampler:
             self._thread = None
 
     def _sample_loop(self) -> None:
-        """Background sampling loop using pynvml — polls all gpu_indices per tick."""
+        """Background sampling loop using pynvml - polls all gpu_indices per tick."""
         try:
             import pynvml
         except ImportError:
@@ -309,7 +309,7 @@ class PowerThermalSampler:
                 throttle_timestamps=throttled_timestamps,
             )
         except ImportError:
-            # pynvml not available — return basic info from sample flags
+            # pynvml not available - return basic info from sample flags
             return ThermalThrottleInfo(
                 throttle_duration_sec=throttle_duration,
                 max_temperature_c=max_temp,

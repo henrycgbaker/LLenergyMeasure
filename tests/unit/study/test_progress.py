@@ -1,4 +1,4 @@
-"""Unit tests for study/_progress.py — print_study_progress and helpers.
+"""Unit tests for study/_progress.py - print_study_progress and helpers.
 
 All tests run GPU-free. Output is captured via capsys (writes to stderr).
 """
@@ -72,7 +72,7 @@ def test_format_duration_exactly_60():
 
 
 # ---------------------------------------------------------------------------
-# print_study_progress — output format
+# print_study_progress - output format
 # ---------------------------------------------------------------------------
 
 

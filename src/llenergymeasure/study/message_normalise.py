@@ -5,7 +5,7 @@ timestamps, ANSI sequences) from a captured log / warning message so two
 emissions produced by different configs with the same underlying rule hash to
 the same canonical template.
 
-The pipeline is deliberately conservative — documented substitution order,
+The pipeline is deliberately conservative - documented substitution order,
 no fuzzy matching. Easy to add a new regex case when a real emission doesn't
 normalise; hard to remove one once consumers depend on permissive behaviour.
 """
@@ -33,7 +33,7 @@ class NormalisedMessage:
         match_regex: Anchored regex that matches the template back against
             raw messages. Used by the corpus consumer to re-identify the
             same rule firing later.
-        original: The pre-normalisation message — kept for evidence in draft
+        original: The pre-normalisation message - kept for evidence in draft
             PR bodies.
     """
 
@@ -49,7 +49,7 @@ _ISO_TIMESTAMP_RE = re.compile(
 # Line numbers at end of path-like tokens ("…sampling_params.py:368"). We
 # strip them before path normalisation so the path itself doesn't swallow them.
 _LINE_NUMBER_RE = re.compile(r"(?<=\.py):\d+")
-# Absolute and relative path-like tokens. Kept intentionally narrow — the
+# Absolute and relative path-like tokens. Kept intentionally narrow - the
 # miner emits short human messages, not shell output.
 _PATH_RE = re.compile(r"(?:(?<=\s)|^)(?:/[^\s:()\[\]]+|[A-Za-z]:\\[^\s:]+)")
 # Hex digests / fingerprints (sha256: prefixes and loose 16+ hex runs).
@@ -85,7 +85,7 @@ def normalise(message: str) -> NormalisedMessage:
     6. Replace numeric literals with ``<NUM>``.
     7. Collapse repeated whitespace.
 
-    ``build_template_regex`` produces the corresponding match regex —
+    ``build_template_regex`` produces the corresponding match regex -
     placeholders become loose character classes so the template matches
     future raw emissions.
     """

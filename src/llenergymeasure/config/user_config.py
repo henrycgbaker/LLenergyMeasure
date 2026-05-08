@@ -122,7 +122,7 @@ class UserExecutionConfig(BaseModel):
 class UserConfig(BaseModel):
     """User preferences loaded from ~/.config/llenergymeasure/config.yaml.
 
-    All fields are optional — missing file or missing fields fall back to
+    All fields are optional - missing file or missing fields fall back to
     built-in defaults. Invalid values raise ConfigError via load_user_config().
     """
 
@@ -204,7 +204,7 @@ def _apply_env_overrides(config: UserConfig) -> UserConfig:
 def load_user_config(config_path: Path | None = None) -> UserConfig:
     """Load user configuration from ~/.config/llenergymeasure/config.yaml.
 
-    Missing file: silently applies all defaults — no error.
+    Missing file: silently applies all defaults - no error.
     Invalid YAML: raises ConfigError with parse error detail.
     Invalid schema: raises ConfigError with field path context.
 
@@ -219,7 +219,7 @@ def load_user_config(config_path: Path | None = None) -> UserConfig:
     path = config_path or get_user_config_path()
 
     if not path.exists():
-        # Missing file — zero-config, apply all defaults + env var overrides
+        # Missing file - zero-config, apply all defaults + env var overrides
         return _apply_env_overrides(UserConfig())
 
     try:

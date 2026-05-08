@@ -30,7 +30,7 @@ def run_study_preflight(
 ) -> tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]]:
     """Pre-flight checks for a study configuration.
 
-    Single-engine studies pass through — per-experiment pre-flight runs later
+    Single-engine studies pass through - per-experiment pre-flight runs later
     in the subprocess. Multi-engine studies auto-elevate to Docker when Docker
     is available; raise PreFlightError otherwise.
 
@@ -44,7 +44,7 @@ def run_study_preflight(
     Args:
         study: Resolved StudyConfig.
         skip_preflight: Skip Docker pre-flight checks. The effective skip value
-            is ``skip_preflight OR study.study_execution.skip_preflight`` — CLI flag
+            is ``skip_preflight OR study.study_execution.skip_preflight`` - CLI flag
             takes priority, then YAML config.
         yaml_runners: Runner config from the study YAML ``runners:`` section.
             Forwarded to ``resolve_study_runners()`` so pre-flight uses the same

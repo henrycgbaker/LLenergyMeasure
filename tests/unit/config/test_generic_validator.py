@@ -88,7 +88,7 @@ def _reset_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Severity dispatch — error
+# Severity dispatch - error
 # ---------------------------------------------------------------------------
 
 
@@ -126,7 +126,7 @@ def test_error_severity_no_raise_when_match_misses(monkeypatch: pytest.MonkeyPat
 
 
 # ---------------------------------------------------------------------------
-# Severity dispatch — warn
+# Severity dispatch - warn
 # ---------------------------------------------------------------------------
 
 
@@ -173,7 +173,7 @@ def test_warn_severity_not_fatal_under_simplefilter_error(
 
 
 # ---------------------------------------------------------------------------
-# Severity dispatch — dormant
+# Severity dispatch - dormant
 # ---------------------------------------------------------------------------
 
 
@@ -203,7 +203,7 @@ def test_dormant_severity_populates_observations(monkeypatch: pytest.MonkeyPatch
 
 
 # ---------------------------------------------------------------------------
-# Fallbacks — missing corpus / empty invariant set
+# Fallbacks - missing corpus / empty invariant set
 # ---------------------------------------------------------------------------
 
 
@@ -268,7 +268,7 @@ def test_error_invariant_shortcircuits_later_invariants(monkeypatch: pytest.Monk
 
 
 # ---------------------------------------------------------------------------
-# Unknown severity — fail-safe
+# Unknown severity - fail-safe
 # ---------------------------------------------------------------------------
 
 
@@ -294,7 +294,7 @@ def test_unknown_severity_emits_warning(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 # ---------------------------------------------------------------------------
-# Integration — real corpus on disk exercises every engine path without
+# Integration - real corpus on disk exercises every engine path without
 # raising (catches predicate-operator / field-path regressions end-to-end)
 # ---------------------------------------------------------------------------
 
@@ -302,7 +302,7 @@ def test_unknown_severity_emits_warning(monkeypatch: pytest.MonkeyPatch) -> None
 def test_real_corpus_loads_and_default_config_passes() -> None:
     """Default transformers config doesn't trigger any error-severity invariant.
 
-    Sanity check against the actual packaged corpus — catches cases where a
+    Sanity check against the actual packaged corpus - catches cases where a
     invariant's match predicate fires on defaults (e.g. the early-stopping
     false-positive fixed in #375).
     """

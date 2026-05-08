@@ -14,7 +14,7 @@ from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
 
-# Re-export domain primitives — study.library_resolution and tests import from here.
+# Re-export domain primitives - study.library_resolution and tests import from here.
 from llenergymeasure.domain.hashing import (
     _FLOAT_SIG_DIGITS,
     ConfigHashView,
@@ -36,7 +36,7 @@ __all__ = [
 
 
 # ---------------------------------------------------------------------------
-# Resolved-config view construction — from library-resolution mechanism output
+# Resolved-config view construction - from library-resolution mechanism output
 # ---------------------------------------------------------------------------
 
 
@@ -45,7 +45,7 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
 
     Reads the active engine section's full post-normalisation state; the
     library-resolution mechanism has already applied dormant invariants to fixpoint before this
-    runs.  Callers pass the resolved config, not the declared one — resolved_config_hash is
+    runs.  Callers pass the resolved config, not the declared one - resolved_config_hash is
     meaningless on a pre-resolved config.
 
     Engine-specific sub-models carry a ``sampling`` attribute; it is lifted
@@ -62,6 +62,6 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
         task=config.task.model_dump(mode="python"),
         observed_engine_params=dump,
         observed_sampling_params=sampling,
-        lora=None,  # No LoRA field yet on ExperimentConfig — reserved for future.
+        lora=None,  # No LoRA field yet on ExperimentConfig - reserved for future.
         passthrough_kwargs=dict(config.passthrough_kwargs or {}),
     )

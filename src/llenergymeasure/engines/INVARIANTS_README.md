@@ -1,6 +1,6 @@
 # Engine invariants corpus
 
-This directory contains the SSOT for per-engine configuration invariants — the
+This directory contains the SSOT for per-engine configuration invariants - the
 data that tells users "this combination will error", "this field will be
 silently ignored", or "this will trigger a library warning". Invariants live as
 **data**, not code; a single generic Pydantic validator
@@ -14,12 +14,12 @@ Design doc: [`.product/designs/config-deduplication-dormancy/runtime-config-vali
 
 Each engine is a sub-package containing its validation invariants and discovered schema:
 
-- `{engine}/invariants.proposed.yaml` — post-mine corpus from `scripts/engine_miners/{engine}_miner.py`
-- `{engine}/invariants.validated.yaml` — post-validation envelope from `scripts/validate_invariants.py`
-- `{engine}/schema.discovered.json` — discovered parameters from `scripts/refresh_discovered_schemas.sh`
-- `{engine}/_staging/` — gitignored scratch directory for intermediate artefacts
+- `{engine}/invariants.proposed.yaml` - post-mine corpus from `scripts/engine_miners/{engine}_miner.py`
+- `{engine}/invariants.validated.yaml` - post-validation envelope from `scripts/validate_invariants.py`
+- `{engine}/schema.discovered.json` - discovered parameters from `scripts/refresh_discovered_schemas.sh`
+- `{engine}/_staging/` - gitignored scratch directory for intermediate artefacts
 
-The `.proposed.yaml` is the post-mine corpus — declared expectations only. The
+The `.proposed.yaml` is the post-mine corpus - declared expectations only. The
 `.validated.yaml` is the post-validation envelope capturing observed outcomes plus any
 divergences from the proposed expectations. The runtime
 `EngineInvariantsLoader` reads the `.validated.yaml` when present and overlays
@@ -39,14 +39,14 @@ invariants:
   - id: ...
 ```
 
-- `schema_version` — semver. Loader supports major 1; mismatches raise
+- `schema_version` - semver. Loader supports major 1; mismatches raise
   `UnsupportedSchemaVersionError` (see
   `src/llenergymeasure/config/engine_invariants/loader.py`).
-- `engine_version` — the library version the corpus was seeded against.
+- `engine_version` - the library version the corpus was seeded against.
   Informational; the validation-CI pipeline will revalidate against each
   Dockerfile-pinned version.
-- `miner_pinned_range` — echoes the miner module's SSOT pin. CI fails if the installed library is outside range.
-- `mined_at` — ISO-8601 UTC timestamp of the miner run. Byte-reproducibility
+- `miner_pinned_range` - echoes the miner module's SSOT pin. CI fails if the installed library is outside range.
+- `mined_at` - ISO-8601 UTC timestamp of the miner run. Byte-reproducibility
   via `LLENERGY_MINER_FROZEN_AT=<timestamp>` env variable.
 
 ## Invariant schema
@@ -111,18 +111,18 @@ Every entry under `invariants:` must populate the following fields.
 | `{"divisible_by": n}`, `{"not_divisible_by": n}` | Integer divisibility. Both operands must be non-bool ints; zero divisor never fires. |
 | Multi-key dict | All predicates AND-combined. |
 
-Multi-key example — "field is set AND isn't default":
+Multi-key example - "field is set AND isn't default":
 
 ```yaml
 transformers.sampling.temperature: {present: true, not_equal: 1.0}
 ```
 
-`match.fields` is also AND-combined **across field paths** — every entry
+`match.fields` is also AND-combined **across field paths** - every entry
 under `match.fields` must satisfy its predicate for the invariant to fire.
 Use this for cross-field preconditions (e.g. "fires when
 `num_beam_groups > 1` AND `diversity_penalty <= 0`").
 
-`type_is_not` accepts a list to express an allowlist negation — the
+`type_is_not` accepts a list to express an allowlist negation - the
 predicate fires when the field's concrete type name is **not** in any of
 the listed names. Useful for "must be an instance of one of these
 classes" checks:
@@ -146,7 +146,7 @@ substituted from the same config before evaluation. Two resolution modes:
 | Bare `@name` | Sibling of the predicate's field path | `'>': '@num_beams'` resolves `num_beams` next to the predicate's field |
 | Dotted `@a.b.c` | Config root | `'>': '@transformers.sampling.num_beams'` |
 
-Example — fires when `num_return_sequences > num_beams`:
+Example - fires when `num_return_sequences > num_beams`:
 
 ```yaml
 match:
@@ -155,7 +155,7 @@ match:
       '>': '@num_beams'
 ```
 
-Example — fires when `num_beams` is not a multiple of `num_beam_groups`,
+Example - fires when `num_beams` is not a multiple of `num_beam_groups`,
 guarded by `num_beam_groups > 1`:
 
 ```yaml
@@ -180,7 +180,7 @@ predicate rather than raising.
 
 ### ID convention
 
-`{engine}_{invariant_summary_snake}` — unique within engine. Miner-authored IDs
+`{engine}_{invariant_summary_snake}` - unique within engine. Miner-authored IDs
 encode the pattern (`greedy_strips_X`, `single_beam_strips_X`,
 `bnb_X_type`); manual seeds use a descriptive snake-case tail.
 
@@ -240,7 +240,7 @@ When reviewing a corpus PR:
 
 ## Non-goals
 
-- This directory does not drive sweep generation — that's
+- This directory does not drive sweep generation - that's
   `configs/example-study-full.yaml` and related. Corpus YAMLs are data, not
   executable configs.
 - The corpus is not consumed at runtime yet (phase 50.2c wires the generic

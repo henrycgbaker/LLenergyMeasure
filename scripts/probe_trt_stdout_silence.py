@@ -2,7 +2,7 @@
 """PoC-N: TensorRT-LLM stdout-silence profile (issue #366).
 
 Sibling of ``probe_vllm_stdout_silence.py``. Runs a TRT-LLM study with
-the engine cache cleared upfront so the build phase actually compiles —
+the engine cache cleared upfront so the build phase actually compiles -
 this is the worst-case scenario for stdout-silence (engine compilation
 can go several minutes between progress lines).
 
@@ -107,7 +107,7 @@ def _clear_trt_cache() -> None:
         shutil.rmtree(_TRT_CACHE_DIR)
         _TRT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     else:
-        print(f"# TRT cache absent at {_TRT_CACHE_DIR} — nothing to clear", flush=True)
+        print(f"# TRT cache absent at {_TRT_CACHE_DIR} - nothing to clear", flush=True)
 
 
 def _run_and_capture(config_path: Path) -> list[tuple[float, str]]:

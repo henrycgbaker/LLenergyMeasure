@@ -58,7 +58,7 @@ def _make_model_info(param_count: int | None = _LLAMA_7B_PARAMS, with_config: bo
 
 
 # ---------------------------------------------------------------------------
-# estimate_vram — dtype variants
+# estimate_vram - dtype variants
 # ---------------------------------------------------------------------------
 
 
@@ -99,7 +99,7 @@ def test_estimate_vram_fp16():
 
 
 def test_estimate_vram_fp32():
-    """fp32 weights use 4 bytes/param — double the fp16 size."""
+    """fp32 weights use 4 bytes/param - double the fp16 size."""
     config = make_config(**_VRAM_DEFAULTS, dtype="float32")
     model_info = _make_model_info()
 
@@ -113,7 +113,7 @@ def test_estimate_vram_fp32():
 
 
 def test_estimate_vram_bf16():
-    """bf16 weights use 2 bytes/param — same size as fp16."""
+    """bf16 weights use 2 bytes/param - same size as fp16."""
     config = make_config(**_VRAM_DEFAULTS, dtype="bfloat16")
     model_info = _make_model_info()
 
@@ -145,7 +145,7 @@ def test_estimate_vram_fp32_double_fp16():
 
 
 # ---------------------------------------------------------------------------
-# estimate_vram — failure modes
+# estimate_vram - failure modes
 # ---------------------------------------------------------------------------
 
 

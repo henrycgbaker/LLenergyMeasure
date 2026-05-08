@@ -6,7 +6,7 @@
 #
 # Always writes to src/llenergymeasure/engines/<engine>.json
 # and prints the resulting `git diff`. Does NOT commit. The discovered JSON
-# file IS the canonical SSOT — authority comes from `git commit`, not from
+# file IS the canonical SSOT - authority comes from `git commit`, not from
 # who ran discovery.
 #
 # Legitimate refresh (e.g. you bumped a Dockerfile FROM tag):
@@ -95,7 +95,7 @@ docker run --rm --gpus all \
 
 cd "$REPO_ROOT"
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
-    echo "[$ENGINE] Not inside a git repo — skipping diff output." >&2
+    echo "[$ENGINE] Not inside a git repo - skipping diff output." >&2
     exit 0
 fi
 

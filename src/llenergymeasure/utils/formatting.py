@@ -1,4 +1,4 @@
-"""Shared formatting utilities (Layer 0 — importable from any layer)."""
+"""Shared formatting utilities (Layer 0 - importable from any layer)."""
 
 from __future__ import annotations
 

@@ -4,11 +4,11 @@ Tests cover:
 - CFG-01: Compile-time params (tensor_parallel_size, pipeline_parallel_size, max_batch_size,
           max_input_len, max_seq_len, max_num_tokens, dtype, fast_build)
 - CFG-02: Quantisation (QuantAlgo Literal type, kv_cache_quant_algo)
-- CFG-03: (Removed) Calibration sub-config dropped — D3 build-only PTQ, project consumes
+- CFG-03: (Removed) Calibration sub-config dropped - D3 build-only PTQ, project consumes
           pre-quantised checkpoints. Falls through extra="allow" if needed.
 - CFG-04: KV cache (enable_block_reuse, free_gpu_memory_fraction, max_tokens, host_cache_size)
 - CFG-05: Scheduler (capacity_scheduling_policy Literal)
-- CFG-06: (Removed) Build cache sub-config dropped — D1 engine-cache plumbing.
+- CFG-06: (Removed) Build cache sub-config dropped - D1 engine-cache plumbing.
           Falls through extra="allow" if needed.
 - CFG-07: Sampling (min_tokens, n, ignore_eos; return_perf_metrics dropped D1)
 """
@@ -126,7 +126,7 @@ class TestQuantisation:
             TensorRTQuantConfig(kv_cache_quant_algo="INVALID")
 
 
-# CFG-03: Calibration sub-config dropped (D3) — tests removed.
+# CFG-03: Calibration sub-config dropped (D3) - tests removed.
 # calib fields remain settable via TensorRTConfig extra="allow" passthrough.
 
 
@@ -202,7 +202,7 @@ class TestScheduler:
             TensorRTSchedulerConfig(capacity_scheduling_policy="INVALID_POLICY")
 
 
-# CFG-06: Build cache sub-config dropped (D1) — tests removed.
+# CFG-06: Build cache sub-config dropped (D1) - tests removed.
 # build_cache fields remain settable via TensorRTConfig extra="allow" passthrough.
 
 
@@ -228,7 +228,7 @@ class TestSampling:
     def test_sampling_return_perf_metrics_is_extra_allow(self):
         """return_perf_metrics still accepted via extra='allow' passthrough."""
         config = TensorRTSamplingConfig(return_perf_metrics=True)
-        # No ValidationError — extra="allow"
+        # No ValidationError - extra="allow"
         assert getattr(config, "return_perf_metrics", None) is True
 
     def test_sampling_n_ge_1(self):

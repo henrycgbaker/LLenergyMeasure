@@ -13,7 +13,7 @@ field constraint.
 Used by:
 
 - vLLM ``vllm.config.*`` (~27 pydantic-dataclasses with rich constraint metadata).
-- TensorRT-LLM ``TrtLlmArgs`` (Pydantic-v2 root, schema-poor — most bounds live
+- TensorRT-LLM ``TrtLlmArgs`` (Pydantic-v2 root, schema-poor - most bounds live
   in validator AST, but Literal-typed enum fields are picked up here).
 
 Operator vocabulary
@@ -35,7 +35,7 @@ with ``match_fields[<field>] == {"in": [a, b, c]}``.
 
 Determinism
 -----------
-No randomness, no library probing, no time-based seeds — output is a pure
+No randomness, no library probing, no time-based seeds - output is a pure
 function of (target type, namespace, today, source path). See
 ``feedback_miner_pipeline_deterministic.md``.
 """
@@ -308,7 +308,7 @@ def _build(
             "normalised_fields": [],
         },
         message_template=partial["message_template"],
-        references=[f"{library}.{type_name} — Pydantic FieldInfo metadata"],
+        references=[f"{library}.{type_name} - Pydantic FieldInfo metadata"],
         added_by="pydantic_lift",
         added_at=today,
     )

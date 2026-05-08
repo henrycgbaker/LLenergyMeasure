@@ -66,7 +66,7 @@ class CircuitBreaker:
 
         - ``closed``: resets consecutive failure counter.
         - ``half_open``: transitions back to ``closed``, resets counter.
-        - ``open``: invalid — raises :class:`RuntimeError`.
+        - ``open``: invalid - raises :class:`RuntimeError`.
         """
         if self._state == "open":
             raise RuntimeError("record_success() called in open state; call start_probe() first.")
@@ -82,9 +82,9 @@ class CircuitBreaker:
         """Record a failed experiment outcome.
 
         Returns:
-            ``"continue"`` — below threshold, keep going.
-            ``"tripped"``  — threshold reached, breaker is now open.
-            ``"abort"``    — probe failed in half-open state; caller should stop.
+            ``"continue"`` - below threshold, keep going.
+            ``"tripped"``  - threshold reached, breaker is now open.
+            ``"abort"``    - probe failed in half-open state; caller should stop.
 
         Raises:
             RuntimeError: if called in ``open`` state.

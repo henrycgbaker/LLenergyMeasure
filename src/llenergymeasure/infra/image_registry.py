@@ -306,7 +306,7 @@ def parse_runner_value(value: str) -> tuple[RunnerMode, str | None]:
         image = value[len("docker:") :]
         if not image:
             raise ValueError(
-                "empty image name in runner value 'docker:' — "
+                "empty image name in runner value 'docker:' - "
                 "use 'docker' (bare) to select the built-in default image, "
                 "or 'docker:full/image:tag' for an explicit image."
             )

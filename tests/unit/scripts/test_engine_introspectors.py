@@ -1,4 +1,4 @@
-"""Tests for ``scripts.engine_introspectors`` — pure-Python helpers only.
+"""Tests for ``scripts.engine_introspectors`` - pure-Python helpers only.
 
 Container-gated end-to-end discovery tests would use @pytest.mark.docker and
 live in a separate test file if added later. This module tests the helpers
@@ -42,7 +42,7 @@ def test_type_str_pep604_union() -> None:
 
 
 def test_type_str_typing_optional() -> None:
-    # Deliberately exercising the legacy typing.Optional form — discovery sees
+    # Deliberately exercising the legacy typing.Optional form - discovery sees
     # this syntax in third-party code even if we prefer X | None ourselves.
     from typing import Optional
 
@@ -50,7 +50,7 @@ def test_type_str_typing_optional() -> None:
 
 
 def test_type_str_typing_union() -> None:
-    # Ditto for typing.Union — third-party engine packages still use it.
+    # Ditto for typing.Union - third-party engine packages still use it.
     from typing import Union
 
     assert _common.annotation_to_type_str(Union[int, str]) == "int | str"  # noqa: UP007
@@ -101,7 +101,7 @@ def test_read_dockerfile_no_runtime_stage_falls_back(tmp_path: Path) -> None:
     df.write_text(
         "FROM foo:1 AS builder\n"
         "FROM bar:2 AS packager\n"
-        "FROM builder\n"  # references prior stage — should be skipped
+        "FROM builder\n"  # references prior stage - should be skipped
     )
     # No `AS runtime` -> first external FROM wins (foo:1)
     assert _common.read_dockerfile_from(df) == "foo:1"

@@ -1,4 +1,4 @@
-"""Unit tests for domain/metrics.py — precision, energy, inference, latency models."""
+"""Unit tests for domain/metrics.py - precision, energy, inference, latency models."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ class TestPrecisionMetadata:
     def test_precision_factor_mixed_compute(self):
         """mixed as a weights value doesn't affect precision_factor directly.
 
-        But PrecisionMetadata's compute field doesn't accept 'mixed' — only
+        But PrecisionMetadata's compute field doesn't accept 'mixed' - only
         weights does. Test through the property with known fallback.
         """
         pm = PrecisionMetadata(weights="mixed")

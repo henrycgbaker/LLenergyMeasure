@@ -93,7 +93,7 @@ class ProgressCallback(Protocol):
 
         The substep renders as a dim indented bullet with a spinner and
         rising elapsed counter until ``on_substep_done`` arrives. Only one
-        active substep per parent step is supported — calling
+        active substep per parent step is supported - calling
         ``on_substep_start`` again without a matching ``on_substep_done``
         freezes the prior substep with the previous start's text and its
         accumulated elapsed.
@@ -348,7 +348,7 @@ def docker_steps(*, images_prepared: bool, host_baseline: bool) -> list[str]:
             and pulled engine images. Omits ``image_check`` / ``pull`` from
             the list because they were handled at study level.
         host_baseline: True when the host runner measures baseline *before*
-            dispatching the experiment container — i.e. ``cached`` or
+            dispatching the experiment container - i.e. ``cached`` or
             ``validated`` strategies that fire a short-lived baseline
             container (or host-side measurement for local runners). False
             for ``fresh``, where the harness measures baseline inside the

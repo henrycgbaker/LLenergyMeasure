@@ -1,9 +1,9 @@
-"""TensorRT-LLM miner orchestrator — single-stage (static-only).
+"""TensorRT-LLM miner orchestrator - single-stage (static-only).
 
 Per the locked invariant-miner design (decision #8 of the adversarial
 review, 2026-04-26), TRT-LLM ships **without** a dynamic miner: probing
 ``TrtLlmArgs(...)`` with combinatorial inputs yields near-zero raises
-because the constructor is permissive — all real cross-field validity
+because the constructor is permissive - all real cross-field validity
 invariants fire later at engine compile time, inside C++ ``Builder.build_engine``.
 The static miner alone covers the surface that matters at config-validation
 time.
@@ -21,7 +21,7 @@ Pipeline this orchestrator drives:
    staging YAML.
 
 This orchestrator never imports ``tensorrt_llm``. The host has 1.1.0
-installed and importing it would mine the wrong source — exactly the
+installed and importing it would mine the wrong source - exactly the
 silent-degradation failure mode that the Haiku-era extractor PRs (#415,
 #416, #417, all reverted in #423) tripped on. AST-walk over a known
 extracted source tree is the only safe path.
@@ -43,7 +43,7 @@ from pathlib import Path
 
 # NOTE: this script's parent dir contains a sibling ``transformers_*.py``
 # that would shadow the real ``transformers`` package on import. Strip the
-# script directory before any third-party imports — same defensive measure
+# script directory before any third-party imports - same defensive measure
 # as the static miner.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     candidates, source_version, rel_path = walk_tensorrt(args.source_root)
-    # Pin the source-tree version against the SSOT miner range — any drift
+    # Pin the source-tree version against the SSOT miner range - any drift
     # (e.g. someone pointed --source-root at a 1.x checkout) becomes a fatal
     # MinerVersionMismatchError instead of silently emitting drifted invariants.
     check_installed_version("tensorrt_llm", source_version, engine="tensorrt", producer="static")

@@ -17,7 +17,7 @@ from unittest.mock import patch
 import pytest
 
 # ---------------------------------------------------------------------------
-# Formula tests — MeasurementHarness._build_result inference_memory_mb
+# Formula tests - MeasurementHarness._build_result inference_memory_mb
 # ---------------------------------------------------------------------------
 
 
@@ -72,7 +72,7 @@ def test_inference_memory_zero_when_peak_equals_model():
 
 
 # ---------------------------------------------------------------------------
-# Ordering test — TransformersEngine resets peak before inference measurement
+# Ordering test - TransformersEngine resets peak before inference measurement
 # ---------------------------------------------------------------------------
 
 
@@ -104,7 +104,7 @@ def test_peak_memory_reset_precedes_measurement():
         pad_token = "<pad>"
         eos_token = "<eos>"
 
-    # We don't need a real GPU — just verify the ordering of calls.
+    # We don't need a real GPU - just verify the ordering of calls.
     # Patch cuda.is_available to True and intercept reset/max_alloc.
     with (
         patch("torch.cuda.is_available", return_value=True),
@@ -129,13 +129,13 @@ def test_peak_memory_reset_precedes_measurement():
     assert "reset" in call_log, "reset_peak_memory_stats must be called in run_inference"
     assert "max_alloc" in call_log, "max_memory_allocated must be called in run_inference"
     assert call_log.index("reset") < call_log.index("max_alloc"), (
-        "reset_peak_memory_stats must be called BEFORE max_memory_allocated — "
+        "reset_peak_memory_stats must be called BEFORE max_memory_allocated - "
         "reset clears the peak counter so the measurement captures only the inference window"
     )
 
 
 # ---------------------------------------------------------------------------
-# Seed test — TransformersEngine seeds torch RNG before inference
+# Seed test - TransformersEngine seeds torch RNG before inference
 # ---------------------------------------------------------------------------
 
 
@@ -165,7 +165,7 @@ def test_transformers_engine_seeds_rng_before_inference():
 
 
 # ---------------------------------------------------------------------------
-# Domain model tests — MemoryEfficiencyMetrics field existence
+# Domain model tests - MemoryEfficiencyMetrics field existence
 # ---------------------------------------------------------------------------
 
 

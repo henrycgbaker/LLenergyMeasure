@@ -15,19 +15,19 @@
 [worker.oci]
   # GC rules are evaluated in order. First matching rule wins.
 
-  # Rule 0: local sources and cache mounts — keep 48h, cap at 5 GiB
+  # Rule 0: local sources and cache mounts - keep 48h, cap at 5 GiB
   [[worker.oci.gcpolicy]]
     filters = ["type==source.local", "type==exec.cachemount", "type==source.git.checkout"]
     keepDuration = "48h"
     maxUsedSpace = "5GiB"
 
-  # Rule 1: non-internal layers — keep 60 days, generous space
+  # Rule 1: non-internal layers - keep 60 days, generous space
   [[worker.oci.gcpolicy]]
     keepDuration = "1440h"
     reservedSpace = "20GiB"
     maxUsedSpace = "200GiB"
 
-  # Rule 2: all layers — reserve 20 GiB, cap at 200 GiB
+  # Rule 2: all layers - reserve 20 GiB, cap at 200 GiB
   [[worker.oci.gcpolicy]]
     all = true
     reservedSpace = "20GiB"

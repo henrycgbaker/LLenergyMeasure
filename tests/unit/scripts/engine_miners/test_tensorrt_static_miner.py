@@ -12,7 +12,7 @@ Covers:
   load-bearing methods (``LookaheadDecodingConfig.validate_positive_values``,
   ``BaseLlmArgs.validate_build_config_with_runtime_params``).
 - Gate-soundness fixpoint contract (Decision #12 of the adversarial review)
-  — running ``assert_gate_soundness_fixpoint`` against the live validation
+  - running ``assert_gate_soundness_fixpoint`` against the live validation
   gate must succeed.
 
 These tests skip cleanly when the 0.21.0 source isn't available locally
@@ -70,7 +70,7 @@ _REQUIRES_SOURCE = pytest.mark.skipif(
 
 
 # ---------------------------------------------------------------------------
-# Module-level contract — survives without the live source
+# Module-level contract - survives without the live source
 # ---------------------------------------------------------------------------
 
 
@@ -81,7 +81,7 @@ class TestModuleContract:
         assert isinstance(load_miner_pin("tensorrt", "static"), SpecifierSet)
 
     def test_ssot_miner_pin_pins_021(self) -> None:
-        # The miner must reject 1.x — that's a separate library generation.
+        # The miner must reject 1.x - that's a separate library generation.
         # The pin must accept 0.21.x and reject 1.x.
         pin = load_miner_pin("tensorrt", "static")
         assert pin.contains("0.21.0", prereleases=True)
@@ -125,7 +125,7 @@ class TestSourceExtraction:
         """Pin the design's 20-28 invariant target.
 
         If a future TRT-LLM source change kicks the count outside this band,
-        the test fails loudly — surface the drift rather than silently shift
+        the test fails loudly - surface the drift rather than silently shift
         the corpus.
         """
         candidates, _version, _rel_path = trt_miner.walk_tensorrt()
@@ -310,18 +310,18 @@ class TestGateSoundnessFixpoint:
     """The validation-CI gate's three soundness checks must all be wired.
 
     This is the same regression contract :class:`TestGateSoundnessFixpoint`
-    in :mod:`tests.unit.scripts.engine_miners.test_fixpoint` exercises — duplicated
+    in :mod:`tests.unit.scripts.engine_miners.test_fixpoint` exercises - duplicated
     here so the TRT-LLM miner's CI lane fails loudly if the gate weakens.
     """
 
     def test_gate_soundness_passes_on_real_gate(self) -> None:
-        # Should not raise — all three checks (positive_raises,
+        # Should not raise - all three checks (positive_raises,
         # message_template_match, negative_does_not_raise) are wired.
         assert_gate_soundness_fixpoint()
 
 
 # ---------------------------------------------------------------------------
-# AST helpers — parameterised regression on representative landmarks
+# AST helpers - parameterised regression on representative landmarks
 # ---------------------------------------------------------------------------
 
 
@@ -340,14 +340,14 @@ class TestAstHelpers:
         assert preds[0].rhs == "pytorch"
 
     def test_extract_predicates_handles_cross_field_compare(self) -> None:
-        # ``self.max_batch_size > self.build_config.max_batch_size`` —
+        # ``self.max_batch_size > self.build_config.max_batch_size`` -
         # the right-hand side is a nested attribute, not a self.<simple>
-        # — so the miner treats it as opaque (no @ref synthesised).
+        # - so the miner treats it as opaque (no @ref synthesised).
         fragment = "self.max_batch_size > self.build_config.max_batch_size"
         cond = ast.parse(fragment, mode="eval").body
         preds = trt_miner._extract_predicates(cond)
         # We extract one predicate with no usable RHS in this case, or none.
-        # Either way, the invariant body still emits — recall over precision.
+        # Either way, the invariant body still emits - recall over precision.
         # The important contract is: the call doesn't raise.
         assert isinstance(preds, list)
 

@@ -15,7 +15,7 @@ def trust_remote_code_enabled() -> bool:
 
     Reads ``LLEM_TRUST_REMOTE_CODE`` from the environment. Treats
     ``1``/``true``/``yes``/``on`` (case-insensitive) as True; anything else
-    (including unset) as False — matching HuggingFace's own default.
+    (including unset) as False - matching HuggingFace's own default.
 
     Setting True allows loading models that ship custom Python implementations
     (Qwen, DeepSeek, ChatGLM, etc.) at the cost of executing repo-supplied code.
@@ -51,7 +51,7 @@ def validate_path(path: Path, must_exist: bool = False, allow_relative: bool = T
 def is_safe_path(base_dir: Path, target_path: Path) -> bool:
     """Check if target_path is within base_dir (prevent path traversal).
 
-    Uses Path.is_relative_to() for robust checking — this correctly handles
+    Uses Path.is_relative_to() for robust checking - this correctly handles
     edge cases like /foo/bar vs /foo/bar_malicious that string prefix
     checks would fail on.
 

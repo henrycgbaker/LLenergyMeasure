@@ -421,7 +421,7 @@ jobs:
     # Aggregate writeback (H4-fixed). Downloads all per-cell writeback
     # artefacts and performs ONE git push. Lenient gating: runs as long
     # as ANY cell uploaded its writeback artefact, so partial-success
-    # PRs (vllm pass + tensorrt fail) still land vllm's changes — same
+    # PRs (vllm pass + tensorrt fail) still land vllm's changes - same
     # availability as today's per-cell writeback.
     #
     # Mints its own bot token. Cross-job token forwarding via outputs
@@ -475,7 +475,7 @@ jobs:
 
           # Compose a per-cell summary from the artefact directory shape.
           # Each artefact is a folder named {invariants,schemas}-writeback-<engine>
-          # — but merge-multiple flattens it; we infer cells from the file
+          # - but merge-multiple flattens it; we infer cells from the file
           # paths themselves.
           CONTRIBUTORS=()
           for ENGINE in transformers vllm tensorrt; do

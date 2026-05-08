@@ -1,4 +1,4 @@
-"""Config resolution log — tracks provenance of each non-default experiment field.
+"""Config resolution log - tracks provenance of each non-default experiment field.
 
 Produces a per-experiment ``_resolution.json`` sidecar that records which config
 values were overridden relative to Pydantic defaults, and *why* (CLI flag, sweep
@@ -108,7 +108,7 @@ def _get_defaults_flat(model_cls: type[BaseModel], prefix: str = "") -> dict[str
         elif field_info.default_factory is not None:
             val = field_info.default_factory()  # type: ignore[call-arg]
         else:
-            continue  # Required field (no default) — any value is explicitly set
+            continue  # Required field (no default) - any value is explicitly set
 
         # Recurse into BaseModel sub-config defaults
         if isinstance(val, BaseModel):

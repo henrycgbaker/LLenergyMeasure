@@ -1,7 +1,7 @@
 # Tutorial: multi-engine implementation-parameter study.
 #
-# Goal: measure how four implementation choices — dtype, batching,
-# attention backend, KV-cache reuse — affect energy and efficiency for
+# Goal: measure how four implementation choices - dtype, batching,
+# attention backend, KV-cache reuse - affect energy and efficiency for
 # the same model across three inference engines (Transformers, vLLM,
 # TensorRT-LLM).
 #
@@ -55,7 +55,7 @@ output:
   save_timeseries: true
 
 # ---------------------------------------------------------------------
-# Sweep — four implementation-parameter axes, expanded per engine.
+# Sweep - four implementation-parameter axes, expanded per engine.
 # ---------------------------------------------------------------------
 # Independent axes (lists of scalars) are crossed; engines for which an
 # axis has no meaning are simply omitted from that axis. Cross-engine
@@ -66,7 +66,7 @@ sweep:
   vllm.dtype: [float16, bfloat16]
   tensorrt.dtype: [float16, bfloat16]
 
-  # 2. Batching strategy — engine-native parameter names.
+  # 2. Batching strategy - engine-native parameter names.
   #    Transformers: explicit batch_size at generation time.
   #    vLLM: max_num_seqs (continuous batching cap).
   #    TensorRT-LLM: max_batch_size (compile-time engine parameter).
@@ -74,12 +74,12 @@ sweep:
   vllm.engine.max_num_seqs: [64, 256]
   tensorrt.max_batch_size: [4, 16]
 
-  # 3. Attention backend — measurable energy effect on prefill-heavy work.
+  # 3. Attention backend - measurable energy effect on prefill-heavy work.
   transformers.attn_implementation: [sdpa, flash_attention_2]
   vllm.attention.backend: [flash_attn, flashinfer]
   # TensorRT-LLM uses its own fused attention; no axis here.
 
-  # 4. KV-cache reuse — affects steady-state throughput and energy.
+  # 4. KV-cache reuse - affects steady-state throughput and energy.
   vllm.engine.enable_prefix_caching: [true, false]
   tensorrt.kv_cache_reuse:
     - {}                                              # baseline

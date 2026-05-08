@@ -1,6 +1,6 @@
 """Unit tests for v2.0 energy samplers and auto-selection.
 
-All tests are fully mocked — no GPU or installed energy packages required.
+All tests are fully mocked - no GPU or installed energy packages required.
 Tests cover NVMLSampler, ZeusSampler, EnergyMeasurement, and select_energy_sampler().
 """
 
@@ -131,7 +131,7 @@ def test_energy_measurement_dataclass() -> None:
 
 
 # ---------------------------------------------------------------------------
-# select_energy_sampler — null returns None
+# select_energy_sampler - null returns None
 # ---------------------------------------------------------------------------
 
 
@@ -142,7 +142,7 @@ def test_select_backend_null_returns_none() -> None:
 
 
 # ---------------------------------------------------------------------------
-# select_energy_sampler — explicit unavailable raises ConfigError
+# select_energy_sampler - explicit unavailable raises ConfigError
 # ---------------------------------------------------------------------------
 
 
@@ -176,7 +176,7 @@ def test_select_backend_unknown_name_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
-# select_energy_sampler — auto priority
+# select_energy_sampler - auto priority
 # ---------------------------------------------------------------------------
 
 
@@ -253,7 +253,7 @@ def test_select_backend_auto_returns_none_when_nothing_available() -> None:
 
 
 # ---------------------------------------------------------------------------
-# select_energy_sampler — gpu_indices forwarding
+# select_energy_sampler - gpu_indices forwarding
 # ---------------------------------------------------------------------------
 
 
@@ -303,7 +303,7 @@ def test_select_backend_auto_forwards_gpu_indices() -> None:
 
 
 # ---------------------------------------------------------------------------
-# NVMLSampler trapezoidal integration — single GPU
+# NVMLSampler trapezoidal integration - single GPU
 # ---------------------------------------------------------------------------
 
 
@@ -339,7 +339,7 @@ def test_nvml_trapezoidal_skips_none_power() -> None:
     """Trapezoidal integration skips sample pairs where power_w is None."""
     from llenergymeasure.device.power_thermal import PowerThermalSample
 
-    # Middle sample has None power — pairs (0,1) and (1,2) both involve None
+    # Middle sample has None power - pairs (0,1) and (1,2) both involve None
     sample_data = [
         PowerThermalSample(timestamp=0.0, power_w=100.0, gpu_index=0),
         PowerThermalSample(timestamp=0.1, power_w=None, gpu_index=0),
@@ -372,7 +372,7 @@ def test_nvml_trapezoidal_single_sample() -> None:
 
 
 # ---------------------------------------------------------------------------
-# NVMLSampler trapezoidal integration — multi-GPU
+# NVMLSampler trapezoidal integration - multi-GPU
 # ---------------------------------------------------------------------------
 
 

@@ -5,7 +5,7 @@
 export const SITE_TITLE = 'LLenergyMeasure';
 
 // Route entry points per pillar. Each value is the URL of the FIRST
-// page in that sidebar — clicking the corresponding navbar item or
+// page in that sidebar - clicking the corresponding navbar item or
 // landing-page card lands there.
 export const ROUTES = {
   getStarted: '/get-started/install',

@@ -1,6 +1,6 @@
 """Tests for the host-side baseline container dispatch helper.
 
-All tests patch ``subprocess.Popen`` at the module boundary — nothing actually
+All tests patch ``subprocess.Popen`` at the module boundary - nothing actually
 talks to Docker.
 """
 
@@ -223,7 +223,7 @@ class TestRunBaselineContainerSuccess:
             "samples": "289",
             "duration": "30.00",
         }
-        # Elapsed values are monotonically non-decreasing — a mock may fire
+        # Elapsed values are monotonically non-decreasing - a mock may fire
         # them in the same tick, so we allow equality.
         assert elapsed_seen == sorted(elapsed_seen)
 
@@ -321,7 +321,7 @@ class TestRunBaselineContainerFailure:
 
             def _never_ending():
                 # Simulate a wedged container: block indefinitely in stdout.
-                # We yield one line then sleep — but our loop checks the
+                # We yield one line then sleep - but our loop checks the
                 # timeout every iteration, so we just yield nothing and
                 # let the outer timeout check trigger. Instead, raise
                 # TimeoutExpired on wait().

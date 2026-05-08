@@ -1,4 +1,4 @@
-"""Unit tests for domain/progress.py — ProgressCallback protocol and step vocabulary."""
+"""Unit tests for domain/progress.py - ProgressCallback protocol and step vocabulary."""
 
 from __future__ import annotations
 
@@ -104,7 +104,7 @@ def test_step_phases_cover_all_constants():
 
 
 # -------------------------------------------------------------------------
-# docker_steps() — assembles the Docker step list with strategy-dependent
+# docker_steps() - assembles the Docker step list with strategy-dependent
 # placement of STEP_BASELINE. The renderer iterates in registered order, so
 # a step list out of sync with actual event order is exactly what causes the
 # "janky" progress display when using cached/validated baselines.
@@ -171,7 +171,7 @@ def test_docker_steps_images_prepared_fresh():
 def test_docker_steps_measurement_tail_is_identical_across_variants():
     """The measurement-phase tail (model…save) is the same in every mode.
 
-    This locks in the single-source-of-truth property of the constructor —
+    This locks in the single-source-of-truth property of the constructor -
     changing the tail in one variant would drift the others automatically.
     """
     tails = {}

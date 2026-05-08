@@ -2,21 +2,21 @@
 
 Five tiers, each with a different dependency on live library behaviour:
 
-* **Tier A — Miner internal invariants.** Determinism and tag hygiene.
+* **Tier A - Miner internal invariants.** Determinism and tag hygiene.
   Runs the miner twice, asserts shape.
-* **Tier B — Library-observational property tests.** Parametrised over the
+* **Tier B - Library-observational property tests.** Parametrised over the
   miner's probe set; checks that every positive probe still fires on the
   installed ``transformers`` and every negative probe doesn't. This is the
   test that fails loud when HF drops or adds a invariant.
-* **Tier C — Mutation / behavioural e2e.** Corrupt the committed YAML
+* **Tier C - Mutation / behavioural e2e.** Corrupt the committed YAML
   corpus (message, predicate, added_by, presence), re-run the miner,
   assert the miner output corrects each mutation. Proves the miner is a
   functioning drift-detection loop, not an inert replayer.
-* **Tier D — Library-round-trip.** For each dormancy invariant, derive ground
+* **Tier D - Library-round-trip.** For each dormancy invariant, derive ground
   truth at test time by probing the live library, assert the miner's
   emitted template (after ``{declared_value}`` substitution) is a substring
   of the library's actual raise message. No hardcoded library phrasing.
-* **Tier E — Auto-discovery sanity.** Prove the enumerator finds the full
+* **Tier E - Auto-discovery sanity.** Prove the enumerator finds the full
   partition the corpus requires, so dormancy invariants never accidentally
   slip back to hand-curation.
 """
@@ -38,7 +38,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from scripts.engine_miners import transformers_dynamic_miner as intro  # noqa: E402
 from scripts.engine_miners._ssot import load_miner_pin  # noqa: E402
 
-# Every test in this module needs transformers importable — the miner
+# Every test in this module needs transformers importable - the miner
 # observes the real library. Skip the whole module if it's not installed.
 pytest.importorskip("transformers")
 
@@ -55,7 +55,7 @@ _TF_DYNAMIC_PIN = load_miner_pin("transformers", "dynamic")
 if not _TF_DYNAMIC_PIN.contains(_pkg_version.Version(_tf.__version__), prereleases=True):
     pytest.skip(
         f"transformers=={_tf.__version__} is outside SSOT miner pin "
-        f"{_TF_DYNAMIC_PIN!s} — introspection tests would compare drifted "
+        f"{_TF_DYNAMIC_PIN!s} - introspection tests would compare drifted "
         f"library output against corpus generated on a different version. "
         f"Install a pinned transformers to run.",
         allow_module_level=True,
@@ -83,12 +83,12 @@ def miner_candidates() -> list:
 
 @pytest.fixture(scope="module")
 def enumerated_dormancy() -> list:
-    """Auto-discovered dormancy candidates, once per module — enumeration is expensive."""
+    """Auto-discovered dormancy candidates, once per module - enumeration is expensive."""
     return intro._enumerate_dormancy_candidates()
 
 
 # ---------------------------------------------------------------------------
-# Tier A — Miner internal invariants
+# Tier A - Miner internal invariants
 # ---------------------------------------------------------------------------
 
 
@@ -112,7 +112,7 @@ def test_miner_is_deterministic() -> None:
 
 def test_every_introspection_rule_is_tagged_introspection(miner_candidates) -> None:
     # No invariant from this miner should ever leak through as manual_seed
-    # — that tag belongs to BNB invariants only, which live in the parent miner.
+    # - that tag belongs to BNB invariants only, which live in the parent miner.
     tags = {c.added_by for c in miner_candidates}
     assert tags == {"dynamic_miner"}
 
@@ -139,7 +139,7 @@ def test_mode_gated_dormancy_templates_carry_placeholder(miner_candidates) -> No
     """Each mode-gated dormancy invariant's template must have a ``{declared_value}`` slot.
 
     Regression guard: the strict substitution anchors on ``\\`{field}\\` is
-    set to \\`{value}\\``` — if HF ever rephrases the greedy / beam
+    set to \\`{value}\\``` - if HF ever rephrases the greedy / beam
     dormancy messages, substitution fails silently and the template loses
     its placeholder. This test fires immediately when that happens.
     """
@@ -151,7 +151,7 @@ def test_mode_gated_dormancy_templates_carry_placeholder(miner_candidates) -> No
         if not any(invariant.id.startswith(p) for p in mode_prefixes):
             continue
         assert "{declared_value}" in (invariant.message_template or ""), (
-            f"Dormancy invariant {invariant.id!r} lost its {{declared_value}} slot — "
+            f"Dormancy invariant {invariant.id!r} lost its {{declared_value}} slot - "
             f"HF phrasing may have drifted. Template: {invariant.message_template!r}"
         )
 
@@ -179,7 +179,7 @@ def test_dormancy_rule_match_fields_align_with_id_prefix(miner_candidates) -> No
 
 
 # ---------------------------------------------------------------------------
-# Tier B — Library-observational property tests
+# Tier B - Library-observational property tests
 # ---------------------------------------------------------------------------
 
 
@@ -191,7 +191,7 @@ def test_positive_trigger_probe_fires_minor_issue(trigger, enumerated_dormancy) 
     # Pick any field discovered under this trigger; doesn't matter which.
     fields_for_trigger = [f for (t, f, *_) in enumerated_dormancy if t is trigger]
     assert fields_for_trigger, (
-        f"Trigger {trigger.id_prefix!r} discovered no dormancy invariants — "
+        f"Trigger {trigger.id_prefix!r} discovered no dormancy invariants - "
         f"library behaviour may have drifted."
     )
 
@@ -215,12 +215,12 @@ def test_negative_trigger_probe_does_not_fire(trigger, enumerated_dormancy) -> N
     Every field discovered under ``trigger`` is checked. Three legitimate
     "doesn't fire" outcomes are accepted:
 
-    1. ``validate(strict=True)`` passes — the field genuinely became valid.
-    2. Raises, but this field isn't in the composed issue list — other fields
+    1. ``validate(strict=True)`` passes - the field genuinely became valid.
+    2. Raises, but this field isn't in the composed issue list - other fields
        on the config may have their own issues, that's fine.
     3. ``GenerationConfig(**kwargs)`` itself raises a cross-field error
        (e.g. ``constraints`` requires ``do_sample=False`` even before
-       ``validate`` runs) — the library refuses to build such a config, so
+       ``validate`` runs) - the library refuses to build such a config, so
        no minor_issue for this field can fire anywhere downstream.
 
     Only the "field STILL appears in validate(strict=True) issues" case is
@@ -240,7 +240,7 @@ def test_negative_trigger_probe_does_not_fire(trigger, enumerated_dormancy) -> N
                 **{trigger.trigger_field: trigger.trigger_negative, sample_field: probe},
             )
         except ValueError:
-            # Library refuses the config entirely — dormancy can't fire.
+            # Library refuses the config entirely - dormancy can't fire.
             continue
         try:
             gc.validate(strict=True)
@@ -248,12 +248,12 @@ def test_negative_trigger_probe_does_not_fire(trigger, enumerated_dormancy) -> N
             issues = intro._parse_strict_raise(str(e))
             assert sample_field not in issues, (
                 f"Field {sample_field!r} under trigger {trigger.id_prefix!r} "
-                f"still fires under negative trigger — predicate encoded in "
+                f"still fires under negative trigger - predicate encoded in "
                 f"corpus would over-fire."
             )
 
 
-# Tier B (mid) — error-class probe round-trip tests retired:
+# Tier B (mid) - error-class probe round-trip tests retired:
 # The pre-refactor introspection extractor exposed ``ERROR_PROBES`` as a
 # hardcoded tuple and these tests parametrised over it. The combinatorial
 # refactor (2026-04-25) replaced the hardcoded tuple with cluster-based
@@ -266,7 +266,7 @@ def test_negative_trigger_probe_does_not_fire(trigger, enumerated_dormancy) -> N
 
 
 # ---------------------------------------------------------------------------
-# Tier C — Mutation / behavioural e2e
+# Tier C - Mutation / behavioural e2e
 # ---------------------------------------------------------------------------
 
 
@@ -292,7 +292,7 @@ def test_miner_corrects_wrong_message_template(committed_corpus, miner_candidate
     """A corrupted message_template in the corpus is not what the miner emits."""
     mutant = copy.deepcopy(committed_corpus)
     target = _pick_introspection_rule(mutant)
-    target["message_template"] = "BOGUS — library does not say this"
+    target["message_template"] = "BOGUS - library does not say this"
 
     miner_invariant = _find_miner_invariant(miner_candidates, target["id"])
     assert miner_invariant.message_template != target["message_template"]
@@ -319,7 +319,7 @@ def test_miner_corrects_wrong_predicate_default(committed_corpus, miner_candidat
 
 @pytest.mark.skip(
     reason=(
-        "Pre-refactor invariant — miner emitted a stable id for every committed "
+        "Pre-refactor invariant - miner emitted a stable id for every committed "
         "invariant. Combinatorial probing now derives ids from observed patterns; the "
         "load-bearing question 'do the corpus and miner agree' lives at the "
         "merger + validation-CI level (lands in follow-up PRs). Re-enable or remove "
@@ -348,14 +348,14 @@ def test_miner_rejects_drift_in_added_by(committed_corpus, miner_candidates) -> 
 
 
 # ---------------------------------------------------------------------------
-# Tier D — Library-round-trip (ground truth derived at test time)
+# Tier D - Library-round-trip (ground truth derived at test time)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.skip(
     reason=(
         "Combinatorial probing emits some invariants whose kwargs_positive are inferred "
-        "from cluster sweeps and don't always round-trip in the live library — "
+        "from cluster sweeps and don't always round-trip in the live library - "
         "exactly the recall-first behaviour validation CI (separate follow-up PR) is "
         "designed to filter. Re-enable or remove once validation is wired "
         "into build_corpus.py and the canonical corpus excludes non-round-tripping "
@@ -369,7 +369,7 @@ def test_miner_dormancy_template_is_substring_of_live_library_message(
     the probed value must be a substring of what the library actually says
     when the same kwargs run through ``validate(strict=True)``.
 
-    No hardcoded library phrasing — ground truth comes from re-probing the
+    No hardcoded library phrasing - ground truth comes from re-probing the
     live library at test time.
     """
     from transformers import GenerationConfig
@@ -398,7 +398,7 @@ def test_dormancy_template_substitution_uses_declared_value_not_frozen(
     miner_candidates,
 ) -> None:
     """Rendering a mode-gated dormancy template with a NON-probe value must
-    appear in the rendered output — and the probe value must NOT.
+    appear in the rendered output - and the probe value must NOT.
 
     This is the T5 regression guard. If substitution drifts back to
     anchoring on naked backticked values (the original bug), a different
@@ -429,7 +429,7 @@ def _isolation_for_rule(invariant) -> dict[str, Any]:
 
 
 def _probed_field(invariant) -> str:
-    """Return the probed field name — last segment of the non-trigger match key."""
+    """Return the probed field name - last segment of the non-trigger match key."""
     for trigger in intro.TRIGGERS:
         if invariant.id.startswith(trigger.id_prefix):
             return invariant.id.removeprefix(trigger.id_prefix)
@@ -439,7 +439,7 @@ def _probed_field(invariant) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tier E — Auto-discovery sanity
+# Tier E - Auto-discovery sanity
 # ---------------------------------------------------------------------------
 
 

@@ -7,7 +7,7 @@ pair, where ``producer`` is one of the keys under ``miner_pins:`` in the
 SSOT (``static`` | ``dynamic`` | ``discovery``).
 
 The SSOT path is resolved by walking up from this file until a
-``pyproject.toml`` marker is found — the canonical project-root marker
+``pyproject.toml`` marker is found - the canonical project-root marker
 across the codebase. Failing to find the SSOT raises ``FileNotFoundError``
 loud (no silent fallback to a hard-coded default).
 

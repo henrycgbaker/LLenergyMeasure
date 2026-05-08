@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 def _timeseries_schema() -> Any:
     """Return the locked Parquet schema for timeseries data.
 
-    Schema is locked per CONTEXT.md — do not change column names or types
+    Schema is locked per CONTEXT.md - do not change column names or types
     without a schema version bump.
     """
     import pyarrow as pa

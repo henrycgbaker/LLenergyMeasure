@@ -129,7 +129,7 @@ class TestCaptureStderrSnippet:
 
 
 # ---------------------------------------------------------------------------
-# translate_docker_error — category matching
+# translate_docker_error - category matching
 # ---------------------------------------------------------------------------
 
 

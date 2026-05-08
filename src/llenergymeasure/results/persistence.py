@@ -1,4 +1,4 @@
-"""v3.0 results persistence — save, load, atomic writes.
+"""v3.0 results persistence - save, load, atomic writes.
 
 Handles directory lifecycle, collision avoidance,
 JSON serialisation (primary), and Parquet sidecar management.
@@ -60,7 +60,7 @@ def _experiment_dir_name(
 
 
 def _find_collision_free_dir(base: Path) -> Path:
-    """Return base or base_1, base_2, etc. — never overwrites.
+    """Return base or base_1, base_2, etc. - never overwrites.
 
     Creates the directory atomically to avoid race conditions.
     """
@@ -76,7 +76,7 @@ def _find_collision_free_dir(base: Path) -> Path:
 def _atomic_write(content: str, path: Path) -> None:
     """Write content to path atomically via temp file + os.replace().
 
-    Uses POSIX rename semantics — atomic on same filesystem.
+    Uses POSIX rename semantics - atomic on same filesystem.
     Calls fsync before replace to ensure durability on power loss.
     Cleans up temp file on failure.
     """
@@ -111,14 +111,14 @@ def save_config_sidecar(
     Schema lives in ``.product/designs/config-deduplication-dormancy/sweep-dedup.md``
     §3.3. Fields:
 
-    - ``observed_engine_params`` / ``observed_sampling_params`` — authoritative
+    - ``observed_engine_params`` / ``observed_sampling_params`` - authoritative
       post-construction library state (populated by
       :func:`llenergymeasure.engines._helpers.extract_observed_params`).
-    - ``resolved_config_hash`` — library-resolution mechanism-output hash, carried forward from sweep
+    - ``resolved_config_hash`` - library-resolution mechanism-output hash, carried forward from sweep
       expansion via ``StudyConfig.declared_resolved_config_hashes``.
-    - ``observed_config_hash`` — library-observation hash computed from the effective
+    - ``observed_config_hash`` - library-observation hash computed from the effective
       params at sidecar-write time.
-    - ``config_validation_observations`` — DormantField entries that
+    - ``config_validation_observations`` - DormantField entries that
       ``_apply_invariants`` attached at load time.
 
     Any missing optional field is omitted from the sidecar (not written as
@@ -237,7 +237,7 @@ def save_result(
             shutil.copy2(timeseries_source, dest)
             logger.debug("Copied timeseries sidecar to %s", dest)
         else:
-            logger.warning("timeseries_source %s does not exist — skipping copy", timeseries_source)
+            logger.warning("timeseries_source %s does not exist - skipping copy", timeseries_source)
 
     return result_path
 
