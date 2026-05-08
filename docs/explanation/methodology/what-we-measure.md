@@ -38,7 +38,7 @@ from instantaneous power samples. Reported as:
 Adjusted energy is the load-bearing figure for cross-implementation
 comparison. The baseline subtraction is non-trivial - idle power varies
 with hardware state, cooling, and prior thermal load - and is documented
-in [methodology > baseline measurement](/explanation/methodology/methodology#baseline-measurement).
+in [methodology > baseline power](/explanation/methodology/methodology#baseline-power).
 
 The unit is the joule (J): one watt-second. For reference, a smartphone
 battery stores roughly 15 kJ; a 100-prompt inference run on a 0.5B model
