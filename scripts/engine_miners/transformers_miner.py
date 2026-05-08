@@ -63,7 +63,7 @@ from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.
     MinerSource,
     check_installed_version,
 )
-from scripts.engine_miners._ssot import load_miner_pin  # noqa: E402
+from scripts.engine_miners._ssot import load_miner_pin, load_ssot  # noqa: E402
 from scripts.engine_miners.transformers_dynamic_miner import (  # noqa: E402
     walk_generation_config_invariants,
 )
@@ -72,12 +72,48 @@ from scripts.engine_miners.transformers_dynamic_miner import (  # noqa: E402
 # inside the live ``transformers`` package. Read by ``scripts._probe``
 # before mining runs; a missing landmark flips the probe verdict to
 # ``fail`` and skips the downstream stages without re-importing here.
-LANDMARKS: tuple[str, ...] = (
-    "transformers.GenerationConfig",
-    "transformers.GenerationConfig.validate",
-    "transformers.BitsAndBytesConfig",
-    "transformers.BitsAndBytesConfig.post_init",
-)
+#
+# Sourced from the version-pinned archive at
+# ``llenergymeasure._engine_archive.transformers.<safe_version>.machinery.static``.
+# PEP 562 ``__getattr__`` defers the archive import + SSOT parse until the
+# probe (or in-module code) accesses ``LANDMARKS``; module import stays
+# cheap so unrelated test collection does not drag in the engine machinery.
+
+
+def _get_landmarks() -> tuple[str, ...]:
+    """Resolve LANDMARKS for the current SSOT ``library.current_version``.
+
+    Caches in module ``globals()`` after first call so subsequent in-module
+    references (and the probe's ``getattr(module, "LANDMARKS")``) read
+    directly from the module dict without re-dispatching.
+    """
+    cached = globals().get("LANDMARKS")
+    if cached is not None:
+        return cached  # type: ignore[no-any-return]
+    from llenergymeasure._engine_archive._dispatcher import load_machinery
+
+    ssot = load_ssot("transformers")
+    library = ssot.get("library")
+    if not isinstance(library, dict) or "current_version" not in library:
+        raise ValueError(
+            "engine_versions/transformers.yaml is missing library.current_version; "
+            "cannot resolve archived LANDMARKS."
+        )
+    landmarks = load_machinery(
+        engine="transformers",
+        version=str(library["current_version"]),
+        producer="static",
+    ).LANDMARKS
+    globals()["LANDMARKS"] = landmarks
+    return landmarks  # type: ignore[no-any-return]
+
+
+def __getattr__(name: str) -> object:
+    """PEP 562 hook: lazy LANDMARKS export from the per-version archive."""
+    if name == "LANDMARKS":
+        return _get_landmarks()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # ---------------------------------------------------------------------------
 # BitsAndBytesConfig type-check invariants (kept hand-curated - CPU-safe)
@@ -117,36 +153,26 @@ _BNB_TYPE_RULES: tuple[tuple[str, str, Any, Any], ...] = (
 
 
 def _check_landmarks() -> tuple[str, str]:
-    """Import transformers, verify the landmarks the miner relies on.
+    """Verify the archived LANDMARKS resolve under the live ``transformers`` package.
 
     Returns ``(installed_version, generation_config_source_path)``.
+
+    Iterates :data:`LANDMARKS` (lazy-loaded from
+    ``llenergymeasure._engine_archive``) and resolves each via the same
+    ``_resolve_landmark`` helper the probe uses, so the miner's runtime
+    landmark check cannot drift from the probe's static check. A missing
+    landmark raises :class:`MinerLandmarkMissingError`.
     """
-    try:
-        import transformers  # type: ignore
-    except ImportError as exc:
-        raise MinerLandmarkMissingError(
-            "transformers.__init__", detail="transformers not importable"
-        ) from exc
+    from scripts._probe import _resolve_landmark
 
-    try:
-        from transformers import GenerationConfig  # type: ignore
-    except ImportError as exc:
-        raise MinerLandmarkMissingError(
-            "transformers.GenerationConfig", detail="symbol not importable"
-        ) from exc
+    for landmark in _get_landmarks():
+        try:
+            _resolve_landmark(landmark)
+        except (AttributeError, ImportError) as exc:
+            raise MinerLandmarkMissingError(landmark, detail=str(exc)) from exc
 
-    if not hasattr(GenerationConfig, "validate"):
-        raise MinerLandmarkMissingError("GenerationConfig.validate")
-
-    try:
-        from transformers import BitsAndBytesConfig  # type: ignore
-    except ImportError as exc:
-        raise MinerLandmarkMissingError(
-            "transformers.BitsAndBytesConfig", detail="symbol not importable"
-        ) from exc
-
-    if not hasattr(BitsAndBytesConfig, "post_init"):
-        raise MinerLandmarkMissingError("BitsAndBytesConfig.post_init")
+    import transformers  # type: ignore
+    from transformers import GenerationConfig  # type: ignore
 
     source_path = inspect.getsourcefile(GenerationConfig) or "<unknown>"
     return transformers.__version__, source_path
