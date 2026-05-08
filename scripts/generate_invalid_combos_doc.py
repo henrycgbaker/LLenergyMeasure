@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate docs/generated/invalid-combos.md from config introspection SSOT.
+"""Generate docs/reference/engines/invalid-combos.md from config introspection SSOT.
 
 Pure renderer: all data comes from llenergymeasure.config.introspection.
 No static lists maintained in this script.
@@ -143,7 +143,9 @@ def generate_markdown() -> str:
 
 def main() -> None:
     """Generate and write the invalid combos documentation."""
-    output_path = Path(__file__).parent.parent / "docs" / "generated" / "invalid-combos.md"
+    output_path = (
+        Path(__file__).parent.parent / "docs" / "reference" / "engines" / "invalid-combos.md"
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     content = generate_markdown()
