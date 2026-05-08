@@ -1,15 +1,30 @@
 name: Build docs site
 
 # Builds the Docusaurus site under website/ and deploys to GitHub Pages
-# on push to main. PR-time previews are handled separately by Cloudflare
-# Pages (see docs/architecture/preview-deployments.md) - this workflow
-# does not run on pull_request.
+# on push to main. PR runs build only (no deploy) so the docs build
+# acts as an authoritative correctness gate, independent of Cloudflare
+# Pages preview availability (see docs/contributing/preview-deployments.md).
+#
+# Path filters are asymmetric on purpose:
+# - pull_request includes scripts/generate_api_docs.py because edits to
+#   the custom stdlib-only API renderer can break the build, and only a
+#   docs build run will catch that.
+# - push to main does not, mirroring the deploy-side policy that API
+#   reference drift on src changes is acceptable until the next
+#   docs/website push (avoids triggering republish on every src commit).
 #
 # Path-trigger self-test: this workflow's own filename is included in
-# `on.push.paths` below, so edits to this file fire the workflow on
-# merge and exercise its current behaviour.
+# both `on.pull_request.paths` and `on.push.paths` below, so edits fire
+# the workflow at PR time and on merge.
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "website/**"
+      - "docs/**"
+      - "scripts/generate_api_docs.py"
+      - ".github/workflows/docs.yml"
   push:
     branches: [main]
     paths:
@@ -71,6 +86,10 @@ jobs:
 
   deploy:
     name: Deploy docs site
+    # Skipped on pull_request - PR runs are build-only, used as a
+    # correctness gate. Fires on push to main (standard publish path)
+    # and workflow_dispatch (manual republish lever).
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     environment:
