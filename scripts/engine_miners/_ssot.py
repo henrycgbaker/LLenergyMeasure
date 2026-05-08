@@ -61,3 +61,39 @@ def load_miner_pin(engine: str, producer: Producer) -> SpecifierSet:
     if producer not in pins:
         raise KeyError(f"miner_pins.{producer} missing from {path}; present keys: {sorted(pins)}.")
     return SpecifierSet(str(pins[producer]))
+
+
+def load_ssot(engine: str) -> dict[str, object]:
+    """Read + parse ``engine_versions/{engine}.yaml`` into a dict.
+
+    Intentionally uncached: callers (probe, producer modules,
+    update_last_probe) all run at most once per cell invocation, and
+    tests rely on hermetic per-test SSOT fixtures that the @cache
+    decorator would silently shadow across test cases.
+
+    Raises :class:`FileNotFoundError` if the SSOT is missing,
+    :class:`ValueError` if it does not parse to a mapping.
+    """
+    path = ssot_path(engine)
+    text = path.read_text()
+    data = yaml.safe_load(text)
+    if not isinstance(data, dict):
+        raise ValueError(f"SSOT at {path} did not parse to a mapping.")
+    return data
+
+
+def safe_version(version: str) -> str:
+    """Map a dotted PEP-440 version string to a Python-identifier-safe form.
+
+    ``"0.7.3"`` -> ``"v0_7_3"``. Used to derive subpackage names under
+    ``llenergymeasure._engine_archive.<engine>.<safe_version>.machinery.*``.
+    Raises :class:`ValueError` if the resulting identifier would be illegal
+    (e.g. version contains characters other than ``[0-9a-zA-Z._-]``).
+    """
+    safe = "v" + version.replace(".", "_").replace("-", "_")
+    if not safe.replace("_", "").isalnum():
+        raise ValueError(
+            f"Cannot derive a Python identifier from version {version!r}; "
+            f"resulting candidate {safe!r} contains non-alphanumeric chars."
+        )
+    return safe

@@ -58,7 +58,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.engine_miners._ssot import ssot_path  # noqa: E402
+from scripts.engine_miners._ssot import safe_version, ssot_path  # noqa: E402
 
 # Match `  verdict: pass`, `  verdict: "pass"`, `  fingerprint_drift: []`,
 # `  version_inside_envelope: null`, etc. Captures indent + key + the rest
@@ -192,14 +192,66 @@ def _emit_outputs(*, changed: bool, verdict: str) -> None:
         fh.write(f"verdict={verdict}\n")
 
 
+def _write_archive_last_probe(*, engine: str, version: str, report: dict[str, Any]) -> bool:
+    """Mirror the last_probe block to the per-version archive.
+
+    Each version's archive at ``src/llenergymeasure/_engine_archive/<engine>/<safe>/outputs/``
+    holds a frozen ``last_probe.yaml`` capturing the verdict + diagnostics
+    of the last successful pipeline run at that version. The file is a
+    *derivative* of the SSOT's ``last_probe:`` block; it is NOT the source
+    of truth. The SSOT remains authoritative for downstream consumers.
+
+    Gated on the engine being vendored at this version (per-engine
+    ``__init__.py`` present). When an engine is not yet vendored, this
+    function returns ``False`` (no-op); the per-engine vendor PR adds the
+    package marker and bootstraps the archive. Without this gate, a
+    half-baked archive directory (``outputs/`` without ``__init__.py``)
+    would be created on every pipeline run for engines awaiting vendoring.
+
+    Idempotent: returns ``True`` when the file was created or rewritten
+    with new content, ``False`` if the existing file already matches the
+    payload OR the engine is not vendored at this version.
+    """
+    safe = safe_version(version)
+    archive_root = _PROJECT_ROOT / "src" / "llenergymeasure" / "_engine_archive" / engine / safe
+    if not (archive_root / "__init__.py").is_file():
+        # Engine not yet vendored at this version; archive mirror is a no-op.
+        return False
+    archive_dir = archive_root / "outputs"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    archive_path = archive_dir / "last_probe.yaml"
+
+    # Build payload: same fields, same scalar formatting as the SSOT block.
+    rendered_lines = [f"{field}: {_format_scalar(report[field])}\n" for field in _MUTABLE_FIELDS]
+    payload = "".join(rendered_lines)
+
+    if archive_path.exists() and archive_path.read_text() == payload:
+        return False
+    archive_path.write_text(payload)
+    return True
+
+
 def update(*, engine: str, report: dict[str, Any]) -> int:
     """Apply *report*'s last_probe-relevant fields to the engine SSOT.
 
     Returns 0 on success (whether or not a change was written), 2 on
     infrastructure failure (SSOT missing / malformed, ProbeReport
     missing required fields).
+
+    Also mirrors the last_probe block as a standalone YAML to the
+    versioned archive at
+    ``src/llenergymeasure/_engine_archive/<engine>/<safe>/outputs/last_probe.yaml``.
+    The archive write happens after the SSOT update succeeds; on archive-
+    write failure the SSOT update is preserved (no rollback). Both paths
+    are idempotent so subsequent runs converge.
     """
-    required = {"verdict", "version_inside_envelope", "fingerprint", "fingerprint_drift"}
+    required = {
+        "verdict",
+        "version_inside_envelope",
+        "fingerprint",
+        "fingerprint_drift",
+        "library_version",
+    }
     missing = required - report.keys()
     if missing:
         print(
@@ -233,6 +285,25 @@ def update(*, engine: str, report: dict[str, Any]) -> int:
         print(f"Updated {path} last_probe block (verdict={verdict}).")
     else:
         print(f"No change to {path} last_probe block (verdict={verdict}).")
+
+    # Mirror to the versioned archive. Failure here is non-fatal; the
+    # SSOT is authoritative and the archive will be regenerated on the
+    # next run. We still surface the failure to stderr so it's visible
+    # in CI logs.
+    library_version = str(report["library_version"])
+    try:
+        archive_changed = _write_archive_last_probe(
+            engine=engine, version=library_version, report=report
+        )
+    except (OSError, ValueError) as exc:
+        print(
+            f"Warning: could not mirror last_probe to archive for {engine} "
+            f"v{library_version}: {exc!r}. SSOT update preserved.",
+            file=sys.stderr,
+        )
+    else:
+        if archive_changed:
+            print(f"Mirrored last_probe to archive at {engine}/v{library_version}.")
 
     _emit_outputs(changed=changed, verdict=verdict)
     return 0
