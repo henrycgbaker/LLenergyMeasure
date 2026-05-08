@@ -54,6 +54,15 @@ packages = ["src/llenergymeasure"]
 # Z-engines runtime data (src/llenergymeasure/engines/<engine>/{invariants.*.yaml,
 # schema.discovered.json}) ships automatically in the wheel - no force-include
 # needed (and adding one creates duplicates).
+#
+# Exclude the per-version machinery archive: it's CI-time tooling for
+# probe/mine reproducibility, not runtime. The import-linter contract
+# already forbids runtime layers from importing it; this exclude keeps
+# the same boundary at wheel-build time so end users don't pay for ~MB of
+# historical mining data they cannot use.
+exclude = [
+    "src/llenergymeasure/_engine_archive/**",
+]
 
 [tool.ruff]
 line-length = 100
