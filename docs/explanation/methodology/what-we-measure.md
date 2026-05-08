@@ -1,100 +1,161 @@
-# What We Measure and Why It Matters
+---
+title: What we measure
+description: The three quantities LLenergyMeasure reports per measurement (energy, throughput, FLOPs), why two are headline metrics and one is a validity check, and what the tool does not measure.
+---
 
-This guide explains what LLenergyMeasure measures - energy, throughput, and FLOPs - in plain language. No programming knowledge required.
+# What we measure
+
+LLenergyMeasure reports three quantities per measurement: **energy**,
+**throughput**, and **FLOPs**. Two are headline metrics that answer the
+question the tool was built to answer - *how do implementation choices
+drive efficiency?* The third is a validity check that should remain
+roughly invariant across implementations of the same model.
+
+This page sets out each quantity, why it is or is not load-bearing for
+the impl-effect question, and what the tool does not measure. For the
+methodology details behind these numbers, see
+[methodology](/explanation/methodology/methodology) and
+[energy measurement](/explanation/methodology/energy-measurement). For a
+hands-on first measurement with these metrics in plain language, see
+[Get Started > For policy readers](/get-started/for-policy-readers).
 
 ---
 
-## Why AI Energy Measurement Matters
+## Energy (joules)
 
-Artificial intelligence models run on computers. Those computers consume electricity. As AI becomes more widely used - in search, in healthcare, in government services, in consumer products - the energy cost of running these systems has become a significant policy concern.
+GPU electrical energy consumed during the measurement window, integrated
+from instantaneous power samples. Reported as:
 
-Data centres that host AI infrastructure already account for a growing share of global electricity demand. Training a large AI model once can consume as much electricity as a transatlantic flight. But training happens once; *inference* - using a trained model to generate answers - happens millions or billions of times per day across deployed systems. That repeated cost is what LLenergyMeasure measures.
+- **Total energy** (`total_energy_j`) - raw integrated GPU energy across
+  the experiment.
+- **Adjusted energy** (`energy_adjusted_j`) - total minus the
+  baseline-power contribution; isolates the energy attributable to
+  inference work rather than idle GPU draw.
+- **Per-token energy** (`mj_per_tok_total`, `mj_per_tok_adjusted`) -
+  millijoules per output token, normalising out absolute compute volume
+  so cross-experiment comparisons read at a comparable scale.
 
-Understanding the energy cost of AI inference enables:
+Adjusted energy is the load-bearing figure for cross-implementation
+comparison. The baseline subtraction is non-trivial - idle power varies
+with hardware state, cooling, and prior thermal load - and is documented
+in [methodology > baseline measurement](/explanation/methodology/methodology#baseline-measurement).
 
-- **Informed procurement decisions** - choosing AI systems that deliver equivalent capability with lower energy use
-- **Sustainability accounting** - including AI infrastructure in carbon footprint reporting
-- **Policy design** - setting energy efficiency standards or disclosure requirements for AI systems
-- **Comparative research** - evaluating whether a more capable AI system is worth its higher energy cost
-
-LLenergyMeasure makes this measurement rigorous, reproducible, and comparable across different models and deployment configurations.
-
----
-
-## Energy (Joules): How Much Electricity Does One Inference Use?
-
-**What it is:** The amount of electrical energy consumed by the computer's graphics processor (GPU) to complete one AI inference - that is, to process an input and generate a response.
-
-**Analogy:** Think of it like measuring fuel consumption for a car journey. Just as you might ask "how many litres of fuel does this car use for a 10-kilometre drive?", we ask "how many joules of energy does this AI model use to process 100 prompts?"
-
-**The unit:** Joules. One joule is one watt of power used for one second. A GPU might draw 300 watts of power; if an inference takes 2 seconds, that is 600 joules. For context, a typical smartphone battery stores roughly 15,000 joules.
-
-**What LLenergyMeasure reports:**
-
-- **Total energy** - the raw GPU energy consumed during the experiment
-- **Baseline power** - the idle power the GPU draws even when doing nothing (like a car engine idling)
-- **Adjusted energy** - total energy minus the baseline, representing energy specifically attributable to the inference work
-
-The adjusted figure is the most meaningful for comparison, because it isolates the cost of the AI work rather than the general cost of keeping the hardware running.
+The unit is the joule (J): one watt-second. For reference, a smartphone
+battery stores roughly 15 kJ; a 100-prompt inference run on a 0.5B model
+consumes hundreds of joules.
 
 ---
 
-## Throughput (Tokens per Second): How Fast Does the AI Produce Output?
+## Throughput (output tokens per second)
 
-**What it is:** How many units of output (called "tokens") the AI model produces per second.
+Output tokens generated per wall-clock second across the measurement
+window. Reported as `avg_tokens_per_second` per experiment cell, with
+warmup-excluded accounting.
 
-**What is a token?** In AI language models, text is broken into small chunks called tokens. A token is roughly equivalent to a short word or part of a word. "Hello, world!" is about 4 tokens. This is the unit AI models work with internally.
+Throughput is the second headline metric. It captures how quickly the
+system produces useful output and is sensitive to implementation
+choices: batching strategy, attention-kernel selection, KV-cache reuse,
+and quantisation form all affect throughput, sometimes in different
+directions than they affect energy.
 
-**Analogy:** Think of it like typing speed - words per minute. A faster typist produces more words in the same time. A model with higher throughput produces more tokens in the same time.
-
-**Why it matters:** Throughput affects how quickly users get responses, and how many users a given system can serve simultaneously. A faster model can handle more traffic with the same hardware.
-
-**The trade-off:** A model that runs more slowly might actually be more *energy efficient per unit of output* - it might use less total energy to produce the same amount of text. Throughput alone does not tell you about energy efficiency; you need to combine it with energy measurement.
-
----
-
-## FLOPs (Floating Point Operations): How Much Computational Work Does the Model Do? {#flops}
-
-**What it is:** A count of the number of mathematical calculations the AI model performs during inference.
-
-**Analogy:** Think of it like counting the number of individual calculations a student makes when solving a maths problem. A more complex problem requires more calculations. Similarly, a larger AI model performs more calculations to generate each response.
-
-**The unit:** FLOPs - "Floating Point Operations". Larger models perform billions or trillions of FLOPs per inference (reported as GFLOPs or TFLOPs respectively).
-
-**Why it matters:** FLOPs provide a hardware-independent measure of computational complexity. This is useful for:
-
-- Comparing models of different sizes fairly (a larger model naturally uses more energy partly because it does more work)
-- Estimating theoretical efficiency limits (a model using many FLOPs but little energy is running efficiently; a model using few FLOPs but high energy suggests hardware or configuration inefficiency)
-- Normalising comparisons across different GPU hardware
-
-FLOPs are estimated by LLenergyMeasure based on the model architecture. They cannot be measured directly during inference but can be calculated from model properties.
+Combined with energy, throughput defines **energy per token** (joules
+per token) - the canonical efficiency primitive. A measurement can be
+high-energy because the workload was large (many tokens) or because the
+implementation was inefficient (high energy per token); the joint
+reading distinguishes the two.
 
 ---
 
-## Why These Three Metrics Together?
+## FLOPs (floating-point operations)
 
-Each metric alone can mislead:
+An estimate of the floating-point operations the model executes per
+inference. Reported as `flops_estimate` with a method tag (`roofline`,
+`analytical`, `profiled`) and a confidence level.
 
-- **Energy alone** does not account for how much useful work was done. A model that uses twice the energy might produce ten times the output.
-- **Throughput alone** does not capture efficiency. A fast but power-hungry model may cost more to run than a slower, more efficient one.
-- **FLOPs alone** describe complexity but not actual hardware utilisation or energy draw.
+**FLOPs is a validity check, not a headline metric.** This is a
+deliberate framing choice. FLOPs are largely invariant across
+implementations of the same model: a given `(model, prompts, max-output)`
+tuple performs approximately the same arithmetic regardless of whether
+it runs through Transformers, vLLM, or TensorRT-LLM. The differences
+between engines are in *how that arithmetic is dispatched to hardware*
+(kernel selection, memory layout, scheduling, fusion), not in *how much
+arithmetic happens*.
 
-Together, the three metrics enable meaningful comparisons:
+This makes FLOPs uninformative for the impl-effect question. Swapping
+engines should change energy and throughput substantially while leaving
+FLOPs roughly unchanged. When that prediction fails - when FLOPs drift
+significantly between cells of an implementation sweep - the most
+likely cause is methodological:
 
-| Question | Metrics needed |
-|----------|---------------|
-| Which model costs more to run? | Energy per inference |
-| Which model is faster per user? | Throughput (tokens/second) |
-| Which model is most efficient per unit of output? | Energy ÷ throughput (joules per token) |
-| Is this hardware being used efficiently? | FLOPs vs energy (FLOPs/joule) |
-| Is this model worth its higher energy cost? | All three, combined with accuracy |
+- the prompts or output budget weren't actually held fixed across cells;
+- the model architecture differs (e.g. a quantised variant has fewer
+  effective FLOPs even though the parameter count is unchanged);
+- the FLOPs estimator's confidence is `low` and the cells happen to be
+  near a boundary in the estimator's heuristic.
 
-The goal of LLenergyMeasure is to make these comparisons rigorous and reproducible - giving policy makers and researchers the data they need to evaluate AI systems beyond their headline capabilities.
+So FLOPs functions as a **sanity-check backstop**: if cells diverge on
+FLOPs, something is wrong with the experiment design, not with the
+implementations being compared. That is a useful and load-bearing role;
+it is not the tool's headline.
+
+(Research that *does* benchmark FLOPs as a primary signal - theoretical
+roofline analyses, hardware-utilisation studies - is better served by
+tools targeted at that question. See
+[comparison with other tools](/explanation/methodology/comparison-context).)
 
 ---
 
-## Further Reading
+## What we don't measure
 
-- [How to Read LLenergyMeasure Output](/how-to/interpret-results) - what the numbers mean in practice
-- [Running Your First Measurement](/get-started/for-policy-readers) - a step-by-step guide for running your first measurement
-- [Comparison with Other Benchmarks](/explanation/methodology/comparison-context) - how LLenergyMeasure relates to MLPerf, AI Energy Score, and other tools
+Honest limits, stated explicitly:
+
+- **Training energy.** This tool measures inference. Training costs are
+  out of scope. Pair with `codecarbon` or similar for training-side
+  accounting.
+- **Capability, accuracy, or quality.** No benchmark score, no
+  perplexity, no task accuracy. Pair with
+  [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)
+  when capability matters.
+- **Carbon emissions directly.** Energy is reported in joules; carbon
+  depends on the grid mix where the inference runs, which is outside
+  this tool's scope. The CodeCarbon sampler can attach an estimated
+  carbon figure based on a configured locale; the canonical record is
+  joules.
+- **End-to-end serving cost.** The measurement window covers inference
+  proper, not request queuing, network transit, authentication, or
+  storage costs of running an inference service.
+- **Cross-prompt and cross-run contamination effects.** Each measurement
+  window is per-experiment. Effects across runs (cache warming, weight
+  quantisation drift, GPU thermal hysteresis) are documented in
+  [methodology](/explanation/methodology/methodology) and surfaced
+  through warnings, but are not reported as separate metrics.
+
+---
+
+## How the three combine for the impl-effect question
+
+The question this tool answers: *given a fixed model and prompts, how
+do implementation choices drive efficiency?*
+
+| Reading across cells of an implementation sweep | What it tells you |
+|---|---|
+| Energy and throughput differ; FLOPs roughly equal | Implementation choices affect efficiency. **This is the signal the tool was built to surface.** |
+| Energy, throughput, and FLOPs all differ | Either the experiment isn't holding model+prompts fixed across cells, or the model architecture varies between cells. Investigate before drawing conclusions. |
+| FLOPs differ but energy and throughput don't | Likely a methodology bug in the FLOPs estimator at low confidence. Surface and check; energy + throughput readings remain reliable. |
+
+For interpretation guidance against actual results, see
+[how to read LLenergyMeasure output](/how-to/interpret-results).
+
+---
+
+## Further reading
+
+- [Methodology](/explanation/methodology/methodology) - the full
+  measurement protocol (warmup, baseline, sampler, thermal floor).
+- [Energy measurement](/explanation/methodology/energy-measurement) -
+  technical depth on the sampler abstraction (NVML, Zeus, CodeCarbon).
+- [Comparison with other tools](/explanation/methodology/comparison-context) -
+  positioning relative to MLPerf, AIEnergyScore, llmperf, and capability
+  benchmarks.
+- [For policy readers](/get-started/for-policy-readers) - a plain-language
+  walk-through of running a first measurement.
