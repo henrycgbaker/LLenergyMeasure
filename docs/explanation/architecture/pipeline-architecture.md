@@ -97,7 +97,7 @@ LEGEND:  [auto]    fully automated, no human action
 │   → src/llenergymeasure/engines│         │   → src/llenergymeasure/     │
 │     /{engine}/invariants.proposed.yaml  │         │     config/discovered_       │
 │                              │         │     schemas/{engine}/schema.discovered.json    │
-│  STEP 3 [auto]: VENDOR-REPLAY│         │                              │
+│  STEP 3 [auto]: VALIDATE-REPLAY│         │                              │
 │   validate_invariants.py + the      │         │  STEP 3 [auto]: DIFF vs HEAD │
 │   compare_expected_vs_       │         │                              │
 │   observed contract from     │         │  STEP 4 [auto]: REGENERATE   │
