@@ -6,10 +6,10 @@ a structured Markdown reference grouped by section.
 
 Usage:
     python scripts/generate_config_docs.py
-    python scripts/generate_config_docs.py --output docs/study-config-reference.md
+    python scripts/generate_config_docs.py --output docs/reference/study-config.md
 
 Output:
-    Markdown to stdout (or --output path). Suitable for inlining into docs/study-config.md.
+    Markdown to stdout (or --output path). Suitable for inlining into docs/reference/study-config.md.
 """
 
 from __future__ import annotations

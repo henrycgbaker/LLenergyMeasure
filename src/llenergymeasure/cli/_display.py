@@ -132,7 +132,7 @@ def print_dry_run(
     dtype_display = engine_dtype or "-"
     print(f"  Dtype          {dtype_display}{_annotate('dtype', engine_dtype)}")
 
-    # Batch size — from pytorch section if present
+    # Batch size - from transformers section if present
     batch_size: int | None = None
     if config.transformers is not None and hasattr(config.transformers, "batch_size"):
         batch_size = config.transformers.batch_size

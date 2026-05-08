@@ -4,11 +4,18 @@
 
 export const SITE_TITLE = 'LLenergyMeasure';
 
+// Route entry points per pillar. Each value is the URL of the FIRST
+// page in that sidebar — clicking the corresponding navbar item or
+// landing-page card lands there.
 export const ROUTES = {
-  userGuide: '/docs/installation',
-  methodology: '/methodology/methodology',
-  api: '/api/llenergymeasure',
-  architecture: '/architecture/architecture-overview',
+  getStarted: '/get-started/install',
+  tutorials: '/tutorials/first-measurement',
+  howTo: '/how-to/install',
+  reference: '/reference/cli',
+  explanation: '/explanation/overview',
+  contributing: '/contributing/development',
+  // Deep route used by the landing-page hero secondary CTA.
+  why: '/explanation/why',
 } as const;
 
 export const GITHUB_REPO = 'https://github.com/henrycgbaker/llenergymeasure';

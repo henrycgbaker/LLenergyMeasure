@@ -12,7 +12,7 @@ to a "deferred until first probe-pass cycle" placeholder. HEAD~1 is
 deliberately NOT consulted because it can be a bot writeback commit,
 which would make the comparison anchor non-deterministic.
 
-Output: docs/generated/curation-{engine}.md
+Output: docs/reference/engines/curation-{engine}.md
 
 Run: python scripts/generate_curation_doc.py
 """
@@ -185,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.out and not args.engine:
         parser.error("--out requires --engine (single-engine mode)")
 
-    default_dir = _PROJECT_ROOT / "docs" / "user" / "generated"
+    default_dir = _PROJECT_ROOT / "docs" / "reference" / "engines"
     loader = SchemaLoader()
 
     targets = (args.engine,) if args.engine else ENGINES

@@ -4,7 +4,7 @@
 Stdlib-only renderer. Walks ``llenergymeasure.__all__``, extracts
 docstrings + signatures + Pydantic field metadata via ``inspect``,
 renders a single markdown page at
-``docs/architecture/api/llenergymeasure.md`` with a pre-1.0 disclaimer
+``docs/reference/api/llenergymeasure.md`` with a pre-1.0 disclaimer
 admonition prepended.
 
 Build-time only — the output file is gitignored. Re-runs on every
@@ -27,7 +27,7 @@ sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
 import llenergymeasure  # noqa: E402
 
-_OUT_PATH = _PROJECT_ROOT / "docs" / "api" / "llenergymeasure.md"
+_OUT_PATH = _PROJECT_ROOT / "docs" / "reference" / "api" / "llenergymeasure.md"
 
 _DISCLAIMER = """\
 ---
@@ -43,8 +43,8 @@ sidebar_label: API reference
 >
 > The supported user-facing interfaces are the **CLI**
 > (`llem run`, `llem config`) and the **YAML study config**. See
-> [CLI reference](/docs/cli-reference) and
-> [Study config](/docs/study-config) for stable contracts.
+> [CLI reference](/reference/cli) and
+> [Study config](/reference/study-config) for stable contracts.
 >
 > The library API will stabilise at v1.0.0.
 

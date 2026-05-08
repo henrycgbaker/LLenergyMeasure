@@ -3,7 +3,7 @@ name: Build docs site
 # Builds the Docusaurus site under website/ and deploys to GitHub Pages
 # on push to main. PR runs build only (no deploy) so the docs build
 # acts as an authoritative correctness gate, independent of Cloudflare
-# Pages preview availability (see docs/architecture/preview-deployments.md).
+# Pages preview availability (see docs/contributing/preview-deployments.md).
 #
 # Path filters are asymmetric on purpose:
 # - pull_request includes scripts/generate_api_docs.py because edits to
