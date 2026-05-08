@@ -4,9 +4,9 @@
 isolated containers with GPU access. This guide walks through setting up Docker with GPU support
 from scratch on a Linux host.
 
-> **Recommended path.** Docker is the recommended way to run LLenergyMeasure. The PyTorch
-> engine can run locally for quick tests, but Docker gives you vLLM and reproducible
-> container-isolated measurements.
+> **Recommended path.** Docker is the recommended way to run LLenergyMeasure. The
+> Transformers engine can run locally for quick tests, but Docker gives you vLLM,
+> TensorRT-LLM, and reproducible container-isolated measurements.
 
 ---
 
@@ -14,7 +14,7 @@ from scratch on a Linux host.
 
 Before starting, confirm you have:
 
-- A Linux host (GPU passthrough in Docker is Linux-only — no macOS or Windows Docker GPU support)
+- A Linux host (GPU passthrough in Docker is Linux-only - no macOS or Windows Docker GPU support)
 - An NVIDIA GPU installed
 - Root or sudo access to install system packages
 
@@ -259,7 +259,7 @@ Then run it:
 llem run experiment.yaml
 ```
 
-`llem` will pull the TensorRT-LLM Docker image, compile a TensorRT engine (first run only —
+`llem` will pull the TensorRT-LLM Docker image, compile a TensorRT engine (first run only -
 takes several minutes), cache the engine on disk, then run inference. See [Getting Started](/tutorials/first-measurement)
 for the full TensorRT-LLM walkthrough.
 
@@ -353,13 +353,13 @@ TensorRT-LLM use canonical upstream images directly and bind-mount the
 project source at run time.
 
 ```bash
-# Transformers — build from project source
+# Transformers - build from project source
 make docker-build-transformers
 
-# vLLM — pull upstream
+# vLLM - pull upstream
 docker pull vllm/vllm-openai:0.7.3
 
-# TensorRT-LLM — pull upstream (NGC)
+# TensorRT-LLM - pull upstream (NGC)
 docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0
 ```
 
@@ -371,7 +371,7 @@ for the full mechanism).
 
 > **Advanced.** Setting `COMPOSE_BAKE=true` routes builds through `buildx bake` for
 > parallel multi-engine builds. With the current cache architecture this is rarely
-> worth enabling — vLLM/TRT cold builds are already 4–13 min and warm rebuilds are
+> worth enabling - vLLM/TRT cold builds are already 4-13 min and warm rebuilds are
 > seconds, so the parallelism gain is small. Left out of `.env.example` to avoid
 > noise; opt in only if you frequently run `make docker-build-all` from cold.
 
@@ -396,7 +396,7 @@ behaviour. No additional setup is needed when SGLang ships.
 
 ### Layer cache sharing via GHCR registry
 
-See [installation.md — Fast rebuilds and first-pull cost](/how-to/install#fast-rebuilds-and-first-pull-cost)
+See [installation.md - Fast rebuilds and first-pull cost](/how-to/install#fast-rebuilds-and-first-pull-cost)
 for the user-facing walkthrough (mechanism, sizes, authentication, offline fallback)
 and the three-ref breakdown of what the build/push pipeline publishes
 (`-buildcache` ref, PR-time `transformers-cache:VER` ref, canonical
@@ -429,7 +429,7 @@ docker image inspect llenergymeasure:transformers \
 > `org.opencontainers.image.version` and `llem.expconf.schema.fingerprint`
 > labels at build time so `llem doctor` could detect host/container schema
 > skew via `StudyRunner._prepare_images`. Once the image stopped baking the
-> project source (the project is bind-mounted at runtime — see
+> project source (the project is bind-mounted at runtime - see
 > `docs/development.md`), the bound-in source always matches the host source,
 > so the handshake became structurally redundant. The labels are no longer
 > set on any engine image; `llem doctor` reports `UNVERIFIED` for all engines
@@ -527,10 +527,10 @@ When you update an engine version (by bumping the SSOT in
 `engine_versions/<engine>.yaml`), the discovered parameter schemas must be
 regenerated. This happens automatically via the
 [Parameter Discovery Pipeline](/contributing/schema-refresh): `engine-pipeline.yml`
-covers all three engines via per-job `if:` gating — the vllm + tensorrt
+covers all three engines via per-job `if:` gating - the vllm + tensorrt
 cells fire on `pull_request: paths`; the transformers cell fires via
 `workflow_run` after `publish-engine-image.yml` completes (which itself
-chains off `engine-pipeline.yml` via workflow_run — the build/push
+chains off `engine-pipeline.yml` via workflow_run - the build/push
 split exists so push failures don't burn the FA3 compile). For manual
 bumps, run:
 
@@ -544,6 +544,6 @@ See [Parameter Discovery Pipeline](/contributing/schema-refresh) for the full wo
 
 ## Next Steps
 
-- [Getting Started](/tutorials/first-measurement) — run your first vLLM or TensorRT-LLM experiment
-- [Engine Configuration](/reference/engines/configuration) — configure vLLM, TensorRT-LLM, and switch between engines
-- [Fast rebuilds and first-pull cost](/how-to/install#fast-rebuilds-and-first-pull-cost) — how the GHCR layer cache speeds up local Docker builds
+- [Getting Started](/tutorials/first-measurement) - run your first vLLM or TensorRT-LLM experiment
+- [Engine Configuration](/reference/engines/configuration) - configure vLLM, TensorRT-LLM, and switch between engines
+- [Fast rebuilds and first-pull cost](/how-to/install#fast-rebuilds-and-first-pull-cost) - how the GHCR layer cache speeds up local Docker builds

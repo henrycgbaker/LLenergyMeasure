@@ -1,6 +1,6 @@
 # How to Read LLenergyMeasure Output
 
-When LLenergyMeasure runs a measurement, it prints a summary to the terminal and saves a detailed result file. This guide explains what each number means — in plain language.
+When LLenergyMeasure runs a measurement, it prints a summary to the terminal and saves a detailed result file. This guide explains what each number means - in plain language.
 
 If you have not yet run a measurement, see [Running Your First Measurement](/get-started/for-policy-readers) first.
 
@@ -11,7 +11,7 @@ If you have not yet run a measurement, see [Running Your First Measurement](/get
 After running a measurement, the terminal prints output like this:
 
 ```
-Result: gpt2-transformers-bf16-2026-05-07T14-32-08
+Result: gpt2_20260507_143208
 
 Energy
   Total          847 J
@@ -34,43 +34,40 @@ A full result file is also saved to the `results/` folder. The sections below ex
 ## The Experiment ID
 
 ```
-Result: gpt2-transformers-bf16-2026-05-07T14-32-08
+Result: gpt2_20260507_143208
 ```
 
-This is a unique identifier for this specific measurement. It encodes:
-
-- `gpt2` — the model measured
-- `transformers` — the inference engine used
-- `bfloat16` — the model dtype
-- `2026-05-07T14-32-08` — the date and time the experiment ran
-
-The experiment ID helps you trace results back to the exact configuration that produced them.
+This is a unique identifier for this specific measurement. It encodes the
+model name and a UTC timestamp in `YYYYMMDD_HHMMSS` form. For full
+configuration provenance, see the `effective_config` block inside
+`result.json` - it records every setting that influenced the measurement,
+including engine choice, dtype, and engine defaults.
 
 ---
 
 ## Energy Metrics
 
-Energy is measured in **joules** (J) — a standard unit of energy. One joule equals one watt of power consumed for one second.
+Energy is measured in **joules** (J) - a standard unit of energy. One joule equals one watt of power consumed for one second.
 
-### Total (J) — Raw GPU energy
+### Total (J) - Raw GPU energy
 
 The total electrical energy drawn by the GPU during the entire measurement period, from first prompt to last.
 
 *In practice:* This includes both the energy for actual inference work and the energy the GPU would have consumed anyway just by being switched on ("idle power").
 
-### Baseline (W) — Idle GPU power
+### Baseline (W) - Idle GPU power
 
-The power the GPU draws when doing nothing — measured before the experiment starts and used as a reference point.
+The power the GPU draws when doing nothing - measured before the experiment starts and used as a reference point.
 
 *Analogy:* Like measuring a car's fuel consumption at idle before a test drive, so you can subtract it from the total and isolate the fuel used specifically for driving.
 
 *In practice:* This is reported in **watts** (W), not joules, because it is a power level rather than a total energy amount.
 
-### Adjusted (J) — Net inference energy
+### Adjusted (J) - Net inference energy
 
 The most meaningful energy metric: total energy minus the idle power multiplied by the duration. This represents the energy specifically attributable to running the AI model.
 
-*Formula:* `Adjusted = Total − (Baseline × Duration)`
+*Formula:* `Adjusted = Total - (Baseline x Duration)`
 
 *In practice:* Use the adjusted figure when comparing models. Two models running on the same hardware for the same task may have different baseline subtractions; the adjusted figure puts them on equal footing.
 
@@ -78,7 +75,7 @@ The most meaningful energy metric: total energy minus the idle power multiplied 
 
 ## Performance Metrics
 
-### Throughput (tok/s) — Output speed
+### Throughput (tok/s) - Output speed
 
 How many output tokens the model generated per second, averaged across the entire experiment.
 
@@ -86,13 +83,13 @@ How many output tokens the model generated per second, averaged across the entir
 
 *Note:* Throughput is measured across all prompts in the experiment. A single short prompt may feel fast even at low throughput; the experiment-level figure reflects sustained performance.
 
-### FLOPs — Computational work
+### FLOPs - Computational work
 
 An estimate of the number of floating-point calculations the model performed. Reported in scientific notation (e.g., `4.21e+11` = 421 billion FLOPs).
 
 The result also shows:
-- **Method** (e.g., `roofline`) — how the FLOPs were estimated
-- **Confidence** (e.g., `medium`) — how reliable the estimate is
+- **Method** (e.g., `roofline`) - how the FLOPs were estimated
+- **Confidence** (e.g., `medium`) - how reliable the estimate is
 
 *In practice:* FLOPs are most useful for comparing models of different sizes. A larger model will naturally have higher FLOPs. If two models have similar FLOPs but very different energy, that suggests a hardware or configuration efficiency difference rather than a model complexity difference.
 
@@ -100,13 +97,13 @@ The result also shows:
 
 ## Timing Metrics
 
-### Duration — Total experiment time
+### Duration - Total experiment time
 
 The wall-clock time from the start of the first prompt to the end of the last, including all processing time.
 
 *In practice:* Duration × Baseline power gives the idle energy component (which is subtracted to produce the Adjusted energy figure).
 
-### Warmup — Excluded prompts
+### Warmup - Excluded prompts
 
 The number of prompts run at the start that were excluded from the reported metrics.
 
@@ -122,16 +119,20 @@ The full result is saved as a JSON file in the `results/` directory. Key fields:
 
 | Field | What it means |
 |-------|---------------|
-| `energy_joules` | Total GPU energy (same as "Total" in terminal output) |
-| `inference_energy_joules` | Adjusted energy (same as "Adjusted" in terminal output) |
-| `throughput_tokens_per_second` | Output tokens per second (same as "Throughput") |
-| `latency_seconds` | Total duration in seconds (same as "Duration") |
-| `inference_memory_mb` | Peak GPU memory used during inference, in megabytes |
-| `total_prompts` | Number of prompts processed (excluding warmup) |
-| `total_output_tokens` | Total output tokens generated across all prompts |
-| `effective_config` | The exact configuration used (model, dtype, engine, etc.) |
+| `total_energy_j` | Total GPU energy in joules (same as "Total" in terminal output) |
+| `energy_adjusted_j` | Baseline-subtracted energy in joules (same as "Adjusted" in terminal output). `null` when no baseline was measured. |
+| `baseline_power_w` | Idle GPU power in watts (same as "Baseline"). `null` when baseline disabled. |
+| `mj_per_tok_total` | Millijoules per token from raw (unadjusted) energy. |
+| `mj_per_tok_adjusted` | Millijoules per token from baseline-adjusted energy. **The right field for cross-experiment comparisons.** |
+| `avg_tokens_per_second` | Output throughput in tokens/second (same as "Throughput"). |
+| `total_inference_time_sec` | Wall-clock inference time in seconds (same as "Duration"). |
+| `total_tokens` | Total tokens processed across all prompts. |
+| `total_flops` | Estimated total floating-point operations. |
+| `effective_config` | The exact configuration used (model, dtype, engine, etc.). |
 
-The `effective_config` section is particularly important for reproducibility — it records every setting that influenced the measurement, including defaults that were not explicitly specified.
+The `effective_config` section is particularly important for reproducibility - it records every setting that influenced the measurement, including defaults that were not explicitly specified.
+
+For the full schema, see [Reference: results schema](/reference/results-schema).
 
 ---
 
@@ -155,9 +156,9 @@ To put energy figures in context (approximate, for orientation only):
 
 | Scenario | Approximate energy |
 |----------|--------------------|
-| One GPT-2 inference (single prompt) | ~1–10 joules |
-| 100 GPT-2 inferences | ~100–1,000 joules |
-| One large model (70B) inference | ~500–5,000 joules |
+| One GPT-2 inference (single prompt) | ~1-10 joules |
+| 100 GPT-2 inferences | ~100-1,000 joules |
+| One large model (70B) inference | ~500-5,000 joules |
 | Smartphone full charge | ~15,000 joules |
 | Boiling 1 litre of water | ~330,000 joules |
 
@@ -167,6 +168,6 @@ These figures vary significantly with hardware, prompt length, and configuration
 
 ## Further Reading
 
-- [What We Measure and Why It Matters](/explanation/methodology/what-we-measure) — conceptual background on the three metrics
-- [Running Your First Measurement](/get-started/for-policy-readers) — step-by-step guide to running measurements
-- [Comparison with Other Benchmarks](/explanation/methodology/comparison-context) — how these results relate to MLPerf, AI Energy Score, and other benchmarks
+- [What We Measure and Why It Matters](/explanation/methodology/what-we-measure) - conceptual background on the three metrics
+- [Running Your First Measurement](/get-started/for-policy-readers) - step-by-step guide to running measurements
+- [Comparison with Other Benchmarks](/explanation/methodology/comparison-context) - how these results relate to MLPerf, AI Energy Score, and other benchmarks

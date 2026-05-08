@@ -22,8 +22,8 @@ Lovelace or newer); on A100 (SM 8.0), use INT8 or W4A16_AWQ instead.
 ## Prerequisites
 
 - `llenergymeasure` installed (host-side orchestrator)
-- Docker + NVIDIA Container Toolkit — see [Docker setup](/how-to/docker-setup)
-- TensorRT-LLM Docker image built or pullable from GHCR — see [Contributing > Development](/contributing/development)
+- Docker + NVIDIA Container Toolkit - see [Docker setup](/how-to/docker-setup)
+- TensorRT-LLM Docker image built or pullable from GHCR - see [Contributing > Development](/contributing/development)
 - NVIDIA GPU with SM >= 7.5 (Turing or newer; e.g. RTX 2000-series, A100, H100)
 
 ## 1. Create a config file
@@ -58,10 +58,8 @@ runners:
 tensorrt:
   max_batch_size: 8
   dtype: bfloat16
-  quant:
+  quant_config:
     quant_algo: W4A16_AWQ
-  build_cache:
-    max_cache_storage_gb: 100
 ```
 
 </TabItem>
@@ -109,7 +107,7 @@ What happens:
 2. The TensorRT-LLM Docker image is pulled on first run
    (`ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0`).
 3. The container compiles the TensorRT engine from the model weights.
-   **First run only — this takes several minutes.** Progress is shown in
+   **First run only - this takes several minutes.** Progress is shown in
    the terminal.
 4. The compiled engine is cached on disk
    (`~/.cache/tensorrt_llm` inside the container, mounted from the host).
@@ -133,7 +131,7 @@ walkthrough.
 
 ## Related
 
-- [Tutorial: Your first measurement](/tutorials/first-measurement) — start here if you've never run `llem`
-- [How to: run with vLLM](/how-to/run-with-docker-vllm) — sister recipe for the vLLM engine
-- [Reference: engine configuration](/reference/engines/configuration) — every TensorRT-LLM-specific config field
-- [Reference: invariants (TensorRT)](/reference/engines/invariants-tensorrt) — mined parameter constraints
+- [Tutorial: Your first measurement](/tutorials/first-measurement) - start here if you've never run `llem`
+- [How to: run with vLLM](/how-to/run-with-docker-vllm) - sister recipe for the vLLM engine
+- [Reference: engine configuration](/reference/engines/configuration) - every TensorRT-LLM-specific config field
+- [Reference: invariants (TensorRT)](/reference/engines/invariants-tensorrt) - mined parameter constraints

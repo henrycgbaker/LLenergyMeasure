@@ -21,8 +21,8 @@ the NVIDIA Container Toolkit are installed before proceeding.
 ## Prerequisites
 
 - `llenergymeasure` installed (host-side orchestrator)
-- Docker + NVIDIA Container Toolkit — see [Docker setup](/how-to/docker-setup)
-- vLLM Docker image built or pullable from GHCR — see [Contributing > Development](/contributing/development)
+- Docker + NVIDIA Container Toolkit - see [Docker setup](/how-to/docker-setup)
+- vLLM Docker image built or pullable from GHCR - see [Contributing > Development](/contributing/development)
 
 ## 1. Create a config file
 
@@ -98,6 +98,6 @@ walkthrough.
 
 ## Related
 
-- [Tutorial: Your first measurement](/tutorials/first-measurement) — start here if you've never run `llem`
-- [How to: run with TensorRT-LLM](/how-to/run-with-tensorrt-llm) — sister recipe for the TRT-LLM engine
-- [Reference: engine configuration](/reference/engines/configuration) — every vLLM-specific config field
+- [Tutorial: Your first measurement](/tutorials/first-measurement) - start here if you've never run `llem`
+- [How to: run with TensorRT-LLM](/how-to/run-with-tensorrt-llm) - sister recipe for the TRT-LLM engine
+- [Reference: engine configuration](/reference/engines/configuration) - every vLLM-specific config field

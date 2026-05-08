@@ -29,7 +29,7 @@ other advanced scenarios.
 
 ## Install
 
-The host package is the orchestrator only — it carries no engine
+The host package is the orchestrator only - it carries no engine
 libraries. Install with:
 
 ```bash
@@ -107,7 +107,7 @@ for details.
 
 ## Getting Engine Images
 
-Only the Transformers engine is built from a project Dockerfile — vLLM and
+Only the Transformers engine is built from a project Dockerfile - vLLM and
 TensorRT-LLM use canonical upstream images directly, because no upstream
 ships an FA3-included Transformers image but vLLM and TensorRT-LLM both
 publish ready-to-use images of their own. The project source is bind-mounted
@@ -115,13 +115,13 @@ into the upstream image at run time, so there is no per-release rebuild for
 vLLM or TensorRT-LLM.
 
 ```bash
-# Transformers — build from source (FA3 compile is the slow step)
+# Transformers - build from source (FA3 compile is the slow step)
 make docker-build-transformers
 
-# vLLM — pull upstream
+# vLLM - pull upstream
 docker pull vllm/vllm-openai:0.7.3
 
-# TensorRT-LLM — pull upstream (NGC)
+# TensorRT-LLM - pull upstream (NGC)
 docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0
 ```
 
@@ -175,7 +175,7 @@ compile. vLLM and TensorRT-LLM are pulled from upstream images
 (`vllm/vllm-openai`, `nvcr.io/nvidia/tensorrt-llm/release`) and need no
 project-side cache.
 
-Measured on `ds01` (AMD EPYC 7742, 128 cores, 504 GB RAM — Docker 27.0.3 / Buildx
+Measured on `ds01` (AMD EPYC 7742, 128 cores, 504 GB RAM - Docker 27.0.3 / Buildx
 v0.32.1 / llenergymeasure 0.9.0):
 
 | Engine | Image size | Cold build | First GHCR pull | Warm local rebuild |
@@ -187,11 +187,11 @@ v0.32.1 / llenergymeasure 0.9.0):
 **Reading the table.** Times are measured on a 128-core/504 GB host; on smaller
 machines cold builds scale roughly with `MAX_JOBS` (FA3 compile is CPU-bound).
 
-- **Cold build** — fresh builder, `--no-cache`, no GHCR. Simulates an offline
+- **Cold build** - fresh builder, `--no-cache`, no GHCR. Simulates an offline
   first-ever build.
-- **First GHCR pull** — fresh builder, `cache_from` populated. What a new
+- **First GHCR pull** - fresh builder, `cache_from` populated. What a new
   contributor gets after `make docker-builder-setup`.
-- **Warm local rebuild** — second and subsequent local builds. The transformers
+- **Warm local rebuild** - second and subsequent local builds. The transformers
   image is a kernel substrate (FA3 + engine deps + runtime deps); the
   LLenergyMeasure project source is bind-mounted at runtime, never baked in.
   Source-only edits never invalidate any image layer for any engine.
@@ -200,14 +200,14 @@ machines cold builds scale roughly with `MAX_JOBS` (FA3 compile is CPU-bound).
 upstream images directly (`vllm/vllm-openai`, `nvcr.io/nvidia/tensorrt-llm/release`)
 with no first-party overlay. The dominant cost on a fresh machine is pulling
 the upstream base from Docker Hub / NGC, which our GHCR cache cannot accelerate
-— there is no first-party Dockerfile to cache. Transformers does have a
+- there is no first-party Dockerfile to cache. Transformers does have a
 first-party Dockerfile (`docker/Dockerfile.transformers`) because no upstream
 provides an FA3-included transformers image, and the FA3 compile is the
 load-bearing layer that the GHCR cache makes a single-digit-minute pull
 instead of a ~30-min cold compile.
 
 Once the upstream base is in local Docker storage (after the first build),
-subsequent rebuilds for vLLM/TRT are seconds — the slow part doesn't repeat.
+subsequent rebuilds for vLLM/TRT are seconds - the slow part doesn't repeat.
 
 **Build (or pull) as normal:**
 
@@ -225,7 +225,7 @@ separate answers:
 
 | Ref | Kind | Written by | Consumed by |
 |---|---|---|---|
-| `transformers-cache:transformers-<VER>-buildcache` | BuildKit cache manifest (`mode=max`, intermediate layer metadata — **not a runnable image**) | `engine-pipeline.yml` on every successful build (PR, main, schedule, dispatch) | Future `docker build` invocations as `cache-from` |
+| `transformers-cache:transformers-<VER>-buildcache` | BuildKit cache manifest (`mode=max`, intermediate layer metadata - **not a runnable image**) | `engine-pipeline.yml` on every successful build (PR, main, schedule, dispatch) | Future `docker build` invocations as `cache-from` |
 | `transformers-cache:transformers-<VER>` | Runnable PR-time runtime image | `publish-engine-image.yml` when parent build was a `pull_request` | `engine-pipeline.yml` + `engine-pipeline.yml` for PR-time validation against the PR's Dockerfile |
 | `transformers:transformers-<VER>` + `transformers:latest` | Runnable canonical runtime image | `publish-engine-image.yml` when parent build was a push to `main`, a schedule, or a `workflow_dispatch` | End users (`docker pull`), `make docker-pull`, main-branch invariants/schemas, downstream Renovate consumers |
 
@@ -255,7 +255,7 @@ Pipeline mechanics:
 
 - `engine-pipeline.yml` runs `build-push-action` with `cache-from` /
   `cache-to` pointing at the buildcache ref. Builds run on every PR, push to
-  `main`, schedule, and dispatch. `push: false` — this workflow only exports
+  `main`, schedule, and dispatch. `push: false` - this workflow only exports
   cache, never publishes runnable images.
 - `publish-engine-image.yml` is `workflow_run`-triggered on successful
   `engine-pipeline.yml`. It rebuilds (warming off the just-exported
@@ -264,7 +264,7 @@ Pipeline mechanics:
   split exists so a registry permission failure during push doesn't burn
   the FA3 compile; the cache survives independently.
 - `docker-compose.yml` declares `cache_from: [:transformers-<VERSION>,
-  :latest]` for the transformers engine — version-pinned first (best layer
+  :latest]` for the transformers engine - version-pinned first (best layer
   match within a release), rolling-latest as fallback. vllm and tensorrt
   have no first-party `cache_from` chain (they pull upstream directly).
 - `make docker-builder-setup` provisions a `docker-container` BuildKit
@@ -278,9 +278,9 @@ Pipeline mechanics:
 **How to tell if the cache actually warmed:** `make docker-build-{engine}` runs the build
 under `BUILDKIT_PROGRESS=plain` and emits a one-line summary when it finishes:
 
-- `✓ transformers build: 4m 18s — GHCR cache imported, 27 layers reused` — cache hit,
+- `✓ transformers build: 4m 18s - GHCR cache imported, 27 layers reused` - cache hit,
   FA3 layer not recompiled.
-- `⚠ transformers build: 18m 03s — no GHCR cache imported (cold build)` — silent fallback.
+- `⚠ transformers build: 18m 03s - no GHCR cache imported (cold build)` - silent fallback.
   Cross-check [troubleshooting → Docker rebuild is slow](/how-to/troubleshoot#docker-rebuild-is-slow--recompiling-flash-attn).
 
 The full BuildKit log for the most recent build is at `/tmp/llem-build-{engine}.log`.
@@ -289,7 +289,7 @@ The full BuildKit log for the most recent build is at `/tmp/llem-build-{engine}.
 If you hit rate limits or are behind a corporate proxy, `docker login ghcr.io` with a
 [personal access token](https://github.com/settings/tokens) (scope `read:packages`) may help.
 
-**Push access (contributors).** You do not need push access to develop on this project —
+**Push access (contributors).** You do not need push access to develop on this project -
 contributors only ever pull cache. Cache publication on releases is fully automated by
 `docker-publish.yml` using the repo's auto-issued `GITHUB_TOKEN`, so any merged release
 PR ships a fresh cache without human intervention. Manual seeding via
@@ -382,11 +382,11 @@ Python
 
 What each section means:
 
-- **GPU** — NVIDIA GPU detected via pynvml. If this shows "No GPU detected", experiments will fail.
-- **Engines** — Which inference engines are installed. You need at least one to run experiments.
-- **Energy** — Active energy measurement backend. `nvml` (pynvml) is the default and ships with the base install.
-- **Config** — Path to the user config file. "Using defaults" is normal for new installs.
-- **Python** — Python version in use.
+- **GPU** - NVIDIA GPU detected via pynvml. If this shows "No GPU detected", experiments will fail.
+- **Engines** - Which inference engines are installed. You need at least one to run experiments.
+- **Energy** - Active energy sampler. `nvml` (pynvml) is the default and ships with the base install.
+- **Config** - Path to the user config file. "Using defaults" is normal for new installs.
+- **Python** - Python version in use.
 
 Run `llem config --verbose` for driver version, engine versions, and full config values.
 

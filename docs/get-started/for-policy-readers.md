@@ -46,7 +46,7 @@ installed and a Docker image built before running an experiment; see
 the [Installation Guide](/how-to/install) and the
 [development guide](/contributing/development) for the build/run pattern.
 
-**How long it takes:** A minute or two — the host package is small. The
+**How long it takes:** A minute or two - the host package is small. The
 slower step is building (or pulling) the Docker image for the engine you
 want to use.
 
@@ -89,11 +89,11 @@ Python
 **What to look for:**
 
 - **GPU section** shows your graphics card. If it says "No GPU detected", LLenergyMeasure will not be able to measure energy. Check that your NVIDIA drivers are installed.
-- **Engines section** lists each engine with its host-import status. Engines run inside Docker, so "not installed" against an engine name is expected — the suffix in brackets points at the Docker workflow. Docker images are what actually run the inference.
-- **Energy section** shows `nvml` — this is the energy measurement method. NVML reads directly from the GPU hardware and is the default.
+- **Engines section** lists each engine with its host-import status. Engines run inside Docker, so "not installed" against an engine name is expected - the suffix in brackets points at the Docker workflow. Docker images are what actually run the inference.
+- **Energy section** shows `nvml` - this is the energy measurement method. NVML reads directly from the GPU hardware and is the default.
 - **Python section** confirms your Python version.
 
-If the GPU is not detected, you may need to install NVIDIA drivers — see the [Installation Guide](/how-to/install) for guidance.
+If the GPU is not detected, you may need to install NVIDIA drivers - see the [Installation Guide](/how-to/install) for guidance.
 
 ---
 
@@ -107,9 +107,9 @@ llem run --model gpt2 -e transformers
 
 **What this does:**
 
-- `llem run` — starts a measurement experiment
-- `--model gpt2` — uses GPT-2, a small AI language model made freely available by OpenAI. It is tiny compared to modern AI systems (124 million parameters vs the billions in GPT-4 or Claude), which makes it fast to download and run.
-- `-e transformers` — uses the Transformers inference engine (what you installed in Step 1)
+- `llem run` - starts a measurement experiment
+- `--model gpt2` - uses GPT-2, a small AI language model made freely available by OpenAI. It is tiny compared to modern AI systems (124 million parameters vs the billions in GPT-4 or Claude), which makes it fast to download and run.
+- `-e transformers` - uses the Transformers inference engine (what you installed in Step 1)
 
 **On first run:** The model downloads from HuggingFace (about 500 MB). This happens once; subsequent runs use a local cache.
 
@@ -126,7 +126,7 @@ Running experiment (100 prompts)...  [████████░░] 80%
 **What you will see when it finishes:**
 
 ```
-Result: gpt2-transformers-bf16-2026-05-07T14-32-08
+Result: gpt2_20260507_143208
 
 Energy
   Total          847 J
@@ -150,19 +150,19 @@ Here is what each section means:
 
 **Energy**
 
-- **Total (J)** — the total electrical energy your GPU consumed during the entire run, in joules. Think of this as the electricity bill for the experiment.
-- **Baseline (W)** — how much power the GPU uses when idle (doing nothing). This is subtracted to isolate the energy specifically used for running the AI model.
-- **Adjusted (J)** — total energy minus idle power. This is the most useful number for comparing different models: it tells you the energy specifically attributable to running the AI inference.
+- **Total (J)** - the total electrical energy your GPU consumed during the entire run, in joules. Think of this as the electricity bill for the experiment.
+- **Baseline (W)** - how much power the GPU uses when idle (doing nothing). This is subtracted to isolate the energy specifically used for running the AI model.
+- **Adjusted (J)** - total energy minus idle power. This is the most useful number for comparing different models: it tells you the energy specifically attributable to running the AI inference.
 
 **Performance**
 
-- **Throughput (tok/s)** — how many tokens (short word-pieces) the model produced per second across all 100 prompts. Higher is faster.
-- **FLOPs** — an estimate of the computational work performed. Useful for comparing models of different sizes.
+- **Throughput (tok/s)** - how many tokens (short word-pieces) the model produced per second across all 100 prompts. Higher is faster.
+- **FLOPs** - an estimate of the computational work performed. Useful for comparing models of different sizes.
 
 **Timing**
 
-- **Duration** — how long the experiment took, wall-clock time.
-- **Warmup** — how many prompts were excluded from the results to let the hardware reach a stable temperature. The metrics are based on the remaining prompts only.
+- **Duration** - how long the experiment took, wall-clock time.
+- **Warmup** - how many prompts were excluded from the results to let the hardware reach a stable temperature. The metrics are based on the remaining prompts only.
 
 For a detailed explanation of every metric, including what numbers are "normal" and how to compare results across models, see [How to Read LLenergyMeasure Output](/how-to/interpret-results).
 
@@ -174,11 +174,11 @@ Results are automatically saved to a `results/` folder in the directory where yo
 
 ```
 results/
-└── gpt2-transformers-bf16-2026-05-07T14-32-08/
+└── gpt2_20260507_143208/
     └── result.json
 ```
 
-The `result.json` file contains all metrics, the exact configuration used, and metadata. It is the scientific record of the measurement — keep it if you want to reproduce or reference the result later.
+The `result.json` file contains all metrics, the exact configuration used, and metadata. It is the scientific record of the measurement - keep it if you want to reproduce or reference the result later.
 
 ---
 
