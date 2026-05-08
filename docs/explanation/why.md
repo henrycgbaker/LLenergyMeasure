@@ -137,42 +137,16 @@ See [Harness-plugin model](architecture/harness-plugin.md).
 
 The tool grew from a master's thesis on LLM energy efficiency
 ([Baker, 2025](https://henrycgbaker.github.io/research/llm-energy-efficiency/)).
-The thesis investigated how parallelisation, batch size, and quantisation
-affected per-token energy on a single inference engine, on a single GPU
-class, against a hand-picked prompt set.
-
-The thesis is the seed of the current tool, but it is not the current
+That thesis is the seed of the current tool, but it is not the current
 tool. Several of the original methodological choices are now known to be
 wrong by the standards the project holds itself to, and have been
-replaced:
-
-- **Parallelisation handling.** The thesis treated tensor-parallel runs
-  as commensurable with single-GPU runs at the per-token energy level.
-  This is wrong: tensor-parallel introduces synchronisation cost that
-  does not factor cleanly into per-token attribution. The current tool
-  separates tensor-parallel measurements explicitly and does not pool
-  them with single-GPU runs without a stated correction.
-- **Parameter choice.** The thesis enumerated a small fixed set of
-  configuration parameters as "the implementation choices". The current
-  tool replaces this with programmatic discovery (above). The thesis's
-  closed-list framing under-represents the surface and is exactly the
-  failure mode the discovery pipeline corrects.
-- **Engines as a category.** The thesis worked with a single engine and
-  treated the engine as backdrop. The current tool makes engines a
-  first-class category in the architecture, because the engine is one
-  of the largest implementation effects on energy that exists.
-
-This honesty about the project's evolution is itself part of the
-methodology-first ethos. A measurement tool that is not willing to say
-"this earlier approach was wrong, here is the corrected one" is not
-trustworthy as an instrument.
+replaced.
 
 ---
 
 ## Boundaries
 
-LLenergyMeasure does not aspire to be everything. The boundaries below
-are deliberate and load-bearing.
+The boundaries below are deliberate and load-bearing.
 
 **Not a benchmark.** A benchmark fixes rules so that results are fair
 across submitters; the rule-fixing is the value. LLenergyMeasure is the
@@ -192,34 +166,52 @@ that this tool does not target.
 
 For full ecosystem positioning, see [Ecosystem](ecosystem.md).
 
-**FLOPs is a validity check, not a headline metric.** FLOPs are reported
-because they are cheap to estimate and useful for sanity-checking that a
-configuration is doing what it claims. They are largely invariant across
-implementations of the same model, which is exactly why they make a good
-check rather than a good comparison axis. Headlines are energy and
-throughput.
-
 ---
 
 ## Where this goes next
 
-Inference is shifting. Reasoning models do multi-pass under uncertainty;
-agentic harnesses chain tool-use over many model calls; scaffolds add
-re-prompting, verifier passes, and sampling-strategy variation as
-first-class parts of the workload. In these settings, implementation
-detail dominates energy budgets even more than in the single-pass case.
-A reasoning model with 10x output-length variance produces something
-near 10x energy variance; an agentic loop with adaptive depth produces
-energy distributions that are not well-summarised by a single
-mean-tokens-per-call number.
+Concrete near-term directions:
+
+- **Additional inference engines.** SGLang is the next planned engine
+  plugin (RadixAttention prefix-cache energy profiles); the
+  engine-plugin contract is sized to absorb new entrants as they
+  stabilise.
+- **Adaptive sweep sampling.** Programmatic discovery + invariant
+  mining keeps the tractable parameter space large; further reductions
+  would come from adaptive sampling that prioritises cells most
+  informative about the impl-effect question (Bayesian-optimisation-
+  over-a-sweep-budget being the most natural shape). Useful when the
+  cartesian product remains beyond a single researcher's compute
+  budget.
+- **Open-science result database.** A web frontend that lets users
+  submit results against a shared schema. The bundled environment-
+  snapshot metadata (hardware, drivers, library versions, sampler
+  configuration) means submissions are comparable across labs; over
+  time this accumulates a corpus of impl-effect measurements across
+  hardware classes, engines, and model families that no single
+  researcher could otherwise assemble.
+
+Inference is also shifting in shape. Reasoning models do multi-pass
+under uncertainty; agentic harnesses chain tool-use over many model
+calls; scaffolds add re-prompting, verifier passes, and sampling-
+strategy variation as first-class parts of the workload. In these
+settings, implementation detail dominates energy budgets even more
+than in the single-pass case. A reasoning model with 10x output-length
+variance produces something near 10x energy variance; an agentic loop
+with adaptive depth produces energy distributions that are not
+well-summarised by a single mean-tokens-per-call number.
 
 The plugin architecture is sized for these workloads. Sampling-strategy
 plugins, per-call energy attribution, and harness-aware metrics
 (distribution rather than mean; tail behaviour rather than centre) are
 natural extensions of the existing contract rather than redesigns.
-Open-source agent harnesses are appearing in increasing numbers and the
-research community will need a measurement primitive that does not
-flatten their distributional structure.
+Open-source agent harnesses are appearing in increasing numbers, and
+the research community will need a measurement primitive that does not
+flatten their distributional structure. The agentic layer is exactly
+the kind of place where energy attribution per-call,
+per-tool-invocation, and per-decision-step matters - and exactly the
+kind of place where measurement tools that report a single
+mean-energy-per-inference figure stop being useful.
 
 This is forward-looking, and is flagged here without commitment to a
 specific delivery shape. The current contribution is the present tool;
