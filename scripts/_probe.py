@@ -48,6 +48,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Literal
 
+import yaml
 from packaging.specifiers import SpecifierSet
 
 # Make the top-level ``scripts`` package importable when invoked as a
@@ -58,7 +59,6 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts.engine_miners._base import MinerLandmarkMissingError  # noqa: E402
-from scripts.engine_miners._ssot import load_ssot as _load_ssot  # noqa: E402
 from scripts.engine_miners._ssot import ssot_path  # noqa: E402
 
 ProducerKind = Literal["invariants", "schemas"]
@@ -180,6 +180,21 @@ def _fingerprint(resolved: list[_ResolvedLandmark]) -> str:
 # ---------------------------------------------------------------------------
 # SSOT helpers
 # ---------------------------------------------------------------------------
+
+
+def _load_ssot(engine: str) -> dict[str, object]:
+    """Read + parse ``engine_versions/{engine}.yaml``.
+
+    Raises :class:`FileNotFoundError` if missing. The probe treats SSOT
+    absence as an infrastructure error (exit code 2) - every supported
+    engine must have a SSOT before the probe is wired up for it.
+    """
+    path = ssot_path(engine)
+    text = path.read_text()  # FileNotFoundError surfaces here
+    data = yaml.safe_load(text)
+    if not isinstance(data, dict):
+        raise ValueError(f"SSOT at {path} did not parse to a mapping.")
+    return data
 
 
 def _check_envelope(ssot: dict[str, object], producer: ProducerKind, library_version: str) -> bool:

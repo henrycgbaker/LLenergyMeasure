@@ -63,14 +63,13 @@ def load_miner_pin(engine: str, producer: Producer) -> SpecifierSet:
     return SpecifierSet(str(pins[producer]))
 
 
-@cache
 def load_ssot(engine: str) -> dict[str, object]:
     """Read + parse ``engine_versions/{engine}.yaml`` into a dict.
 
-    Cached (lru) so repeated calls within one process re-parse at most once
-    per engine. Used by producer modules to discover ``library.current_version``
-    when dispatching to per-version machinery in
-    ``llenergymeasure._engine_archive``.
+    Intentionally uncached: callers (probe, producer modules,
+    update_last_probe) all run at most once per cell invocation, and
+    tests rely on hermetic per-test SSOT fixtures that the @cache
+    decorator would silently shadow across test cases.
 
     Raises :class:`FileNotFoundError` if the SSOT is missing,
     :class:`ValueError` if it does not parse to a mapping.
