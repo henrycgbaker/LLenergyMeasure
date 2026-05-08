@@ -8,9 +8,8 @@ This document is the entry point to the LLenergyMeasure architecture documentati
 
 ## Who this is for
 
-- **End users** running experiments: read the "Why configs are rejected" section and the [parameter-discovery](/explanation/architecture/parameter-discovery) guide.
 - **Engine extenders** adding a new engine: read this overview, then [miner-pipeline](/contributing/miner-pipeline) and [extending-miners](/contributing/extending-miners).
-- **Researchers and paper readers**: read this overview, then [comparison-context](/explanation/methodology/comparison-context) for how results relate to other benchmarks.
+- **Researchers**: read this overview, then [comparison-context](/explanation/methodology/comparison-context) for how results relate to other benchmarks.
 
 ---
 

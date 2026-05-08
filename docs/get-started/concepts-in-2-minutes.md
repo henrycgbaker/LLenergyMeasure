@@ -62,17 +62,3 @@ model); not a headline efficiency metric.
 
 For the full methodology, see
 [What we measure](/explanation/methodology/what-we-measure).
-
----
-
-## The four Diataxis pillars
-
-This documentation follows the [Diataxis](https://diataxis.fr) framework.
-Four types of doc, one purpose each:
-
-| Pillar | What it is | Start here if... |
-|--------|-----------|-----------------|
-| [Tutorials](/tutorials/first-measurement) | Guided learning, linear | You want a walkthrough |
-| [How-to](/how-to/install) | Goal-driven recipes | You know what you want to do |
-| [Reference](/reference/cli) | Exhaustive lookup | You need exact syntax |
-| [Explanation](/explanation/overview) | Concepts and context | You want to understand why |

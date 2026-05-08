@@ -1,6 +1,6 @@
 # Comparison with Other Benchmarks
 
-This guide explains how LLenergyMeasure relates to other AI benchmarking and energy measurement tools. It is intended for policy analysts and researchers who want to contextualise LLenergyMeasure results within the broader AI measurement landscape.
+This guide explains how LLenergyMeasure relates to other AI benchmarking and energy measurement tools.
 
 ---
 
