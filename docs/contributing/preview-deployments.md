@@ -144,15 +144,7 @@ docs/website push, avoiding republish on every src commit.
 ## Troubleshooting
 
 **"Preview URL doesn't appear on my PR"**
-- CF builds are gated by the dashboard's "Include paths" filter. CF uses
-  non-standard glob syntax: a single `*` matches across path separators,
-  so `docs/*` matches `docs/foo/bar.md`. Bare `docs/` (no wildcard) does
-  not match anything and every PR will be marked "skipped". The current
-  include set should mirror `docs.yml`'s `pull_request.paths`:
-  `docs/*`, `website/*`, `scripts/generate_api_docs.py`,
-  `scripts/cloudflare-build.sh`, `pyproject.toml`, `.python-version`,
-  `.nvmrc`. Manual "Retry deployment" bypasses the path filter, which
-  is why retries always work after a "skipped" status.
+- CF builds are gated by the dashboard's "Include paths" filter.
 - Check the PR's "Checks" tab for a `cloudflare-pages` entry - if the
   build failed, click through to the CF dashboard logs.
 - If the GitHub App is mis-authorised, the comment won't post but the
