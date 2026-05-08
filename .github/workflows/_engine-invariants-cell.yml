@@ -80,7 +80,11 @@ jobs:
             echo "Could not resolve ${ENGINE} version from engine_versions/${ENGINE}.yaml" >&2
             exit 1
           fi
+          # Python-identifier-safe form (dots and hyphens -> underscores) used as the
+          # subpackage name under src/llenergymeasure/_engine_archive/<engine>/.
+          SAFE_VER="v${VER//[.-]/_}"
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "safe_version=${SAFE_VER}" >> "$GITHUB_OUTPUT"
           echo "image=llenergymeasure:${ENGINE}-${VER}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR (read-only, for image pull)
@@ -410,6 +414,24 @@ jobs:
             fi
           } > "/tmp/engine-invariants-diff/${ENGINE}.summary.md"
 
+      - name: Mirror canonical invariants to versioned archive
+        if: steps.probe.outputs.verdict == 'pass'
+        env:
+          ENGINE: ${{ inputs.engine }}
+          SAFE_VER: ${{ steps.version.outputs.safe_version }}
+        run: |
+          # Derivative dual-write: the archive is always a byte-identical
+          # mirror of the canonical mining outputs. Copies happen AFTER the
+          # canonical writes are confirmed (probe pass + miner + validator
+          # all green); on probe-blocked / mining failure the cp step does
+          # not run, leaving the archive in sync with the last successful
+          # run. The dual-tree determinism check in subsequent runs reduces
+          # to ``diff -q canonical archive`` (always 0 by construction).
+          ARCHIVE_DIR="src/llenergymeasure/_engine_archive/${ENGINE}/${SAFE_VER}/outputs"
+          mkdir -p "${ARCHIVE_DIR}"
+          cp "${ENGINES_DIR}/${ENGINE}/invariants.proposed.yaml" "${ARCHIVE_DIR}/invariants.proposed.yaml"
+          cp "${ENGINES_DIR}/${ENGINE}/invariants.validated.yaml" "${ARCHIVE_DIR}/invariants.validated.yaml"
+
       - name: Probe-fail comment (skip downstream)
         if: steps.probe.outputs.verdict == 'fail' && inputs.pr-number != ''
         env:
@@ -458,6 +480,8 @@ jobs:
           path: |
             ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/invariants.proposed.yaml
             ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/invariants.validated.yaml
+            src/llenergymeasure/_engine_archive/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/invariants.proposed.yaml
+            src/llenergymeasure/_engine_archive/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/invariants.validated.yaml
             engine_versions/${{ inputs.engine }}.yaml
             docs/user/generated/invariants-${{ inputs.engine }}.md
           if-no-files-found: error

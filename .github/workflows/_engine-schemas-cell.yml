@@ -78,7 +78,11 @@ jobs:
             echo "Could not resolve ${ENGINE} version from engine_versions/${ENGINE}.yaml" >&2
             exit 1
           fi
+          # Python-identifier-safe form (dots and hyphens -> underscores) used as the
+          # subpackage name under src/llenergymeasure/_engine_archive/<engine>/.
+          SAFE_VER="v${VER//[.-]/_}"
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "safe_version=${SAFE_VER}" >> "$GITHUB_OUTPUT"
           echo "image=llenergymeasure:${ENGINE}-${VER}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR (read-only, for image pull)
@@ -366,6 +370,17 @@ jobs:
             fi
           } > "/tmp/engine-schemas-diff/${ENGINE}.summary.md"
 
+      - name: Mirror canonical schema to versioned archive
+        if: steps.probe.outputs.verdict == 'pass'
+        env:
+          ENGINE: ${{ inputs.engine }}
+          SAFE_VER: ${{ steps.version.outputs.safe_version }}
+        run: |
+          # Derivative dual-write — see invariants cell for rationale.
+          ARCHIVE_DIR="src/llenergymeasure/_engine_archive/${ENGINE}/${SAFE_VER}/outputs"
+          mkdir -p "${ARCHIVE_DIR}"
+          cp "${ENGINES_DIR}/${ENGINE}/schema.discovered.json" "${ARCHIVE_DIR}/schema.discovered.json"
+
       - name: Probe-fail comment (skip downstream)
         if: steps.probe.outputs.verdict == 'fail' && inputs.pr-number != ''
         env:
@@ -413,6 +428,7 @@ jobs:
           name: schemas-writeback-${{ inputs.engine }}
           path: |
             ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/schema.discovered.json
+            src/llenergymeasure/_engine_archive/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/schema.discovered.json
             engine_versions/${{ inputs.engine }}.yaml
             docs/user/generated/curation-${{ inputs.engine }}.md
             docs/user/generated/schema-${{ inputs.engine }}.md
