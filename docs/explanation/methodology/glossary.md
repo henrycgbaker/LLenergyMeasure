@@ -5,9 +5,10 @@ measurement domain (energy, GPU, LLM inference) and the project's own
 terminology (engines, runners, invariants). Cross-references use anchors within
 this page.
 
-For the project's canonical naming decisions (e.g. "invariant" not "rule",
-"validated corpus" not "vendored corpus"), see [Contributing: terminology
-reference](/contributing/miner-pipeline).
+For canonical naming decisions internal to the engine-invariants pipeline
+(e.g. "invariant" not "rule", "validated corpus" not "vendored corpus"), see
+[Contributing: miner pipeline](/contributing/miner-pipeline) and
+[Contributing: validation invariant corpus](/contributing/validation-invariant-corpus).
 
 ---
 
@@ -395,8 +396,9 @@ See [thermal stabilisation / warmup](#thermal-stabilisation--warmup).
 ## Engine-invariants pipeline terminology
 
 For terminology specific to the miner pipeline, validation gate, and corpus
-naming, see the [Contributing: terminology reference](/explanation/methodology/glossary) -
-that section is the canonical definition source and must be consulted before
+naming, see [Contributing: miner pipeline](/contributing/miner-pipeline) and
+[Contributing: validation invariant corpus](/contributing/validation-invariant-corpus).
+Those pages are the canonical definition source and must be consulted before
 introducing new names in code or documentation.
 
 ---

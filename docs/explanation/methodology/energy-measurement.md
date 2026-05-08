@@ -15,10 +15,12 @@ GPU power draw integrated over inference time. This is the primary metric.
 Energy in Joules = integral of Power(t) dt over the inference window.
 
 LLenergyMeasure reports:
-- `inference_energy_joules` - total GPU energy during inference
-- `adjusted_energy_joules` - inference energy minus baseline idle power (isolates the
+- `total_energy_j` - total GPU energy during inference
+- `energy_adjusted_j` - total energy minus baseline idle power (isolates the
   inference-attributable component)
-- `baseline_power_watts` - idle GPU power measured before inference
+- `baseline_power_w` - idle GPU power measured before inference
+- `mj_per_tok_adjusted` - per-token form of the adjusted figure (preferred for
+  cross-experiment comparison)
 
 ### Throughput
 
@@ -27,8 +29,8 @@ Tokens generated per second.
 - `tokens_per_second` - total output tokens divided by total inference time
 - Per-prompt throughput is available in the detailed per-prompt result records
 
-Throughput measurements are backend-independent and do not require GPU access - they work
-from wall-clock timing.
+Throughput measurements are sampler-independent and do not require GPU access - they
+work from wall-clock timing.
 
 ### FLOPs
 
@@ -57,7 +59,7 @@ Energy measurement is configured with a single field in your experiment or study
 energy_sampler: auto   # auto | nvml | zeus | codecarbon | null
 ```
 
-This is a flat top-level field - no nesting required. All backend-specific parameters
+This is a flat top-level field - no nesting required. All sampler-specific parameters
 (polling intervals, sampling modes, CPU measurement) are resolved internally by the
 harness. See [Design Rationale](#design-rationale) for why.
 
@@ -85,15 +87,15 @@ The two systems are independent:
 
 ---
 
-## Energy Measurement Backends
+## Energy Samplers
 
 ### `auto` (default)
 
-Auto-selects the best available backend in priority order: **Zeus > NVML > CodeCarbon**.
+Auto-selects the best available sampler in priority order: **Zeus > NVML > CodeCarbon**.
 
 Zeus is preferred because it reads hardware energy counters directly (zero overhead,
 no integration error). NVML is the fallback (polls power at 100ms intervals). CodeCarbon
-is the last resort (coarser sampling, lower accuracy). If no backend is available
+is the last resort (coarser sampling, lower accuracy). If no sampler is available
 (CPU-only machine), energy measurement is silently disabled.
 
 ### `nvml`
@@ -114,7 +116,7 @@ Zeus GPU energy monitoring via hardware energy counters.
 - **Most accurate** software-accessible GPU energy measurement available
 - On Volta+ GPUs (V100, T4, A100, H100, etc.): reads `nvmlDeviceGetTotalEnergyConsumption`
   hardware counter - two NVML calls total, zero overhead during measurement, 1mJ resolution
-- On pre-Volta GPUs: automatically falls back to power polling (equivalent to NVML backend)
+- On pre-Volta GPUs: automatically falls back to power polling (equivalent to the NVML sampler)
 - Requires additional install: `pip install "llenergymeasure[zeus]"`
 - GPU-only (CPU/DRAM measurement via RAPL is disabled - requires root privileges and is
   <5% of total energy for GPU-dominated LLM inference)
@@ -128,7 +130,7 @@ CodeCarbon tracker. Estimates total system energy including CPU, GPU, and RAM.
 - Requires additional install: `pip install "llenergymeasure[codecarbon]"`
 - **Least accurate** for GPU energy: ~25-40% error vs physical power meters
   (Hessenthaler et al., 2025), compared to ~5-10% for NVML polling and ~1-2% for Zeus
-- Uses the same `nvmlDeviceGetPowerUsage` NVML call as the NVML backend, but at coarser
+- Uses the same `nvmlDeviceGetPowerUsage` NVML call as the NVML sampler, but at coarser
   intervals (1s vs 100ms) with simpler integration
 - Best used when you need CPU/RAM energy or carbon emissions estimates
 
@@ -149,7 +151,7 @@ Most accurate                                        Least accurate
      GPU only              GPU only               GPU + CPU + RAM (estimated)
 ```
 
-All three backends ultimately read the same NVIDIA power sensor (shunt resistor on the
+All three samplers ultimately read the same NVIDIA power sensor (shunt resistor on the
 GPU power rails). The accuracy difference comes from how they process the readings:
 
 - **Zeus** reads the hardware energy counter (`nvmlDeviceGetTotalEnergyConsumption`) which
@@ -160,7 +162,7 @@ GPU power rails). The accuracy difference comes from how they process the readin
   coarser resolution, plus CPU/RAM estimates add further uncertainty
 
 The +/-5% floor on all NVML-based measurements comes from the physical sensor accuracy
-(NVIDIA-documented). Software integration adds 0-5% on top depending on backend.
+(NVIDIA-documented). Software integration adds 0-5% on top depending on sampler.
 
 ---
 
@@ -184,7 +186,7 @@ inference - zero CPU overhead.
    ```
 6. The result is total GPU energy in joules over the inference window
 7. If baseline measurement is enabled:
-   `adjusted_energy_joules = total_j - (baseline_power_w * duration_s)`
+   `energy_adjusted_j = total_energy_j - (baseline_power_w * duration_s)`
 
 The raw power timeseries is available in the result JSON for detailed post-hoc analysis.
 
@@ -207,7 +209,7 @@ conflate background power draw with inference energy.
 **How it works:**
 - The sampler polls GPU power for `baseline.duration_seconds` (default: 30s) before
   the first experiment
-- The mean is stored as `baseline_power_watts`
+- The mean is stored as `baseline_power_w`
 - Baseline results are persisted to disk (`_study-artefacts/baseline_cache.json`) and
   shared across experiments in a study, including Docker containers via bind-mount
 
@@ -236,18 +238,18 @@ baseline:
 ## What the Harness Resolves Internally
 
 The following parameters are resolved automatically by the measurement harness. They are
-not exposed in YAML config because they are either hardware-determined, backend-specific
+not exposed in YAML config because they are either hardware-determined, sampler-specific
 implementation details, or have single correct values:
 
 | Parameter | Value | Rationale |
 |:----------|:------|:----------|
 | NVML polling interval | 100ms | Matches A100 hardware update period. Polling faster reads stale values. |
 | Zeus CPU measurement | Disabled | Requires root privileges; <5% of total energy for GPU workloads. |
-| Zeus sync mode | `torch` | All backends use PyTorch/CUDA. Always correct. |
+| Zeus sync mode | `torch` | All engines use PyTorch/CUDA. Always correct. |
 | CodeCarbon polling interval | 1s | Appropriate for inference (default 15s is for training). |
 | CodeCarbon tracking mode | `process` | Better attribution than `machine` for single-workload benchmarks. |
 | CodeCarbon file output | Disabled | We extract metrics programmatically; prevents stray `emissions.csv`. |
-| GPU indices | Auto-resolved | Derived from backend config (tensor_parallel_size, device_map, etc.). |
+| GPU indices | Auto-resolved | Derived from engine config (tensor_parallel_size, device_map, etc.). |
 | Baseline cache TTL | 2 hours | Configurable via `baseline.cache_ttl_seconds`. Disk-persisted and shared with Docker containers. |
 | Integration method | Trapezoidal rule | Standard for non-uniform timesteps; Simpson's offers no practical gain given +/-5% sensor noise. |
 | Power reading mode | Instantaneous | Uses least-smoothed NVML reading for best temporal resolution. |
@@ -258,16 +260,16 @@ implementation details, or have single correct values:
 
 ### Why `energy_sampler` is a flat field (not nested)
 
-Research into all three backends (NVML, Zeus, CodeCarbon) confirmed that:
+Research into all three samplers (NVML, Zeus, CodeCarbon) confirmed that:
 
 1. **Zeus** has zero user-tunable parameters - all constructor args are internally resolved
 2. **CodeCarbon** has 30+ constructor params, all of which should be internally resolved
 3. **NVML** has one potentially tunable param (polling interval), but the 100ms default
    matches A100 hardware and is correct for the vast majority of use cases
 
-Since no backend exposes parameters worth configuring in YAML, the nested `energy: { backend: auto }`
-structure added indirection with zero value. A flat `energy_sampler: auto` field is
-semantically identical and simpler.
+Since no sampler exposes parameters worth configuring in YAML, a nested
+`energy: { sampler: auto }` structure would add indirection with zero value. A flat
+`energy_sampler: auto` field is semantically identical and simpler.
 
 ### Why Zeus is preferred over NVML
 
@@ -287,20 +289,20 @@ NVML polling is kept as a fallback because:
 
 ### External references
 
-- **NVML** &mdash; [NVIDIA Management Library Reference](https://docs.nvidia.com/deploy/nvml-api/index.html) (hardware sensor architecture, polling intervals, power reading modes)
-- **Zeus** &mdash; [Zeus: Understanding and Optimizing GPU Energy Consumption (NSDI '23)](https://www.usenix.org/conference/nsdi23/presentation/you) and the [Zeus repo](https://github.com/ml-energy/zeus) (hardware counters, CPU/DRAM measurement)
-- **CodeCarbon** &mdash; [CodeCarbon docs](https://mlco2.github.io/codecarbon/) (estimation modes, accuracy validation, regional carbon intensity)
+- **NVML** - [NVIDIA Management Library Reference](https://docs.nvidia.com/deploy/nvml-api/index.html) (hardware sensor architecture, polling intervals, power reading modes)
+- **Zeus** - [Zeus: Understanding and Optimizing GPU Energy Consumption (NSDI '23)](https://www.usenix.org/conference/nsdi23/presentation/you) and the [Zeus repo](https://github.com/ml-energy/zeus) (hardware counters, CPU/DRAM measurement)
+- **CodeCarbon** - [CodeCarbon docs](https://mlco2.github.io/codecarbon/) (estimation modes, accuracy validation, regional carbon intensity)
 
 ---
 
 ## Limitations
 
-**All backends measure GPU only (by default).** CPU and RAM power are not included in
+**All samplers measure GPU only (by default).** CPU and RAM power are not included in
 the primary energy metric. CodeCarbon can estimate CPU/RAM energy but with significant
 uncertainty (~25-40% total error).
 
 **NVML sensor has a +/-5% accuracy floor.** This is a hardware limitation of the on-board
-shunt resistor and ADC. All software backends (Zeus, NVML, CodeCarbon) share this floor.
+shunt resistor and ADC. All software samplers (Zeus, NVML, CodeCarbon) share this floor.
 For publication-quality results, report energy with appropriate uncertainty bounds.
 
 **A100 power sensor observes 25% of runtime.** The A100's power sensor averages over a
@@ -310,7 +312,7 @@ mitigates this by accumulating continuously.
 
 **Multi-GPU measurement sums per-device energy.** For tensor-parallel runs across multiple
 GPUs, LLenergyMeasure sums per-device energy. All participating GPUs are automatically
-monitored based on the backend's parallelism config.
+monitored based on the engine's parallelism config.
 
 **Container isolation.** Inside Docker containers, pynvml accesses the same physical GPU
 as the host via the NVIDIA Container Toolkit. Energy readings represent the full device

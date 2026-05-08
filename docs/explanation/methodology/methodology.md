@@ -62,10 +62,10 @@ flowchart LR
     style C fill:#e8f5e9,stroke:#4caf50
 ```
 
-1. **Warmup prompts** — heat the GPU to steady state (fixed or CV mode).
-2. **Thermal floor wait** — sleep `thermal_floor_seconds` (default 60s) for GPU
+1. **Warmup prompts** - heat the GPU to steady state (fixed or CV mode).
+2. **Thermal floor wait** - sleep `thermal_floor_seconds` (default 60s) for GPU
    temperature to plateau after warmup.
-3. **Measurement** — energy tracking begins.
+3. **Measurement** - energy tracking begins.
 
 The thermal floor wait occurs *after* warmup, not before. This ensures the GPU has
 reached operating temperature from warmup but has stabilised before measurement starts.
@@ -106,24 +106,28 @@ Configure via the `baseline:` section:
 ```yaml
 baseline:
   enabled: true           # default: true
-  duration_seconds: 30    # default: 30.0, range: 5–120
+  duration_seconds: 30    # default: 30.0, range: 5-120
 ```
 
 **What happens:**
 1. Before the first experiment, the GPU power sampler runs for `duration_seconds` with
    no inference work.
-2. The mean power over this period is stored as `baseline_power_watts`.
-3. For each subsequent measurement, `adjusted_energy_joules = total_j - (baseline_w * duration_s)`.
-4. The baseline result is cached per-session (1-hour TTL) — subsequent experiments in a
-   study reuse the cached baseline without measuring again.
+2. The mean power over this period is stored as `baseline_power_w`.
+3. For each subsequent measurement, `energy_adjusted_j = total_energy_j - (baseline_power_w * duration_s)`.
+4. The baseline result is cached per-session (default 2-hour TTL, configurable via
+   `baseline.cache_ttl_seconds`) - subsequent experiments in a study reuse the
+   cached baseline without measuring again.
 
 **In results:**
-- `baseline_power_watts` — measured idle power
-- `inference_energy_joules` — total GPU energy during inference
-- `adjusted_energy_joules` — inference energy minus baseline (inference-attributable only)
+- `baseline_power_w` - measured idle power in watts
+- `total_energy_j` - total GPU energy during inference
+- `energy_adjusted_j` - total energy minus baseline (inference-attributable only)
+- `mj_per_tok_adjusted` - the per-token form of the adjusted figure (preferred for
+  cross-experiment comparison)
 
 For publication-quality results, always include baseline in your reported energy.
-`adjusted_energy_joules` is the preferred metric for comparing configurations.
+`energy_adjusted_j` (and its per-token form `mj_per_tok_adjusted`) is the preferred
+metric for comparing configurations.
 
 ### Where baselines are measured
 
@@ -131,7 +135,7 @@ Baseline idle power is measured in the same CUDA environment as the inference
 work it will be subtracted from. For local (host) runs that is the host
 process itself. For Docker runs, the baseline is measured inside a short-lived
 container of the same engine image, with the CUDA runtime initialised and
-the torch memory pool seeded — matching the state the experiment container
+the torch memory pool seeded - matching the state the experiment container
 will be in just before inference starts.
 
 **Why this matters:** a host-measured baseline underestimates the container's
@@ -151,7 +155,7 @@ a controlled host-vs-container comparison on A100-PCIE-40GB hardware.
 
 **Cross-engine comparisons:** each engine image gets its own baseline cache.
 If your study mixes engines, each engine's adjusted energy is computed
-against a baseline measured in that engine's environment — cross-engine
+against a baseline measured in that engine's environment - cross-engine
 energy comparisons remain apples-to-apples.
 
 ### Multi-engine studies: per-engine scoping
@@ -159,8 +163,8 @@ energy comparisons remain apples-to-apples.
 Baseline caches, TTL expiry, and the `validated` strategy's spot-check
 counter are all keyed per engine target (``local`` for host runs,
 ``image:<sanitised-tag>`` for each Docker image). In a mixed-engine
-study — for example 300 experiments randomly interleaving Transformers, vLLM,
-and TensorRT-LLM — each engine behaves as if it had its own independent
+study - for example 300 experiments randomly interleaving Transformers, vLLM,
+and TensorRT-LLM - each engine behaves as if it had its own independent
 baseline session:
 
 - **`cached` TTL:** each engine's baseline ages out independently after
@@ -171,13 +175,13 @@ baseline session:
   experiments *per engine*, not across the whole study. If the interval
   is 50 and the study interleaves three engines, each engine triggers
   its own drift check after 50 experiments against *that* engine's
-  cached baseline — regardless of how many experiments ran against the
+  cached baseline - regardless of how many experiments ran against the
   other engines in between.
 - **Drift threshold:** a drift detected on one engine only re-measures
   that engine's baseline. The other engines' caches are untouched.
 
 This scoping makes randomised Multi-engine studies safe to run without
-baseline interference — interleaving does not corrupt the statistical
+baseline interference - interleaving does not corrupt the statistical
 independence of each engine's adjusted energy figures.
 
 ### Two-container architecture (Docker runs)
@@ -227,7 +231,7 @@ sequenceDiagram
 would force every experiment in a cached or validated study to pay the
 full `duration_seconds` (typically 30 s) up front, cancelling the main
 benefit of caching. The two-container design pays that cost once per
-engine per TTL window and then reuses the result — a 300-experiment
+engine per TTL window and then reuses the result - a 300-experiment
 mixed-engine study pays ~3 × 30 s of baseline measurement instead of
 300 × 30 s.
 
@@ -271,14 +275,14 @@ loaded across cycles). May introduce temporal bias if system state changes over 
 **`interleave`** → `A, B, A, B, A, B`
 
 One cycle of each experiment per round, repeated. Balances temporal effects across
-configurations — both A and B experience similar system conditions per round.
+configurations - both A and B experience similar system conditions per round.
 Good for comparisons where temporal fairness matters.
 
 **`shuffle`** → random per-cycle order, seeded from study design hash
 
 The execution order is randomised independently for each cycle. The seed is derived from
 the study design hash (SHA-256 of the resolved experiment list), so the same study YAML
-always produces the same shuffle sequence — reruns are reproducible.
+always produces the same shuffle sequence - reruns are reproducible.
 
 `shuffle` is the CLI default. It eliminates systematic ordering bias while maintaining
 reproducibility.
@@ -311,7 +315,7 @@ llem run study.yaml --cycles 5 --order interleave
 **Purpose:** GPU temperature affects power draw and throughput. A GPU running at 85°C
 performs differently from one at 60°C. Without thermal gaps between experiments, earlier
 experiments heat the GPU, causing later experiments to run at a higher baseline
-temperature — introducing a systematic bias across sweep positions.
+temperature - introducing a systematic bias across sweep positions.
 
 By default, LLenergyMeasure inserts thermal gaps between experiments in a study. These
 gaps allow the GPU to return toward its baseline temperature before the next experiment
@@ -336,12 +340,12 @@ experiment's result, and the throttle duration and trigger reason are recorded.
 LLenergyMeasure uses two independent seeds that control reproducibility at different
 scopes:
 
-**`random_seed`** (ExperimentConfig) — per-experiment stochasticity:
+**`random_seed`** (ExperimentConfig) - per-experiment stochasticity:
 
 - Engine inference RNG (`torch.manual_seed`, vLLM `seed=`, TRT-LLM `random_seed=`)
 - Dataset prompt ordering (when `dataset.order: shuffled`)
 
-**`shuffle_seed`** (ExecutionConfig) — study-level scheduling:
+**`shuffle_seed`** (ExecutionConfig) - study-level scheduling:
 
 - Cycle shuffle order (which experiment runs when)
 - Default: derived from `study_design_hash` (same YAML always produces the same order)
@@ -356,13 +360,13 @@ test sampling variance (vary `random_seed`) independently from ordering effects 
 To maximise reproducibility across runs and machines:
 
 1. **Fix the random seed.** The default `random_seed: 42` controls all per-experiment
-   stochasticity — inference RNG and dataset ordering:
+   stochasticity - inference RNG and dataset ordering:
    ```yaml
    random_seed: 42
    ```
 
 2. **Use shuffle experiment ordering with n_cycles >= 3.** Shuffle ordering is seeded from
-   the study design hash — identical study YAML always produces identical shuffle order.
+   the study design hash - identical study YAML always produces identical shuffle order.
    To override the shuffle seed explicitly:
    ```yaml
    study_execution:
@@ -391,10 +395,10 @@ To maximise reproducibility across runs and machines:
 ### What is stored in results
 
 Each experiment result JSON includes:
-- `effective_config` — the fully resolved ExperimentConfig (all defaults filled in)
-- `study_design_hash` — SHA-256[:16] of the resolved experiment list (for studies)
-- `baseline_power_watts` — measured idle power for this session
-- `thermal_throttle_detected` — whether throttling occurred during measurement
+- `effective_config` - the fully resolved ExperimentConfig (all defaults filled in)
+- `study_design_hash` - SHA-256[:16] of the resolved experiment list (for studies)
+- `baseline_power_w` - measured idle power for this session
+- `thermal_throttle_detected` - whether throttling occurred during measurement
 - Per-prompt timeseries data (power samples, latency) for detailed analysis
 
 ---

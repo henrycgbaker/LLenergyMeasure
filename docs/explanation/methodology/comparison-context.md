@@ -20,7 +20,7 @@ The key distinction from performance benchmarks: most AI benchmarks measure *how
 
 **Who uses it:** Hardware vendors (NVIDIA, Intel, Google, AMD), cloud providers, and enterprise AI teams. MLPerf results are published publicly and widely cited in hardware procurement decisions.
 
-**What it measures:** Primarily throughput — how many inferences per second a system can process — and quality — whether the model meets a minimum accuracy threshold on standardised tasks.
+**What it measures:** Primarily throughput - how many inferences per second a system can process - and quality - whether the model meets a minimum accuracy threshold on standardised tasks.
 
 **What it does not measure:** Energy consumption is not a primary MLPerf metric, though some MLPerf Power results are published separately. MLPerf also requires fixed, certified hardware configurations and uses proprietary model weights in some divisions, limiting its applicability to research settings.
 
@@ -119,17 +119,17 @@ When Zeus is installed, LLenergyMeasure can use it instead of the default NVML p
 - LLenergyMeasure version (from `llem --version`)
 - Dataset (default: AI Energy Score prompts)
 
-**Comparing across studies:** Results are only comparable if the hardware, dataset, number of prompts, and dtype setting are identical. Hardware differences are the largest source of non-comparability — an A100 and a consumer GPU will produce very different energy figures even for the same model.
+**Comparing across studies:** Results are only comparable if the hardware, dataset, number of prompts, and dtype setting are identical. Hardware differences are the largest source of non-comparability - an A100 and a consumer GPU will produce very different energy figures even for the same model.
 
-**Energy per token:** When comparing models of different sizes or with different output lengths, use the derived metric of joules per output token (`inference_energy_joules ÷ total_output_tokens`). This normalises for the amount of useful output produced.
+**Energy per token:** When comparing models of different sizes or with different output lengths, use the derived metric of millijoules per output token. The result file exposes this directly as `mj_per_tok_adjusted` (baseline-subtracted) and `mj_per_tok_total` (raw). Use the adjusted form for cross-experiment comparisons - it isolates inference work from idle GPU draw.
 
-**Reporting for sustainability:** If you are including AI energy use in an organisation's carbon accounting or sustainability report, pair LLenergyMeasure energy figures with the electricity carbon intensity of the data centre where the model runs, or use the CodeCarbon backend to get CO₂ estimates directly.
+**Reporting for sustainability:** If you are including AI energy use in an organisation's carbon accounting or sustainability report, pair LLenergyMeasure energy figures with the electricity carbon intensity of the data centre where the model runs, or use the CodeCarbon sampler to get CO2 estimates directly.
 
 ---
 
 ## Further Reading
 
-- [What We Measure and Why It Matters](/explanation/methodology/what-we-measure) — plain-language explanation of energy, throughput, and FLOPs
+- [What We Measure and Why It Matters](/explanation/methodology/what-we-measure) - plain-language explanation of energy, throughput, and FLOPs
 - [How to Read LLenergyMeasure Output](/how-to/interpret-results) - interpreting the numbers
-- [Running Your First Measurement](/get-started/for-policy-readers) — getting started with a measurement
-- [Energy Measurement](/explanation/methodology/energy-measurement) — technical depth on measurement backends (for researchers)
+- [Running Your First Measurement](/get-started/for-policy-readers) - getting started with a measurement
+- [Energy Measurement](/explanation/methodology/energy-measurement) - technical depth on energy samplers (for researchers)

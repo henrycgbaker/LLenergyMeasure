@@ -6,16 +6,16 @@ This guide explains what LLenergyMeasure measures - energy, throughput, and FLOP
 
 ## Why AI Energy Measurement Matters
 
-Artificial intelligence models run on computers. Those computers consume electricity. As AI becomes more widely used — in search, in healthcare, in government services, in consumer products — the energy cost of running these systems has become a significant policy concern.
+Artificial intelligence models run on computers. Those computers consume electricity. As AI becomes more widely used - in search, in healthcare, in government services, in consumer products - the energy cost of running these systems has become a significant policy concern.
 
-Data centres that host AI infrastructure already account for a growing share of global electricity demand. Training a large AI model once can consume as much electricity as a transatlantic flight. But training happens once; *inference* — using a trained model to generate answers — happens millions or billions of times per day across deployed systems. That repeated cost is what LLenergyMeasure measures.
+Data centres that host AI infrastructure already account for a growing share of global electricity demand. Training a large AI model once can consume as much electricity as a transatlantic flight. But training happens once; *inference* - using a trained model to generate answers - happens millions or billions of times per day across deployed systems. That repeated cost is what LLenergyMeasure measures.
 
 Understanding the energy cost of AI inference enables:
 
-- **Informed procurement decisions** — choosing AI systems that deliver equivalent capability with lower energy use
-- **Sustainability accounting** — including AI infrastructure in carbon footprint reporting
-- **Policy design** — setting energy efficiency standards or disclosure requirements for AI systems
-- **Comparative research** — evaluating whether a more capable AI system is worth its higher energy cost
+- **Informed procurement decisions** - choosing AI systems that deliver equivalent capability with lower energy use
+- **Sustainability accounting** - including AI infrastructure in carbon footprint reporting
+- **Policy design** - setting energy efficiency standards or disclosure requirements for AI systems
+- **Comparative research** - evaluating whether a more capable AI system is worth its higher energy cost
 
 LLenergyMeasure makes this measurement rigorous, reproducible, and comparable across different models and deployment configurations.
 
@@ -23,7 +23,7 @@ LLenergyMeasure makes this measurement rigorous, reproducible, and comparable ac
 
 ## Energy (Joules): How Much Electricity Does One Inference Use?
 
-**What it is:** The amount of electrical energy consumed by the computer's graphics processor (GPU) to complete one AI inference — that is, to process an input and generate a response.
+**What it is:** The amount of electrical energy consumed by the computer's graphics processor (GPU) to complete one AI inference - that is, to process an input and generate a response.
 
 **Analogy:** Think of it like measuring fuel consumption for a car journey. Just as you might ask "how many litres of fuel does this car use for a 10-kilometre drive?", we ask "how many joules of energy does this AI model use to process 100 prompts?"
 
@@ -31,9 +31,9 @@ LLenergyMeasure makes this measurement rigorous, reproducible, and comparable ac
 
 **What LLenergyMeasure reports:**
 
-- **Total energy** — the raw GPU energy consumed during the experiment
-- **Baseline power** — the idle power the GPU draws even when doing nothing (like a car engine idling)
-- **Adjusted energy** — total energy minus the baseline, representing energy specifically attributable to the inference work
+- **Total energy** - the raw GPU energy consumed during the experiment
+- **Baseline power** - the idle power the GPU draws even when doing nothing (like a car engine idling)
+- **Adjusted energy** - total energy minus the baseline, representing energy specifically attributable to the inference work
 
 The adjusted figure is the most meaningful for comparison, because it isolates the cost of the AI work rather than the general cost of keeping the hardware running.
 
@@ -45,11 +45,11 @@ The adjusted figure is the most meaningful for comparison, because it isolates t
 
 **What is a token?** In AI language models, text is broken into small chunks called tokens. A token is roughly equivalent to a short word or part of a word. "Hello, world!" is about 4 tokens. This is the unit AI models work with internally.
 
-**Analogy:** Think of it like typing speed — words per minute. A faster typist produces more words in the same time. A model with higher throughput produces more tokens in the same time.
+**Analogy:** Think of it like typing speed - words per minute. A faster typist produces more words in the same time. A model with higher throughput produces more tokens in the same time.
 
 **Why it matters:** Throughput affects how quickly users get responses, and how many users a given system can serve simultaneously. A faster model can handle more traffic with the same hardware.
 
-**The trade-off:** A model that runs more slowly might actually be more *energy efficient per unit of output* — it might use less total energy to produce the same amount of text. Throughput alone does not tell you about energy efficiency; you need to combine it with energy measurement.
+**The trade-off:** A model that runs more slowly might actually be more *energy efficient per unit of output* - it might use less total energy to produce the same amount of text. Throughput alone does not tell you about energy efficiency; you need to combine it with energy measurement.
 
 ---
 
@@ -59,7 +59,7 @@ The adjusted figure is the most meaningful for comparison, because it isolates t
 
 **Analogy:** Think of it like counting the number of individual calculations a student makes when solving a maths problem. A more complex problem requires more calculations. Similarly, a larger AI model performs more calculations to generate each response.
 
-**The unit:** FLOPs — "Floating Point Operations". Larger models perform billions or trillions of FLOPs per inference (reported as GFLOPs or TFLOPs respectively).
+**The unit:** FLOPs - "Floating Point Operations". Larger models perform billions or trillions of FLOPs per inference (reported as GFLOPs or TFLOPs respectively).
 
 **Why it matters:** FLOPs provide a hardware-independent measure of computational complexity. This is useful for:
 
@@ -96,5 +96,5 @@ The goal of LLenergyMeasure is to make these comparisons rigorous and reproducib
 ## Further Reading
 
 - [How to Read LLenergyMeasure Output](/how-to/interpret-results) - what the numbers mean in practice
-- [Running Your First Measurement](/get-started/for-policy-readers) — a step-by-step guide for running your first measurement
+- [Running Your First Measurement](/get-started/for-policy-readers) - a step-by-step guide for running your first measurement
 - [Comparison with Other Benchmarks](/explanation/methodology/comparison-context) - how LLenergyMeasure relates to MLPerf, AI Energy Score, and other tools
