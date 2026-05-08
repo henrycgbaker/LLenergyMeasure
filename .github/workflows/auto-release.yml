@@ -19,6 +19,13 @@ on:
   pull_request:
     types: [closed]
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Set to true to allow irreversible steps (tag creation, issue creation). Defaults to false (dry-run)."
+        required: false
+        default: "false"
+        type: boolean
 
 jobs:
   check-release:
@@ -48,6 +55,7 @@ jobs:
 
   create-tag:
     needs: [check-release, gpu-ci]
+    if: inputs.confirm == true || github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -65,7 +73,7 @@ jobs:
 
   open-issue-on-failure:
     needs: [check-release, gpu-ci]
-    if: failure()
+    if: failure() && (inputs.confirm == true || github.event_name != 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       issues: write

@@ -9,6 +9,7 @@ on:
       - '.github/workflows/security.yml'
   schedule:
     - cron: "0 9 * * 1"  # Monday 09:00 UTC
+  workflow_dispatch:
 
 jobs:
   pip-audit:
