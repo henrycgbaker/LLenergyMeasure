@@ -6,10 +6,10 @@ and parameter metadata, then renders a structured Markdown reference.
 
 Usage:
     python scripts/generate_cli_reference.py
-    python scripts/generate_cli_reference.py --output docs/cli-reference.md
+    python scripts/generate_cli_reference.py --output docs/reference/cli.md
 
 Output:
-    Markdown to stdout (or --output path). Suitable for inlining into docs/cli-reference.md.
+    Markdown to stdout (or --output path). Suitable for inlining into docs/reference/cli.md.
 """
 
 from __future__ import annotations

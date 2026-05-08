@@ -118,7 +118,7 @@ clean:
 generate-docs:
 	python scripts/generate_invalid_combos_doc.py
 	python scripts/generate_config_docs.py
-	@echo "Generated docs in docs/generated/"
+	@echo "Generated docs in docs/reference/"
 
 # Check if generated docs are stale (CI validation)
 check-docs: docs-check
@@ -386,4 +386,4 @@ docs-build: docs-generate
 
 docs-clean:
 	rm -rf website/node_modules website/build website/.docusaurus website/.cache-loader \
-	       docs/api
+	       docs/reference/api

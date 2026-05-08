@@ -505,9 +505,9 @@ jobs:
             'src/llenergymeasure/engines/*/invariants.validated.yaml' \
             'src/llenergymeasure/engines/*/schema.discovered.json' \
             'engine_versions/*.yaml' \
-            'docs/user/generated/invariants-*.md' \
-            'docs/user/generated/curation-*.md' \
-            'docs/user/generated/schema-*.md' \
+            'docs/reference/engines/invariants-*.md' \
+            'docs/reference/engines/curation-*.md' \
+            'docs/reference/engines/schema-*.md' \
             2>/dev/null || true
 
           if git diff --cached --quiet; then
