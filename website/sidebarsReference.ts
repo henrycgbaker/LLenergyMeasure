@@ -7,6 +7,7 @@ const sidebarsReference: SidebarsConfig = {
     'dataset-format',
     'results-schema',
     'invariants-corpus-format',
+    'schema-discovered-format',
     {
       type: 'category',
       label: 'Library API (pre-1.0, unstable)',
