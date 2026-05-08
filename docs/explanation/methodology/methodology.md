@@ -95,7 +95,7 @@ Do not use `enabled: false` for published results.
 
 ---
 
-## Baseline Power
+## Baseline Power {#baseline-measurement}
 
 **Purpose:** Measures idle GPU power draw before inference to enable baseline-adjusted
 energy attribution. The adjusted figure isolates the energy cost of the inference work

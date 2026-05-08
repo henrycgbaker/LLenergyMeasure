@@ -66,7 +66,7 @@ reading distinguishes the two.
 
 ---
 
-## FLOPs (floating-point operations)
+## FLOPs (floating-point operations) {#flops}
 
 An estimate of the floating-point operations the model executes per
 inference. Reported as `flops_estimate` with a method tag (`roofline`,

@@ -388,7 +388,7 @@ The templates not adopted from Daikon's full library (linear arithmetic
 ternary `z = ax + by + c`, sortedness, sequence-equality) cover
 scientific-computing trace patterns not seen in engine config classes.
 
-## Renovate-driven refresh loop (parallel re-fire)
+## Renovate-driven refresh loop (parallel re-fire) {#renovate-driven-refresh-loop}
 
 Library version bumps trigger both pipelines automatically. Renovate
 watches the engine SSOT (`engine_versions/<engine>.yaml`) plus the

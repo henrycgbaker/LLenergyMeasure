@@ -140,7 +140,7 @@ The corpus complements, rather than replaces, engine-side validation: it capture
 
 Live introspection at runtime would require importing each engine at startup - which on vLLM and TRT-LLM means initialising CUDA contexts. The corpus is pre-computed and ships as a YAML file that loads in a few milliseconds with no GPU dependency.
 
-The trade-off is staleness risk: the corpus must be regenerated when the engine library changes. The Renovate-driven refresh loop and the validation-CI gate together enforce this discipline. See [miner-pipeline.md - Renovate refresh loop](/contributing/miner-pipeline#renovate-driven-refresh-loop).
+The trade-off is staleness risk: the corpus must be regenerated when the engine library changes. The Renovate-driven refresh loop and the validation-CI gate together enforce this discipline. See [engine-introspection-pipelines - Renovate refresh loop](/explanation/architecture/engine-introspection-pipelines#renovate-driven-refresh-loop).
 
 ---
 
