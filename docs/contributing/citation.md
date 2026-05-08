@@ -34,17 +34,28 @@ For a plain-text reference:
 
 LLenergyMeasure ships with the AIEnergyScore prompt dataset as its default
 measurement corpus. If your results use the default dataset, also cite the
-upstream source:
+upstream project:
 
 ```bibtex
-@misc{lottick2019energy,
-  title        = {Energy Usage Reports: Environmental awareness as part of
-                  algorithmic accountability},
-  author       = {Lottick, Kadan and Susai, Silvia and Friedler, Sorelle A.
-                  and Wilson, Jonathan P.},
-  year         = {2019},
-  howpublished = {NeurIPS 2019 Workshop on Tackling Climate Change with ML},
-  url          = {https://arxiv.org/abs/1910.08235}
+@misc{aienergyscore,
+  title        = {{AIEnergyScore}: A standardised approach for evaluating
+                  the energy efficiency of AI model inference},
+  author       = {Luccioni, Alexandra Sasha and {Hugging Face}},
+  year         = {2024},
+  howpublished = {\url{https://huggingface.github.io/AIEnergyScore/}}
+}
+```
+
+The methodology that informs AIEnergyScore is set out in:
+
+```bibtex
+@inproceedings{luccioni2024power,
+  title     = {Power Hungry Processing: {Watts} Driving the Cost of AI Deployment?},
+  author    = {Luccioni, Alexandra Sasha and Jernite, Yacine and Strubell, Emma},
+  booktitle = {Proceedings of the 2024 ACM Conference on Fairness,
+                Accountability, and Transparency (FAccT)},
+  year      = {2024},
+  url       = {https://arxiv.org/abs/2311.16863}
 }
 ```
 

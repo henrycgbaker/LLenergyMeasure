@@ -449,7 +449,10 @@ Everything else passes through without translation:
 
 ### NVML thermal throttle subsampling
 
-NVML samples power and thermal state at ~1s intervals. Thermal throttle events shorter
-than ~100ms may not be detected. The `throttle_detected` field in results reflects what
-NVML observed, not the complete throttle history. This is an inherent limitation of
-NVML's polling API and cannot be resolved without kernel-level instrumentation.
+LLenergyMeasure polls NVML at 100 ms intervals during the measurement window
+(`sample_interval_ms` in `src/llenergymeasure/energy/nvml.py`). Thermal throttle
+events shorter than the polling interval, or those that begin and end between
+adjacent samples, may not appear in the recorded power and thermal trace. The
+`throttle_detected` field reflects what NVML reported across these polls, not a
+continuous throttle history. This is an inherent limitation of polling-based
+sampling and cannot be resolved without kernel-level instrumentation.

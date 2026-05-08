@@ -148,7 +148,7 @@ Written when `output.save_timeseries: true` (the default). One Parquet file per 
 | `memory_used_mib` | float64 | GPU memory used in MiB |
 | `sm_clock_mhz` | float64 | SM clock in MHz (when available) |
 
-NVML samples at ~1 s intervals (driver-dependent). Thermal-throttle events shorter than ~100 ms may be missed - see [Methodology &gt; Known limitations](/explanation/methodology/methodology#known-limitations).
+LLenergyMeasure polls NVML at 100 ms intervals; thermal-throttle events shorter than the polling interval may be missed - see [Methodology &gt; Known limitations](/explanation/methodology/methodology#known-limitations).
 
 ## `StudyResult` - final return value (Python API)
 
