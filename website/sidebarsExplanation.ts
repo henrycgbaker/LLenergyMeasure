@@ -40,6 +40,7 @@ const sidebarsExplanation: SidebarsConfig = {
           label: 'Internal pipelines',
           collapsed: true,
           items: [
+            'architecture/engine-introspection-pipelines',
             'architecture/parameter-discovery',
             'architecture/parameter-curation',
           ],
