@@ -1,50 +1,252 @@
+/* ---------------------------------------------------------------------------
+   Hero
+--------------------------------------------------------------------------- */
+
 .hero {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6rem 0;
-  min-height: 60vh;
+  padding: 6rem 0 4rem;
+  text-align: center;
 }
 
-.inner {
-  text-align: center;
-  max-width: 720px;
+.heroInner {
+  max-width: 760px;
   margin: 0 auto;
 }
 
-.title {
-  font-size: 3.5rem;
+.wordmark {
+  font-size: 3.25rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  letter-spacing: -0.5px;
+}
+
+.tagline {
+  font-size: 1.35rem;
+  color: var(--ifm-color-emphasis-700);
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+.subTag {
+  font-size: 1rem;
+  color: var(--ifm-color-emphasis-500);
+  margin-bottom: 2.5rem;
+  font-style: italic;
+}
+
+.heroCtas {
+  display: flex;
+  justify-content: center;
   margin-bottom: 1rem;
 }
 
-.lead {
-  font-size: 1.5rem;
-  color: var(--ifm-color-emphasis-700);
-  margin-bottom: 1.5rem;
-}
-
-.description {
-  font-size: 1.05rem;
-  color: var(--ifm-color-emphasis-600);
-  margin-bottom: 2.5rem;
-  line-height: 1.6;
-}
-
-.actions {
+.heroSecondary {
   display: flex;
   gap: 0.75rem;
   justify-content: center;
   flex-wrap: wrap;
+  margin-top: 1rem;
 }
+
+/* ---------------------------------------------------------------------------
+   Disambiguation strip
+--------------------------------------------------------------------------- */
+
+.disambig {
+  background: var(--ifm-color-emphasis-100);
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+  padding: 0.75rem 0;
+}
+
+.disambigText {
+  font-size: 0.85rem;
+  color: var(--ifm-color-emphasis-600);
+  margin: 0;
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* ---------------------------------------------------------------------------
+   Sections
+--------------------------------------------------------------------------- */
+
+.section {
+  padding: 4rem 0;
+}
+
+.sectionAlt {
+  padding: 4rem 0;
+  background: var(--ifm-color-emphasis-50);
+}
+
+.sectionNarrow {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.sectionHeading {
+  font-size: 1.75rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ---------------------------------------------------------------------------
+   What is this / pitch
+--------------------------------------------------------------------------- */
+
+.pitch {
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--ifm-color-emphasis-700);
+}
+
+/* ---------------------------------------------------------------------------
+   Content list (used by methodology bullets, boundary bullets, and any
+   prose-bullet list inside a Section)
+--------------------------------------------------------------------------- */
+
+.contentList {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: var(--ifm-color-emphasis-700);
+  padding-left: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.contentList li {
+  margin-bottom: 0.25rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Cards (audience + pillar shared grid)
+--------------------------------------------------------------------------- */
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+/* Audience cards */
+
+.card {
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--ifm-background-color);
+}
+
+.cardTitle {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.cardDescription {
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-600);
+  flex: 1;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Pillar cards */
+
+.pillarCard {
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  background: var(--ifm-background-color);
+}
+
+.pillarCard:hover {
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  text-decoration: none;
+  color: inherit;
+}
+
+.pillarCardTitle {
+  font-size: 1.1rem;
+  margin: 0 0 0.4rem;
+}
+
+.pillarCardTagline {
+  font-size: 0.875rem;
+  color: var(--ifm-color-emphasis-600);
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Code blocks
+--------------------------------------------------------------------------- */
+
+.codeBlock {
+  background: var(--ifm-code-background);
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  font-size: 0.875rem;
+  overflow-x: auto;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* ---------------------------------------------------------------------------
+   Contributor / citation
+--------------------------------------------------------------------------- */
+
+.attribution {
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-600);
+  margin-bottom: 1.25rem;
+}
+
+.citationDetails {
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+}
+
+.citationSummary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+  user-select: none;
+}
+
+.citationDetails[open] .citationSummary {
+  margin-bottom: 0.75rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Responsive
+--------------------------------------------------------------------------- */
 
 @media (max-width: 768px) {
   .hero {
-    padding: 3rem 1rem;
+    padding: 3rem 1rem 2.5rem;
   }
-  .title {
+
+  .wordmark {
     font-size: 2.25rem;
   }
-  .lead {
-    font-size: 1.15rem;
+
+  .tagline {
+    font-size: 1.1rem;
+  }
+
+  .heroSecondary {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .cardGrid {
+    grid-template-columns: 1fr;
   }
 }

@@ -30,7 +30,7 @@ LLenergyMeasure is a Python framework for measuring the energy consumption, thro
 pip install llenergymeasure
 ```
 
-Engine code (Transformers, vLLM, TensorRT-LLM) runs inside per-engine Docker images; the host package is the orchestrator. See [docs/architecture/development.md](docs/architecture/development.md) for the build/run pattern.
+Engine code (Transformers, vLLM, TensorRT-LLM) runs inside per-engine Docker images; the host package is the orchestrator. See [docs/contributing/development.md](docs/contributing/development.md) for the build/run pattern.
 
 Run your first measurement (host dispatches the appropriate engine container):
 
@@ -38,13 +38,13 @@ Run your first measurement (host dispatches the appropriate engine container):
 llem run --model gpt2 --engine transformers
 ```
 
-See the [documentation site](https://henrycgbaker.github.io/llenergymeasure/) for the full guide — installation, getting started (technical + policy-maker tracks), CLI reference, methodology, Python API reference, and architecture internals.
+See the [documentation site](https://henrycgbaker.github.io/llenergymeasure/) for the full guide — tutorials, how-to recipes, reference (CLI, study config, library API, engines), conceptual explanation (methodology, energy measurement, architecture), and a contributing guide for internals.
 
 ---
 
 ## Contributing
 
-Contributions welcome. See the [development install](docs/user/installation.md#install-from-source-development) instructions to set up a local environment.
+Contributions welcome. See the [development install](docs/how-to/install.md#install-from-source-development) instructions to set up a local environment, plus the [contributing guide](docs/contributing/development.md).
 
 ---
 

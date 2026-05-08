@@ -24,3 +24,18 @@
   --ifm-color-primary-lightest: #dbeafe;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
+
+/* Centre Mermaid diagrams horizontally in their container.
+ * Default Docusaurus rendering left-aligns the SVG; centring reads
+ * better for the kind of structural flow diagrams the docs use.
+ * The wrapper class is what @docusaurus/theme-mermaid emits.
+ */
+.docusaurus-mermaid-container {
+  display: flex;
+  justify-content: center;
+}
+
+.docusaurus-mermaid-container > svg {
+  max-width: 100%;
+  height: auto;
+}

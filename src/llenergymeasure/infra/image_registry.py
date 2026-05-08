@@ -19,7 +19,7 @@ Overriding the image
 The ``runners:`` section in the study YAML accepts explicit image references::
 
     runners:
-      pytorch: local                    # host execution (no Docker)
+      transformers: local               # host execution (no Docker)
       vllm: docker                      # default resolution (local → registry)
       tensorrt: "docker:my/custom:tag"  # explicit image override
 

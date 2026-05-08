@@ -49,7 +49,7 @@ def run(
     ] = None,
     engine: Annotated[
         str | None,
-        typer.Option("--engine", "-e", help="Inference engine (pytorch, vllm, tensorrt)"),
+        typer.Option("--engine", "-e", help="Inference engine (transformers, vllm, tensorrt)"),
     ] = None,
     dataset: Annotated[
         str | None,
@@ -229,7 +229,7 @@ def _run_impl(
             "Provide a config file or --model flag.\n"
             "  Examples:\n"
             "    llem run experiment.yaml\n"
-            "    llem run --model gpt2 --engine pytorch"
+            "    llem run --model gpt2 --engine transformers"
         )
 
     # Study detection: YAML with sweep: or experiments: keys is a study
@@ -357,7 +357,7 @@ def _resolve_runner_tag(config: Any) -> str:
         return RUNNER_LOCAL
     if runner == RUNNER_DOCKER or (isinstance(runner, str) and runner.startswith("docker:")):
         return RUNNER_DOCKER
-    # auto: pytorch defaults to local, vllm/tensorrt default to docker
+    # auto: transformers defaults to local, vllm/tensorrt default to docker
     engine = getattr(config, "engine", Engine.TRANSFORMERS)
     return RUNNER_LOCAL if engine == Engine.TRANSFORMERS else RUNNER_DOCKER
 
