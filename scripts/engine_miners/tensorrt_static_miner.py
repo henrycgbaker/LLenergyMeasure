@@ -74,7 +74,7 @@ from scripts.engine_miners._base import (  # noqa: E402  (late import after sys.
     find_method,
     first_string_arg,
 )
-from scripts.engine_miners._ssot import load_miner_pin  # noqa: E402
+from scripts.engine_miners._ssot import load_miner_pin, load_ssot  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -107,27 +107,42 @@ BUILDER_REL = Path("builder.py")
 # stages. The miner itself walks /tmp source AST rather than the live
 # package (see ``_load_source``), but probe uses live-package landmarks
 # because that is the seam Renovate's library bumps shift first.
-LANDMARKS: tuple[str, ...] = (
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_dtype",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_model",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_model_format_misc",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.set_runtime_knobs_from_build_config",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_build_config_with_runtime_params",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_build_config_remaining",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_speculative_config",
-    "tensorrt_llm.llmapi.llm_args.BaseLlmArgs.validate_lora_config_consistency",
-    "tensorrt_llm.llmapi.llm_args.TrtLlmArgs",
-    "tensorrt_llm.llmapi.llm_args.TrtLlmArgs.validate_enable_build_cache",
-    "tensorrt_llm.llmapi.llm_args.LookaheadDecodingConfig",
-    "tensorrt_llm.llmapi.llm_args.LookaheadDecodingConfig.validate_positive_values",
-    "tensorrt_llm.llmapi.llm_args.CalibConfig",
-    "tensorrt_llm.llmapi.llm_args.BatchingType",
-    "tensorrt_llm.llmapi.llm_args.CapacitySchedulerPolicy",
-    "tensorrt_llm.llmapi.llm_args.ContextChunkingPolicy",
-    "tensorrt_llm.builder.Builder",
-    "tensorrt_llm.builder.Builder.build_engine",
-)
+#
+# Sourced from the version-pinned archive at
+# ``llenergymeasure._engine_archive.tensorrt.<safe_version>.machinery.static``.
+# PEP 562 ``__getattr__`` defers the archive import + SSOT parse until
+# accessed.
+
+
+def _get_landmarks() -> tuple[str, ...]:
+    """Resolve LANDMARKS for the current SSOT ``library.current_version``."""
+    cached = globals().get("LANDMARKS")
+    if cached is not None:
+        return cached  # type: ignore[no-any-return]
+    from llenergymeasure._engine_archive._dispatcher import load_machinery
+
+    ssot = load_ssot("tensorrt")
+    library = ssot.get("library")
+    if not isinstance(library, dict) or "current_version" not in library:
+        raise ValueError(
+            "engine_versions/tensorrt.yaml is missing library.current_version; "
+            "cannot resolve archived LANDMARKS."
+        )
+    landmarks = load_machinery(
+        engine="tensorrt",
+        version=str(library["current_version"]),
+        producer="static",
+    ).LANDMARKS
+    globals()["LANDMARKS"] = landmarks
+    return landmarks  # type: ignore[no-any-return]
+
+
+def __getattr__(name: str) -> object:
+    """PEP 562 hook: lazy LANDMARKS export from the per-version archive."""
+    if name == "LANDMARKS":
+        return _get_landmarks()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # Class-level landmarks. Each entry is ``(class_name, file_relative_path)``.
 _CLASS_LANDMARKS: tuple[tuple[str, Path], ...] = (
