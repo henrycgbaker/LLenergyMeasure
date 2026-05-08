@@ -9,16 +9,17 @@ This document is the reference for the YAML corpus format: what each field means
 ## File locations
 
 ```
-  src/llenergymeasure/engines/
-  ├── transformers.proposed.yaml   Maintainer-seeded corpus, post-mining
-  ├── transformers.validated.yaml   CI-validated overlay, post-validate-replay
-  └── _staging/
-      ├── transformers_static_miner.yaml   Per-miner staging output (not committed)
-      ├── transformers_dynamic_miner.yaml
-      └── _failed_validation_transformers.yaml  Quarantined rules
+  src/llenergymeasure/engines/{engine}/
+  ├── invariants.proposed.yaml    Maintainer-seeded corpus, post-mining
+  └── invariants.validated.yaml   CI-validated overlay, post-validate-replay
+
+  src/llenergymeasure/engines/{engine}/_staging/   (gitignored, miner-only)
+  ├── {engine}_static_miner.yaml   Per-miner staging output (not committed)
+  ├── {engine}_dynamic_miner.yaml
+  └── _failed_validation_{engine}.yaml   Quarantined rules
 
   src/llenergymeasure/config/engine_invariants/
-  └── loader.py                  Runtime consumer
+  └── loader.py                   Runtime consumer
 ```
 
 The two corpus files form a lifecycle pair: the miner pipeline writes the

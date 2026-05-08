@@ -296,7 +296,7 @@ check_installed_version(
 ```
 
 The envelope itself lives in `engine_versions/{engine}.yaml` under
-`miner_pins.{static|dynamic|discovery}` — one pin per producer role. There
+`miner_pins.{static|dynamic|discovery}` - one pin per producer role. There
 is no per-module `TESTED_AGAINST_VERSIONS` constant; Renovate updates the
 SSOT and every miner reads through `load_miner_pin`.
 
@@ -450,17 +450,17 @@ Library version bumps trigger corpus regeneration automatically. The flow descri
   │         └─────────────────┴────────────────────┘                  │
   │                       ▼                                           │
   │  Per-engine step sequence inside one job:                         │
-  │   1. Probe — scripts._probe checks landmarks; `fail` skips        │
+  │   1. Probe - scripts._probe checks landmarks; `fail` skips        │
   │      downstream and posts a `probe-blocked` comment + label.      │
-  │   2. Mine — build_corpus.py merges staging into                   │
+  │   2. Mine - build_corpus.py merges staging into                   │
   │      src/llenergymeasure/engines/{engine}/invariants.proposed.yaml.            │
-  │   3. Validate-replay — validate_invariants.py --fail-on-divergence         │
+  │   3. Validate-replay - validate_invariants.py --fail-on-divergence         │
   │      replays each rule against the live library inside the        │
   │      engine's Docker container; confirmed cases write to          │
   │      src/llenergymeasure/engines/{engine}/invariants.validated.yaml.            │
-  │   4. Doc-gen — generate_invariants_doc.py refreshes               │
+  │   4. Doc-gen - generate_invariants_doc.py refreshes               │
   │      docs/reference/engines/invariants-{engine}.md.                       │
-  │   5. Atomic writeback — one bot commit covers proposed.yaml,      │
+  │   5. Atomic writeback - one bot commit covers proposed.yaml,      │
   │      validated.yaml, the digest doc, and engine_versions/          │
   │      {engine}.compat.json. Pushed with --force-with-lease.        │
   │                       │                                           │
@@ -509,7 +509,7 @@ The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transforme
                                          (TRANSFORMERS_VERSION → 4.57.6)
                                                   │
                                                   ▼
-  a77aa185                  llem-ci-bot  invariant-miner.yml — validate-tensorrt
+  a77aa185                  llem-ci-bot  invariant-miner.yml - validate-tensorrt
                                          (first cycle; replays existing
                                           tensorrt invariants against live library)
                                                   │
@@ -519,22 +519,22 @@ The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transforme
                                           schema, 1 safe change)
                                                   │
                                                   ▼
-  45e0d75a                  llem-ci-bot  invariant-miner.yml — validate-transformers
+  45e0d75a                  llem-ci-bot  invariant-miner.yml - validate-transformers
                                          (first cycle; replays existing
                                           transformers invariants against new library)
                                                   │
                                                   ▼
-  96d811fb                  llem-ci-bot  auto-mine.yml — mine-transformers
+  96d811fb                  llem-ci-bot  auto-mine.yml - mine-transformers
                                          (Stage 1: regenerated YAML corpus
                                           from miners against new library)
                                                   │
                                                   ▼  (chain validation re-fire)
-  fb473a22                  llem-ci-bot  invariant-miner.yml — validate-transformers
+  fb473a22                  llem-ci-bot  invariant-miner.yml - validate-transformers
                                          (Stage 2 RE-FIRES on auto-mine's
                                           new YAML; validates against new YAML)
                                                   │
                                                   ▼  (delayed; serial runner)
-  75d4c0c1                  llem-ci-bot  invariant-miner.yml — validate-vllm
+  75d4c0c1                  llem-ci-bot  invariant-miner.yml - validate-vllm
                                          (delayed: self-hosted GPU runner is
                                           serial, vLLM job queued behind others)
 ```
@@ -574,7 +574,7 @@ Decision: leave the JSON commit-back in place; revisit when #467 lands.
 
 All miners run inside their engine's Docker image. The host has no engine
 libraries (`import transformers`, `import vllm`, `import tensorrt_llm` all
-fail by design — see [development.md](/contributing/development)), so every engine's
+fail by design - see [development.md](/contributing/development)), so every engine's
 mining stage must run in the matching container.
 
 | Runner | Image | What runs |

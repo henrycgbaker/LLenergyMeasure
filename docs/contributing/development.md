@@ -18,7 +18,7 @@ uv sync --dev
 ```
 
 Installs orchestration dependencies plus dev tools (pytest, ruff, mypy,
-import-linter). **No engine libraries are installed on host** —
+import-linter). **No engine libraries are installed on host** -
 `import transformers`, `import vllm`, and `import tensorrt_llm` will all fail
 on host. That is the contract, not a bug.
 
@@ -47,7 +47,7 @@ docker run --rm \
 ```
 
 Replace `transformers` with `vllm` or `tensorrt` (and add `--gpus all` for
-those two — they need a CUDA device) for the other engines. The automated
+those two - they need a CUDA device) for the other engines. The automated
 path is the `engine-pipeline.yml` orchestrator in `.github/workflows/`, which
 fans out per-engine cells (the `_engine-invariants-cell.yml` and
 `_engine-schemas-cell.yml` reusables) plus an inline `build-transformers`
@@ -87,7 +87,7 @@ The principled rationale:
    LLenergyMeasure's runtime non-engine deps (pydantic, typer, pyyaml,
    platformdirs, nvidia-ml-py, numpy, pyarrow, tqdm, rich, python-dotenv,
    filelock). The `llenergymeasure` package itself is NOT installed into the
-   image — it is bind-mounted at runtime via `-v <repo>:/llem-src` +
+   image - it is bind-mounted at runtime via `-v <repo>:/llem-src` +
    `PYTHONPATH=/llem-src`, identically to the vllm + tensorrt cells. This
    keeps image rebuilds dependent only on the engine substrate, not on
    project source edits, so `src/` changes never invalidate the FA3 layer.
@@ -98,9 +98,9 @@ The principled rationale:
    defaults to `true` and is not overridden in any workflow). Cold builds
    on a brand-new SSOT version still pay the FA3 compile (~30-60 min); warm
    rebuilds reuse the GHA scope cache + the canonical `:latest` registry
-   cache and finish in a few minutes. The previous shape — engine-invariants
+   cache and finish in a few minutes. The previous shape - engine-invariants
    and engine-schemas each running their own buildx step against the same
-   per-version GHA scope — was prone to cache-write contention and observed
+   per-version GHA scope - was prone to cache-write contention and observed
    to deadlock at PR time on multi-GB layer writes.
 
 ## CI pipeline ordering
@@ -145,7 +145,7 @@ When Renovate bumps `engine_versions/vllm.yaml` or
 images directly (no first-party build).
 
 A weekly scheduled run (Monday 05:37 UTC) fires `build-transformers`
-with `--no-cache` for drift detection — if the resulting layer cache
+with `--no-cache` for drift detection - if the resulting layer cache
 diverges from the prior `:<VERSION>-buildcache`, that surfaces external
 dependency drift (apt repo, PyPI wheel re-publish, base image silent
 update) that layer caching alone wouldn't catch. Cells skip on schedule
@@ -157,7 +157,7 @@ production consumers.
 
 ## Running tests
 
-Host tests (the majority — orchestration, config, energy scaffolding, CLI):
+Host tests (the majority - orchestration, config, energy scaffolding, CLI):
 
 ```bash
 uv run pytest tests/
@@ -195,7 +195,7 @@ engine producer runs inside its own image, period. The host lock has no
 engine deps and resolves cleanly; Renovate stops OOMing; CUDA-on-import is
 no longer a host problem.
 
-The cost — slower iteration on engine code (Docker build + run vs `python -m`)
-— is a non-issue because engine-touching iteration was already Docker-bound
+The cost - slower iteration on engine code (Docker build + run vs `python -m`)
+- is a non-issue because engine-touching iteration was already Docker-bound
 in practice. This contract just stops pretending host imports work for those
 paths.

@@ -24,7 +24,7 @@ Before writing any code, answer these questions:
 
 3. Does the engine constructor raise on invalid inputs, or silently normalise them? (Transformers and vLLM raise; TRT-LLM constructors are more permissive, so TRT-LLM has no dynamic miner.)
 
-4. What is the CUDA / import dependency? Engines have no host install path — they are imported only inside their per-engine Docker images (see [development.md](/contributing/development)). Within the engine container, can the miner `import enginelib` on the CPU phase of the build, or does the import require a live CUDA runtime? (vLLM: importable inside `llenergymeasure:vllm-${VER}` without GPU at probe time; TRT-LLM: requires CUDA-aware import even inside the NGC container.)
+4. What is the CUDA / import dependency? Engines have no host install path - they are imported only inside their per-engine Docker images (see [development.md](/contributing/development)). Within the engine container, can the miner `import enginelib` on the CPU phase of the build, or does the import require a live CUDA runtime? (vLLM: importable inside `llenergymeasure:vllm-${VER}` without GPU at probe time; TRT-LLM: requires CUDA-aware import even inside the NGC container.)
 
 5. What is a realistic post-validation-CI invariant count? (Transformers: 46; vLLM: 80-110; TRT-LLM: 20-28.) This helps plan the scope.
 
@@ -390,12 +390,12 @@ def test_landmark_checks_raise_on_missing():
 ## Step 7: Add to CI
 
 1. Decide the engine's CI shape:
-   - **Upstream image consumer** (vllm / tensorrt pattern) — add a per-engine
+   - **Upstream image consumer** (vllm / tensorrt pattern) - add a per-engine
      job to `engine-pipeline.yml` and `engine-pipeline.yml` mirroring the
      existing `invariants-vllm` / `schemas-vllm` (or `*-tensorrt`) jobs. The
      job pulls the upstream canonical image, then runs probe → mine →
      validate → doc-gen → atomic-writeback inline.
-   - **First-party image (transformers pattern)** — split the build out into
+   - **First-party image (transformers pattern)** - split the build out into
      a pair of workflows modelled on `engine-pipeline.yml` (build + cache
      export, no runtime push) and `publish-engine-image.yml` (workflow_run-
      triggered, pulls cache + pushes runtime tags per parent event). The
@@ -405,7 +405,7 @@ def test_landmark_checks_raise_on_missing():
      of the heavy from-source compile (e.g. ~30 min FA3 compile) on retry.
 
 2. Set the runner: every engine miner runs inside its own Docker image
-   (no host extras exist — see [development.md](/contributing/development)). For the
+   (no host extras exist - see [development.md](/contributing/development)). For the
    upstream-image pattern, mirror `invariants-vllm` as the template for
    engines whose miners need a GPU only for `import`-time reasons; use
    `invariants-tensorrt` as the template for engines whose Python source
@@ -417,11 +417,11 @@ def test_landmark_checks_raise_on_missing():
    pattern, mirror `engine-pipeline.yml` + `publish-engine-image.yml` + the
    workflow_run-gated cell pair in engine-pipeline.yml / engine-pipeline.yml.
 
-3. The validate step runs inside the engine's container in the same job as the miner — no separate validation workflow to update.
+3. The validate step runs inside the engine's container in the same job as the miner - no separate validation workflow to update.
 
 4. Add a Renovate `packageRule` so library bumps trigger the appropriate
    workflow via the `engine_versions/{engine}.yaml` path filter (or, for
-   the first-party-image pattern, via `engine-pipeline.yml`'s filter —
+   the first-party-image pattern, via `engine-pipeline.yml`'s filter -
    downstream `publish-engine-image.yml` and the workflow_run-gated cells fire
    automatically on its success).
 

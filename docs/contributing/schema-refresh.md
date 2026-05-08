@@ -1,9 +1,9 @@
 # Parameter Discovery Pipeline
 
 Engine parameter schemas are stored as JSON files in
-`src/llenergymeasure/src/llenergymeasure/engines/`. When an upstream engine
-releases a new version, these schemas must be regenerated so that config
-validation stays in sync with the engine's actual parameters.
+`src/llenergymeasure/engines/{engine}/schema.discovered.json`. When an
+upstream engine releases a new version, these schemas must be regenerated
+so that config validation stays in sync with the engine's actual parameters.
 
 This pipeline automates that process end-to-end.
 
@@ -99,7 +99,7 @@ Compares ARG version in Dockerfile vs engine_version in schema JSON
 On failure, the developer can either:
 - Run locally: `./scripts/refresh_discovered_schemas.sh <engine>`
 - Trigger remotely: `gh workflow run engine-pipeline.yml --field engine=<engine> --field pr_number=<N>`
-  (for transformers, run `engine-pipeline.yml` instead — the
+  (for transformers, run `engine-pipeline.yml` instead - the
   `schemas-transformers` job in `engine-pipeline.yml` is `workflow_run`-gated
   on Publish engine image success, which itself chains off Build engine image,
   so the chain re-fires automatically once the build completes)

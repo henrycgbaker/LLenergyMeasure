@@ -7,20 +7,20 @@ description: Where LLenergyMeasure is, where it is going, and what stays stable.
 
 ## Where we are
 
-**Current version: 0.10.0 (Milestone 4)**
-
-Four milestones shipped:
+Released milestones:
 
 | Version | What shipped |
 |---------|-------------|
-| v0.7.0 | Core single-experiment: CLI, config system, PyTorch/Transformers engine, energy measurement, results schema |
+| v0.7.0 | Core single-experiment: CLI, config system, Transformers engine, energy measurement, results schema |
 | v0.8.0 | Study/sweep: multi-experiment grid sweeps, manifest writer, deduplication, subprocess isolation |
 | v0.9.0 | Docker + vLLM: containerised engine architecture, vLLM engine, Docker CI, logging overhaul |
-| v0.10.0 | TensorRT-LLM: NGC container integration, engine-parameter curation pipeline, CI orchestrator redesign |
 
-The current release is a pre-1.0 research tool. It is production-ready for
-single-machine research use but not yet at the stability and API-stability bar
-of a 1.0 release.
+The TensorRT-LLM milestone (M4 / v0.10.0) is implementation-complete and in
+final UAT before tagging. Run `llem --version` against your installed package
+for the authoritative current version.
+
+Pre-1.0 disclaimer: the tool is research-grade for single-machine use. It is
+not yet at the stability and API-stability bar of a 1.0 release.
 
 ---
 
@@ -56,11 +56,13 @@ Under consideration (not yet scoped):
 The following are stable across pre-1.0 minor versions and will not change
 without a deprecation notice:
 
-- **`ExperimentResult` top-level fields** - `energy`, `performance`, `timing`,
-  `config`, `metadata`. New fields may be added; existing fields will not be
-  renamed or removed.
-- **Study config top-level keys** - `experiment`, `sweep`, `execution`. Key
-  names and their structural role will not change.
+- **`ExperimentResult` schema** - the flat result shape and the headline
+  fields (`total_energy_j`, `energy_adjusted_j`, `mj_per_tok_adjusted`,
+  `avg_tokens_per_second`, `total_inference_time_sec`, `total_flops`).
+  New fields may be added; existing fields will not be renamed or removed.
+- **Study config top-level keys** - `task`, `sweep`, `experiments`,
+  `study_execution`, `runners`. Key names and their structural role will
+  not change.
 - **CLI commands** - `llem run` and `llem config` are stable. Flag names
   (`--model`, `--engine`, `--dtype`) are stable.
 
