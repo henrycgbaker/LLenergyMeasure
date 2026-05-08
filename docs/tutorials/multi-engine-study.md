@@ -8,18 +8,23 @@ import TabItem from '@theme/TabItem';
 
 # Multi-engine implementation-parameter study
 
-This is the flagship tutorial. We'll measure how four implementation choices —
-**numerical precision, batching, attention backend, KV-cache reuse** —
-affect the energy and efficiency profile of the same model across
-Transformers, vLLM, and TensorRT-LLM. By the end you'll have a structured
-result you can chart, and you'll know how to design your own
-implementation-parameter sweeps.
+This is the flagship tutorial. We'll measure how four representative
+implementation choices - numerical precision, batching, attention
+backend, KV-cache reuse - affect the energy and efficiency profile of
+the same model across Transformers, vLLM, and TensorRT-LLM. By the end
+you'll have a structured result you can chart, and you'll know how to
+design your own implementation-parameter sweeps.
+
+These four are illustrative, not exhaustive. Every parameter declared
+by an engine is exposed programmatically and can be swept; we picked
+four that exercise different layers of the stack. The point of the
+exercise is the workflow, not the parameter list.
 
 The framing matters. This is the question `llem` is built to answer:
-*given a fixed open-source model, how do downstream implementation choices
-shape its inference cost?* Most adjacent tools optimise the other axis —
-"given a fixed implementation, how do models compare?" That's a useful
-question too, but it's not this one.
+*given a fixed open-source model, how do downstream implementation
+choices shape its inference cost?* Most adjacent tools optimise the
+other axis - "given a fixed implementation, how do models compare?"
+That's a useful question too, but it's not this one.
 
 > **Compute time:** ~30 minutes on a single A100-class GPU once Docker
 > images are pulled, plus ~5 minutes of one-time TensorRT-LLM engine
@@ -28,11 +33,11 @@ question too, but it's not this one.
 
 ## Prerequisites
 
-- A working install of `llenergymeasure` — see
+- A working install of `llenergymeasure` - see
   [How to install](/how-to/install).
 - Docker + NVIDIA Container Toolkit operational and `llem doctor`
-  passing — see [Docker setup](/how-to/docker-setup).
-- All three engine images either built locally or pullable from GHCR —
+  passing - see [Docker setup](/how-to/docker-setup).
+- All three engine images either built locally or pullable from GHCR -
   see [Contributing > Development](/contributing/development) for the
   build pattern.
 - ~30 GB of free disk for caches (model weights + TRT-LLM compiled
@@ -41,27 +46,27 @@ question too, but it's not this one.
   [first-measurement tutorial](/tutorials/first-measurement) so the
   shape of `llem run` and `result.json` is familiar.
 
-## Step 1 — Sketch the question
+## Step 1 - Sketch the question
 
 Before writing config, sketch what you expect. This is a research
 discipline, not a measurement step.
 
 The four parameters in this tutorial are chosen because they exercise
-*different layers of the inference stack* and have plausible — but
-not pre-assumed — energy effects:
+*different layers of the inference stack* and have plausible - but
+not pre-assumed - energy effects:
 
 | Parameter | What it changes | Expected effect on energy |
 |-----------|-----------------|---------------------------|
 | **dtype** (`float16` vs `bfloat16`) | Per-element precision of weights/activations | Probably small for a 0.5B model; bf16 may shift error patterns without changing FLOPs |
 | **Batch size / max_num_seqs / max_batch_size** | How many prompts share a kernel call | Larger batches → higher GPU utilisation → lower J/token (until VRAM saturates) |
 | **Attention backend** (`sdpa` vs `flash_attention_2`; `flash_attn` vs `flashinfer`) | Kernel implementation of attention | Flash-attn-style backends typically reduce HBM traffic → lower energy |
-| **KV-cache reuse** (vLLM prefix caching; TRT-LLM block reuse) | Whether prefix tokens are recomputed across overlapping prompts | Workload-dependent — large effect if prompts share prefix, near-zero otherwise |
+| **KV-cache reuse** (vLLM prefix caching; TRT-LLM block reuse) | Whether prefix tokens are recomputed across overlapping prompts | Workload-dependent - large effect if prompts share prefix, near-zero otherwise |
 
 We don't pre-assume the answers. The point of measurement is to find
 them. But **writing them down before running** is what separates
 "I ran a benchmark" from "I tested a hypothesis."
 
-## Step 2 — Read the study config
+## Step 2 - Read the study config
 
 The shipped config lives at
 [`configs/tutorials/tutorial-multi-engine.yaml`](https://github.com/henrycgbaker/llenergymeasure/blob/main/configs/tutorials/tutorial-multi-engine.yaml).
@@ -78,7 +83,7 @@ runners:
 
 All three engines in Docker. `runners` is what pins each engine to its
 isolated image, so the host doesn't need to import any engine. This is
-the only correct way to compare engines side-by-side — without
+the only correct way to compare engines side-by-side - without
 isolation, library-version conflicts (e.g. transformers ↔ vllm pinned
 versions) cross-contaminate the measurement.
 
@@ -99,7 +104,7 @@ task:
 ```
 
 Same model + same prompts + same token budget across every cell of the
-sweep. This is what makes cross-cell comparison legitimate — only the
+sweep. This is what makes cross-cell comparison legitimate - only the
 varied parameters differ.
 
 `max_input_tokens` and `max_output_tokens` *control* the FLOPs budget.
@@ -123,27 +128,27 @@ measurement:
 sampler available (NVML → Zeus → CodeCarbon, in that order). The
 30-second baseline measures idle GPU power *before* each experiment so
 the result file's `Adjusted` energy figure reflects only the inference
-work — see [How to interpret results](/how-to/interpret-results).
+work - see [How to interpret results](/how-to/interpret-results).
 
 The sweep section is where the implementation parameters live:
 
 ```yaml
 sweep:
-  # 1. Numerical precision — applies to all three engines.
+  # 1. Numerical precision - applies to all three engines.
   transformers.dtype: [float16, bfloat16]
   vllm.dtype: [float16, bfloat16]
   tensorrt.dtype: [float16, bfloat16]
 
-  # 2. Batching strategy — engine-native parameter names.
+  # 2. Batching strategy - engine-native parameter names.
   transformers.batch_size: [4, 16]
   vllm.engine.max_num_seqs: [64, 256]
   tensorrt.max_batch_size: [4, 16]
 
-  # 3. Attention backend — measurable energy effect on prefill-heavy work.
+  # 3. Attention backend - measurable energy effect on prefill-heavy work.
   transformers.attn_implementation: [sdpa, flash_attention_2]
   vllm.attention.backend: [flash_attn, flashinfer]
 
-  # 4. KV-cache reuse — affects steady-state throughput and energy.
+  # 4. KV-cache reuse - affects steady-state throughput and energy.
   vllm.engine.enable_prefix_caching: [true, false]
   tensorrt.kv_cache_reuse:
     - {}
@@ -156,7 +161,7 @@ key prefix (`transformers.`, `vllm.`, `tensorrt.`). When the sweep
 expander processes an experiment cell whose engine is `vllm`, only
 `vllm.*` axes are applied to it; the `transformers.*` and
 `tensorrt.*` axes are skipped. This is what makes cross-engine sweeps
-sensible — you don't end up with `vllm.engine.max_num_seqs=64` mixed
+sensible - you don't end up with `vllm.engine.max_num_seqs=64` mixed
 into a Transformers experiment.
 
 The `tensorrt.kv_cache_reuse` group illustrates a **dependent group**:
@@ -165,7 +170,7 @@ the group as a whole is crossed against other axes. The empty `{}`
 is the baseline; the second entry sets two related fields together.
 This is the right way to sweep parameters that travel in pairs.
 
-## Step 3 — Dry-run, then run
+## Step 3 - Dry-run, then run
 
 Before kicking off the real run, validate the config and see how many
 experiments will actually execute:
@@ -187,7 +192,7 @@ Study: tutorial-multi-engine
   Per-engine breakdown:
     transformers: 16 (dtype × batch_size × attn × cycles)
     vllm: 16 (dtype × max_num_seqs × attn × prefix_caching)
-    tensorrt:  4 (dtype × max_batch_size × kv_cache_reuse — 1 cycle)
+    tensorrt:  4 (dtype × max_batch_size × kv_cache_reuse - 1 cycle)
   VRAM estimate (per engine): ~4 GB peak (Qwen2.5-0.5B in bf16)
   Estimated wall-clock: 28 min (excluding TRT-LLM first-build ~5 min)
 ```
@@ -223,7 +228,7 @@ You'll see a progress indicator with experiment counters and the
 running cell's identifier. Each result lands in
 `results/tutorial-multi-engine_<timestamp>/<NNN_cN_*>/result.json`.
 
-## Step 4 — Inspect the manifest and a single result
+## Step 4 - Inspect the manifest and a single result
 
 After the run completes, the study directory looks roughly like this:
 
@@ -268,16 +273,16 @@ A single `result.json` looks like (truncated for readability):
 > sample.** The structure is stable.
 
 The two energy-per-token figures are the headline:
-- `mj_per_tok_total` — millijoules per output token, raw GPU energy
-- `mj_per_tok_adjusted` — same, with idle baseline subtracted
+- `mj_per_tok_total` - millijoules per output token, raw GPU energy
+- `mj_per_tok_adjusted` - same, with idle baseline subtracted
 
-For cross-cell comparison the **adjusted** figure is the right pick —
+For cross-cell comparison the **adjusted** figure is the right pick -
 it isolates inference work from the cost of having a GPU plugged in.
 The full reasoning is on the
 [methodology page](/explanation/methodology/methodology) and the
 [energy-measurement explanation](/explanation/methodology/energy-measurement).
 
-## Step 5 — Compare across engines in Python
+## Step 5 - Compare across engines in Python
 
 Loading and grouping results uses the public API. Drop this snippet
 into a Python file alongside your study directory:
@@ -322,7 +327,7 @@ vllm           float16                   86.5    8
 > **Sample numbers above; the *ordering* of magnitudes is what's
 > directionally meaningful**, not the precise values. On A100 you
 > typically see TRT-LLM lowest, vLLM middle, Transformers highest
-> for the per-token energy figure — but the gap between dtypes is
+> for the per-token energy figure - but the gap between dtypes is
 > often within noise for a 0.5B model.
 
 To go further: group by `(engine, batch_size_effective)` and plot
@@ -331,7 +336,7 @@ mJ/token vs batch size, or pivot on `attn_implementation` /
 The result.json schema makes this kind of analysis a few lines of
 Python.
 
-## Step 6 — What you've learned and where to go next
+## Step 6 - What you've learned and where to go next
 
 You've now exercised the full `llem` workflow:
 
@@ -346,25 +351,25 @@ You've now exercised the full `llem` workflow:
   (mJ/token, tokens/sec) that allow cross-engine comparison
 
 The shape of every research workflow with `llem` looks like this. The
-*specifics* — which parameters, which model, which task — change with
+*specifics* - which parameters, which model, which task - change with
 your question.
 
 ### Sister recipes (How-to)
 
-- [Run with vLLM (Docker)](/how-to/run-with-docker-vllm) — single-engine recipe
-- [Run with TensorRT-LLM (Docker)](/how-to/run-with-tensorrt-llm) — single-engine recipe
-- [Interpret results](/how-to/interpret-results) — field-by-field walkthrough of `result.json`
-- [Troubleshoot](/how-to/troubleshoot) — when a cell fails or a metric looks wrong
+- [Run with vLLM (Docker)](/how-to/run-with-docker-vllm) - single-engine recipe
+- [Run with TensorRT-LLM (Docker)](/how-to/run-with-tensorrt-llm) - single-engine recipe
+- [Interpret results](/how-to/interpret-results) - field-by-field walkthrough of `result.json`
+- [Troubleshoot](/how-to/troubleshoot) - when a cell fails or a metric looks wrong
 
 ### Reference
 
-- [Study config](/reference/study-config) — full sweep / runner / measurement field listing
-- [CLI](/reference/cli) — every `llem run` flag (resume, fail-fast, etc.)
-- [Engine configuration](/reference/engines/configuration) — per-engine parameter spaces
+- [Study config](/reference/study-config) - full sweep / runner / measurement field listing
+- [CLI](/reference/cli) - every `llem run` flag (resume, fail-fast, etc.)
+- [Engine configuration](/reference/engines/configuration) - per-engine parameter spaces
 
 ### Conceptual depth (Explanation)
 
-- [Methodology](/explanation/methodology/methodology) — warmup, baseline, thermal management
-- [What we measure](/explanation/methodology/what-we-measure) — energy / throughput / FLOPs
-- [Parameter discovery](/explanation/architecture/parameter-discovery) — how the engine-introspected parameter spaces are mined
-- [Comparison context](/explanation/methodology/comparison-context) — relationship to MLPerf, AI Energy Score
+- [Methodology](/explanation/methodology/methodology) - warmup, baseline, thermal management
+- [What we measure](/explanation/methodology/what-we-measure) - energy / throughput / FLOPs
+- [Parameter discovery](/explanation/architecture/parameter-discovery) - how the engine-introspected parameter spaces are mined
+- [Comparison context](/explanation/methodology/comparison-context) - relationship to MLPerf, AI Energy Score

@@ -1,6 +1,6 @@
 ---
 title: Your first measurement
-description: Measure GPT-2 energy in five minutes — install, run, read the result.
+description: Measure GPT-2 energy in five minutes - install, run, read the result.
 ---
 
 import Tabs from '@theme/Tabs';
@@ -14,13 +14,13 @@ In the next five minutes you'll install `llenergymeasure`, run a measurement on 
 - What a single experiment measures (energy, throughput, FLOPs)
 - Where results are written and how to read them
 
-This is a **tutorial** — guided and linear. For goal-driven recipes
+This is a **tutorial** - guided and linear. For goal-driven recipes
 (e.g. *"how do I run with vLLM?"*), see [How-to](/how-to/install).
 
 ## Prerequisites
 
-- `llenergymeasure` installed — see [How to install](/how-to/install)
-- Docker + NVIDIA Container Toolkit — every engine, including PyTorch
+- `llenergymeasure` installed - see [How to install](/how-to/install)
+- Docker + NVIDIA Container Toolkit - every engine, including
   Transformers, runs inside a per-engine Docker image
 - An NVIDIA GPU available
 
@@ -31,7 +31,7 @@ llem config
 ```
 
 Check that the output shows your GPU detected and an energy sampler
-selected. Engines will show as "not installed" on host — that is expected;
+selected. Engines will show as "not installed" on host - that is expected;
 they run inside Docker. See the [Docker setup how-to](/how-to/docker-setup)
 if any of the pre-flight checks fail.
 
@@ -64,20 +64,20 @@ Default settings: 100 prompts, `aienergyscore` dataset, `bfloat16` dtype.
 You'll see a progress indicator on stderr, then results printed to stdout:
 
 ```
-Result: gpt2-transformers-bf16-2026-05-07T14-32-08     ← unique experiment ID
+Result: gpt2_20260507_143208                     # unique experiment ID
 
-Energy                                          ← GPU energy consumed
-  Total          847 J                          ← total joules for all 100 prompts
-  Baseline       12.3 W                         ← idle GPU power (subtracted from total)
-  Adjusted       723 J                          ← energy minus baseline × duration
+Energy                                           # GPU energy consumed
+  Total          847 J                           # total joules for all 100 prompts
+  Baseline       12.3 W                          # idle GPU power (subtracted from total)
+  Adjusted       723 J                           # energy minus baseline x duration
 
-Performance                                     ← throughput and compute
-  Throughput     312 tok/s                      ← output tokens per second (all 100 prompts)
-  FLOPs          4.21e+11 (roofline, medium)    ← estimated FLOPs (method, confidence)
+Performance                                      # throughput and compute
+  Throughput     312 tok/s                       # output tokens per second
+  FLOPs          4.21e+11                        # estimated from architecture
 
-Timing                                          ← wall-clock time
-  Duration       1m 38s                         ← total experiment wall time
-  Warmup         5 prompts excluded             ← thermal stabilisation prompts (not in metrics)
+Timing                                           # wall-clock time
+  Duration       1m 38s                          # total experiment wall time
+  Warmup         5 prompts excluded              # thermal stabilisation, not in metrics
 ```
 
 ## Step 3: Read the results
@@ -88,7 +88,7 @@ Each field maps to a measurement decision:
 |-------|-----------------|
 | `Total` (J) | Raw GPU energy consumed during the experiment |
 | `Baseline` (W) | Idle GPU power measured before the run |
-| `Adjusted` (J) | Energy minus `Baseline × Duration` — net inference energy |
+| `Adjusted` (J) | Energy minus `Baseline x Duration` - net inference energy |
 | `Throughput` (tok/s) | Output tokens generated per second across all prompts |
 | `FLOPs` | Estimated floating-point operations (method and confidence shown) |
 | `Duration` | Wall-clock time for the full experiment |
@@ -105,11 +105,11 @@ Results are written to `results/` by default:
 
 ```
 results/
-└── gpt2-transformers-bf16-2026-05-07T14-32-08/
+└── gpt2_20260507_143208/
     └── result.json        # full record (all metrics, config, metadata)
 ```
 
-The JSON file is the scientific record — all raw metrics, the resolved
+The JSON file is the scientific record - all raw metrics, the resolved
 config, timestamps, and any measurement warnings. See
 [How to interpret results](/how-to/interpret-results) for a walkthrough.
 
@@ -127,7 +127,7 @@ Keep the `result.json` and `effective_config.json` together. The config file rec
 
 - `llem run` runs one experiment end-to-end, writes a `result.json`, prints a
   human-readable summary.
-- Even Transformers/PyTorch runs go through a Docker image — keeps the
+- Even Transformers runs go through a Docker image - keeps the
   measurement environment reproducible.
 - Energy is measured *and* baseline-adjusted; both numbers ship in the
   result file so you can pick the framing your study needs.
@@ -136,5 +136,5 @@ Keep the `result.json` and `effective_config.json` together. The config file rec
 
 - [How to: run with vLLM (Docker)](/how-to/run-with-docker-vllm)
 - [How to: run with TensorRT-LLM (Docker)](/how-to/run-with-tensorrt-llm)
-- [Reference: study config](/reference/study-config) — sweep syntax for multi-experiment studies
-- [Reference: CLI](/reference/cli) — every `llem` flag
+- [Reference: study config](/reference/study-config) - sweep syntax for multi-experiment studies
+- [Reference: CLI](/reference/cli) - every `llem` flag
