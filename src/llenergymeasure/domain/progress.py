@@ -146,7 +146,7 @@ class StudyProgressCallback(ProgressCallback, Protocol):
 
         Args:
             index: 1-based experiment position in the study.
-            header: Pre-built display string (e.g. "Qwen2.5-0.5B / pytorch / bf16 batch=4").
+            header: Pre-built display string (e.g. "Qwen2.5-0.5B / transformers / bf16 batch=4").
                     Built by ``format_experiment_header()`` in ``utils/formatting.py``.
             steps: Ordered step names for this experiment's [x/y] counter.
             runner_info: Optional dict with runner/image provenance for display:

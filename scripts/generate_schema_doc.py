@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the discovered-schema doc for one engine.
 
-Produces ``docs/generated/schema-{engine}.md`` from the introspector-mined
+Produces ``docs/reference/engines/schema-{engine}.md`` from the introspector-mined
 JSON at ``src/llenergymeasure/engines/<engine>/schema.discovered.json``. The output
 is a per-engine reference of every parameter the engine exposes, with
 type, default, description, and deprecation state, plus any limitations
@@ -10,7 +10,7 @@ the introspector flagged.
 Run::
 
     python scripts/generate_schema_doc.py --engine transformers \\
-        --out docs/generated/schema-transformers.md
+        --out docs/reference/engines/schema-transformers.md
 """
 
 from __future__ import annotations
