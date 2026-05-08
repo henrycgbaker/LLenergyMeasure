@@ -149,10 +149,10 @@ detection rebuild every Monday, so version drift is caught even without a PR.
 - Edge-case handling - hardware checks, graceful degradation, compatibility
   errors for unsupported configurations. These are engine-specific.
 
-## Worked forecast: SGLang as M5 engine
+## Worked forecast: SGLang as the next engine
 
-SGLang is the planned M5 engine. Given the current contract, the delivery
-checklist is:
+SGLang is the planned next engine. Given the current contract, the
+delivery checklist is:
 
 **Manual work:**
 

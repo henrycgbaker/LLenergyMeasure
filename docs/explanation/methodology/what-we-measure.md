@@ -69,8 +69,10 @@ reading distinguishes the two.
 ## FLOPs (floating-point operations) {#flops}
 
 An estimate of the floating-point operations the model executes per
-inference. Reported as `flops_estimate` with a method tag (`roofline`,
-`analytical`, `profiled`) and a confidence level.
+inference. The headline field is `total_flops` (reference metadata);
+derived fields `flops_per_output_token`, `flops_per_input_token`, and
+`flops_per_second` are computed from `total_flops` against the matching
+token / time denominators when those are non-zero.
 
 **FLOPs is a validity check, not a headline metric.** This is a
 deliberate framing choice. FLOPs are largely invariant across
@@ -90,8 +92,9 @@ likely cause is methodological:
 - the prompts or output budget weren't actually held fixed across cells;
 - the model architecture differs (e.g. a quantised variant has fewer
   effective FLOPs even though the parameter count is unchanged);
-- the FLOPs estimator's confidence is `low` and the cells happen to be
-  near a boundary in the estimator's heuristic.
+- the FLOPs estimator's heuristic is hitting an architecture boundary
+  it does not fully recognise (estimator quality varies across model
+  families).
 
 So FLOPs functions as a **sanity-check backstop**: if cells diverge on
 FLOPs, something is wrong with the experiment design, not with the

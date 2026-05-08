@@ -15,7 +15,7 @@ Released milestones:
 | v0.8.0 | Study/sweep: multi-experiment grid sweeps, manifest writer, deduplication, subprocess isolation |
 | v0.9.0 | Docker + vLLM: containerised engine architecture, vLLM engine, Docker CI, logging overhaul |
 
-The TensorRT-LLM milestone (M4 / v0.10.0) is implementation-complete and in
+The TensorRT-LLM release (v0.10.0) is implementation-complete and in
 final UAT before tagging. Run `llem --version` against your installed package
 for the authoritative current version.
 

@@ -100,10 +100,11 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Methodology list
+   Content list (used by methodology bullets, boundary bullets, and any
+   prose-bullet list inside a Section)
 --------------------------------------------------------------------------- */
 
-.methodologyList {
+.contentList {
   font-size: 1rem;
   line-height: 1.8;
   color: var(--ifm-color-emphasis-700);
@@ -111,23 +112,7 @@
   margin-bottom: 1.25rem;
 }
 
-.methodologyList li {
-  margin-bottom: 0.25rem;
-}
-
-/* ---------------------------------------------------------------------------
-   Boundary list
---------------------------------------------------------------------------- */
-
-.boundaryList {
-  font-size: 1rem;
-  line-height: 1.8;
-  color: var(--ifm-color-emphasis-700);
-  padding-left: 1.5rem;
-  margin-bottom: 1.25rem;
-}
-
-.boundaryList li {
+.contentList li {
   margin-bottom: 0.25rem;
 }
 

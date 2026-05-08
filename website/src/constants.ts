@@ -14,6 +14,8 @@ export const ROUTES = {
   reference: '/reference/cli',
   explanation: '/explanation/overview',
   contributing: '/contributing/development',
+  // Deep route used by the landing-page hero secondary CTA.
+  why: '/explanation/why',
 } as const;
 
 export const GITHUB_REPO = 'https://github.com/henrycgbaker/llenergymeasure';

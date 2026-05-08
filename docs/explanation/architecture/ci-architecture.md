@@ -62,8 +62,9 @@ flowchart LR
   two JSON arrays of cell-objects for the vllm + tensorrt matrix. The
   arrays are the
   [#564](https://github.com/henrycgbaker/llenergymeasure/issues/564)
-  dynamic-engine-matrix mechanism - adding M5 SGLang as engine #4 means
-  appending one line to the JSON-emit step rather than declaring new jobs.
+  dynamic-engine-matrix mechanism - adding SGLang as the next engine
+  means appending one line to the JSON-emit step rather than declaring
+  new jobs.
 
 - **Bot token mint** is per-cell + per-writeback (each consumer mints
   its own via `actions/create-github-app-token@v1`). Cross-job
@@ -320,7 +321,7 @@ gh run list --workflow="Engine invariants cell" --json databaseId,headBranch,job
 Reusable-workflow runs appear as their own top-level entries in the
 Actions tab (with their reusable's `name:` as the workflow name).
 
-## Adding a new engine (M5+)
+## Adding a new engine
 
 A future engine (e.g. SGLang) is absorbed in three places:
 

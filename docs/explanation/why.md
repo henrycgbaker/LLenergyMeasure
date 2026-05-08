@@ -178,44 +178,38 @@ Concrete near-term directions:
   stabilise.
 - **Adaptive sweep sampling.** Programmatic discovery + invariant
   mining keeps the tractable parameter space large; further reductions
-  would come from adaptive sampling that prioritises cells most
-  informative about the impl-effect question (Bayesian-optimisation-
-  over-a-sweep-budget being the most natural shape). Useful when the
-  cartesian product remains beyond a single researcher's compute
-  budget.
+  would come from adaptive sampling that prioritises experiments most
+  informative about the impl-effect question.
 - **Open-science result database.** A web frontend that lets users
   submit results against a shared schema. The bundled environment-
   snapshot metadata (hardware, drivers, library versions, sampler
-  configuration) means submissions are comparable across labs; over
-  time this accumulates a corpus of impl-effect measurements across
-  hardware classes, engines, and model families that no single
-  researcher could otherwise assemble.
-
-Inference is also shifting in shape. Reasoning models do multi-pass
-under uncertainty; agentic harnesses chain tool-use over many model
-calls; scaffolds add re-prompting, verifier passes, and sampling-
-strategy variation as first-class parts of the workload. In these
-settings, implementation detail dominates energy budgets even more
-than in the single-pass case. A reasoning model with 10x output-length
-variance produces something near 10x energy variance; an agentic loop
-with adaptive depth produces energy distributions that are not
-well-summarised by a single mean-tokens-per-call number.
-
-The plugin architecture is sized for these workloads. Sampling-strategy
-plugins, per-call energy attribution, and harness-aware metrics
-(distribution rather than mean; tail behaviour rather than centre) are
-natural extensions of the existing contract rather than redesigns.
-Open-source agent harnesses are appearing in increasing numbers, and
-the research community will need a measurement primitive that does not
-flatten their distributional structure. The agentic layer is exactly
-the kind of place where energy attribution per-call,
-per-tool-invocation, and per-decision-step matters - and exactly the
-kind of place where measurement tools that report a single
-mean-energy-per-inference figure stop being useful.
-
-This is forward-looking, and is flagged here without commitment to a
-specific delivery shape. The current contribution is the present tool;
-the future direction is what the present tool is sized for.
+  configuration) means submissions are comparable across hardware classes
+  and devices.
+- **Reasoning models.** Multi-pass-under-uncertainty inference makes
+  the *generated token count* - not the visible answer length - the
+  dominant driver of per-call energy. The model produces an internal
+  reasoning trace (the thinking tokens, scratchpad, or hidden
+  chain-of-thought) before emitting the final answer the user sees;
+  the GPU pays energy for the full stream, and the hidden portion is
+  often much longer than the visible portion. A 10x variance in total
+  generated tokens produces something near 10x energy variance, and
+  the resulting distribution is not well-summarised by a single
+  mean-energy-per-call figure - especially because the variance has no
+  surface signal in the visible output. The natural extension is at
+  the metrics layer: distributional summaries (percentiles, tail
+  behaviour) and sampling-strategy plugins, rather than a redesign of
+  the engine contract.
+- **Agentic harnesses.** Tool-use chains, re-prompting scaffolds, and
+  verifier passes turn a single user request into many model calls
+  with adaptive depth. Implementation detail dominates energy budgets
+  even more than in the single-pass case, and the unit of useful
+  attribution shifts from per-inference to per-call,
+  per-tool-invocation, and per-decision-step. The engine-plugin
+  contract already isolates the inference call as the attribution
+  unit; harness-aware aggregation sits above it as a natural
+  extension. Open-source agent harnesses are appearing in increasing
+  numbers, and a single mean-energy-per-inference figure stops being
+  useful in exactly this regime.
 
 ---
 

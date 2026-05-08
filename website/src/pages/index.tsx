@@ -44,7 +44,7 @@ function Hero(): ReactNode {
           <div className={styles.heroSecondary}>
             <Link
               className="button button--secondary"
-              to="/explanation/why">
+              to={ROUTES.why}>
               Why this exists
             </Link>
           </div>
@@ -140,7 +140,7 @@ function MethodologyBlock(): ReactNode {
           <Heading as="h2" className={styles.sectionHeading}>
             Methodology
           </Heading>
-          <ul className={styles.methodologyList}>
+          <ul className={styles.contentList}>
             <li>
               GPU power sampled via NVML at 100 ms intervals (default sampler)
             </li>
@@ -244,7 +244,7 @@ function ExtensibilityBlock(): ReactNode {
           <p className={styles.pitch}>
             LLenergyMeasure handles this through three coupled mechanisms:
           </p>
-          <ul className={styles.methodologyList}>
+          <ul className={styles.contentList}>
             <li>
               <strong>Programmatic introspection.</strong> Each engine&#39;s
               full parameter surface is discovered automatically from
@@ -295,7 +295,7 @@ function BoundariesBlock(): ReactNode {
           <Heading as="h2" className={styles.sectionHeading}>
             What this isn&#39;t
           </Heading>
-          <ul className={styles.boundaryList}>
+          <ul className={styles.contentList}>
             <li>
               Inference, not training. Training accounting belongs elsewhere.
             </li>
@@ -471,13 +471,14 @@ function PillarCards(): ReactNode {
 
 const BIBTEX = `@software{baker2026llenergymeasure,
   author    = {Baker, Henry C. G.},
-  title     = {{LLenergyMeasure}: Energy and efficiency measurement for LLM inference},
+  title     = {{LLenergyMeasure}: Measure how implementation choices drive
+                LLM inference efficiency},
   year      = {2026},
   version   = {0.9.0},
   url       = {https://github.com/henrycgbaker/llenergymeasure},
   note      = {Pre-1.0 release. See GitHub releases for the current version.
-               CLI-first measurement framework for LLM inference efficiency
-               across heterogeneous runtimes.}
+                Multi-engine, methodology-first measurement framework for
+                LLM inference efficiency.}
 }`;
 
 function ContributorFooter(): ReactNode {

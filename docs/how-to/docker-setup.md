@@ -393,7 +393,7 @@ runners:
 
 ### Future engines
 
-SGLang (M5) images will follow the same naming convention, resolution logic, and auto-pull
+SGLang images (when SGLang ships) will follow the same naming convention, resolution logic, and auto-pull
 behaviour. No additional setup is needed when SGLang ships.
 
 ### Layer cache sharing via GHCR registry
