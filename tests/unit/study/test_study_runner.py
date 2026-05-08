@@ -6,7 +6,7 @@ via mock injection of multiprocessing.get_context. ManifestWriter interactions a
 asserted against MagicMock instances.
 
 The only paths NOT covered here are:
-- Real CUDA teardown (requires GPU hardware — manual verification noted in STATE.md)
+- Real CUDA teardown (requires GPU hardware - manual verification noted in STATE.md)
 - True cross-process Pipe data transfer (integration test concern)
 """
 
@@ -204,7 +204,7 @@ def test_study_runner_subprocess_exception(study_config: StudyConfig) -> None:
 
     with patch("multiprocessing.get_context", return_value=ctx):
         runner = StudyRunner(study_config, manifest, Path("/tmp/test-study"))
-        # Must NOT raise — failures are non-fatal
+        # Must NOT raise - failures are non-fatal
         results = runner.run()
 
     assert len(results) == 1
@@ -811,7 +811,7 @@ def test_progress_events_forwarded():
     q.put({"event": "step_start", "step": "baseline", "description": "Measuring", "detail": "30s"})
     q.put({"event": "step_done", "step": "baseline", "elapsed_sec": 30.1})
     q.put({"event": "substep", "step": "model", "text": "loading weights", "elapsed_sec": 2.5})
-    q.put({"event": "started", "config_hash": "abc123"})  # coarse event — ignored
+    q.put({"event": "started", "config_hash": "abc123"})  # coarse event - ignored
     q.put(None)  # sentinel
 
     _consume_progress_events(q, study_progress=mock_progress)
@@ -1114,7 +1114,7 @@ def test_recv_before_join_ordering(study_config: StudyConfig) -> None:
     assert "join" in call_order, "p.join() was never called"
     first_poll = call_order.index("poll")
     first_join = call_order.index("join")
-    assert first_poll < first_join, f"poll() must happen before join() — got order: {call_order}"
+    assert first_poll < first_join, f"poll() must happen before join() - got order: {call_order}"
 
 
 # =============================================================================
@@ -1541,7 +1541,7 @@ def test_docker_error_persists_to_failed_runs_subdir(
 
 
 # =============================================================================
-# _prepare_images() — study-level Docker image preparation
+# _prepare_images() - study-level Docker image preparation
 # =============================================================================
 
 FAKE_INSPECT_JSON = b"""[{
@@ -1585,7 +1585,7 @@ class TestPrepareImages:
         assert not runner._images_prepared
 
     def test_local_cache_hit(self, study_config: StudyConfig, tmp_path: Path) -> None:
-        """Image found locally — no pull, metadata extracted, _images_prepared set."""
+        """Image found locally - no pull, metadata extracted, _images_prepared set."""
         import subprocess
 
         progress = MagicMock()
@@ -1649,7 +1649,7 @@ class TestPrepareImages:
         progress.end_image_prep.assert_called_once()
 
     def test_pull_fails_raises_pull_error(self, study_config: StudyConfig, tmp_path: Path) -> None:
-        """Image not locally cached, pull fails — raises DockerImagePullError."""
+        """Image not locally cached, pull fails - raises DockerImagePullError."""
         import subprocess
 
         from llenergymeasure.infra.docker_errors import DockerImagePullError
@@ -1681,7 +1681,7 @@ class TestPrepareImages:
     def test_pull_timeout_raises_pull_error(
         self, study_config: StudyConfig, tmp_path: Path
     ) -> None:
-        """Pull times out — raises DockerImagePullError with timeout message."""
+        """Pull times out - raises DockerImagePullError with timeout message."""
         import subprocess
 
         from llenergymeasure.infra.docker_errors import DockerImagePullError
@@ -2149,7 +2149,7 @@ def test_circuit_breaker_trips_and_marks_remaining_skipped() -> None:
     )
     manifest = MagicMock()
 
-    # Results: fail, fail (trips), probe (abort) — 3 experiments dispatched
+    # Results: fail, fail (trips), probe (abort) - 3 experiments dispatched
     failure_dict = {"type": "RuntimeError", "message": "CUDA OOM"}
     results_seq = [failure_dict, failure_dict, failure_dict, failure_dict]
     ctx = _make_ctx_with_results(results_seq)

@@ -1,6 +1,6 @@
 """Tests for :mod:`scripts.validate_invariants` and :mod:`scripts._invariant_validation_common`.
 
-The test strategy: exercise the validate_invariants script via synthetic native types —
+The test strategy: exercise the validate_invariants script via synthetic native types -
 we construct small Pydantic / dataclass / ``__slots__`` fixtures and point
 the validation step at them. Tests that touch the real transformers library
 live in the workflow-smoke integration test; unit tests stay deterministic
@@ -177,7 +177,7 @@ class TestRunCase:
     def test_preserves_warnings_when_call_raises(self) -> None:
         # Dormant-then-raise paths (e.g. deprecation warning followed by a
         # strict-mode ValueError) must preserve the warning alongside the
-        # exception — both are the invariant's fingerprint.
+        # exception - both are the invariant's fingerprint.
         import warnings
 
         def warn_then_raise() -> None:
@@ -234,7 +234,7 @@ class TestClassify:
 
     def test_logger_warning_once_classified_when_sentinel_present(self) -> None:
         # Any sentinel-tagged line upgrades the classification from
-        # logger_warning to logger_warning_once — the dedup-wrapped form is
+        # logger_warning to logger_warning_once - the dedup-wrapped form is
         # the stricter claim on user visibility.
         sentinel = _invariant_validation_common._WARNING_ONCE_SENTINEL
         buf = _invariant_validation_common.CaptureBuffers(
@@ -316,7 +316,7 @@ class TestCompareExpectedVsObserved:
 
 
 # ---------------------------------------------------------------------------
-# validate_invariant — end-to-end on a synthetic corpus
+# validate_invariant - end-to-end on a synthetic corpus
 # ---------------------------------------------------------------------------
 
 

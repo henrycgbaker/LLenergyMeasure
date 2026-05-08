@@ -1,4 +1,4 @@
-"""Study module — sweep expansion, cycle ordering, manifest, runner."""
+"""Study module - sweep expansion, cycle ordering, manifest, runner."""
 
 from llenergymeasure.study.manifest import (
     ExperimentManifestEntry,

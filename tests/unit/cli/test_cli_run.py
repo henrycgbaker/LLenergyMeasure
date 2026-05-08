@@ -109,7 +109,7 @@ def test_build_header_strips_hf_org_prefix():
     config.task.model = "meta-llama/Llama-3.2-1B-Instruct"
     config.engine = "vllm"
     config.vllm = None  # no engine section → dtype is None (engine default)
-    config.task.dataset.n_prompts = 100  # default — should not appear
+    config.task.dataset.n_prompts = 100  # default - should not appear
 
     header = _build_header(config, runner_tag="docker")
     assert "Llama-3.2-1B-Instruct" in header
@@ -124,8 +124,8 @@ def test_build_header_default_dtype_omitted():
     config = _make_mock_config()
     config.task.model = "gpt2"
     config.engine = "transformers"
-    config.transformers = None  # engine default — should not appear
-    config.task.dataset.n_prompts = 100  # default — should not appear
+    config.transformers = None  # engine default - should not appear
+    config.task.dataset.n_prompts = 100  # default - should not appear
 
     header = _build_header(config, runner_tag="local")
     assert "bfloat16" not in header
@@ -142,7 +142,7 @@ def test_build_header_nondefault_fields_shown():
     transformers_section = MagicMock()
     transformers_section.dtype = "float16"
     config.transformers = transformers_section
-    config.task.dataset.n_prompts = 50  # non-default — should appear
+    config.task.dataset.n_prompts = 50  # non-default - should appear
 
     header = _build_header(config, runner_tag="local")
     assert "float16" in header
@@ -200,7 +200,7 @@ def test_run_config_error_exits_2():
 
 def test_run_validation_error_exits_2():
     """Pydantic ValidationError from a bad field value exits with code 2."""
-    # "pytorh" is a misspelled engine — Pydantic will raise ValidationError
+    # "pytorh" is a misspelled engine - Pydantic will raise ValidationError
     result = runner.invoke(app, ["run", "--model", "gpt2", "--engine", "pytorh"])
     assert result.exit_code == 2, (
         f"Expected exit 2, got {result.exit_code}. Output: {result.output}"
@@ -394,7 +394,7 @@ def test_print_study_summary_basic():
     from llenergymeasure.cli._display import print_study_summary
     from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
-    # Use model_construct to bypass Pydantic validation for the container —
+    # Use model_construct to bypass Pydantic validation for the container -
     # experiments list contains a MagicMock, which is not a valid ExperimentResult.
     exp = MagicMock()
     exp.model_name = "test/model"
@@ -443,7 +443,7 @@ def test_print_study_progress():
 
 
 # ---------------------------------------------------------------------------
-# Study routing tests — verify CLI actually invokes run_study for study YAMLs
+# Study routing tests - verify CLI actually invokes run_study for study YAMLs
 # ---------------------------------------------------------------------------
 
 
@@ -539,7 +539,7 @@ def test_run_study_cli_defaults_applied(tmp_path):
     _capture_load, captured_overrides = _make_capture_load()
 
     # load_study_config, run_study, and build_preflight_panel are all lazily
-    # imported inside _run_study_impl — patch at source modules
+    # imported inside _run_study_impl - patch at source modules
     with (
         patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),

@@ -2,8 +2,8 @@
 # Benchmark Docker build times for documentation.
 #
 # Measures two scenarios:
-#   1. Cold build     — no cache anywhere (--no-cache); simulates offline / first-ever build
-#   2. First GHCR pull — fresh builder, layers pulled from GHCR registry cache
+#   1. Cold build     - no cache anywhere (--no-cache); simulates offline / first-ever build
+#   2. First GHCR pull - fresh builder, layers pulled from GHCR registry cache
 #
 # Warm local rebuild is intentionally NOT benchmarked: it depends entirely on which
 # layers changed and is documented in prose (only changed layers re-execute; stable
@@ -111,7 +111,7 @@ for engine in $ENGINES; do
 done
 
 # ---------------------------------------------------------------------------
-# Scenario 1: Cold build  (opt-in — slow)
+# Scenario 1: Cold build  (opt-in - slow)
 # ---------------------------------------------------------------------------
 if $RUN_COLD; then
     echo "" >&2
@@ -136,10 +136,10 @@ done
 # Markdown output
 # ---------------------------------------------------------------------------
 echo ""
-echo "<!-- benchmark output — paste into docs/installation.md -->"
+echo "<!-- benchmark output - paste into docs/installation.md -->"
 echo ""
-echo "Measured on **\`$hostname_str\`** — $cpu_model, $cpu_cores cores,"
-echo "${ram_gb} GB RAM — Docker $docker_ver / Buildx $buildx_ver / llenergymeasure $pkg_ver"
+echo "Measured on **\`$hostname_str\`** - $cpu_model, $cpu_cores cores,"
+echo "${ram_gb} GB RAM - Docker $docker_ver / Buildx $buildx_ver / llenergymeasure $pkg_ver"
 echo ""
 
 if $RUN_COLD; then
@@ -162,12 +162,12 @@ fi
 echo ""
 echo "**Scenarios:**"
 echo ""
-echo "- **Cold build** — no cache anywhere; simulates a new machine with GHCR offline or"
+echo "- **Cold build** - no cache anywhere; simulates a new machine with GHCR offline or"
 echo "  the very first build before any cache exists. Time is dominated by flash-attn FA3"
 echo "  Hopper compilation (~80 nvcc invocations at MAX_JOBS=$(nproc))."
-echo "- **First GHCR pull** — fresh builder, all layers pulled from the GHCR registry cache"
+echo "- **First GHCR pull** - fresh builder, all layers pulled from the GHCR registry cache"
 echo "  seeded by CI on each release. What a new developer gets after \`make docker-builder-setup\`."
-echo "- **Warm local rebuild** — after the first build, only layers whose inputs changed"
+echo "- **Warm local rebuild** - after the first build, only layers whose inputs changed"
 echo "  are re-executed. The Dockerfile places stable expensive layers (FA3 compile, base"
 echo "  deps) before application code by design, so a source-only edit typically rebuilds"
 echo "  in seconds regardless of engine."

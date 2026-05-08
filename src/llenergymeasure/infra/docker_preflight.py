@@ -1,18 +1,18 @@
-"""Docker pre-flight checks — validate the host environment before container launch.
+"""Docker pre-flight checks - validate the host environment before container launch.
 
 Tiered execution model:
   Tier 1 (host-level checks, no container needed):
     1. Docker CLI on PATH
     2. NVIDIA Container Toolkit installed (any of nvidia-container-runtime,
        nvidia-ctk, nvidia-container-cli)
-    3. Host nvidia-smi — warns if missing, does NOT hard-block (remote daemon support)
+    3. Host nvidia-smi - warns if missing, does NOT hard-block (remote daemon support)
 
-  Tier 2 (requires a running container — only reached if Tier 1 passes):
+  Tier 2 (requires a running container - only reached if Tier 1 passes):
     4. GPU visibility inside container (docker run --gpus all nvidia-smi)
     5. CUDA/driver compatibility (parsed from the same container probe)
 
 Multiple failures within a tier are reported together as a numbered list before
-aborting. Silent on success — no output when all checks pass.
+aborting. Silent on success - no output when all checks pass.
 
 Call ``run_docker_preflight(skip=True)`` to bypass all checks (CLI --skip-preflight
 flag or YAML execution.skip_preflight: true).
@@ -58,7 +58,7 @@ _NVIDIA_TOOLKIT_BINS = (
 def _check_docker_cli() -> str | None:
     """Return an error string if docker CLI is not on PATH, else None."""
     if shutil.which("docker") is None:
-        return f"Docker not found on PATH\n     Fix: Install Docker Engine — {_DOCKER_INSTALL_URL}"
+        return f"Docker not found on PATH\n     Fix: Install Docker Engine - {_DOCKER_INSTALL_URL}"
     return None
 
 
@@ -67,7 +67,7 @@ def _check_nvidia_toolkit() -> str | None:
     if not any(shutil.which(tool) is not None for tool in _NVIDIA_TOOLKIT_BINS):
         return (
             "NVIDIA Container Toolkit not found\n"
-            f"     Fix: Install NVIDIA Container Toolkit — {_NVIDIA_TOOLKIT_INSTALL_URL}"
+            f"     Fix: Install NVIDIA Container Toolkit - {_NVIDIA_TOOLKIT_INSTALL_URL}"
         )
     return None
 
@@ -75,13 +75,13 @@ def _check_nvidia_toolkit() -> str | None:
 def _get_host_driver_version() -> str | None:
     """Run host nvidia-smi and return the driver version string, or None.
 
-    Warns (does not raise) if nvidia-smi is missing or fails — this supports
+    Warns (does not raise) if nvidia-smi is missing or fails - this supports
     remote Docker daemon scenarios where the local host has no GPU driver.
     """
     if shutil.which("nvidia-smi") is None:
         logger.warning(
             "Host nvidia-smi not found. This may be a remote Docker daemon setup. "
-            "Skipping host driver version check — GPU validation will proceed via "
+            "Skipping host driver version check - GPU validation will proceed via "
             "container probe only."
         )
         return None
@@ -144,14 +144,14 @@ def _probe_container_gpu(host_driver_version: str | None) -> list[str]:
         errors.append(
             "Container GPU probe timed out after "
             f"{_PROBE_TIMEOUT}s\n"
-            f"     Fix: Check Docker daemon and GPU availability — {_NVIDIA_TOOLKIT_INSTALL_URL}"
+            f"     Fix: Check Docker daemon and GPU availability - {_NVIDIA_TOOLKIT_INSTALL_URL}"
         )
         return errors
     except FileNotFoundError:
-        # docker not on PATH — should have been caught by tier 1, but guard defensively
+        # docker not on PATH - should have been caught by tier 1, but guard defensively
         errors.append(
             "Docker not found when launching container probe\n"
-            f"     Fix: Install Docker Engine — {_DOCKER_INSTALL_URL}"
+            f"     Fix: Install Docker Engine - {_DOCKER_INSTALL_URL}"
         )
         return errors
 
@@ -191,7 +191,7 @@ def _probe_container_gpu(host_driver_version: str | None) -> list[str]:
         elif _is_quota_error:
             stderr_detail = result.stderr.strip()
             errors.append(
-                "GPU quota or allocation limit reached — the probe container could not "
+                "GPU quota or allocation limit reached - the probe container could not "
                 "acquire a GPU.\n"
                 "     Free up GPU quota (e.g. stop a running container) and retry.\n"
                 f"     Docker stderr: {stderr_detail}"
@@ -207,7 +207,7 @@ def _probe_container_gpu(host_driver_version: str | None) -> list[str]:
             )
         return errors
 
-    # Container probe succeeded — optionally check for major driver version mismatch
+    # Container probe succeeded - optionally check for major driver version mismatch
     output = result.stdout.strip()
     if output and host_driver_version:
         lines = output.splitlines()
@@ -237,9 +237,9 @@ def run_docker_preflight(skip: bool = False) -> None:
     """Run tiered Docker pre-flight checks before any container is launched.
 
     Validates:
-      Tier 1 — Docker CLI on PATH, NVIDIA Container Toolkit installed,
+      Tier 1 - Docker CLI on PATH, NVIDIA Container Toolkit installed,
                 host nvidia-smi (warn-only if missing)
-      Tier 2 — GPU visibility inside container, CUDA/driver compatibility
+      Tier 2 - GPU visibility inside container, CUDA/driver compatibility
 
     Silent on success. Raises DockerPreFlightError with actionable numbered
     list on failure.
@@ -270,7 +270,7 @@ def run_docker_preflight(skip: bool = False) -> None:
     if toolkit_error is not None:
         tier1_failures.append(toolkit_error)
 
-    # Host nvidia-smi — warn-only (supports remote Docker daemon)
+    # Host nvidia-smi - warn-only (supports remote Docker daemon)
     host_driver_version = _get_host_driver_version()
 
     if tier1_failures:

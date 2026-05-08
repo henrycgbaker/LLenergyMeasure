@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts.widen_miner_pin` — the SSOT pin-widener helper.
+"""Tests for :mod:`scripts.widen_miner_pin` - the SSOT pin-widener helper.
 
 The helper backs the ``/approve-reuse`` slash command. These tests pin
 the determinism contract (idempotency, line-surgical edits, no-op when

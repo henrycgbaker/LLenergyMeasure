@@ -219,7 +219,7 @@ decoder:
 
 Multi-GPU parallelism for large model inference.
 
-**Background**: v1.x used `accelerate launch` with `device_map="auto"`, which auto-distributes layers across visible GPUs based on `CUDA_VISIBLE_DEVICES`. This worked but was naive—each GPU holds different layers with no coordinated parallel execution.
+**Background**: v1.x used `accelerate launch` with `device_map="auto"`, which auto-distributes layers across visible GPUs based on `CUDA_VISIBLE_DEVICES`. This worked but was naive-each GPU holds different layers with no coordinated parallel execution.
 
 v2.0 adds proper parallelism strategies:
 - **Tensor Parallelism**: Splits layers horizontally so GPUs compute in parallel

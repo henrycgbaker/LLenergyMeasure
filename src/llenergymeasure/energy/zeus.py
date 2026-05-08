@@ -4,7 +4,7 @@ Wraps ZeusMonitor to measure per-GPU energy consumption during inference.
 Zeus provides more accurate GPU energy readings than NVML power polling
 by integrating with the GPU's hardware energy counters.
 
-All zeus imports are deferred — this module is safe to import without zeus installed.
+All zeus imports are deferred - this module is safe to import without zeus installed.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ class ZeusSampler:
     measurement window.  Zeus is the preferred sampler when available, as it
     reads hardware energy registers directly.
 
-    All zeus imports are deferred — safe to import without zeus installed.
+    All zeus imports are deferred - safe to import without zeus installed.
 
     Args:
         gpu_indices: GPU indices to monitor.  Defaults to ``[0]`` when None.

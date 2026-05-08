@@ -15,7 +15,7 @@ def isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Chdir to a tmp dir, drop CLI modules from sys.modules for fresh reimport.
 
     Uses ``monkeypatch.delitem`` so each touched ``sys.modules`` entry is
-    restored at teardown — a raw ``del sys.modules[...]`` would leak the
+    restored at teardown - a raw ``del sys.modules[...]`` would leak the
     reimport across subsequent tests and cause test-pollution failures
     (e.g. preflight spec lookups returning None in unrelated CLI tests).
 

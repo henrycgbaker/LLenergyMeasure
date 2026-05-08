@@ -1,4 +1,4 @@
-"""Unit tests for api/_gpu.py — _resolve_gpu_indices.
+"""Unit tests for api/_gpu.py - _resolve_gpu_indices.
 
 All tests run GPU-free. pynvml calls are mocked via patch.dict(sys.modules)
 or unittest.mock.patch. No real GPU hardware required.
@@ -198,7 +198,7 @@ def test_pytorch_device_map_pynvml_error_falls_through():
         task={"model": "gpt2"}, engine="transformers", transformers=pytorch_cfg
     )
 
-    # pynvml raises on init — should fall through silently
+    # pynvml raises on init - should fall through silently
     mock_pynvml = MagicMock()
     mock_pynvml.nvmlInit.side_effect = RuntimeError("NVML not available")
 

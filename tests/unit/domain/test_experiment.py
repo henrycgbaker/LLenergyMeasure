@@ -1,4 +1,4 @@
-"""Unit tests for domain/experiment.py — RawProcessResult, hashing, StudySummary, edge cases."""
+"""Unit tests for domain/experiment.py - RawProcessResult, hashing, StudySummary, edge cases."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ class TestRawProcessResult:
             rpr.engine = "vllm"
 
     def test_minimal_construction(self):
-        """Builds with only required fields — no extra kwargs needed."""
+        """Builds with only required fields - no extra kwargs needed."""
         rpr = make_raw_process_result()
         assert rpr.experiment_id == "test-001"
         assert rpr.process_index == 0

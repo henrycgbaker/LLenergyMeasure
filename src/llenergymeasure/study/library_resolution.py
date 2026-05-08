@@ -1,11 +1,11 @@
-"""Sweep library-resolution mechanism — apply validated dormant invariants to fixpoint, dedup by resolved_config_hash.
+"""Sweep library-resolution mechanism - apply validated dormant invariants to fixpoint, dedup by resolved_config_hash.
 
 Design: ``.product/designs/config-deduplication-dormancy/sweep-dedup.md`` §2.
 
 The library-resolution mechanism is the host-side, pre-dispatch layer that normalises every
 field the engine-invariants corpus marks as ``dormant``. Each invariant's fired-state
 projection is taken from its match predicate's "not_equal" / "present"
-operand (the sentinel value the predicate is *deviating from*) — that same
+operand (the sentinel value the predicate is *deviating from*) - that same
 projection is what :mod:`scripts.engine_miners._fixpoint_test` enforces in CI, so
 runtime canonicalisation and CI correctness tests apply an identical
 normalisation.
@@ -62,7 +62,7 @@ class LibraryResolutionCycleError(RuntimeError):
 
 
 # ---------------------------------------------------------------------------
-# Core _apply_invariants_fixpoint() — one config
+# Core _apply_invariants_fixpoint() - one config
 # ---------------------------------------------------------------------------
 
 
@@ -81,7 +81,7 @@ def _apply_invariants_fixpoint(
 
     Raises:
         LibraryResolutionCycleError: If the fixpoint loop exceeds
-            :data:`_MAX_ITER` passes — the validated corpus has an invariant cycle.
+            :data:`_MAX_ITER` passes - the validated corpus has an invariant cycle.
     """
     dormant_rules = [r for r in invariants if r.severity in ("dormant", "dormant_silent")]
     if not dormant_rules:
@@ -116,11 +116,11 @@ def _rule_normalisations(invariant: Invariant) -> dict[str, Any]:
     2. Otherwise, fall back to the invariant's *match* predicate: any field
        matched with a ``not_equal`` / ``present`` operator is normalised by
        stripping (setting to ``None`` or the ``not_equal`` sentinel if
-       scalar). This is the fixpoint-test projection — structurally identical
+       scalar). This is the fixpoint-test projection - structurally identical
        to what CI enforces for shuffle-stability.
 
     Rules that match only on equality (e.g. ``do_sample: false``) do not
-    normalise those fields — equality predicates are *triggers*, not
+    normalise those fields - equality predicates are *triggers*, not
     *subjects*. Subject fields are the ones marked ``present``/``not_equal``.
     """
     out: dict[str, Any] = {}
@@ -137,11 +137,11 @@ def _rule_normalisations(invariant: Invariant) -> dict[str, Any]:
         if not isinstance(spec, dict):
             continue
         if "not_equal" in spec:
-            # The "canonical" state is the not_equal sentinel — applying the
+            # The "canonical" state is the not_equal sentinel - applying the
             # invariant drives the field back to the library-observed default.
             out[path] = spec["not_equal"]
         elif spec.get("present") and "in" not in spec:
-            # Subject field marked only as "present" — strip to None (the
+            # Subject field marked only as "present" - strip to None (the
             # library either ignores it, or the effective value is captured
             # later via observed_config_hash).
             out[path] = None
@@ -153,7 +153,7 @@ def _assign_field_path(config: ExperimentConfig, path: str, value: Any) -> None:
 
     Walks nested Pydantic models / dicts, tolerant of ``None`` intermediate
     attributes (silently returns if the path doesn't resolve to an assignable
-    location — mirrors :func:`resolve_field_path`'s permissive traversal).
+    location - mirrors :func:`resolve_field_path`'s permissive traversal).
     """
     parts = path.split(".")
     parent: Any = config
@@ -171,7 +171,7 @@ def _assign_field_path(config: ExperimentConfig, path: str, value: Any) -> None:
             setattr(parent, leaf, value)
     except (ValueError, TypeError) as exc:
         # Pydantic model_config={"frozen": True} or field constraints can
-        # reject the assignment. Log at debug — the library-resolution mechanism is best-
+        # reject the assignment. Log at debug - the library-resolution mechanism is best-
         # effort; a rejected field just stays at its declared value.
         logger.debug("Library resolution could not assign %s=%r: %s", path, value, exc)
 
@@ -205,7 +205,7 @@ class DedupResult:
             kept). This is what the runner iterates over.
         groups: One :class:`EquivalenceGroup` per unique resolved_config_hash, recording
             which indices of the input sweep collapsed together.
-        declared_resolved_hashes: ``declared_index → resolved_config_hash`` — lets the runner tag
+        declared_resolved_hashes: ``declared_index → resolved_config_hash`` - lets the runner tag
             the manifest entry for each run with its equivalence group.
         would_dedup: ``True`` iff any group has > 1 member (dedup would save
             runs even when ``deduplicate=False``).
@@ -240,12 +240,12 @@ def resolve_library_effective(
             sweep is single-engine and the caller has a invariants handle.
         loader: Optional ``EngineInvariantsLoader``. Defaults to a fresh one
             (per-process cache is internal to each instance).
-        deduplicate: When ``False``, every declared config still runs —
+        deduplicate: When ``False``, every declared config still runs -
             groups are computed for the equivalence-groups sidecar but the
             returned ``canonical_configs`` list has one entry per input.
 
     Returns:
-        :class:`DedupResult` — see fields above.
+        :class:`DedupResult` - see fields above.
     """
     if not configs:
         return DedupResult(canonical_configs=[])

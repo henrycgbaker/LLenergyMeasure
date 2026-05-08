@@ -4,7 +4,7 @@ Pure, dependency-free primitives shared by both the resolved-config (library-res
 mechanism output) and observed-config (library-observed) hashing pipelines.  Neither
 hash requires imports from upper layers, so these live at Layer 0 (domain).
 
-``build_resolved_view`` — the one function that needs ``ExperimentConfig`` —
+``build_resolved_view`` - the one function that needs ``ExperimentConfig`` -
 stays in :mod:`llenergymeasure.study.hashing` where it belongs (Layer 4).
 
 Normalisation rules are locked by sweep-dedup.md §9.Q3.  Over-normalising
@@ -103,11 +103,11 @@ class ConfigHashView:
 
     Per sweep-dedup.md §2.4, the hashed-field set is:
 
-    - ``task`` — model, prompt source, batch shape
-    - ``observed_engine_params`` — engine state (library-resolution mechanism output for
+    - ``task`` - model, prompt source, batch shape
+    - ``observed_engine_params`` - engine state (library-resolution mechanism output for
       resolved-config-hash, live library observation for observed-config-hash)
-    - ``observed_sampling_params`` — sampling state (same sources as above)
-    - ``lora`` / ``passthrough_kwargs`` — user-attached overrides
+    - ``observed_sampling_params`` - sampling state (same sources as above)
+    - ``lora`` / ``passthrough_kwargs`` - user-attached overrides
 
     Excluded: ``MeasurementConfig`` (observation dials), ``ExecutionConfig``
     (runner/parallelism), ``experiment_id``.
@@ -132,7 +132,7 @@ def hash_config(view: ConfigHashView) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Observed-config view construction — from library-observed effective params
+# Observed-config view construction - from library-observed effective params
 # ---------------------------------------------------------------------------
 
 
@@ -147,7 +147,7 @@ def build_observed_view(
 ) -> ConfigHashView:
     """Assemble an observed-config view from per-engine ``extract_observed_params`` output.
 
-    Callers live in the harness/sidecar path — they read ``task`` from the
+    Callers live in the harness/sidecar path - they read ``task`` from the
     same config that ran and pair it with the native-object dumps the engine
     returned.
     """

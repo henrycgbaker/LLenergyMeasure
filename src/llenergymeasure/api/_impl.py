@@ -25,7 +25,7 @@ from llenergymeasure.domain.experiment import ExperimentResult, StudyResult, Stu
 from llenergymeasure.domain.progress import ProgressCallback
 from llenergymeasure.utils.exceptions import ConfigError
 
-# Single source of truth for n_prompts default — derived from DatasetConfig field default
+# Single source of truth for n_prompts default - derived from DatasetConfig field default
 # so run_experiment() kwargs and DatasetConfig always agree.
 _N_PROMPTS_DEFAULT: int = DatasetConfig.model_fields["n_prompts"].default
 
@@ -34,7 +34,7 @@ _TASK_FIELDS: frozenset[str] = frozenset(TaskConfig.model_fields) - {"model", "d
 _MEASUREMENT_FIELDS: frozenset[str] = frozenset(MeasurementConfig.model_fields)
 
 # ---------------------------------------------------------------------------
-# run_experiment — three overloaded forms
+# run_experiment - three overloaded forms
 # ---------------------------------------------------------------------------
 
 
@@ -253,7 +253,7 @@ def _to_study_config(
                 "run_experiment() requires either a config argument or model= keyword.\n"
                 "Example: run_experiment(model='meta-llama/Llama-3.1-8B')"
             )
-        # Build kwargs dict for ExperimentConfig — route fields into sub-models.
+        # Build kwargs dict for ExperimentConfig - route fields into sub-models.
         task_kwargs: dict[str, Any] = {
             "model": model,
             "dataset": DatasetConfig(source=dataset, n_prompts=n_prompts),
@@ -341,7 +341,7 @@ def _run(
     # ensuring preflight uses the same runner resolution as the actual dispatch path.
     user_config = load_user_config()
 
-    # Multi-engine guard — raises PreFlightError for multi-engine studies without
+    # Multi-engine guard - raises PreFlightError for multi-engine studies without
     # Docker, or auto-elevates to Docker when available. Also runs Docker pre-flight
     # checks when any engine resolves to a Docker runner.
     # Preflight returns resolved runner specs so we don't resolve them twice.
@@ -544,7 +544,7 @@ def _run(
 
     wall_time = time.monotonic() - wall_start
 
-    # Mark manifest as completed — only reached on success (SIGINT path calls
+    # Mark manifest as completed - only reached on success (SIGINT path calls
     # manifest.mark_interrupted() then sys.exit(130) before returning here).
     manifest.mark_study_completed()
 
@@ -616,7 +616,7 @@ def _run_in_process(
 
     check_gpu_memory_residual()
 
-    # Collect environment snapshot once — used for both harness and environment.json sidecar
+    # Collect environment snapshot once - used for both harness and environment.json sidecar
     from llenergymeasure.harness.environment import collect_environment_snapshot
 
     snapshot = collect_environment_snapshot()
@@ -678,7 +678,7 @@ def _run_in_process(
             )
             return [], [None], [error_payload["message"]]
         except DockerError as exc:
-            # Convert to failure dict — manifest marks failed, study continues
+            # Convert to failure dict - manifest marks failed, study continues
             error_payload = {
                 "type": type(exc).__name__,
                 "message": str(exc),
@@ -691,7 +691,7 @@ def _run_in_process(
         # Docker path: ts_tmpdir comes from DockerRunner
         ts_tmpdir = docker_ts_dir
     else:
-        # Local in-process path — errors propagate naturally (PreFlightError, EngineError)
+        # Local in-process path - errors propagate naturally (PreFlightError, EngineError)
         import tempfile
 
         from llenergymeasure.engines import get_engine

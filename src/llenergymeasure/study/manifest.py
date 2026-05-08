@@ -1,4 +1,4 @@
-"""Study manifest — checkpoint model and atomic writer."""
+"""Study manifest - checkpoint model and atomic writer."""
 
 from __future__ import annotations
 
@@ -157,7 +157,7 @@ class ManifestWriter:
     Writes after every state transition (mark_running / mark_completed /
     mark_failed). Uses atomic os.replace() via _atomic_write.
 
-    Write failures are logged as warnings — they never abort the study.
+    Write failures are logged as warnings - they never abort the study.
     Directory creation failure raises StudyError immediately (fast-fail).
     """
 
@@ -269,7 +269,7 @@ class ManifestWriter:
         """Set manifest status to 'completed' and record completion time.
 
         Called by _run() after all experiments finish successfully (no SIGINT).
-        Only reached on the success path — SIGINT triggers mark_interrupted() then
+        Only reached on the success path - SIGINT triggers mark_interrupted() then
         sys.exit(130) before _run() returns.
         """
         self.manifest = self.manifest.model_copy(

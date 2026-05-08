@@ -49,7 +49,7 @@ from scripts.engine_miners.vllm_static_miner import (  # noqa: E402
 )
 
 # ---------------------------------------------------------------------------
-# Lift call-site smoke tests — confirm the per-engine driver composes the
+# Lift call-site smoke tests - confirm the per-engine driver composes the
 # library-level lifts correctly against real vLLM types.
 # ---------------------------------------------------------------------------
 
@@ -63,7 +63,7 @@ class TestLiftCallSites:
 
         Per the research doc, vLLM 0.17.1 ships zero ``msgspec.Meta(...)``
         annotations on SamplingParams. The lift therefore returns ``[]``
-        today — the test pins the call-site (lift IS invoked) and the
+        today - the test pins the call-site (lift IS invoked) and the
         contract that the result is a list of :class:`RuleCandidate`. The
         day vLLM adopts ``Meta(ge=...)`` annotations, the count flips
         positive without code change.
@@ -107,7 +107,7 @@ class TestLiftCallSites:
     def test_dataclass_lift_call_site_dropped_for_engine_args(self) -> None:
         """The dynamic miner intentionally skips ``_dataclass_lift(EngineArgs)``.
 
-        Stdlib dataclass doesn't enforce Literal types — running the lift
+        Stdlib dataclass doesn't enforce Literal types - running the lift
         here would emit ~23 unenforceable invariants that all fail validation-CI.
         Pin the omission so a future refactor doesn't accidentally re-add
         the call.
@@ -270,13 +270,13 @@ class TestClusters:
         assert isinstance(cluster, _Cluster)
         # Pick the FIRST value of each grid as a positive trial.
         kwargs = {name: vals[0] for name, vals in cluster.values_per_field.items()}
-        # Some combinations may legitimately raise — that's fine; we just
+        # Some combinations may legitimately raise - that's fine; we just
         # need the factory to be callable without TypeError on the kwargs
         # shape.
         try:
             cluster.probe_class_factory(kwargs)
         except (ValueError, TypeError) as exc:
-            # ValueError / TypeError from the library itself is fine —
+            # ValueError / TypeError from the library itself is fine -
             # construction-time validation, not factory misconfiguration.
             assert "probe_class_factory" not in str(exc)
 
@@ -289,8 +289,8 @@ class TestClusters:
 class TestGateSoundnessOnVllmCorpus:
     """Re-run the gate-soundness fixpoint from the vLLM test file.
 
-    The structural gate-soundness fixpoint is library-agnostic — it
-    synthesises malformed invariants and asserts the gate flags each — but
+    The structural gate-soundness fixpoint is library-agnostic - it
+    synthesises malformed invariants and asserts the gate flags each - but
     re-running it here guarantees the contract is exercised in the
     vLLM CI lane too.
     """

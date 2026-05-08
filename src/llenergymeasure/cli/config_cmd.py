@@ -1,10 +1,10 @@
-"""llem config command — environment and configuration display.
+"""llem config command - environment and configuration display.
 
 Prints GPU info, installed engines, energy sampler status, and user config
 path. Designed to be the first thing a researcher runs to verify their
 environment is correctly set up.
 
-Always exits 0 — this command is purely informational.
+Always exits 0 - this command is purely informational.
 """
 
 from __future__ import annotations
@@ -117,7 +117,7 @@ def config_command(
                     print(f"  ({version})", end="")
             print()
         else:
-            print(f"  {engine}: not installed  (runs in Docker — see docs/development.md)")
+            print(f"  {engine}: not installed  (runs in Docker - see docs/development.md)")
 
     # --- Energy backends ---
     print("Energy")

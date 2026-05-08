@@ -41,7 +41,7 @@ def _check_engine_installed(engine: str) -> bool:
     try:
         engine_key = Engine(engine)
     except ValueError:
-        # Unknown engine — Pydantic already blocked invalid values; treat as missing.
+        # Unknown engine - Pydantic already blocked invalid values; treat as missing.
         return False
     package = ENGINE_PACKAGES.get(engine_key)
     if package is None:
@@ -55,16 +55,16 @@ def _check_model_accessible(model_id: str) -> str | None:
     Returns an error string if a definitive failure is detected, None otherwise
     (including when we cannot determine reachability).
     """
-    # Local path — starts with /, ./, or ~
+    # Local path - starts with /, ./, or ~
     if model_id.startswith("/") or model_id.startswith("./") or model_id.startswith("~"):
         path = Path(model_id).expanduser()
         if not path.exists():
-            return f"{model_id} not found — path does not exist"
+            return f"{model_id} not found - path does not exist"
         return None
 
-    # Hub model — use huggingface_hub if available
+    # Hub model - use huggingface_hub if available
     if importlib.util.find_spec("huggingface_hub") is None:
-        return None  # Cannot check — skip rather than block
+        return None  # Cannot check - skip rather than block
 
     try:
         from huggingface_hub import HfApi
@@ -74,10 +74,10 @@ def _check_model_accessible(model_id: str) -> str | None:
     except Exception as exc:
         exc_str = str(exc)
         if "401" in exc_str or "403" in exc_str or "gated" in exc_str.lower():
-            return f"{model_id} gated model — no HF_TOKEN → export HF_TOKEN=<your_token>"
+            return f"{model_id} gated model - no HF_TOKEN → export HF_TOKEN=<your_token>"
         if "404" in exc_str or "not found" in exc_str.lower():
             return f"{model_id} not found on HuggingFace Hub"
-        # Network error, timeout, etc. — don't block
+        # Network error, timeout, etc. - don't block
         logger.debug("Model accessibility check skipped (network error): %s", exc)
         return None
 
@@ -88,7 +88,7 @@ def _warn_if_persistence_mode_off(gpu_indices: list[int] | None = None) -> None:
     Checks all GPUs in gpu_indices (defaults to [0] when None). Warns once if
     any GPU has persistence mode off.
 
-    Never raises — always wrapped in a broad except.
+    Never raises - always wrapped in a broad except.
 
     Args:
         gpu_indices: GPU device indices to check. Defaults to [0] when None.
@@ -131,14 +131,14 @@ def run_preflight(config: ExperimentConfig) -> None:
 
     # Check 1: CUDA available
     if not _check_cuda_available():
-        failures.append("CUDA not available — is a GPU present and CUDA installed?")
+        failures.append("CUDA not available - is a GPU present and CUDA installed?")
 
     # Check 2: Engine installed
     if not _check_engine_installed(config.engine):
         package = ENGINE_PACKAGES.get(config.engine, config.engine)
         failures.append(
             f"{config.engine} not available on host (missing: {package}). "
-            f"Engine code runs inside Docker — dispatch via `llem run` with a Docker "
+            f"Engine code runs inside Docker - dispatch via `llem run` with a Docker "
             f"runner, or see docs/development.md for the build/run pattern."
         )
 
@@ -155,7 +155,7 @@ def run_preflight(config: ExperimentConfig) -> None:
         engine_errors = build_config_probe(config).errors
         failures.extend(engine_errors)
     except Exception:
-        pass  # get_engine may fail if engine not installed — already caught by Check 2
+        pass  # get_engine may fail if engine not installed - already caught by Check 2
 
     if failures:
         n = len(failures)

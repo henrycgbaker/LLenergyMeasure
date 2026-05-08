@@ -1,4 +1,4 @@
-"""TensorRT-LLM inference engine — thin EnginePlugin.
+"""TensorRT-LLM inference engine - thin EnginePlugin.
 
 Implements the EnginePlugin protocol:
   load_model, warmup, run_inference, cleanup, check_hardware
@@ -83,7 +83,7 @@ def _apply_default_build_cache(kwargs: dict[str, Any]) -> None:
     """Apply the env-var-gated default TRT-LLM build cache to ``kwargs``.
 
     The opinionated llenergymeasure default is enabled (engine compilation is
-    expensive; the cache is a large time-saver for repeat runs) — shipped via
+    expensive; the cache is a large time-saver for repeat runs) - shipped via
     ``LLEM_TRT_BUILD_CACHE_ENABLED=1`` in ``.env.example``. The helpers are
     pure passthrough (see :mod:`llenergymeasure.utils.env_config`), so
     removing the line reverts to TRT-LLM's disabled default.
@@ -118,7 +118,7 @@ def _apply_default_build_cache(kwargs: dict[str, Any]) -> None:
 
 
 class TensorRTEngine:
-    """TensorRT-LLM inference engine — offline batch mode, thin plugin.
+    """TensorRT-LLM inference engine - offline batch mode, thin plugin.
 
     Implements EnginePlugin:
     - load_model: Compile/load engine via tensorrt_llm.LLM(), record build metadata
@@ -157,7 +157,7 @@ class TensorRTEngine:
     ) -> tuple[Any, Any]:
         """Compile/load engine via tensorrt_llm.LLM() and build SamplingParams.
 
-        Engine compilation happens here — BEFORE the NVML measurement window.
+        Engine compilation happens here - BEFORE the NVML measurement window.
         Build metadata is recorded for inclusion in InferenceOutput.extras.
 
         All tensorrt_llm imports are lazy so this module can be imported without TRT-LLM.
@@ -262,7 +262,7 @@ class TensorRTEngine:
     ) -> InferenceOutput:
         """Run offline batch inference over all prompts.
 
-        Single llm.generate() call with ALL prompts — no streaming.
+        Single llm.generate() call with ALL prompts - no streaming.
 
         Args:
             config: Experiment configuration.
@@ -476,7 +476,7 @@ class TensorRTEngine:
         Starts with {"model": config.model} and applies all non-None fields
         from TensorRTConfig, including the typed ``backend`` field when set.
         When ``backend`` is unset (None), TRT-LLM auto-picks (respecting
-        ``TLLM_USE_TRT_ENGINE``) — the previous hardcoded ``"trt"`` default
+        ``TLLM_USE_TRT_ENGINE``) - the previous hardcoded ``"trt"`` default
         is removed.
 
         When engine_path is set, returns early with only {"model": engine_path}
@@ -507,7 +507,7 @@ class TensorRTEngine:
             return early_kwargs
 
         if trt is None:
-            # No tensorrt section — apply env-var-gated default build cache.
+            # No tensorrt section - apply env-var-gated default build cache.
             _apply_default_build_cache(kwargs)
             return kwargs
 
@@ -548,7 +548,7 @@ class TensorRTEngine:
             except ImportError:
                 logger.debug("tensorrt_llm.llmapi not available; skipping QuantConfig")
 
-        # Build cache — env-var-gated default.
+        # Build cache - env-var-gated default.
         # TensorRTBuildCacheConfig was dropped (D1); advanced config via extra="allow".
         _apply_default_build_cache(kwargs)
 

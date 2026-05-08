@@ -168,7 +168,7 @@ def test_run_experiment_no_disk_writes(tmp_path, monkeypatch):
     config = ExperimentConfig(task={"model": "gpt2"})
     run_experiment(config)
 
-    # tmp_path should be empty — no files written there
+    # tmp_path should be empty - no files written there
     written_files = list(tmp_path.rglob("*"))
     assert written_files == [], f"Unexpected files written: {written_files}"
 
@@ -227,7 +227,7 @@ def test_run_experiment_path_object_form(tmp_path, monkeypatch):
 
 
 # =============================================================================
-# Test 12: kwargs form — engine kwarg passed through
+# Test 12: kwargs form - engine kwarg passed through
 # =============================================================================
 
 
@@ -835,7 +835,7 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
 
 
 def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_path):
-    """total_experiments == len(study.experiments) — no double-multiply by n_cycles.
+    """total_experiments == len(study.experiments) - no double-multiply by n_cycles.
 
     The study passed to _run() has experiments already cycle-expanded (as load_study_config
     does). With 2 unique configs and n_cycles=3, study.experiments has 6 entries.
@@ -907,7 +907,7 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
 
 
 class TestResolveGpuIndices:
-    """Unit tests for _resolve_gpu_indices(). No real GPU required — NVML is monkeypatched."""
+    """Unit tests for _resolve_gpu_indices(). No real GPU required - NVML is monkeypatched."""
 
     def _make_pytorch_config(self, device_map: str | None = None) -> ExperimentConfig:
         """Build a minimal PyTorch ExperimentConfig."""

@@ -1,7 +1,7 @@
-"""Tests for the sweep library-resolution mechanism — fixpoint iteration + dedup.
+"""Tests for the sweep library-resolution mechanism - fixpoint iteration + dedup.
 
 Idempotence + shuffle-stability are enforced by
-``scripts/miners/_fixpoint_test.py`` (CI-time contract — any corpus PR that
+``scripts/miners/_fixpoint_test.py`` (CI-time contract - any corpus PR that
 violates them is rejected before this module runs). These tests focus on
 the *runtime* behaviour: does the library-resolution mechanism reach fixpoint, does it
 collapse measurement-equivalent configs, does it detect cycles, does it
@@ -108,7 +108,7 @@ class TestCanonicalise:
 
     def test_chained_rules_converge(self):
         # Invariant A: if temperature > 0.8, strip top_p (simulating greedy-when-hot
-        # semantics — imaginary for this test).
+        # semantics - imaginary for this test).
         # Invariant B: if top_p is None, strip top_k.
         # Input with temperature 0.9, top_p=0.95, top_k=50 must converge in 2 passes.
         cfg = _mk_config(
@@ -250,7 +250,7 @@ class TestDedupSweep:
         assert len(result.declared_resolved_hashes) == 2
 
     def test_integration_with_real_corpus(self):
-        # End-to-end with the actual validated invariants — the original motivating
+        # End-to-end with the actual validated invariants - the original motivating
         # example: do_sample x temperature = [T,F] x [0.5, 1.0, 1.5] -> 6 configs,
         # library-resolution mechanism collapses to 4 (1 greedy canonical + 3 sampling variants).
         from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader

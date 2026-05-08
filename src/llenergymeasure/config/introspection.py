@@ -252,7 +252,7 @@ def get_params_from_model(
 def _get_custom_test_values() -> dict[str, list[Any]]:
     """Get custom test value overrides for params that need special handling.
 
-    Returns known-invalid values for constrained fields — used by runtime
+    Returns known-invalid values for constrained fields - used by runtime
     parameter tests to verify validation rejects out-of-range inputs.
     One invalid value per constrained field (the simplest violation).
     """
@@ -339,7 +339,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
     - Dataset: source, n_prompts, order
 
     Note: dtype and sampling params (temperature, top_k, top_p, etc.) are not
-    shared — they live per-engine on each engine's config section and are
+    shared - they live per-engine on each engine's config section and are
     discovered via :func:`get_engine_params`.
     """
     shared: dict[str, dict[str, Any]] = {}
@@ -420,7 +420,7 @@ def get_experiment_config_schema() -> dict[str, Any]:
     Returns:
         JSON-serialisable dict with the complete schema including all
         properties, types, constraints, and nested model schemas.
-        Uses Pydantic's built-in model_json_schema() — always in sync
+        Uses Pydantic's built-in model_json_schema() - always in sync
         with the actual model definition.
     """
     from llenergymeasure.config.models import ExperimentConfig
@@ -504,7 +504,7 @@ def list_all_param_paths(engine: str | None = None) -> list[str]:
 def get_engine_specific_params() -> dict[str, list[str]]:
     """Get params that are only valid for specific engines.
 
-    Derived from the Pydantic engine models via ``get_engine_params`` — never
+    Derived from the Pydantic engine models via ``get_engine_params`` - never
     hand-maintained. Adding or removing a typed field in
     ``engine_configs.py`` is automatically reflected here.
 

@@ -9,7 +9,7 @@ shape it can structurally translate.
 Why a fresh static miner rather than reusing ``transformers_static_miner``
 -------------------------------------------------------------------------
 The HF static miner is paired tightly with HF's ``minor_issues`` channel and
-the strict-validate composed-error message shape — neither of which exist
+the strict-validate composed-error message shape - neither of which exist
 in vLLM. Trying to share the per-engine driver would leak HF concepts into
 vLLM emission. The shared infrastructure that DOES carry over is the lift
 modules (``_pydantic_lift`` / ``_msgspec_lift`` / ``_dataclass_lift``) and
@@ -122,7 +122,7 @@ LANDMARKS: tuple[str, ...] = (
 
 
 # ---------------------------------------------------------------------------
-# AST landmark registry — what to walk and where
+# AST landmark registry - what to walk and where
 # ---------------------------------------------------------------------------
 
 
@@ -155,7 +155,7 @@ class _ASTTarget:
 
 
 _AST_TARGETS: tuple[_ASTTarget, ...] = (
-    # SamplingParams family — sampling_params.py
+    # SamplingParams family - sampling_params.py
     _ASTTarget(
         module_attr="sampling_params.SamplingParams",
         method="_verify_args",
@@ -303,7 +303,7 @@ def _detect_raise(stmt: ast.stmt) -> _Detected | None:
 
 
 def _detect_self_assign(stmt: ast.stmt) -> _Detected | None:
-    """``self.X = Y`` inside an ``if`` body — silent normalisation."""
+    """``self.X = Y`` inside an ``if`` body - silent normalisation."""
     if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
         return None
     target = stmt.targets[0]
@@ -379,7 +379,7 @@ def _detect_body_stmts(body: list[ast.stmt]) -> list[_Detected]:
     Iterates over every statement (not just the first) so a single ``if``
     block containing multiple ``self.x = …`` assignments emits one invariant
     per assignment. ``vllm.SamplingParams._verify_greedy_sampling`` is
-    the canonical case — it overrides three sampling fields in one branch
+    the canonical case - it overrides three sampling fields in one branch
     and we want a invariant for each. Recurses into nested ``if`` blocks via
     the parent miner.
     """
@@ -736,7 +736,7 @@ def _walk_function(
 
     def descend(body: list[ast.stmt], frame: _Frame) -> None:
         # Emit invariants for top-level detector hits first (rare but possible:
-        # bare ``raise`` in a method body — we skip those because they have
+        # bare ``raise`` in a method body - we skip those because they have
         # no condition to translate).
         # Then recurse into ``if`` / ``for`` blocks.
         for stmt in body:
@@ -754,13 +754,13 @@ def _walk_function(
         # internal-state guards (``if self._initialized``) and argument-
         # gated invariants without configuration meaning.
         if public_fields and not any(p.field in public_fields for p in own_preds):
-            # Recurse anyway — nested predicates on different fields may still
+            # Recurse anyway - nested predicates on different fields may still
             # be public-field-referencing.
             descend(if_node.body, frame)
             return
         local = _Frame(predicates=[*frame.predicates, *own_preds])
         # Emit invariants for every detected statement in this body (not just
-        # the first — multiple self-assigns in one branch must each emit).
+        # the first - multiple self-assigns in one branch must each emit).
         for det in _detect_body_stmts(if_node.body):
             invariant = _build_rule(
                 target=target,
@@ -772,9 +772,9 @@ def _walk_function(
             if invariant is None:
                 continue
             if invariant.id in seen_ids:
-                # Append a numeric suffix on collision rather than dropping —
+                # Append a numeric suffix on collision rather than dropping -
                 # multiple invariants at the same predicate shape can be real
-                # (e.g. greedy block sets top_p, top_k, min_p — three invariants
+                # (e.g. greedy block sets top_p, top_k, min_p - three invariants
                 # on the same predicate).
                 suffix = 2
                 while f"{invariant.id}__{suffix}" in seen_ids:
@@ -789,7 +789,7 @@ def _walk_function(
             if isinstance(sub, ast.If):
                 _handle_if(sub, frame)
             elif isinstance(sub, (ast.Assign, ast.Raise, ast.Expr)):
-                # Bare statements in else — no condition to translate.
+                # Bare statements in else - no condition to translate.
                 continue
 
     descend(func.body, _Frame())
@@ -826,7 +826,7 @@ def _build_rule(
         # Force distinct: tweak the last field by flipping its value.
         kwargs_neg = _force_distinct(kwargs_pos, effective_preds)
 
-    # Use the field's runtime default for the negative when available —
+    # Use the field's runtime default for the negative when available -
     # raw-flipped values (None on an int field, "_neg" on an int) trip
     # pydantic type validation on the negative path which would
     # quarantine an otherwise-correct invariant. Falling back to the
@@ -859,7 +859,7 @@ def _build_rule(
         expected_outcome={
             "outcome": detected.outcome,
             "emission_channel": detected.emission_channel,
-            # Bare field name (no namespace prefix) — matches the runtime
+            # Bare field name (no namespace prefix) - matches the runtime
             # observation shape ``validate_invariants`` returns. Namespacing this
             # would cause every dormancy invariant to diverge on
             # ``normalised_fields`` in validation-CI.
@@ -958,7 +958,7 @@ def _describe_rule(*, target: _ASTTarget, preds: list[_Predicate], detected: _De
 def _public_field_names_from_target(target: _ASTTarget) -> frozenset[str]:
     """Return the set of public field names of the target class.
 
-    Uses runtime introspection — lists ``__pydantic_fields__`` for
+    Uses runtime introspection - lists ``__pydantic_fields__`` for
     pydantic-dataclasses, ``__struct_fields__`` for msgspec-Struct,
     ``dataclasses.fields`` for stdlib dataclasses, and the union of
     instance ``vars(cls())`` keys as a last-resort fallback.
@@ -975,10 +975,10 @@ def _public_field_names_from_target(target: _ASTTarget) -> frozenset[str]:
     # Pydantic-v2 surface.
     pyd_fields = getattr(cls, "__pydantic_fields__", None)
     if pyd_fields:
-        # Include private fields too — vLLM's ``ParallelConfig._api_process_count``
+        # Include private fields too - vLLM's ``ParallelConfig._api_process_count``
         # is a real config knob exposed via the pydantic model, just spelt
         # with a leading underscore. The public-field filter uses this set
-        # as "is the field a real configurable field" — leading-underscore
+        # as "is the field a real configurable field" - leading-underscore
         # fields qualify if pydantic registers them.
         return frozenset(pyd_fields.keys())
     # msgspec.Struct surface.
@@ -1014,7 +1014,7 @@ def _field_default_from_target(target: _ASTTarget, field_name: str) -> tuple[boo
     if pyd_fields and field_name in pyd_fields:
         info = pyd_fields[field_name]
         default = getattr(info, "default", None)
-        # PydanticUndefined sentinel means "no default declared" — skip it.
+        # PydanticUndefined sentinel means "no default declared" - skip it.
         if default is not None and type(default).__name__ == "PydanticUndefinedType":
             return False, None
         return True, default
@@ -1065,7 +1065,7 @@ def _check_landmarks() -> tuple[str, dict[str, str]]:
                 f"{target.module_path}.{target.class_name}.{target.method}",
                 detail="method missing on class",
             )
-        # AST find_class / find_method on the parsed source — fail-loud if
+        # AST find_class / find_method on the parsed source - fail-loud if
         # the symbol is on the runtime class but not in the source AST
         # (e.g. dynamically attached method). The runtime ``hasattr``
         # check above is necessary but not sufficient; the AST miner

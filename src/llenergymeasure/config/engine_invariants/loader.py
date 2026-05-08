@@ -8,7 +8,7 @@ template. The generic ``@model_validator`` in ``config/models.py`` calls
 error/warn/dormant annotations based on the invariant's severity.
 
 Design mirror: this module parallels :mod:`llenergymeasure.config.schema_loader`
-from parameter-discovery — same envelope validation
+from parameter-discovery - same envelope validation
 (:class:`UnsupportedSchemaVersionError` on major-version mismatch), same
 per-instance caching for test isolation, same lazy load pattern.
 
@@ -17,7 +17,7 @@ Lifecycle pair (per the engine-coupling architecture, 2026-04-28):
   ``engine-invariants`` (validation gate) CI pipeline (see
   ``scripts/validate_invariants.py``) runs every invariant through the real library
   and emits ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml``
-  — this YAML captures observed outcomes. When present, the loader overlays
+  - this YAML captures observed outcomes. When present, the loader overlays
   the validated observations onto the corpus so downstream consumers see
   CI-validated truth; absent, the loader falls back to the proposed YAML so
   local development without a validation run still works.
@@ -42,12 +42,12 @@ refuses partial reads to avoid silently accepting a future schema shape.
 Severity = Literal["dormant", "warn", "error"]
 """Severity tier a invariant match produces at validation time.
 
-- ``dormant`` — the config still runs, but a field is silently ignored or
+- ``dormant`` - the config still runs, but a field is silently ignored or
   coerced by the engine. Observable-but-user-invisible; the invariant surfaces
   this.
-- ``warn`` — the engine announces a suboptimal setting at construct or
+- ``warn`` - the engine announces a suboptimal setting at construct or
   runtime but still proceeds.
-- ``error`` — the engine raises and the config cannot run.
+- ``error`` - the engine raises and the config cannot run.
 """
 
 Outcome = Literal[
@@ -59,13 +59,13 @@ Outcome = Literal[
 ]
 """What the engine does when the invariant's predicate holds.
 
-- ``dormant_silent`` — the engine silently normalises or ignores
+- ``dormant_silent`` - the engine silently normalises or ignores
   (observable only via ``extract_observed_params`` post-construction).
-- ``dormant_announced`` — the engine writes to a ``minor_issues`` dict /
+- ``dormant_announced`` - the engine writes to a ``minor_issues`` dict /
   logger, but the config still runs.
-- ``warn`` — the engine calls ``warnings.warn(...)`` or equivalent.
-- ``error`` — the engine raises at construct / validate time.
-- ``pass`` — the predicate matched but the engine handles it cleanly;
+- ``warn`` - the engine calls ``warnings.warn(...)`` or equivalent.
+- ``error`` - the engine raises at construct / validate time.
+- ``pass`` - the predicate matched but the engine handles it cleanly;
   used for positive-reference invariants.
 """
 
@@ -79,12 +79,12 @@ EmissionChannel = Literal[
 ]
 """How the engine user-visibly signals the issue.
 
-- ``warnings_warn`` — Python ``warnings.warn(...)``.
-- ``logger_warning`` / ``logger_warning_once`` — stdlib logger.
-- ``minor_issues_dict`` — an internal dict (e.g. HF's ``minor_issues``)
+- ``warnings_warn`` - Python ``warnings.warn(...)``.
+- ``logger_warning`` / ``logger_warning_once`` - stdlib logger.
+- ``minor_issues_dict`` - an internal dict (e.g. HF's ``minor_issues``)
   whose presence is user-observable via strict-mode raise OR log.
-- ``none`` — no user-visible emission (silent coercion or raise).
-- ``runtime_exception`` — exception raised at engine construct / runtime.
+- ``none`` - no user-visible emission (silent coercion or raise).
+- ``runtime_exception`` - exception raised at engine construct / runtime.
 
 Canonical invariant: ``minor_issues_dict`` alone is an internal signal; if HF
 composes the dict then emits via ``logger.warning_once``, the
@@ -106,24 +106,24 @@ AddedBy = Literal[
 
 Eight discovery paths with distinct trust/verifiability profiles:
 
-- ``static_miner`` — invariant extracted by parsing Python source AST
+- ``static_miner`` - invariant extracted by parsing Python source AST
   (used by vLLM / TRT-LLM miners; CI can re-derive on library bump).
-- ``dynamic_miner`` — invariant extracted via library-API introspection
+- ``dynamic_miner`` - invariant extracted via library-API introspection
   (transformers' ``GenerationConfig.validate(strict=True)`` returning
   structured ``minor_issues`` dict; CI can re-derive on library bump).
-- ``pydantic_lift`` — invariant extracted from a ``pydantic.BaseModel`` (or
+- ``pydantic_lift`` - invariant extracted from a ``pydantic.BaseModel`` (or
   ``pydantic.dataclasses.dataclass``) via ``model_json_schema()`` plus
   ``FieldInfo.metadata`` (annotated-types constraints + Literal allowlists).
-- ``msgspec_lift`` — invariant extracted from a ``msgspec.Struct`` via
+- ``msgspec_lift`` - invariant extracted from a ``msgspec.Struct`` via
   ``msgspec.inspect.type_info`` (``Meta(ge=, le=, ...)`` constraints).
-- ``dataclass_lift`` — invariant extracted from a ``@dataclasses.dataclass``
+- ``dataclass_lift`` - invariant extracted from a ``@dataclasses.dataclass``
   via ``dataclasses.fields()`` plus ``Literal[...]`` annotation parsing.
-- ``manual_seed`` — hand-written by a maintainer for cases the miners
+- ``manual_seed`` - hand-written by a maintainer for cases the miners
   can't reach (e.g. BNB type invariants; not auto-regenerable).
-- ``runtime_warning`` — proposed by the feedback loop from captured
+- ``runtime_warning`` - proposed by the feedback loop from captured
   ``logger.warning_once`` emissions (needs human generalisation before
   landing).
-- ``observed_collision`` — proposed by the feedback loop from observed-config-hash
+- ``observed_collision`` - proposed by the feedback loop from observed-config-hash
   collision detection (needs human generalisation before landing).
 """
 
@@ -238,7 +238,7 @@ class Invariant:
         dotted references (``@transformers.sampling.num_beams``) resolve
         from the config root.
 
-        ``declared_value`` on the returned match is the last field's value —
+        ``declared_value`` on the returned match is the last field's value -
         corpus convention puts the precondition fields first and the
         *subject* field last (the field the invariant is actually about). Users
         see the subject value substituted into message templates.
@@ -257,7 +257,7 @@ class Invariant:
     def render_message(self, match: InvariantMatch) -> str:
         """Substitute ``{declared_value}`` / ``{effective_value}`` / ``{invariant_id}`` in the template.
 
-        Uses ``str.format`` with permissive defaults — templates that reference
+        Uses ``str.format`` with permissive defaults - templates that reference
         missing keys fall back to the invariant id + raw template rather than
         raising at user-facing time.
         """
@@ -298,7 +298,7 @@ def _spec_has_field_ref(spec: Any) -> bool:
     Used to short-circuit :func:`_resolve_field_refs_in_spec` on the hot
     path: most predicates are literal (no cross-field refs), so paying a
     cheap pre-scan to skip the substitution-recursion's allocations is
-    a win — every ``Invariant.try_match`` runs this on every match_fields
+    a win - every ``Invariant.try_match`` runs this on every match_fields
     spec on every config construction.
     """
     if isinstance(spec, str):
@@ -320,7 +320,7 @@ def _resolve_field_refs_in_spec(spec: Any, config: Any, predicate_field_path: st
     the config root.
 
     Short-circuits via :func:`_spec_has_field_ref` when the spec contains
-    no references — returns the original spec unchanged in that case,
+    no references - returns the original spec unchanged in that case,
     avoiding the dict/list rebuild overhead on the common literal-spec
     path.
 
@@ -357,10 +357,10 @@ _OPERATOR_HANDLERS: dict[str, Any] = {
     # ``a`` may be None when the predicate's field is unset; ``b`` may be
     # None when a ``@field_ref`` resolves against a missing target. Both
     # cases must yield False (invariant does not fire) rather than raise.
-    # ``==`` and ``equals`` stay as plain equality — `None == x` evaluates
+    # ``==`` and ``equals`` stay as plain equality - `None == x` evaluates
     # to `False` for any non-None `x`, so they naturally don't fire on None.
     # ``equals`` / ``not_equal`` are word-form aliases of ``==`` / ``!=``
-    # and MUST match their symbol forms exactly — corpus authors swap them.
+    # and MUST match their symbol forms exactly - corpus authors swap them.
     "==": lambda a, b: a == b,
     "!=": lambda a, b: a is not None and b is not None and a != b,
     "<": lambda a, b: a is not None and b is not None and a < b,
@@ -372,7 +372,7 @@ _OPERATOR_HANDLERS: dict[str, Any] = {
     # Membership operators: None-safe on the asymmetric one (``not_in``)
     # so unset fields don't trip the invariant. ``in`` against a missing field
     # naturally yields False without an explicit guard. Reject non-iterable
-    # specs (a string spec would otherwise fall through to substring match —
+    # specs (a string spec would otherwise fall through to substring match -
     # "ab" in "abc" is True, which surprises corpus authors writing
     # {"in": "abc"} thinking "exactly one of these three chars").
     "in": lambda a, b: _require_iterable(b, "in") and a in b,
@@ -391,7 +391,7 @@ _OPERATOR_HANDLERS: dict[str, Any] = {
     # positive/negative convention (``equals`` / ``not_equal``,
     # ``in`` / ``not_in``). Both operands must be non-bool integers
     # (``True``/``False`` would silently pass via ``bool`` < ``int``).
-    # ``not_divisible_by`` fires when ``a % b != 0`` — corpus authors
+    # ``not_divisible_by`` fires when ``a % b != 0`` - corpus authors
     # write ``num_beams: {not_divisible_by: '@num_beam_groups'}`` to
     # express "invariant fires when num_beams isn't a multiple of
     # num_beam_groups". A zero divisor yields False (no invariant fires).
@@ -411,7 +411,7 @@ def _is_int_pair(a: Any, b: Any) -> bool:
 
 
 def _type_name(value: Any) -> str:
-    """Return the concrete class name of ``value`` — ``type(value).__name__``.
+    """Return the concrete class name of ``value`` - ``type(value).__name__``.
 
     **Collision limitation:** this is the bare class name without the module
     qualifier, so unrelated libraries that happen to use the same class name
@@ -454,7 +454,7 @@ def evaluate_predicate(actual: Any, spec: Any) -> bool:
     - Multi-key dict → every operator must hold (all predicates AND-combined).
 
     The last form covers corpus entries like
-    ``{present: true, not_equal: 1.0}`` — field must be set AND not default.
+    ``{present: true, not_equal: 1.0}`` - field must be set AND not default.
     """
     if isinstance(spec, dict):
         if not spec:
@@ -477,7 +477,7 @@ def evaluate_predicate(actual: Any, spec: Any) -> bool:
 def resolve_field_path(config: Any, path: str) -> Any:
     """Walk dotted attribute / key path against ``config``.
 
-    Missing attributes return ``None`` rather than raising — the predicate
+    Missing attributes return ``None`` rather than raising - the predicate
     engine treats ``None`` as an absent field. Supports nested Pydantic models,
     dataclasses, and plain dicts mixed in any combination.
 
@@ -497,17 +497,17 @@ def resolve_field_path(config: Any, path: str) -> Any:
         if isinstance(current, dict):
             current = current.get(part)
             continue
-        # Pydantic models — use model_fields for the authoritative field set.
+        # Pydantic models - use model_fields for the authoritative field set.
         model_fields = getattr(type(current), "model_fields", None)
         if isinstance(model_fields, dict) and part in model_fields:
             current = getattr(current, part, None)
             continue
-        # Dataclasses — use __dataclass_fields__ for the authoritative field set.
+        # Dataclasses - use __dataclass_fields__ for the authoritative field set.
         dc_fields = getattr(type(current), "__dataclass_fields__", None)
         if isinstance(dc_fields, dict) and part in dc_fields:
             current = getattr(current, part, None)
             continue
-        # Fallback: plain objects. Reject callables — they're methods or
+        # Fallback: plain objects. Reject callables - they're methods or
         # descriptors, never config field values.
         candidate = getattr(current, part, None)
         current = None if callable(candidate) else candidate
@@ -639,13 +639,13 @@ _DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parents[2] / "engines"
 class EngineInvariantsLoader:
     """Load, cache, and serve :class:`EngineInvariants` per engine.
 
-    Per-instance cache (rather than module-level LRU) — tests can instantiate
+    Per-instance cache (rather than module-level LRU) - tests can instantiate
     a loader and monkeypatch ``corpus_root`` without polluting other tests.
 
     Load order (picked up automatically; per-engine sub-package layout):
-      1. **Proposed YAML** under ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`` —
+      1. **Proposed YAML** under ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`` -
          the maintainer-seeded source of truth; always present in-repo.
-      2. **Validated YAML** under ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml`` —
+      2. **Validated YAML** under ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml`` -
          CI-validated observed behaviour, overlaid onto the corpus's invariants
          when present. Written by ``scripts/validate_invariants.py`` under the
          engine-invariants CI.
@@ -660,7 +660,7 @@ class EngineInvariantsLoader:
 
         When a CI-validated validated YAML envelope exists at the configured
         ``corpus_root``, the loader overlays its observed outcomes onto the
-        corpus's invariants — downstream consumers see empirically-confirmed
+        corpus's invariants - downstream consumers see empirically-confirmed
         behaviour rather than the corpus's declared shape alone.
         """
         cached = self._cache.get(engine)
@@ -704,7 +704,7 @@ def _try_load_validated_yaml(corpus_root: Path, engine: str) -> dict[str, Any] |
 
     Reads from ``{corpus_root}/{engine}/invariants.validated.yaml``. Swallows YAML parse
     errors and rejects unsupported envelope versions to avoid breaking
-    startup on a corrupt or future-schema commit-back — the validation CI job
+    startup on a corrupt or future-schema commit-back - the validation CI job
     will resurface the issue.
     """
     path = corpus_root / engine / "invariants.validated.yaml"
@@ -746,7 +746,7 @@ def _overlay_validated_observations(
     observed-* keys alongside the corpus's declared ``outcome`` /
     ``emission_channel`` so consumers (the generic ``@model_validator``)
     can act on CI-validated truth. The declared fields are left untouched
-    — strict validation in :func:`_parse_invariant` is not re-exercised against
+    - strict validation in :func:`_parse_invariant` is not re-exercised against
     the observed vocabulary (which is deliberately wider; see
     ``scripts/_invariant_validation_common.py``).
     """

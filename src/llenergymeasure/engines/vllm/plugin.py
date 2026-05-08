@@ -1,4 +1,4 @@
-"""vLLM inference engine — thin EnginePlugin.
+"""vLLM inference engine - thin EnginePlugin.
 
 Implements the 4-method EnginePlugin protocol:
   load_model, warmup, run_inference, cleanup
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class VLLMEngine:
-    """vLLM inference engine — offline batch mode, thin plugin.
+    """vLLM inference engine - offline batch mode, thin plugin.
 
     Implements EnginePlugin:
     - load_model: Load model via vllm.LLM(), build SamplingParams
@@ -139,7 +139,7 @@ class VLLMEngine:
     ) -> InferenceOutput:
         """Run offline batch inference over all prompts.
 
-        Single llm.generate() call with ALL prompts — no streaming, no
+        Single llm.generate() call with ALL prompts - no streaming, no
         one-at-a-time loops.
 
         Args:
@@ -172,7 +172,7 @@ class VLLMEngine:
         try:
             t0 = time.perf_counter()
             # BeamSearchParams uses llm.beam_search(), SamplingParams uses llm.generate().
-            # Guard import — BeamSearchParams was added in vLLM >=0.8; older versions
+            # Guard import - BeamSearchParams was added in vLLM >=0.8; older versions
             # (e.g. 0.7.3 in the v0.9.0 container image) don't export it.
             try:
                 from vllm import BeamSearchParams as _BSP
@@ -194,7 +194,7 @@ class VLLMEngine:
                 hint="reduce n, use gpu_memory_utilization=0.8, or use a smaller model.",
             )
 
-        # Capture peak memory — torch first, NVML fallback for pre-allocation detection.
+        # Capture peak memory - torch first, NVML fallback for pre-allocation detection.
         from llenergymeasure.engines._helpers import get_cuda_peak_memory_mb
 
         peak_mb = get_cuda_peak_memory_mb()
@@ -246,7 +246,7 @@ class VLLMEngine:
 
         # Attempt to expose HuggingFace model for FLOPs estimation.
         # vllm.LLM has llm_engine.model_executor.driver_worker.model_runner.model
-        # This is an internal API path — stash in extras, harness will attempt FLOPs.
+        # This is an internal API path - stash in extras, harness will attempt FLOPs.
         hf_model = None
         with contextlib.suppress(Exception):
             hf_model = llm.llm_engine.model_executor.driver_worker.model_runner.model
@@ -277,7 +277,7 @@ class VLLMEngine:
     ) -> dict[str, Any]:
         """Extract post-construction state from the vLLM native types.
 
-        Sampling params are captured via :func:`extract_observed_params` —
+        Sampling params are captured via :func:`extract_observed_params` -
         PoC-C allowlist is unset (the private fields ``_all_stop_token_ids``,
         ``_bad_words_token_ids``, ``_eos_token_id`` default-exclude since they
         vary per-model without affecting measurement-equivalence). Engine
@@ -292,7 +292,7 @@ class VLLMEngine:
         sampling: dict[str, Any] = {}
         try:
             sampling = extract_observed_params(sampling_params)
-        except Exception as exc:  # pragma: no cover — best-effort capture
+        except Exception as exc:  # pragma: no cover - best-effort capture
             logger.debug("vLLM SamplingParams capture failed: %s", exc)
 
         engine_params: dict[str, Any] = {}
@@ -300,7 +300,7 @@ class VLLMEngine:
             vllm_cfg = getattr(llm.llm_engine, "vllm_config", None)
             if vllm_cfg is not None:
                 engine_params = extract_observed_params(vllm_cfg)
-        except Exception as exc:  # pragma: no cover — best-effort capture
+        except Exception as exc:  # pragma: no cover - best-effort capture
             logger.debug("vLLM config capture failed: %s", exc)
 
         return assemble_observed_params(engine_params, sampling, "vllm")
@@ -364,7 +364,7 @@ class VLLMEngine:
         if vllm_cfg is not None and vllm_cfg.dtype is not None:
             kwargs["dtype"] = vllm_cfg.dtype
 
-        # Apply VLLMEngineConfig fields if provided — only set non-None values
+        # Apply VLLMEngineConfig fields if provided - only set non-None values
         if vllm_cfg is not None and vllm_cfg.engine is not None:
             engine = vllm_cfg.engine
 
@@ -390,7 +390,7 @@ class VLLMEngine:
             _set("max_seq_len_to_capture", engine.max_seq_len_to_capture)
             _set("distributed_executor_backend", engine.distributed_executor_backend)
 
-            # Speculative decoding — dump the typed sub-config straight into kwargs.
+            # Speculative decoding - dump the typed sub-config straight into kwargs.
             if engine.speculative_config is not None:
                 spec_dict = engine.speculative_config.model_dump(exclude_none=True)
                 if spec_dict:

@@ -119,7 +119,7 @@ class TestIsDockerAvailable:
 
 
 # ---------------------------------------------------------------------------
-# resolve_runner — precedence chain
+# resolve_runner - precedence chain
 # ---------------------------------------------------------------------------
 
 
@@ -269,7 +269,7 @@ class TestResolveRunner:
         ):
             spec = resolve_runner("transformers", user_config=user_config)
 
-        # "auto" falls through — Docker auto-detection applies
+        # "auto" falls through - Docker auto-detection applies
         assert spec.source == "auto_detected"
         assert spec.mode == "docker"
 

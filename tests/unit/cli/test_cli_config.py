@@ -117,7 +117,7 @@ def test_config_verbose_gpu_driver() -> None:
 
     mock_pynvml = MagicMock()
     mock_pynvml.nvmlSystemGetDriverVersion.return_value = mock_driver_raw
-    mock_pynvml.__spec__ = MagicMock()  # Must be non-None — sys.modules insertion requires it
+    mock_pynvml.__spec__ = MagicMock()  # Must be non-None - sys.modules insertion requires it
 
     mock_nvml_context = MagicMock()
     mock_nvml_context.return_value.__enter__ = MagicMock(return_value=None)
@@ -238,7 +238,7 @@ def test_config_user_config_loaded_verbose_non_defaults() -> None:
     fake_path.exists.return_value = True
     fake_path.__str__ = lambda self: "/fake/config.yaml"
 
-    # load_user_config and UserConfig are lazy-imported inside the function body —
+    # load_user_config and UserConfig are lazy-imported inside the function body -
     # patch at the source module, not at config_cmd
     with (
         patch.object(cli_config_mod, "_probe_gpu", return_value=None),
@@ -339,7 +339,7 @@ def test_config_verbose_driver_exception_handled() -> None:
     ):
         result = runner.invoke(app, ["config", "-v"])
 
-    # Driver exception is swallowed — command must still succeed
+    # Driver exception is swallowed - command must still succeed
     assert result.exit_code == 0
 
 

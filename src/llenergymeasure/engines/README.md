@@ -101,7 +101,7 @@ pattern. Host imports of these libraries fail by design.
 
 ## Layer constraints
 
-- Layer 2 — may import from layers 0–1 only
+- Layer 2 - may import from layers 0-1 only
 - Can import from: `config/`, `domain/`, `device/`, `utils/`, `energy/`, `datasets/`, `infra/`
 - Cannot import from: `harness/`, `study/`, `api/`, `cli/`, `results/`
 

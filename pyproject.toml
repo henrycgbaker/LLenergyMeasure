@@ -52,7 +52,7 @@ llem = "llenergymeasure.cli:app"
 packages = ["src/llenergymeasure"]
 # Hatchling includes non-Python files in package dirs by default, so the
 # Z-engines runtime data (src/llenergymeasure/engines/<engine>/{invariants.*.yaml,
-# schema.discovered.json}) ships automatically in the wheel — no force-include
+# schema.discovered.json}) ships automatically in the wheel - no force-include
 # needed (and adding one creates duplicates).
 
 [tool.ruff]
@@ -149,13 +149,13 @@ layers = [
 ignore_imports = [
     # Phase 50 M4: config.loader.load_study_config invokes resolve_library_effective
     # as part of the grid-expansion pipeline (between expand_grid and
-    # apply_cycles). The library-resolution mechanism lives under study/ — reviewer
+    # apply_cycles). The library-resolution mechanism lives under study/ - reviewer
     # may decide to invert this by moving dedup into api/cli callers; for now
     # the import is local-inside-function so there is no cycle risk.
     "llenergymeasure.config.loader -> llenergymeasure.study.library_resolution",
     # Phase 50 M4: harness._write_config_sidecar() persists config.json
     # (needs results.persistence). Import is local-inside-method; no cycle risk.
-    # H3 hashing now imports from domain.hashing (L0) — no layer breach.
+    # H3 hashing now imports from domain.hashing (L0) - no layer breach.
     "llenergymeasure.harness -> llenergymeasure.results.persistence",
 ]
 

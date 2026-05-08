@@ -241,7 +241,7 @@ def test_save_and_record_calls_mark_failed_on_exception(tmp_path: Path) -> None:
     ):
         _save_and_record(result, study_dir, manifest, "aabb1122", 1, result_files)
 
-    # mark_failed must be called — NOT mark_completed
+    # mark_failed must be called - NOT mark_completed
     manifest.mark_failed.assert_called_once()
     call_args = manifest.mark_failed.call_args[0]
     assert call_args[0] == "aabb1122"  # config_hash

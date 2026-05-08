@@ -1,12 +1,12 @@
 """Env-var helpers for opinionated runtime defaults.
 
 This module is the canonical location for ``LLEM_*`` env-var constants and
-the thin passthrough helpers that read them. Helpers are pure — they return
+the thin passthrough helpers that read them. Helpers are pure - they return
 ``os.environ.get(...)`` (or a parsed form) and return ``None`` / ``False``
 when unset, deferring to each inference library's own default.
 
 Opinionated defaults (e.g. ``LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP=auto``) live in the
-repo-root ``.env.example`` — the single reviewable source of truth for what
+repo-root ``.env.example`` - the single reviewable source of truth for what
 llem overrides out-of-the-box. Users copy ``.env.example`` to ``.env`` (auto-
 loaded by the CLI) and edit to taste. Because helpers have no baked-in
 defaults, removing a line from ``.env`` always restores the library default.
@@ -35,7 +35,7 @@ ENV_TRANSFORMERS_DEFAULT_DEVICE_MAP: Final = "LLEM_TRANSFORMERS_DEFAULT_DEVICE_M
 Unset / empty → ``None`` (caller omits the kwarg; HuggingFace's own default
 applies, which is CPU-only). Any non-empty value is forwarded as-is
 (e.g. ``auto``, ``balanced``, ``sequential``). The opinionated default
-``auto`` is shipped via ``.env.example`` — not baked into this helper.
+``auto`` is shipped via ``.env.example`` - not baked into this helper.
 """
 
 
@@ -61,7 +61,7 @@ ENV_TRT_BUILD_CACHE_ENABLED: Final = "LLEM_TRT_BUILD_CACHE_ENABLED"
 Unset / empty / any falsy value (``0``, ``false``, ``no``, ``off``) → False,
 matching TRT-LLM's own default. Truthy values (``1``, ``true``, ``yes``,
 ``on``, case-insensitive) → True. The opinionated default ``1`` is shipped
-via ``.env.example`` — not baked into this helper.
+via ``.env.example`` - not baked into this helper.
 """
 
 

@@ -66,7 +66,7 @@ def test_lift_numeric_meta_and_literal() -> None:
 
 
 def test_lift_returns_empty_for_struct_without_meta() -> None:
-    """Edge case: vLLM ``SamplingParams`` ships zero ``Meta`` — must yield ``[]``.
+    """Edge case: vLLM ``SamplingParams`` ships zero ``Meta`` - must yield ``[]``.
 
     Per locked design §1, a Meta-less struct returning ``[]`` is the expected
     contract; the static miner picks up the slack via AST.

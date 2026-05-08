@@ -1,4 +1,4 @@
-"""Unit tests for results/extended_metrics.py — compute and aggregate functions."""
+"""Unit tests for results/extended_metrics.py - compute and aggregate functions."""
 
 from __future__ import annotations
 

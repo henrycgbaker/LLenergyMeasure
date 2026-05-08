@@ -27,7 +27,7 @@ SUPPORTED_ENGINES: tuple[Engine, ...] = tuple(Engine)
 
 _DETAIL_FOR_STATUS: dict[SchemaStatus, str] = {
     SchemaStatus.OK: "",
-    SchemaStatus.UNVERIFIED: "image predates schema-fingerprint label — rebuild to verify",
+    SchemaStatus.UNVERIFIED: "image predates schema-fingerprint label - rebuild to verify",
     SchemaStatus.UNREACHABLE: "no labels (image missing or built pre-handshake)",
 }
 
@@ -69,7 +69,7 @@ def run_doctor_checks(
 ) -> DoctorReport:
     """Run image-health checks across *engines* and return a structured report.
 
-    Image resolution follows ``get_default_image`` — local build first, then
+    Image resolution follows ``get_default_image`` - local build first, then
     versioned GHCR tag. Unreachable images (docker not installed, no such tag,
     inspect timeout) become ``UNREACHABLE`` rows rather than blowing up.
     """

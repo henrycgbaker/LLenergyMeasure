@@ -7,7 +7,7 @@ This module is engine-agnostic. Per-engine behaviour lives behind
 :func:`get_native_type_runner`, which dispatches on engine name.
 
 Design contract: the validation step observes library behaviour concretely. It
-never re-interprets the invariant's declared shape — if the library behaves
+never re-interprets the invariant's declared shape - if the library behaves
 differently from what the corpus claims, CI fails. See
 :doc:`.product/designs/config-deduplication-dormancy/runtime-config-validation.md`
 §4.3 for the full contract.
@@ -142,7 +142,7 @@ def extract_state(
 
     Handles Pydantic v2 (``model_dump``), dataclasses, ``__slots__`` classes
     and plain ``__dict__`` classes. Private attributes (``_foo``) are dropped
-    unless they appear in ``private_allowlist`` — see module docstring for
+    unless they appear in ``private_allowlist`` - see module docstring for
     why the allowlist exists.
     """
     allowlist = frozenset(private_allowlist)
@@ -179,7 +179,7 @@ def extract_state(
 def diff_input_vs_state(
     kwargs: dict[str, Any], observed_state: dict[str, Any]
 ) -> dict[str, dict[str, Any]]:
-    """Identify silent normalisations — fields the library changed post-construction.
+    """Identify silent normalisations - fields the library changed post-construction.
 
     Returns ``{field: {"declared": <input>, "observed": <state>}}``.
     """
@@ -245,7 +245,7 @@ def _patch_warning_once() -> Callable[[], None]:
     nothing to patch).
 
     HF's ``warning_once`` is ``@functools.lru_cache``-wrapped at the module
-    level — the cache survives across ``run_case`` calls in the same process.
+    level - the cache survives across ``run_case`` calls in the same process.
     Without clearing it, a dormancy invariant that fires its message on invariant N
     would silently no-op on invariant N+1 reusing the same template, and the
     validation classifier would observe ``logger_warning`` (the underlying
@@ -378,7 +378,7 @@ def classify_emission_channel(capture: CaptureBuffers) -> str:
     ``logger_warning_once`` is distinguished from plain ``logger_warning``
     via the sentinel prepended by :func:`_patch_warning_once`. Mixed
     batches (same invariant emitting both forms) classify as
-    ``logger_warning_once`` — the dedup-wrapped form is the stricter claim
+    ``logger_warning_once`` - the dedup-wrapped form is the stricter claim
     on user visibility.
     """
     if capture.exception_type is not None:
@@ -416,7 +416,7 @@ def compare_expected_vs_observed(
 ) -> list[Divergence]:
     """Return the list of expected-vs-observed divergences for one invariant.
 
-    Missing/extra fields on either side are *not* treated as divergence —
+    Missing/extra fields on either side are *not* treated as divergence -
     only fields present in ``expected`` are checked. This keeps the
     comparison permissive while still catching drift in the tracked fields.
     """

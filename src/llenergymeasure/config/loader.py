@@ -85,7 +85,7 @@ def load_experiment_config(
             merged, _unflatten(overrides)
         )  # handle "transformers.batch_size" dotted keys
 
-    # Strip optional version field — not an ExperimentConfig field
+    # Strip optional version field - not an ExperimentConfig field
     merged.pop("version", None)
 
     # Collect unknown field errors before handing to Pydantic
@@ -97,13 +97,13 @@ def load_experiment_config(
             suggestion = _did_you_mean(key, known_fields)
             msg = f"Unknown field '{key}'"
             if suggestion:
-                msg += f" — did you mean '{suggestion}'?"
+                msg += f" - did you mean '{suggestion}'?"
             if path:
                 msg += f" (in {path})"
             errors.append(msg)
         raise ConfigError("\n".join(errors))
 
-    # Construct ExperimentConfig — let ValidationError pass through unchanged
+    # Construct ExperimentConfig - let ValidationError pass through unchanged
     try:
         return ExperimentConfig(**merged)
     except ValidationError:
@@ -123,7 +123,7 @@ def load_study_config(
       1. Load YAML file
       2. Apply CLI overrides on execution block
       3. Parse execution block (Pydantic validates it)
-      4. expand_grid() — Cartesian product + Pydantic validation of each ExperimentConfig
+      4. expand_grid() - Cartesian product + Pydantic validation of each ExperimentConfig
       5. Guard: empty or all-invalid → ConfigError
       6. compute_study_design_hash() over valid experiments
       7. apply_cycles() for cycle ordering
@@ -147,7 +147,7 @@ def load_study_config(
         ValidationError: Pydantic structural errors on ExecutionConfig pass through.
     """
     path = Path(path)
-    raw = _load_file(path)  # reuse existing _load_file — raises ConfigError on missing/parse error
+    raw = _load_file(path)  # reuse existing _load_file - raises ConfigError on missing/parse error
 
     # Apply CLI overrides (--cycles etc. translated into this dict)
     if cli_overrides:
@@ -159,23 +159,23 @@ def load_study_config(
     # Extract study-level metadata
     name = raw.get("study_name")
     # runners: per-engine runner config (e.g. {"transformers": "local", "vllm": "docker"})
-    # None if not specified in YAML — caller uses user config / auto-detection.
+    # None if not specified in YAML - caller uses user config / auto-detection.
     runners: dict[str, str] | None = raw.get("runners") or None
     # images: per-engine Docker image overrides (orthogonal to runners)
     # e.g. {"vllm": "ghcr.io/org/vllm:v1.0"}. None = smart default resolution.
     images: dict[str, str] | None = raw.get("images") or None
 
-    # Parse output block — Pydantic validates it
+    # Parse output block - Pydantic validates it
     output = OutputConfig(**(raw.get("output") or {}))
 
-    # Parse execution block — Pydantic validates it
+    # Parse execution block - Pydantic validates it
     execution = ExecutionConfig(**(raw.get("study_execution") or {}))
 
     # Expand sweep → list[ExperimentConfig], collect skipped
     # This is CFG-12: sweep resolution at YAML parse time, before Pydantic
     valid_experiments, skipped = expand_grid(raw, study_yaml_path=path)
 
-    # Guard: empty study — expand_grid already raises if all_raw_configs is empty,
+    # Guard: empty study - expand_grid already raises if all_raw_configs is empty,
     # but we also need to handle the degenerate case where expand_grid itself
     # returns no valid experiments and raises. If we reach here, valid_experiments
     # has at least one entry (expand_grid raises ConfigError if all invalid).
@@ -192,7 +192,7 @@ def load_study_config(
         )
 
     # Apply library-resolution mechanism + resolved-config-hash dedup to the declared configs
-    # before running cycles. See sweep-dedup.md §2 — this collapses measurement-equivalent
+    # before running cycles. See sweep-dedup.md §2 - this collapses measurement-equivalent
     # configs so a 6-config sweep with dormant sampling fields becomes 4 unique runs.
     from llenergymeasure.study.library_resolution import resolve_library_effective
 
@@ -206,7 +206,7 @@ def load_study_config(
         "resolved" if execution.deduplicate_equivalent else "off"
     )
 
-    # Compute study_design_hash over the post-dedup configs — the hash
+    # Compute study_design_hash over the post-dedup configs - the hash
     # identifies the *unique* measurement set, not duplicate declarations.
     study_hash = compute_study_design_hash(run_experiments)
 

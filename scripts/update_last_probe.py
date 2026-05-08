@@ -65,7 +65,7 @@ from scripts.engine_miners._ssot import ssot_path  # noqa: E402
 # of the value line so we can reconstruct with the original indentation.
 _LAST_PROBE_LINE_RE = re.compile(r"^(?P<indent> {2,})(?P<key>[a-z_]+):\s*(?P<value>.*)$")
 
-# The four mutable fields under ``last_probe:``. Order intentional —
+# The four mutable fields under ``last_probe:``. Order intentional -
 # matches the canonical SSOT layout so the regenerated block is
 # byte-identical when nothing changes.
 _MUTABLE_FIELDS: tuple[str, ...] = (
@@ -86,7 +86,7 @@ def _format_scalar(value: Any) -> str:
     to keep them stable through YAML's natural-language scalar coercion
     (a 64-char hex digest could otherwise be reinterpreted as
     something exotic). Lists of strings render in flow style for
-    compactness — drift lists are short.
+    compactness - drift lists are short.
     """
     if value is None:
         return "null"
@@ -100,7 +100,7 @@ def _format_scalar(value: Any) -> str:
     if isinstance(value, str):
         # ``verdict`` is a bare-word enum (pass/fail/unrun); render it
         # unquoted to match the canonical seed shape. Everything else
-        # quoted — fingerprints (hex) and arbitrary strings round-trip
+        # quoted - fingerprints (hex) and arbitrary strings round-trip
         # safely double-quoted.
         if value in {"pass", "fail", "unrun"}:
             return value
@@ -114,7 +114,7 @@ def _replace_last_probe_block(text: str, updates: dict[str, Any]) -> tuple[str, 
     """Replace mutable fields under ``last_probe:``; return (new_text, changed).
 
     ``changed`` is ``False`` iff every targeted line is byte-identical
-    before and after the rewrite — this is the determinism short-circuit
+    before and after the rewrite - this is the determinism short-circuit
     that prevents the workflow looping on no-op writebacks. Lines whose
     keys are not in ``updates`` are left untouched.
 
@@ -142,7 +142,7 @@ def _replace_last_probe_block(text: str, updates: dict[str, Any]) -> tuple[str, 
             continue
         match = _LAST_PROBE_LINE_RE.match(stripped_no_nl)
         if match is None:
-            # Dedent or unexpected shape — block ended.
+            # Dedent or unexpected shape - block ended.
             break
 
         indent = match.group("indent")

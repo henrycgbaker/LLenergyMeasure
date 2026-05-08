@@ -1,7 +1,7 @@
 name: Publish engine image (transformers)
 
 # Promotes the transformers runtime image (cache repo → canonical repo)
-# via tag-copy. NO rebuild — the PR that just merged validated the
+# via tag-copy. NO rebuild - the PR that just merged validated the
 # image at transformers-cache:<VER>; this workflow creates new tag refs
 # pointing at the same image digest. Production users get the
 # bit-identical image that CI validated before merge.
@@ -76,7 +76,7 @@ jobs:
         # digest. No rebuild, no layer copy. The promoted image is
         # bit-identical to the one validated by
         # update-engine-{invariants,schemas} on the PR cycle that just
-        # merged — exactly what we want for a production release.
+        # merged - exactly what we want for a production release.
         env:
           VER: ${{ steps.version.outputs.version }}
           REPO: ghcr.io/${{ github.repository }}

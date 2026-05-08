@@ -1,4 +1,4 @@
-"""Probe primitive — binary reusability check for per-engine producers.
+"""Probe primitive - binary reusability check for per-engine producers.
 
 The probe is the first step of each per-concern workflow (engine-invariants
 + engine-schemas). It answers one question: do the landmarks the producer
@@ -13,7 +13,7 @@ Verdict semantics (binary, per the engine-coupling design doc §3):
 
 Diagnostic fields (``version_inside_envelope``, ``fingerprint_drift``)
 ride along on every report and are surfaced in workflow comments. They
-NEVER affect the verdict — those signals steer the human's attention on
+NEVER affect the verdict - those signals steer the human's attention on
 ``pass``-but-suspicious bumps without gating the pipeline.
 
 Producer-module discovery uses a per-engine convention table (see
@@ -26,7 +26,7 @@ Usage::
 
     python -m scripts._probe --engine transformers --producer invariants
 
-Emits a JSON ``ProbeReport`` to stdout. Exit 0 on either verdict — the
+Emits a JSON ``ProbeReport`` to stdout. Exit 0 on either verdict - the
 binary verdict travels in the JSON, and downstream workflow steps gate
 on it. Exit 2 only on infrastructure failure (SSOT missing, producer
 module unimportable, SSOT malformed).
@@ -65,7 +65,7 @@ ProducerKind = Literal["invariants", "schemas"]
 
 # Per-engine producer module map. The probe lives one layer above the
 # producers; this table is the single seam where (engine, producer) cells
-# resolve to a Python module path. Keep it exhaustive — adding a new
+# resolve to a Python module path. Keep it exhaustive - adding a new
 # engine means adding a row here.
 _PRODUCER_MODULES: dict[tuple[str, ProducerKind], str] = {
     ("transformers", "invariants"): "scripts.engine_miners.transformers_miner",
@@ -186,7 +186,7 @@ def _load_ssot(engine: str) -> dict[str, object]:
     """Read + parse ``engine_versions/{engine}.yaml``.
 
     Raises :class:`FileNotFoundError` if missing. The probe treats SSOT
-    absence as an infrastructure error (exit code 2) — every supported
+    absence as an infrastructure error (exit code 2) - every supported
     engine must have a SSOT before the probe is wired up for it.
     """
     path = ssot_path(engine)
@@ -255,7 +255,7 @@ def _import_producer(engine: str, producer: ProducerKind) -> ModuleType:
     """Import the producer module for ``(engine, producer)``.
 
     Retries once on :class:`MinerLandmarkMissingError` raised at import
-    time (per design D-8) — a flaky import is treated as transient and
+    time (per design D-8) - a flaky import is treated as transient and
     retried before the verdict is finalised. A second failure escalates
     to caller; the CLI maps it to exit code 2 (infrastructure failure).
     """

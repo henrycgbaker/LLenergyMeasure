@@ -1,4 +1,4 @@
-"""Equivalence-groups sidecar — pre-run resolved groups + post-run observed detection.
+"""Equivalence-groups sidecar - pre-run resolved groups + post-run observed detection.
 
 Design: ``.product/designs/config-deduplication-dormancy/sweep-dedup.md`` §6.
 
@@ -44,7 +44,7 @@ class PreRunGroup:
 
 @dataclass(frozen=True)
 class ObservedCollisionGroup:
-    """Post-run observed-config-hash collision group — a library-resolution mechanism gap if member count >= 2."""
+    """Post-run observed-config-hash collision group - a library-resolution mechanism gap if member count >= 2."""
 
     observed_config_hash: str
     engine: str
@@ -67,7 +67,7 @@ class EquivalenceGroups:
 
 
 # ---------------------------------------------------------------------------
-# Pre-run population — from resolve_library_effective output
+# Pre-run population - from resolve_library_effective output
 # ---------------------------------------------------------------------------
 
 
@@ -79,7 +79,7 @@ def build_pre_run_groups(
     """Bind :class:`DedupResult` group indices back to caller-supplied IDs.
 
     ``experiment_ids`` must be parallel to the declared-configs list passed
-    to :func:`resolve_library_effective`. The runner is the natural source — it already
+    to :func:`resolve_library_effective`. The runner is the natural source - it already
     assigns per-experiment IDs before dispatch.
     """
     if len(experiment_ids) != len(dedup.declared_resolved_hashes):
@@ -105,7 +105,7 @@ def build_pre_run_groups(
 
 
 # ---------------------------------------------------------------------------
-# Post-run observed-config-hash grouping — scan sidecars after study completes
+# Post-run observed-config-hash grouping - scan sidecars after study completes
 # ---------------------------------------------------------------------------
 
 
@@ -113,7 +113,7 @@ def find_observed_collisions(sidecars: list[dict[str, Any]]) -> list[ObservedCol
     """Group sidecars by ``(engine, library_version, observed_config_hash)``.
 
     Any group with size >= 2 AND distinct ``resolved_config_hash`` across its members is
-    flagged as a proven library-resolution mechanism gap — per sweep-dedup.md §4.1.
+    flagged as a proven library-resolution mechanism gap - per sweep-dedup.md §4.1.
 
     Each sidecar dict must carry at minimum ``engine``, ``library_version``,
     ``resolved_config_hash``, ``observed_config_hash``, and ``experiment_id`` keys. Sidecars missing any
@@ -135,7 +135,7 @@ def find_observed_collisions(sidecars: list[dict[str, Any]]) -> list[ObservedCol
             continue
         resolved_config_hashes = tuple(str(m.get("resolved_config_hash", "")) for m in members)
         exp_ids = tuple(str(m.get("experiment_id", "")) for m in members)
-        # Gap only if the resolved_config_hashes differ — matching resolved-config means the
+        # Gap only if the resolved_config_hashes differ - matching resolved-config means the
         # library-resolution mechanism already collapsed them.
         gap_detected = len(set(resolved_config_hashes)) > 1
         groups.append(

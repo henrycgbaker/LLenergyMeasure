@@ -30,7 +30,7 @@ def print_result_summary(result: ExperimentResult) -> None:
     """Print grouped result summary to stdout.
 
     Sections: Energy, Performance, Timing, Warnings.
-    Strictly raw metrics only — no derived ratios.
+    Strictly raw metrics only - no derived ratios.
     All numeric values formatted to 3 significant figures.
     """
     # Header
@@ -44,7 +44,7 @@ def print_result_summary(result: ExperimentResult) -> None:
         print(f"  Baseline       {_sig3(result.baseline_power_w)} W")
     if result.energy_adjusted_j is not None:
         print(f"  Adjusted       {_sig3(result.energy_adjusted_j)} J")
-    # Per-token energy (mJ/tok) — prefer adjusted, fall back to total, no recomputation
+    # Per-token energy (mJ/tok) - prefer adjusted, fall back to total, no recomputation
     if result.mj_per_tok_adjusted is not None:
         print(f"  Per token      {_sig3(result.mj_per_tok_adjusted)} mJ/tok (adjusted)")
     elif result.mj_per_tok_total is not None:
@@ -199,7 +199,7 @@ def format_validation_error(e: ValidationError) -> str:
     """Format a Pydantic ValidationError with a friendly header.
 
     Includes did-you-mean suggestions for literal_error types.
-    Does NOT catch or re-wrap the error — only formats it.
+    Does NOT catch or re-wrap the error - only formats it.
     """
     from llenergymeasure.config.ssot import DTYPE_SUPPORT
 
@@ -264,7 +264,7 @@ def print_study_dry_run(
 
     assert isinstance(study_config, StudyConfig)
 
-    # Pre-flight panel — same args as actual run so both show identical output
+    # Pre-flight panel - same args as actual run so both show identical output
     _stdout_console = RichConsole()
     panel = build_preflight_panel(
         study_config,
@@ -280,7 +280,7 @@ def print_study_dry_run(
     if study_config.skipped_configs:
         n_skip = len(study_config.skipped_configs)
         _stdout_console.print(
-            f"Skipped {n_skip} invalid config(s) — details in skipped_configs.log"
+            f"Skipped {n_skip} invalid config(s) - details in skipped_configs.log"
         )
         _stdout_console.print()
 
@@ -393,7 +393,7 @@ def print_study_summary(result: StudyResult) -> None:
         toks_str = _sig3(exp.avg_tokens_per_second) if exp.avg_tokens_per_second else "-"
 
         # mJ/tok: prefer adjusted (baseline-subtracted), fall back to total.
-        # No recomputation — show "-" if both null.
+        # No recomputation - show "-" if both null.
         if exp.mj_per_tok_adjusted is not None:
             mj_str = _sig3(exp.mj_per_tok_adjusted)
         elif exp.mj_per_tok_total is not None:

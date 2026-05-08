@@ -1,4 +1,4 @@
-"""Unit tests for entrypoints/container.py — StreamProgressCallback."""
+"""Unit tests for entrypoints/container.py - StreamProgressCallback."""
 
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ def test_stream_callback_substep_start_writes_json():
 
 def test_stream_callback_substep_done_writes_json_with_optional_fields():
     """on_substep_done emits ``substep_done`` with ``text`` / ``elapsed_sec``
-    both optional — the host side reuses the start's text + computed elapsed
+    both optional - the host side reuses the start's text + computed elapsed
     when either is missing (None-safe over the wire)."""
     cb = StreamProgressCallback()
     with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
@@ -87,7 +87,7 @@ def test_stream_callback_substep_done_writes_json_with_optional_fields():
 
 def test_stream_callback_substep_done_null_fields_serialise():
     """on_substep_done with no overrides must round-trip through JSON (None
-    values stay as nulls — consumer decodes them as missing)."""
+    values stay as nulls - consumer decodes them as missing)."""
     cb = StreamProgressCallback()
     with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
         cb.on_substep_done("baseline")

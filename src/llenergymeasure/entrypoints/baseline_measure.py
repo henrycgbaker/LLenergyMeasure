@@ -1,19 +1,19 @@
 """Container-side entry point for baseline-only idle power measurement.
 
 Invoked by the host study runner via a short-lived container whose CUDA state
-must match the experiment container's — a host-measured baseline understates
+must match the experiment container's - a host-measured baseline understates
 container idle power by ~8.7 W/GPU on A100 because the host has no CUDA context
 and no torch memory pool seeded. See
 ``.product/research/baseline-measurement-location.md`` for the controlled
 experiment and statistics.
 
 Volume layout (managed by the host helper ``study/baseline_container.py``):
-    /run/llem/baseline_spec.json    — written by host before container start
-    /run/llem/baseline_result.json  — written here on success
-    /run/llem/baseline_error.json   — written here on failure
+    /run/llem/baseline_spec.json    - written by host before container start
+    /run/llem/baseline_result.json  - written here on success
+    /run/llem/baseline_error.json   - written here on failure
 
 Environment variable:
-    LLEM_BASELINE_SPEC_PATH  — absolute path to the spec JSON inside the container.
+    LLEM_BASELINE_SPEC_PATH  - absolute path to the spec JSON inside the container.
 
 Spec JSON shape::
 
@@ -23,7 +23,7 @@ Spec JSON shape::
         "duration_sec": 30.0
     }
 
-Result JSON shape (both modes — callers read power_w for spot_check)::
+Result JSON shape (both modes - callers read power_w for spot_check)::
 
     {
         "power_w": 42.590,
@@ -62,7 +62,7 @@ def _emit_stage(name: str, **kv: object) -> None:
     """Print a stage marker to stdout for the host to parse.
 
     Wire format: ``[llem.baseline] stage=<name> [k=v ...]``. Keys and values
-    must be whitespace-free — this is a purpose-built internal protocol, not
+    must be whitespace-free - this is a purpose-built internal protocol, not
     a general key-value serialiser. ``flush=True`` is non-negotiable: without
     it, container stdio buffering delays each marker until the pipe's 4-8KB
     block fills, which hides the whole point of streaming.
@@ -77,7 +77,7 @@ def _prime_cuda(gpu_indices: list[int]) -> None:
     """Initialise the CUDA runtime and seed the torch caching allocator.
 
     Matches the experiment container's pre-inference GPU state so NVML reads
-    capture the same idle draw. A bare ``torch.cuda.init()`` is not enough —
+    capture the same idle draw. A bare ``torch.cuda.init()`` is not enough -
     the allocator only pins its baseline block on the first real tensor
     allocation, so we do a throw-away ``torch.zeros(1024)``.
 
@@ -100,7 +100,7 @@ def _prime_cuda(gpu_indices: list[int]) -> None:
             return
         torch.cuda.init()
         device_index = gpu_indices[0] if gpu_indices else 0
-        # Allocation is what seeds the caching allocator — bare init does not.
+        # Allocation is what seeds the caching allocator - bare init does not.
         _ = torch.zeros(1024, device=f"cuda:{device_index}")
     except Exception as exc:
         logger.warning("baseline_measure: CUDA prime failed: %s", exc)
@@ -119,7 +119,7 @@ def run_baseline_measurement(spec_path: Path) -> Path:
         Any exception propagates up so ``main`` can serialise it into
         ``baseline_error.json``.
     """
-    # First line of output after Python has finished importing the package —
+    # First line of output after Python has finished importing the package -
     # the host interprets this as "container launched, runtime ready" and
     # prints a dim sub-bullet with the elapsed time from subprocess start.
     _emit_stage("container_ready")

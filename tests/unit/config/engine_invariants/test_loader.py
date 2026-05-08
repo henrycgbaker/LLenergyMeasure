@@ -210,7 +210,7 @@ def test_unknown_added_by_value_raises(tmp_path: Path) -> None:
 
 
 def test_missing_added_by_defaults_to_manual_seed(tmp_path: Path) -> None:
-    # Omitting added_by is not a corpus authoring error — unknown provenance
+    # Omitting added_by is not a corpus authoring error - unknown provenance
     # falls back to manual_seed (the conservative default).
     corpus = _CORPUS_MINIMAL.replace("    added_by: static_miner\n", "")
     _write_corpus(tmp_path, "transformers", corpus)
@@ -220,7 +220,7 @@ def test_missing_added_by_defaults_to_manual_seed(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Closed-enum validation — severity / outcome / emission_channel
+# Closed-enum validation - severity / outcome / emission_channel
 # ---------------------------------------------------------------------------
 
 
@@ -362,7 +362,7 @@ def test_try_load_validated_yaml_rejects_non_numeric_schema_version(
 ) -> None:
     # A corrupt commit-back could write a non-numeric schema_version
     # (e.g. "dev"). The loader must return None rather than propagating
-    # UnsupportedSchemaVersionError from _major() — the validation CI job
+    # UnsupportedSchemaVersionError from _major() - the validation CI job
     # resurfaces the issue separately.
     import yaml
 

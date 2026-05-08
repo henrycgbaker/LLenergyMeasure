@@ -1,7 +1,7 @@
 """Unit tests for TensorRTEngine.
 
 All tests run without GPU hardware and without tensorrt_llm installed.
-TRT-LLM imports inside TensorRTEngine methods are lazy — the module is
+TRT-LLM imports inside TensorRTEngine methods are lazy - the module is
 importable on any host. Tests that exercise QuantConfig / BuildCacheConfig
 construction inject mock classes via sys.modules so no real tensorrt_llm
 import occurs.
@@ -101,7 +101,7 @@ class _MockSchedulerConfig:
 
 
 class _FakeSamplingParams:
-    """Minimal stand-in for tensorrt_llm.SamplingParams — captures kwargs."""
+    """Minimal stand-in for tensorrt_llm.SamplingParams - captures kwargs."""
 
     def __init__(self, **kwargs):
         self._kwargs = kwargs

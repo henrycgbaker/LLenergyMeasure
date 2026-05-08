@@ -1,4 +1,4 @@
-"""Canonical corpus builder — orchestrate miners, merge staging, emit corpus.
+"""Canonical corpus builder - orchestrate miners, merge staging, emit corpus.
 
 The validation-invariants pipeline is split into independent miners (dynamic miner,
 static miner, future runtime-warning miner) that each write to a staging file
@@ -23,29 +23,29 @@ runtime-applied corpus.
 Why a merger at all
 -------------------
 Today the corpus is single-writer (dynamic miner only). With the static miner
-landing in parallel, we need a deterministic reconciliation step — same invariant
+landing in parallel, we need a deterministic reconciliation step - same invariant
 discovered by two independent paths becomes evidence of cross-validation, not
 two duplicates. Different fingerprints across paths stay as two invariants; the
 validation CI pipeline (``scripts/validate_invariants.py``) runs every invariant's
 ``kwargs_positive`` / ``kwargs_negative`` against the real library and fails
-divergent invariants — the merger optimises for *recall* and lets CI kill false
+divergent invariants - the merger optimises for *recall* and lets CI kill false
 positives.
 
 Schema choice for cross-source provenance
 -----------------------------------------
 Two viable shapes for tagging cross-validation:
 
-    A. ``added_by: list[str]`` — change the existing single-string field to a
+    A. ``added_by: list[str]`` - change the existing single-string field to a
        list. Touches the loader, every test that pins the literal, and the
        validated JSON shape.
     B. ``added_by: <single primary string>`` + ``cross_validated_by: list[str]``
-       — additive; primary source unchanged, secondary sources surfaced via a
+       - additive; primary source unchanged, secondary sources surfaced via a
        new optional field.
 
 This module picks **B**. Rationale: the existing ``AddedBy`` Literal and the
 ``test_corpus_added_by_values_valid`` invariant treat the field as an enum;
 flipping it to ``list[str]`` ripples through every test that constructs a
-:class:`Invariant` directly. ``cross_validated_by`` is strictly additive — old
+:class:`Invariant` directly. ``cross_validated_by`` is strictly additive - old
 invariants default to an empty tuple, the loader accepts the new field with its
 own enum validation, and the merger writes it only when there's a second
 source to cite. Loader changes are minimal: one new field on :class:`Invariant`,
@@ -61,7 +61,7 @@ The dedup key is::
         "match_fields": invariant.match["fields"],
     })
 
-via :func:`llenergymeasure.domain.hashing.canonical_serialise` — same primitive
+via :func:`llenergymeasure.domain.hashing.canonical_serialise` - same primitive
 that powers ``resolved_config_hash``. It normalises floats, sorts keys, and
 distinguishes ``None`` from missing. Two invariants with the same fingerprint are
 the same constraint discovered by two independent paths.
@@ -129,7 +129,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 # When this file is run directly (``python scripts/engine_miners/build_corpus.py``),
 # Python prepends ``scripts/engine_miners/`` to sys.path. That directory contains a
 # ``transformers_miner.py`` miner module which would shadow the real ``transformers``
-# library on import — validation would then crash with
+# library on import - validation would then crash with
 # ``module 'transformers' has no attribute '__version__'``. Drop the script's
 # own directory from sys.path so the upstream library wins. ``-m`` invocation
 # doesn't trigger this branch (sys.path[0] is the cwd then).
@@ -150,7 +150,7 @@ from llenergymeasure.domain.hashing import canonical_serialise  # noqa: E402
 class _Extractor:
     """One staging-file producer for an engine.
 
-    ``module`` is invoked as ``python -m {module} --out {staging_path}`` —
+    ``module`` is invoked as ``python -m {module} --out {staging_path}`` -
     each subagent's extractor must accept a single ``--out`` argument.
 
     ``staging_basename`` is the filename written under
@@ -176,7 +176,7 @@ _ENGINE_EXTRACTORS: dict[str, tuple[_Extractor, ...]] = {
             staging_basename="transformers_dynamic_miner.yaml",
         ),
     ),
-    # TRT-LLM is static-only by adversarial-review decision #8 — the dynamic
+    # TRT-LLM is static-only by adversarial-review decision #8 - the dynamic
     # constructor probe yields zero raises (TRT-LLM defers all real validation
     # to engine build, opaque from Python). The static miner reads the 0.21.0
     # source tree extracted to /tmp/trt-llm-0.21.0/.
@@ -217,7 +217,7 @@ def _canonical_path(corpus_root: Path, engine: str) -> Path:
 # ``cross_validated_by`` (sorted alphabetically for stability).
 #
 # Static miner beats dynamic miner because the static miner derives match.fields
-# and kwargs from structural source — the dynamic miner probes the real library
+# and kwargs from structural source - the dynamic miner probes the real library
 # and trusts the resulting raise/no-raise pattern, which is more noise-prone for
 # kwargs-positive synthesis than reading the conditional directly.
 # message_template precedence is handled separately (dynamic miner wins there
@@ -251,7 +251,7 @@ def _canonicalise_numbers(value: Any) -> Any:
     """Coerce ints (excluding bool) to float for fingerprint purposes.
 
     Predicate thresholds derived independently by the static and dynamic
-    miners can differ in numeric type — the static miner reads literals
+    miners can differ in numeric type - the static miner reads literals
     from source (``0.0``), the dynamic miner emits int probes (``0``).
     Both encode the same constraint. ``canonical_serialise`` preserves the
     int/float distinction (``json.dumps(0)`` -> ``"0"``;
@@ -334,7 +334,7 @@ def discover_staging_files(engine: str, corpus_root: Path) -> list[Path]:
     """Return all staging YAMLs for ``engine``, sorted alphabetically.
 
     The sort makes merger output deterministic when two staging files have
-    the same fingerprint at the same priority rank — first-seen wins, and
+    the same fingerprint at the same priority rank - first-seen wins, and
     the alphabetical order makes "first-seen" predictable across machines.
 
     The merger's own previous output (``{engine}_merged_candidates.yaml``)
@@ -355,7 +355,7 @@ def _load_staging(path: Path) -> dict[str, Any]:
     """Parse a staging YAML file; return the envelope dict (with invariants list).
 
     Raises ``ValueError`` on a missing or malformed envelope rather than
-    silently skipping — staging files are produced by trusted extractors,
+    silently skipping - staging files are produced by trusted extractors,
     so a parse failure is a bug we want to surface.
     """
     raw = yaml.safe_load(path.read_text())
@@ -413,7 +413,7 @@ def _merge_bucket(invariants: list[dict[str, Any]]) -> _MergeResult:
     semantically wrong outputs regardless.
     """
     if len(invariants) == 1:
-        # Single-source invariant — preserve its shape as-is, just normalise an
+        # Single-source invariant - preserve its shape as-is, just normalise an
         # empty cross_validated_by entry away.
         invariant = dict(invariants[0])
         invariant.pop("cross_validated_by", None)
@@ -537,7 +537,7 @@ def merge_staging(
     """
     if not staging_envelopes:
         raise ValueError(
-            "No staging envelopes provided — at least one extractor must run "
+            "No staging envelopes provided - at least one extractor must run "
             "before merging. Did the extractors fail to produce output?"
         )
 
@@ -560,7 +560,7 @@ def merge_staging(
 
     # Build the envelope. schema_version + engine come from the first
     # staging file (extractors all target one schema major). engine_version
-    # is taken from the highest staging-reported version — if extractors
+    # is taken from the highest staging-reported version - if extractors
     # disagree (one miner pinned to an older release than another), the
     # canonical corpus reflects the newest observed.
     first = staging_envelopes[0]
@@ -625,7 +625,7 @@ def _load_prior_added_at_map(corpus_path: Path) -> dict[bytes, str]:
     except (yaml.YAMLError, OSError) as exc:
         _log.warning(
             "Could not read prior corpus at %s for added_at preservation: %s. "
-            "Falling open — every invariant will be stamped with today's date.",
+            "Falling open - every invariant will be stamped with today's date.",
             corpus_path,
             exc,
         )
@@ -724,7 +724,7 @@ def _validate_candidates(
     diagnostic info from ``validate_engine``.
 
     The function writes the candidates to ``_staging/{engine}_merged_candidates.yaml``
-    as a side effect — that file is the input to :func:`validate_engine`. The
+    as a side effect - that file is the input to :func:`validate_engine`. The
     YAML envelope ``validate_engine`` writes goes to a sibling temp path
     (``_staging/_validation_envelope_{engine}.yaml``) so the canonical
     ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml`` (the
@@ -743,7 +743,7 @@ def _validate_candidates(
     )
 
     # validate_engine returns (envelope, divergences). Divergences carry invariant_id,
-    # field, expected, observed — exactly the diagnostic we need to surface in
+    # field, expected, observed - exactly the diagnostic we need to surface in
     # the quarantine file.
     _validation_envelope, divergences = validate_engine(
         engine=engine,
@@ -901,7 +901,7 @@ def build_corpus_text_and_outcome(
     Pure-ish modulo the staging-file read; callable in isolation by
     pre-populating the staging directory. When ``skip_validation`` is true,
     all merged candidates land in the canonical YAML regardless of validation
-    outcomes — useful for fast local iteration but never appropriate in CI.
+    outcomes - useful for fast local iteration but never appropriate in CI.
     """
     paths = discover_staging_files(engine, corpus_root)
     if not paths:
@@ -924,7 +924,7 @@ def build_corpus_text_and_outcome(
         # Still write the merged-candidates staging file so reviewers can
         # inspect the recall-first list; just don't run the validation gate.
         _write_merged_candidates(corpus_root, engine, candidates, envelope)
-        # Drop any stale quarantine file — running --skip-validation with a
+        # Drop any stale quarantine file - running --skip-validation with a
         # leftover file from a previous validating run would be misleading.
         stale = _staging_dir(corpus_root, engine) / _FAILED_VALIDATION_BASENAME.format(
             engine=engine
@@ -996,7 +996,7 @@ def check_drift(
     Returns ``(exit_code, diff_text)``. ``exit_code`` is ``0`` if the
     canonical corpus matches the merger's freshly-built output exactly; ``1``
     on any byte-level drift; ``2`` on missing staging or missing corpus
-    (treated as fatal — CI must run the extractors before --check).
+    (treated as fatal - CI must run the extractors before --check).
 
     Drift detection compares the validated rebuild to the validated canonical
     by default. Without re-running validation, drift would compare the

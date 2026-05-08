@@ -1,7 +1,7 @@
 """Smoke test for the invariant-miner (validation gate) workflow glue.
 
 Runs the validate + diff + fixpoint pipeline end-to-end on a fixture corpus.
-Does NOT spin up Docker or require transformers — the validation step is driven
+Does NOT spin up Docker or require transformers - the validation step is driven
 through a patched synthetic runner. This test is the "trust the glue" check
 that complements the unit tests for each individual script.
 """

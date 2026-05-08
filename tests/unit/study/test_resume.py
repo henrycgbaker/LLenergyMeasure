@@ -163,7 +163,7 @@ def test_find_resumable_study_handles_all_resumable_statuses(tmp_path: Path) -> 
             experiments=[],
         )
 
-    # All are resumable — should find one
+    # All are resumable - should find one
     result = find_resumable_study(output_dir)
     assert result is not None
 

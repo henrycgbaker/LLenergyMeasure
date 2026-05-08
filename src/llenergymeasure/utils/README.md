@@ -71,6 +71,6 @@ resolved = validate_path(path, must_exist=True)
 
 ## Layer constraints
 
-- Layer 0 — base layer; no imports from other llenergymeasure layers
+- Layer 0 - base layer; no imports from other llenergymeasure layers
 - Can be imported by all layers above
 - Do not add logic here that belongs in a higher layer (domain, config, etc.)

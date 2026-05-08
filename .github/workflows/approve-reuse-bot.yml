@@ -1,4 +1,4 @@
-name: Approve Reuse — Slash Command Bot
+name: Approve Reuse - Slash Command Bot
 
 # This workflow has no PR-time `paths:` trigger (it's issue_comment-only),
 # so edits can't self-test at runtime. Shape validation happens at PR time
@@ -13,7 +13,7 @@ name: Approve Reuse — Slash Command Bot
 #
 # Producer naming
 # ---------------
-# Producer is `invariants | schemas` — matches the probe primitive's
+# Producer is `invariants | schemas` - matches the probe primitive's
 # user-facing producer kinds and the suggestion text emitted in probe-
 # fail PR comments. The mapping to SSOT miner_pins keys
 # (`static | dynamic | discovery`) lives in
@@ -69,7 +69,7 @@ jobs:
 
       - name: Validate commenter has approval rights
         # `issue_comment` fires on every comment. Permission gate is the
-        # FIRST behavioural step — anything below it must be guarded by
+        # FIRST behavioural step - anything below it must be guarded by
         # `steps.auth.outputs.authorised == 'true'`. Acceptable repo
         # roles: admin | maintain | write. Read-only, triage, and non-
         # collaborators are rejected.
@@ -110,7 +110,7 @@ jobs:
         # first line is the slash-command line. Restricting the regex to
         # this line prevents quoted-reply blocks (`> /approve-reuse ...`
         # in a reply) from being silently accepted as commands. Engine +
-        # producer are constrained to fixed vocabularies — no shell
+        # producer are constrained to fixed vocabularies - no shell
         # injection risk downstream.
         id: parse
         if: steps.auth.outputs.authorised == 'true'

@@ -30,7 +30,7 @@ class ExperimentPhase(str, Enum):
     The state machine has exactly 3 phases:
         INITIALISING -> MEASURING -> DONE
 
-    The ``failed`` flag on ExperimentState is orthogonal to these phases —
+    The ``failed`` flag on ExperimentState is orthogonal to these phases -
     any phase can be marked failed without changing the phase value.
     """
 
@@ -115,7 +115,7 @@ class ExperimentState(BaseModel):
     def mark_failed(self, error: str) -> None:
         """Set the failed flag and record the error message.
 
-        Does not change ``phase`` — failure is orthogonal to lifecycle phase.
+        Does not change ``phase`` - failure is orthogonal to lifecycle phase.
 
         Args:
             error: Human-readable error description.

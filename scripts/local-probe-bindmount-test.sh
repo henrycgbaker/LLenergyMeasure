@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local PoC harness — verify probe --output writes host-readable JSON via bind mount.
+# Local PoC harness - verify probe --output writes host-readable JSON via bind mount.
 #
 # Catches the entire class of Docker bind-mount permission issues that bit
 # us repeatedly while iterating on engine-image-build.yml. Runs in ~10 sec
@@ -81,7 +81,7 @@ else
   exit 1
 fi
 
-# Mode check — must be world-readable
+# Mode check - must be world-readable
 if [[ "$HOST_MODE" != "644" ]]; then
   echo "❌ file mode is $HOST_MODE, expected 644" >&2
   echo "   The chmod fix in _write_report_to_file may have regressed." >&2

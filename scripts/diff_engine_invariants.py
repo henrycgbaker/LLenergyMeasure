@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Semantic differ for validated invariant envelopes.
 
-Sibling of :mod:`scripts.diff_discovered_schemas` — same contract (safe vs
+Sibling of :mod:`scripts.diff_discovered_schemas` - same contract (safe vs
 breaking classification, JSON-on-stdout + Markdown summary), different artifact
 kind (invariant cases instead of parameter schemas).
 
@@ -273,7 +273,7 @@ def render_markdown(result: DiffResult, *, title: str = "Invariants Diff") -> st
 def _load_envelope(path: Path) -> dict[str, Any]:
     """Parse a validated-invariants envelope from YAML, with JSON as a graceful fallback.
 
-    YAML is a superset of JSON, so ``yaml.safe_load`` happily parses both —
+    YAML is a superset of JSON, so ``yaml.safe_load`` happily parses both -
     the explicit fallback is only here for defensiveness against pathological
     inputs (e.g. embedded tabs that PyYAML rejects but ``json.loads`` accepts).
     """

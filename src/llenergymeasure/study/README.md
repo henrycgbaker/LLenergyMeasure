@@ -10,11 +10,11 @@ Implements the sweep runner that executes a `StudyConfig` (a list of `Experiment
 
 | Module | Description |
 |--------|-------------|
-| `runner.py` | `StudyRunner` — subprocess dispatch core |
-| `manifest.py` | `ManifestWriter`, `StudyManifest`, `ExperimentManifestEntry` — checkpoint model |
+| `runner.py` | `StudyRunner` - subprocess dispatch core |
+| `manifest.py` | `ManifestWriter`, `StudyManifest`, `ExperimentManifestEntry` - checkpoint model |
 | `_progress.py` | Progress bar display during sweeps |
-| `gpu_memory.py` | `check_gpu_memory_residual()` — pre-dispatch GPU memory check |
-| `gaps.py` | `run_gap()` — thermal gap between experiments |
+| `gpu_memory.py` | `check_gpu_memory_residual()` - pre-dispatch GPU memory check |
+| `gaps.py` | `run_gap()` - thermal gap between experiments |
 | `__init__.py` | Re-exports `StudyRunner`, `ManifestWriter`, `StudyManifest`, etc. |
 
 ## StudyRunner
@@ -27,11 +27,11 @@ raw_results = runner.run()  # list[ExperimentResult | dict]
 ```
 
 Each experiment runs in a subprocess spawned with `multiprocessing.get_context("spawn")`:
-- **spawn context** — CUDA-safe; fork causes silent CUDA corruption
-- **daemon=False** — clean CUDA teardown if parent exits unexpectedly
-- **Pipe-only IPC** — ExperimentResult fits in Pipe buffer for study-scale experiments
-- **SIGKILL on timeout** — SIGTERM may be ignored by hung CUDA operations
-- **Process group kill** — worker calls `os.setpgrp()` so all descendants (vLLM workers, MPI ranks) are killed together
+- **spawn context** - CUDA-safe; fork causes silent CUDA corruption
+- **daemon=False** - clean CUDA teardown if parent exits unexpectedly
+- **Pipe-only IPC** - ExperimentResult fits in Pipe buffer for study-scale experiments
+- **SIGKILL on timeout** - SIGTERM may be ignored by hung CUDA operations
+- **Process group kill** - worker calls `os.setpgrp()` so all descendants (vLLM workers, MPI ranks) are killed together
 
 ## Manifest
 
@@ -69,7 +69,7 @@ Before each experiment dispatch, `check_gpu_memory_residual()` polls for leftove
 
 ## Layer constraints
 
-- Layer 4 — may import from layers 0–3
+- Layer 4 - may import from layers 0-3
 - Can import from: `config/`, `domain/`, `device/`, `utils/`, `energy/`, `engines/`, `datasets/`, `infra/`, `harness/`, `results/`
 - Cannot import from: `api/`, `cli/`
 

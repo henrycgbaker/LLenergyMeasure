@@ -1,4 +1,4 @@
-"""``llem report-gaps`` — feedback-loop proposer for the invariants corpus.
+"""``llem report-gaps`` - feedback-loop proposer for the invariants corpus.
 
 Reads ``runtime_observations.jsonl`` emitted by
 :mod:`llenergymeasure.study.runtime_observations`, groups captured warnings
@@ -17,11 +17,11 @@ Design:
   :func:`llenergymeasure.config.engine_invariants.loader._parse_invariant`;
   placeholders carry ``# TODO: human`` markers.
 - **Sentinel filtering.** ``subprocess_died`` / ``exception`` records
-  don't prove "rule didn't fire" — excluded from B always; excluded from
+  don't prove "rule didn't fire" - excluded from B always; excluded from
   A unless ``include_exceptions=True``.
 - **Emission channels.** This module produces ``warnings_warn``,
   ``logger_warning``, ``logger_warning_once``, and ``runtime_exception``
-  only — a documented subset of :data:`EmissionChannel`.
+  only - a documented subset of :data:`EmissionChannel`.
 
 Source of config kwargs: per-experiment ``_resolution.json`` sidecars,
 flattened into ``dict[str, Any]`` per ``config_hash``. Located via
@@ -136,7 +136,7 @@ def load_engine_invariants(
     :func:`llenergymeasure.config.models._get_invariants_loader` is used.
     Tests inject a throwaway loader to sidestep the cache.
 
-    Engines without a YAML corpus are skipped silently — a user scanning
+    Engines without a YAML corpus are skipped silently - a user scanning
     only transformers studies shouldn't fail because ``tensorrt.yaml`` is
     absent.
     """
@@ -443,7 +443,7 @@ def _load_kwargs_by_hash(study_dir: Path) -> tuple[dict[str, dict[str, Any]], in
     Preferred path: read ``manifest.json`` (written by
     :class:`llenergymeasure.study.manifest.ManifestWriter`) which keys
     entries by full ``config_hash`` and records the ``result_file``
-    relative path — ``_resolution.json`` sits in the same directory.
+    relative path - ``_resolution.json`` sits in the same directory.
 
     Fallback path: scan experiment subdirs and key on the 8-char hex
     suffix. Logged as a warning so operators know the preferred lookup
@@ -658,7 +658,7 @@ _BANNER = (
     "# Invariant fragment proposed by 'llem report-gaps'. Review and APPEND to\n"
     "# src/llenergymeasure/engines/{engine}/invariants.proposed.yaml under the 'rules:' key.\n"
     "# ----------------------------------------------------------------------\n"
-    "# added_by: runtime_warning — always, for runtime-derived rules.\n"
+    "# added_by: runtime_warning - always, for runtime-derived rules.\n"
     "# needs_generalisation_review: set when the predicate is narrow or\n"
     "# missing. Reviewers must confirm severity, native_type, and predicate\n"
     "# generalisation before merging.\n"
@@ -669,7 +669,7 @@ def render_yaml_fragment(proposal: GapProposal) -> str:
     """Render one :class:`GapProposal` as a YAML document.
 
     The output always parses through
-    :func:`llenergymeasure.config.engine_invariants.loader._parse_invariant` —
+    :func:`llenergymeasure.config.engine_invariants.loader._parse_invariant` -
     placeholder fields are enum-valid so the round-trip test passes while
     the ``# TODO: human`` markers make stubs obvious to reviewers.
     """
@@ -686,10 +686,10 @@ def render_yaml_fragment(proposal: GapProposal) -> str:
             "(runtime-derived) Library emitted normalised template; reviewer to confirm semantic."
         ),
         "severity": proposal.severity,
-        "native_type": f"{engine_str}.<TODO: human — set concrete native type>",
+        "native_type": f"{engine_str}.<TODO: human - set concrete native type>",
         "miner_source": {
-            "path": "<TODO: human — runtime-derived; no AST source>",
-            "method": "<TODO: human — no AST source>",
+            "path": "<TODO: human - runtime-derived; no AST source>",
+            "method": "<TODO: human - no AST source>",
             "line_at_scan": 0,
         },
         "match": {"engine": engine_str, "fields": match_fields},
@@ -711,7 +711,7 @@ def render_yaml_fragment(proposal: GapProposal) -> str:
             f"Representative raw message: {proposal.representative_message!r}",
         ],
         "added_by": "runtime_warning",
-        "added_at": "<TODO: human — YYYY-MM-DD>",
+        "added_at": "<TODO: human - YYYY-MM-DD>",
         "source_channel": proposal.source_channel,
         "needs_generalisation_review": proposal.needs_generalisation_review,
         "evidence_field_value_distribution": proposal.evidence_field_value_distribution,

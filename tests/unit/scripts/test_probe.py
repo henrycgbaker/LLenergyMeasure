@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts._probe` — the probe primitive.
+"""Tests for :mod:`scripts._probe` - the probe primitive.
 
 The probe primitive answers a binary question ("do all landmarks resolve
 under the live library?") and emits a richly-diagnosed report. These
@@ -9,7 +9,7 @@ LANDMARKS are stdlib symbols (``json.JSONDecodeError`` etc.) rather than
 real engine symbols: the probe imports modules via ``importlib`` and
 introspects with ``getattr``, so any module path works. Engine libraries
 are not installed on host (engines run only inside their Docker images
-— see ``docs/development.md``); using stdlib symbols keeps the probe's
+- see ``docs/development.md``); using stdlib symbols keeps the probe's
 resolution logic exercised host-side without an engine dependency.
 """
 
@@ -192,7 +192,7 @@ def test_probe_version_inside_envelope_matches_ssot(
         landmarks=("json.JSONDecodeError",),
     )
 
-    # Rewrite the SSOT so the current version sits OUTSIDE the static pin —
+    # Rewrite the SSOT so the current version sits OUTSIDE the static pin -
     # version_inside_envelope must flip to False without touching verdict.
     fake_ssot.write_text(
         "schema_version: 1\n"
@@ -259,7 +259,7 @@ def test_probe_output_flag_writes_to_file_keeps_stdout_clean(
     captured = capsys.readouterr()
     assert captured.out == "", "stdout should be empty when --output is set"
 
-    # Mode 0644 — readable by the host runner user when the probe is invoked
+    # Mode 0644 - readable by the host runner user when the probe is invoked
     # from inside a Docker container running as root via a bind mount.
     # `tempfile.mkstemp` defaults to 0600 which would block host reads.
     assert out.stat().st_mode & 0o777 == 0o644, "output must be 0644 for host bind-mount reads"

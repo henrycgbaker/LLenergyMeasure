@@ -4,7 +4,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 import {ROUTES, GITHUB_REPO, EDIT_URL, SITE_TITLE} from './src/constants';
 
-// Runs in Node.js — no client-side code (no browser APIs, no JSX).
+// Runs in Node.js - no client-side code (no browser APIs, no JSX).
 //
 // Five+one-plugin IA (Get Started + Diataxis pillars + Contributing):
 //   docs/get-started/  - onboarding: install, quick-start, concepts, audience routing
@@ -45,8 +45,8 @@ const config: Config = {
 
   markdown: {
     // Treat .md files as plain CommonMark (not MDX). Docs in this repo use
-    // standard markdown features only — HTML comments, GFM tables, code
-    // blocks — and don't need JSX. CommonMark mode is more permissive.
+    // standard markdown features only - HTML comments, GFM tables, code
+    // blocks - and don't need JSX. CommonMark mode is more permissive.
     format: 'md',
     mermaid: true,
     hooks: {

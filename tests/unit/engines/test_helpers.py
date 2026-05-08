@@ -1,4 +1,4 @@
-"""Unit tests for engines/_helpers.py — shared engine utilities.
+"""Unit tests for engines/_helpers.py - shared engine utilities.
 
 All tests run GPU-free. warmup_until_converged is now in harness.warmup;
 this file tests the remaining helpers: compute_cv, warmup_single_token
@@ -75,7 +75,7 @@ def test_warmup_fixed_mode_runs_n_warmup_iterations():
 def test_warmup_fixed_mode_marks_converged():
     """Fixed mode marks converged=True regardless of latency variance."""
     config = WarmupConfig(n_warmup=4, convergence_detection=False, enabled=True)
-    # High variance latencies — would not converge in CV mode
+    # High variance latencies - would not converge in CV mode
     run_fn = _varying_latency_fn([10.0, 200.0, 10.0, 200.0])
     result = warmup_until_converged(run_fn, config)
 
@@ -179,7 +179,7 @@ def test_warmup_continues_after_inference_failure():
         return 50.0
 
     config = WarmupConfig(n_warmup=4, convergence_detection=False, enabled=True)
-    # Should not raise — failures are caught and logged inside warmup_until_converged
+    # Should not raise - failures are caught and logged inside warmup_until_converged
     result = warmup_until_converged(_sometimes_fails, config)
 
     assert isinstance(result, WarmupResult)

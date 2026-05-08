@@ -180,7 +180,7 @@ def aggregate_results(
     - Throughput: Average (tokens_per_second / num_processes gives per-GPU rate)
     - FLOPs: Sum across processes
     - Time: Use wall-clock range (earliest start to latest end)
-    - Latencies: Concatenated (late aggregation — no average of averages)
+    - Latencies: Concatenated (late aggregation - no average of averages)
 
     Args:
         raw_results: List of raw results from each process.
@@ -475,7 +475,7 @@ def _aggregate_extended_metrics_from_results(
     raw_extended_metrics: list[ExtendedEfficiencyMetrics] = []
 
     for r in raw_results:
-        # Collect per-request latencies (late aggregation — concatenate, not average)
+        # Collect per-request latencies (late aggregation - concatenate, not average)
         if r.per_request_latencies_ms:
             all_request_latencies.extend(r.per_request_latencies_ms)
 

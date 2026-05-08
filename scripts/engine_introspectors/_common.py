@@ -80,7 +80,7 @@ def read_dockerfile_from(dockerfile: Path) -> str:
     For multi-stage Dockerfiles, prefers the ``AS runtime`` stage (convention
     used by all llenergymeasure Dockerfiles). Falls back to the first FROM
     line that references an external image (not a prior stage name). Only
-    default ARG values are substituted — no environment overrides.
+    default ARG values are substituted - no environment overrides.
 
     Returns e.g. ``"vllm/vllm-openai:v0.7.3"`` for a Dockerfile with
     ``ARG VLLM_VERSION=v0.7.3`` and ``FROM vllm/vllm-openai:${VLLM_VERSION}``.
@@ -121,7 +121,7 @@ def read_dockerfile_from(dockerfile: Path) -> str:
         if ref not in stage_names:
             return _expand(ref)
 
-    # All FROM lines reference prior stages — shouldn't happen in a valid Dockerfile
+    # All FROM lines reference prior stages - shouldn't happen in a valid Dockerfile
     return _expand(from_lines[0][0])
 
 
@@ -186,7 +186,7 @@ def make_envelope(
     sampling_params: dict[str, Any],
 ) -> dict[str, Any]:
     # Honour LLENERGY_DISCOVERY_FROZEN_AT when the caller (CI) wants the
-    # envelope pinned to a stable anchor — typically the author date of the
+    # envelope pinned to a stable anchor - typically the author date of the
     # most recent commit touching any input path. Without this override every
     # CI run produces a fresh wallclock timestamp, which the workflow's
     # commit-back picks up as a 2-line diff, re-firing the path filter and

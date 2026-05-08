@@ -6,12 +6,12 @@ experiment via the library API (not CLI re-entry), and writes the
 ExperimentResult back to the same volume for the host to collect.
 
 Volume layout (managed by DockerRunner on the host):
-    /run/llem/{config_hash}_config.json   — written by host before container start
-    /run/llem/{config_hash}_result.json   — written here on success
-    /run/llem/{config_hash}_error.json    — written here on failure
+    /run/llem/{config_hash}_config.json   - written by host before container start
+    /run/llem/{config_hash}_result.json   - written here on success
+    /run/llem/{config_hash}_error.json    - written here on failure
 
 Environment variable:
-    LLEM_CONFIG_PATH  — absolute path to config JSON inside the container
+    LLEM_CONFIG_PATH  - absolute path to config JSON inside the container
                         (e.g. /run/llem/abc123_config.json)
 
 Invocation::
@@ -157,7 +157,7 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
         Any exception from pre-flight or engine execution propagates up so
         ``main()`` can catch it and write an error payload.
     """
-    # Lazy imports — only needed at runtime, not import time
+    # Lazy imports - only needed at runtime, not import time
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.device.gpu_info import _resolve_gpu_indices
     from llenergymeasure.domain.experiment import compute_declared_config_hash

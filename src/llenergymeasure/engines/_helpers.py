@@ -31,7 +31,7 @@ def extract_observed_params(
 ) -> dict[str, Any]:
     """Dump a constructed native type's post-``__post_init__`` state.
 
-    Used by the observed-config hashing pipeline (sweep-dedup.md §3.2) — after each
+    Used by the observed-config hashing pipeline (sweep-dedup.md §3.2) - after each
     backend constructs its native type (``GenerationConfig``,
     ``SamplingParams``, ``LlmArgs``), the harness calls this to extract
     the authoritative effective parameters the library settled on.
@@ -49,7 +49,7 @@ def extract_observed_params(
     ``private_field_allowlist`` only when a specific private field is
     genuinely measurement-relevant (rare).
 
-    Dispatch covers the three observed native-type shapes — Pydantic
+    Dispatch covers the three observed native-type shapes - Pydantic
     (``model_dump``), dataclass (``dataclasses.asdict``), and
     ``__slots__``-based (vLLM msgspec-adjacent). Fallback is ``__dict__``.
     """
@@ -61,7 +61,7 @@ def extract_observed_params(
 def library_version(module_name: str) -> str:
     """Return ``__version__`` of an imported library or ``"unknown"`` on failure.
 
-    Shared helper for the observed-config capture path — all three engines publish the
+    Shared helper for the observed-config capture path - all three engines publish the
     library version alongside their effective-params dump so researchers can
     disambiguate identical observed_config_hash values across library versions.
     """
@@ -85,7 +85,7 @@ def assemble_observed_params_safe(
 
     Each engine supplies small callables that produce its engine-specific and
     sampling-specific observed-params dicts.  Extraction failures are logged at
-    DEBUG and silently produce empty dicts — sidecar writes are best-effort.
+    DEBUG and silently produce empty dicts - sidecar writes are best-effort.
 
     Args:
         engine_extractor: Zero-arg callable returning engine-section params dict,
@@ -183,7 +183,7 @@ def _dump_raw(native_obj: Any) -> dict[str, Any]:
 def reset_cuda_peak_memory() -> None:
     """Reset CUDA peak memory stats before a measurement window.
 
-    Best-effort — silently ignores failures (e.g. no CUDA, no torch).
+    Best-effort - silently ignores failures (e.g. no CUDA, no torch).
     """
     try:
         import torch
@@ -245,7 +245,7 @@ def require_import(module: str) -> Any:
 
     Engine libraries (`transformers`, `vllm`, `tensorrt_llm`) only resolve
     inside their respective Docker images. A host import failure is the
-    expected state when running `llem` outside a container — surface that
+    expected state when running `llem` outside a container - surface that
     plainly rather than suggesting a host install that no longer exists.
 
     Args:
@@ -260,7 +260,7 @@ def require_import(module: str) -> Any:
         return importlib.import_module(module)
     except ImportError as e:
         raise EngineError(
-            f"{module} is not available on host. Engine code runs inside Docker — "
+            f"{module} is not available on host. Engine code runs inside Docker - "
             f"see docs/development.md for the build/run pattern."
         ) from e
 

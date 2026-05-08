@@ -1,7 +1,7 @@
 """GPU-free unit tests for EnvironmentSnapshot and related detection functions.
 
 All tests run without a GPU. torch, subprocess, and huggingface_hub are never
-directly imported — access is always via monkeypatch.
+directly imported - access is always via monkeypatch.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ def test_environment_snapshot_optional_fields() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test: CUDA version detection — torch source
+# Test: CUDA version detection - torch source
 # ---------------------------------------------------------------------------
 
 
@@ -93,7 +93,7 @@ def test_cuda_version_from_torch(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def patched_find_spec(name: str):
         if name == "torch":
-            return MagicMock()  # truthy — torch is "installed"
+            return MagicMock()  # truthy - torch is "installed"
         return original_find_spec(name)
 
     monkeypatch.setattr(env_module.importlib.util, "find_spec", patched_find_spec)
@@ -136,7 +136,7 @@ def test_cuda_version_from_torch_empty(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test: CUDA version detection — version.txt source
+# Test: CUDA version detection - version.txt source
 # ---------------------------------------------------------------------------
 
 
@@ -164,7 +164,7 @@ def test_cuda_version_from_version_txt(monkeypatch: pytest.MonkeyPatch, tmp_path
 
 
 # ---------------------------------------------------------------------------
-# Test: CUDA version detection — nvcc source
+# Test: CUDA version detection - nvcc source
 # ---------------------------------------------------------------------------
 
 
@@ -191,7 +191,7 @@ def test_cuda_version_from_nvcc(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test: CUDA version detection — all sources fail → (None, None)
+# Test: CUDA version detection - all sources fail → (None, None)
 # ---------------------------------------------------------------------------
 
 

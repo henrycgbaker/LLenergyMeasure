@@ -440,7 +440,7 @@ def test_harness_defaults_to_no_gpu_indices(minimal_config):
 
 
 # ---------------------------------------------------------------------------
-# H2: Thermal floor ordering — start_tracking after thermal_floor_wait
+# H2: Thermal floor ordering - start_tracking after thermal_floor_wait
 # ---------------------------------------------------------------------------
 
 
@@ -509,7 +509,7 @@ def test_harness_start_tracking_called_after_thermal_floor_wait(minimal_config):
 
 
 # ---------------------------------------------------------------------------
-# M18: Per-device memory tracking — _capture_model_memory_mb(gpu_indices)
+# M18: Per-device memory tracking - _capture_model_memory_mb(gpu_indices)
 # ---------------------------------------------------------------------------
 
 
@@ -599,7 +599,7 @@ def test_harness_sets_inference_time_sec(minimal_config):
     NOT the engine's elapsed_time_sec.
     """
     custom_output = InferenceOutput(
-        elapsed_time_sec=99.0,  # Backend's own timer — harness must NOT use this
+        elapsed_time_sec=99.0,  # Backend's own timer - harness must NOT use this
         input_tokens=10,
         output_tokens=20,
         peak_memory_mb=512.0,
@@ -776,7 +776,7 @@ def test_capture_observed_params_called_post_window(minimal_config, tmp_path: Pa
 
 
 # ---------------------------------------------------------------------------
-# Dropped field wiring tests — warmup_result, energy_per_device_j, multi_gpu
+# Dropped field wiring tests - warmup_result, energy_per_device_j, multi_gpu
 # ---------------------------------------------------------------------------
 
 

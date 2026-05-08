@@ -6,13 +6,13 @@ indefinitely on a stuck CUDA / NCCL / compile step.
 
 Three load-bearing cases pin the contract:
 
-1. **Stuck-stdout subprocess** — opens stdout then ``time.sleep(9999)``
+1. **Stuck-stdout subprocess** - opens stdout then ``time.sleep(9999)``
    without writing. The watchdog must kill it within
    ``silence_timeout + epsilon`` and raise ``DockerStdoutSilenceError``.
-2. **Wall-clock fires when stdout is active** — a chatty subprocess
+2. **Wall-clock fires when stdout is active** - a chatty subprocess
    that prints continuously must still be killed when its total runtime
    exceeds ``timeout``, raising ``DockerTimeoutError``.
-3. **Both budgets disabled** — the watchdog must not interfere with a
+3. **Both budgets disabled** - the watchdog must not interfere with a
    normal short-lived subprocess.
 
 We avoid spinning up real Docker containers by exercising the watchdog
@@ -70,7 +70,7 @@ def _chatty_script(duration_s: float = 30.0, interval_s: float = 0.05) -> list[s
 
 
 def _quick_script() -> list[str]:
-    """Subprocess that prints once and exits — fits well inside any budget."""
+    """Subprocess that prints once and exits - fits well inside any budget."""
     return [sys.executable, "-u", "-c", "print('done')"]
 
 
@@ -85,7 +85,7 @@ def runner_factory() -> Iterator[callable]:
         return r
 
     yield _make
-    # No cleanup needed — DockerRunner is stateless beyond constructor args.
+    # No cleanup needed - DockerRunner is stateless beyond constructor args.
 
 
 def _run_watchdog(runner: DockerRunner, cmd: list[str]) -> tuple[int, str]:
@@ -93,7 +93,7 @@ def _run_watchdog(runner: DockerRunner, cmd: list[str]) -> tuple[int, str]:
 
     Mirrors how ``run()`` invokes ``_run_container_streaming``, but
     skipping the docker-specific argv build. The watchdog logic is
-    process-agnostic — it operates on the Popen's stdout pipe.
+    process-agnostic - it operates on the Popen's stdout pipe.
     """
     return runner._run_container_streaming(cmd)
 
@@ -112,7 +112,7 @@ class TestStdoutSilenceFires:
         elapsed = time.monotonic() - start
         # Generous epsilon for the queue-poll cadence (~0.5s) + process
         # cleanup. CI scheduling jitter justifies up to 4x the configured
-        # ceiling — tighter assertions flake on shared runners.
+        # ceiling - tighter assertions flake on shared runners.
         assert elapsed < 8.0, f"Watchdog took {elapsed:.1f}s for a 2s silence budget"
         assert "no stdout" in str(ei.value).lower()
 
@@ -131,7 +131,7 @@ class TestStdoutSilenceFires:
 
 class TestWallClockStillFires:
     def test_chatty_subprocess_killed_at_wall_clock(self, runner_factory) -> None:
-        # Wall-clock 2s, silence 60s — wall-clock must win against a
+        # Wall-clock 2s, silence 60s - wall-clock must win against a
         # chatty subprocess that would otherwise reset the silence timer.
         runner = runner_factory(timeout=2.0, silence_timeout=60.0)
         start = time.monotonic()

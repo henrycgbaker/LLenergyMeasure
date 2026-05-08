@@ -1,7 +1,7 @@
 """Invariants enforced on the seeded validation-invariants corpus.
 
 The validation CI pipeline (a separate follow-up PR) runs a richer equivalent
-of these checks — empirically verifying each invariant's ``kwargs_positive``
+of these checks - empirically verifying each invariant's ``kwargs_positive``
 actually fires in the real library and ``kwargs_negative`` doesn't. These
 schema-level invariants are the offline backstop.
 
@@ -46,7 +46,7 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
     def covers_field(field_path: str) -> bool:
         return any(field_path in invariant.match_fields for invariant in invariants)
 
-    # Single-field invariants — at least one invariant must touch each path.
+    # Single-field invariants - at least one invariant must touch each path.
     # Scope reflects the regenerated canonical corpus produced by
     # ``scripts/engine_miners/build_corpus.py`` with the validation gate.
     # Adding a path here means: an invariant for that field must survive validation
@@ -95,7 +95,7 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         "transformers.llm_int8_skip_modules",
         "transformers.llm_int8_enable_fp32_cpu_offload",
         "transformers.llm_int8_has_fp16_weight",
-        # Note: transformers.bnb_4bit_compute_dtype — validation-CI quarantined
+        # Note: transformers.bnb_4bit_compute_dtype - validation-CI quarantined
         # the type-check invariant under 4.57.3. Coverage loss tracked in a
         # follow-up alongside num_beam_groups / diversity_penalty.
         "transformers.bnb_4bit_quant_type",
@@ -106,7 +106,7 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         f"corpus is missing invariants for {len(missing)} required invariants: {missing}"
     )
 
-    # Cross-field invariants — at least one invariant must AND-combine the listed
+    # Cross-field invariants - at least one invariant must AND-combine the listed
     # fields. Catches regressions where the extractor lost the cross-field
     # predicate machinery. PR 5 added the (num_beam_groups,
     # diversity_penalty) pair (the AST miner's beam-search divisibility
@@ -200,7 +200,7 @@ def test_corpus_dormant_silent_has_normalised_fields(transformers_corpus) -> Non
 
 
 def test_corpus_added_by_values_valid(transformers_corpus) -> None:
-    # Defers to the loader's single source of truth (VALID_ADDED_BY) — the
+    # Defers to the loader's single source of truth (VALID_ADDED_BY) - the
     # loader's UnknownAddedByError would have rejected the invariant at parse
     # time if the value were outside the enum. Kept here for human-readable
     # catalogue + defence-in-depth.

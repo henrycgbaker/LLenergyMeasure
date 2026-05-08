@@ -315,7 +315,7 @@ def test_print_result_summary_with_flops(capsys):
 def test_print_result_summary_with_latency_stats(capsys):
     """Result with latency_stats that has ttft_ms/itl_ms shows Latency lines.
 
-    The _display.py code checks hasattr(ls, "ttft_ms") — uses duck typing
+    The _display.py code checks hasattr(ls, "ttft_ms") - uses duck typing
     so any object with those attributes will trigger the print.
     """
     from unittest.mock import MagicMock

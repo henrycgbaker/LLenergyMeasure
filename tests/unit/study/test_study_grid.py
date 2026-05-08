@@ -136,7 +136,7 @@ class TestStudyConfig:
 
 
 # =============================================================================
-# expand_grid() — grid sweep mode
+# expand_grid() - grid sweep mode
 # =============================================================================
 
 
@@ -205,7 +205,7 @@ class TestExpandGridSweep:
 
 
 # =============================================================================
-# expand_grid() — explicit experiments mode
+# expand_grid() - explicit experiments mode
 # =============================================================================
 
 
@@ -224,7 +224,7 @@ class TestExpandGridExplicit:
 
 
 # =============================================================================
-# expand_grid() — combined mode
+# expand_grid() - combined mode
 # =============================================================================
 
 
@@ -252,7 +252,7 @@ class TestExpandGridCombined:
 
 
 # =============================================================================
-# expand_grid() — base: resolution
+# expand_grid() - base: resolution
 # =============================================================================
 
 
@@ -316,7 +316,7 @@ class TestExpandGridBase:
 
 
 # =============================================================================
-# expand_grid() — invalid combination handling
+# expand_grid() - invalid combination handling
 # =============================================================================
 
 
@@ -414,7 +414,7 @@ class TestMultiBackendSectionStripping:
             "experiments": [
                 # Inherited tensorrt: should be stripped for this pytorch experiment
                 {"task": {"model": "gpt2"}, "engine": "transformers"},
-                # Explicit vllm: section with engine=transformers is a user error — should fail
+                # Explicit vllm: section with engine=transformers is a user error - should fail
                 {
                     "task": {"model": "gpt2"},
                     "engine": "transformers",

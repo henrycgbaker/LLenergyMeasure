@@ -42,7 +42,7 @@ jobs:
 
       # The default `docker` buildx driver does not support
       # cache-to=type=registry. Switching to `docker-container` is required
-      # for the mode=max cache export below to work — without this, the
+      # for the mode=max cache export below to work - without this, the
       # build-push-action step fails with:
       #   ERROR: failed to build: Cache export is not supported for the
       #   docker driver.

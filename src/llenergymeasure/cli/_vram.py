@@ -126,7 +126,7 @@ def get_gpu_vram_gb() -> float | None:
 
         vram_gb: float | None = None
         with nvml_context():
-            # GPU:0 is intentional for dry-run — we don't yet know which GPU will be
+            # GPU:0 is intentional for dry-run - we don't yet know which GPU will be
             # assigned at runtime, so the first GPU serves as a conservative estimate.
             handle = pynvml.nvmlDeviceGetHandleByIndex(0)
             mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)

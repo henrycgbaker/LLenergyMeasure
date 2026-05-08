@@ -75,7 +75,7 @@ def test_atomic_rollback_on_contention(tmp_path: Path) -> None:
         with pytest.raises(StudyError):
             acquire_gpu_locks([0, 1], lock_dir=tmp_path)
 
-        # GPU 0 must be released after rollback — we can acquire it again
+        # GPU 0 must be released after rollback - we can acquire it again
         locks = acquire_gpu_locks([0], lock_dir=tmp_path)
         assert len(locks) == 1
         release_gpu_locks(locks)

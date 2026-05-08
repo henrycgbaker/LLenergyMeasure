@@ -1,7 +1,7 @@
 """Tests for :func:`extract_observed_params` and the per-engine capture path.
 
 PoC-C finding (sweep-dedup.md §3.2): the extractor must strip private
-(``_``-prefixed) fields by default — transformers and vLLM both leak
+(``_``-prefixed) fields by default - transformers and vLLM both leak
 state that would poison observed_config_hash otherwise. These tests verify the default
 behaviour and the allowlist escape hatch.
 """
@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from llenergymeasure.engines._helpers import extract_observed_params
 
 # ---------------------------------------------------------------------------
-# Dispatch behaviour — one per native-type shape
+# Dispatch behaviour - one per native-type shape
 # ---------------------------------------------------------------------------
 
 
@@ -103,7 +103,7 @@ class TestPrivateFieldStripping:
 
 
 # ---------------------------------------------------------------------------
-# Byte stability — same kwargs → same dump
+# Byte stability - same kwargs → same dump
 # ---------------------------------------------------------------------------
 
 

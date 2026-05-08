@@ -22,7 +22,7 @@ re-quote scalars, breaking the determinism contract on subsequent runs.
 
 User-facing producer naming
 ---------------------------
-``producer`` is ``invariants | schemas`` — matching the probe primitive's
+``producer`` is ``invariants | schemas`` - matching the probe primitive's
 user-facing producer kinds and the suggestion text emitted in probe-fail
 PR comments. The mapping to the SSOT's ``miner_pins`` keys
 (``static | dynamic | discovery``) is the same one the probe uses
@@ -74,7 +74,7 @@ def _widen_range_string(existing: str, version: Version) -> str:
     (e.g. ``4.58.0`` -> ``<4.59``).
 
     Falls back to appending ``,<=current_version`` for unrecognised
-    shapes — loud-but-functional; the workflow will still commit a
+    shapes - loud-but-functional; the workflow will still commit a
     deterministic result. The returned string preserves the order
     callers expect to see in the SSOT (lower bound first).
     """
@@ -91,7 +91,7 @@ def _widen_range_string(existing: str, version: Version) -> str:
             extras.append(part)
 
     if lower is None or upper is None or extras:
-        # Unrecognised shape — preserve every original constraint and
+        # Unrecognised shape - preserve every original constraint and
         # add a ``<=current_version`` ceiling so the bumped version is
         # covered. Ordering: original parts in original order, then the
         # new ceiling appended.
@@ -220,7 +220,7 @@ def widen(*, engine: str, producer: ProducerKind) -> int:
 
     new_text, old_line_value = _replace_pin_line(text, pin_key, new_range)
     if old_line_value is None:
-        # Parser saw the key but the regex missed it — inconsistent shape.
+        # Parser saw the key but the regex missed it - inconsistent shape.
         print(
             f"Could not locate miner_pins.{pin_key} line in {path}.",
             file=sys.stderr,

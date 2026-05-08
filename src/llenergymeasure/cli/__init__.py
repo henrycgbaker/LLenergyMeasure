@@ -86,7 +86,7 @@ def main(
     """LLM inference efficiency measurement framework."""
 
 
-# Register commands — deferred imports inside command functions keep startup fast
+# Register commands - deferred imports inside command functions keep startup fast
 from llenergymeasure.cli.run import run as _run_cmd  # noqa: E402
 
 app.command(name="run", help="Run an LLM efficiency experiment")(_run_cmd)

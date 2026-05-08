@@ -64,13 +64,13 @@ Control how prompts are selected and ordered via `dataset.order`:
 
 | Value | Behaviour |
 |-------|-----------|
-| `interleaved` | File order (default) — stops reading after `n_prompts` records |
+| `interleaved` | File order (default) - stops reading after `n_prompts` records |
 | `grouped` | Sort by `source` field (preserves intra-group order) |
 | `shuffled` | Random shuffle using `random_seed` |
 
 ## Layer constraints
 
-- Layer 0 — base layer; no imports from other llenergymeasure layers except `config/` (for `ExperimentConfig`)
+- Layer 0 - base layer; no imports from other llenergymeasure layers except `config/` (for `ExperimentConfig`)
 - Can be imported by all layers above
 
 ## Related

@@ -54,7 +54,7 @@ def get_engine_install_hint(engine: str) -> str:
     """
     hints = {
         "transformers": "pip install llenergymeasure",
-        "vllm": "Docker recommended — see docs/deployment.md",
-        "tensorrt": "Docker recommended — see docs/deployment.md",
+        "vllm": "Docker recommended - see docs/deployment.md",
+        "tensorrt": "Docker recommended - see docs/deployment.md",
     }
     return hints.get(engine, f"pip install llenergymeasure[{engine}]")

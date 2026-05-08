@@ -191,7 +191,7 @@ def test_deep_merge_nested_overlay_wins():
 
 
 def test_deep_merge_does_not_mutate_inputs():
-    """deep_merge returns a new dict — originals are unchanged."""
+    """deep_merge returns a new dict - originals are unchanged."""
     base = {"a": {"b": 1}}
     overlay = {"a": {"c": 2}}
     _ = deep_merge(base, overlay)
@@ -218,7 +218,7 @@ def test_deep_merge_non_dict_overlay_replaces_nested():
 
 
 # ---------------------------------------------------------------------------
-# load_study_config() — grid sweep mode
+# load_study_config() - grid sweep mode
 # ---------------------------------------------------------------------------
 
 

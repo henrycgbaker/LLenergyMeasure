@@ -2,7 +2,7 @@
 
 Called by StudyRunner before spawning each experiment subprocess to detect
 driver-level GPU memory leaks or residual allocations from prior processes.
-Warnings are informational only — the check never blocks execution.
+Warnings are informational only - the check never blocks execution.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ def check_gpu_memory_residual(
     """Query NVML for residual GPU memory before an experiment dispatch.
 
     If the memory used on ``device_index`` exceeds ``threshold_mb``, a warning
-    is logged. The function never raises — any failure (missing pynvml, NVML
+    is logged. The function never raises - any failure (missing pynvml, NVML
     initialisation error, device query error) is caught and logged at DEBUG
     level only.
 

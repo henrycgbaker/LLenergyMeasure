@@ -9,7 +9,7 @@ import importlib.util
 import pytest
 
 # =============================================================================
-# Protocol satisfaction — TensorRTEngine (BACK-01)
+# Protocol satisfaction - TensorRTEngine (BACK-01)
 # =============================================================================
 
 
@@ -139,14 +139,14 @@ def test_detect_default_engine_error_message_has_setup_hint():
 
 
 # =============================================================================
-# _model_load_kwargs — P0 fix verification (GPU-free)
+# _model_load_kwargs - P0 fix verification (GPU-free)
 # =============================================================================
 
 
 def test_model_load_kwargs_contains_base_keys(monkeypatch):
     """_model_load_kwargs always includes torch_dtype and trust_remote_code.
 
-    device_map is present only when LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP is set — simulate
+    device_map is present only when LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP is set - simulate
     the production default (``.env`` loaded, ``LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP=auto``)
     via monkeypatch so the assertion does not depend on the test host's env.
     """
@@ -161,7 +161,7 @@ def test_model_load_kwargs_contains_base_keys(monkeypatch):
 
     assert "torch_dtype" in kwargs
     assert kwargs["device_map"] == "auto"
-    # HF default — env var LLEM_TRUST_REMOTE_CODE not set, no typed override
+    # HF default - env var LLEM_TRUST_REMOTE_CODE not set, no typed override
     assert kwargs["trust_remote_code"] is False
 
 
@@ -288,7 +288,7 @@ def test_model_load_kwargs_pytorch_config_attn_implementation():
 
 
 # =============================================================================
-# _resolve_attn_implementation — flash_attn availability guard
+# _resolve_attn_implementation - flash_attn availability guard
 # =============================================================================
 
 
@@ -524,7 +524,7 @@ def test_resolve_torch_dtype_unknown_raises():
 
 
 # =============================================================================
-# _build_generate_kwargs — GPU-free decoder config mapping
+# _build_generate_kwargs - GPU-free decoder config mapping
 # =============================================================================
 
 
@@ -649,7 +649,7 @@ def test_get_engine_unknown_message_lists_tensorrt():
 
 
 # =============================================================================
-# _model_load_kwargs — tensor parallelism (tp_plan / tp_size)
+# _model_load_kwargs - tensor parallelism (tp_plan / tp_size)
 # =============================================================================
 
 

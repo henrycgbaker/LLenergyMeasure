@@ -57,7 +57,7 @@ def compute_extended_metrics(
     metrics = ExtendedEfficiencyMetrics()
 
     if output_tokens == 0:
-        logger.warning("Output tokens is 0 — derived efficiency metrics will be unavailable")
+        logger.warning("Output tokens is 0 - derived efficiency metrics will be unavailable")
         return metrics
 
     # TPOT (Time Per Output Token) - industry standard alias for ITL mean

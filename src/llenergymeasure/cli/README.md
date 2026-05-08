@@ -4,7 +4,7 @@ Typer-based CLI for llenergymeasure. Layer 6 (top layer) in the six-layer archit
 
 ## Purpose
 
-Three commands: `llem run` for running experiments and studies, `llem config` for environment diagnostics, and `llem doctor` for host/container Docker-image schema verification. The CLI is a thin client over the `api/` layer — it handles argument parsing, user-facing formatting, and error presentation.
+Three commands: `llem run` for running experiments and studies, `llem config` for environment diagnostics, and `llem doctor` for host/container Docker-image schema verification. The CLI is a thin client over the `api/` layer - it handles argument parsing, user-facing formatting, and error presentation.
 
 ## Modules
 
@@ -50,7 +50,7 @@ llem config          # brief environment summary
 llem config -v       # verbose: list all GPU properties, energy samplers, etc.
 ```
 
-Shows GPU hardware (name, VRAM), installed engines, energy sampler availability, and user config path. Always exits 0 — purely informational.
+Shows GPU hardware (name, VRAM), installed engines, energy sampler availability, and user config path. Always exits 0 - purely informational.
 
 ### llem doctor
 
@@ -78,7 +78,7 @@ Verbosity is controlled per-run via `-v` / `-vv`. The `llenergymeasure` logger h
 
 ## Layer constraints
 
-- Layer 6 — top layer, may import from all layers below
+- Layer 6 - top layer, may import from all layers below
 - Nothing imports from `cli/` except the entrypoint defined in `pyproject.toml`
 - CLI is a client of `api/`, not the reverse
 

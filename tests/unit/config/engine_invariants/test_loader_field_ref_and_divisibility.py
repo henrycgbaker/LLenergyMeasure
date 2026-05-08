@@ -75,7 +75,7 @@ def _make_invariant(*, match_fields: dict[str, Any]) -> Invariant:
 
 
 # ---------------------------------------------------------------------------
-# @field_ref resolution — sibling
+# @field_ref resolution - sibling
 # ---------------------------------------------------------------------------
 
 
@@ -112,7 +112,7 @@ def test_field_ref_sibling_via_evaluate_predicate(
 
 
 # ---------------------------------------------------------------------------
-# @field_ref resolution — dotted from root
+# @field_ref resolution - dotted from root
 # ---------------------------------------------------------------------------
 
 
@@ -135,7 +135,7 @@ def test_field_ref_dotted_resolves_through_attribute_chains() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Spec walk — recursion through lists and nested dicts
+# Spec walk - recursion through lists and nested dicts
 # ---------------------------------------------------------------------------
 
 
@@ -187,10 +187,10 @@ def test_divisibility_zero_divisor_does_not_fire() -> None:
 @pytest.mark.parametrize(
     "actual, divisor",
     [
-        (None, 3),  # missing field — predicate must not fire
-        (6.0, 3),  # float operand — strict int-only
-        ("6", 3),  # str operand — strict int-only
-        (6, 3.0),  # float divisor — strict int-only
+        (None, 3),  # missing field - predicate must not fire
+        (6.0, 3),  # float operand - strict int-only
+        ("6", 3),  # str operand - strict int-only
+        (6, 3.0),  # float divisor - strict int-only
     ],
 )
 def test_divisibility_rejects_non_int_operands(actual: Any, divisor: Any) -> None:
@@ -223,7 +223,7 @@ def test_is_int_pair_helper() -> None:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end via Invariant.try_match — corpus-shape predicate
+# End-to-end via Invariant.try_match - corpus-shape predicate
 # ---------------------------------------------------------------------------
 
 
@@ -244,7 +244,7 @@ def test_try_match_with_field_ref_fires_when_left_exceeds_right() -> None:
 
 
 def test_try_match_with_field_ref_does_not_fire_when_left_le_right() -> None:
-    # The valid case (num_return_sequences=2, num_beams=4) — invariant must not fire.
+    # The valid case (num_return_sequences=2, num_beams=4) - invariant must not fire.
     invariant = _make_invariant(
         match_fields={
             "transformers.sampling.num_return_sequences": {">": "@num_beams"},

@@ -486,7 +486,7 @@ def test_manifest_status_after_all_experiments_complete(tmp_path: Path) -> None:
         writer.mark_running(entry.config_hash, entry.cycle)
         writer.mark_completed(entry.config_hash, entry.cycle, result_file="result.json")
 
-    # All experiments done — pending should be 0
+    # All experiments done - pending should be 0
     assert writer.manifest.pending == 0
 
     # Mark study as a whole completed

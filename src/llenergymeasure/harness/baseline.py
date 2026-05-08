@@ -9,7 +9,7 @@ For multi-GPU setups, baseline power is summed across all specified GPUs.
 Disk persistence enables sharing baselines across processes (e.g. host -> Docker
 container) via a JSON cache file with configurable TTL.
 
-Gracefully degrades when NVML is unavailable — returns None instead of crashing.
+Gracefully degrades when NVML is unavailable - returns None instead of crashing.
 """
 
 from __future__ import annotations

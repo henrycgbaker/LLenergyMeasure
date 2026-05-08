@@ -38,7 +38,7 @@ _SPOT = "llenergymeasure.harness.baseline.measure_spot_check"
 _RESOLVE_GPU = "llenergymeasure.device.gpu_info._resolve_gpu_indices"
 _RUN_BASELINE_CONTAINER = "llenergymeasure.study.baseline_container.run_baseline_container"
 
-# Cache key for purely-local runner targets — all existing tests construct
+# Cache key for purely-local runner targets - all existing tests construct
 # a StudyRunner with runner_specs=None, which maps to "local".
 _LOCAL_KEY = "local"
 
@@ -119,7 +119,7 @@ def config_validated() -> ExperimentConfig:
 
 class TestStrategyFresh:
     def test_returns_none(self, tmp_path: Path, config_fresh: ExperimentConfig):
-        """strategy='fresh' returns None — each experiment measures its own."""
+        """strategy='fresh' returns None - each experiment measures its own."""
         runner = _make_runner(tmp_path, config_fresh)
         result = runner._get_baseline(config_fresh)
         assert result is None
@@ -205,7 +205,7 @@ class TestStrategyCached:
         runner = _make_runner(tmp_path, config_cached)
         disk_baseline = _make_baseline(72.0, from_cache=True)
 
-        # The runner now checks disk_path.exists() before calling load — create
+        # The runner now checks disk_path.exists() before calling load - create
         # a real file on disk so the load path is taken.
         disk_path = runner._get_baseline_cache_path(_LOCAL_KEY)
         disk_path.write_text("{}", encoding="utf-8")
@@ -311,7 +311,7 @@ class TestStrategyCached:
 
 class TestStrategyValidated:
     def test_first_call_measures_baseline(self, tmp_path: Path, config_validated: ExperimentConfig):
-        """First call behaves like 'cached' — measures and persists."""
+        """First call behaves like 'cached' - measures and persists."""
         runner = _make_runner(tmp_path, config_validated)
         fake = _make_baseline()
 
@@ -753,7 +753,7 @@ class TestBaselineHostProgressEvents:
     ):
         """When _measure_baseline returns None (e.g. baseline container
         dispatch crashed because the image is stale), the host must freeze
-        the dangling live substep with a failure text before on_step_done —
+        the dangling live substep with a failure text before on_step_done -
         otherwise the UI silently shows ✓ and users mistake it for a
         successful measurement.
         """
@@ -770,7 +770,7 @@ class TestBaselineHostProgressEvents:
         mock_save.assert_not_called()  # nothing to persist when measurement failed
 
         # Failure surfaces via on_substep_done (freezes any live substep with
-        # the failure text) — never as on_substep which would leave the
+        # the failure text) - never as on_substep which would leave the
         # dangling "launching ..." heartbeat alive beside it.
         done_calls = [
             call
@@ -788,7 +788,7 @@ class TestBaselineHostProgressEvents:
         events = _baseline_step_events(progress)
         names = [e[0] for e in events]
         # on_step_done still fires (host UI gets a terminal event) even though
-        # the measurement itself failed — the substep carries the "why".
+        # the measurement itself failed - the substep carries the "why".
         assert "on_step_done" in names
 
     def test_docker_fresh_emits_live_stage_substeps(
@@ -799,7 +799,7 @@ class TestBaselineHostProgressEvents:
         baseline step, producing heartbeating sub-bullets that animate while
         each stage is in flight and freeze with a dim tick on completion.
 
-        This is the regression for "why did a 30s measurement take 37s?" —
+        This is the regression for "why did a 30s measurement take 37s?" -
         the user now sees a live breakdown of launching container → CUDA init
         → sampling → teardown instead of one opaque parent step.
         """
@@ -888,7 +888,7 @@ class TestBaselineHostProgressEvents:
             for t in done_texts
         )
 
-        # 3. No retroactive "container launch + teardown" substeps — those
+        # 3. No retroactive "container launch + teardown" substeps - those
         #    were the pre-streaming labels from before stage markers existed.
         all_texts = start_texts + done_texts
         assert not any("container launch + teardown" in t for t in all_texts)
@@ -977,7 +977,7 @@ class TestBaselineHostProgressEvents:
             patch(_RESOLVE_GPU, return_value=[0]),
             patch(_SAVE),
         ):
-            # Any strategy path — just verify no AttributeError is raised.
+            # Any strategy path - just verify no AttributeError is raised.
             runner._get_baseline(config_cached)
             runner._get_baseline(config_cached)
 
@@ -1033,7 +1033,7 @@ class TestBaselineCacheKey:
         assert p1 != p2
         assert p1.name == "baseline_cache_local.json"
         assert p2.name == "baseline_cache_image_test_img_v1.json"
-        # Regression: the filename must not contain ':' — Docker's bind-mount
+        # Regression: the filename must not contain ':' - Docker's bind-mount
         # parser treats it as the mode separator and rejects the mount.
         assert ":" not in p2.name
 

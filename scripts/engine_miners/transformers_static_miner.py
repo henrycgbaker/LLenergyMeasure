@@ -1,4 +1,4 @@
-"""AST miner for the transformers library — recall-first invariant extraction.
+"""AST miner for the transformers library - recall-first invariant extraction.
 
 Walks ``GenerationConfig.validate()`` and the depth-1 helpers it calls
 (``WatermarkingConfig.validate``, ``SynthIDTextWatermarkingConfig.validate``)
@@ -26,7 +26,7 @@ the surrounding invariant and notes the dropped sub-clause in a YAML comment.
 Output
 ------
 Writes ``src/llenergymeasure/engines/transformers/_staging/transformers_static_miner.yaml``
-— consumed downstream by ``scripts/engine_miners/build_corpus.py``. Schema
+- consumed downstream by ``scripts/engine_miners/build_corpus.py``. Schema
 mirrors ``src/llenergymeasure/engines/transformers/invariants.proposed.yaml``
 exactly: ``schema_version``, ``engine``, ``engine_version``, ``invariants: [...]``.
 
@@ -54,7 +54,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 # Defend against the script-directory shadowing site-packages. When run as
 # `python3 scripts/engine_miners/transformers_static_miner.py`, Python prepends
-# `scripts/engine_miners/` to sys.path, where a sibling `transformers.py` lives —
+# `scripts/engine_miners/` to sys.path, where a sibling `transformers.py` lives -
 # `import transformers` would resolve to that local stub instead of the real
 # installed package. Strip the script dir before any third-party imports.
 _SCRIPT_DIR = str(Path(__file__).resolve().parent)
@@ -100,7 +100,7 @@ NATIVE_TYPE_BNB = "transformers.BitsAndBytesConfig"
 # Field-path namespace for GenerationConfig fields. The corpus convention
 # (see existing transformers.yaml entries) puts every GenerationConfig
 # attribute under transformers.sampling.<field>, even those that aren't
-# strictly "sampling" parameters — that namespace is how the project's
+# strictly "sampling" parameters - that namespace is how the project's
 # Pydantic config model exposes them.
 GENCONFIG_NAMESPACE = "transformers.sampling"
 
@@ -155,7 +155,7 @@ class ExtractedCondition:
     """An ``ast.expr`` condition translated into a list of FieldPredicates.
 
     ``unparseable_clauses`` records sub-clauses the miner couldn't translate
-    — surfaced into the YAML invariant's ``invariant_under_test`` so reviewers see what
+    - surfaced into the YAML invariant's ``invariant_under_test`` so reviewers see what
     was dropped.
     """
 
@@ -195,10 +195,10 @@ class InvariantCandidate:
     references: list[str]
     confidence: str
     library: str = LIBRARY
-    """Owning library — overridden for BNB (``bitsandbytes``) etc."""
+    """Owning library - overridden for BNB (``bitsandbytes``) etc."""
     source_path: str | None = None
     """Site-packages-relative source path. Falls back to the miner's
-    primary module path when None — used by GenerationConfig invariants; BNB
+    primary module path when None - used by GenerationConfig invariants; BNB
     invariants sit in a different source file and override this."""
     normalised_fields: list[Any] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
@@ -275,7 +275,7 @@ def _rhs_from_node(node: ast.expr) -> tuple[bool, Any, int]:
     if name is not None:
         return True, f"@{name}", 0
     # ast.Name resolved as a module-level constant (e.g. ALL_CACHE_IMPLEMENTATIONS):
-    # treat as opaque but flag low confidence — the loader can't replay it,
+    # treat as opaque but flag low confidence - the loader can't replay it,
     # but validation CI can run kwargs_positive / kwargs_negative empirically.
     if isinstance(node, ast.Name):
         return False, ast.unparse(node), 1
@@ -331,7 +331,7 @@ def _extract_compare(cmp: ast.Compare) -> tuple[list[FieldPredicate], list[str]]
     # Walk the chain pairwise: (left, op0, comparator0), (comparator0, op1, comparator1), ...
     operands = [cmp.left, *cmp.comparators]
     for left, op, right in zip(operands, cmp.ops, cmp.comparators, strict=False):
-        # `is`/`is not` — corpus loader has no `is` operator. Map `is None` to
+        # `is`/`is not` - corpus loader has no `is` operator. Map `is None` to
         # `absent`, `is not None` to `present`.
         if isinstance(op, (ast.Is, ast.IsNot)):
             field_name = _self_attr_name(left)
@@ -459,7 +459,7 @@ def _isinstance_type_names(node: ast.expr) -> list[str]:
 
 
 def _extract_unary_not(node: ast.UnaryOp) -> tuple[list[FieldPredicate], list[str]]:
-    """``not <expr>`` — invert the inner predicate set if possible."""
+    """``not <expr>`` - invert the inner predicate set if possible."""
     inner_preds, inner_un = extract_predicates(node.operand)
     inverted: list[FieldPredicate] = []
     inversion_map = {
@@ -498,13 +498,13 @@ def extract_predicates(condition: ast.expr) -> tuple[list[FieldPredicate], list[
     """Translate a boolean condition AST into a list of AND-combined predicates.
 
     BoolOp(And, ...) → AND-combined; we recurse and concatenate.
-    BoolOp(Or, ...) → can't represent OR in match.fields — surface the entire
+    BoolOp(Or, ...) → can't represent OR in match.fields - surface the entire
     OR clause as unparseable; the invariant emits with low confidence.
     Compare → extract via ``_extract_compare``.
     Call (isinstance/hasattr) → ``_extract_call_predicate``.
     UnaryOp(Not, ...) → invert inner.
     Attribute (bare ``self.x``) → ``self.x`` truthiness ≈ "present and not falsy"
-        — emit ``present`` predicate with low confidence (loader can't capture
+        - emit ``present`` predicate with low confidence (loader can't capture
         Python truthiness exactly but recall-first wins).
     """
     if isinstance(condition, ast.BoolOp) and isinstance(condition.op, ast.And):
@@ -525,7 +525,7 @@ def extract_predicates(condition: ast.expr) -> tuple[list[FieldPredicate], list[
         return _extract_call_predicate(condition)
     if isinstance(condition, ast.UnaryOp) and isinstance(condition.op, ast.Not):
         return _extract_unary_not(condition)
-    # Bare ``self.x`` truthiness ≈ "present" — degrade confidence.
+    # Bare ``self.x`` truthiness ≈ "present" - degrade confidence.
     field_name = _self_attr_name(condition)
     if field_name is not None:
         return [
@@ -544,7 +544,7 @@ def negate_predicates(preds: list[FieldPredicate]) -> list[FieldPredicate]:
 
     For an AND-combined predicate set, the simplest negation is to flip the
     *last* predicate (so its kwargs_negative differs from kwargs_positive in
-    only one field). This isn't a logical negation — it's a "near miss" used
+    only one field). This isn't a logical negation - it's a "near miss" used
     to give the validation CI loop a value that doesn't trigger the invariant.
     """
     if not preds:
@@ -681,7 +681,7 @@ def _detect_logger_warning(stmt: ast.stmt) -> DetectedBody | None:
 
 
 def _detect_minor_issues(stmt: ast.stmt) -> DetectedBody | None:
-    """``minor_issues[<key>] = <message>`` — HF announced-dormancy pattern."""
+    """``minor_issues[<key>] = <message>`` - HF announced-dormancy pattern."""
     if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
         return None
     target = stmt.targets[0]
@@ -709,7 +709,7 @@ def _detect_minor_issues(stmt: ast.stmt) -> DetectedBody | None:
 
 
 def _detect_self_assign(stmt: ast.stmt) -> DetectedBody | None:
-    """``self.<field> = <expr>`` — silent normalisation."""
+    """``self.<field> = <expr>`` - silent normalisation."""
     if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
         return None
     target = stmt.targets[0]
@@ -783,7 +783,7 @@ def _negate_branch_predicates(
 
     Strict: only invertible if the AND-set has exactly one predicate (whose
     operator has a known inversion). Else, surface as an unparseable
-    "else of <conditions>" annotation — the invariant emits with low confidence.
+    "else of <conditions>" annotation - the invariant emits with low confidence.
     """
     if len(preds) != 1:
         return [], [f"else of: {' AND '.join(f'{p.field} {p.op} {p.rhs}' for p in preds)}"]
@@ -950,7 +950,7 @@ def _build_rule(
     # up for the {declared_value} substitution.
     subject_field = detected.affected_field
 
-    # If we have no predicates at all and no subject field, drop — too noisy.
+    # If we have no predicates at all and no subject field, drop - too noisy.
     if not preds and subject_field is None:
         return None
 
@@ -1031,10 +1031,10 @@ def _build_match_fields(preds: list[FieldPredicate], namespace: str) -> dict[str
         rhs = p.rhs
         if isinstance(rhs, str) and rhs.startswith("@") and "." not in rhs:
             # Bare reference: corpus loader resolves it as a sibling of the
-            # predicate field, which is exactly what we want — no rewrite needed.
+            # predicate field, which is exactly what we want - no rewrite needed.
             pass
         if p.op in spec:
-            # Two predicates with the same operator on the same field —
+            # Two predicates with the same operator on the same field -
             # corpus invariant shape can't represent that natively. Keep the
             # last one wins.
             spec[p.op] = rhs
@@ -1058,7 +1058,7 @@ def _build_match_fields(preds: list[FieldPredicate], namespace: str) -> dict[str
 def _synthesise_kwargs(preds: list[FieldPredicate], *, sense: str) -> dict[str, Any]:
     """Pick concrete kwarg values that satisfy (or violate) the predicates.
 
-    ``sense`` is purely informational — both positive and negative paths
+    ``sense`` is purely informational - both positive and negative paths
     use the same logic (the predicates passed in are already prepared by
     ``negate_predicates``).
 
@@ -1115,12 +1115,12 @@ def _value_satisfying(op: str, rhs: Any) -> Any:
         # (e.g. ``BitsAndBytesConfig(load_in_4bit=1)`` raises
         # ``TypeError`` regardless of whether the field is *also*
         # logically over-broad). Using ``True`` lets validation
-        # observe the actual semantic — does the invariant fire when the user
-        # legitimately enables this flag? — and quarantine the invariant when
+        # observe the actual semantic - does the invariant fire when the user
+        # legitimately enables this flag? - and quarantine the invariant when
         # it doesn't.
         return True
     if op == "absent":
-        # ``None`` is a poor sentinel here — many native types reject ``None``
+        # ``None`` is a poor sentinel here - many native types reject ``None``
         # outright (e.g. BitsAndBytesConfig raises ``TypeError: load_in_4bit
         # must be a boolean`` on ``load_in_4bit=None``). Use ``False``, which
         # is the documented default for the BNB / GenerationConfig flag-style
@@ -1181,7 +1181,7 @@ def _type_label_default(label: Any) -> Any:
     For non-primitive types we can't materialise without importing the
     relevant runtime (e.g. ``torch.dtype``, custom dataclasses), the
     miner returns ``None``. The caller treats ``None`` as "field is
-    absent / default" — many native types (BNB ``bnb_4bit_compute_dtype``,
+    absent / default" - many native types (BNB ``bnb_4bit_compute_dtype``,
     GenerationConfig ``compile_config``) accept ``None`` as the no-op
     value, so validation observes the negative case correctly.
     """
@@ -1219,7 +1219,7 @@ def _force_distinct_negative(pos: dict[str, Any], preds: list[FieldPredicate]) -
     out = dict(pos)
     # For type_is_not predicates the negation must be a value of the *expected*
     # type (the type the invariant says was violated). ``None`` is a poor sentinel
-    # here — many native types reject ``None`` outright (e.g. BNB raises
+    # here - many native types reject ``None`` outright (e.g. BNB raises
     # ``TypeError: load_in_4bit must be a boolean``), so validation
     # observes the negative ALSO firing, fails ``negative_confirmed``, and
     # the invariant lands in quarantine. Use a real instance of the rhs type so
@@ -1277,7 +1277,7 @@ def _make_invariant_id(
     # The library check is `if self.diversity_penalty == 0.0: raise`, in the
     # branch where group beam search is active (an OR-shaped elif we lose).
     # User-facing id signals "diversity_penalty nonpositive when group beams
-    # active" — match the invariant by predicate-shape rather than exact predicate.
+    # active" - match the invariant by predicate-shape rather than exact predicate.
     if (
         "diversity_penalty" in fields_in_order
         and any(p.field == "diversity_penalty" and p.op in {"<=", "==", "<"} for p in preds)
@@ -1494,7 +1494,7 @@ def walk_transformers() -> tuple[list[InvariantCandidate], str, str]:
                 )
             )
 
-    # 4) BitsAndBytesConfig.post_init — type-check raises that gate the
+    # 4) BitsAndBytesConfig.post_init - type-check raises that gate the
     # BNB quantisation entrypoint. Stays CPU-safe: we parse the source AST
     # without importing ``bitsandbytes`` itself (that would touch CUDA on
     # GPU hosts). The class lives in transformers.utils.quantization_config,
@@ -1508,7 +1508,7 @@ def _walk_bnb_post_init(today: str) -> list[InvariantCandidate]:
     """Walk ``BitsAndBytesConfig.post_init`` for type-check raises.
 
     Returns an empty list if the quantization_config module isn't importable
-    (older transformers) — the merger tolerates absent invariants, and validation CI
+    (older transformers) - the merger tolerates absent invariants, and validation CI
     on a supported version will reintroduce them.
     """
     try:
@@ -1524,7 +1524,7 @@ def _walk_bnb_post_init(today: str) -> list[InvariantCandidate]:
     bnb_cls = find_class(module_ast, "BitsAndBytesConfig")
     if bnb_cls is None:
         return []
-    # Method name is ``post_init`` (no leading underscore — distinct from
+    # Method name is ``post_init`` (no leading underscore - distinct from
     # ``__post_init__``; HF defines it as a regular method called from
     # ``__init__``).
     post_init_fn = find_method(bnb_cls, "post_init")

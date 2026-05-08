@@ -256,7 +256,7 @@ class LoRAConfig(BaseModel):
 class TaskConfig(BaseModel):
     """What to measure: model identity, dataset, and workload shape.
 
-    These fields define the scientific workload — changing any of them means
+    These fields define the scientific workload - changing any of them means
     you're measuring a fundamentally different task.
     """
 
@@ -305,7 +305,7 @@ class TaskConfig(BaseModel):
 class MeasurementConfig(BaseModel):
     """How to measure: warmup, baseline, and energy sampling strategy.
 
-    These fields control the measurement methodology — changing them affects
+    These fields control the measurement methodology - changing them affects
     measurement quality/accuracy but not the workload itself.
     """
 
@@ -348,7 +348,7 @@ class ExperimentConfig(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    # Task — what to measure
+    # Task - what to measure
     task: TaskConfig = Field(..., description="Task configuration: model, dataset, workload shape")
 
     # Engine selection
@@ -358,13 +358,13 @@ class ExperimentConfig(BaseModel):
         json_schema_extra={"display_label": "Engine"},
     )
 
-    # Measurement — how to measure
+    # Measurement - how to measure
     measurement: MeasurementConfig = Field(
         default_factory=MeasurementConfig,
         description="Measurement methodology: warmup, baseline, energy sampling",
     )
 
-    # Sampling preset — expands into the active engine's sampling section
+    # Sampling preset - expands into the active engine's sampling section
     sampling_preset: SamplingPreset | None = Field(
         default=None,
         description=(
@@ -391,7 +391,7 @@ class ExperimentConfig(BaseModel):
     # LoRA adapter (optional)
     lora: LoRAConfig | None = Field(default=None, description="LoRA adapter configuration")
 
-    # Escape hatch — explicitly declared for extra="forbid" compatibility
+    # Escape hatch - explicitly declared for extra="forbid" compatibility
     passthrough_kwargs: dict[str, Any] | None = Field(
         default=None,
         description="Extra kwargs passed through to engine at execution time. "
@@ -442,7 +442,7 @@ class ExperimentConfig(BaseModel):
     def validate_engine_section_match(self) -> ExperimentConfig:
         """Engine section must match the engine field.
 
-        A transformers: section with engine=vllm is a configuration error — it indicates
+        A transformers: section with engine=vllm is a configuration error - it indicates
         the researcher copied the wrong config block. Fail explicitly rather than
         silently ignoring the mismatched section.
         """
@@ -511,7 +511,7 @@ class ExperimentConfig(BaseModel):
     def _apply_invariants(self) -> ExperimentConfig:
         # ``object.__setattr__`` bypasses Pydantic's ``extra='forbid'``;
         # consumers read via ``cfg._dormant_observations`` (dict keyed by
-        # invariant.id). Missing corpus is non-fatal — the invariants layer is additive.
+        # invariant.id). Missing corpus is non-fatal - the invariants layer is additive.
         from llenergymeasure.config.probe import DormantField
 
         dormant_observations: dict[str, DormantField] = {}
@@ -705,7 +705,7 @@ class ExecutionConfig(BaseModel):
             "When true (default), sweep expansion applies library resolution to each declared "
             "ExperimentConfig via engine-invariants dormant-invariant application and drops "
             "duplicates that share an resolved_config_hash. When false, every declared "
-            "config runs — the library-resolution mechanism still populates equivalence-group "
+            "config runs - the library-resolution mechanism still populates equivalence-group "
             "metadata for the sidecar but no configs are elided. The --no-dedup "
             "CLI flag is the equivalent. See sweep-dedup.md §2.3.1."
         ),
@@ -744,7 +744,7 @@ class StudyConfig(BaseModel):
             "('transformers', 'vllm', 'tensorrt'), values are runner strings "
             "('local', 'docker', or 'docker:<image>'). "
             "None = use user config / auto-detection. "
-            "Runner is metadata — not part of the experiment config hash."
+            "Runner is metadata - not part of the experiment config hash."
         ),
     )
     images: dict[str, str] | None = Field(
@@ -754,7 +754,7 @@ class StudyConfig(BaseModel):
             "Keys are engine names, values are image references "
             "(e.g. 'ghcr.io/org/img:tag'). None = use smart default "
             "(local build → registry fallback). "
-            "Image is metadata — not part of the experiment config hash."
+            "Image is metadata - not part of the experiment config hash."
         ),
     )
     study_design_hash: str | None = Field(

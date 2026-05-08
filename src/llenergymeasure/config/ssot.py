@@ -8,7 +8,7 @@ temp file prefixes, and infrastructure timeout values. Consumers include:
 - Infrastructure modules (Docker runner, runner resolution, image registry)
 - Study runner and container lifecycle management
 
-Do not inline these values in validators or infrastructure code — always
+Do not inline these values in validators or infrastructure code - always
 import from here.
 """
 
@@ -21,7 +21,7 @@ from typing import Any, Final, Literal
 # Sampling presets (shared across engines)
 # ---------------------------------------------------------------------------
 # Preset values are aligned with industry conventions (vLLM, OpenAI, MLPerf).
-# do_sample is intentionally absent from presets — it's HF-specific; the
+# do_sample is intentionally absent from presets - it's HF-specific; the
 # transformers engine builder infers do_sample=False from temperature=0.
 
 SAMPLING_PRESETS: dict[str, dict[str, Any]] = {
@@ -32,7 +32,7 @@ SAMPLING_PRESETS: dict[str, dict[str, Any]] = {
 }
 
 # ---------------------------------------------------------------------------
-# Engine enum — the ONE source of truth for backend engine identifiers.
+# Engine enum - the ONE source of truth for backend engine identifiers.
 # Add a new backend by adding a member here; everything else derives from it
 # (Pydantic validation, membership checks, ordered iteration, CLI choices).
 # ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ class Engine(str, Enum):
 
 
 ALL_ENGINES: Final[frozenset[Engine]] = frozenset(Engine)
-"""Unordered engine set — use for O(1) membership checks (``engine in ALL_ENGINES``)."""
+"""Unordered engine set - use for O(1) membership checks (``engine in ALL_ENGINES``)."""
 
 # ---------------------------------------------------------------------------
 # Runner mode constants
@@ -73,7 +73,7 @@ SOURCE_MULTI_ENGINE_ELEVATION: Final = "multi_engine_elevation"
 RunnerMode = Literal["local", "docker"]
 
 DOCKER_PULL_TIMEOUT: Final = 1800
-"""Maximum seconds to wait for ``docker pull`` (30 min — generous for large images like TensorRT ~10 GB)."""
+"""Maximum seconds to wait for ``docker pull`` (30 min - generous for large images like TensorRT ~10 GB)."""
 
 # ---------------------------------------------------------------------------
 # Environment variable name constants

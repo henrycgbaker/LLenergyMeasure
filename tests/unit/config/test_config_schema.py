@@ -89,7 +89,7 @@ def test_v1x_field_fp_precision_rejected():
 
 
 def test_top_level_dtype_rejected():
-    """Top-level dtype is rejected — dtype lives per-engine (extra='forbid')."""
+    """Top-level dtype is rejected - dtype lives per-engine (extra='forbid')."""
     with pytest.raises(ValidationError):
         ExperimentConfig(task={"model": "gpt2"}, dtype="float16")  # type: ignore[call-arg]
 
@@ -404,7 +404,7 @@ def test_pytorch_config_device_map_without_tp_plan_ok():
 
 
 # ---------------------------------------------------------------------------
-# Bug 1.1 — fp8 quantization + float32 dtype (vLLM)
+# Bug 1.1 - fp8 quantization + float32 dtype (vLLM)
 # ---------------------------------------------------------------------------
 
 
@@ -465,7 +465,7 @@ def test_vllm_no_quantization_default_dtype_accepted():
 
 
 # ---------------------------------------------------------------------------
-# Bug 1.2 — max_num_batched_tokens < max_model_len (vLLM engine)
+# Bug 1.2 - max_num_batched_tokens < max_model_len (vLLM engine)
 # ---------------------------------------------------------------------------
 
 
@@ -504,7 +504,7 @@ def test_vllm_batched_tokens_one_none_accepted():
 
 
 # ---------------------------------------------------------------------------
-# Bug 1.3 — flash_attention_2/3 + float32 dtype (PyTorch)
+# Bug 1.3 - flash_attention_2/3 + float32 dtype (PyTorch)
 # ---------------------------------------------------------------------------
 
 

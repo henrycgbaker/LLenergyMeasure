@@ -4,8 +4,8 @@ PaLM/Chinchilla formula: FLOPs = 2 * N_non_embedding_params * total_tokens
 Split into prefill (input) and decode (output) phases.
 
 Two entry points:
-- estimate_flops_palm() — requires a loaded model object (higher confidence).
-- estimate_flops_palm_from_config() — uses AutoConfig only (no weights needed).
+- estimate_flops_palm() - requires a loaded model object (higher confidence).
+- estimate_flops_palm_from_config() - uses AutoConfig only (no weights needed).
 """
 
 from __future__ import annotations

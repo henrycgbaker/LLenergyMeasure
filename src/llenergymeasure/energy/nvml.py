@@ -3,7 +3,7 @@
 Uses PowerThermalSampler (pynvml-based) to poll GPU power at 100ms intervals
 and integrates samples to joules via the trapezoidal rule.
 
-All pynvml imports are deferred — this module is safe to import on CPU-only machines.
+All pynvml imports are deferred - this module is safe to import on CPU-only machines.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ class NVMLSampler:
     integrates consecutive sample pairs using the trapezoidal rule to produce
     total energy in joules.
 
-    All pynvml access is fully deferred — safe to import on CPU-only hosts.
+    All pynvml access is fully deferred - safe to import on CPU-only hosts.
 
     Args:
         gpu_indices: CUDA device indices to monitor. Defaults to [0] when None.
@@ -67,7 +67,7 @@ class NVMLSampler:
             from llenergymeasure.device.gpu_info import nvml_context
 
             # Use a sentinel to detect whether nvml_context yielded successfully
-            # (nvml_context silently yields even on failure — we probe via nvmlDeviceGetCount)
+            # (nvml_context silently yields even on failure - we probe via nvmlDeviceGetCount)
             with nvml_context():
                 pynvml.nvmlDeviceGetCount()
             return True

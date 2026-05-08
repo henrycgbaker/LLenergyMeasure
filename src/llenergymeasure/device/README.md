@@ -87,11 +87,11 @@ Sampling is best-effort: if pynvml is unavailable, returns empty sample list wit
 
 ## NVML availability
 
-All device/ functions degrade gracefully when NVML is unavailable (CPU-only host, pynvml not installed, Docker without `--gpus`). No function raises ImportError or NVMLError — callers receive None or empty collections.
+All device/ functions degrade gracefully when NVML is unavailable (CPU-only host, pynvml not installed, Docker without `--gpus`). No function raises ImportError or NVMLError - callers receive None or empty collections.
 
 ## Layer constraints
 
-- Layer 0 — base layer; no imports from other llenergymeasure layers
+- Layer 0 - base layer; no imports from other llenergymeasure layers
 - Can be imported by all layers above
 - All NVML usage in the codebase must go through this layer
 

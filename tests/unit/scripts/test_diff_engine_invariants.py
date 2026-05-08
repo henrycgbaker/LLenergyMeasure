@@ -95,8 +95,8 @@ class TestDiffInvariants:
         assert any(c.kind == "severity_relaxed" for c in result.safe)
 
     def test_outcome_changed_same_rank_is_breaking(self) -> None:
-        # no_op vs skipped_hardware_dependent — sibling categories, not a
-        # monotonic change — flagged as outcome_changed (breaking).
+        # no_op vs skipped_hardware_dependent - sibling categories, not a
+        # monotonic change - flagged as outcome_changed (breaking).
         old = _envelope([_case("r1", outcome="no_op")])
         new = _envelope([_case("r1", outcome="no_op")])
         # tweak outcome that has same rank to force outcome_changed
@@ -139,7 +139,7 @@ class TestDiffInvariants:
     def test_summary_counts(self) -> None:
         old = _envelope([_case("r1")])
         new = _envelope([_case("r1", outcome="error"), _case("r2", outcome="warn")])
-        # r1 in both — no change; r2 added — safe
+        # r1 in both - no change; r2 added - safe
         result = diff_invariants.diff_invariants(old, new)
         assert "1 invariants-safe" in result.summary
 

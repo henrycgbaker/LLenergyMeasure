@@ -156,7 +156,7 @@ def _run_transformers(
 
 
 def _construct_and_validate_generation_config(kwargs: dict[str, Any], *, strict: bool) -> Any:
-    # Corpus kwargs pass through verbatim — the raw YAML shape IS the invariant
+    # Corpus kwargs pass through verbatim - the raw YAML shape IS the invariant
     # under test (e.g. compile_config receives a raw dict on purpose).
     from transformers import GenerationConfig  # type: ignore
 
@@ -183,7 +183,7 @@ def _construct_generic(native_type: str, kwargs: dict[str, Any]) -> Any:
 # ---------------------------------------------------------------------------
 #
 # Runs inside the ``llenergymeasure:tensorrt`` Docker image on the self-hosted
-# GPU runner — TRT-LLM 0.21.0 cannot be imported on a CPU host (loads CUDA
+# GPU runner - TRT-LLM 0.21.0 cannot be imported on a CPU host (loads CUDA
 # bindings on import), so this codepath is only exercised in CI by the
 # ``validate-tensorrt`` job in ``.github/workflows/engine-invariants.yml``.
 #
@@ -290,7 +290,7 @@ _VLLM_BOOTSTRAP_NOISE = re.compile(
 def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool) -> CaptureBuffers:
     """Execute one invariant's kwargs through the vLLM library.
 
-    ``strict_validate`` is unused — vLLM has no analog to HF's ``strict``
+    ``strict_validate`` is unused - vLLM has no analog to HF's ``strict``
     flag; sampling-param errors raise during construction and dormancy
     surfaces via ``logger.warning_once`` from inside ``__post_init__`` /
     ``_verify_args``. Both paths run on plain construction.
@@ -335,7 +335,7 @@ def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
     # tripping ``negative_confirms`` for every invariant that constructs one of
     # these classes. The captured records carry no level prefix in the
     # plain-message handler (``%(message)s`` formatter), so we filter on
-    # known-bootstrap message substrings instead — vLLM's
+    # known-bootstrap message substrings instead - vLLM's
     # ``init_logger(__name__)`` uses standard logging without a level
     # marker baked into the message.
     filtered_logs = tuple(m for m in result.logger_messages if not _VLLM_BOOTSTRAP_NOISE.search(m))
@@ -377,7 +377,7 @@ def get_native_type_runner(engine: str):
 def validate_invariant(engine: str, invariant: dict[str, Any], *, gpu_mode: str) -> CaseResult:
     """Run one invariant's positive + negative kwargs and assemble the case result.
 
-    ``gpu_mode`` is ``"all" | "skip" | "only"`` — hardware-dependent invariants
+    ``gpu_mode`` is ``"all" | "skip" | "only"`` - hardware-dependent invariants
     are skipped unless ``gpu_mode`` permits them.
     """
     case, _pos, _neg = _validate_invariant_with_captures(engine, invariant, gpu_mode=gpu_mode)
@@ -678,7 +678,7 @@ def validate_engine(
     """Run the full validation loop for one engine; write YAML envelope to ``out_path``.
 
     Returns ``(envelope, divergences)``. Raises :class:`ValidationEngineNotImportable`
-    if the engine library can't be imported. Does NOT raise on divergence —
+    if the engine library can't be imported. Does NOT raise on divergence -
     the caller inspects the returned list and decides.
     """
     corpus = _load_corpus(corpus_path)
@@ -688,7 +688,7 @@ def validate_engine(
     divergences: list[Divergence] = []
 
     for invariant in corpus.get("invariants", []):
-        # ValidationError (and subclasses) propagate — they indicate misconfig, not
+        # ValidationError (and subclasses) propagate - they indicate misconfig, not
         # a library behaviour finding. Any other Exception gets recorded as a
         # per-invariant error so one bad invariant doesn't abort the full validation run.
         pos: CaptureBuffers | None = None
@@ -878,7 +878,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[{args.engine}] wrote {args.out}", file=sys.stderr)
     if divergences:
         print(
-            f"[{args.engine}] {len(divergences)} divergence(s) — see YAML 'divergences' array.",
+            f"[{args.engine}] {len(divergences)} divergence(s) - see YAML 'divergences' array.",
             file=sys.stderr,
         )
         for d in divergences[:10]:

@@ -9,7 +9,7 @@ Used by:
 
 - vLLM ``SamplingParams`` (msgspec.Struct). Per
   ``research-vllm-extractor.md``, the live class ships **zero**
-  ``Meta`` annotations — that's expected; this lift returns ``[]`` and the
+  ``Meta`` annotations - that's expected; this lift returns ``[]`` and the
   static miner picks up the slack via AST parsing of ``_verify_args``.
   The lift exists so the day vLLM (or another msgspec user) starts
   annotating ``Meta(ge=...)`` we capture it for free.
@@ -187,7 +187,7 @@ def _candidates_for_field(
             )
         )
 
-    # Literal allowlists — msgspec exposes these as LiteralType with .values.
+    # Literal allowlists - msgspec exposes these as LiteralType with .values.
     if isinstance(field_type, msgspec.inspect.LiteralType):
         out.append(
             _build_literal(
@@ -236,7 +236,7 @@ def _build_numeric(
             "normalised_fields": [],
         },
         message_template=f"`{field_name}` must satisfy {op_key} {threshold!r}",
-        references=[f"{library}.{type_name} — msgspec.Meta constraint"],
+        references=[f"{library}.{type_name} - msgspec.Meta constraint"],
         added_by="msgspec_lift",
         added_at=today,
     )
@@ -274,7 +274,7 @@ def _build_length(
             "normalised_fields": [],
         },
         message_template=f"`{field_name}` length must satisfy {op_key} {threshold}",
-        references=[f"{library}.{type_name} — msgspec.Meta length constraint"],
+        references=[f"{library}.{type_name} - msgspec.Meta length constraint"],
         added_by="msgspec_lift",
         added_at=today,
     )
@@ -309,7 +309,7 @@ def _build_literal(
             "normalised_fields": [],
         },
         message_template=f"`{field_name}` must be one of {list(values)!r}",
-        references=[f"{library}.{type_name} — msgspec Literal annotation"],
+        references=[f"{library}.{type_name} - msgspec Literal annotation"],
         added_by="msgspec_lift",
         added_at=today,
     )
