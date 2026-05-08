@@ -39,8 +39,11 @@ function Hero(): ReactNode {
               to={ROUTES.getStarted}>
               Get Started
             </Link>
+          </div>
+
+          <div className={styles.heroSecondary}>
             <Link
-              className="button button--secondary button--lg"
+              className="button button--secondary"
               to="/explanation/why">
               Why this exists
             </Link>
@@ -71,9 +74,16 @@ function WhatIsThis(): ReactNode {
             tool that takes researchers&#39; specs and runs them. The tool
             discovers and exposes engine parameters programmatically, then uses
             invariant mining and deduplication to keep the resulting parameter
-            space tractable for sweeps. It can be used for any LLM efficiency
-            research; the primary question it was built to answer is: how do
-            implementation choices drive efficiency?
+            space tractable for sweeps.
+          </p>
+          <p className={styles.pitch}>
+            While both the CLI and its underlying Python library can be used
+            for any LLM efficiency research, the primary question the CLI was
+            built to answer is:{' '}
+            <em>
+              how do implementation choices downstream of model selection drive
+              LLM serving efficiency?
+            </em>
           </p>
         </div>
       </div>
