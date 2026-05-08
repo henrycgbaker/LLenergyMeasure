@@ -5,11 +5,22 @@ GitHub App integration. Production stays on GitHub Pages
 (`https://henrycgbaker.github.io/llenergymeasure/`); CF Pages handles the
 preview URL surface only.
 
-This split is deliberate: production belongs on the existing, working
+This split is deliberate. Production belongs on the existing, working
 deployment path (`actions/deploy-pages` from `.github/workflows/docs.yml`,
-which runs on push to `main`); previews are a separate concern that
-benefits from CF's auto-build-on-PR + auto-comment integration without
-touching the production deploy.
+which deploys on push to `main`). Previews are a separate concern,
+covered by two complementary surfaces:
+
+- **GitHub Actions** runs `docs.yml` on every docs-touching PR, build-only
+  (no deploy), as the authoritative correctness gate. Catches broken
+  links, generator failures, and Docusaurus build errors before merge.
+- **Cloudflare Pages** auto-builds on PR via direct GitHub App integration
+  and posts a comment with a clickable preview URL. Reviewer convenience.
+
+Either surface alone leaves a class of bug uncaught: GH Actions alone
+can't surface a clickable preview, and CF alone can't detect itself
+being misconfigured (a path filter or App permission drift can silently
+disable CF builds while the comment looks alive). Defence-in-depth is
+cheap here - one extra ~40 s build per docs PR.
 
 ## What contributors see
 
@@ -98,26 +109,34 @@ No GitHub Actions secrets are needed; the GitHub App handles auth.
 
 This setup intentionally does not migrate production to CF Pages.
 `.github/workflows/docs.yml` continues to deploy `main` to GH Pages on
-every push. The two paths are independent:
+every push. The pipelines on each git event:
 
 ```mermaid
 flowchart LR
     prpush[PR push]
     mainpush[main push]
     cf[CF Pages]
-    docs[docs.yml]
+    docsPR["docs.yml<br/>build-only gate"]
+    docsMain[docs.yml]
     gh[GitHub Pages]
     preview["&lt;hash&gt;.llenergymeasure-docs.pages.dev<br/>preview, comment on PR"]
     prod["henrycgbaker.github.io/llenergymeasure<br/>production"]
 
+    prpush --> docsPR
     prpush --> cf --> preview
-    mainpush --> docs --> gh --> prod
+    mainpush --> docsMain --> gh --> prod
 ```
 
-If CF availability degrades, PRs lose preview URLs but production remains
-deployable - `docs.yml` runs only on push to `main` (not on PRs), so a
-broken CF build doesn't block merging if the change is otherwise sound;
-the deploy job re-validates the build at merge time.
+If CF availability degrades, PRs lose the clickable preview URL but the
+GH Actions build still gates merge correctness. If GH Pages degrades,
+the CF mirror at `*.pages.dev` still serves prod. Neither single failure
+blocks the other.
+
+Path filters on `docs.yml` are asymmetric on purpose. PRs include
+`scripts/generate_api_docs.py` (the custom stdlib API renderer can
+break and only a docs build catches that). Push to main does not -
+API-reference drift on src changes is accepted until the next
+docs/website push, avoiding republish on every src commit.
 
 ## Troubleshooting
 
