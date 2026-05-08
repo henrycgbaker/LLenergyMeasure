@@ -30,7 +30,7 @@ results/
 
 `<UTC-timestamp>` is ISO-8601 (e.g. `2026-05-07T14-32-08`). Cell directory names encode `<NNN>_c<cycle>_<model>-<engine>_<config-hash>` so they sort sensibly and you can tell sibling cycles apart at a glance.
 
-## `result.json` &mdash; per-experiment record
+## `result.json` - per-experiment record
 
 The scientific record. One JSON file per experiment cell. Schema version `3.0`.
 
@@ -39,8 +39,8 @@ The scientific record. One JSON file per experiment cell. Schema version `3.0`.
 | Field | Type | Description |
 |-------|------|-------------|
 | `schema_version` | str | Result schema version (currently `"3.0"`) |
-| `experiment_id` | str | Unique experiment identifier; encodes model, engine, dtype, timestamp |
-| `measurement_config_hash` | str | SHA-256[:16] of `ExperimentConfig` with environment fields excluded; same hash &rarr; logically identical experiments |
+| `experiment_id` | str | Unique experiment identifier (`{model}_{YYYYMMDD_HHMMSS}` for single experiments; study-level cells inherit a richer per-cell identifier) |
+| `measurement_config_hash` | str | SHA-256[:16] of `ExperimentConfig` with environment fields excluded; same hash -> logically identical experiments |
 | `llenergymeasure_version` | str &#124; null | Package version that produced this result |
 | `engine` | str | Inference engine: `transformers` &#124; `vllm` &#124; `tensorrt` |
 | `engine_version` | str &#124; null | Engine library version (e.g. `4.57.0` for transformers) |
@@ -52,7 +52,7 @@ The scientific record. One JSON file per experiment cell. Schema version `3.0`.
 |-------|------|-------------|
 | `measurement_methodology` | `"total"` &#124; `"steady_state"` &#124; `"windowed"` | Which slice of the run produced the headline metrics |
 | `warmup_excluded_samples` | int &#124; null | Prompts excluded during warmup; `null` when `methodology = "total"` |
-| `reproducibility_notes` | str | Free-text caveats (default mentions NVML accuracy &plusmn;5 %, thermal drift) |
+| `reproducibility_notes` | str | Free-text caveats (default mentions NVML accuracy +/-5 %, thermal drift) |
 
 ### Aggregate metrics
 
@@ -93,7 +93,7 @@ These are the totals across all processes / GPUs (post-aggregation, post-warmup-
 | Field | Type | Description |
 |-------|------|-------------|
 | `baseline_power_w` | float &#124; null | Idle GPU power in watts, measured before this experiment |
-| `energy_adjusted_j` | float &#124; null | Total energy minus `baseline_power_w &times; total_inference_time_sec`. The "net inference work" energy figure. |
+| `energy_adjusted_j` | float &#124; null | Total energy minus `baseline_power_w x total_inference_time_sec`. The "net inference work" energy figure. |
 | `energy_per_device_j` | list[float] &#124; null | Per-GPU energy breakdown (length = `num_processes`) |
 
 For the methodology that motivates baseline subtraction, see [Methodology &gt; Baseline power](/explanation/methodology/methodology#baseline-power).
@@ -106,9 +106,9 @@ For the methodology that motivates baseline subtraction, see [Methodology &gt; B
 
 ### Effective config (sibling file)
 
-`effective_config.json` lives next to `result.json` in each experiment directory. It contains the fully resolved `ExperimentConfig` &mdash; every parameter value used, including engine defaults that were not explicitly specified. **This is what reproduces the experiment.**
+`effective_config.json` lives next to `result.json` in each experiment directory. It contains the fully resolved `ExperimentConfig` - every parameter value used, including engine defaults that were not explicitly specified. **This is what reproduces the experiment.**
 
-## `manifest.json` &mdash; study-level checkpoint
+## `manifest.json` - study-level checkpoint
 
 Written and updated as a study runs (resume support reads from it). Once the study completes, manifest's `summary` field is essentially the same as the returned `StudyResult.summary`.
 
@@ -117,7 +117,7 @@ Written and updated as a study runs (resume support reads from it). Once the stu
 | Field | Type | Description |
 |-------|------|-------------|
 | `study_name` | str &#124; null | Study name (used in directory naming) |
-| `study_design_hash` | str &#124; null | 16-char SHA-256 of the resolved experiment list (execution block excluded). Same YAML &rarr; same hash. |
+| `study_design_hash` | str &#124; null | 16-char SHA-256 of the resolved experiment list (execution block excluded). Same YAML -> same hash. |
 | `start_time` | datetime | Study start (ISO-8601 UTC) |
 | `end_time` | datetime | Study end (ISO-8601 UTC, populated on completion) |
 | `experiments` | list[dict] | Per-experiment resolved config + status (running &#124; completed &#124; failed) |
@@ -135,22 +135,22 @@ Written and updated as a study runs (resume support reads from it). Once the stu
 | `unique_configurations` | int &#124; null | Distinct experiment configs: `total_experiments / n_cycles` |
 | `warnings` | list[str] | Runtime warnings emitted during the study |
 
-## `timeseries.parquet` &mdash; sample-level sidecar
+## `timeseries.parquet` - sample-level sidecar
 
 Written when `output.save_timeseries: true` (the default). One Parquet file per experiment, columnar layout, suitable for direct loading into Pandas / Polars / DuckDB.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `t` | float64 | Wall-clock seconds since experiment start |
-| `gpu_idx` | int32 | GPU device index (0, 1, &hellip;) for multi-GPU runs |
+| `gpu_idx` | int32 | GPU device index (0, 1, ...) for multi-GPU runs |
 | `power_w` | float64 | Instantaneous GPU power draw in watts |
-| `temperature_c` | float64 | GPU temperature in &deg;C |
+| `temperature_c` | float64 | GPU temperature in degC |
 | `memory_used_mib` | float64 | GPU memory used in MiB |
 | `sm_clock_mhz` | float64 | SM clock in MHz (when available) |
 
-NVML samples at ~1 s intervals (driver-dependent). Thermal-throttle events shorter than ~100 ms may be missed &mdash; see [Methodology &gt; Known limitations](/explanation/methodology/methodology#known-limitations).
+NVML samples at ~1 s intervals (driver-dependent). Thermal-throttle events shorter than ~100 ms may be missed - see [Methodology &gt; Known limitations](/explanation/methodology/methodology#known-limitations).
 
-## `StudyResult` &mdash; final return value (Python API)
+## `StudyResult` - final return value (Python API)
 
 Returned by `run_study(...)`. Distinct from `manifest.json`: this is the fully-assembled object handed back to the caller after the study completes.
 
@@ -191,10 +191,10 @@ For the Python API equivalent (`StudyResult` object), see [Reference &gt; Librar
 
 ## Schema versioning
 
-`result.json.schema_version` follows semantic versioning: minor bumps add fields without breaking existing readers, major bumps signal breaking changes. Pre-1.0 the policy is conservative &mdash; new fields land as `Optional` with `default = null` so existing parsers don't break.
+`result.json.schema_version` follows semantic versioning: minor bumps add fields without breaking existing readers, major bumps signal breaking changes. Pre-1.0 the policy is conservative - new fields land as `Optional` with `default = null` so existing parsers don't break.
 
 ## See also
 
-- [Tutorial &mdash; Multi-engine study](/tutorials/multi-engine-study) walks through writing analysis code against this schema.
-- [How to &mdash; Interpret results](/how-to/interpret-results) reads a real `result.json` field by field with worked examples.
-- [Methodology &mdash; Energy measurement](/explanation/methodology/energy-measurement) explains where the numbers come from.
+- [Tutorial - Multi-engine study](/tutorials/multi-engine-study) walks through writing analysis code against this schema.
+- [How to - Interpret results](/how-to/interpret-results) reads a real `result.json` field by field with worked examples.
+- [Methodology - Energy measurement](/explanation/methodology/energy-measurement) explains where the numbers come from.
