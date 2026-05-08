@@ -242,7 +242,7 @@ function ExtensibilityBlock(): ReactNode {
             does not keep up.
           </p>
           <p className={styles.pitch}>
-            llem handles this through three coupled mechanisms:
+            LLenergyMeasure handles this through three coupled mechanisms:
           </p>
           <ul className={styles.methodologyList}>
             <li>
@@ -320,8 +320,8 @@ function BoundariesBlock(): ReactNode {
               for standardised inter-model comparison.
             </li>
             <li>
-              Outputs inform benchmark design and policy; llem is not the
-              benchmark itself.
+              Outputs inform benchmark design and policy; LLenergyMeasure
+              is not the benchmark itself.
             </li>
           </ul>
           <p>
@@ -372,7 +372,7 @@ const AUDIENCE_CARDS: AudienceCardProps[] = [
   {
     title: 'Engineer',
     description:
-      'Run llem in your CI pipeline with Docker and vLLM. ' +
+      'Run LLenergyMeasure in your CI pipeline with Docker and vLLM. ' +
       'Reproducible containers; no host CUDA dependency.',
     ctaLabel: 'Run with Docker + vLLM',
     to: '/how-to/run-with-docker-vllm',
