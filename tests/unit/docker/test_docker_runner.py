@@ -883,17 +883,18 @@ class TestExtraMounts:
         assert "/host/b:/container/b" in cmd
 
     def test_no_extra_mounts_no_extra_volumes(self, tmp_path):
-        """Without extra_mounts, two -v flags are present: exchange dir + llem-src."""
+        """Without extra_mounts, three -v flags are present: exchange dir + llem-src + HF cache."""
         config = make_config()
         runner = DockerRunner(image=IMAGE)
         cmd = self._build_cmd(config, tmp_path, runner)
 
-        # Two -v flags: the exchange dir + the llem-src bind mount (all engines
-        # now use mount-based dispatch - see docker_runner._build_docker_cmd).
+        # Three -v flags: exchange dir, llem-src bind mount, and the HF cache
+        # auto-mount (all engines now use mount-based dispatch).
         v_count = cmd.count("-v")
-        assert v_count == 2
+        assert v_count == 3
         assert f"/tmp/llem-test:{CONTAINER_EXCHANGE_DIR}" in cmd
         assert any(arg.endswith(":/llem-src:ro") for arg in cmd)
+        assert any(arg.endswith(":/root/.cache/huggingface") for arg in cmd)
 
     def test_tensorrt_auto_cache_mount(self, tmp_path):
         """TRT-LLM engine auto-mounts ~/.cache/trt-llm:/root/.cache/trt-llm."""

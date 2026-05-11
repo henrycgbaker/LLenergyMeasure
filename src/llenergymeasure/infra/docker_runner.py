@@ -773,6 +773,14 @@ class DockerRunner:
             if not any(cp == cache_container for _, cp in self.extra_mounts):
                 cmd.extend(["-v", f"{cache_host}:{cache_container}"])
 
+        # Auto-mount the host HuggingFace cache so model weights persist across
+        # ephemeral containers; otherwise each run re-downloads the full model.
+        hf_cache_host = Path.home() / ".cache" / "huggingface"
+        hf_cache_container = "/root/.cache/huggingface"
+        if not any(cp == hf_cache_container for _, cp in self.extra_mounts):
+            cmd.extend(["-v", f"{hf_cache_host}:{hf_cache_container}"])
+            cmd.extend(["-e", f"HF_HOME={hf_cache_container}"])
+
         # Extra volume mounts (engine cache, model cache, etc.)
         for host_path, container_path in self.extra_mounts:
             cmd.extend(["-v", f"{host_path}:{container_path}"])
