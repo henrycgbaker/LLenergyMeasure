@@ -412,7 +412,7 @@ class TestBuildLlmKwargs:
 
 class TestBuildSamplingParams:
     def test_build_sampling_params_defaults(self, monkeypatch):
-        """Default config produces SamplingParams with max_new_tokens and no temperature."""
+        """Default config produces SamplingParams with max_tokens and no temperature."""
         mock_trt = _make_fake_tensorrt_llm_module()
         monkeypatch.setitem(sys.modules, "tensorrt_llm", mock_trt)
         monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
@@ -422,10 +422,10 @@ class TestBuildSamplingParams:
         params = engine._build_sampling_params(config)
 
         assert isinstance(params, _FakeSamplingParams)
-        assert params._kwargs["max_new_tokens"] == config.task.max_output_tokens
+        assert params._kwargs["max_tokens"] == config.task.max_output_tokens
 
     def test_build_sampling_params_passes_random_seed(self, monkeypatch):
-        """random_seed from ExperimentConfig is forwarded to SamplingParams."""
+        """random_seed from ExperimentConfig is forwarded to SamplingParams as `seed`."""
         mock_trt = _make_fake_tensorrt_llm_module()
         monkeypatch.setitem(sys.modules, "tensorrt_llm", mock_trt)
         monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
@@ -434,7 +434,7 @@ class TestBuildSamplingParams:
         engine = TensorRTEngine()
         params = engine._build_sampling_params(config)
 
-        assert params._kwargs["random_seed"] == 123
+        assert params._kwargs["seed"] == 123
 
     def test_build_sampling_params_default_no_temperature(self, monkeypatch):
         """Unset sampling -> no temperature in kwargs (TRT-LLM uses its own default)."""
