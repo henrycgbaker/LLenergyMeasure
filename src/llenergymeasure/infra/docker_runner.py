@@ -781,6 +781,13 @@ class DockerRunner:
             cmd.extend(["-v", f"{hf_cache_host}:{hf_cache_container}"])
             cmd.extend(["-e", f"HF_HOME={hf_cache_container}"])
 
+        # Forward LLEM_* env vars into the container so framework defaults set
+        # on the host (e.g. LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP) reach the
+        # experiment process, which actually runs inside the container.
+        for env_key, env_val in os.environ.items():
+            if env_key.startswith("LLEM_") and env_val:
+                cmd.extend(["-e", f"{env_key}={env_val}"])
+
         # Extra volume mounts (engine cache, model cache, etc.)
         for host_path, container_path in self.extra_mounts:
             cmd.extend(["-v", f"{host_path}:{container_path}"])
