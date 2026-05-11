@@ -598,9 +598,9 @@ class TensorRTEngine:
         kwargs: dict[str, Any] = (
             sampling.model_dump(exclude_none=True) if sampling is not None else {}
         )
-        kwargs["random_seed"] = config.task.random_seed
+        kwargs["seed"] = config.task.random_seed
         if config.task.max_output_tokens is not None:
-            kwargs["max_new_tokens"] = config.task.max_output_tokens
+            kwargs["max_tokens"] = config.task.max_output_tokens
         return kwargs
 
     def _build_sampling_params(self, config: ExperimentConfig) -> Any:
