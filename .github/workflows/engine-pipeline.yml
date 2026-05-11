@@ -318,14 +318,19 @@ jobs:
             echo "no_cache=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build transformers image and push runtime tag for downstream cells
+      # Build is split from push so the smoke gate runs against the exact image
+      # that would be pushed: downstream invariants/schemas cells and production
+      # promotion read the cache image unchallenged, so a broken push contaminates
+      # them. Keep this split when "simplifying" the workflow.
+      - name: Build transformers image
         uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile.transformers
           target: runtime
           tags: ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
-          push: true
+          load: true
+          push: false
           no-cache: ${{ steps.targets.outputs.no_cache }}
           build-args: |
             TRANSFORMERS_VERSION=${{ steps.version.outputs.version }}
@@ -336,6 +341,18 @@ jobs:
             type=registry,ref=ghcr.io/${{ github.repository }}/transformers:transformers-${{ steps.version.outputs.version }}
           cache-to: type=registry,mode=max,ref=ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache
 
+      - name: Verify transformers package imports inside built image
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint python3 "$IMAGE" -c "import transformers; print(f'transformers {transformers.__version__} OK')"
+
+      - name: Push validated image to cache registry
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}
+        run: docker push "$IMAGE"
+
       - name: Emit build summary
         run: |
           {
@@ -345,6 +362,7 @@ jobs:
             echo "- Transformers version: \`${{ steps.version.outputs.version }}\`"
             echo "- Buildcache ref: \`ghcr.io/${{ github.repository }}/transformers-cache:transformers-${{ steps.version.outputs.version }}-buildcache\`"
             echo "- No-cache rebuild: \`${{ steps.targets.outputs.no_cache }}\`"
+            echo "- Smoke test: \`import transformers\` passed before push"
           } >> "$GITHUB_STEP_SUMMARY"
 
   invariants-transformers:
