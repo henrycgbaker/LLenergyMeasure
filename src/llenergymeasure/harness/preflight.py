@@ -82,6 +82,79 @@ def _check_model_accessible(model_id: str) -> str | None:
         return None
 
 
+# TRT-LLM cannot load HF pre-quantised checkpoints directly; they require
+# trtllm-build conversion first. The detection signal is the HF-declared
+# quant_method value rather than a regex over model ids, so user-renamed
+# checkpoints (e.g. local forks without the conventional suffix) are still
+# caught - extend by adding the canonical quant_method string, not a pattern.
+_TRT_UNSUPPORTED_HF_QUANT_METHODS: tuple[str, ...] = ("awq", "gptq")
+
+
+def _read_model_quant_method(model_id: str) -> str | None:
+    """Return the HF ``quantization_config.quant_method`` for *model_id*, or None.
+
+    ``quantization_config.quant_method`` is HF's authoritative quantisation
+    declaration - every quantisation library (AutoAWQ, AutoGPTQ, bitsandbytes,
+    compressed-tensors) writes it, so it's the stable signal for "is this
+    checkpoint pre-quantised, and how?".
+
+    Returns None for both "no quantisation declared" AND "couldn't determine"
+    (network error, missing config, malformed JSON, no huggingface_hub
+    installed). Callers must treat None as "not detected, proceed" rather
+    than "definitely unquantised" - failing closed on transient errors would
+    block legitimate runs on every network hiccup.
+    """
+    import json
+
+    config_data: dict[str, object] | None = None
+
+    if model_id.startswith("/") or model_id.startswith("./") or model_id.startswith("~"):
+        config_path = Path(model_id).expanduser() / "config.json"
+        try:
+            config_data = json.loads(config_path.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.debug("Could not read local config.json for %s: %s", model_id, exc)
+            return None
+    else:
+        if importlib.util.find_spec("huggingface_hub") is None:
+            return None
+        try:
+            from huggingface_hub import hf_hub_download
+
+            local = hf_hub_download(repo_id=model_id, filename="config.json")
+            config_data = json.loads(Path(local).read_text())
+        except Exception as exc:
+            logger.debug("Could not fetch HF config.json for %s: %s", model_id, exc)
+            return None
+
+    quant_block = config_data.get("quantization_config") if isinstance(config_data, dict) else None
+    if not isinstance(quant_block, dict):
+        return None
+    method = quant_block.get("quant_method")
+    return method.lower() if isinstance(method, str) else None
+
+
+def _check_tensorrt_checkpoint_compat(config: ExperimentConfig) -> str | None:
+    """Reject HF pre-quantised checkpoints on TRT-LLM unless ``engine_path`` is set."""
+    if config.engine != Engine.TENSORRT:
+        return None
+
+    trt = config.tensorrt
+    if trt is not None and getattr(trt, "engine_path", None):
+        return None
+
+    method = _read_model_quant_method(config.task.model)
+    if method is None or method not in _TRT_UNSUPPORTED_HF_QUANT_METHODS:
+        return None
+
+    return (
+        f"{config.task.model} is an HF {method.upper()} checkpoint; TRT-LLM cannot "
+        f"load it directly. Pre-build a TRT-LLM engine (`trtllm-build --checkpoint_dir "
+        f"<converted> ...`) and set `tensorrt.engine_path` to the build output. "
+        f"See docs/how-to/run-with-tensorrt-llm.md#hf-pre-quantised-checkpoints."
+    )
+
+
 def _warn_if_persistence_mode_off(gpu_indices: list[int] | None = None) -> None:
     """Log a warning if GPU persistence mode is disabled on any specified GPU.
 
@@ -156,6 +229,11 @@ def run_preflight(config: ExperimentConfig) -> None:
         failures.extend(engine_errors)
     except Exception:
         pass  # get_engine may fail if engine not installed - already caught by Check 2
+
+    # Check 5: TRT-LLM cannot consume HF pre-quantised checkpoints natively.
+    checkpoint_error = _check_tensorrt_checkpoint_compat(config)
+    if checkpoint_error is not None:
+        failures.append(checkpoint_error)
 
     if failures:
         n = len(failures)
