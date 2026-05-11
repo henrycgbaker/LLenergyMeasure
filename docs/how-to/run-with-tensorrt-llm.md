@@ -121,6 +121,32 @@ and starts inference immediately. Changing any compile-time parameter
 triggers a new build.
 :::
 
+## HF pre-quantised checkpoints
+
+TensorRT-LLM cannot load Hugging Face AWQ or GPTQ checkpoints directly:
+the weight-key layout in HF's serialisation differs from what TensorRT-LLM
+expects, so model load raises `KeyError: 'weight'`.
+
+Pre-flight catches this and refuses the run with an actionable error. To
+benchmark a pre-quantised checkpoint, convert it once with `trtllm-build`
+and point the experiment at the build output:
+
+```bash
+trtllm-build \
+  --checkpoint_dir <path-to-converted-checkpoint> \
+  --output_dir /shared/engines/qwen2.5-7b-awq
+```
+
+```yaml
+task:
+  model: Qwen/Qwen2.5-7B-Instruct-AWQ   # original HF id, for tokenizer + metadata
+tensorrt:
+  engine_path: /shared/engines/qwen2.5-7b-awq
+```
+
+With `engine_path` set, the pre-flight gate is skipped because the engine
+is already in TensorRT-LLM's native format.
+
 ## 3. Read the results
 
 The output format matches other engines. The result file includes
