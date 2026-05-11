@@ -781,6 +781,14 @@ class DockerRunner:
             cmd.extend(["-v", f"{hf_cache_host}:{hf_cache_container}"])
             cmd.extend(["-e", f"HF_HOME={hf_cache_container}"])
 
+        # Auto-mount the host flashinfer JIT cache so TRT-LLM warm runs reuse
+        # already-compiled per-arch attention kernels (cold compile is minutes).
+        if config.engine == Engine.TENSORRT:
+            fi_cache_host = Path.home() / ".cache" / "flashinfer"
+            fi_cache_container = "/root/.cache/flashinfer"
+            if not any(cp == fi_cache_container for _, cp in self.extra_mounts):
+                cmd.extend(["-v", f"{fi_cache_host}:{fi_cache_container}"])
+
         # Forward LLEM_* env vars into the container so framework defaults set
         # on the host (e.g. LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP) reach the
         # experiment process, which actually runs inside the container.
