@@ -1,0 +1,49 @@
+name: Docs
+description: Issue with documentation accuracy, freshness, links, or coverage
+labels: ["area:docs"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - stale after rename / move
+        - contract drift (doc says one thing, code does another)
+        - broken link / dead reference
+        - citation freshness (BibTeX, version)
+        - missing coverage (no doc for X)
+        - typo / wording
+        - other
+    validations:
+      required: true
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      description: Type label for triage. Add the matching label after submission.
+      options:
+        - fix
+        - feat
+        - refactor
+        - chore
+    validations:
+      required: true
+  - type: input
+    id: doc_path
+    attributes:
+      label: Doc path or URL
+      placeholder: "docs/architecture/ci-architecture.md, README.md, contributing/citation.md, or web URL"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's wrong
+      description: Quote the offending section if possible
+    validations:
+      required: true
+  - type: textarea
+    id: source_of_truth
+    attributes:
+      label: Source of truth
+      description: Where does the correct information live (code path, other doc, decision in `.product/`)?

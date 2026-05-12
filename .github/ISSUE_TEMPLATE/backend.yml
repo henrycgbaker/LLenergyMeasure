@@ -1,0 +1,69 @@
+name: Backend / engine
+description: Issue specific to a backend integration (transformers / vllm / tensorrt)
+labels: ["area:backends"]
+body:
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Engine
+      options:
+        - transformers
+        - vllm
+        - tensorrt
+        - cross-engine / other
+    validations:
+      required: true
+  - type: input
+    id: engine_version
+    attributes:
+      label: Engine version (pin)
+      placeholder: "e.g. vllm 0.7.3, tensorrt-llm 0.21.0, transformers 4.48.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: runner
+    attributes:
+      label: Runner
+      options:
+        - Docker (in-container)
+        - Host (local)
+        - CI (GitHub-hosted)
+        - CI (self-hosted GPU)
+    validations:
+      required: true
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      description: Type label for triage. Add the matching label after submission.
+      options:
+        - fix
+        - poc-debug
+        - feat
+        - refactor
+        - chore
+        - test
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model id (if applicable)
+      placeholder: "e.g. meta-llama/Llama-3.2-1B-Instruct"
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What went wrong, or what should change?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Command, config snippet, or failing CI run URL
+  - type: textarea
+    id: triage
+    attributes:
+      label: Triage notes
+      description: Upstream bug vs ours? Fix-now vs defer? Known workaround?

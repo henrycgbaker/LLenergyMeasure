@@ -1,0 +1,41 @@
+name: Issue type labeller
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  apply-type-label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply type label from form dropdown
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || '';
+
+            // Form-template responses render as `### Type\n\n<value>` in the body.
+            // Match the section heading and capture the first non-empty line below it.
+            const m = body.match(/###\s*Type\s*\n+([^\n]+)/i);
+            if (!m) { core.info('No "Type" section found; skipping.'); return; }
+
+            const raw = m[1].trim().toLowerCase();
+            // Allowed type labels (must exist in the repo's label manifest).
+            const allowed = new Set(['fix', 'feat', 'refactor', 'chore', 'test', 'poc-debug']);
+            if (!allowed.has(raw)) {
+              core.info(`Type "${raw}" not in allowed set; skipping.`);
+              return;
+            }
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.issue.number;
+
+            // Don't re-add if already present (idempotent on edited events).
+            const existing = (context.payload.issue.labels || []).map(l => l.name);
+            if (existing.includes(raw)) { core.info(`Label "${raw}" already present.`); return; }
+
+            await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [raw] });
+            core.info(`Applied label "${raw}" to issue #${issue_number}.`);
