@@ -1,0 +1,49 @@
+name: Config / sweeps / YAML
+description: Issue with experiment / study config, sweep grammar, validation, or YAML parsing
+labels: ["area:config"]
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - ExperimentConfig (single)
+        - StudyConfig / sweep resolution
+        - validation_rules / validate corpus
+        - YAML parser / loader grammar
+        - other
+    validations:
+      required: true
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      description: Type label for triage. Add the matching label after submission.
+      options:
+        - fix
+        - feat
+        - refactor
+        - chore
+        - test
+    validations:
+      required: true
+  - type: textarea
+    id: snippet
+    attributes:
+      label: Config snippet
+      description: Paste the YAML (or excerpt) that triggers this. Use a fenced ```yaml block.
+      render: yaml
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's wrong / what's missing
+      description: Validation error, unexpected resolved shape, missing field, sweep grammar gap
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Backend, version pin, expected behaviour

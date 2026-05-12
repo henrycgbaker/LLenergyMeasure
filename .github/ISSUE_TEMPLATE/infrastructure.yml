@@ -1,0 +1,55 @@
+name: Infrastructure / Docker / CI
+description: Issue with Docker images, runners, host-deps, GitHub Actions workflows, or other infra surfaces
+labels: ["area:infrastructure"]
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - Docker image / Dockerfile
+        - Runner (host / self-hosted GPU)
+        - Host deps / system packages
+        - CI workflow (GitHub Actions)
+        - GHCR / image registry
+        - other
+    validations:
+      required: true
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      description: Type label for triage. Add the matching label after submission.
+      options:
+        - fix
+        - poc-debug
+        - feat
+        - refactor
+        - chore
+        - test
+    validations:
+      required: true
+  - type: input
+    id: workflow_or_file
+    attributes:
+      label: Workflow file or run URL
+      placeholder: ".github/workflows/engine-pipeline.yml or https://github.com/.../actions/runs/N"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What's failing or what should change?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Failing log excerpt, command, or steps to reproduce locally if possible
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Recent changes, suspected root cause, related runs
