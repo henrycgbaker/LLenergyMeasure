@@ -2050,18 +2050,26 @@ class TestSchemaFingerprintHandshake:
 
         import logging as _logging
 
+        # The unlabelled-image path falls through to the SSOT engine-version
+        # probe; this test asserts soft-warn behaviour, which is the same
+        # whether the probe returns None because docker is unreachable or
+        # because the output is unparseable. Patch the probe to None
+        # directly so we exercise just the handshake-fallback logic without
+        # depending on subprocess output shape.
+        from llenergymeasure.infra import version_handshake as vh
+
+        vh.probe_image_engine_version.cache_clear()
         with (
             caplog.at_level(_logging.WARNING, logger="llenergymeasure.study.runner"),
             patch("subprocess.run", return_value=ok),
+            patch(
+                "llenergymeasure.study.runner.probe_image_engine_version",
+                return_value=None,
+            ),
         ):
             runner._prepare_images()
 
         assert runner._images_prepared
-        # The handshake now falls back to an SSOT engine-version probe when the
-        # OCI label is absent; with subprocess mocked to return inspect-shaped
-        # output instead of a version string, the probe is inconclusive and we
-        # soft-warn rather than hard-error. The warning explicitly names both
-        # the missing label and the inconclusive probe.
         assert any("engine-version probe was inconclusive" in rec.message for rec in caplog.records)
         meta = (
             progress.image_ready.call_args[1].get("metadata")

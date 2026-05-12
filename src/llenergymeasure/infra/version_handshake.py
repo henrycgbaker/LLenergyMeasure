@@ -36,13 +36,11 @@ import logging
 import subprocess
 from dataclasses import dataclass
 from functools import cache, lru_cache
-from pathlib import Path
 
-from llenergymeasure.config.ssot import TIMEOUT_DOCKER_INSPECT
+from llenergymeasure.config.ssot import ENGINE_PACKAGES, TIMEOUT_DOCKER_INSPECT, Engine
 from llenergymeasure.utils.compat import StrEnum
 
 __all__ = [
-    "ENGINE_TO_IMPORT_MODULE",
     "ENV_SKIP_IMAGE_CHECK",
     "LABEL_IMAGE_VERSION",
     "LABEL_SCHEMA_FINGERPRINT",
@@ -65,15 +63,6 @@ logger = logging.getLogger(__name__)
 ENV_SKIP_IMAGE_CHECK = "LLEM_SKIP_IMAGE_CHECK"
 LABEL_SCHEMA_FINGERPRINT = "llem.expconf.schema.fingerprint"
 LABEL_IMAGE_VERSION = "org.opencontainers.image.version"
-
-# Engine name -> Python module to import for ``__version__`` probing.
-# TRT-LLM's pip distribution is ``tensorrt-llm`` but the import is
-# ``tensorrt_llm``; vLLM's distribution and import name agree.
-ENGINE_TO_IMPORT_MODULE = {
-    "transformers": "transformers",
-    "vllm": "vllm",
-    "tensorrt": "tensorrt_llm",
-}
 
 # Soft cap on how long the engine-version probe is allowed to take per
 # image. The probe is one ``docker run`` (with the engine library import
@@ -173,15 +162,16 @@ def probe_image_engine_version(
     unimportable, timeout, or output unparseable. Callers should treat
     ``None`` the same as a missing label - unverified, not mismatch.
     """
-    module_name = ENGINE_TO_IMPORT_MODULE.get(engine)
-    if module_name is None:
+    try:
+        module_name = ENGINE_PACKAGES[Engine(engine)]
+    except (KeyError, ValueError):
         return None
 
     probe_code = (
         f"import {module_name}; print({_ENGINE_VERSION_MARKER!r} + str({module_name}.__version__))"
     )
 
-    if engine == "tensorrt":
+    if engine == Engine.TENSORRT:
         cmd = [
             "docker",
             "run",
@@ -206,37 +196,22 @@ def probe_image_engine_version(
         ]
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            timeout=timeout,
-            text=True,
-        )
+        result = subprocess.run(cmd, capture_output=True, timeout=timeout, text=True)
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
         logger.debug("engine-version probe failed for %s/%s: %s", engine, image, exc)
         return None
 
     if result.returncode != 0:
-        stderr_repr = result.stderr or ""
-        if isinstance(stderr_repr, bytes):
-            stderr_repr = stderr_repr.decode("utf-8", errors="replace")
         logger.debug(
             "engine-version probe exited %s for %s/%s; stderr=%s",
             result.returncode,
             engine,
             image,
-            stderr_repr[:200],
+            (result.stderr or "")[:200],
         )
         return None
 
-    # ``text=True`` should yield str, but tests routinely mock subprocess.run
-    # and return MagicMock-shaped results with bytes stdout. Decode defensively
-    # so both real and mocked subprocess shapes work.
-    stdout = result.stdout
-    if isinstance(stdout, bytes):
-        stdout = stdout.decode("utf-8", errors="replace")
-
-    for line in stdout.splitlines():
+    for line in result.stdout.splitlines():
         if line.startswith(_ENGINE_VERSION_MARKER):
             return line[len(_ENGINE_VERSION_MARKER) :].strip() or None
     return None
@@ -246,19 +221,15 @@ def read_ssot_engine_version(engine: str) -> str | None:
     """Read ``engine_versions/{engine}.yaml::library.current_version``.
 
     Returns ``None`` if the file is absent, unreadable, or the field is
-    missing. The SSOT lives in the repo root, resolved relative to this
-    module's path so the function works regardless of cwd.
+    missing. The repo root is resolved via
+    :func:`llenergymeasure.infra.docker_runner._resolve_repo_root`, which
+    is the single source of truth for repo-shape paths.
     """
-    try:
-        import yaml
-    except ImportError:
-        logger.debug("PyYAML not available; cannot read SSOT engine version")
-        return None
+    import yaml
 
-    # version_handshake.py at src/llenergymeasure/infra/version_handshake.py;
-    # repo root is three .parent hops up from __file__.
-    repo_root = Path(__file__).resolve().parent.parent.parent.parent
-    ssot_path = repo_root / "engine_versions" / f"{engine}.yaml"
+    from llenergymeasure.infra.docker_runner import _resolve_repo_root
+
+    ssot_path = _resolve_repo_root() / "engine_versions" / f"{engine}.yaml"
     try:
         with open(ssot_path) as f:
             data = yaml.safe_load(f) or {}

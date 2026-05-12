@@ -41,7 +41,12 @@ from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
     DOCKER_PULL_TIMEOUT,
     ENV_CONFIG_PATH,
+    ENV_DEPS_CACHE_DIR,
+    ENV_ENGINE,
     ENV_HF_TOKEN,
+    ENV_HOST_GID,
+    ENV_HOST_UID,
+    ENV_MPI_NP,
     ENV_OUTPUT_DIR,
     ENV_SAVE_TIMESERIES,
     TEMP_PREFIX_ENV_FILE,
@@ -156,9 +161,9 @@ def _resolve_repo_root() -> Path:
     return _resolve_package_parent_dir().parent
 
 
-def _resolve_deps_cache_dir() -> Path:
-    """Return the host-side directory used for the in-container runtime-deps
-    cache, creating it if absent.
+@functools.cache
+def _ensure_deps_cache_dir() -> Path:
+    """Resolve the host-side runtime-deps cache directory, creating it if absent.
 
     The entrypoint script (``scripts/container_entrypoint.sh``) primes any
     missing runtime deps here on first dispatch and short-circuits subsequent
@@ -168,10 +173,12 @@ def _resolve_deps_cache_dir() -> Path:
     Python minors differ.
 
     Uses ``platformdirs`` for XDG-conformant path resolution; users can
-    override via ``LLEM_DEPS_CACHE_DIR`` if they want to share the cache
-    across machines (e.g. on shared cluster storage).
+    override via ``ENV_DEPS_CACHE_DIR`` if they want to share the cache
+    across machines (e.g. on shared cluster storage). Cached because the
+    result is invariant within a process and the mkdir is the only
+    side-effect.
     """
-    override = os.environ.get("LLEM_DEPS_CACHE_DIR")
+    override = os.environ.get(ENV_DEPS_CACHE_DIR)
     if override:
         cache_dir = Path(override).expanduser().resolve()
     else:
@@ -878,7 +885,9 @@ class DockerRunner:
         repo_root = _resolve_repo_root()
         entry_script = repo_root / "scripts" / "container_entrypoint.sh"
         pyproject = repo_root / "pyproject.toml"
-        deps_cache = _resolve_deps_cache_dir()
+        deps_cache = _ensure_deps_cache_dir()
+        # ``Engine`` is a (str, Enum) so ``f"{config.engine}"`` resolves to
+        # the raw value via its ``__str__`` override.
         cmd.extend(
             [
                 "-v",
@@ -892,18 +901,15 @@ class DockerRunner:
                 "-e",
                 "PYTHONDONTWRITEBYTECODE=1",
                 "-e",
-                # ``config.engine`` is normally an ``Engine`` (StrEnum) but
-                # downstream tests sometimes pass a plain string. ``getattr``
-                # accepts both and falls through cleanly.
-                f"LLEM_ENGINE={getattr(config.engine, 'value', config.engine)}",
+                f"{ENV_ENGINE}={config.engine}",
                 "-e",
-                f"LLEM_HOST_UID={os.getuid()}",
+                f"{ENV_HOST_UID}={os.getuid()}",
                 "-e",
-                f"LLEM_HOST_GID={os.getgid()}",
+                f"{ENV_HOST_GID}={os.getgid()}",
             ]
         )
         if tp_size is not None and tp_size > 1:
-            cmd.extend(["-e", f"LLEM_MPI_NP={tp_size}"])
+            cmd.extend(["-e", f"{ENV_MPI_NP}={tp_size}"])
 
         # The entrypoint script handles the engine-conditional final exec
         # (TRT-LLM routes through nvidia_entrypoint.sh; others exec python3
