@@ -378,12 +378,13 @@ const AUDIENCE_CARDS: AudienceCardProps[] = [
     to: '/how-to/run-with-docker-vllm',
   },
   {
-    title: 'Policy reader',
+    title: 'Serving open-weights models',
     description:
-      'Understand what LLenergyMeasure measures, what it does not ' +
-      'measure, and how to read its outputs.',
-    ctaLabel: 'Plain-language overview',
-    to: '/get-started/for-policy-readers',
+      'Run open-weights inference and want to make it more efficient. ' +
+      'Apply the same measurement methodology that supports published ' +
+      'comparisons to your own serving stack.',
+    ctaLabel: 'Where to start',
+    to: '/get-started/for-serving-open-weights-models',
   },
 ];
 

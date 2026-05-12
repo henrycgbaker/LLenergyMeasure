@@ -16,8 +16,9 @@ the impl-effect question, and what the tool does not measure. For the
 methodology details behind these numbers, see
 [methodology](/explanation/methodology/methodology) and
 [energy measurement](/explanation/methodology/energy-measurement). For a
-hands-on first measurement with these metrics in plain language, see
-[Get Started > For policy readers](/get-started/for-policy-readers).
+hands-on first measurement see [Get Started > Quick start](/get-started/quick-start),
+and for the deployment-decision framing of these numbers see
+[Get Started > For serving open-weights models](/get-started/for-serving-open-weights-models).
 
 ---
 
@@ -160,5 +161,6 @@ For interpretation guidance against actual results, see
 - [Comparison with other tools](/explanation/methodology/comparison-context) -
   positioning relative to MLPerf, AIEnergyScore, llmperf, and capability
   benchmarks.
-- [For policy readers](/get-started/for-policy-readers) - a plain-language
-  walk-through of running a first measurement.
+- [For serving open-weights models](/get-started/for-serving-open-weights-models) -
+  framing for operators applying the measurement methodology to their own
+  deployments.

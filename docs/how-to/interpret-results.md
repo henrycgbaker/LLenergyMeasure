@@ -2,7 +2,7 @@
 
 When LLenergyMeasure runs a measurement, it prints a summary to the terminal and saves a detailed result file. This guide explains what each number means - in plain language.
 
-If you have not yet run a measurement, see [Running Your First Measurement](/get-started/for-policy-readers) first.
+If you have not yet run a measurement, see the [Quick start](/get-started/quick-start) first.
 
 ---
 
@@ -169,5 +169,5 @@ These figures vary significantly with hardware, prompt length, and configuration
 ## Further Reading
 
 - [What We Measure and Why It Matters](/explanation/methodology/what-we-measure) - conceptual background on the three metrics
-- [Running Your First Measurement](/get-started/for-policy-readers) - step-by-step guide to running measurements
+- [Quick start](/get-started/quick-start) - step-by-step guide to running measurements
 - [Comparison with Other Benchmarks](/explanation/methodology/comparison-context) - how these results relate to MLPerf, AI Energy Score, and other benchmarks
