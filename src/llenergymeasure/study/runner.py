@@ -48,13 +48,17 @@ from llenergymeasure.config.ssot import (
 )
 from llenergymeasure.domain.progress import STEP_BASELINE, STEPS_LOCAL, docker_steps
 from llenergymeasure.infra.version_handshake import (
+    ENV_SKIP_IMAGE_CHECK,
     LABEL_SCHEMA_FINGERPRINT,
     ImageStamp,
     SchemaStatus,
     VersionMismatchError,
+    classify_engine_version,
     classify_stamp,
     compute_expconf_fingerprint,
     parse_image_stamp,
+    probe_image_engine_version,
+    read_ssot_engine_version,
     rebuild_hint,
     skip_check_enabled,
 )
@@ -1574,38 +1578,93 @@ class StudyRunner:
         short display string and ``error`` is a ``VersionMismatchError`` to
         raise (or ``None``). Callers raise after rendering so the offending
         engine appears in the terminal before the study aborts.
+
+        Two-tier classification:
+
+        1. **Label-based fingerprint check** (preferred when present).
+           Definitive ``OK`` / ``MISMATCH`` answers are trusted directly.
+        2. **SSOT engine-version probe** (fallback). When the label is
+           absent or stamped ``"unknown"``, probe the engine library's
+           ``__version__`` inside the image and compare against
+           ``engine_versions/{engine}.yaml::library.current_version``.
+           Closes the verification gap for upstream-direct images (vllm,
+           tensorrt) which never had a llem schema-fingerprint label,
+           and for legacy local images where the fingerprint was stamped
+           as ``"unknown"``.
         """
         if skip_check_enabled():
             return "bypassed", None
 
         host_fp = compute_expconf_fingerprint()
-        status = classify_stamp(stamp, host_fp)
+        label_status = classify_stamp(stamp, host_fp)
 
-        if status in (SchemaStatus.UNVERIFIED, SchemaStatus.UNREACHABLE):
-            logger.warning(
-                "Image %s has no %s label - schema skew check skipped "
-                "(image predates the handshake feature; rebuild to enable)",
-                image,
-                LABEL_SCHEMA_FINGERPRINT,
-            )
-            return "unverified (no labels)", None
-
-        if status is SchemaStatus.OK:
+        if label_status is SchemaStatus.OK:
             return "ok", None
 
-        assert stamp.expconf_fingerprint is not None  # MISMATCH implies non-None
+        if label_status is SchemaStatus.MISMATCH:
+            # Image has a real fingerprint label and it disagrees with the
+            # host. Hard-error - the label is authoritative when present.
+            assert stamp.expconf_fingerprint is not None
+            error = VersionMismatchError(
+                f"Docker image '{image}' was built from llenergymeasure "
+                f"{stamp.pkg_version or 'unknown'} (schema {stamp.expconf_fingerprint[:12]}) "
+                f"but the host is running {_HOST_PKG_VERSION} (schema {host_fp[:12]}). "
+                f"The container will reject ExperimentConfig fields added on the host "
+                f"after the image was built.\n\n"
+                f"To fix:\n"
+                f"  {rebuild_hint(engine_name)}       # rebuild locally\n"
+                f"  make docker-pull                  # or pull a newer tagged release\n\n"
+                f"If you're certain the skew is harmless, set {ENV_SKIP_IMAGE_CHECK}=1."
+            )
+            return "mismatch", error
+
+        # label_status is UNVERIFIED or UNREACHABLE: fall back to engine-
+        # version probe. The probe takes one docker-run (a few seconds)
+        # and is cached per (image, engine).
+        probed = probe_image_engine_version(image, engine_name)
+        expected = read_ssot_engine_version(engine_name)
+        probe_status = classify_engine_version(probed, expected)
+
+        if probe_status is SchemaStatus.OK:
+            logger.debug(
+                "Image %s verified via engine-version probe: %s matches SSOT",
+                image,
+                probed,
+            )
+            return f"ok (engine={probed})", None
+
+        if probe_status is SchemaStatus.UNREACHABLE:
+            # Neither label nor probe yielded a definitive answer. Soft-warn
+            # and proceed - the bind-mounted framework on the host still
+            # defines the actual contract; we just can't independently
+            # verify the engine version.
+            logger.warning(
+                "Image %s has no %s label and the engine-version probe was "
+                "inconclusive (probed=%r, SSOT=%r). Dispatch will proceed; "
+                "the bind-mounted framework defines the contract regardless.",
+                image,
+                LABEL_SCHEMA_FINGERPRINT,
+                probed,
+                expected,
+            )
+            return "unverified (no labels, probe inconclusive)", None
+
+        # probe_status is MISMATCH
         error = VersionMismatchError(
-            f"Docker image '{image}' was built from llenergymeasure "
-            f"{stamp.pkg_version or 'unknown'} (schema {stamp.expconf_fingerprint[:12]}) "
-            f"but the host is running {_HOST_PKG_VERSION} (schema {host_fp[:12]}). "
-            f"The container will reject ExperimentConfig fields added on the host "
-            f"after the image was built.\n\n"
+            f"Docker image '{image}' has {engine_name} library version "
+            f"{probed!r} but engine_versions/{engine_name}.yaml "
+            f"::library.current_version is {expected!r}. The vendored "
+            f"invariants + discovered schemas in "
+            f"src/llenergymeasure/engines/{engine_name}/ were generated "
+            f"against {expected!r} and may not be compatible with "
+            f"{probed!r}.\n\n"
             f"To fix:\n"
-            f"  {rebuild_hint(engine_name)}       # rebuild locally\n"
-            f"  make docker-pull                  # or pull a newer tagged release\n\n"
-            f"If you're certain the skew is harmless, set LLEM_SKIP_IMAGE_CHECK=1."
+            f"  Update engine_versions/{engine_name}.yaml to {probed!r}, "
+            f"or pull an image matching {expected!r}.\n\n"
+            f"If you're certain the skew is harmless, set "
+            f"{ENV_SKIP_IMAGE_CHECK}=1."
         )
-        return "mismatch", error
+        return f"mismatch (engine {probed} vs SSOT {expected})", error
 
     def _run_gap(self, seconds: float, label: str) -> None:
         """Run a thermal gap, rendering countdown in the live display or terminal."""

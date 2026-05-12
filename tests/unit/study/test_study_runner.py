@@ -2033,7 +2033,12 @@ class TestSchemaFingerprintHandshake:
             runner._prepare_images()
 
         assert runner._images_prepared
-        assert any("schema skew check skipped" in rec.message for rec in caplog.records)
+        # The handshake now falls back to an SSOT engine-version probe when the
+        # OCI label is absent; with subprocess mocked to return inspect-shaped
+        # output instead of a version string, the probe is inconclusive and we
+        # soft-warn rather than hard-error. The warning explicitly names both
+        # the missing label and the inconclusive probe.
+        assert any("engine-version probe was inconclusive" in rec.message for rec in caplog.records)
         meta = (
             progress.image_ready.call_args[1].get("metadata")
             or (progress.image_ready.call_args[0][4])
