@@ -892,7 +892,10 @@ class DockerRunner:
                 "-e",
                 "PYTHONDONTWRITEBYTECODE=1",
                 "-e",
-                f"LLEM_ENGINE={config.engine.value}",
+                # ``config.engine`` is normally an ``Engine`` (StrEnum) but
+                # downstream tests sometimes pass a plain string. ``getattr``
+                # accepts both and falls through cleanly.
+                f"LLEM_ENGINE={getattr(config.engine, 'value', config.engine)}",
                 "-e",
                 f"LLEM_HOST_UID={os.getuid()}",
                 "-e",

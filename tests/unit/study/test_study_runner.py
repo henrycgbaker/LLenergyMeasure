@@ -1555,6 +1555,30 @@ FAKE_INSPECT_JSON = b"""[{
 class TestPrepareImages:
     """Tests for StudyRunner._prepare_images() across all image resolution paths."""
 
+    @pytest.fixture(autouse=True)
+    def _bypass_engine_version_probe(self):
+        """Short-circuit the SSOT engine-version probe for image-prep tests.
+
+        ``_verify_image_fingerprint`` falls back to ``probe_image_engine_version``
+        whenever the OCI label is UNVERIFIED/UNREACHABLE, which adds a second
+        ``subprocess.run`` call beyond the ``docker image inspect``. These tests
+        check image-prep behaviour (cache hit, pull fall-through), not handshake
+        behaviour, so patching the probe to return ``None`` (probe-inconclusive)
+        keeps assertions about subprocess call counts and side_effect lists
+        stable. Probe behaviour itself is exercised in TestSchemaFingerprintHandshake.
+
+        Also clears the module-level lru_cache so test ordering across the
+        xdist worker doesn't leak cached probe results between tests.
+        """
+        from llenergymeasure.infra import version_handshake
+
+        version_handshake.probe_image_engine_version.cache_clear()
+        with patch(
+            "llenergymeasure.study.runner.probe_image_engine_version",
+            return_value=None,
+        ):
+            yield
+
     def _make_runner(
         self,
         study_config: StudyConfig,
