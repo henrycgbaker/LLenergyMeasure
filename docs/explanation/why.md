@@ -15,10 +15,12 @@ under this configuration?".
 
 The reverse question is at least as interesting and considerably less
 studied: with the model and task held fixed, how do implementation
-choices drive energy and throughput? For a given researcher running
-Llama-3-8B on an A100, the engine choice between transformers, vLLM, and
-TensorRT-LLM is not a small effect; nor is dtype, nor attention kernel, quantisation form, KV-cache reuse, paged attention, nor batch size at the prefill / decode split. These choices interact, and
-their interactions are not well-characterised in published comparisons.
+choices drive energy and throughput? For a given researcher or
+open-weights inference provider, the engine choice is not a small
+effect; nor is dtype, nor attention kernel, quantisation form, KV-cache
+reuse, paged attention, nor batch size at the prefill / decode split.
+These choices interact, and their interactions are not well-characterised
+in openly published comparisons.
 
 Existing tools cover adjacent layers. Energy samplers like NVML, Zeus
 ([You et al., 2023](https://www.usenix.org/conference/nsdi23/presentation/you))
@@ -34,9 +36,9 @@ fix rules for fair hardware comparison; the rule-fixing is the whole
 point, and is the opposite of what a researcher needs when the variable of
 interest is implementation itself.
 
-No tool sat at the methodology layer that made implementation effects on
-efficiency a first-class measurable axis across multiple inference
-engines. That is the gap LLenergyMeasure addresses - for researchers
+No open research tool sat at the methodology layer has made
+implementation effects on efficiency a first-class measurable axis.
+That is the gap LLenergyMeasure addresses - both for researchers
 studying open-weights inference, and for the open-source community that
 runs the engines being measured.
 
