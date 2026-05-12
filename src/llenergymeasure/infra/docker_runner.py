@@ -31,6 +31,8 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import platformdirs
+
 if TYPE_CHECKING:
     from llenergymeasure.domain.progress import ProgressCallback
 
@@ -39,7 +41,12 @@ from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
     DOCKER_PULL_TIMEOUT,
     ENV_CONFIG_PATH,
+    ENV_DEPS_CACHE_DIR,
+    ENV_ENGINE,
     ENV_HF_TOKEN,
+    ENV_HOST_GID,
+    ENV_HOST_UID,
+    ENV_MPI_NP,
     ENV_OUTPUT_DIR,
     ENV_SAVE_TIMESERIES,
     TEMP_PREFIX_ENV_FILE,
@@ -71,11 +78,13 @@ _WATCHDOG_POLL_INTERVAL = 0.5
 # Sentinel for "budget disabled" in the deadline comparison.
 _NO_DEADLINE = float("inf")
 
-# Trailing post-image args invoking the in-container entrypoint module.
-# All engines route through the same Python entrypoint; for TP > 1 the mpirun
-# prefix is prepended so this list runs as mpirun's command. Centralised so
-# the entrypoint contract has a single source of truth.
-_ENTRYPOINT_MODULE_ARGS = ["-m", "llenergymeasure.entrypoints.container"]
+# Host paths the container expects to find as bind-mount targets.
+# scripts/container_entrypoint.sh is the in-container bootstrap: it diffs
+# pyproject.toml against installed dists, primes any missing runtime deps
+# to the host-mounted cache, then exec's the framework's Python entrypoint
+# module (with engine-conditional routing through nvidia_entrypoint.sh for
+# TRT-LLM and an mpirun wrapper when LLEM_MPI_NP is set).
+_CONTAINER_ENTRY_SCRIPT_REL = ("scripts", "container_entrypoint.sh")
 
 
 @contextmanager
@@ -140,6 +149,44 @@ def _resolve_package_parent_dir() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
+@functools.cache
+def _resolve_repo_root() -> Path:
+    """Return the repository root (one level above the ``src/`` package parent).
+
+    The repo root holds ``pyproject.toml`` and ``scripts/`` - both consumed by
+    the in-container entrypoint script. Resolved relative to
+    ``_resolve_package_parent_dir`` so a future src-layout change only needs
+    to touch one helper.
+    """
+    return _resolve_package_parent_dir().parent
+
+
+@functools.cache
+def _ensure_deps_cache_dir() -> Path:
+    """Resolve the host-side runtime-deps cache directory, creating it if absent.
+
+    The entrypoint script (``scripts/container_entrypoint.sh``) primes any
+    missing runtime deps here on first dispatch and short-circuits subsequent
+    dispatches via a pyproject-hash stamp. The cache is keyed by container
+    Python minor (script writes to ``$DEPS_CACHE_ROOT/py{N}.{M}/``), so a
+    single host directory serves multiple engine images even when their
+    Python minors differ.
+
+    Uses ``platformdirs`` for XDG-conformant path resolution; users can
+    override via ``ENV_DEPS_CACHE_DIR`` if they want to share the cache
+    across machines (e.g. on shared cluster storage). Cached because the
+    result is invariant within a process and the mkdir is the only
+    side-effect.
+    """
+    override = os.environ.get(ENV_DEPS_CACHE_DIR)
+    if override:
+        cache_dir = Path(override).expanduser().resolve()
+    else:
+        cache_dir = Path(platformdirs.user_cache_dir("llem")) / "deps"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
 class DockerRunner:
     """Dispatches a single experiment to an ephemeral Docker container.
 
@@ -147,9 +194,18 @@ class DockerRunner:
         1. Create temp exchange dir (``tempfile.mkdtemp(prefix='llem-')``)
         2. Write ExperimentConfig as JSON to ``{config_hash}_config.json``
         3. ``docker run --rm --gpus all -v {exchange_dir}:/run/llem``
+               ``-v {pkg_parent}:/llem-src:ro``
+               ``-v {pyproject}:/llem-pyproject.toml:ro``
+               ``-v {entry_script}:/llem-entry.sh:ro``
+               ``-v {deps_cache}:/llem-runtime-deps``
+               ``-e LLEM_ENGINE={engine}``
                ``-e LLEM_CONFIG_PATH=/run/llem/{config_hash}_config.json``
-               ``--shm-size 8g {image}``
-               ``python3 -m llenergymeasure.entrypoints.container``
+               ``--entrypoint /llem-entry.sh --shm-size 8g {image}``.
+           The entrypoint script primes any missing runtime deps to the
+           bind-mounted cache, then exec's
+           ``python3 -m llenergymeasure.entrypoints.container`` (routing
+           through ``/opt/nvidia/nvidia_entrypoint.sh`` for TRT-LLM and
+           wrapping in mpirun when ``LLEM_MPI_NP`` is set).
         4. Read ``{config_hash}_result.json`` from exchange dir
         5. Clean up temp dir on success; preserve on failure with debug path logged
 
@@ -719,20 +775,24 @@ class DockerRunner:
 
         All three engines (transformers, vllm, tensorrt) follow the same
         dispatch shape: the image carries only the engine substrate, the host
-        package source is bind-mounted at ``/llem-src`` and exposed via
-        ``PYTHONPATH`` so the in-container Python can import
-        ``llenergymeasure``. ``--entrypoint`` is overridden to ``python3`` so
-        the post-image command consistently invokes the entrypoint module
-        regardless of any default entrypoint set by the upstream image (vLLM
-        intercepts as api_server args; NGC wraps in
-        /opt/nvidia/nvidia_entrypoint.sh; the first-party transformers image
-        sets no default).
+        package source is bind-mounted at ``/llem-src``, pyproject.toml is
+        bind-mounted as a single-file mount at ``/llem-pyproject.toml``, the
+        in-container entrypoint script is bind-mounted at ``/llem-entry.sh``,
+        and a host-side deps cache is bind-mounted at ``/llem-runtime-deps``.
+        ``--entrypoint`` always points at ``/llem-entry.sh``; that script
+        (a) diffs ``pyproject.toml``'s ``[project.dependencies]`` against
+        installed dists and pip-installs any missing ones to the cache (fast-
+        path skips this when a pyproject-hash stamp matches), (b) sets
+        ``PYTHONPATH`` to include the cache and ``/llem-src``, and (c) exec's
+        the framework entrypoint module - routing through
+        ``/opt/nvidia/nvidia_entrypoint.sh`` when ``LLEM_ENGINE=tensorrt``
+        (sets up LD_LIBRARY_PATH for libnvinfer) and wrapping in
+        ``mpirun -n {n} --allow-run-as-root`` when ``LLEM_MPI_NP`` is set
+        (TRT-LLM tensor parallelism > 1).
 
-        For TRT-LLM tensor parallelism (tensor_parallel_size > 1), ``mpirun -n {n}
-        --allow-run-as-root`` is the entrypoint instead, with the python3
-        invocation as its command. MPI worker ranks re-import the module but
-        do not call ``main()`` because ``container_entrypoint.py`` is guarded
-        by ``if __name__ == "__main__"``.
+        MPI worker ranks re-import the framework module but do not call
+        ``main()`` because ``container_entrypoint.py`` is guarded by
+        ``if __name__ == "__main__"``.
 
         Args:
             config:       ExperimentConfig for the current experiment. Used to
@@ -805,25 +865,57 @@ class DockerRunner:
         if config.engine == Engine.TENSORRT and config.tensorrt is not None:
             tp_size = config.tensorrt.tensor_parallel_size
 
-        # All engines: bind-mount the host package source and override the
-        # entrypoint. PYTHONDONTWRITEBYTECODE prevents the container from
-        # littering the bind-mounted source with root-owned __pycache__
-        # directories.
-        pkg_parent = str(_resolve_package_parent_dir())
+        # All engines: bind-mount the host package source, pyproject.toml
+        # (consulted by the entrypoint script's runtime-dep diff),
+        # the entrypoint script itself, and the host deps cache. The
+        # entrypoint script primes any missing runtime deps on first
+        # dispatch (and short-circuits subsequent ones via a pyproject-hash
+        # stamp), sets PYTHONPATH to include /llem-src and the deps cache,
+        # then exec's the framework entrypoint module - routing through
+        # /opt/nvidia/nvidia_entrypoint.sh when LLEM_ENGINE=tensorrt so the
+        # NGC LD_LIBRARY_PATH setup runs, and wrapping in mpirun when
+        # LLEM_MPI_NP is set (TP > 1).
+        #
+        # PYTHONDONTWRITEBYTECODE prevents __pycache__ litter on the
+        # bind-mounted source. LLEM_HOST_UID/LLEM_HOST_GID let the
+        # entrypoint script chown the primed deps to the host user, so
+        # the cache can be cleaned without sudo even though the container
+        # itself runs as root (default for upstream engine images).
+        pkg_parent = _resolve_package_parent_dir()
+        repo_root = _resolve_repo_root()
+        entry_script = repo_root / "scripts" / "container_entrypoint.sh"
+        pyproject = repo_root / "pyproject.toml"
+        deps_cache = _ensure_deps_cache_dir()
+        # ``Engine`` is a (str, Enum) so ``f"{config.engine}"`` resolves to
+        # the raw value via its ``__str__`` override.
         cmd.extend(
             [
                 "-v",
                 f"{pkg_parent}:/llem-src:ro",
-                "-e",
-                "PYTHONPATH=/llem-src",
+                "-v",
+                f"{pyproject}:/llem-pyproject.toml:ro",
+                "-v",
+                f"{entry_script}:/llem-entry.sh:ro",
+                "-v",
+                f"{deps_cache}:/llem-runtime-deps",
                 "-e",
                 "PYTHONDONTWRITEBYTECODE=1",
+                "-e",
+                f"{ENV_ENGINE}={config.engine}",
+                "-e",
+                f"{ENV_HOST_UID}={os.getuid()}",
+                "-e",
+                f"{ENV_HOST_GID}={os.getgid()}",
             ]
         )
-        # For TP > 1, mpirun is the entrypoint and python3 follows in args;
-        # otherwise python3 is the entrypoint directly.
-        entrypoint = "mpirun" if (tp_size is not None and tp_size > 1) else "python3"
-        cmd.extend(["--entrypoint", entrypoint])
+        if tp_size is not None and tp_size > 1:
+            cmd.extend(["-e", f"{ENV_MPI_NP}={tp_size}"])
+
+        # The entrypoint script handles the engine-conditional final exec
+        # (TRT-LLM routes through nvidia_entrypoint.sh; others exec python3
+        # directly) and the mpirun wrap for TP > 1, so docker_runner only
+        # needs to point --entrypoint at the script.
+        cmd.extend(["--entrypoint", "/llem-entry.sh"])
 
         # Container name and labels for lifecycle management (cleanup, reaper).
         # These must appear before the image name in the docker run command.
@@ -834,16 +926,8 @@ class DockerRunner:
 
         cmd.append(self.image)
 
-        # Post-image arguments invoke the entrypoint module. For TP > 1 an
-        # mpirun prefix runs python3 as mpirun's command; otherwise python3
-        # is the container entrypoint and the module args follow directly.
-        mpi_prefix = (
-            ["-n", str(tp_size), "--allow-run-as-root", "python3"]
-            if tp_size and tp_size > 1
-            else []
-        )
-        cmd.extend([*mpi_prefix, *_ENTRYPOINT_MODULE_ARGS])
-
+        # No post-image args - the entrypoint script invokes the framework
+        # module itself; config is passed via env vars (LLEM_CONFIG_PATH etc.).
         return cmd
 
     def _read_result(self, exchange_dir: Path, config_hash: str) -> Any:
