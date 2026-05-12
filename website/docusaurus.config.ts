@@ -178,7 +178,7 @@ const config: Config = {
             {label: 'Quick start', to: '/get-started/quick-start'},
             {label: 'Concepts in 2 minutes', to: '/get-started/concepts-in-2-minutes'},
             {label: 'Choose your path', to: '/get-started/choose-your-path'},
-            {label: 'For policy readers', to: '/get-started/for-policy-readers'},
+            {label: 'For serving open-weights models', to: '/get-started/for-serving-open-weights-models'},
           ],
         },
         {

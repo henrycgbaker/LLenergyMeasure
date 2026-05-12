@@ -131,5 +131,5 @@ When Zeus is installed, LLenergyMeasure can use it instead of the default NVML p
 
 - [What We Measure and Why It Matters](/explanation/methodology/what-we-measure) - plain-language explanation of energy, throughput, and FLOPs
 - [How to Read LLenergyMeasure Output](/how-to/interpret-results) - interpreting the numbers
-- [Running Your First Measurement](/get-started/for-policy-readers) - getting started with a measurement
+- [Quick start](/get-started/quick-start) - getting started with a measurement
 - [Energy Measurement](/explanation/methodology/energy-measurement) - technical depth on energy samplers (for researchers)

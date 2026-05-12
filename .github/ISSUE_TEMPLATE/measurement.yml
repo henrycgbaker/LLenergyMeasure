@@ -1,0 +1,47 @@
+name: Measurement (energy / FLOPs / throughput)
+description: Issue with energy profiling, FLOPs accounting, throughput, sampling, or any measurement metric
+labels: ["area:measurement"]
+body:
+  - type: dropdown
+    id: metric
+    attributes:
+      label: Metric
+      options:
+        - energy (NVML / Zeus / CodeCarbon)
+        - FLOPs
+        - throughput / latency
+        - sampling (tokens, batching)
+        - other
+    validations:
+      required: true
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      description: Type label for triage. Add the matching label after submission.
+      options:
+        - fix
+        - poc-debug
+        - feat
+        - refactor
+        - chore
+        - test
+    validations:
+      required: true
+  - type: textarea
+    id: expected_observed
+    attributes:
+      label: Expected vs observed
+      description: What value did you expect, what did you actually measure, and why does the gap matter?
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Measurement setup
+      description: Backend, model, hardware, measurement window boundaries, anything that affects the metric
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Logs, profiler output, comparison baselines

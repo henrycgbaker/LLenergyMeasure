@@ -104,5 +104,5 @@ jobs:
                 `   - Manually trigger GPU CI (\`gh workflow run gpu-ci.yml\`) and create the tag once it passes`,
                 `   - Or create a new release PR with the fix`,
               ].join('\n'),
-              labels: ['bug', 'release'],
+              labels: ['fix', 'release'],
             });

@@ -1,0 +1,45 @@
+name: CLI / display / UX
+description: Issue with `llem` CLI commands, output formatting, or developer-facing UX
+labels: ["area:cli"]
+body:
+  - type: dropdown
+    id: command
+    attributes:
+      label: Command
+      options:
+        - llem run
+        - llem config / info / doctor
+        - llem --version
+        - other
+    validations:
+      required: true
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      description: Type label for triage. Add the matching label after submission.
+      options:
+        - fix
+        - feat
+        - refactor
+        - chore
+        - test
+    validations:
+      required: true
+  - type: textarea
+    id: invocation
+    attributes:
+      label: Invocation
+      description: Exact command(s) you ran
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed output
+      description: What the CLI printed (paste verbatim, including exit code)
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected output
+      description: What you expected to see and why

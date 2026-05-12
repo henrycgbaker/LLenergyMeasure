@@ -10,9 +10,6 @@ conditions that may reduce the accuracy or reproducibility of a measurement.
 This page documents each warning category, what triggers it, and how to
 interpret the downstream metrics in light of it.
 
-The framing here is researcher-to-researcher: if you see warning X, here is
-what it means for the validity of your figures and what you should do about it.
-
 ---
 
 ## Warmup did not converge
@@ -44,14 +41,6 @@ energy and throughput figures are still technically correct (the harness measure
 what actually happened), but the transient state means the measurement does not
 reflect steady-state operation. Figures are likely to be higher variance than
 usual and may not match a run on a pre-warmed system.
-
-**When to re-run vs accept:**
-
-- For publication: re-run with larger `warmup.max_prompts` (e.g. 20-30) or a
-  longer `warmup.thermal_floor_seconds`. If the warning persists, it indicates
-  a hardware condition you should describe in your methods section.
-- For quick iteration: accept the measurement and note the warning. Throughput
-  and energy are still useful for relative comparisons within the same run.
 
 ---
 

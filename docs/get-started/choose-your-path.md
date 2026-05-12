@@ -45,8 +45,9 @@ writing a parameter miner and wiring it into the validation pipeline.
 
 ---
 
-**I am a policy reader and want to understand what these measurements mean.**
+**I serve open-weights models and want to make my deployment more efficient.**
 
-Start at [For policy readers](/get-started/for-policy-readers).
-A step-by-step, no-programming guide to running a measurement and
-interpreting the result.
+Start at [For serving open-weights models](/get-started/for-serving-open-weights-models).
+Frames the deployment-decision use of LLenergyMeasure and points at the
+quick-start, multi-engine study tutorial, and output-interpretation guide
+in the order an operator would read them.

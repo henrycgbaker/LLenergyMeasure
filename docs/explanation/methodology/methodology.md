@@ -70,6 +70,27 @@ flowchart LR
 The thermal floor wait occurs *after* warmup, not before. This ensures the GPU has
 reached operating temperature from warmup but has stabilised before measurement starts.
 
+### Rationale for the thermal floor wait
+
+Warmup raises the GPU to operating temperature but does not stabilise it. Within
+the warmup phase the device remains on a temperature ramp: temperature,
+instantaneous power, and clock frequency continue to change between prompts.
+A measurement window opened immediately after warmup would therefore sample
+across this transient, with each successive prompt observing a different thermal
+state. Between-prompt variance under this regime is dominated by position on the
+warmup curve rather than by workload properties.
+
+During the wait, the temperature curve plateaus: heat dissipation matches the
+heat input from the warmup phase, fan speed reaches a steady state for that
+thermal load, and clocks settle at the sustainable boost level. Measurement then
+proceeds against a stable thermal state, and observed between-prompt variance
+reflects workload variation rather than residual warmup transient.
+
+The 60 s default is empirical: this is the approximate timescale on which
+datacenter-class GPUs settle after a step change in load - long enough that
+residual drift falls below the noise floor of NVML's ~5% power-sample accuracy,
+short enough not to dominate experiment runtime.
+
 ### Engine-specific behaviour
 
 For **vLLM** and **TRT-LLM** engines, warmup is a single kernel warmup call that
