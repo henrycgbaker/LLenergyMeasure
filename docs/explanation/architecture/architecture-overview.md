@@ -127,11 +127,13 @@ flowchart TB
 
 ## Why validate before engine initialisation?
 
-Engine initialisation is expensive: model weights load from disk, CUDA contexts initialise, and for TensorRT-LLM the engine may need compilation. A rejected config discovered after two minutes of initialisation wastes GPU time and researcher patience.
+GPU time is the scarce resource. Two distinct failure modes burn it:
 
-Pre-construction validation from a corpus catches the most common mistakes at config-parse time - a few milliseconds rather than several minutes.
+**Dormancy-driven duplicate runs.** This is the larger cost. Engines silently normalise many fields - `seed=-1` becomes `None`, `early_stopping=True` is stripped when `num_beams=1`, sampling parameters are dropped under greedy decoding. A sweep that varies a dormant field generates configs that look distinct to the user (and to Pydantic) but produce *identical effective configurations* once the engine has normalised them. Without invariance mining, the harness runs every cell, and the resulting cells are measurement-equivalent: the user spends hours of GPU time to discover that twelve of their sixteen cells collapsed to four. With a corpus of `dormant` invariants, the loader resolves the effective config at parse time, the study planner deduplicates measurement-equivalent cells, and the GPU only runs the cells that produce distinct measurements.
 
-The corpus complements, rather than replaces, engine-side validation: it captures invariants that fire only in specific combinations (cross-field constraints), silent normalisations (`dormant` rules), and invariants from methods that run at build time rather than construction time.
+**Invalid-combination late rejection.** Engine initialisation is expensive: model weights load from disk, CUDA contexts initialise, and for TensorRT-LLM the engine may need compilation. A rejected config discovered after two minutes of initialisation wastes that GPU time outright. Pre-construction validation from `error` invariants catches the most common cross-field violations at config-parse time - a few milliseconds rather than several minutes.
+
+The corpus complements, rather than replaces, engine-side validation: it captures invariants that fire only in specific combinations (cross-field constraints), silent normalisations (`dormant` rules underpinning the deduplication above), and invariants from methods that run at build time rather than construction time.
 
 ---
 

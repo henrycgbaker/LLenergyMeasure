@@ -36,7 +36,9 @@ interest is implementation itself.
 
 No tool sat at the methodology layer that made implementation effects on
 efficiency a first-class measurable axis across multiple inference
-engines. That is the gap LLenergyMeasure addresses.
+engines. That is the gap LLenergyMeasure addresses - for researchers
+studying open-weights inference, and for the open-source community that
+runs the engines being measured.
 
 ---
 

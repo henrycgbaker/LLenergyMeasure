@@ -6,7 +6,7 @@ const sidebarsGetStarted: SidebarsConfig = {
     'quick-start',
     'concepts-in-2-minutes',
     'choose-your-path',
-    'for-policy-readers',
+    'for-serving-open-weights-models',
   ],
 };
 
