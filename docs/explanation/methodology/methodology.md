@@ -70,26 +70,26 @@ flowchart LR
 The thermal floor wait occurs *after* warmup, not before. This ensures the GPU has
 reached operating temperature from warmup but has stabilised before measurement starts.
 
-### Why a wait after warmup, not just warmup
+### Rationale for the thermal floor wait
 
-Warmup brings you up, but it doesn't stabilise you. During warmup the GPU is on a
-temperature ramp - it's heating fast. If you started measuring the instant warmup
-ended, you'd be measuring a transient where temperature, power, and clocks are all
-changing simultaneously. Successive prompts would each see a slightly different
-thermal state, and your variance would explode.
+Warmup raises the GPU to operating temperature but does not stabilise it. Within
+the warmup phase the device remains on a temperature ramp: temperature,
+instantaneous power, and clock frequency continue to change between prompts.
+A measurement window opened immediately after warmup would therefore sample
+across this transient, with each successive prompt observing a different thermal
+state. Between-prompt variance under this regime is dominated by position on the
+warmup curve rather than by workload properties.
 
-The thermal floor wait lets the rising temperature curve flatten. Heat input from
-the warmup work is now matched by heat removal via the cooling system, the fans
-have reached their steady RPM for that thermal load, and the clocks have settled
-to whatever boost level is sustainable. Only then does the measurement window open,
-and now repeated prompts see roughly the same thermal state - so what you're
-measuring is workload energy, not "energy as a function of where on the warmup
-curve I happened to land."
+During the wait, the temperature curve plateaus: heat dissipation matches the
+heat input from the warmup phase, fan speed reaches a steady state for that
+thermal load, and clocks settle at the sustainable boost level. Measurement then
+proceeds against a stable thermal state, and observed between-prompt variance
+reflects workload variation rather than residual warmup transient.
 
-60 seconds specifically is empirically the rough timescale on which datacenter
-GPUs settle after a step change in load - fast enough not to dominate experiment
-time, long enough that the residual drift is below the noise floor of NVML's ~5%
-power-sample accuracy.
+The 60 s default is empirical: this is the approximate timescale on which
+datacenter-class GPUs settle after a step change in load - long enough that
+residual drift falls below the noise floor of NVML's ~5% power-sample accuracy,
+short enough not to dominate experiment runtime.
 
 ### Engine-specific behaviour
 
