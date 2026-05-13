@@ -68,18 +68,18 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
-      - name: Resolve engine version from SSOT
+      - name: Resolve engine version from current.yaml
         id: version
         env:
           ENGINE: ${{ inputs.engine }}
         run: |
-          VER=$(yq '.library.current_version' "engine_versions/${ENGINE}.yaml")
+          VER=$(yq '.library.current_version' "engine_versions/${ENGINE}/current.yaml")
           if [[ -z "$VER" || "$VER" == "null" ]]; then
-            echo "Could not resolve ${ENGINE} version from engine_versions/${ENGINE}.yaml" >&2
+            echo "Could not resolve ${ENGINE} version from engine_versions/${ENGINE}/current.yaml" >&2
             exit 1
           fi
           # Python-identifier-safe form (dots and hyphens -> underscores) used as the
-          # subpackage name under src/llenergymeasure/_engine_archive/<engine>/.
+          # subpackage name under engine_versions/<engine>/.
           SAFE_VER="v${VER//[.-]/_}"
           {
             echo "version=${VER}"
@@ -155,9 +155,9 @@ jobs:
             echo "Source tree already present at ${DEST}; skipping fetch."
             exit 0
           fi
-          URL_TEMPLATE=$(yq '.source_tarball.url_template' engine_versions/tensorrt.yaml)
+          URL_TEMPLATE=$(yq '.source_tarball.url_template' engine_versions/tensorrt/current.yaml)
           if [[ -z "$URL_TEMPLATE" || "$URL_TEMPLATE" == "null" ]]; then
-            echo "Could not resolve source_tarball.url_template from engine_versions/tensorrt.yaml" >&2
+            echo "Could not resolve source_tarball.url_template from engine_versions/tensorrt/current.yaml" >&2
             exit 1
           fi
           URL="${URL_TEMPLATE//\{version\}/${VER}}"
@@ -172,11 +172,10 @@ jobs:
           ENGINE: ${{ inputs.engine }}
         run: |
           BASE_PATHS=(
-            "engine_versions/${ENGINE}.yaml"
-            "scripts/engine_introspectors/_common.py"
-            "scripts/engine_introspectors/__init__.py"
-            "scripts/engine_introspectors/__main__.py"
-            "scripts/engine_introspectors/${ENGINE}_introspector.py"
+            "engine_versions/${ENGINE}/current.yaml"
+            "scripts/engine_producers/_common.py"
+            "scripts/engine_producers/_schemas_runner.py"
+            "scripts/engine_producers/${ENGINE}_schema_introspector.py"
           )
           ENGINE_PATHS=()
           if [[ "$ENGINE" == "transformers" ]]; then
@@ -214,8 +213,12 @@ jobs:
               -e LD_LIBRARY_PATH
             )
           fi
+          ENTRYPOINT_FLAG=(--entrypoint python3)
+          CMD_PREFIX=()
           if [[ "$ENGINE" == "tensorrt" ]]; then
             DOCKER_FLAGS+=( -v "/tmp/trt-llm-${VER}:/tmp/trt-llm-${VER}:ro" )
+            ENTRYPOINT_FLAG=(--entrypoint /opt/nvidia/nvidia_entrypoint.sh)
+            CMD_PREFIX=(python3)
           fi
           docker run --rm "${DOCKER_FLAGS[@]}" \
             -v "${GITHUB_WORKSPACE}:/repo" \
@@ -223,14 +226,14 @@ jobs:
             -w /repo \
             -e PYTHONPATH \
             -e PYTHONDONTWRITEBYTECODE \
-            --entrypoint python3 \
+            "${ENTRYPOINT_FLAG[@]}" \
             "$IMAGE" \
-            -m scripts._probe --engine "$ENGINE" --producer schemas \
+            "${CMD_PREFIX[@]}" -m scripts._probe --engine "$ENGINE" --producer schemas \
               --output "/llem-probe-out/probe-${ENGINE}.json"
           VERDICT=$(jq -r '.verdict' "/tmp/llem-probe-out/probe-${ENGINE}.json")
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
 
-      - name: Update last_probe in SSOT
+      - name: Update last_probe in current.yaml
         if: always() && steps.probe.outcome == 'success'
         env:
           IMAGE: ${{ steps.version.outputs.image }}
@@ -246,14 +249,20 @@ jobs:
               -e LD_LIBRARY_PATH
             )
           fi
+          ENTRYPOINT_FLAG=(--entrypoint bash)
+          CMD_PREFIX=()
+          if [[ "$ENGINE" == "tensorrt" ]]; then
+            ENTRYPOINT_FLAG=(--entrypoint /opt/nvidia/nvidia_entrypoint.sh)
+            CMD_PREFIX=(bash)
+          fi
           docker run --rm "${DOCKER_FLAGS[@]}" \
             -v "${GITHUB_WORKSPACE}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:ro \
             -w /repo \
             -e PYTHONPATH \
-            --entrypoint bash \
+            "${ENTRYPOINT_FLAG[@]}" \
             "$IMAGE" \
-            -c "python3 scripts/update_last_probe.py --engine ${ENGINE} < /llem-probe-out/probe-${ENGINE}.json"
+            "${CMD_PREFIX[@]}" -c "python3 scripts/update_last_probe.py --engine ${ENGINE} < /llem-probe-out/probe-${ENGINE}.json"
 
       - name: Save current schema for diffing
         if: steps.probe.outputs.verdict == 'pass'
@@ -288,8 +297,12 @@ jobs:
               -e LD_LIBRARY_PATH
             )
           fi
+          ENTRYPOINT_FLAG=(--entrypoint python3)
+          CMD_PREFIX=()
           if [[ "$ENGINE" == "tensorrt" ]]; then
             DOCKER_FLAGS+=( -v "/tmp/trt-llm-${VER}:/tmp/trt-llm-${VER}:ro" )
+            ENTRYPOINT_FLAG=(--entrypoint /opt/nvidia/nvidia_entrypoint.sh)
+            CMD_PREFIX=(python3)
           fi
           docker run --rm "${DOCKER_FLAGS[@]}" \
             -e LLENERGY_DISCOVERY_FROZEN_AT="${ANCHOR_DATE}" \
@@ -297,9 +310,9 @@ jobs:
             -e PYTHONPATH \
             -v "${GITHUB_WORKSPACE}:/repo" \
             -w /repo \
-            --entrypoint python3 \
+            "${ENTRYPOINT_FLAG[@]}" \
             "$IMAGE" \
-            -m scripts.engine_introspectors \
+            "${CMD_PREFIX[@]}" -m scripts.engine_producers._schemas_runner \
               --engine "${ENGINE}" \
               --image-ref "${IMAGE}" \
               --output "${ENGINES_DIR}/${ENGINE}/schema.discovered.json"
@@ -385,12 +398,12 @@ jobs:
         run: |
           # Derivative dual-write — see invariants cell for rationale.
           # Gated on the engine being vendored (per-engine __init__.py present).
-          ARCHIVE_INIT="src/llenergymeasure/_engine_archive/${ENGINE}/${SAFE_VER}/__init__.py"
+          ARCHIVE_INIT="engine_versions/${ENGINE}/${SAFE_VER}/__init__.py"
           if [[ ! -f "$ARCHIVE_INIT" ]]; then
             echo "Engine ${ENGINE} not yet vendored at ${SAFE_VER}; skipping archive mirror." >&2
             exit 0
           fi
-          ARCHIVE_DIR="src/llenergymeasure/_engine_archive/${ENGINE}/${SAFE_VER}/outputs"
+          ARCHIVE_DIR="engine_versions/${ENGINE}/${SAFE_VER}/outputs"
           mkdir -p "${ARCHIVE_DIR}"
           cp "${ENGINES_DIR}/${ENGINE}/schema.discovered.json" "${ARCHIVE_DIR}/schema.discovered.json"
 
@@ -418,7 +431,7 @@ jobs:
             echo "**To unblock,** choose one of:"
             echo
             echo "- **Patch the introspector module's landmarks** - required when the library has genuinely renamed or removed the missing symbols. The introspector code needs updating to match the new library API."
-            echo "- **Run \`@llem-ci-bot /approve-reuse ${ENGINE} schemas\`** - widens the SSOT pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
+            echo "- **Run \`@llem-ci-bot /approve-reuse ${ENGINE} schemas\`** - widens the current.yaml pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
             echo
             echo "**The probe is the canonical gate** - \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
           } | scripts/ci/upsert_pr_comment.sh
@@ -441,8 +454,8 @@ jobs:
           name: schemas-writeback-${{ inputs.engine }}
           path: |
             ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/schema.discovered.json
-            src/llenergymeasure/_engine_archive/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/schema.discovered.json
-            engine_versions/${{ inputs.engine }}.yaml
+            engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/schema.discovered.json
+            engine_versions/${{ inputs.engine }}/current.yaml
             docs/user/generated/curation-${{ inputs.engine }}.md
             docs/user/generated/schema-${{ inputs.engine }}.md
           # See invariants cell for rationale (archive path gated on engine

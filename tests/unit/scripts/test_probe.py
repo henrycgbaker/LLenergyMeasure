@@ -3,7 +3,7 @@
 The probe primitive answers a binary question ("do all landmarks resolve
 under the live library?") and emits a richly-diagnosed report. These
 tests verify pass/fail verdict derivation, fingerprint stability + drift,
-SSOT envelope checks, and round-tripping through the cache file.
+current.yaml envelope checks, and round-tripping through the cache file.
 
 LANDMARKS are stdlib symbols (``json.JSONDecodeError`` etc.) rather than
 real engine symbols: the probe imports modules via ``importlib`` and
@@ -58,20 +58,27 @@ def _install_synthetic_producer(
 def _redirect_compat_dir(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, engine: str = "transformers"
 ) -> Path:
-    """Point both SSOT path and compat cache writes at ``tmp_path``.
+    """Point both current.yaml path and compat cache writes at ``tmp_path``.
 
-    Copies the real engine SSOT into ``tmp_path`` so envelope checks can
-    still read it; redirects ``ssot_path`` to the temporary copy.
+    Copies the real engine current.yaml into a per-engine subdirectory
+    under ``tmp_path`` so envelope checks can still read it; redirects
+    ``current_path`` to the temporary copy.
+
+    The compat.json cache ends up at ``tmp_path/{engine}.compat.json``
+    because ``_compat_path`` walks two parents up from the fake current.yaml
+    (``tmp_path/{engine}/current.yaml`` → ``.parent.parent`` = ``tmp_path``).
     """
-    real_ssot = _PROJECT_ROOT / "engine_versions" / f"{engine}.yaml"
-    fake_ssot = tmp_path / f"{engine}.yaml"
-    fake_ssot.write_text(real_ssot.read_text())
+    real_current = _PROJECT_ROOT / "engine_versions" / engine / "current.yaml"
+    fake_engine_dir = tmp_path / engine
+    fake_engine_dir.mkdir(parents=True, exist_ok=True)
+    fake_current = fake_engine_dir / "current.yaml"
+    fake_current.write_text(real_current.read_text())
 
     def _fake_path(name: str) -> Path:
-        return tmp_path / f"{name}.yaml"
+        return tmp_path / name / "current.yaml"
 
-    monkeypatch.setattr(_probe, "ssot_path", _fake_path)
-    return fake_ssot
+    monkeypatch.setattr(_probe, "current_path", _fake_path)
+    return fake_current
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +190,7 @@ def test_probe_fingerprint_drift_listed_on_change(
 def test_probe_version_inside_envelope_matches_ssot(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """``version_inside_envelope`` reflects the SSOT ``miner_pins.static`` range."""
+    """``version_inside_envelope`` reflects the current.yaml ``miner_pins.static`` range."""
     fake_ssot = _redirect_compat_dir(monkeypatch, tmp_path)
     _install_synthetic_producer(
         monkeypatch,
@@ -192,7 +199,7 @@ def test_probe_version_inside_envelope_matches_ssot(
         landmarks=("json.JSONDecodeError",),
     )
 
-    # Rewrite the SSOT so the current version sits OUTSIDE the static pin -
+    # Rewrite the current.yaml so the current version sits OUTSIDE the static pin -
     # version_inside_envelope must flip to False without touching verdict.
     fake_ssot.write_text(
         "schema_version: 1\n"
@@ -309,8 +316,8 @@ def test_probe_atomic_output_rename_failure_leaves_destination_intact(
 def test_probe_ssot_missing_returns_infra_error(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """No SSOT for the engine → CLI exits 2 with a stderr error envelope."""
-    monkeypatch.setattr(_probe, "ssot_path", lambda name: tmp_path / f"{name}.yaml")
+    """No current.yaml for the engine → CLI exits 2 with a stderr error envelope."""
+    monkeypatch.setattr(_probe, "current_path", lambda name: tmp_path / f"{name}.yaml")
     _install_synthetic_producer(
         monkeypatch,
         engine="ghost_engine",

@@ -7,7 +7,7 @@ loaded directly through the dispatcher.
 
 Mirror style of ``test_dispatcher.py``: keep imports lazy where the
 assertion target is the module attribute, fail loud otherwise. Note the
-miner module name is ``tensorrt_static_miner`` (not ``tensorrt_miner``) -
+miner module name is ``tensorrt_static_invariant_miner`` (not ``tensorrt_miner``) -
 see ``scripts/_probe.py`` ``_PRODUCER_MODULES`` for the canonical mapping.
 """
 
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import importlib
 
-from llenergymeasure._engine_archive._dispatcher import load_machinery
+from engine_versions._dispatcher import load_producer
 
 _TENSORRT_VERSION = "0.21.0"
 
@@ -32,23 +32,23 @@ def _assert_landmark_shape(landmarks: object) -> tuple[str, ...]:
     return landmarks  # type: ignore[return-value]
 
 
-def test_tensorrt_static_miner_landmarks_resolve_lazily() -> None:
-    """``scripts.engine_miners.tensorrt_static_miner.LANDMARKS`` resolves via PEP 562."""
-    module = importlib.import_module("scripts.engine_miners.tensorrt_static_miner")
+def test_tensorrt_static_invariant_miner_landmarks_resolve_lazily() -> None:
+    """``scripts.engine_producers.tensorrt_static_invariant_miner.LANDMARKS`` resolves via PEP 562."""
+    module = importlib.import_module("scripts.engine_producers.tensorrt_static_invariant_miner")
     landmarks = _assert_landmark_shape(module.LANDMARKS)
 
-    archived = load_machinery(
-        engine="tensorrt", version=_TENSORRT_VERSION, producer="static"
+    archived = load_producer(
+        engine="tensorrt", version=_TENSORRT_VERSION, producer="static_invariant_miner"
     ).LANDMARKS
     assert landmarks == archived
 
 
-def test_tensorrt_introspector_landmarks_resolve_lazily() -> None:
-    """``scripts.engine_introspectors.tensorrt_introspector.LANDMARKS`` resolves via PEP 562."""
-    module = importlib.import_module("scripts.engine_introspectors.tensorrt_introspector")
+def test_tensorrt_schema_introspector_landmarks_resolve_lazily() -> None:
+    """``scripts.engine_producers.tensorrt_schema_introspector.LANDMARKS`` resolves via PEP 562."""
+    module = importlib.import_module("scripts.engine_producers.tensorrt_schema_introspector")
     landmarks = _assert_landmark_shape(module.LANDMARKS)
 
-    archived = load_machinery(
-        engine="tensorrt", version=_TENSORRT_VERSION, producer="discovery"
+    archived = load_producer(
+        engine="tensorrt", version=_TENSORRT_VERSION, producer="schema_introspector"
     ).LANDMARKS
     assert landmarks == archived

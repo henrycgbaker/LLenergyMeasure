@@ -26,7 +26,7 @@ sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from llenergymeasure.config.ssot import Engine  # noqa: E402
-from scripts.engine_introspectors._common import DEFAULT_SCHEMA_FILENAME  # noqa: E402
+from scripts.engine_producers._common import DEFAULT_SCHEMA_FILENAME  # noqa: E402
 
 _ENGINE_DISPLAY_NAMES: dict[str, str] = {
     "transformers": "Transformers",

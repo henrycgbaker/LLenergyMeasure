@@ -22,7 +22,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from scripts import _invariant_validation_common, validate_invariants  # noqa: E402
 from scripts import diff_engine_invariants as diff_invariants  # noqa: E402
 from scripts._invariant_validation_common import run_case  # noqa: E402
-from scripts.engine_miners._fixpoint_test import fixpoint_test_corpus  # noqa: E402
+from scripts.engine_producers._fixpoint_test import fixpoint_test_corpus  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Synthetic corpus + runner

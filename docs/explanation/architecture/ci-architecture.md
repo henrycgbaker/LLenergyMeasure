@@ -179,8 +179,8 @@ audit unexpected shapes against this table.
 | PR shape | `engine-pipeline` triggered? | Cells that fire | Writeback fires? |
 |---|---|---|---|
 | **Workflow-only edit** (only `engine-pipeline.yml` or `_*-cell.yml` or `.github/actions/**` changed) | Yes (self-test) | All 6 cells (filter file in every group) + build-transformers | Yes if any cell changed an artefact |
-| **One-engine SSOT bump** (e.g. `engine_versions/vllm.yaml`) | Yes | `invariants-vllm` + `schemas-vllm` only | Yes if either cell changed an artefact |
-| **Miner-code change** (`scripts/engine_miners/<engine>_*.py`) | Yes | `invariants-<engine>` only | Yes if cell changed an artefact |
+| **One-engine SSOT bump** (e.g. `engine_versions/vllm/current.yaml`) | Yes | `invariants-vllm` + `schemas-vllm` only | Yes if either cell changed an artefact |
+| **Miner-code change** (`scripts/engine_producers/<engine>_*.py`) | Yes | `invariants-<engine>` only | Yes if cell changed an artefact |
 | **Hand-edit corpus** (`engines/<engine>/invariants.proposed.yaml`) | Yes | `invariants-<engine>` only (re-validates) | Yes if cell changed validated yaml |
 | **Pure ci.yml / docs change** | **Absent** | - | - |
 

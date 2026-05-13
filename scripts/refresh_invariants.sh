@@ -71,7 +71,7 @@ OUTPUT_REL="src/llenergymeasure/engines/${ENGINE}/invariants.validated.yaml"
 
 if [[ ! -f "$REPO_ROOT/$CORPUS_REL" ]]; then
     echo "[$ENGINE] Corpus $CORPUS_REL not found. Run the miner first:" >&2
-    echo "    python -m scripts.engine_miners.${ENGINE}_miner --out $CORPUS_REL" >&2
+    echo "    python -m scripts.engine_producers.${ENGINE}_static_invariant_miner --out $CORPUS_REL" >&2
     exit 1
 fi
 

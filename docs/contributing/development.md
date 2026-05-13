@@ -33,11 +33,11 @@ uv sync --dev --extra zeus --extra codecarbon
 The dispatch path for experiments goes through `docker_runner.py`, which
 bind-mounts the project source + a tiny entrypoint script + the host's
 runtime-deps cache into the container. The image tag is derived from the
-SSOT (`engine_versions/{engine}.yaml`); the framework code is bind-mounted
+SSOT (`engine_versions/{engine}/current.yaml`); the framework code is bind-mounted
 rather than baked.
 
 ```bash
-VER=$(yq '.library.current_version' engine_versions/transformers.yaml)
+VER=$(yq '.library.current_version' engine_versions/transformers/current.yaml)
 docker build -f docker/Dockerfile.transformers \
   --build-arg TRANSFORMERS_VERSION="$VER" \
   -t llenergymeasure:transformers-${VER} .
@@ -47,7 +47,7 @@ docker run --rm \
   -v "$(pwd)":/repo -w /repo \
   --entrypoint python3 \
   llenergymeasure:transformers-${VER} \
-  -m scripts.engine_miners.build_corpus --engine transformers
+  -m scripts.engine_producers.build_corpus --engine transformers
 ```
 
 For experiment dispatch (the `llem run` path) docker_runner.py emits a
@@ -204,7 +204,7 @@ flowchart LR
     sch_other --> writeback
 ```
 
-When Renovate (or a maintainer) bumps `engine_versions/transformers.yaml`
+When Renovate (or a maintainer) bumps `engine_versions/transformers/current.yaml`
 or `docker/Dockerfile.transformers`, the orchestrator fires:
 
 1. **`filter`** computes which cells to expand.
@@ -221,8 +221,8 @@ or `docker/Dockerfile.transformers`, the orchestrator fires:
    availability: a cell that succeeded still lands its changes even if
    another cell failed.
 
-When Renovate bumps `engine_versions/vllm.yaml` or
-`engine_versions/tensorrt.yaml`, the corresponding cells (in the
+When Renovate bumps `engine_versions/vllm/current.yaml` or
+`engine_versions/tensorrt/current.yaml`, the corresponding cells (in the
 `invariants-others` / `schemas-others` matrix) fire and pull upstream
 images directly (no first-party build).
 
@@ -254,7 +254,7 @@ docker run --rm \
   -v "$(pwd)":/repo -w /repo \
   --entrypoint pytest \
   llenergymeasure:transformers-${VER} \
-  tests/unit/scripts/engine_miners/test_transformers_miner.py
+  tests/unit/scripts/engine_producers/test_transformers_miner.py
 ```
 
 ## Why this contract

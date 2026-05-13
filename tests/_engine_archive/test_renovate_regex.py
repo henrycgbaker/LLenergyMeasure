@@ -1,11 +1,11 @@
 """Renovate regex regression test.
 
 The customManagers regex in ``renovate.json`` matches the ``pep503_name``
-+ ``current_version`` pair on adjacent lines of every top-level
-``engine_versions/<engine>.yaml``. Inserting a comment, blank line, or
-new field between those two lines silently breaks Renovate detection
++ ``current_version`` pair on adjacent lines of every
+``engine_versions/<engine>/current.yaml``. Inserting a comment, blank line,
+or new field between those two lines silently breaks Renovate detection
 (``\\s*\\n\\s*`` allows whitespace only). This test catches that drift in
-PR review by asserting the regex matches every top-level SSOT.
+PR review by asserting the regex matches every current.yaml.
 
 Per the second adversarial pass on PR-0 (FM 5 mitigation).
 """
@@ -42,8 +42,8 @@ def _load_regex_pattern() -> str:
 
 
 @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
-def test_renovate_regex_matches_top_level_ssot(engine: str) -> None:
-    """Top-level engine_versions/<engine>.yaml MUST match Renovate's regex.
+def test_renovate_regex_matches_current_yaml(engine: str) -> None:
+    """engine_versions/<engine>/current.yaml MUST match Renovate's regex.
 
     If this fails, Renovate has stopped detecting library bumps for
     ``engine``. Likely cause: a comment / blank line / new field has been
@@ -51,18 +51,18 @@ def test_renovate_regex_matches_top_level_ssot(engine: str) -> None:
     regex requires only whitespace between them.
     """
     pattern = _load_regex_pattern()
-    text = (_REPO_ROOT / "engine_versions" / f"{engine}.yaml").read_text()
+    text = (_REPO_ROOT / "engine_versions" / engine / "current.yaml").read_text()
     match = re.search(pattern, text)
     assert match is not None, (
-        f"engine_versions/{engine}.yaml does not match Renovate's pep503_name+"
+        f"engine_versions/{engine}/current.yaml does not match Renovate's pep503_name+"
         f"current_version regex. Did someone interleave a comment/blank line "
         f"between those two fields? Renovate's regex is `\\s*\\n\\s*` between "
         f"fields - strict whitespace only."
     )
     # depName + currentValue must both have been captured.
     assert match.group("depName"), (
-        f"Renovate regex matched {engine}.yaml but did not capture depName."
+        f"Renovate regex matched {engine}/current.yaml but did not capture depName."
     )
     assert match.group("currentValue"), (
-        f"Renovate regex matched {engine}.yaml but did not capture currentValue."
+        f"Renovate regex matched {engine}/current.yaml but did not capture currentValue."
     )

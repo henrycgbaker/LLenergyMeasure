@@ -212,7 +212,7 @@ class Invariant:
     """Other miner sources that produced the same fingerprint as this invariant.
 
     Empty for single-source invariants. Populated by the corpus merger
-    (``scripts/engine_miners/build_corpus.py``) when two or more miners
+    (``scripts/engine_producers/build_corpus.py``) when two or more miners
     independently emitted a invariant with the same ``(engine, severity,
     match.fields)`` fingerprint. ``added_by`` remains the *primary*
     source (used for downstream filtering); ``cross_validated_by`` is
@@ -673,7 +673,7 @@ class EngineInvariantsLoader:
         except FileNotFoundError as exc:
             raise FileNotFoundError(
                 f"Engine invariants for {engine!r} not found at {yaml_path}. "
-                f"Run `python -m scripts.engine_miners.{engine}_miner "
+                f"Run `python -m scripts.engine_producers.{engine}_miner "
                 f"--out {yaml_path}` to generate."
             ) from exc
 

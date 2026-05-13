@@ -14,7 +14,7 @@ Design doc: [`.product/designs/config-deduplication-dormancy/runtime-config-vali
 
 Each engine is a sub-package containing its validation invariants and discovered schema:
 
-- `{engine}/invariants.proposed.yaml` - post-mine corpus from `scripts/engine_miners/{engine}_miner.py`
+- `{engine}/invariants.proposed.yaml` - post-mine corpus from `scripts/engine_producers/{engine}_miner.py`
 - `{engine}/invariants.validated.yaml` - post-validation envelope from `scripts/validate_invariants.py`
 - `{engine}/schema.discovered.json` - discovered parameters from `scripts/refresh_discovered_schemas.sh`
 - `{engine}/_staging/` - gitignored scratch directory for intermediate artefacts
@@ -203,7 +203,7 @@ and extended by the validation-CI gate (`scripts/validate_invariants.py`).
 ### Via miner (preferred)
 
 1. Rerun the miner for the engine:
-   `python -m scripts.engine_miners.{engine}_miner --out src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`
+   `python -m scripts.engine_producers.{engine}_miner --out src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`
    (optionally with `LLENERGY_MINER_FROZEN_AT=<iso-utc>` for reproducibility).
 2. Inspect the diff against the previous corpus file. Review the predicate
    shape and verify it matches the library source before merging.

@@ -1,10 +1,10 @@
 """Per-engine lazy-LANDMARKS tests for vLLM at v0.7.3.
 
 Asserts that the producer modules' PEP 562 ``__getattr__`` hooks resolve
-``LANDMARKS`` to the same tuple that ``load_machinery`` returns directly
+``LANDMARKS`` to the same tuple that ``load_producer`` returns directly
 from the per-version archive subpackage. This catches drift between the
 producer-side wiring (script ``_get_landmarks`` + dispatcher call) and
-the archive contents (``_engine_archive/vllm/v0_7_3/machinery/*.py``).
+the archive contents (``_engine_archive/vllm/v0_7_3/producers/*.py``).
 
 Mirror of ``tests/_engine_archive/test_dispatcher.py`` style: pytest,
 parametrize across producer kinds, no fixtures.
@@ -17,13 +17,13 @@ from types import ModuleType
 
 import pytest
 
-from llenergymeasure._engine_archive._dispatcher import load_machinery
+from engine_versions._dispatcher import load_producer
 
 # (producer_module_path, producer_kind) pairs. The producer kind is the
-# SSOT-side name (``static`` / ``discovery``) the dispatcher routes on.
+# dispatcher's producer argument name.
 _PRODUCERS: tuple[tuple[str, str], ...] = (
-    ("scripts.engine_miners.vllm_static_miner", "static"),
-    ("scripts.engine_introspectors.vllm_introspector", "discovery"),
+    ("scripts.engine_producers.vllm_static_invariant_miner", "static_invariant_miner"),
+    ("scripts.engine_producers.vllm_schema_introspector", "schema_introspector"),
 )
 
 
@@ -60,5 +60,5 @@ def test_producer_landmarks_matches_dispatcher(module_path: str, producer: str) 
     archive subpackage is meant to prevent.
     """
     module = _import_producer(module_path)
-    direct = load_machinery(engine="vllm", version="0.7.3", producer=producer).LANDMARKS
+    direct = load_producer(engine="vllm", version="0.7.3", producer=producer).LANDMARKS
     assert direct == module.LANDMARKS

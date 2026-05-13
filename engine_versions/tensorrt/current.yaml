@@ -1,0 +1,34 @@
+# Per-engine version-bundle SSOT for tensorrt-llm.
+#
+# Renovate updates `library.current_version` on each upstream release;
+# every other artefact (Dockerfile ARG, miner pin reads, validation gates)
+# is derived from this file. See
+# `.product/designs/engine-coupling-architecture-2026-04-28.md` §4.
+schema_version: 1
+engine: tensorrt
+library:
+  pep503_name: tensorrt-llm
+  current_version: "0.21.0"
+  current_commit_sha: null
+image:
+  base_image_ref: "nvcr.io/nvidia/tensorrt-llm/release:0.21.0"
+  llem_image_ref: null
+source_tarball:
+  # Template for the upstream release tarball. Workflow cells that need to
+  # mine TRT-LLM source files (the static miner + introspector) read it via
+  # `yq`, then substitute `{version}` with `library.current_version`. Single
+  # locus to update if NVIDIA changes their tag scheme. See #532.
+  url_template: "https://github.com/NVIDIA/TensorRT-LLM/archive/refs/tags/v{version}.tar.gz"
+miner_pins:
+  static: ">=0.21.0,<0.22.0"
+  dynamic: ">=0.21.0,<0.22.0"
+  discovery: ">=0.21.0,<0.22.0"
+artefact_paths:
+  engine_invariants: src/llenergymeasure/engines/tensorrt/invariants.proposed.yaml
+  validated_invariants: src/llenergymeasure/engines/tensorrt/invariants.validated.yaml
+  discovered_schemas: src/llenergymeasure/engines/tensorrt/schema.discovered.json
+last_probe:
+  verdict: pass
+  version_inside_envelope: true
+  fingerprint: "5126812b572055f3f9d5b1c0f1e297ce627230f272165837b5fe0699bb9f54fa"
+  fingerprint_drift: []

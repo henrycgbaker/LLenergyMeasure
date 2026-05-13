@@ -1,15 +1,15 @@
-"""Widen ``miner_pins.{producer}`` SpecifierSet in an engine's SSOT.
+"""Widen ``miner_pins.{producer}`` SpecifierSet in an engine's current.yaml.
 
 Helper for the ``/approve-reuse`` slash-command workflow. Reads the
-per-engine SSOT (``engine_versions/{engine}.yaml``), inspects the current
+per-engine current.yaml (``engine_versions/{engine}/current.yaml``), inspects the current
 ``library.current_version`` and the ``miner_pins.{ssot_key}`` SpecifierSet
 for the requested producer, and widens the SpecifierSet so the bumped
 version falls inside the envelope.
 
 Determinism contract
 --------------------
-For a given (SSOT contents, engine, producer) input, the widening output
-is a pure function of the inputs. Re-running with no change to the SSOT
+For a given (current.yaml contents, engine, producer) input, the widening output
+is a pure function of the inputs. Re-running with no change to the current.yaml
 emits ``changed=false`` and exits 0 without mutating the file. The
 "already widened" short-circuit prevents the workflow from looping when
 the same slash command runs twice.
@@ -62,21 +62,21 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts._probe import _SSOT_PIN_FOR_PRODUCER, ProducerKind  # noqa: E402
-from scripts.engine_miners._ssot import ssot_path  # noqa: E402
+from scripts.engine_producers._current import current_path  # noqa: E402
 
 
 def _widen_range_string(existing: str, version: Version) -> str:
     """Return a ``>=A,<B``-shaped range string that includes ``version``.
 
     Recognised shape: ``>=A,<B`` (the convention in every
-    ``engine_versions/*.yaml`` miner_pin today). When ``version >= B``,
+    ``engine_versions/<engine>/current.yaml`` miner_pin today). When ``version >= B``,
     the upper bound is widened to the next minor above ``version``
     (e.g. ``4.58.0`` -> ``<4.59``).
 
     Falls back to appending ``,<=current_version`` for unrecognised
     shapes - loud-but-functional; the workflow will still commit a
     deterministic result. The returned string preserves the order
-    callers expect to see in the SSOT (lower bound first).
+    callers expect to see in the current.yaml (lower bound first).
     """
     parts = [p.strip() for p in existing.split(",") if p.strip()]
     lower: str | None = None
@@ -171,13 +171,13 @@ def widen(*, engine: str, producer: ProducerKind) -> int:
         return 2
 
     pin_key = _SSOT_PIN_FOR_PRODUCER[producer]
-    path = ssot_path(engine)
+    path = current_path(engine)
     text = path.read_text()
 
     # Parse for value extraction only; never write the parsed dict back.
     data = yaml.safe_load(text)
     if not isinstance(data, dict):
-        print(f"SSOT at {path} is not a mapping.", file=sys.stderr)
+        print(f"current.yaml at {path} is not a mapping.", file=sys.stderr)
         return 2
 
     library = data.get("library") or {}
@@ -239,13 +239,13 @@ def widen(*, engine: str, producer: ProducerKind) -> int:
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="scripts.widen_miner_pin",
-        description="Widen miner_pins.{producer} SpecifierSet in an engine SSOT.",
+        description="Widen miner_pins.{producer} SpecifierSet in an engine current.yaml.",
     )
     parser.add_argument(
         "--engine",
         required=True,
         choices=("transformers", "vllm", "tensorrt"),
-        help="Engine whose SSOT to mutate.",
+        help="Engine whose current.yaml to mutate.",
     )
     parser.add_argument(
         "--producer",

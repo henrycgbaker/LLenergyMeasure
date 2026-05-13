@@ -34,7 +34,7 @@ flowchart TD
     gate -->|red| pr
 ```
 
-1. **PR trigger.** `engine-pipeline.yml` fires when a PR touches any of the path-filter inputs: `engine_versions/transformers.yaml`, `docker/Dockerfile.transformers`, or `.github/workflows/engine-pipeline.yml`.
+1. **PR trigger.** `engine-pipeline.yml` fires when a PR touches any of the path-filter inputs: `engine_versions/transformers/current.yaml`, `docker/Dockerfile.transformers`, or `.github/workflows/engine-pipeline.yml`.
 2. **build-transformers.** Builds the transformers runtime image. Cache hits land in ~10-15 min; cold FA3 builds ~60-90 min. Pushes to `ghcr.io/<repo>/transformers-cache:transformers-<VER>`.
 3. **invariants-transformers + schemas-transformers cells.** Orchestrator's `needs:` graph fires these on build success. Each cell pulls the transformers-cache image, runs probe -> mine/introspect -> validate, and uploads a writeback artefact.
 4. **Probe + CI verdict.** A probe failure turns CI red. The `accept-probe-fail` PR label bypasses the gate for known-drift cases (admin escalation; see [#547](https://github.com/henrycgbaker/llenergymeasure/issues/547)).
@@ -53,7 +53,7 @@ The diagram captures the high-level flow; per-step detail follows below.
 ```mermaid
 flowchart TD
     renovate[Renovate scans upstream releases<br/>on configured schedule]
-    bump[Custom regex manager bumps SSOT<br/>engine_versions/&lt;engine&gt;.yaml + Dockerfile ARG]
+    bump[Custom regex manager bumps SSOT<br/>engine_versions/engine_versions/&lt;engine&gt;.yamllt;engineengine_versions/&lt;engine&gt;.yamlgt;/current.yaml + Dockerfile ARG]
     pr[Renovate PR opens<br/>fix&#40;deps&#41;: bump vllm to 0.10.2]
 
     renovate --> bump --> pr
@@ -77,7 +77,7 @@ flowchart TD
 
 #### Trigger contract
 
-- **Renovate.** Scans upstream library releases on the configured schedule. Custom regex manager bumps two file targets together: `engine_versions/{engine}.yaml:library.current_version` (the SSOT, canonical) and `docker/Dockerfile.{engine}` ARG (derived, auto-templated from SSOT).
+- **Renovate.** Scans upstream library releases on the configured schedule. Custom regex manager bumps two file targets together: `engine_versions/{engine}/current.yaml:library.current_version` (the SSOT, canonical) and `docker/Dockerfile.{engine}` ARG (derived, auto-templated from SSOT).
 - **Path-filtered fan-out.** When Renovate's PR opens, paths-filter routes the change to two workflows in parallel: the engine-invariants pipeline and the engine-schemas pipeline.
 
 #### engine-invariants cell (per-engine matrix)
@@ -97,7 +97,7 @@ Layers over: invariant-miner + invalidity-miner + lift modules + validation-CI g
 Layers over: parameter-discovery + typed-schema-discovery.
 
 1. **PROBE** - inline `python -m scripts._probe --producer schemas`; verdict `pass` or `fail`.
-2. **DISCOVER** (only if probe passes) - `engine_introspectors` writes `src/llenergymeasure/config/discovered_schemas/{engine}/schema.discovered.json`.
+2. **DISCOVER** (only if probe passes) - `engine_producers` writes `src/llenergymeasure/config/discovered_schemas/{engine}/schema.discovered.json`.
 3. **DIFF vs HEAD**.
 4. **REGENERATE** `docs/reference/engines/curation-{engine}.md` (Parameters section - fact base for the human curator; pre-existing behaviour preserved).
 5. **COMMENT + LABEL** (suppress on empty).
@@ -123,7 +123,7 @@ git add src/llenergymeasure/engines/{engine}/invariants.proposed.yaml
         docs/reference/engines/curation-{engine}.md
         docs/reference/engines/invariants-{engine}.md
         engine_versions/{engine}.compat.json
-        engine_versions/{engine}.yaml   # only if /approve-reuse fired
+        engine_versions/{engine}/current.yaml   # only if /approve-reuse fired
 git commit && git push --force-with-lease
 ```
 
@@ -198,9 +198,9 @@ flowchart TD
     label --> needfollowup[Route 1 or 2 must follow before merge]
 ```
 
-**Route 1 - Patch producer code.** The dev edits `scripts/engine_miners/{engine}_*_miner.py` or `scripts/engine_introspectors/{engine}_introspector.py` to fix the broken landmark (e.g. follow an upstream rename). Pushing the commit re-runs the workflow; the probe re-runs; if it passes, downstream stages proceed.
+**Route 1 - Patch producer code.** The dev edits `scripts/engine_producers/{engine}_*_miner.py` or `scripts/engine_producers/{engine}_introspector.py` to fix the broken landmark (e.g. follow an upstream rename). Pushing the commit re-runs the workflow; the probe re-runs; if it passes, downstream stages proceed.
 
-**Route 2 - Approve reuse via slash command.** The dev posts `@llem-ci-bot /approve-reuse <engine> <producer>` as a PR comment. Producer is one of `{invariants, schemas}` (per-producer granularity - vllm invariants might be reusable while vllm schemas are not). `approve-reuse-bot.yml` is the `issue_comment: created` listener; it validates the dev's approval rights, updates `engine_versions/{engine}.yaml` `miner_pins.{producer}` to widen the `SpecifierSet` to include the bumped version, and commits the SSOT change via the llem-ci-bot App token (cascades; `GITHUB_TOKEN` would not). The probe re-runs against the widened range; the verdict flips to PASS and downstream stages proceed.
+**Route 2 - Approve reuse via slash command.** The dev posts `@llem-ci-bot /approve-reuse <engine> <producer>` as a PR comment. Producer is one of `{invariants, schemas}` (per-producer granularity - vllm invariants might be reusable while vllm schemas are not). `approve-reuse-bot.yml` is the `issue_comment: created` listener; it validates the dev's approval rights, updates `engine_versions/{engine}/current.yaml` `miner_pins.{producer}` to widen the `SpecifierSet` to include the bumped version, and commits the SSOT change via the llem-ci-bot App token (cascades; `GITHUB_TOKEN` would not). The probe re-runs against the widened range; the verdict flips to PASS and downstream stages proceed.
 
 **Route 3 - Escalate / block.** The dev applies the `probe-blocked` label. Renovate stops retrying this bump until the label is removed; route 1 or 2 must follow before merge.
 

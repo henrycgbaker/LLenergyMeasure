@@ -55,14 +55,9 @@ packages = ["src/llenergymeasure"]
 # schema.discovered.json}) ships automatically in the wheel - no force-include
 # needed (and adding one creates duplicates).
 #
-# Exclude the per-version machinery archive: it's CI-time tooling for
-# probe/mine reproducibility, not runtime. The import-linter contract
-# already forbids runtime layers from importing it; this exclude keeps
-# the same boundary at wheel-build time so end users don't pay for ~MB of
-# historical mining data they cannot use.
-exclude = [
-    "src/llenergymeasure/_engine_archive/**",
-]
+# The per-version machinery archive now lives at the repo root under
+# engine_versions/ (outside src/), so it is automatically excluded from the
+# wheel - no explicit exclude needed.
 
 [tool.ruff]
 line-length = 100
@@ -135,7 +130,7 @@ exclude_lines = [
 show_missing = true
 
 [tool.importlinter]
-root_packages = ["llenergymeasure"]
+root_packages = ["llenergymeasure", "engine_versions"]
 include_external_packages = false
 exclude_type_checking_imports = true
 unmatched_ignore_imports_alerting = "warn"
@@ -153,7 +148,7 @@ layers = [
     "llenergymeasure.infra",
     "llenergymeasure.device",
     "llenergymeasure.config | llenergymeasure.domain",
-    "llenergymeasure.utils | llenergymeasure._engine_archive",
+    "llenergymeasure.utils",
 ]
 ignore_imports = [
     # Phase 50 M4: config.loader.load_study_config invokes resolve_library_effective
@@ -220,7 +215,7 @@ ignore_imports = [
 
 [[tool.importlinter.contracts]]
 id = "engine-archive-tooling-only"
-name = "_engine_archive is for CI-time tooling; runtime layers must not import it"
+name = "engine_versions is for CI-time tooling; runtime layers must not import it"
 type = "forbidden"
 source_modules = [
     "llenergymeasure.cli",
@@ -238,4 +233,4 @@ source_modules = [
     "llenergymeasure.domain",
     "llenergymeasure.utils",
 ]
-forbidden_modules = ["llenergymeasure._engine_archive"]
+forbidden_modules = ["engine_versions"]

@@ -48,7 +48,7 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
 
     # Single-field invariants - at least one invariant must touch each path.
     # Scope reflects the regenerated canonical corpus produced by
-    # ``scripts/engine_miners/build_corpus.py`` with the validation gate.
+    # ``scripts/engine_producers/build_corpus.py`` with the validation gate.
     # Adding a path here means: an invariant for that field must survive validation
     # against the pinned engine library (see ``engine_version``
     # in the corpus envelope). If a path drops out, investigate WHY (real
@@ -138,7 +138,7 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
     manual = [invariant.id for invariant in invariants if invariant.added_by == "manual_seed"]
     assert not manual, (
         f"corpus contains {len(manual)} hand-seeded invariants; corpus must be "
-        f"machine-extracted (run scripts/engine_miners/build_corpus.py): {manual}"
+        f"machine-extracted (run scripts/engine_producers/build_corpus.py): {manual}"
     )
 
 

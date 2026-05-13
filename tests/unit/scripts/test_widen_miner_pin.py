@@ -57,13 +57,13 @@ def _seed_ssot(tmp_path: Path, engine: str, body: str) -> Path:
 
 @pytest.fixture()
 def fake_ssot(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    """Redirect ``widen_miner_pin.ssot_path`` to a temporary SSOT copy."""
+    """Redirect ``widen_miner_pin.current_path`` to a temporary SSOT copy."""
     target = _seed_ssot(tmp_path, "transformers", _BASE_SSOT)
 
     def _fake_path(engine: str) -> Path:
         return tmp_path / f"{engine}.yaml"
 
-    monkeypatch.setattr(widen_miner_pin, "ssot_path", _fake_path)
+    monkeypatch.setattr(widen_miner_pin, "current_path", _fake_path)
     return target
 
 
@@ -97,7 +97,7 @@ def test_version_already_inside_envelope_is_noop(
     """Bumped version inside the existing range -> no file mutation."""
     body = _BASE_SSOT.replace('static: ">=4.56,<4.57"', 'static: ">=4.56,<4.99"')
     target = _seed_ssot(tmp_path, "transformers", body)
-    monkeypatch.setattr(widen_miner_pin, "ssot_path", lambda _e: target)
+    monkeypatch.setattr(widen_miner_pin, "current_path", lambda _e: target)
     monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
 
     before = target.read_text()
@@ -151,7 +151,7 @@ def test_emits_changed_false_when_noop(monkeypatch: pytest.MonkeyPatch, tmp_path
     """No-op widening still emits ``changed=false`` for the workflow to read."""
     body = _BASE_SSOT.replace('static: ">=4.56,<4.57"', 'static: ">=4.56,<4.99"')
     target = _seed_ssot(tmp_path, "transformers", body)
-    monkeypatch.setattr(widen_miner_pin, "ssot_path", lambda _e: target)
+    monkeypatch.setattr(widen_miner_pin, "current_path", lambda _e: target)
 
     output_file = tmp_path / "gh-output"
     output_file.touch()
@@ -166,7 +166,7 @@ def test_missing_miner_pin_key_fails_loud(monkeypatch: pytest.MonkeyPatch, tmp_p
     """Missing SSOT ``miner_pins.<key>`` -> non-zero exit, no mutation."""
     body = _BASE_SSOT.replace('  static: ">=4.56,<4.57"\n', "")
     target = _seed_ssot(tmp_path, "transformers", body)
-    monkeypatch.setattr(widen_miner_pin, "ssot_path", lambda _e: target)
+    monkeypatch.setattr(widen_miner_pin, "current_path", lambda _e: target)
     monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
 
     rc = widen_miner_pin.widen(engine="transformers", producer="invariants")
@@ -179,7 +179,7 @@ def test_widening_below_lower_bound_refuses_to_commit(
     """Bumped version below the lower bound -> refuse rather than emit a wrong widening."""
     body = _BASE_SSOT.replace('current_version: "4.57.3"', 'current_version: "4.50.0"')
     target = _seed_ssot(tmp_path, "transformers", body)
-    monkeypatch.setattr(widen_miner_pin, "ssot_path", lambda _e: target)
+    monkeypatch.setattr(widen_miner_pin, "current_path", lambda _e: target)
     monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
 
     before = target.read_text()

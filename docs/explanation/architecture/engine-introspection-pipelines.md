@@ -88,9 +88,9 @@ flowchart TD
 ```
 
 The introspector is engine-specific: each engine has a module under
-`scripts/engine_introspectors/` that knows how to walk its own config
+`scripts/engine_producers/` that knows how to walk its own config
 surface. The shared envelope and helpers live in
-`scripts/engine_introspectors/_common.py`.
+`scripts/engine_producers/_common.py`.
 
 ### Determinism
 
@@ -391,7 +391,7 @@ scientific-computing trace patterns not seen in engine config classes.
 ## Renovate-driven refresh loop (parallel re-fire) {#renovate-driven-refresh-loop}
 
 Library version bumps trigger both pipelines automatically. Renovate
-watches the engine SSOT (`engine_versions/<engine>.yaml`) plus the
+watches the engine SSOT (`engine_versions/<engine>/current.yaml`) plus the
 `docker/Dockerfile.*` files and opens a PR bumping the relevant version
 fields. The PR fans out to both cells in parallel; each cell probes,
 then runs its producer, then writes its artefact. The bot commits the
@@ -407,7 +407,7 @@ sequenceDiagram
     participant Bot as llem-ci-bot
     participant Reviewer
 
-    Renovate->>CI: bump SSOT (engine_versions/<engine>.yaml)
+    Renovate->>CI: bump SSOT (engine_versions/<engine>/current.yaml)
     activate CI
     CI->>Schema: fan-out (paths-filter)
     CI->>Inv: fan-out (paths-filter)
@@ -448,7 +448,7 @@ not a guideline.
 
 ```python
 # Every *_miner.py must resolve its envelope from the engine's SSOT:
-from scripts.engine_miners._ssot import load_miner_pin
+from scripts.engine_producers._ssot import load_miner_pin
 
 _envelope = load_miner_pin("transformers", "static")  # SpecifierSet
 
@@ -460,7 +460,7 @@ check_installed_version(
 )
 ```
 
-The envelope itself lives in `engine_versions/{engine}.yaml` under
+The envelope itself lives in `engine_versions/{engine}/current.yaml` under
 `miner_pins.{static|dynamic|discovery}` - one pin per producer role.
 There is no per-module `TESTED_AGAINST_VERSIONS` constant; Renovate
 updates the SSOT and every producer reads through `load_miner_pin`.

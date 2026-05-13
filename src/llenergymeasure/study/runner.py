@@ -1652,14 +1652,14 @@ class StudyRunner:
         # probe_status is MISMATCH
         error = VersionMismatchError(
             f"Docker image '{image}' has {engine_name} library version "
-            f"{probed!r} but engine_versions/{engine_name}.yaml "
+            f"{probed!r} but engine_versions/{engine_name}/current.yaml "
             f"::library.current_version is {expected!r}. The vendored "
             f"invariants + discovered schemas in "
             f"src/llenergymeasure/engines/{engine_name}/ were generated "
             f"against {expected!r} and may not be compatible with "
             f"{probed!r}.\n\n"
             f"To fix:\n"
-            f"  Update engine_versions/{engine_name}.yaml to {probed!r}, "
+            f"  Update engine_versions/{engine_name}/current.yaml to {probed!r}, "
             f"or pull an image matching {expected!r}.\n\n"
             f"If you're certain the skew is harmless, set "
             f"{ENV_SKIP_IMAGE_CHECK}=1."

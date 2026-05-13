@@ -10,7 +10,7 @@ This document is the practitioner's guide to adding invariant miner support for 
 
 1. Read [miner-pipeline.md](/contributing/miner-pipeline) to understand the static miner / dynamic miner / lift module split.
 2. Read the [corpus format reference](/reference/invariants-corpus-format) to understand what rules look like.
-3. Review `scripts/engine_miners/transformers_static_miner.py` and `scripts/engine_miners/transformers_dynamic_miner.py` as the gold standard. The comments in those files contain important design decisions.
+3. Review `scripts/engine_producers/transformers_static_miner.py` and `scripts/engine_producers/transformers_dynamic_miner.py` as the gold standard. The comments in those files contain important design decisions.
 
 ---
 
@@ -32,14 +32,14 @@ Before writing any code, answer these questions:
 
 ## Step 1: Add the fail-loud import contract
 
-Create `scripts/engine_miners/{engine}_miner.py` (the orchestration entry point). The very first thing it must do:
+Create `scripts/engine_producers/{engine}_miner.py` (the orchestration entry point). The very first thing it must do:
 
 ```python
 import importlib.metadata
-from scripts.engine_miners._base import check_installed_version, MinerLandmarkMissingError
-from scripts.engine_miners._ssot import load_miner_pin
+from scripts.engine_producers._base import check_installed_version, MinerLandmarkMissingError
+from scripts.engine_producers._ssot import load_miner_pin
 
-# Pin source-of-truth lives in ``engine_versions/{engine}.yaml`` under
+# Pin source-of-truth lives in ``engine_versions/{engine}/current.yaml`` under
 # ``miner_pins.{static|dynamic|discovery}``. Pick the producer matching this
 # miner's role; ``load_miner_pin`` returns a ``packaging.SpecifierSet``.
 # Keep the upper bound tight (e.g. <4.60 not <99.0) so
@@ -57,7 +57,7 @@ Then declare landmark checks for every class or method the miner will walk:
 ```python
 import ast
 import inspect
-from scripts.engine_miners._base import find_class, find_method
+from scripts.engine_producers._base import find_class, find_method
 
 from enginelib.config import SomeConfigClass
 
@@ -85,7 +85,7 @@ All three lift modules expose a single function named `lift` with the same signa
 
 ```python
 from datetime import date
-from scripts.engine_miners._pydantic_lift import lift as lift_pydantic
+from scripts.engine_producers._pydantic_lift import lift as lift_pydantic
 from enginelib.config import CacheConfig, SchedulerConfig
 
 TODAY = date.today().isoformat()
@@ -107,7 +107,7 @@ The lift emits one invariant per `Gt`, `Ge`, `Lt`, `Le`, `MultipleOf`, `MinLen`,
 ### If the engine uses msgspec
 
 ```python
-from scripts.engine_miners._msgspec_lift import lift as lift_msgspec
+from scripts.engine_producers._msgspec_lift import lift as lift_msgspec
 from enginelib.config import SamplingParams
 
 def mine_msgspec_invariants():
@@ -124,7 +124,7 @@ Note: if the class ships zero `Meta(ge=...)` annotations (common for msgspec cla
 ### If the engine uses stdlib dataclasses
 
 ```python
-from scripts.engine_miners._dataclass_lift import lift as lift_dataclass
+from scripts.engine_producers._dataclass_lift import lift as lift_dataclass
 from enginelib.config import EngineArgs
 
 def mine_dataclass_invariants():
@@ -142,14 +142,14 @@ The dataclass lift is limited to `Literal[...]` value-allowlist invariants (no n
 
 ## Step 3: Write the static miner
 
-Create `scripts/engine_miners/{engine}_static_miner.py`. The static miner walks the AST of validator methods and emits rules for conditional raises, warnings, and silent normalisations.
+Create `scripts/engine_producers/{engine}_static_miner.py`. The static miner walks the AST of validator methods and emits rules for conditional raises, warnings, and silent normalisations.
 
 ### Pattern: walking a validator method
 
 ```python
 import ast
 import inspect
-from scripts.engine_miners._base import (
+from scripts.engine_producers._base import (
     find_class, find_method, extract_condition_fields,
     filter_condition_references_self,
     ConditionalRaiseDetector, ConditionalSelfAssignDetector,
@@ -224,7 +224,7 @@ Per the transformers static miner's header, per-engine miners currently define t
 
 ## Step 4: Write the dynamic miner (if applicable)
 
-Create `scripts/engine_miners/{engine}_dynamic_miner.py` if the engine's constructors raise on invalid inputs.
+Create `scripts/engine_producers/{engine}_dynamic_miner.py` if the engine's constructors raise on invalid inputs.
 
 **Skip this step if:** probing the engine's constructors yields zero raises. This is the case for TRT-LLM, where `TrtLlmArgs(**kwargs)` is extremely permissive at construction time; constraints are enforced in validator methods (covered by the static miner) or at build time.
 
@@ -314,7 +314,7 @@ def infer_predicates(rows: list[tuple[dict, str | None]]) -> list[InvariantCandi
 
 ## Step 5: Write the corpus orchestration entry
 
-`scripts/engine_miners/{engine}_miner.py` is the main entry point:
+`scripts/engine_producers/{engine}_miner.py` is the main entry point:
 
 ```python
 def mine() -> list[InvariantCandidate]:
@@ -323,18 +323,18 @@ def mine() -> list[InvariantCandidate]:
     candidates.extend(mine_dataclass_invariants())
 
     # Static miner
-    from scripts.engine_miners.myengine_static_miner import mine as static_mine
+    from scripts.engine_producers.myengine_static_miner import mine as static_mine
     candidates.extend(static_mine())
 
     # Dynamic miner (if applicable)
-    from scripts.engine_miners.myengine_dynamic_miner import mine as dynamic_mine
+    from scripts.engine_producers.myengine_dynamic_miner import mine as dynamic_mine
     candidates.extend(dynamic_mine())
 
     return candidates
 
 if __name__ == "__main__":
     import yaml
-    from scripts.engine_miners._base import candidate_to_dict
+    from scripts.engine_producers._base import candidate_to_dict
     results = mine()
     staging = {
         "schema_version": "1.0.0",
@@ -353,10 +353,10 @@ if __name__ == "__main__":
 Each per-engine miner ships with parametrised tests:
 
 ```python
-# tests/unit/scripts/engine_miners/test_myengine_miner.py
+# tests/unit/scripts/engine_producers/test_myengine_miner.py
 
 import pytest
-from scripts.engine_miners.myengine_miner import CLUSTERS
+from scripts.engine_producers.myengine_miner import CLUSTERS
 
 @pytest.mark.parametrize("cluster", CLUSTERS, ids=lambda c: c.name)
 def test_cluster_probes_without_crashing(cluster):
@@ -367,14 +367,14 @@ def test_cluster_probes_without_crashing(cluster):
 def test_version_envelope_resolves():
     """The miner pin loaded from the engine SSOT must be a non-empty SpecifierSet."""
     from packaging.specifiers import SpecifierSet
-    from scripts.engine_miners._ssot import load_miner_pin
+    from scripts.engine_producers._ssot import load_miner_pin
     envelope = load_miner_pin("myengine", "static")
     assert isinstance(envelope, SpecifierSet)
     assert str(envelope) != ""
 
 def test_landmark_checks_raise_on_missing():
     """find_class returning None must raise MinerLandmarkMissingError."""
-    from scripts.engine_miners._base import find_class, MinerLandmarkMissingError
+    from scripts.engine_producers._base import find_class, MinerLandmarkMissingError
     import ast
     module = ast.parse("class Unrelated: pass")
     cls = find_class(module, "SomeConfigClass")
@@ -420,7 +420,7 @@ def test_landmark_checks_raise_on_missing():
 3. The validate step runs inside the engine's container in the same job as the miner - no separate validation workflow to update.
 
 4. Add a Renovate `packageRule` so library bumps trigger the appropriate
-   workflow via the `engine_versions/{engine}.yaml` path filter (or, for
+   workflow via the `engine_versions/{engine}/current.yaml` path filter (or, for
    the first-party-image pattern, via `engine-pipeline.yml`'s filter -
    downstream `publish-engine-image.yml` and the workflow_run-gated cells fire
    automatically on its success).
@@ -432,10 +432,10 @@ def test_landmark_checks_raise_on_missing():
 Run the miner locally (inside the engine's Docker container if CUDA is required):
 
 ```bash
-python scripts/engine_miners/myengine_miner.py
+python scripts/engine_producers/myengine_miner.py
 # Writes src/llenergymeasure/engines/_staging/myengine_miner.yaml
 
-python scripts/engine_miners/build_corpus.py --engine myengine
+python scripts/engine_producers/build_corpus.py --engine myengine
 # Merges staging files, runs validation-CI gate, writes corpus
 
 python scripts/validate_invariants.py \
@@ -511,7 +511,7 @@ When Renovate bumps an engine library, the miner pipeline must catch behavioural
 
 The miner pipeline's import-time contract (Step 1 above) raises hard CI errors when the library has drifted out of the envelope the miner was written against:
 
-- **`MinerVersionMismatchError`** - installed library version is outside the miner's pinned envelope (read from `engine_versions/{engine}.yaml miner_pins.{producer}` via `load_miner_pin`). Forces the maintainer to read release notes and either widen the envelope or update the miner to match new validator semantics.
+- **`MinerVersionMismatchError`** - installed library version is outside the miner's pinned envelope (read from `engine_versions/{engine}/current.yaml miner_pins.{producer}` via `load_miner_pin`). Forces the maintainer to read release notes and either widen the envelope or update the miner to match new validator semantics.
   - Example: a vLLM version outside an SSOT pin of `>=0.17,<0.18` raises `MinerVersionMismatchError` at import. Forces the maintainer to update the SSOT envelope or upgrade the miner.
 
 - **`MinerLandmarkMissingError`** - an expected class or method symbol is no longer present in the library source. Catches refactors where a class was renamed, moved to a different module, or an API was deprecated and removed.
@@ -565,7 +565,7 @@ The fail-loud envelope and the YAML diff together cover the failure modes that t
 
 | Mistake | Consequence | Fix |
 |---------|-------------|-----|
-| Not pinning the miner envelope in `engine_versions/{engine}.yaml` | Miner runs against wrong library version silently | Set `miner_pins.{static\|dynamic\|discovery}` in the SSOT and call `check_installed_version(load_miner_pin(...))` at import |
+| Not pinning the miner envelope in `engine_versions/{engine}/current.yaml` | Miner runs against wrong library version silently | Set `miner_pins.{static\|dynamic\|discovery}` in the SSOT and call `check_installed_version(load_miner_pin(...))` at import |
 | Catching `ImportError` on landmark imports | Silent degradation (returns `[]` on failure) | Let `ImportError` propagate; or raise `MinerLandmarkMissingError` explicitly |
 | Cartesian-only probing with large clusters | Exponential probe count; CI timeouts | Add Hypothesis supplement for clusters > 200 combinations |
 | Adding `manual_seed` rules for automatable constraints | Pipeline-failure debt | Extend the miner instead |
@@ -580,6 +580,6 @@ The fail-loud envelope and the YAML diff together cover the failure modes that t
 - [invariants-corpus-format.md](/reference/invariants-corpus-format) - corpus format
 - [parameter-discovery.md](/explanation/architecture/parameter-discovery) - runtime validation
 - [architecture-overview.md](/explanation/architecture/architecture-overview) - system overview
-- `scripts/engine_miners/transformers_static_miner.py` - gold-standard static miner
-- `scripts/engine_miners/transformers_dynamic_miner.py` - gold-standard dynamic miner
-- `scripts/engine_miners/_base.py` - shared infrastructure
+- `scripts/engine_producers/transformers_static_miner.py` - gold-standard static miner
+- `scripts/engine_producers/transformers_dynamic_miner.py` - gold-standard dynamic miner
+- `scripts/engine_producers/_base.py` - shared infrastructure

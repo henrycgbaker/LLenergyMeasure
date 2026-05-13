@@ -4,9 +4,9 @@
 For each engine, produces a Markdown file with a four-column table showing
 every discovered parameter and whether llem's Pydantic layer curates it.
 
-The header surfaces a delta-vs-previous block. The previous SSOT version
+The header surfaces a delta-vs-previous block. The previous current.yaml version
 is read from ``engine_versions/{engine}.yaml``'s
-``last_probe.version_inside_envelope`` field if present; on a fresh SSOT
+``last_probe.version_inside_envelope`` field if present; on a fresh current.yaml
 where ``last_probe.verdict`` is ``unrun`` the block degrades gracefully
 to a "deferred until first probe-pass cycle" placeholder. HEAD~1 is
 deliberately NOT consulted because it can be a bot writeback commit,
@@ -32,7 +32,7 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 from llenergymeasure.config.introspection import get_engine_params  # noqa: E402
 from llenergymeasure.config.schema_loader import SchemaLoader  # noqa: E402
 from llenergymeasure.config.ssot import Engine  # noqa: E402
-from scripts.engine_miners._ssot import ssot_path  # noqa: E402
+from scripts.engine_producers._current import current_path  # noqa: E402
 
 ENGINES = tuple(e.value for e in Engine)
 
@@ -50,17 +50,17 @@ def _get_curated_names(engine: str) -> set[str]:
 
 
 def _read_previous_ssot_version(engine: str) -> str | None:
-    """Return the previous library version recorded in the SSOT, or ``None``.
+    """Return the previous library version recorded in the current.yaml, or ``None``.
 
     Reads ``engine_versions/{engine}.yaml`` and returns the value of
-    ``last_probe.version_inside_envelope`` only when (a) the SSOT file
+    ``last_probe.version_inside_envelope`` only when (a) the current.yaml file
     exists, (b) ``last_probe.verdict`` is one of the post-run verdicts
     (``pass``/``fail``), and (c) the recorded version differs from the
     current one. On any other shape (``unrun``, missing, malformed) the
     delta block degrades to a deferred placeholder rather than fabricate
     a comparison.
     """
-    path = ssot_path(engine)
+    path = current_path(engine)
     if not path.is_file():
         return None
     try:
@@ -83,7 +83,7 @@ def _read_previous_ssot_version(engine: str) -> str | None:
 def _render_delta_block(engine: str, current_version: str) -> list[str]:
     """Render the "Delta vs previous" header block.
 
-    On a fresh SSOT (``last_probe.verdict: unrun``) this degrades to an
+    On a fresh current.yaml (``last_probe.verdict: unrun``) this degrades to an
     honest placeholder rather than fabricating a comparison from
     HEAD~1 (which can be a bot writeback commit).
     """

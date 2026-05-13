@@ -1,0 +1,33 @@
+# Per-engine version-bundle SSOT for vllm.
+#
+# Renovate updates `library.current_version` on each upstream release;
+# every other artefact (Dockerfile ARG, miner pin reads, validation gates)
+# is derived from this file. See
+# `.product/designs/engine-coupling-architecture-2026-04-28.md` §4.
+#
+# `miner_pins.*` now bracket the pinned `library.current_version` since
+# producer machinery is vendored per-version under
+# `engine_versions/vllm/v<safe>/producers/`. Each version archive's miner
+# is tuned for that specific library surface.
+schema_version: 1
+engine: vllm
+library:
+  pep503_name: vllm
+  current_version: "0.7.3"
+  current_commit_sha: null
+image:
+  base_image_ref: "vllm/vllm-openai:v0.7.3"
+  llem_image_ref: null
+miner_pins:
+  static: ">=0.7.3,<0.8"
+  dynamic: ">=0.7.3,<0.8"
+  discovery: ">=0.7.3,<0.8"
+artefact_paths:
+  engine_invariants: src/llenergymeasure/engines/vllm/invariants.proposed.yaml
+  validated_invariants: src/llenergymeasure/engines/vllm/invariants.validated.yaml
+  discovered_schemas: src/llenergymeasure/engines/vllm/schema.discovered.json
+last_probe:
+  verdict: pass
+  version_inside_envelope: true
+  fingerprint: "c162e9d8bd82bd20dede4fabfc6c2a08ae2c460989c12ade558c48310b4b6c1c"
+  fingerprint_drift: []

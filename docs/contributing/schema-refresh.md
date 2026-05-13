@@ -41,7 +41,7 @@ For local refresh against an installed engine:
 ./scripts/refresh_discovered_schemas.sh <engine>
 ```
 
-The script runs `python -m scripts.engine_introspectors --engine <engine>`
+The script runs `python -m scripts.engine_producers._schemas_runner --engine <engine>`
 inside the matching container and writes the result to
 `src/llenergymeasure/engines/<engine>/schema.discovered.json`.
 
@@ -95,9 +95,9 @@ and [extending miners](/contributing/extending-miners).
 
 The introspection-pipeline-specific surface is small:
 
-1. Add a per-engine module under `scripts/engine_introspectors/`,
+1. Add a per-engine module under `scripts/engine_producers/`,
    mirroring an existing `*_introspector.py`, and register it in
-   `scripts/engine_introspectors/__init__.py`.
+   `scripts/engine_producers/__init__.py`.
 2. Add a case to `scripts/refresh_discovered_schemas.sh`.
 3. Run discovery once: `./scripts/refresh_discovered_schemas.sh <engine>`.
 4. Add a Renovate `packageRule` in `renovate.json`.
