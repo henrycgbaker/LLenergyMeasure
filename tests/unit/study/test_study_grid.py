@@ -31,6 +31,7 @@ from llenergymeasure.config.models import (
     ExperimentConfig,
     StudyConfig,
 )
+from llenergymeasure.config.ssot import Engine
 from llenergymeasure.utils.exceptions import ConfigError
 
 # =============================================================================
@@ -708,14 +709,14 @@ class TestFormatPreflightSummary:
             {
                 "raw_config": {"engine": "transformers", "transformers": {"dtype": "float32"}},
                 "reason": "cross-validation failed",
-                "short_label": "pytorch, float32",
+                "short_label": f"{Engine.TRANSFORMERS}, float32",
                 "errors": [],
             }
         ]
         sc = _make_study_config(n_configs=3, n_cycles=1, skipped_configs=skipped)
         summary = format_preflight_summary(sc)
         assert "Skipping 1/" in summary
-        assert "pytorch, float32" in summary
+        assert f"{Engine.TRANSFORMERS}, float32" in summary
         assert "cross-validation failed" in summary
 
     def test_high_skip_rate_warning(self):
@@ -747,7 +748,7 @@ class TestFormatPreflightSummary:
             {
                 "raw_config": {"engine": "transformers", "transformers": {"dtype": "float32"}},
                 "reason": "validation error",
-                "short_label": "pytorch, float32",
+                "short_label": f"{Engine.TRANSFORMERS}, float32",
                 "errors": [],
             }
         ]
