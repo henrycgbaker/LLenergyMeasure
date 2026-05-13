@@ -95,7 +95,7 @@ from llenergymeasure.harness.state import ExperimentPhase, ExperimentState
 ## Layer constraints
 
 - Layer 3 - may import from layers 0-2
-- Can import from: `config/`, `domain/`, `device/`, `utils/`, `energy/`, `backends/`, `datasets/`, `infra/`
+- Can import from: `config/`, `domain/`, `device/`, `utils/`, `energy/`, `engines/`, `datasets/`, `infra/`
 - Cannot import from: `study/`, `api/`, `cli/`, `results/`
 
 ## Related

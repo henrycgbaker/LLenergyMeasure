@@ -1,0 +1,3 @@
+# Generated lockfiles - collapsed by default in PR diffs, excluded from linguist stats
+uv.lock                    linguist-generated=true
+website/package-lock.json  linguist-generated=true

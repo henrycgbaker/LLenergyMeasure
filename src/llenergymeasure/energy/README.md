@@ -6,7 +6,7 @@ Energy measurement samplers implementing the `EnergySampler` protocol. Layer 2 i
 
 Provides pluggable GPU energy tracking via NVML (default), Zeus, or CodeCarbon. The `select_energy_sampler()` function selects the best available sampler or raises a clear error when an explicit choice is unavailable.
 
-Classes use `*Sampler` suffix to distinguish them from inference backends. The selection function is `select_energy_sampler()`.
+Classes use `*Sampler` suffix to distinguish them from inference engines. The selection function is `select_energy_sampler()`.
 
 ## Modules
 
@@ -83,7 +83,7 @@ resolved internally by the harness. See `docs/energy-measurement.md` for full ra
 
 - Layer 2 - may import from layers 0-1 only
 - Can import from: `config/`, `domain/`, `device/`, `utils/`
-- Cannot import from: `harness/`, `backends/`, `study/`, `api/`, `cli/`, `results/`
+- Cannot import from: `harness/`, `engines/`, `study/`, `api/`, `cli/`, `results/`
 
 ## Related
 

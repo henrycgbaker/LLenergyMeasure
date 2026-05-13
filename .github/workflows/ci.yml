@@ -90,6 +90,18 @@ jobs:
         run: uv run ruff format --check src/ tests/
       - name: Architecture lint
         run: uv run lint-imports
+      - name: Defensive lint - no stale Dockerfile.tensorrt
+        # The pre-PR-509 first-party Dockerfile.tensorrt was deleted in
+        # favour of upstream-direct nvcr.io/nvidia/tensorrt-llm dispatch
+        # plus an entrypoint-prime overlay. A stale local Dockerfile.tensorrt
+        # would cause llenergymeasure:tensorrt builds that link against
+        # the wrong CUDA driver (the cuKernelGetName ABI bug). This guard
+        # fails CI if anyone reintroduces it.
+        run: |
+          if [ -e docker/Dockerfile.tensorrt ]; then
+            echo "::error::docker/Dockerfile.tensorrt is gone for a reason - see version_handshake.py + scripts/container_entrypoint.sh"
+            exit 1
+          fi
 
   type-check:
     needs: filter

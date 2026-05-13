@@ -9,7 +9,7 @@
     "PYTHONUNBUFFERED": "1"
   },
   "initializeCommand": "docker compose build base tensorrt-dev 2>/dev/null || true",
-  "postCreateCommand": "pip install -e '.[tensorrt,dev]' --no-deps && pre-commit install || true",
+  "postCreateCommand": "uv sync --dev && pre-commit install || true",
   "customizations": {
     "vscode": {
       "extensions": [

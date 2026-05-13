@@ -6,7 +6,7 @@
 # entries because there is no first-party image to build.
 #
 # Quick Start:
-#   pip install -e .              # Install llenergymeasure
+#   uv sync                       # Install llenergymeasure + base deps
 #   llem config                   # Check environment
 #   docker compose build transformers  # Build engine image
 #

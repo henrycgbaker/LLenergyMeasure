@@ -9,7 +9,7 @@
     "PYTHONUNBUFFERED": "1"
   },
   "initializeCommand": "docker compose build base vllm-dev 2>/dev/null || true",
-  "postCreateCommand": "pip install -e '.[vllm,dev]' && pre-commit install || true",
+  "postCreateCommand": "uv sync --dev && pre-commit install || true",
   "customizations": {
     "vscode": {
       "extensions": [
