@@ -196,13 +196,13 @@ def test_schema_version_is_semver_with_major_one() -> None:
 # Per-engine LANDMARKS contracts
 # ---------------------------------------------------------------------------
 #
-# The probe primitive (``scripts._probe``) reads ``LANDMARKS`` from each
+# The drift tool (``scripts._drift``) reads ``LANDMARKS`` from each
 # producer module and resolves every dotted path against the installed
 # library; a single missing landmark flips the probe verdict to ``fail``
 # and skips downstream discovery. These tests exercise the same
 # resolution logic for the transformers introspector so a landmark-name
 # drift in upstream transformers is caught at unit-test time rather than
-# only on the next probe run.
+# only on the next drift-tool run.
 
 
 def test_transformers_introspector_landmarks_resolve() -> None:

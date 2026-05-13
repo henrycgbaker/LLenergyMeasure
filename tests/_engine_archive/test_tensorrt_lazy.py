@@ -8,7 +8,7 @@ loaded directly through the dispatcher.
 Mirror style of ``test_dispatcher.py``: keep imports lazy where the
 assertion target is the module attribute, fail loud otherwise. Note the
 miner module name is ``tensorrt_static_invariant_miner`` (not ``tensorrt_miner``) -
-see ``scripts/_probe.py`` ``_PRODUCER_MODULES`` for the canonical mapping.
+see ``scripts/_drift.py`` ``_PRODUCER_MODULES`` for the canonical mapping.
 """
 
 from __future__ import annotations

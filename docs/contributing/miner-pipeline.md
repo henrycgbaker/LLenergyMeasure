@@ -115,7 +115,7 @@ Run inside the container:
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace \
   llenergymeasure:{engine}-{version} \
-  python -m scripts._probe --producer invariants
+  python -m scripts._drift --producer invariants
 ```
 
 ### Validation gate flips a previously-passing rule

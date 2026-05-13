@@ -266,7 +266,7 @@ jobs:
             -e PYTHONDONTWRITEBYTECODE \
             "${ENTRYPOINT_FLAG[@]}" \
             "$IMAGE" \
-            "${CMD_PREFIX[@]}" -m scripts._probe --engine "$ENGINE" --producer invariants \
+            "${CMD_PREFIX[@]}" -m scripts._drift --engine "$ENGINE" --producer invariants \
               --output "/llem-probe-out/probe-${ENGINE}.json"
           VERDICT=$(jq -r '.verdict' "/tmp/llem-probe-out/probe-${ENGINE}.json")
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"

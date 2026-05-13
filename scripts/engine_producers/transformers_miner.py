@@ -69,7 +69,7 @@ from scripts.engine_producers.transformers_dynamic_invariant_miner import (  # n
 )
 
 # Symbols this orchestrator (and its delegated dynamic miner) relies on
-# inside the live ``transformers`` package. Read by ``scripts._probe``
+# inside the live ``transformers`` package. Read by ``scripts._drift``
 # before mining runs; a missing landmark flips the probe verdict to
 # ``fail`` and skips the downstream stages without re-importing here.
 #
@@ -163,7 +163,7 @@ def _check_landmarks() -> tuple[str, str]:
     landmark check cannot drift from the probe's static check. A missing
     landmark raises :class:`MinerLandmarkMissingError`.
     """
-    from scripts._probe import _resolve_landmark
+    from scripts._drift import _resolve_landmark
 
     for landmark in _get_landmarks():
         try:

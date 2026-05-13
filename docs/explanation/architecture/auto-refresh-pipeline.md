@@ -60,7 +60,7 @@ workflow cells:
   (`scripts/engine_producers/`) inside the new engine container. The
   introspector imports the live library and walks its Pydantic models to
   produce a JSON schema of all configurable parameters.
-- `_engine-invariants-cell.yml` - runs the `_probe.py` entry point
+- `_engine-invariants-cell.yml` - runs the `_drift.py` entry point
   (`Mine + validate inside container` step) inside the container. The probe
   dispatches to the engine-specific miner (`scripts/engine_producers/`) which
   extracts validator functions, default values, and invalid-combination rules.

@@ -40,7 +40,7 @@ on:
       - 'scripts/validate_invariants.py'
       - 'scripts/_invariant_validation_common.py'
       - 'scripts/refresh_invariant_rules.sh'
-      - 'scripts/_probe.py'
+      - 'scripts/_drift.py'
       - 'scripts/update_last_probe.py'
       - 'scripts/diff_engine_invariants.py'
       - 'scripts/diff_discovered_schemas.py'

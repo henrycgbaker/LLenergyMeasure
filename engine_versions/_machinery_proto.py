@@ -10,7 +10,7 @@ attributes are typed ``Any`` because per-engine shapes diverge:
   miner and a BNB-focused static miner, so its ``AST_TARGETS`` shape is
   not directly comparable.
 
-The probe (``scripts/_probe.py``) only reads ``LANDMARKS`` from the
+The drift tool (``scripts/_drift.py``) only reads ``LANDMARKS`` from the
 producer module via ``getattr``; the other attributes are consumed by
 the per-engine miners themselves. PR-0 vendors LANDMARKS only;
 AST_TARGETS / WALKER_PATTERNS / INTROSPECTOR_TARGETS are deferred to a
