@@ -1,8 +1,8 @@
-"""Tests for :mod:`scripts.update_last_probe` - the SSOT last_probe writer.
+"""Tests for :mod:`scripts.update_last_probe` - the current.yaml last_probe writer.
 
 The helper is invoked from the engine-coupling probe-writeback workflow:
 it reads a ``ProbeReport`` JSON on stdin and rewrites the four mutable
-fields under ``last_probe:`` in ``engine_versions/{engine}.yaml``. These
+fields under ``last_probe:`` in ``engine_versions/{engine}/current.yaml``. These
 tests pin the determinism contract (idempotent re-runs, byte-identical
 file when nothing changed, line-surgical edit preserving comments and
 quoting) and the GitHub Actions output surface.
@@ -23,8 +23,8 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from scripts import update_last_probe  # noqa: E402
 
-_SEED_SSOT = """\
-# Per-engine version-bundle SSOT for transformers.
+_SEED_CURRENT = """\
+# Per-engine version-bundle current.yaml for transformers.
 #
 # Header comment block must survive every probe-writeback.
 schema_version: 1
@@ -52,7 +52,7 @@ last_probe:
 """
 
 
-def _seed_ssot(tmp_path: Path, engine: str, body: str = _SEED_SSOT) -> Path:
+def _seed_current(tmp_path: Path, engine: str, body: str = _SEED_CURRENT) -> Path:
     """Write ``body`` to ``tmp_path/{engine}.yaml`` and return its path."""
     target = tmp_path / f"{engine}.yaml"
     target.write_text(body)
@@ -61,13 +61,13 @@ def _seed_ssot(tmp_path: Path, engine: str, body: str = _SEED_SSOT) -> Path:
 
 @pytest.fixture()
 def fake_ssot(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    """Redirect ``update_last_probe.ssot_path`` to a temporary SSOT copy."""
-    target = _seed_ssot(tmp_path, "transformers")
+    """Redirect ``update_last_probe.current_path`` to a temporary current.yaml copy."""
+    target = _seed_current(tmp_path, "transformers")
 
     def _fake_path(engine: str) -> Path:
         return tmp_path / f"{engine}.yaml"
 
-    monkeypatch.setattr(update_last_probe, "ssot_path", _fake_path)
+    monkeypatch.setattr(update_last_probe, "current_path", _fake_path)
     return target
 
 
@@ -99,7 +99,7 @@ def _pass_report(
 def test_updates_last_probe_block_from_pass_report(
     fake_ssot: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Fresh ``unrun`` SSOT + ``pass`` report -> all four fields rewritten."""
+    """Fresh ``unrun`` current.yaml + ``pass`` report -> all four fields rewritten."""
     monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
     rc = update_last_probe.update(engine="transformers", report=_pass_report())
     assert rc == 0
@@ -179,7 +179,7 @@ def test_line_surgical_edit_preserves_comments_and_unrelated_lines(
     update_last_probe.update(engine="transformers", report=_pass_report())
     text = fake_ssot.read_text()
     # Header comments preserved.
-    assert text.startswith("# Per-engine version-bundle SSOT for transformers.\n")
+    assert text.startswith("# Per-engine version-bundle current.yaml for transformers.\n")
     assert "# Header comment block must survive every probe-writeback." in text
     # Unrelated quoted scalar untouched.
     assert 'current_version: "4.57.3"' in text
@@ -201,8 +201,8 @@ def test_line_surgical_edit_preserves_comments_and_unrelated_lines(
 
 
 def test_missing_ssot_returns_infra_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """No SSOT for the engine -> exit 2, stderr error envelope."""
-    monkeypatch.setattr(update_last_probe, "ssot_path", lambda name: tmp_path / f"{name}.yaml")
+    """No current.yaml for the engine -> exit 2, stderr error envelope."""
+    monkeypatch.setattr(update_last_probe, "current_path", lambda name: tmp_path / f"{name}.yaml")
     monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
     rc = update_last_probe.update(engine="transformers", report=_pass_report())
     assert rc == 2
@@ -222,10 +222,10 @@ def test_report_missing_required_field_returns_infra_error(
 def test_ssot_without_last_probe_block_returns_infra_error(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """SSOT missing ``last_probe:`` block entirely -> exit 2."""
+    """current.yaml missing ``last_probe:`` block entirely -> exit 2."""
     body = "schema_version: 1\nengine: transformers\n"
-    target = _seed_ssot(tmp_path, "transformers", body)
-    monkeypatch.setattr(update_last_probe, "ssot_path", lambda _e: target)
+    target = _seed_current(tmp_path, "transformers", body)
+    monkeypatch.setattr(update_last_probe, "current_path", lambda _e: target)
     monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
     rc = update_last_probe.update(engine="transformers", report=_pass_report())
     assert rc == 2

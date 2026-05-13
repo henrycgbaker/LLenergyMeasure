@@ -1,4 +1,4 @@
-"""Load discovered engine schemas produced by ``scripts.engine_introspectors``.
+"""Load discovered engine schemas produced by ``scripts.engine_producers``.
 
 The discovered JSON files in ``discovered_schemas/`` are the canonical SSOT for
 "what parameters CAN be configured per engine". They are produced by running

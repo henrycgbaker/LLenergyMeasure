@@ -26,7 +26,7 @@ import yaml
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.engine_miners.build_corpus import _PROVENANCE_PRIORITY  # noqa: E402
+from scripts.engine_producers.build_corpus import _PROVENANCE_PRIORITY  # noqa: E402
 
 _ENGINE_DISPLAY_NAMES = {
     "transformers": "Transformers",
@@ -88,7 +88,7 @@ def _render(engine: str) -> str:
     engine_dir = _PROJECT_ROOT / "src" / "llenergymeasure" / "engines" / engine
     proposed = _load_yaml(engine_dir / "invariants.proposed.yaml")
     validated = _load_yaml(engine_dir / "invariants.validated.yaml")
-    ssot = _load_yaml(_PROJECT_ROOT / "engine_versions" / f"{engine}.yaml")
+    ssot = _load_yaml(_PROJECT_ROOT / "engine_versions" / engine / "current.yaml")
 
     library = ssot.get("library") if isinstance(ssot.get("library"), dict) else {}
     library_version = str(library.get("current_version", "<unknown>"))

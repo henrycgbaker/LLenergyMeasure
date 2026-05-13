@@ -28,8 +28,8 @@ Usage::
 
 Emits a JSON ``ProbeReport`` to stdout. Exit 0 on either verdict - the
 binary verdict travels in the JSON, and downstream workflow steps gate
-on it. Exit 2 only on infrastructure failure (SSOT missing, producer
-module unimportable, SSOT malformed).
+on it. Exit 2 only on infrastructure failure (current.yaml missing, producer
+module unimportable, current.yaml malformed).
 """
 
 from __future__ import annotations
@@ -58,8 +58,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.engine_miners._base import MinerLandmarkMissingError  # noqa: E402
-from scripts.engine_miners._ssot import ssot_path  # noqa: E402
+from scripts.engine_producers._base import MinerLandmarkMissingError  # noqa: E402
+from scripts.engine_producers._current import current_path  # noqa: E402
 
 ProducerKind = Literal["invariants", "schemas"]
 
@@ -68,15 +68,15 @@ ProducerKind = Literal["invariants", "schemas"]
 # resolve to a Python module path. Keep it exhaustive - adding a new
 # engine means adding a row here.
 _PRODUCER_MODULES: dict[tuple[str, ProducerKind], str] = {
-    ("transformers", "invariants"): "scripts.engine_miners.transformers_miner",
-    ("vllm", "invariants"): "scripts.engine_miners.vllm_static_miner",
-    ("tensorrt", "invariants"): "scripts.engine_miners.tensorrt_static_miner",
-    ("transformers", "schemas"): "scripts.engine_introspectors.transformers_introspector",
-    ("vllm", "schemas"): "scripts.engine_introspectors.vllm_introspector",
-    ("tensorrt", "schemas"): "scripts.engine_introspectors.tensorrt_introspector",
+    ("transformers", "invariants"): "scripts.engine_producers.transformers_miner",
+    ("vllm", "invariants"): "scripts.engine_producers.vllm_static_invariant_miner",
+    ("tensorrt", "invariants"): "scripts.engine_producers.tensorrt_static_invariant_miner",
+    ("transformers", "schemas"): "scripts.engine_producers.transformers_schema_introspector",
+    ("vllm", "schemas"): "scripts.engine_producers.vllm_schema_introspector",
+    ("tensorrt", "schemas"): "scripts.engine_producers.tensorrt_schema_introspector",
 }
 
-# SSOT ``miner_pins.*`` keys are typed by extraction strategy
+# current.yaml ``miner_pins.*`` keys are typed by extraction strategy
 # (``static | dynamic | discovery``); the probe's user-facing producer
 # kinds are typed by concern (``invariants | schemas``). One layer of
 # translation lives here.
@@ -178,22 +178,22 @@ def _fingerprint(resolved: list[_ResolvedLandmark]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# SSOT helpers
+# current.yaml helpers
 # ---------------------------------------------------------------------------
 
 
-def _load_ssot(engine: str) -> dict[str, object]:
+def _load_current(engine: str) -> dict[str, object]:
     """Read + parse ``engine_versions/{engine}.yaml``.
 
-    Raises :class:`FileNotFoundError` if missing. The probe treats SSOT
+    Raises :class:`FileNotFoundError` if missing. The probe treats current.yaml
     absence as an infrastructure error (exit code 2) - every supported
-    engine must have a SSOT before the probe is wired up for it.
+    engine must have a current.yaml before the probe is wired up for it.
     """
-    path = ssot_path(engine)
+    path = current_path(engine)
     text = path.read_text()  # FileNotFoundError surfaces here
     data = yaml.safe_load(text)
     if not isinstance(data, dict):
-        raise ValueError(f"SSOT at {path} did not parse to a mapping.")
+        raise ValueError(f"current.yaml at {path} did not parse to a mapping.")
     return data
 
 
@@ -210,8 +210,16 @@ def _check_envelope(ssot: dict[str, object], producer: ProducerKind, library_ver
 
 
 def _compat_path(engine: str) -> Path:
-    """Return the path to the cached fingerprint file for ``engine``."""
-    return ssot_path(engine).parent / f"{engine}.compat.json"
+    """Return the path to the cached fingerprint file for ``engine``.
+
+    The compat cache lives at ``engine_versions/{engine}.compat.json`` -
+    sibling of the per-engine sub-directory (not inside it). Resolved via
+    ``current_path`` parent so tests can monkeypatch the location.
+    """
+    # current_path(engine) → engine_versions/{engine}/current.yaml
+    # .parent          → engine_versions/{engine}/
+    # .parent          → engine_versions/
+    return current_path(engine).parent.parent / f"{engine}.compat.json"
 
 
 def _read_cached_fingerprint(
@@ -316,10 +324,10 @@ def probe(*, engine: str, producer: ProducerKind) -> ProbeReport:
     Diagnostic fields (envelope check, fingerprint drift) are computed
     regardless of verdict.
     """
-    ssot = _load_ssot(engine)  # FileNotFoundError -> caller handles as infra error
-    library = ssot.get("library")
+    current = _load_current(engine)  # FileNotFoundError -> caller handles as infra error
+    library = current.get("library")
     if not isinstance(library, dict) or "current_version" not in library:
-        raise ValueError(f"SSOT for {engine} missing library.current_version.")
+        raise ValueError(f"current.yaml for {engine} missing library.current_version.")
     library_version = str(library["current_version"])
 
     producer_module = _import_producer(engine, producer)
@@ -350,7 +358,7 @@ def probe(*, engine: str, producer: ProducerKind) -> ProbeReport:
         producer=producer,
         verdict=verdict,
         library_version=library_version,
-        version_inside_envelope=_check_envelope(ssot, producer, library_version),
+        version_inside_envelope=_check_envelope(current, producer, library_version),
         fingerprint=fingerprint,
         fingerprint_drift=drift,
         landmarks_missing=missing,
@@ -430,7 +438,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         report = probe(engine=args.engine, producer=args.producer)
     except (FileNotFoundError, KeyError, ImportError, AttributeError, TypeError, ValueError) as exc:
-        # Infrastructure failure: SSOT missing / malformed / producer
+        # Infrastructure failure: current.yaml missing / malformed / producer
         # module unimportable / LANDMARKS missing or malformed. Distinct
         # from a fail-verdict probe (which writes JSON to stdout/file).
         print(json.dumps({"error": type(exc).__name__, "message": str(exc)}), file=sys.stderr)

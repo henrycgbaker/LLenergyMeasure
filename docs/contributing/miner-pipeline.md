@@ -30,7 +30,7 @@ src/llenergymeasure/engines/{engine}/_staging/   (gitignored, miner-only)
 ├── {engine}_dynamic_miner.yaml
 └── _failed_validation_{engine}.yaml  Quarantined rules
 
-scripts/engine_miners/
+scripts/engine_producers/
 ├── _base.py                          Shared AST primitives, detectors, filters
 ├── _ssot.py                          load_miner_pin() - resolves SpecifierSet from engine SSOT
 ├── _pydantic_lift.py                 Lift module for Pydantic models
@@ -41,7 +41,7 @@ scripts/engine_miners/
 ├── build_corpus.py                   Orchestration: merge + dedup + validate
 └── validate_invariants.py            Replays each rule against the live library
 
-engine_versions/{engine}.yaml         SSOT for library version + miner_pins envelopes
+engine_versions/{engine}/current.yaml         SSOT for library version + miner_pins envelopes
 ```
 
 The two committed YAML files form a lifecycle pair: the miners write
@@ -82,16 +82,16 @@ while `vllm/schemas` is not, or vice versa.
 
 | Symptom | Files to inspect first |
 |---|---|
-| Miner produces no rules for a new engine | `scripts/engine_miners/{engine}_*_miner.py` (does the file exist? imports succeed?); `engine_versions/{engine}.yaml` (is `miner_pins` populated?) |
-| `MinerVersionMismatchError` raised at import time | `engine_versions/{engine}.yaml miner_pins.{static\|dynamic\|discovery}` vs the live library version (`importlib.metadata.version("{library}")`) |
-| `MinerLandmarkMissingError` raised at import time | `scripts/engine_miners/{engine}_*_miner.py` (which `find_class` / `find_method` call returned None? compare against the live library source tree) |
+| Miner produces no rules for a new engine | `scripts/engine_producers/{engine}_*_miner.py` (does the file exist? imports succeed?); `engine_versions/{engine}/current.yaml` (is `miner_pins` populated?) |
+| `MinerVersionMismatchError` raised at import time | `engine_versions/{engine}/current.yaml miner_pins.{static\|dynamic\|discovery}` vs the live library version (`importlib.metadata.version("{library}")`) |
+| `MinerLandmarkMissingError` raised at import time | `scripts/engine_producers/{engine}_*_miner.py` (which `find_class` / `find_method` call returned None? compare against the live library source tree) |
 | Validation gate fails on a previously-passing rule | `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` (locate the rule by id) and `_staging/_failed_validation_{engine}.yaml` (which check failed: `positive_raises`, `message_template_match`, or `negative_does_not_raise`) |
-| Rule duplication or merge surprises | `scripts/engine_miners/build_corpus.py` (the merger; deduplication key is `(engine, severity, match_fields)`); look at `cross_validated_by` on the merged rule |
-| Static miner missed a predicate | `scripts/engine_miners/_base.py` (which detector should have matched? did a filter drop the candidate?) |
-| Dynamic miner inferred wrong template | `scripts/engine_miners/{engine}_dynamic_miner.py` (predicate-inference logic); the seven templates live in the same file or `_base.py` depending on engine |
+| Rule duplication or merge surprises | `scripts/engine_producers/build_corpus.py` (the merger; deduplication key is `(engine, severity, match_fields)`); look at `cross_validated_by` on the merged rule |
+| Static miner missed a predicate | `scripts/engine_producers/_base.py` (which detector should have matched? did a filter drop the candidate?) |
+| Dynamic miner inferred wrong template | `scripts/engine_producers/{engine}_dynamic_miner.py` (predicate-inference logic); the seven templates live in the same file or `_base.py` depending on engine |
 
 The error classes (`MinerError`, `MinerVersionMismatchError`,
-`MinerLandmarkMissingError`) live in `scripts/engine_miners/_base.py`
+`MinerLandmarkMissingError`) live in `scripts/engine_producers/_base.py`
 and are intentionally fail-loud: a previous extractor that swallowed
 `ImportError` and returned `[]` silently degraded into "no rules
 found", which masked broken extractors. Do not catch these without a
@@ -140,7 +140,7 @@ diverged:
 
 Dynamic mining errs toward recall. The validation-CI gate is the
 filter, not the miner. If a noisy candidate cluster appears, look at
-`scripts/engine_miners/{engine}_dynamic_miner.py` for the cluster
+`scripts/engine_producers/{engine}_dynamic_miner.py` for the cluster
 definition and tighten the value sets so the Cartesian product is
 smaller and more pointed.
 

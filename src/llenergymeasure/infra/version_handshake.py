@@ -218,7 +218,7 @@ def probe_image_engine_version(
 
 
 def read_ssot_engine_version(engine: str) -> str | None:
-    """Read ``engine_versions/{engine}.yaml::library.current_version``.
+    """Read ``engine_versions/{engine}/current.yaml::library.current_version``.
 
     Returns ``None`` if the file is absent, unreadable, or the field is
     missing. The repo root is resolved via
@@ -229,7 +229,7 @@ def read_ssot_engine_version(engine: str) -> str | None:
 
     from llenergymeasure.infra.docker_runner import _resolve_repo_root
 
-    ssot_path = _resolve_repo_root() / "engine_versions" / f"{engine}.yaml"
+    ssot_path = _resolve_repo_root() / "engine_versions" / engine / "current.yaml"
     try:
         with open(ssot_path) as f:
             data = yaml.safe_load(f) or {}

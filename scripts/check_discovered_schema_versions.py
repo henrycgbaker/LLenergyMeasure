@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Check that engine SSOT versions match discovered schema engine_versions.
+"""Check that engine current.yaml versions match discovered schema engine_versions.
 
 Each engine has a canonical version pinned in
-``engine_versions/<engine>.yaml`` under ``library.current_version``. The
+``engine_versions/<engine>/current.yaml`` under ``library.current_version``. The
 discovered schema at ``src/llenergymeasure/engines/<engine>/schema.discovered.json``
 must agree.
 
@@ -35,7 +35,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.engine_introspectors._common import DEFAULT_SCHEMA_FILENAME
+from scripts.engine_producers._common import DEFAULT_SCHEMA_FILENAME
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -47,9 +47,9 @@ def _normalize_version(version: str) -> str:
     return version.lstrip("v")
 
 
-def _ssot_current_version(ssot_path: Path) -> str | None:
-    """Return ``library.current_version`` from an engine SSOT yaml."""
-    data = yaml.safe_load(ssot_path.read_text()) or {}
+def _current_version(current_yaml: Path) -> str | None:
+    """Return ``library.current_version`` from an engine current.yaml."""
+    data = yaml.safe_load(current_yaml.read_text()) or {}
     library = data.get("library") or {}
     value = library.get("current_version")
     return None if value is None else str(value)
@@ -64,17 +64,17 @@ def _parse_schema_version(schema_path: Path) -> Any:
 def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) -> int:
     root = repo_root or REPO_ROOT
     engines_dir = root / "src" / "llenergymeasure" / "engines"
-    ssot_dir = root / "engine_versions"
+    engine_versions_dir = root / "engine_versions"
 
     errors: list[str] = []
     mismatches: list[str] = []
 
     for engine in engines or _ENGINES:
-        ssot_path = ssot_dir / f"{engine}.yaml"
+        current_yaml = engine_versions_dir / engine / "current.yaml"
         try:
-            ssot_version = _ssot_current_version(ssot_path)
+            pinned_version = _current_version(current_yaml)
         except FileNotFoundError:
-            errors.append(f"{engine}: SSOT not found: {ssot_path}")
+            errors.append(f"{engine}: current.yaml not found: {current_yaml}")
             continue
 
         schema_path = engines_dir / engine / DEFAULT_SCHEMA_FILENAME
@@ -84,17 +84,17 @@ def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) 
             errors.append(f"{engine}: schema not found: {schema_path}")
             continue
 
-        if ssot_version is None:
-            errors.append(f"{engine}: library.current_version not found in {ssot_path.name}")
+        if pinned_version is None:
+            errors.append(f"{engine}: library.current_version not found in {current_yaml.name}")
             continue
 
         if schema_version is None:
             errors.append(f"{engine}: engine_version not found in {schema_path.name}")
             continue
 
-        if _normalize_version(ssot_version) != _normalize_version(str(schema_version)):
+        if _normalize_version(pinned_version) != _normalize_version(str(schema_version)):
             mismatches.append(
-                f"MISMATCH: {ssot_path.name} pins library.current_version={ssot_version} "
+                f"MISMATCH: {current_yaml.name} pins library.current_version={pinned_version} "
                 f"but schema was discovered against {schema_version}\n"
                 f"  Run: ./scripts/refresh_discovered_schemas.sh {engine}"
             )
@@ -109,7 +109,7 @@ def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) 
             print(m, file=sys.stderr)
         return 1
 
-    print("All schema versions match SSOT engine_versions.", file=sys.stderr)
+    print("All schema versions match pinned engine_versions.", file=sys.stderr)
     return 0
 
 

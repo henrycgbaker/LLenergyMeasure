@@ -22,7 +22,7 @@ flowchart TB
     subgraph compile["COMPILE-TIME - CI, Renovate-driven library bumps"]
         direction TB
         src[Engine library source<br/>transformers, vLLM, TensorRT-LLM]
-        miner[Invariant miner pipeline<br/>scripts/engine_miners/<br/>static + dynamic + lift]
+        miner[Invariant miner pipeline<br/>scripts/engine_producers/<br/>static + dynamic + lift]
         validated[(validated corpus YAML<br/>engines/&lt;e&gt;/invariants.validated.yaml)]
         src --> miner --> validated
     end
@@ -96,7 +96,7 @@ flowchart TD
 
 The config-validation pipeline lives in Layer 0 (highlighted). Higher layers build on it: every `ExperimentConfig` constructed by the API or CLI passes through `engine_invariants/loader.py` before reaching the harness.
 
-The invariant miner pipeline lives in `scripts/engine_miners/` - it is a build-time tool, not a library module. Its output is the validated corpus that ships with the package.
+The invariant miner pipeline lives in `scripts/engine_producers/` - it is a build-time tool, not a library module. Its output is the validated corpus that ships with the package.
 
 ---
 
@@ -105,7 +105,7 @@ The invariant miner pipeline lives in `scripts/engine_miners/` - it is a build-t
 ```mermaid
 flowchart TB
     bump[Library version bump<br/>e.g. transformers 4.56.0 → 4.57.0]
-    renovate[Renovate opens PR bumping<br/>engine_versions/&lt;engine&gt;.yaml]
+    renovate[Renovate opens PR bumping<br/>engine_versions/engine_versions/&lt;engine&gt;.yamllt;engineengine_versions/&lt;engine&gt;.yamlgt;/current.yaml]
     pipeline[engine-pipeline.yml fires:<br/>probe + mine + validate]
 
     bump --> renovate --> pipeline
@@ -167,7 +167,7 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 
 ```
   scripts/
-  └── engine_miners/              Invariant miner pipeline (build-time)
+  └── engine_producers/              Invariant miner pipeline (build-time)
       ├── _base.py                Shared infrastructure: RuleCandidate, MinerError types,
       │                           AST primitives, pattern detectors
       ├── _pydantic_lift.py       Pydantic v2 sub-library lift

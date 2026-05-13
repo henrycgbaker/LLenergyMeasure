@@ -88,7 +88,7 @@ docker run --rm --gpus all \
     -v "$REPO_ROOT:/repo" \
     -w /repo \
     "$IMAGE" \
-    -m scripts.engine_introspectors \
+    -m scripts.engine_producers._schemas_runner \
     --engine "$ENGINE" \
     --image-ref "$IMAGE" \
     --output "/repo/$OUTPUT_REL"

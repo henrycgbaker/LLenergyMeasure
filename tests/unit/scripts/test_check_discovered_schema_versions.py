@@ -11,30 +11,34 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 from check_discovered_schema_versions import main
 
 
-def _ssot_yaml(version: str) -> str:
-    """Render a minimal engine SSOT yaml carrying ``library.current_version``."""
+def _current_yaml(version: str) -> str:
+    """Render a minimal engine current.yaml carrying ``library.current_version``."""
     return f"library:\n  current_version: {version}\n"
 
 
 def _setup_repo(
     tmp_path: Path,
     *,
-    vllm_ssot: str = "0.7.3",
+    vllm_current: str = "0.7.3",
     vllm_schema_version: str = "0.7.3",
-    trt_ssot: str = "0.21.0",
+    trt_current: str = "0.21.0",
     trt_schema_version: str = "0.21.0",
-    transformers_ssot: str = "5.5.4",
+    transformers_current: str = "5.5.4",
     transformers_schema_version: str = "5.5.4",
     skip_vllm_schema: bool = False,
 ) -> Path:
     """Create a minimal repo structure for the version check script."""
     repo = tmp_path / "repo"
-    ssot_dir = repo / "engine_versions"
-    ssot_dir.mkdir(parents=True)
+    engine_versions_dir = repo / "engine_versions"
 
-    (ssot_dir / "vllm.yaml").write_text(_ssot_yaml(vllm_ssot))
-    (ssot_dir / "tensorrt.yaml").write_text(_ssot_yaml(trt_ssot))
-    (ssot_dir / "transformers.yaml").write_text(_ssot_yaml(transformers_ssot))
+    for engine, version in [
+        ("vllm", vllm_current),
+        ("tensorrt", trt_current),
+        ("transformers", transformers_current),
+    ]:
+        engine_dir = engine_versions_dir / engine
+        engine_dir.mkdir(parents=True)
+        (engine_dir / "current.yaml").write_text(_current_yaml(version))
 
     engines_dir = repo / "src" / "llenergymeasure" / "engines"
 
@@ -57,14 +61,14 @@ class TestVersionsMatch:
         assert main(repo_root=repo) == 0
 
     def test_v_prefix_normalised(self, tmp_path: Path):
-        """v0.7.3 in SSOT should match 0.7.3 in schema."""
-        repo = _setup_repo(tmp_path, vllm_ssot="v0.7.3", vllm_schema_version="0.7.3")
+        """v0.7.3 in current.yaml should match 0.7.3 in schema."""
+        repo = _setup_repo(tmp_path, vllm_current="v0.7.3", vllm_schema_version="0.7.3")
         assert main(repo_root=repo) == 0
 
 
 class TestMismatch:
     def test_version_mismatch(self, tmp_path: Path, capsys):
-        repo = _setup_repo(tmp_path, vllm_ssot="0.8.0", vllm_schema_version="0.7.3")
+        repo = _setup_repo(tmp_path, vllm_current="0.8.0", vllm_schema_version="0.7.3")
         code = main(repo_root=repo)
         assert code == 1
         captured = capsys.readouterr()
@@ -74,7 +78,7 @@ class TestMismatch:
     def test_transformers_mismatch(self, tmp_path: Path, capsys):
         repo = _setup_repo(
             tmp_path,
-            transformers_ssot="5.6.0",
+            transformers_current="5.6.0",
             transformers_schema_version="5.5.4",
         )
         code = main(repo_root=repo)

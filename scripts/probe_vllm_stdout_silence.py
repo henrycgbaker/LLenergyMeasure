@@ -159,7 +159,7 @@ def _classify_phase(line: str, current: str) -> str:
     step = str(event.get("step", "")).strip()
     if not step:
         return current
-    return step if step in _KNOWN_STEPS else step
+    return step if step in _KNOWN_STEPS else step  # noqa: RUF034  pre-existing pattern; tracked separately
 
 
 def _gap_stats(gaps: list[float]) -> dict[str, float]:

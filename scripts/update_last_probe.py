@@ -1,4 +1,4 @@
-"""Update the ``last_probe:`` block in an engine SSOT from a ProbeReport JSON.
+"""Update the ``last_probe:`` block in an engine current.yaml from a ProbeReport JSON.
 
 Helper for the engine-coupling probe-writeback workflow. Reads a
 ``ProbeReport`` JSON document on stdin (the shape emitted by
@@ -12,7 +12,7 @@ Helper for the engine-coupling probe-writeback workflow. Reads a
 
 Determinism contract
 --------------------
-For a given (SSOT contents, ProbeReport JSON) input pair, the rewrite
+For a given (current.yaml contents, ProbeReport JSON) input pair, the rewrite
 output is a pure function of the inputs. Re-running with no change to
 input emits ``changed=false`` to ``$GITHUB_OUTPUT`` and exits 0 without
 mutating the file. The compare-before-write short-circuit is what
@@ -58,7 +58,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.engine_miners._ssot import safe_version, ssot_path  # noqa: E402
+from scripts.engine_producers._current import current_path, safe_version  # noqa: E402
 
 # Match `  verdict: pass`, `  verdict: "pass"`, `  fingerprint_drift: []`,
 # `  version_inside_envelope: null`, etc. Captures indent + key + the rest
@@ -66,7 +66,7 @@ from scripts.engine_miners._ssot import safe_version, ssot_path  # noqa: E402
 _LAST_PROBE_LINE_RE = re.compile(r"^(?P<indent> {2,})(?P<key>[a-z_]+):\s*(?P<value>.*)$")
 
 # The four mutable fields under ``last_probe:``. Order intentional -
-# matches the canonical SSOT layout so the regenerated block is
+# matches the canonical current.yaml layout so the regenerated block is
 # byte-identical when nothing changes.
 _MUTABLE_FIELDS: tuple[str, ...] = (
     "verdict",
@@ -77,9 +77,9 @@ _MUTABLE_FIELDS: tuple[str, ...] = (
 
 
 def _format_scalar(value: Any) -> str:
-    """Render *value* in the SSOT's canonical scalar style.
+    """Render *value* in the current.yaml's canonical scalar style.
 
-    The SSOT uses unquoted YAML scalars for ``verdict`` (bare words like
+    The current.yaml uses unquoted YAML scalars for ``verdict`` (bare words like
     ``pass``, ``fail``, ``unrun``), unquoted booleans / ``null`` for
     diagnostics, and a flow-style empty list for ``fingerprint_drift``.
     Strings that look like fingerprints are rendered with double quotes
@@ -105,7 +105,7 @@ def _format_scalar(value: Any) -> str:
         if value in {"pass", "fail", "unrun"}:
             return value
         return f'"{value}"'
-    # int / float fall through to repr (no current SSOT field uses them
+    # int / float fall through to repr (no current.yaml field uses them
     # under last_probe but defensive).
     return str(value)
 
@@ -166,8 +166,8 @@ def _replace_last_probe_block(text: str, updates: dict[str, Any]) -> tuple[str, 
 
     if not in_block or block_indent is None:
         raise ValueError(
-            "last_probe: block not found in SSOT (or block was empty). "
-            "Every supported engine SSOT must have a last_probe: block; "
+            "last_probe: block not found in current.yaml (or block was empty). "
+            "Every supported engine current.yaml must have a last_probe: block; "
             "see engine_versions/transformers.yaml for the canonical shape."
         )
 
@@ -175,7 +175,7 @@ def _replace_last_probe_block(text: str, updates: dict[str, Any]) -> tuple[str, 
     if missing:
         raise ValueError(
             f"last_probe: block missing required fields: {sorted(missing)}. "
-            "Add them to the SSOT's last_probe: block before running the "
+            "Add them to the current.yaml's last_probe: block before running the "
             "writeback step."
         )
 
@@ -195,11 +195,12 @@ def _emit_outputs(*, changed: bool, verdict: str) -> None:
 def _write_archive_last_probe(*, engine: str, version: str, report: dict[str, Any]) -> bool:
     """Mirror the last_probe block to the per-version archive.
 
-    Each version's archive at ``src/llenergymeasure/_engine_archive/<engine>/<safe>/outputs/``
+    Each version's archive at ``engine_versions/<engine>/<safe>/outputs/``
     holds a frozen ``last_probe.yaml`` capturing the verdict + diagnostics
     of the last successful pipeline run at that version. The file is a
-    *derivative* of the SSOT's ``last_probe:`` block; it is NOT the source
-    of truth. The SSOT remains authoritative for downstream consumers.
+    derivative of the current.yaml's ``last_probe:`` block; it is NOT the
+    source of truth. The current.yaml remains authoritative for downstream
+    consumers.
 
     Gated on the engine being vendored at this version (per-engine
     ``__init__.py`` present). When an engine is not yet vendored, this
@@ -213,7 +214,7 @@ def _write_archive_last_probe(*, engine: str, version: str, report: dict[str, An
     payload OR the engine is not vendored at this version.
     """
     safe = safe_version(version)
-    archive_root = _PROJECT_ROOT / "src" / "llenergymeasure" / "_engine_archive" / engine / safe
+    archive_root = _PROJECT_ROOT / "engine_versions" / engine / safe
     if not (archive_root / "__init__.py").is_file():
         # Engine not yet vendored at this version; archive mirror is a no-op.
         return False
@@ -221,7 +222,7 @@ def _write_archive_last_probe(*, engine: str, version: str, report: dict[str, An
     archive_dir.mkdir(parents=True, exist_ok=True)
     archive_path = archive_dir / "last_probe.yaml"
 
-    # Build payload: same fields, same scalar formatting as the SSOT block.
+    # Build payload: same fields, same scalar formatting as the current.yaml block.
     rendered_lines = [f"{field}: {_format_scalar(report[field])}\n" for field in _MUTABLE_FIELDS]
     payload = "".join(rendered_lines)
 
@@ -232,17 +233,17 @@ def _write_archive_last_probe(*, engine: str, version: str, report: dict[str, An
 
 
 def update(*, engine: str, report: dict[str, Any]) -> int:
-    """Apply *report*'s last_probe-relevant fields to the engine SSOT.
+    """Apply *report*'s last_probe-relevant fields to the engine current.yaml.
 
     Returns 0 on success (whether or not a change was written), 2 on
-    infrastructure failure (SSOT missing / malformed, ProbeReport
+    infrastructure failure (current.yaml missing / malformed, ProbeReport
     missing required fields).
 
     Also mirrors the last_probe block as a standalone YAML to the
     versioned archive at
-    ``src/llenergymeasure/_engine_archive/<engine>/<safe>/outputs/last_probe.yaml``.
-    The archive write happens after the SSOT update succeeds; on archive-
-    write failure the SSOT update is preserved (no rollback). Both paths
+    ``engine_versions/<engine>/<safe>/outputs/last_probe.yaml``.
+    The archive write happens after the current.yaml update succeeds; on archive-
+    write failure the current.yaml update is preserved (no rollback). Both paths
     are idempotent so subsequent runs converge.
     """
     required = {
@@ -260,12 +261,12 @@ def update(*, engine: str, report: dict[str, Any]) -> int:
         )
         return 2
 
-    path = ssot_path(engine)
+    path = current_path(engine)
     try:
         text = path.read_text()
     except FileNotFoundError:
         print(
-            f"Engine SSOT not found at {path}. "
+            f"Engine current.yaml not found at {path}. "
             f"Every supported engine must have a last_probe: block before "
             f"the writeback helper is wired up for it.",
             file=sys.stderr,
@@ -287,7 +288,7 @@ def update(*, engine: str, report: dict[str, Any]) -> int:
         print(f"No change to {path} last_probe block (verdict={verdict}).")
 
     # Mirror to the versioned archive. Failure here is non-fatal; the
-    # SSOT is authoritative and the archive will be regenerated on the
+    # current.yaml is authoritative and the archive will be regenerated on the
     # next run. We still surface the failure to stderr so it's visible
     # in CI logs.
     library_version = str(report["library_version"])
@@ -298,7 +299,7 @@ def update(*, engine: str, report: dict[str, Any]) -> int:
     except (OSError, ValueError) as exc:
         print(
             f"Warning: could not mirror last_probe to archive for {engine} "
-            f"v{library_version}: {exc!r}. SSOT update preserved.",
+            f"v{library_version}: {exc!r}. current.yaml update preserved.",
             file=sys.stderr,
         )
     else:
@@ -321,7 +322,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--engine",
         required=True,
         choices=("transformers", "vllm", "tensorrt"),
-        help="Engine whose SSOT to mutate.",
+        help="Engine whose current.yaml to mutate.",
     )
     return parser.parse_args(argv)
 

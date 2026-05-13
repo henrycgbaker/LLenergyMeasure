@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import importlib
 
-from llenergymeasure._engine_archive._dispatcher import load_machinery
+from engine_versions._dispatcher import load_producer
 
 _TRANSFORMERS_VERSION = "4.57.3"
 
@@ -31,22 +31,22 @@ def _assert_landmark_shape(landmarks: object) -> tuple[str, ...]:
 
 
 def test_transformers_miner_landmarks_resolve_lazily() -> None:
-    """``scripts.engine_miners.transformers_miner.LANDMARKS`` resolves via PEP 562."""
-    module = importlib.import_module("scripts.engine_miners.transformers_miner")
+    """``scripts.engine_producers.transformers_miner.LANDMARKS`` resolves via PEP 562."""
+    module = importlib.import_module("scripts.engine_producers.transformers_miner")
     landmarks = _assert_landmark_shape(module.LANDMARKS)
 
-    archived = load_machinery(
-        engine="transformers", version=_TRANSFORMERS_VERSION, producer="static"
+    archived = load_producer(
+        engine="transformers", version=_TRANSFORMERS_VERSION, producer="static_invariant_miner"
     ).LANDMARKS
     assert landmarks == archived
 
 
-def test_transformers_introspector_landmarks_resolve_lazily() -> None:
-    """``scripts.engine_introspectors.transformers_introspector.LANDMARKS`` resolves via PEP 562."""
-    module = importlib.import_module("scripts.engine_introspectors.transformers_introspector")
+def test_transformers_schema_introspector_landmarks_resolve_lazily() -> None:
+    """``scripts.engine_producers.transformers_schema_introspector.LANDMARKS`` resolves via PEP 562."""
+    module = importlib.import_module("scripts.engine_producers.transformers_schema_introspector")
     landmarks = _assert_landmark_shape(module.LANDMARKS)
 
-    archived = load_machinery(
-        engine="transformers", version=_TRANSFORMERS_VERSION, producer="discovery"
+    archived = load_producer(
+        engine="transformers", version=_TRANSFORMERS_VERSION, producer="schema_introspector"
     ).LANDMARKS
     assert landmarks == archived

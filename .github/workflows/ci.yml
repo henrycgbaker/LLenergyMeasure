@@ -59,7 +59,7 @@ jobs:
             docs_inputs:
               # Inputs to the docs-freshness job: Pydantic models the
               # generators introspect, anything under scripts/ (generators
-              # plus their transitive helpers like engine_miners/_ssot.py),
+              # plus their transitive helpers like engine_producers/_ssot.py),
               # and this workflow file (self-test). pyproject/uv.lock
               # excluded: env-break would surface in lint / type-check /
               # test / package-validation before docs-freshness anyway.

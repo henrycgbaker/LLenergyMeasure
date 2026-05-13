@@ -6,7 +6,7 @@ name: Approve Reuse - Slash Command Bot
 #
 # Listens for /approve-reuse <engine> <producer> slash commands posted as
 # PR comments. When the commenter has write/maintain/admin permission on
-# this repo, the bot widens the SSOT's miner_pins SpecifierSet for the
+# this repo, the bot widens the current.yaml's miner_pins SpecifierSet for the
 # requested (engine, producer) so the bumped library.current_version
 # falls inside the envelope. Subsequent re-runs of update-engine-invariants.yml
 # or update-engine-schemas.yml then probe under the new envelope and proceed.
@@ -15,15 +15,15 @@ name: Approve Reuse - Slash Command Bot
 # ---------------
 # Producer is `invariants | schemas` - matches the probe primitive's
 # user-facing producer kinds and the suggestion text emitted in probe-
-# fail PR comments. The mapping to SSOT miner_pins keys
+# fail PR comments. The mapping to current.yaml miner_pins keys
 # (`static | dynamic | discovery`) lives in
 # scripts/widen_miner_pin.py.
 #
 # Determinism contract
 # --------------------
-# The widening is a pure function of (current SSOT, engine, producer):
-# same inputs always produce the same SSOT mutation. The commit-back is
-# gated on actual diff to the SSOT YAML (no commit when the version is
+# The widening is a pure function of (current.yaml, engine, producer):
+# same inputs always produce the same current.yaml mutation. The commit-back is
+# gated on actual diff to the current.yaml (no commit when the version is
 # already inside the envelope). The line-surgical YAML edit preserves
 # every comment, quote, and adjacent line, so re-running the same slash
 # command emits zero diff after the first widening lands.
@@ -59,7 +59,7 @@ jobs:
       - name: Mint llem-ci-bot App token
         # Short-lived (~1 hour) GitHub App token. Events the App produces
         # are NOT subject to the default GITHUB_TOKEN recursive-workflow
-        # guard, so the SSOT commit-back below can legitimately retrigger
+        # guard, so the current.yaml commit-back below can legitimately retrigger
         # downstream engine-invariants / engine-schemas runs.
         id: app-token
         uses: actions/create-github-app-token@v1
@@ -178,7 +178,7 @@ jobs:
           cache-suffix: approve-reuse-bot-3.12
           python-version: "3.12"
 
-      - name: Widen SSOT miner_pins
+      - name: Widen current.yaml miner_pins
         id: widen
         if: steps.auth.outputs.authorised == 'true' && steps.parse.outputs.valid == 'true'
         env:
@@ -189,7 +189,7 @@ jobs:
             python scripts/widen_miner_pin.py \
             --engine "$ENGINE" --producer "$PRODUCER"
 
-      - name: Commit + push SSOT update
+      - name: Commit + push current.yaml update
         if: steps.auth.outputs.authorised == 'true' && steps.parse.outputs.valid == 'true' && steps.widen.outputs.changed == 'true'
         env:
           ENGINE: ${{ steps.parse.outputs.engine }}
@@ -199,9 +199,9 @@ jobs:
           set -euo pipefail
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
-          git add "engine_versions/${ENGINE}.yaml"
+          git add "engine_versions/${ENGINE}/current.yaml"
           if git diff --cached --quiet; then
-            echo "No SSOT change to commit; skipping push."
+            echo "No current.yaml change to commit; skipping push."
             exit 0
           fi
           git commit -m "chore(engines): widen ${ENGINE} miner_pins.${PRODUCER} per /approve-reuse from @${COMMENTER}"
@@ -222,6 +222,6 @@ jobs:
           if [[ "$CHANGED" == "true" ]]; then
             BODY="Widened \`${ENGINE}\` \`miner_pins.${PRODUCER}\`: \`${OLD_RANGE}\` -> \`${NEW_RANGE}\` per @${COMMENTER}'s /approve-reuse. Re-run engine-invariants or engine-schemas to probe under the new envelope."
           else
-            BODY="\`${ENGINE}\` \`miner_pins.${PRODUCER}\` already covers \`library.current_version\`; no SSOT change needed."
+            BODY="\`${ENGINE}\` \`miner_pins.${PRODUCER}\` already covers \`library.current_version\`; no current.yaml change needed."
           fi
           gh pr comment "$PR_NUMBER" --body "$BODY"

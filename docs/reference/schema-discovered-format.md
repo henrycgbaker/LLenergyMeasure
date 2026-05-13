@@ -4,7 +4,7 @@ Format specification for the JSON Schema artefact emitted by the
 schema-discovery pipeline: top-level envelope, parameter-section shape,
 limitations records, schema-version history, and example.
 
-The artefact is produced by `scripts/engine_introspectors/` running
+The artefact is produced by `scripts/engine_producers/` running
 inside an engine's Docker image. For the conceptual treatment of how
 the pipeline produces it (and how it parallels invariant mining), see
 [engine introspection pipelines](/explanation/architecture/engine-introspection-pipelines).
@@ -73,7 +73,7 @@ when multiple schemas are loaded.
 ### `engine_version`
 
 Library version the schema was discovered against. Sourced from the
-SSOT (`engine_versions/{engine}.yaml`) at discovery time. Renovate-driven
+SSOT (`engine_versions/{engine}/current.yaml`) at discovery time. Renovate-driven
 bumps re-fire discovery so this field tracks the pinned upstream version
 on `main`.
 

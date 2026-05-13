@@ -40,7 +40,7 @@ flowchart LR
 
 The loop has four stages:
 
-**1. Renovate PR** - Renovate watches `engine_versions/<engine>.yaml` for
+**1. Renovate PR** - Renovate watches `engine_versions/<engine>/current.yaml` for
 version string changes (via a `custom.regex` manager) and the `docker/Dockerfile.*`
 files for base image changes. When an upstream release is detected, Renovate
 opens a PR bumping the relevant `current_version` field and/or the `FROM` line.
@@ -48,8 +48,8 @@ The `renovate.json` rule applies a 14-day minimum release age and requires a
 high Mend merge-confidence signal before a PR is opened.
 
 **2. CI trigger** - the `engine-pipeline.yml` workflow fires on `pull_request`
-events when paths under `engine_versions/`, `docker/`, `scripts/engine_miners/`,
-`scripts/engine_introspectors/`, or `src/llenergymeasure/engines/` change. The
+events when paths under `engine_versions/`, `docker/`, `scripts/engine_producers/`,
+`scripts/engine_producers/`, or `src/llenergymeasure/engines/` change. The
 `filter` job runs `dorny/paths-filter` to compute per-engine change flags so
 only the affected engine's cells run.
 
@@ -57,12 +57,12 @@ only the affected engine's cells run.
 workflow cells:
 
 - `_engine-schemas-cell.yml` - runs the engine introspector
-  (`scripts/engine_introspectors/`) inside the new engine container. The
+  (`scripts/engine_producers/`) inside the new engine container. The
   introspector imports the live library and walks its Pydantic models to
   produce a JSON schema of all configurable parameters.
 - `_engine-invariants-cell.yml` - runs the `_probe.py` entry point
   (`Mine + validate inside container` step) inside the container. The probe
-  dispatches to the engine-specific miner (`scripts/engine_miners/`) which
+  dispatches to the engine-specific miner (`scripts/engine_producers/`) which
   extracts validator functions, default values, and invalid-combination rules.
   The output is validated against the existing rule corpus and the diff is
   computed.

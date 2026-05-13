@@ -3,9 +3,9 @@
 Engine-agnostic tests only: the ``safe_version`` mangling helper, the
 no-fallback contract (unknown engines / versions / producers raise
 ``ModuleNotFoundError``), and the actionable error-message contract that
-fires when a Renovate-driven SSOT bump outpaces the per-version vendoring.
+fires when a Renovate-driven version bump outpaces the per-version vendoring.
 
-Per-engine ``load_machinery`` resolution tests live in each engine's
+Per-engine ``load_producer`` resolution tests live in each engine's
 vendor PR alongside the engine's archive subpackage.
 """
 
@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import pytest
 
-from llenergymeasure._engine_archive._dispatcher import load_machinery
-from scripts.engine_miners._ssot import safe_version
+from engine_versions._dispatcher import load_producer
+from scripts.engine_producers._current import safe_version
 
 # ---------------------------------------------------------------------------
 # safe_version mangling
@@ -46,32 +46,34 @@ def test_safe_version_rejects_non_alphanumeric() -> None:
 def test_unknown_version_raises_loud() -> None:
     """Plan's no-fallback rule: an unknown version surfaces ModuleNotFoundError."""
     with pytest.raises(ModuleNotFoundError):
-        load_machinery(engine="vllm", version="999.999.999", producer="static")
+        load_producer(engine="vllm", version="999.999.999", producer="static_invariant_miner")
 
 
 def test_unknown_engine_raises_loud() -> None:
     with pytest.raises(ModuleNotFoundError):
-        load_machinery(engine="not-a-real-engine", version="0.7.3", producer="static")
+        load_producer(
+            engine="not-a-real-engine", version="0.7.3", producer="static_invariant_miner"
+        )
 
 
 def test_unknown_producer_raises_loud() -> None:
     """Dispatcher accepts only the three SSOT producer kinds."""
     with pytest.raises(ModuleNotFoundError):
         # ``introspector`` is the user-facing name; the SSOT key is ``discovery``.
-        load_machinery(engine="vllm", version="0.7.3", producer="introspector")  # type: ignore[arg-type]
+        load_producer(engine="vllm", version="0.7.3", producer="introspector")  # type: ignore[arg-type]
 
 
 def test_dispatcher_error_message_names_file_to_create() -> None:
-    """Missing-machinery diagnostic must name the exact file path.
+    """Missing-producer diagnostic must name the exact file path.
 
     This is the primary signal a maintainer sees when a Renovate-driven SSOT
     bump outpaces the per-version vendoring. The error must point them at
     the file to create so the next chunk PR is unblocked without spelunking.
     """
     with pytest.raises(ModuleNotFoundError) as exc_info:
-        load_machinery(engine="vllm", version="0.16.0", producer="static")
+        load_producer(engine="vllm", version="999.0.0", producer="static_invariant_miner")
     msg = str(exc_info.value)
     assert "vllm" in msg
-    assert "0.16.0" in msg
-    assert "src/llenergymeasure/_engine_archive/vllm/v0_16_0/machinery/static.py" in msg
+    assert "999.0.0" in msg
+    assert "engine_versions/vllm/v999_0_0/producers/static_invariant_miner.py" in msg
     assert "LANDMARKS" in msg

@@ -6,7 +6,7 @@ The library-resolution mechanism is the host-side, pre-dispatch layer that norma
 field the engine-invariants corpus marks as ``dormant``. Each invariant's fired-state
 projection is taken from its match predicate's "not_equal" / "present"
 operand (the sentinel value the predicate is *deviating from*) - that same
-projection is what :mod:`scripts.engine_miners._fixpoint_test` enforces in CI, so
+projection is what :mod:`scripts.engine_producers._fixpoint_test` enforces in CI, so
 runtime canonicalisation and CI correctness tests apply an identical
 normalisation.
 

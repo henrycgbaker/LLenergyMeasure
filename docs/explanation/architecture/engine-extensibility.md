@@ -67,7 +67,7 @@ transformers engine shows the pattern:
 Key requirements:
 - Multi-stage build with a `runtime` target (used by CI for caching).
 - Pin the engine library version via an `ARG`; the version is sourced from
-  `engine_versions/<engine>.yaml` at build time and by Renovate for automated
+  `engine_versions/<engine>/current.yaml` at build time and by Renovate for automated
   bumps.
 - Install `llenergymeasure` with the relevant extras (`[vllm]`, `[tensorrt]`,
   etc.) so the plugin and sampler dependencies are present.
@@ -115,7 +115,7 @@ generate them on the first engine-pipeline PR. See
 `src/llenergymeasure/engines/<engine>/schema.discovered.json` is produced by
 the schema introspector running inside the engine container. Same policy as
 invariants - generated, not authored. The introspectors live in
-`scripts/engine_introspectors/`.
+`scripts/engine_producers/`.
 
 ## What is automated
 
