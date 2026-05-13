@@ -97,6 +97,23 @@ ENV_BASELINE_SPEC_PATH: Final = "LLEM_BASELINE_SPEC_PATH"
 ENV_LOG_LEVEL: Final = "LLEM_LOG_LEVEL"
 ENV_TABLE_ROWS: Final = "LLEM_TABLE_ROWS"
 
+# Engine dispatch (container_entrypoint.sh + docker_runner.py).
+ENV_ENGINE: Final = "LLEM_ENGINE"
+"""Engine value (transformers/vllm/tensorrt) read by the container entrypoint
+script so it can route tensorrt dispatches through nvidia_entrypoint.sh."""
+ENV_HOST_UID: Final = "LLEM_HOST_UID"
+"""Host user UID, passed in so the in-container entrypoint can chown the
+deps cache after priming (container runs as root by default, so without
+this the host can't clean the cache without sudo)."""
+ENV_HOST_GID: Final = "LLEM_HOST_GID"
+"""Host user GID; paired with ENV_HOST_UID for chown."""
+ENV_MPI_NP: Final = "LLEM_MPI_NP"
+"""TRT-LLM tensor_parallel_size when > 1; signals the entrypoint script to
+wrap the final exec in mpirun -n N --allow-run-as-root."""
+ENV_DEPS_CACHE_DIR: Final = "LLEM_DEPS_CACHE_DIR"
+"""Override for the host-side runtime-deps cache directory. Defaults to
+``platformdirs.user_cache_dir('llem')/deps`` when unset."""
+
 # ---------------------------------------------------------------------------
 # Temp file/directory prefixes
 # ---------------------------------------------------------------------------
@@ -186,9 +203,14 @@ __all__ = [
     "ENV_CARBON_INTENSITY",
     "ENV_CONFIG_PATH",
     "ENV_DATACENTER_PUE",
+    "ENV_DEPS_CACHE_DIR",
+    "ENV_ENGINE",
     "ENV_HF_TOKEN",
+    "ENV_HOST_GID",
+    "ENV_HOST_UID",
     "ENV_IMAGE_PREFIX",
     "ENV_LOG_LEVEL",
+    "ENV_MPI_NP",
     "ENV_NO_PROMPT",
     "ENV_OUTPUT_DIR",
     "ENV_RUNNER_PREFIX",

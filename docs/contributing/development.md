@@ -30,8 +30,11 @@ uv sync --dev --extra zeus --extra codecarbon
 
 ## Running engine code
 
-Build the engine image once, then `docker run` against it. The image tag is
-derived from the SSOT (`engine_versions/{engine}.yaml`):
+The dispatch path for experiments goes through `docker_runner.py`, which
+bind-mounts the project source + a tiny entrypoint script + the host's
+runtime-deps cache into the container. The image tag is derived from the
+SSOT (`engine_versions/{engine}.yaml`); the framework code is bind-mounted
+rather than baked.
 
 ```bash
 VER=$(yq '.library.current_version' engine_versions/transformers.yaml)
@@ -39,12 +42,24 @@ docker build -f docker/Dockerfile.transformers \
   --build-arg TRANSFORMERS_VERSION="$VER" \
   -t llenergymeasure:transformers-${VER} .
 
+# Direct invocation for ad-hoc miner / introspector runs:
 docker run --rm \
   -v "$(pwd)":/repo -w /repo \
   --entrypoint python3 \
   llenergymeasure:transformers-${VER} \
   -m scripts.engine_miners.build_corpus --engine transformers
 ```
+
+For experiment dispatch (the `llem run` path) docker_runner.py emits a
+different shape: the entrypoint script `scripts/container_entrypoint.sh`
+is bind-mounted at `/llem-entry.sh` and set as `--entrypoint`. The script
+diffs `pyproject.toml`'s `[project.dependencies]` against the
+in-container installed dists, pip-installs any missing ones to a host-
+mounted cache (`~/.cache/llem/deps/py{N.M}/`, keyed by container Python
+minor), sets `PYTHONPATH` to include the cache + `/llem-src`, then exec's
+the framework entrypoint module. TRT-LLM dispatches route through
+`/opt/nvidia/nvidia_entrypoint.sh` first so `LD_LIBRARY_PATH` is set up
+for libnvinfer. See "Runtime-deps priming" below for the full mechanism.
 
 Replace `transformers` with `vllm` or `tensorrt` (and add `--gpus all` for
 those two - they need a CUDA device) for the other engines. The automated
@@ -55,6 +70,60 @@ job for the first-party transformers image. See "CI pipeline ordering"
 below for the full sequence and
 [Architecture &gt; CI architecture](/explanation/architecture/ci-architecture) for the
 topology + reusable-workflow contract.
+
+## Runtime-deps priming
+
+vLLM and TensorRT-LLM use upstream-direct images as the engine substrate,
+and those images don't ship every runtime dep `llenergymeasure` needs
+(empirical spike 2026-05-12 found `vllm/vllm-openai:v0.7.3` lacks
+`platformdirs`, `nvidia-ml-py`, `pyarrow`; the NGC TRT-LLM image lacks
+`python-dotenv`). Rather than bake a thin wrapper image per engine, the
+in-container entrypoint script primes the missing deps lazily on first
+dispatch into a host-mounted persistent cache.
+
+### Mechanism
+
+`scripts/container_entrypoint.sh` runs once per dispatch and:
+
+1. Computes `PY_MINOR` from the container's Python (`sys.version_info`).
+2. Sets `PYTHONPATH=/llem-src:/llem-runtime-deps/py{N.M}:...` so the
+   probe and subsequent imports see the cache.
+3. Fast-paths via a stamp file: `sha256sum` the bind-mounted
+   `pyproject.toml`, compare to `/llem-runtime-deps/py{N.M}/.llem_pyproject_hash`.
+   Match means "deps probe already done against this pyproject, nothing
+   changed, skip the probe." Saves ~200ms per dispatch on warm cache.
+4. If stamp missing or mismatched: a small Python helper parses
+   `[project.dependencies]`, calls `importlib.metadata.distribution(name)`
+   per dep, and accumulates the missing ones.
+5. Pip-installs missing deps via
+   `pip install --no-deps --no-cache-dir --only-binary=:all: --target $DEPS_TARGET`.
+6. Chowns the cache directory to `LLEM_HOST_UID:LLEM_HOST_GID` (passed
+   by docker_runner) so the host can clean it without sudo despite the
+   container running as root.
+7. Writes the pyproject hash to the stamp file.
+8. Exec's the framework entrypoint - routing through
+   `nvidia_entrypoint.sh` when `LLEM_ENGINE=tensorrt`, wrapping in
+   `mpirun -n {N} --allow-run-as-root` when `LLEM_MPI_NP` is set
+   (TRT-LLM tensor parallelism > 1).
+
+### Cache location
+
+The host-side cache lives at `~/.cache/llem/deps/` by default (resolved
+via `platformdirs`). Set `LLEM_DEPS_CACHE_DIR` to override - useful when
+sharing across machines on cluster storage.
+
+### What this is NOT
+
+- **Not a wrapper image**. The upstream engine image stays untouched.
+- **Not an installation step**. There's no `llem doctor` or pre-flight
+  ritual; first dispatch primes automatically.
+- **Not a permanent host pollution**. The cache is a single bind-mounted
+  directory; `rm -rf ~/.cache/llem/deps/` cleans it.
+- **Not an alternative to the engine-version SSOT**. The probed engine
+  library version (`vllm.__version__`, `tensorrt_llm.__version__`,
+  `transformers.__version__`) is compared at study setup against
+  `engine_versions/{engine}.yaml::library.current_version` and a
+  mismatch is a hard error (see `version_handshake.py`).
 
 ## Engine image strategy
 
