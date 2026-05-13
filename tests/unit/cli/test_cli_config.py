@@ -86,8 +86,10 @@ def test_config_verbose_shows_python_version() -> None:
 
 
 def test_config_user_config_path_shown() -> None:
-    """User config path is printed in the Config section."""
-    fake_path = Path("/home/user/.config/llenergymeasure/config.yaml")
+    """User config path is printed in the Config section when the file exists."""
+    fake_path = MagicMock(spec=Path)
+    fake_path.exists.return_value = True
+    fake_path.__str__ = lambda self: "/home/user/.config/llenergymeasure/config.yaml"
     with (
         patch.object(cli_config_mod, "_probe_gpu", return_value=None),
         patch("llenergymeasure.config.user_config.get_user_config_path", return_value=fake_path),
@@ -95,7 +97,7 @@ def test_config_user_config_path_shown() -> None:
         result = runner.invoke(app, ["config"])
 
     assert result.exit_code == 0
-    assert str(fake_path) in result.output
+    assert "/home/user/.config/llenergymeasure/config.yaml" in result.output
 
 
 def test_config_exits_0() -> None:
