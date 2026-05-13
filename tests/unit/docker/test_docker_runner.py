@@ -408,7 +408,7 @@ class TestErrorPayloadFromContainer:
 
 class TestDockerCommandStructure:
     def test_command_includes_required_flags(self, tmp_path):
-        """docker run command includes --rm, --gpus all, --shm-size 8g, mount, env var, entrypoint."""
+        """docker run command includes --rm, --gpus all, --shm-size 8g, mounts, env vars, entrypoint."""
         config = make_config()
         exchange_dir = tmp_path / "llem-cmd"
         exchange_dir.mkdir()
@@ -451,8 +451,10 @@ class TestDockerCommandStructure:
         # Config path env var
         assert any(ENV_CONFIG_PATH in arg for arg in cmd)
 
-        # Entrypoint module
-        assert "llenergymeasure.entrypoints.container" in joined
+        # Entrypoint script (the in-container bootstrap that primes runtime
+        # deps and exec's the framework entrypoint module).
+        ep_idx = cmd.index("--entrypoint")
+        assert cmd[ep_idx + 1] == "/llem-entry.sh"
 
         # Image tag
         assert IMAGE in cmd
@@ -743,12 +745,17 @@ class TestHFTokenSecure:
 
 
 # ---------------------------------------------------------------------------
-# Test 13: mpirun injection for TRT-LLM tensor parallelism
+# Test 13: TRT-LLM tensor-parallelism (LLEM_MPI_NP env var)
 # ---------------------------------------------------------------------------
 
 
-class TestMpirunInjection:
-    """Verify mpirun is injected iff engine=tensorrt and tensor_parallel_size > 1."""
+class TestEngineDispatchEnvVars:
+    """Verify the env vars passed to the in-container entrypoint script
+    (LLEM_ENGINE, LLEM_MPI_NP) and the always-on entrypoint pointer.
+
+    The script itself handles the mpirun wrap when LLEM_MPI_NP is set;
+    docker_runner just passes the signal.
+    """
 
     def _capture_cmd(self, config, tmp_path) -> list[str]:
         """Run DockerRunner.run() with a fake subprocess and capture the docker cmd."""
@@ -777,71 +784,100 @@ class TestMpirunInjection:
 
         return captured_cmds[0]
 
-    def test_mpirun_injected_for_tensorrt_tp2(self, tmp_path):
-        """TRT-LLM with tensor_parallel_size=2 dispatches via mpirun entrypoint with -n 2."""
+    def _env_value(self, cmd: list[str], key: str) -> str | None:
+        """Return the value of the first -e KEY=VALUE pair matching *key*, or None."""
+        for i, arg in enumerate(cmd):
+            if arg == "-e" and i + 1 < len(cmd):
+                pair = cmd[i + 1]
+                if pair.startswith(f"{key}="):
+                    return pair.split("=", 1)[1]
+        return None
+
+    def test_entrypoint_is_always_script(self):
+        """All engines dispatch through /llem-entry.sh regardless of TP."""
+        from llenergymeasure.config.engine_configs import TensorRTConfig
+
+        runner = DockerRunner(image=IMAGE)
+        for cfg in (
+            make_config(),  # transformers
+            make_config(engine="vllm"),
+            make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=1)),
+            make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=4)),
+        ):
+            cmd = runner._build_docker_cmd(cfg, "abc123", "/tmp/llem-test")
+            ep_idx = cmd.index("--entrypoint")
+            assert cmd[ep_idx + 1] == "/llem-entry.sh"
+
+    def test_mpi_np_set_for_tensorrt_tp2(self, tmp_path):
+        """TRT-LLM with tensor_parallel_size=2 sets LLEM_MPI_NP=2 for the entry script."""
         from llenergymeasure.config.engine_configs import TensorRTConfig
 
         config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=2))
         cmd = self._capture_cmd(config, tmp_path)
+        assert self._env_value(cmd, "LLEM_MPI_NP") == "2"
 
-        # Mount-based dispatch overrides --entrypoint mpirun before the image;
-        # the post-image args are mpirun's flags (no literal "mpirun" needed there).
-        assert "--entrypoint" in cmd
-        ep_idx = cmd.index("--entrypoint")
-        image_idx = cmd.index(IMAGE)
-        assert ep_idx < image_idx
-        assert cmd[ep_idx + 1] == "mpirun"
-        assert "-n" in cmd
-        assert "2" in cmd
-        assert "--allow-run-as-root" in cmd
-
-        # python3 -m llenergymeasure.entrypoints.container runs as mpirun's command
-        python_idx = cmd.index("python3")
-        assert image_idx < python_idx
-
-    def test_mpirun_injected_for_tensorrt_tp4(self, tmp_path):
-        """TRT-LLM with tensor_parallel_size=4 dispatches via mpirun entrypoint with -n 4."""
+    def test_mpi_np_set_for_tensorrt_tp4(self, tmp_path):
+        """TRT-LLM with tensor_parallel_size=4 sets LLEM_MPI_NP=4."""
         from llenergymeasure.config.engine_configs import TensorRTConfig
 
         config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=4))
         cmd = self._capture_cmd(config, tmp_path)
+        assert self._env_value(cmd, "LLEM_MPI_NP") == "4"
 
-        ep_idx = cmd.index("--entrypoint")
-        assert cmd[ep_idx + 1] == "mpirun"
-        n_idx = cmd.index("-n")
-        assert cmd[n_idx + 1] == "4"
-
-    def test_no_mpirun_for_tensorrt_tp1(self, tmp_path):
-        """TRT-LLM with tensor_parallel_size=1 does NOT get mpirun (single-GPU path)."""
+    def test_mpi_np_absent_for_tensorrt_tp1(self, tmp_path):
+        """TRT-LLM with tensor_parallel_size=1 omits LLEM_MPI_NP (single-GPU path)."""
         from llenergymeasure.config.engine_configs import TensorRTConfig
 
         config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=1))
         cmd = self._capture_cmd(config, tmp_path)
+        assert self._env_value(cmd, "LLEM_MPI_NP") is None
 
-        assert "mpirun" not in cmd
-
-    def test_no_mpirun_for_tensorrt_tp_none(self, tmp_path):
-        """TRT-LLM with tensor_parallel_size=None (default) does NOT get mpirun."""
+    def test_mpi_np_absent_for_tensorrt_tp_none(self, tmp_path):
+        """TRT-LLM with tensor_parallel_size=None (default) omits LLEM_MPI_NP."""
         from llenergymeasure.config.engine_configs import TensorRTConfig
 
         config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=None))
         cmd = self._capture_cmd(config, tmp_path)
+        assert self._env_value(cmd, "LLEM_MPI_NP") is None
 
-        assert "mpirun" not in cmd
-
-    def test_no_mpirun_for_vllm(self, tmp_path):
-        """vLLM engine never gets mpirun regardless of any config."""
+    def test_mpi_np_absent_for_vllm(self, tmp_path):
+        """vLLM dispatch never sets LLEM_MPI_NP."""
         config = make_config(engine="vllm")
         cmd = self._capture_cmd(config, tmp_path)
+        assert self._env_value(cmd, "LLEM_MPI_NP") is None
 
-        assert "mpirun" not in cmd
-
-    def test_no_mpirun_for_transformers(self, tmp_path):
-        """PyTorch engine (default) never gets mpirun."""
-        config = make_config()  # engine="transformers" by default
+    def test_mpi_np_absent_for_transformers(self, tmp_path):
+        """transformers dispatch never sets LLEM_MPI_NP."""
+        config = make_config()
         cmd = self._capture_cmd(config, tmp_path)
+        assert self._env_value(cmd, "LLEM_MPI_NP") is None
 
-        assert "mpirun" not in cmd
+    def test_llem_engine_matches_config(self):
+        """LLEM_ENGINE env var matches config.engine (script uses it for nvidia_entrypoint routing)."""
+        from llenergymeasure.config.engine_configs import TensorRTConfig
+
+        runner = DockerRunner(image=IMAGE)
+        cases = [
+            (make_config(), "transformers"),
+            (make_config(engine="vllm"), "vllm"),
+            (
+                make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=1)),
+                "tensorrt",
+            ),
+        ]
+        for cfg, expected in cases:
+            cmd = runner._build_docker_cmd(cfg, "abc123", "/tmp/llem-test")
+            assert self._env_value(cmd, "LLEM_ENGINE") == expected
+
+    def test_host_uid_gid_passed(self):
+        """LLEM_HOST_UID/LLEM_HOST_GID are passed so the entrypoint can chown the deps cache."""
+        import os
+
+        config = make_config()
+        runner = DockerRunner(image=IMAGE)
+        cmd = runner._build_docker_cmd(config, "abc123", "/tmp/llem-test")
+        assert self._env_value(cmd, "LLEM_HOST_UID") == str(os.getuid())
+        assert self._env_value(cmd, "LLEM_HOST_GID") == str(os.getgid())
 
 
 # ---------------------------------------------------------------------------
@@ -883,18 +919,22 @@ class TestExtraMounts:
         assert "/host/b:/container/b" in cmd
 
     def test_no_extra_mounts_no_extra_volumes(self, tmp_path):
-        """Without extra_mounts, three -v flags are present: exchange dir + llem-src + HF cache."""
+        """Without extra_mounts, six -v flags appear for a non-TRT engine: exchange dir, HF cache,
+        package source, pyproject.toml (single-file), entrypoint script (single-file), deps cache."""
         config = make_config()
         runner = DockerRunner(image=IMAGE)
         cmd = self._build_cmd(config, tmp_path, runner)
 
-        # Three -v flags: exchange dir, llem-src bind mount, and the HF cache
-        # auto-mount (all engines now use mount-based dispatch).
+        # Six -v flags: exchange dir, HF cache auto-mount, llem-src, pyproject,
+        # entrypoint script, deps cache.
         v_count = cmd.count("-v")
-        assert v_count == 3
+        assert v_count == 6
         assert f"/tmp/llem-test:{CONTAINER_EXCHANGE_DIR}" in cmd
         assert any(arg.endswith(":/llem-src:ro") for arg in cmd)
         assert any(arg.endswith(":/root/.cache/huggingface") for arg in cmd)
+        assert any(arg.endswith("/pyproject.toml:/llem-pyproject.toml:ro") for arg in cmd)
+        assert any(arg.endswith("/container_entrypoint.sh:/llem-entry.sh:ro") for arg in cmd)
+        assert any(arg.endswith(":/llem-runtime-deps") for arg in cmd)
 
     def test_tensorrt_auto_cache_mount(self, tmp_path):
         """TRT-LLM engine auto-mounts ~/.cache/trt-llm:/root/.cache/trt-llm."""
@@ -949,12 +989,13 @@ class TestExtraMounts:
 
 
 class TestEntrypointPerEngine:
-    """All engines now use mount-based dispatch with --entrypoint set per tp_size.
+    """All engines dispatch through ``/llem-entry.sh`` regardless of tp_size.
 
-    - transformers (any tp): --entrypoint python3.
-    - vllm (any tp): --entrypoint python3.
-    - tensorrt with tp<=1: --entrypoint python3.
-    - tensorrt with tp>1: --entrypoint mpirun.
+    The in-container entrypoint script reads ``LLEM_ENGINE`` and
+    ``LLEM_MPI_NP`` (set per-engine and per-TP-size by docker_runner) and
+    performs the engine-conditional routing internally - mpirun wrap for
+    TP > 1, nvidia_entrypoint.sh wrap for tensorrt - so docker_runner's
+    --entrypoint flag is constant.
     """
 
     @staticmethod
@@ -967,18 +1008,16 @@ class TestEntrypointPerEngine:
         return cmd[idx + 1]
 
     @pytest.mark.parametrize(
-        "engine,tp_size,expected_entrypoint",
+        "engine,tp_size",
         [
-            (Engine.TRANSFORMERS, 1, "python3"),
-            (Engine.VLLM, 1, "python3"),
-            (Engine.TENSORRT, 1, "python3"),
-            (Engine.TENSORRT, 2, "mpirun"),
-            (Engine.TENSORRT, 4, "mpirun"),
+            (Engine.TRANSFORMERS, 1),
+            (Engine.VLLM, 1),
+            (Engine.TENSORRT, 1),
+            (Engine.TENSORRT, 2),
+            (Engine.TENSORRT, 4),
         ],
     )
-    def test_entrypoint_for_engine_and_tp_size(
-        self, engine: Engine, tp_size: int, expected_entrypoint: str | None, tmp_path
-    ):
+    def test_entrypoint_always_script(self, engine: Engine, tp_size: int, tmp_path):
         if engine is Engine.TENSORRT:
             from llenergymeasure.config.engine_configs import TensorRTConfig
 
@@ -991,7 +1030,7 @@ class TestEntrypointPerEngine:
         runner = DockerRunner(image=IMAGE)
         cmd = runner._build_docker_cmd(config, "abc123", "/tmp/llem-test")
 
-        assert self._entrypoint(cmd) == expected_entrypoint
+        assert self._entrypoint(cmd) == "/llem-entry.sh"
 
 
 # ---------------------------------------------------------------------------
@@ -1363,12 +1402,15 @@ class TestVersionMismatchWarning:
 
 
 class TestMountPivot:
-    """Verify the host-package bind-mount + PYTHONPATH plumbing (PR #509).
+    """Verify the host bind-mounts that feed the in-container entrypoint script.
 
-    All three engines run the in-container entrypoint by importing
-    llenergymeasure from a read-only bind-mount at ``/llem-src``, exposed via
-    ``PYTHONPATH``. ``PYTHONDONTWRITEBYTECODE`` keeps the container from
-    writing root-owned ``__pycache__`` into the bind-mounted source tree.
+    All three engines run via ``/llem-entry.sh``, which reads
+    ``/llem-pyproject.toml`` to diff runtime deps, primes any missing ones
+    into ``/llem-runtime-deps``, sets ``PYTHONPATH`` itself (including the
+    cache + ``/llem-src``), and exec's the framework entrypoint module.
+    docker_runner doesn't need to set ``PYTHONPATH`` directly; the script
+    owns that step. ``PYTHONDONTWRITEBYTECODE=1`` keeps the container
+    from writing root-owned ``__pycache__`` into the bind-mounted source.
     """
 
     @staticmethod
@@ -1392,12 +1434,43 @@ class TestMountPivot:
         assert cmd[mount_idx - 1] == "-v"
 
     @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
-    def test_pythonpath_env_set(self, engine, tmp_path):
-        """``PYTHONPATH=/llem-src`` is passed via ``-e`` for each engine."""
+    def test_pyproject_mount_present(self, engine, tmp_path):
+        """pyproject.toml is bind-mounted at /llem-pyproject.toml for the entrypoint's dep diff."""
         cmd = self._build(engine, tmp_path)
-        assert "PYTHONPATH=/llem-src" in cmd
-        idx = cmd.index("PYTHONPATH=/llem-src")
-        assert cmd[idx - 1] == "-e"
+        mount_args = [arg for arg in cmd if arg.endswith(":/llem-pyproject.toml:ro")]
+        assert len(mount_args) == 1
+        host_path = mount_args[0].split(":/llem-pyproject.toml:ro")[0]
+        assert host_path.endswith("/pyproject.toml")
+
+    @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
+    def test_entry_script_mount_present(self, engine, tmp_path):
+        """The container entrypoint script is bind-mounted at /llem-entry.sh."""
+        cmd = self._build(engine, tmp_path)
+        mount_args = [arg for arg in cmd if arg.endswith(":/llem-entry.sh:ro")]
+        assert len(mount_args) == 1
+        host_path = mount_args[0].split(":/llem-entry.sh:ro")[0]
+        assert host_path.endswith("scripts/container_entrypoint.sh")
+
+    @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
+    def test_deps_cache_mount_present(self, engine, tmp_path):
+        """The runtime-deps cache is bind-mounted at /llem-runtime-deps."""
+        cmd = self._build(engine, tmp_path)
+        mount_args = [arg for arg in cmd if arg.endswith(":/llem-runtime-deps")]
+        assert len(mount_args) == 1
+
+    @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
+    def test_pythonpath_not_set_at_docker_level(self, engine, tmp_path):
+        """PYTHONPATH is set by the entrypoint script (which knows the cache path),
+        not by docker_runner. Docker-level PYTHONPATH would interfere with the
+        script's logic that prepends /llem-runtime-deps/py{N.M}/ to the path.
+        """
+        cmd = self._build(engine, tmp_path)
+        # No -e PYTHONPATH=... should appear; the script handles it.
+        for i, arg in enumerate(cmd):
+            if arg == "-e" and i + 1 < len(cmd):
+                assert not cmd[i + 1].startswith("PYTHONPATH="), (
+                    f"docker_runner should not set PYTHONPATH; got {cmd[i + 1]!r}"
+                )
 
     @pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
     def test_pythondontwritebytecode_env_set(self, engine, tmp_path):
