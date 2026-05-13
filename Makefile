@@ -23,7 +23,7 @@ export LLEM_EXPCONF_SCHEMA_FINGERPRINT := $(shell python3 scripts/compute_expcon
 
 # =============================================================================
 # Quick Start
-#   Local:  make setup       (pip install + pre-commit)
+#   Local:  make setup       (uv sync --dev + pre-commit)
 #   Docker: make docker-setup (above + docker compose build)
 #   Dev:    make dev          (uv sync --dev + pre-commit)
 # =============================================================================
