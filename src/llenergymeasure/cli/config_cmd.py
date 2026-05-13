@@ -144,8 +144,8 @@ def config_command(
     from llenergymeasure.config.user_config import get_user_config_path
 
     config_path = get_user_config_path()
-    print(f"  Path: {config_path}")
     if config_path.exists():
+        print(f"  Path: {config_path}")
         print("  Status: loaded")
         if verbose > 0:
             from llenergymeasure.config.user_config import (
