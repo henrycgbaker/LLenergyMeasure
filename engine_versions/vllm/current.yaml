@@ -29,5 +29,5 @@ artefact_paths:
 last_probe:
   verdict: pass
   version_inside_envelope: true
-  fingerprint: "9347689ed43e40af76a83f4f348a88748ebd56e0936b052702bddacf7b9a438c"
+  fingerprint: "c162e9d8bd82bd20dede4fabfc6c2a08ae2c460989c12ade558c48310b4b6c1c"
   fingerprint_drift: []
