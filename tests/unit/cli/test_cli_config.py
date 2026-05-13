@@ -85,11 +85,10 @@ def test_config_verbose_shows_python_version() -> None:
     assert short_version in result.output
 
 
-def test_config_user_config_path_shown() -> None:
+def test_config_user_config_path_shown(tmp_path: Path) -> None:
     """User config path is printed in the Config section when the file exists."""
-    fake_path = MagicMock(spec=Path)
-    fake_path.exists.return_value = True
-    fake_path.__str__ = lambda self: "/home/user/.config/llenergymeasure/config.yaml"
+    fake_path = tmp_path / "config.yaml"
+    fake_path.touch()
     with (
         patch.object(cli_config_mod, "_probe_gpu", return_value=None),
         patch("llenergymeasure.config.user_config.get_user_config_path", return_value=fake_path),
@@ -97,7 +96,7 @@ def test_config_user_config_path_shown() -> None:
         result = runner.invoke(app, ["config"])
 
     assert result.exit_code == 0
-    assert "/home/user/.config/llenergymeasure/config.yaml" in result.output
+    assert str(fake_path) in result.output
 
 
 def test_config_exits_0() -> None:
@@ -215,10 +214,8 @@ def test_config_user_config_not_found() -> None:
     assert "using defaults" in result.output
 
 
-def test_config_user_config_loaded_verbose_non_defaults() -> None:
+def test_config_user_config_loaded_verbose_non_defaults(tmp_path: Path) -> None:
     """With -v and a loaded config that has non-default values, 'Non-default values:' appears."""
-    from pathlib import Path as _Path
-
     from llenergymeasure.config.user_config import UserConfig
 
     # Build a UserConfig with a non-default value
@@ -236,9 +233,8 @@ def test_config_user_config_loaded_verbose_non_defaults() -> None:
             break
     mock_user_cfg.model_dump.return_value = modified_dump
 
-    fake_path = MagicMock(spec=_Path)
-    fake_path.exists.return_value = True
-    fake_path.__str__ = lambda self: "/fake/config.yaml"
+    fake_path = tmp_path / "config.yaml"
+    fake_path.touch()
 
     # load_user_config and UserConfig are lazy-imported inside the function body -
     # patch at the source module, not at config_cmd
