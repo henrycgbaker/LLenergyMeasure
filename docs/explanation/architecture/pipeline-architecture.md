@@ -53,7 +53,7 @@ The diagram captures the high-level flow; per-step detail follows below.
 ```mermaid
 flowchart TD
     renovate[Renovate scans upstream releases<br/>on configured schedule]
-    bump[Custom regex manager bumps SSOT<br/>engine_versions/engine_versions/&lt;engine&gt;.yamllt;engineengine_versions/&lt;engine&gt;.yamlgt;/current.yaml + Dockerfile ARG]
+    bump[Custom regex manager bumps SSOT<br/>engine_versions/&lt;engine&gt;/current.yaml + Dockerfile ARG]
     pr[Renovate PR opens<br/>fix&#40;deps&#41;: bump vllm to 0.10.2]
 
     renovate --> bump --> pr
@@ -198,7 +198,7 @@ flowchart TD
     label --> needfollowup[Route 1 or 2 must follow before merge]
 ```
 
-**Route 1 - Patch producer code.** The dev edits `scripts/engine_producers/{engine}_*_miner.py` or `scripts/engine_producers/{engine}_introspector.py` to fix the broken landmark (e.g. follow an upstream rename). Pushing the commit re-runs the workflow; the probe re-runs; if it passes, downstream stages proceed.
+**Route 1 - Patch producer code.** The dev edits `engine_versions/{engine}/v<safe>/producers/{static_invariant_miner,dynamic_invariant_miner,schema_introspector}.py` to fix the broken landmark (e.g. follow an upstream rename). Pushing the commit re-runs the workflow; the probe re-runs; if it passes, downstream stages proceed.
 
 **Route 2 - Approve reuse via slash command.** The dev posts `@llem-ci-bot /approve-reuse <engine> <producer>` as a PR comment. Producer is one of `{invariants, schemas}` (per-producer granularity - vllm invariants might be reusable while vllm schemas are not). `approve-reuse-bot.yml` is the `issue_comment: created` listener; it validates the dev's approval rights, updates `engine_versions/{engine}/current.yaml` `miner_pins.{producer}` to widen the `SpecifierSet` to include the bumped version, and commits the SSOT change via the llem-ci-bot App token (cascades; `GITHUB_TOKEN` would not). The probe re-runs against the widened range; the verdict flips to PASS and downstream stages proceed.
 
