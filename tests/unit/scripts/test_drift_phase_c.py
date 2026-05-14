@@ -725,10 +725,20 @@ class TestRenderDriftComment:
         return _drift.DriftReport(**defaults)
 
     def test_comment_contains_marker(self) -> None:
-        """Comment body contains the stable HTML marker."""
-        report = self._base_report()
+        """Comment body contains the per-(engine, producer) HTML marker."""
+        report = self._base_report(engine="vllm", producer="invariants")
         body = _drift._render_drift_comment(report)
-        assert "<!-- llem-drift-coverage -->" in body
+        assert "<!-- llem-drift-coverage-vllm-invariants -->" in body
+
+    def test_marker_varies_by_engine_and_producer(self) -> None:
+        """Invariants and schemas comments for the same engine post under
+        distinct markers so they coexist on a PR instead of overwriting."""
+        inv = _drift._render_drift_comment(self._base_report(producer="invariants"))
+        sch = _drift._render_drift_comment(self._base_report(producer="schemas"))
+        assert "<!-- llem-drift-coverage-vllm-invariants -->" in inv
+        assert "<!-- llem-drift-coverage-vllm-schemas -->" in sch
+        assert "<!-- llem-drift-coverage-vllm-invariants -->" not in sch
+        assert "<!-- llem-drift-coverage-vllm-schemas -->" not in inv
 
     def test_comment_contains_engine_and_version(self) -> None:
         """Comment body mentions engine name and safe version."""
@@ -1067,6 +1077,81 @@ class TestCliGateFlag:
             ]
         )
         assert rc == 1
+
+    def test_comment_output_writes_body_and_skips_inprocess_post(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """--comment-output writes the rendered body to disk and SKIPS the
+        in-process upsert_pr_comment.sh call (used in CI cells where the
+        engine container lacks gh)."""
+        _redirect_compat_dir(monkeypatch, tmp_path)
+        _install_synthetic_producer(
+            monkeypatch,
+            engine="transformers",
+            producer="invariants",
+            landmarks=(),
+        )
+        monkeypatch.setattr(
+            _drift, "discover_live_landmarks", lambda e: ({"json.JSONEncoder"}, set())
+        )
+        monkeypatch.setattr(_drift, "load_exclusions", lambda e, v: {})
+        # Sentinel that fails the test if the in-process post path is taken.
+        post_called: list[tuple] = []
+        monkeypatch.setattr(
+            _drift, "_post_drift_comment", lambda *a, **kw: post_called.append((a, kw))
+        )
+        comment_path = tmp_path / "comment-transformers.md"
+        rc = _drift.main(
+            [
+                "--engine",
+                "transformers",
+                "--producer",
+                "invariants",
+                "--no-write-cache",
+                "--pr-number",
+                "644",
+                "--comment-output",
+                str(comment_path),
+            ]
+        )
+        assert rc == 0
+        assert comment_path.exists()
+        body = comment_path.read_text()
+        assert "<!-- llem-drift-coverage-transformers-invariants -->" in body
+        assert "json.JSONEncoder" in body
+        assert post_called == []
+
+    def test_pr_number_without_comment_output_uses_inprocess_post(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Legacy path: --pr-number alone (no --comment-output) still calls
+        _post_drift_comment in-process (CLI-from-host case)."""
+        _redirect_compat_dir(monkeypatch, tmp_path)
+        _install_synthetic_producer(
+            monkeypatch,
+            engine="transformers",
+            producer="invariants",
+            landmarks=(),
+        )
+        monkeypatch.setattr(_drift, "discover_live_landmarks", lambda e: (set(), set()))
+        monkeypatch.setattr(_drift, "load_exclusions", lambda e, v: {})
+        calls: list[tuple] = []
+        monkeypatch.setattr(_drift, "_post_drift_comment", lambda *a, **kw: calls.append((a, kw)))
+        rc = _drift.main(
+            [
+                "--engine",
+                "transformers",
+                "--producer",
+                "invariants",
+                "--no-write-cache",
+                "--pr-number",
+                "644",
+            ]
+        )
+        assert rc == 0
+        assert len(calls) == 1
+        # Marker plumbed through to the helper.
+        assert calls[0][1]["marker"] == "llem-drift-coverage-transformers-invariants"
 
     def test_gate_none_exit_0_with_probe_fail(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

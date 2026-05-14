@@ -1065,7 +1065,17 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "PR number to post a sticky coverage comment to. When set, the drift tool "
             "generates a markdown comment and posts it via "
             "scripts/ci/upsert_pr_comment.sh (marker: llem-drift-coverage). "
-            "Requires GH_TOKEN and REPO env vars (same as the upsert helper)."
+            "Requires GH_TOKEN and REPO env vars (same as the upsert helper). "
+            "Ignored when --comment-output is set."
+        ),
+    )
+    parser.add_argument(
+        "--comment-output",
+        type=Path,
+        default=None,
+        help=(
+            "Write the rendered comment body to PATH and skip the in-process gh post. "
+            "For CI cells whose engine container lacks gh."
         ),
     )
     return parser.parse_args(argv)
@@ -1103,15 +1113,21 @@ def _write_report_to_file(path: Path, report: DriftReport) -> None:
 
 
 _UPSERT_COMMENT_SCRIPT = _PROJECT_ROOT / "scripts" / "ci" / "upsert_pr_comment.sh"
-_DRIFT_COMMENT_MARKER = "llem-drift-coverage"
+_DRIFT_COMMENT_MARKER_PREFIX = "llem-drift-coverage"
+
+
+def _drift_comment_marker(engine: str, producer: ProducerKind) -> str:
+    """Per-(engine, producer) marker so invariants and schemas comments coexist
+    on a PR instead of overwriting each other."""
+    return f"{_DRIFT_COMMENT_MARKER_PREFIX}-{engine}-{producer}"
 
 
 def _render_drift_comment(report: DriftReport) -> str:
     """Render a markdown PR comment body for the drift report.
 
-    Comment shape (per design doc):
+    Comment shape:
 
-        <!-- llem-drift-coverage -->
+        <!-- llem-drift-coverage-<engine>-<producer> -->
         ### Coverage drift - {engine} v{ver} ({producer})
 
         {summary line}
@@ -1127,9 +1143,10 @@ def _render_drift_comment(report: DriftReport) -> str:
     pre_existing = [p for p in report.landmarks_added if p not in delta_set]
     n_new = len(delta)
     n_preexisting = len(pre_existing)
+    marker = _drift_comment_marker(report.engine, report.producer)
 
     lines: list[str] = [
-        f"<!-- {_DRIFT_COMMENT_MARKER} -->",
+        f"<!-- {marker} -->",
         f"### Coverage drift - {report.engine} {safe_ver} ({report.producer})",
         "",
     ]
@@ -1188,18 +1205,16 @@ def _render_drift_comment(report: DriftReport) -> str:
     return "\n".join(lines)
 
 
-def _post_drift_comment(pr_number: str, comment_body: str) -> None:
+def _post_drift_comment(pr_number: str, comment_body: str, marker: str) -> None:
     """Post (or update) the sticky drift comment via upsert_pr_comment.sh.
 
-    Writes ``comment_body`` to the helper via stdin. The helper uses the
-    stable HTML marker embedded in the body for dedup (PATCH if found, POST
-    if new). Failures are logged to stderr but do not abort the drift tool -
-    a comment failure should not fail CI when the gate itself passed.
+    Failures log to stderr but do not abort: a comment failure should not
+    fail CI when the gate itself passed.
     """
     script = _UPSERT_COMMENT_SCRIPT
     env = dict(os.environ)
     env["PR"] = pr_number
-    env["MARKER"] = _DRIFT_COMMENT_MARKER
+    env["MARKER"] = marker
     # REPO must already be set in the environment (set by the workflow).
     # GH_TOKEN must already be set.
     try:
@@ -1256,10 +1271,31 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(json.dumps(asdict(report), indent=2, sort_keys=True))
 
-    # Phase C: post sticky PR comment if --pr-number supplied.
-    if args.pr_number:
+    # Phase C: sticky PR comment.
+    # Two paths:
+    #   --comment-output PATH: write the rendered body to disk; caller posts
+    #     it (used in cell workflows where the engine container lacks gh).
+    #   --pr-number alone: post in-process via upsert_pr_comment.sh (legacy
+    #     CLI-from-host path; requires gh on PATH).
+    if args.comment_output is not None:
         comment = _render_drift_comment(report)
-        _post_drift_comment(args.pr_number, comment)
+        try:
+            args.comment_output.parent.mkdir(parents=True, exist_ok=True)
+            args.comment_output.write_text(comment, encoding="utf-8")
+            os.chmod(args.comment_output, 0o644)
+        except OSError as exc:
+            print(
+                json.dumps({"error": "CommentWriteFailed", "message": str(exc)}),
+                file=sys.stderr,
+            )
+            return 2
+    elif args.pr_number:
+        comment = _render_drift_comment(report)
+        _post_drift_comment(
+            args.pr_number,
+            comment,
+            marker=_drift_comment_marker(args.engine, args.producer),
+        )
 
     # Exit code: 1 when verdict=fail AND the failure was caused by a gate (not
     # infra). The probe-fail gate in the cell workflow reads verdict from JSON,
