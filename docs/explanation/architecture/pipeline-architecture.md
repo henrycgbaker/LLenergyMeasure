@@ -84,7 +84,7 @@ flowchart TD
 
 Layers over: invariant-miner + invalidity-miner + lift modules + validation-CI gate.
 
-1. **PROBE** - inline `python -m scripts._probe --producer invariants`; verdict `pass` or `fail`.
+1. **PROBE** - inline `python -m scripts._drift --producer invariants`; verdict `pass` or `fail`.
 2. **MINE** (only if probe passes) - `build_corpus.py` writes `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`.
 3. **VALIDATE-REPLAY** - `validate_invariants.py` plus the `compare_expected_vs_observed` contract from `_invariant_validation_common.py`. Replays `kwargs_positive` + `kwargs_negative` against the live library; classifies outcomes (`positive_confirmed`, `negative_confirmed`, `divergence`). Writes `src/llenergymeasure/engines/{engine}/invariants.validated.yaml`.
 4. **DIFF vs HEAD** for both `proposed.yaml` and `validated.yaml` artefacts.
@@ -96,7 +96,7 @@ Layers over: invariant-miner + invalidity-miner + lift modules + validation-CI g
 
 Layers over: parameter-discovery + typed-schema-discovery.
 
-1. **PROBE** - inline `python -m scripts._probe --producer schemas`; verdict `pass` or `fail`.
+1. **PROBE** - inline `python -m scripts._drift --producer schemas`; verdict `pass` or `fail`.
 2. **DISCOVER** (only if probe passes) - `engine_producers` writes `src/llenergymeasure/config/discovered_schemas/{engine}/schema.discovered.json`.
 3. **DIFF vs HEAD**.
 4. **REGENERATE** `docs/reference/engines/curation-{engine}.md` (Parameters section - fact base for the human curator; pre-existing behaviour preserved).
@@ -214,7 +214,7 @@ These pipelines run independent of the per-PR Renovate cycle.
 
 #### `engine-versions-sweep.yml` (scheduled, advisory)
 
-Runs `scripts/_probe.py` over a curated version range (e.g. `vllm v0.9..v0.12`) on a weekly schedule. Updates `engine_versions/{engine}.compat.json` (probe cache + compat-matrix in one file; closes [#470](https://github.com/henrycgbaker/llenergymeasure/issues/470)). Populates the probe-result cache so per-PR probes hit a warm cache.
+Runs `scripts/_drift.py` over a curated version range (e.g. `vllm v0.9..v0.12`) on a weekly schedule. Updates `engine_versions/{engine}.compat.json` (probe cache + compat-matrix in one file; closes [#470](https://github.com/henrycgbaker/llenergymeasure/issues/470)). Populates the probe-result cache so per-PR probes hit a warm cache.
 
 #### Runtime side-products (study-local, not CI)
 

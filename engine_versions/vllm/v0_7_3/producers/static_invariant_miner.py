@@ -53,8 +53,8 @@ NS_GUIDED = "vllm.sampling.guided_decoding"
 NS_ENGINE = "vllm.engine"
 
 
-# Probe-contract landmarks. Read by ``scripts._probe`` before the miner
-# runs; a missing landmark flips the probe verdict to ``fail``.
+# Drift-tool contract landmarks. Read by ``scripts._drift`` before the
+# miner runs; a missing landmark flips the probe verdict to ``fail``.
 LANDMARKS: tuple[str, ...] = (
     "vllm.sampling_params.SamplingParams",
     "vllm.sampling_params.SamplingParams._verify_args",

@@ -246,6 +246,12 @@ def update(*, engine: str, report: dict[str, Any]) -> int:
     write failure the current.yaml update is preserved (no rollback). Both paths
     are idempotent so subsequent runs converge.
     """
+    # Accept both the new field name ("current_version", from DriftReport) and
+    # the legacy name ("library_version", from the old ProbeReport) so that any
+    # cached compat.json entries written before the rename still parse cleanly.
+    if "current_version" in report and "library_version" not in report:
+        report = dict(report)
+        report["library_version"] = report["current_version"]
     required = {
         "verdict",
         "version_inside_envelope",
@@ -256,7 +262,7 @@ def update(*, engine: str, report: dict[str, Any]) -> int:
     missing = required - report.keys()
     if missing:
         print(
-            f"ProbeReport JSON missing required fields: {sorted(missing)}.",
+            f"DriftReport JSON missing required fields: {sorted(missing)}.",
             file=sys.stderr,
         )
         return 2
