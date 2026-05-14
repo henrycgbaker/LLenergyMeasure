@@ -31,3 +31,4 @@ last_probe:
   version_inside_envelope: true
   fingerprint: "c162e9d8bd82bd20dede4fabfc6c2a08ae2c460989c12ade558c48310b4b6c1c"
   fingerprint_drift: []
+  added_baseline: []

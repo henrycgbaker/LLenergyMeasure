@@ -30,3 +30,4 @@ last_probe:
   version_inside_envelope: true
   fingerprint: "14dc1896757dfc00a9a4e1990528ecac45394bb5f2850bfab17e87871aaa29da"
   fingerprint_drift: []
+  added_baseline: ["transformers.utils.quantization_config.BitsAndBytesConfig.quant_method"]
