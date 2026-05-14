@@ -359,3 +359,128 @@ def test_drift_unsupported_engine_producer_pair_returns_infra_error(
     monkeypatch.setattr(_drift, "_PRODUCER_MODULES", {})  # empty map
     rc = _drift.main(["--engine", "transformers", "--producer", "invariants"])
     assert rc == 2
+
+
+# ---------------------------------------------------------------------------
+# T2 alias detection
+# ---------------------------------------------------------------------------
+
+
+def _install_class_module(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    canonical_module: str,
+    alias_parent: str | None,
+    class_name: str = "Foo",
+) -> type:
+    """Install a synthetic class in ``canonical_module`` with optional re-export.
+
+    When ``alias_parent`` is set, also installs a parent-level module that
+    re-exports the class (sets ``alias_parent.<class_name> = cls``). The
+    class's ``__module__`` always points at the canonical module, so an
+    alias-path resolution will surface as aliased.
+    """
+    canonical = types.ModuleType(canonical_module)
+    cls = type(class_name, (), {})
+    cls.__module__ = canonical_module
+    setattr(canonical, class_name, cls)
+    monkeypatch.setitem(sys.modules, canonical_module, canonical)
+
+    if alias_parent is not None:
+        alias = types.ModuleType(alias_parent)
+        setattr(alias, class_name, cls)  # re-export
+        monkeypatch.setitem(sys.modules, alias_parent, alias)
+
+    return cls
+
+
+def test_resolved_landmark_carries_aliased_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``_resolve_landmark`` sets ``aliased`` from declared vs resolved module comparison."""
+    _install_class_module(
+        monkeypatch,
+        canonical_module="t2_resolver_canonical_pkg",
+        alias_parent=None,
+        class_name="Bar",
+    )
+    _install_class_module(
+        monkeypatch,
+        canonical_module="t2_resolver_alias_pkg.canonical",
+        alias_parent="t2_resolver_alias_pkg",
+        class_name="Baz",
+    )
+
+    canonical = _drift._resolve_landmark("t2_resolver_canonical_pkg.Bar")
+    aliased = _drift._resolve_landmark("t2_resolver_alias_pkg.Baz")
+
+    assert canonical.aliased is False
+    assert aliased.aliased is True
+
+
+def test_aliased_landmark_surfaces_in_report(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A landmark whose declared path goes through a re-export surfaces in ``landmarks_aliased``."""
+    _redirect_compat_dir(monkeypatch, tmp_path)
+    _install_class_module(
+        monkeypatch,
+        canonical_module="t2_alias_test_pkg.canonical",
+        alias_parent="t2_alias_test_pkg",
+        class_name="Foo",
+    )
+    _install_synthetic_producer(
+        monkeypatch,
+        engine="transformers",
+        producer="invariants",
+        landmarks=("t2_alias_test_pkg.Foo",),  # aliased: parent re-exports from .canonical
+    )
+
+    report = _drift.run(engine="transformers", producer="invariants")
+
+    assert report.verdict == "pass"
+    assert report.landmarks_aliased == ["t2_alias_test_pkg.Foo"]
+    assert report.landmarks_missing == []
+
+
+def test_canonical_landmark_does_not_alias(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A landmark resolving at its canonical home is NOT flagged as aliased."""
+    _redirect_compat_dir(monkeypatch, tmp_path)
+    _install_class_module(
+        monkeypatch,
+        canonical_module="t2_canonical_landmark_pkg",
+        alias_parent=None,
+        class_name="Foo",
+    )
+    _install_synthetic_producer(
+        monkeypatch,
+        engine="transformers",
+        producer="invariants",
+        landmarks=("t2_canonical_landmark_pkg.Foo",),
+    )
+
+    report = _drift.run(engine="transformers", producer="invariants")
+
+    assert report.verdict == "pass"
+    assert report.landmarks_aliased == []
+
+
+def test_aliased_never_affects_verdict(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """``landmarks_aliased`` is informational; verdict stays ``pass`` while ``landmarks_missing`` is empty."""
+    _redirect_compat_dir(monkeypatch, tmp_path)
+    _install_class_module(
+        monkeypatch,
+        canonical_module="t2_verdict_pkg.canonical",
+        alias_parent="t2_verdict_pkg",
+        class_name="Foo",
+    )
+    _install_synthetic_producer(
+        monkeypatch,
+        engine="transformers",
+        producer="invariants",
+        landmarks=("t2_verdict_pkg.Foo",),
+    )
+
+    report = _drift.run(engine="transformers", producer="invariants")
+
+    assert report.verdict == "pass"  # not flipped by alias
+    assert report.landmarks_aliased  # but informational signal present
+    assert report.landmarks_missing == []
