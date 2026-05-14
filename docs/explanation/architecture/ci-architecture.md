@@ -325,7 +325,7 @@ Actions tab (with their reusable's `name:` as the workflow name).
 
 A future engine (e.g. SGLang) is absorbed in three places:
 
-1. New SSOT: `engine_versions/sglang.yaml`.
+1. New SSOT: `engine_versions/sglang/current.yaml`.
 2. Either upstream image (e.g. `lmsysorg/sglang:<VER>` on Docker Hub) or
    first-party Dockerfile + extension to `build-transformers` job.
 3. Append `sglang` to the `invariants_others_cells` and

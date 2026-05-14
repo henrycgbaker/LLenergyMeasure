@@ -114,8 +114,11 @@ generate them on the first engine-pipeline PR. See
 
 `src/llenergymeasure/engines/<engine>/schema.discovered.json` is produced by
 the schema introspector running inside the engine container. Same policy as
-invariants - generated, not authored. The introspectors live in
-`scripts/engine_producers/`.
+invariants - generated, not authored. Introspectors and miners are per-version
+vendored at `engine_versions/<engine>/v<safe>/producers/`; `scripts/engine_producers/<engine>_*.py`
+modules are thin dispatcher shims that resolve to the correct vendored module
+for the SSOT-pinned library version. When the SSOT bumps, the dispatcher
+raises `ModuleNotFoundError` naming the file path to create.
 
 ## What is automated
 
@@ -134,6 +137,14 @@ Once items 1-4 exist and a PR is opened, the engine-pipeline CI surface
   branch so they are never stale when a PR merges.
 - **Image build and cache** - builds the engine image and pushes a cached
   layer to GHCR so subsequent runs start from a warm cache.
+- **Drift detection** - `scripts/_drift.py` runs as the cell's probe step and
+  produces a `DriftReport` JSON. It catches three failure modes: declared
+  `LANDMARKS` missing from the live library (`landmarks_missing`); live surface
+  not yet in `LANDMARKS` (`landmarks_added`); per-version `EXCLUSIONS.yaml`
+  entries with expired suppressions. The `--gate {none,delta,absolute}` option
+  selects how strictly added surface gates the cell. Gate activation in cells
+  is bootstrapped against the `added_baseline` recorded in `current.yaml` on
+  green-main writeback.
 
 The weekly schedule trigger in `engine-pipeline.yml` also runs a no-cache drift
 detection rebuild every Monday, so version drift is caught even without a PR.
@@ -162,7 +173,7 @@ delivery checklist is:
    `run_warmup_prompt` to use kernel-only warmup.
 2. `docker/Dockerfile.sglang` - base image from SGLang's official release
    container; version pinned via `ARG SGLANG_VERSION`; sources version from
-   `engine_versions/sglang.yaml`.
+   `engine_versions/sglang/current.yaml`.
 3. `Engine.SGLANG = "sglang"` in `ssot.py` and a `SGLangConfig` Pydantic
    model in `engine_configs.py`.
 

@@ -10,7 +10,7 @@ This document is the practitioner's guide to adding invariant miner support for 
 
 1. Read [miner-pipeline.md](/contributing/miner-pipeline) to understand the static miner / dynamic miner / lift module split.
 2. Read the [corpus format reference](/reference/invariants-corpus-format) to understand what rules look like.
-3. Review `scripts/engine_producers/transformers_static_miner.py` and `scripts/engine_producers/transformers_dynamic_miner.py` as the gold standard. The comments in those files contain important design decisions.
+3. Review `engine_versions/transformers/v4_57_3/producers/static_invariant_miner.py` and `engine_versions/transformers/v4_57_3/producers/dynamic_invariant_miner.py` as the gold standard. The comments in those files contain important design decisions. The `scripts/engine_producers/transformers_*_invariant_miner.py` modules are thin dispatcher shims that delegate to the per-version vendored producers.
 
 ---
 
@@ -30,14 +30,30 @@ Before writing any code, answer these questions:
 
 ---
 
+## The vendoring model
+
+Each producer (static invariant miner, dynamic invariant miner, schema introspector) lives at two levels:
+
+- **Per-version vendored module** at `engine_versions/<engine>/v<safe>/producers/{static_invariant_miner,dynamic_invariant_miner,schema_introspector}.py`. This is the real implementation. It pins its `LANDMARKS` tuple (the live class / method paths it expects) to the library version named in `engine_versions/<engine>/current.yaml:library.current_version`.
+
+- **Dispatcher shim** at `scripts/engine_producers/<engine>_{static_invariant_miner,dynamic_invariant_miner,schema_introspector}.py`. ~14 lines via `scripts/engine_producers/_stub_factory.py`. Module-level `__getattr__` (PEP 562) resolves to `engine_versions.<engine>.<safe_version>.producers.<producer>` at attribute-access time. The orchestrator (`build_corpus.py`) imports the shim; the shim defers to the dispatcher.
+
+When the SSOT bumps to a new library version, the dispatcher raises `ModuleNotFoundError` naming the exact file path to create. The maintainer copies the previous version's producer to the new path, adjusts `LANDMARKS` to match the new surface, and the cell re-runs green.
+
+Step 1 of this guide walks through the shim contract; subsequent steps detail the per-version producer body.
+
+---
+
 ## Step 1: Add the fail-loud import contract
 
-Create `scripts/engine_producers/{engine}_miner.py` (the orchestration entry point). The very first thing it must do:
+Create `scripts/engine_producers/{engine}_static_invariant_miner.py` (and corresponding `_dynamic_invariant_miner` / `_schema_introspector` shims) using `_stub_factory.py`'s `make_static_stub` / `make_dynamic_stub` / `make_schema_stub`. The shim's job is to defer to the per-version producer module via the dispatcher; the fail-loud contract lives inside the per-version producer.
+
+In `engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py`, the first thing the module must do:
 
 ```python
 import importlib.metadata
 from scripts.engine_producers._base import check_installed_version, MinerLandmarkMissingError
-from scripts.engine_producers._ssot import load_miner_pin
+from scripts.engine_producers._current import load_miner_pin
 
 # Pin source-of-truth lives in ``engine_versions/{engine}/current.yaml`` under
 # ``miner_pins.{static|dynamic|discovery}``. Pick the producer matching this
@@ -142,7 +158,7 @@ The dataclass lift is limited to `Literal[...]` value-allowlist invariants (no n
 
 ## Step 3: Write the static miner
 
-Create `scripts/engine_producers/{engine}_static_miner.py`. The static miner walks the AST of validator methods and emits rules for conditional raises, warnings, and silent normalisations.
+Create `engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py`. The static miner walks the AST of validator methods and emits rules for conditional raises, warnings, and silent normalisations.
 
 ### Pattern: walking a validator method
 
@@ -224,7 +240,7 @@ Per the transformers static miner's header, per-engine miners currently define t
 
 ## Step 4: Write the dynamic miner (if applicable)
 
-Create `scripts/engine_producers/{engine}_dynamic_miner.py` if the engine's constructors raise on invalid inputs.
+Create `engine_versions/{engine}/v<safe>/producers/dynamic_invariant_miner.py` if the engine's constructors raise on invalid inputs.
 
 **Skip this step if:** probing the engine's constructors yields zero raises. This is the case for TRT-LLM, where `TrtLlmArgs(**kwargs)` is extremely permissive at construction time; constraints are enforced in validator methods (covered by the static miner) or at build time.
 
@@ -314,22 +330,15 @@ def infer_predicates(rows: list[tuple[dict, str | None]]) -> list[InvariantCandi
 
 ## Step 5: Write the corpus orchestration entry
 
-`scripts/engine_producers/{engine}_miner.py` is the main entry point:
+`engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py` houses the orchestration. Lift modules, AST walkers, and cluster probes all live in this module (or its companion `dynamic_invariant_miner.py`); the dispatcher shim under `scripts/engine_producers/` only re-exports `mine` / `LANDMARKS` symbols. The pattern:
 
 ```python
 def mine() -> list[InvariantCandidate]:
     candidates = []
     candidates.extend(mine_pydantic_invariants())
     candidates.extend(mine_dataclass_invariants())
-
-    # Static miner
-    from scripts.engine_producers.myengine_static_miner import mine as static_mine
-    candidates.extend(static_mine())
-
-    # Dynamic miner (if applicable)
-    from scripts.engine_producers.myengine_dynamic_miner import mine as dynamic_mine
-    candidates.extend(dynamic_mine())
-
+    # Combinatorial cluster probes
+    candidates.extend(mine_cluster_invariants())
     return candidates
 
 if __name__ == "__main__":
@@ -367,7 +376,7 @@ def test_cluster_probes_without_crashing(cluster):
 def test_version_envelope_resolves():
     """The miner pin loaded from the engine SSOT must be a non-empty SpecifierSet."""
     from packaging.specifiers import SpecifierSet
-    from scripts.engine_producers._ssot import load_miner_pin
+    from scripts.engine_producers._current import load_miner_pin
     envelope = load_miner_pin("myengine", "static")
     assert isinstance(envelope, SpecifierSet)
     assert str(envelope) != ""
@@ -432,8 +441,9 @@ def test_landmark_checks_raise_on_missing():
 Run the miner locally (inside the engine's Docker container if CUDA is required):
 
 ```bash
-python scripts/engine_producers/myengine_miner.py
-# Writes src/llenergymeasure/engines/_staging/myengine_miner.yaml
+python scripts/engine_producers/build_corpus.py --engine myengine --producer static
+# Runs the per-version vendored static miner via the dispatcher shim,
+# writes src/llenergymeasure/engines/_staging/myengine_static_invariant_miner.yaml
 
 python scripts/engine_producers/build_corpus.py --engine myengine
 # Merges staging files, runs validation-CI gate, writes corpus
@@ -580,6 +590,8 @@ The fail-loud envelope and the YAML diff together cover the failure modes that t
 - [invariants-corpus-format.md](/reference/invariants-corpus-format) - corpus format
 - [parameter-discovery.md](/explanation/architecture/parameter-discovery) - runtime validation
 - [architecture-overview.md](/explanation/architecture/architecture-overview) - system overview
-- `scripts/engine_producers/transformers_static_miner.py` - gold-standard static miner
-- `scripts/engine_producers/transformers_dynamic_miner.py` - gold-standard dynamic miner
+- `engine_versions/transformers/v4_57_3/producers/static_invariant_miner.py` - gold-standard static miner
+- `engine_versions/transformers/v4_57_3/producers/dynamic_invariant_miner.py` - gold-standard dynamic miner
+- `engine_versions/_dispatcher.py` and `scripts/engine_producers/_stub_factory.py` - per-version dispatch
+- `scripts/_drift.py` - the drift tool that surfaces missing-vs-extra-vs-stable landmark state at probe time
 - `scripts/engine_producers/_base.py` - shared infrastructure

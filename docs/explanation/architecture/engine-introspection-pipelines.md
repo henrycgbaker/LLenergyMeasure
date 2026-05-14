@@ -87,9 +87,14 @@ flowchart TD
     inspect --> limitations --> envelope
 ```
 
-The introspector is engine-specific: each engine has a module under
-`scripts/engine_producers/` that knows how to walk its own config
-surface. The shared envelope and helpers live in
+The introspector is engine-specific and per-version vendored. The real
+implementation lives at
+`engine_versions/<engine>/v<safe>/producers/schema_introspector.py`,
+where `<safe>` is the SSOT-pinned library version (e.g. `v4_57_3`).
+`scripts/engine_producers/<engine>_schema_introspector.py` is a thin
+dispatcher shim (built via `_stub_factory.make_schema_stub`) that
+resolves to the per-version module at attribute-access time via PEP 562
+`__getattr__`. The shared envelope and helpers live in
 `scripts/engine_producers/_common.py`.
 
 ### Determinism
@@ -447,8 +452,9 @@ SSOT and validate it at import time. This is a structural contract,
 not a guideline.
 
 ```python
-# Every *_miner.py must resolve its envelope from the engine's SSOT:
-from scripts.engine_producers._ssot import load_miner_pin
+# Every per-version producer (under engine_versions/{engine}/v<safe>/producers/)
+# must resolve its envelope from the engine's SSOT:
+from scripts.engine_producers._current import load_miner_pin
 
 _envelope = load_miner_pin("transformers", "static")  # SpecifierSet
 

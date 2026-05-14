@@ -26,22 +26,28 @@ src/llenergymeasure/engines/{engine}/
 └── invariants.validated.yaml         CI-validated overlay, post-validate-replay
 
 src/llenergymeasure/engines/{engine}/_staging/   (gitignored, miner-only)
-├── {engine}_static_miner.yaml        Per-miner staging output (not committed)
-├── {engine}_dynamic_miner.yaml
-└── _failed_validation_{engine}.yaml  Quarantined rules
+├── {engine}_static_invariant_miner.yaml      Per-miner staging output (not committed)
+├── {engine}_dynamic_invariant_miner.yaml
+└── _failed_validation_{engine}.yaml          Quarantined rules
 
 scripts/engine_producers/
 ├── _base.py                          Shared AST primitives, detectors, filters
-├── _ssot.py                          load_miner_pin() - resolves SpecifierSet from engine SSOT
+├── _current.py                       load_current() / load_miner_pin() - resolves SpecifierSet from engine SSOT
 ├── _pydantic_lift.py                 Lift module for Pydantic models
 ├── _msgspec_lift.py                  Lift module for msgspec.Struct
 ├── _dataclass_lift.py                Lift module for stdlib @dataclass + Literal
-├── {engine}_static_miner.py          Per-engine static miner
-├── {engine}_dynamic_miner.py         Per-engine dynamic miner (when applicable)
+├── _stub_factory.py                  Producer dispatcher shims (per-engine PEP 562 hooks)
+├── {engine}_static_invariant_miner.py        Shim: dispatches to engine_versions/<engine>/v<safe>/producers/
+├── {engine}_dynamic_invariant_miner.py       Shim (when applicable)
+├── {engine}_schema_introspector.py           Shim
 ├── build_corpus.py                   Orchestration: merge + dedup + validate
 └── validate_invariants.py            Replays each rule against the live library
 
-engine_versions/{engine}/current.yaml         SSOT for library version + miner_pins envelopes
+engine_versions/{engine}/current.yaml          SSOT for library version + miner_pins envelopes
+engine_versions/{engine}/v<safe>/producers/    Per-version vendored producer modules
+├── static_invariant_miner.py
+├── dynamic_invariant_miner.py        (when applicable)
+└── schema_introspector.py
 ```
 
 The two committed YAML files form a lifecycle pair: the miners write
@@ -82,13 +88,14 @@ while `vllm/schemas` is not, or vice versa.
 
 | Symptom | Files to inspect first |
 |---|---|
-| Miner produces no rules for a new engine | `scripts/engine_producers/{engine}_*_miner.py` (does the file exist? imports succeed?); `engine_versions/{engine}/current.yaml` (is `miner_pins` populated?) |
+| Miner produces no rules for a new engine | `engine_versions/{engine}/v<safe>/producers/{static,dynamic}_invariant_miner.py` (does the file exist? imports succeed?); `engine_versions/{engine}/current.yaml` (is `miner_pins` populated?) |
 | `MinerVersionMismatchError` raised at import time | `engine_versions/{engine}/current.yaml miner_pins.{static\|dynamic\|discovery}` vs the live library version (`importlib.metadata.version("{library}")`) |
-| `MinerLandmarkMissingError` raised at import time | `scripts/engine_producers/{engine}_*_miner.py` (which `find_class` / `find_method` call returned None? compare against the live library source tree) |
+| `MinerLandmarkMissingError` raised at import time | `engine_versions/{engine}/v<safe>/producers/*.py LANDMARKS` tuple (which dotted path is missing in the live library? `scripts/_drift.py --engine {engine} --producer invariants` will surface it) |
 | Validation gate fails on a previously-passing rule | `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` (locate the rule by id) and `_staging/_failed_validation_{engine}.yaml` (which check failed: `positive_raises`, `message_template_match`, or `negative_does_not_raise`) |
 | Rule duplication or merge surprises | `scripts/engine_producers/build_corpus.py` (the merger; deduplication key is `(engine, severity, match_fields)`); look at `cross_validated_by` on the merged rule |
-| Static miner missed a predicate | `scripts/engine_producers/_base.py` (which detector should have matched? did a filter drop the candidate?) |
-| Dynamic miner inferred wrong template | `scripts/engine_producers/{engine}_dynamic_miner.py` (predicate-inference logic); the seven templates live in the same file or `_base.py` depending on engine |
+| Static miner missed a predicate | `scripts/engine_producers/_base.py` (shared detectors) and `engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py` (per-version surface) |
+| Dynamic miner inferred wrong template | `engine_versions/{engine}/v<safe>/producers/dynamic_invariant_miner.py` (predicate-inference logic); the seven templates live in the per-version module or `_base.py` depending on engine |
+| Drift between dispatcher LANDMARKS and live library | `scripts/_drift.py --engine {engine} --producer {invariants,schemas}` reports `landmarks_missing` (removed) and `landmarks_added` (new surface not yet declared). Maintainer flow: patch LANDMARKS in the per-version producer module |
 
 The error classes (`MinerError`, `MinerVersionMismatchError`,
 `MinerLandmarkMissingError`) live in `scripts/engine_producers/_base.py`
@@ -140,7 +147,7 @@ diverged:
 
 Dynamic mining errs toward recall. The validation-CI gate is the
 filter, not the miner. If a noisy candidate cluster appears, look at
-`scripts/engine_producers/{engine}_dynamic_miner.py` for the cluster
+`engine_versions/{engine}/v<safe>/producers/dynamic_invariant_miner.py` for the cluster
 definition and tighten the value sets so the Cartesian product is
 smaller and more pointed.
 
