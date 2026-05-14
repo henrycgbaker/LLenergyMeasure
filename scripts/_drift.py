@@ -114,9 +114,9 @@ class DriftReport:
 
     ``verdict`` is ``fail`` iff ``landmarks_missing`` is non-empty.
 
-    Diagnostic fields (``version_inside_envelope``, ``fingerprint_drift``)
-    ride along on every report and steer human attention on pass-but-
-    suspicious bumps. They NEVER affect verdict.
+    Diagnostic fields (``version_inside_envelope``, ``fingerprint_drift``,
+    ``landmarks_aliased``) ride along on every report and steer human
+    attention on pass-but-suspicious bumps. They NEVER affect verdict.
     """
 
     engine: str
@@ -144,20 +144,18 @@ class _ResolvedLandmark:
     ``filename`` + ``lineno`` are advisory but track real refactors (a method
     moving from line 142 to 187 across a patch release).
 
-    ``declared_module`` is the longest importable prefix of ``landmark``
-    (i.e. what we imported to start the getattr chain). ``resolved_module``
-    is ``obj.__module__`` if defined, or ``None`` for objects without one
-    (modules themselves, some C extension types). When the two differ, the
-    landmark resolved through a package re-export shim and joins
-    ``landmarks_aliased`` on the report.
+    ``aliased`` is True when ``obj.__module__`` differs from the longest
+    importable prefix of ``landmark`` - i.e. the landmark resolved through a
+    package re-export shim (the upstream library moved the symbol's canonical
+    home but kept the old import path working). Objects without ``__module__``
+    (modules themselves, certain C extension types) are not aliased.
     """
 
     landmark: str
     qualname: str
     filename: str | None
     lineno: int | None
-    declared_module: str
-    resolved_module: str | None
+    aliased: bool
 
 
 def _resolve_landmark(landmark: str) -> _ResolvedLandmark:
@@ -199,13 +197,13 @@ def _resolve_landmark(landmark: str) -> _ResolvedLandmark:
 
     qualname = getattr(obj, "__qualname__", None) or getattr(obj, "__name__", landmark)
     resolved_module = getattr(obj, "__module__", None)
+    aliased = resolved_module is not None and resolved_module != declared_module
     return _ResolvedLandmark(
         landmark=landmark,
         qualname=str(qualname),
         filename=filename,
         lineno=lineno,
-        declared_module=declared_module,
-        resolved_module=str(resolved_module) if resolved_module is not None else None,
+        aliased=aliased,
     )
 
 
@@ -395,11 +393,7 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
         # landmarks, not the cause.
         drift = [r.landmark for r in resolved]
 
-    aliased = [
-        r.landmark
-        for r in resolved
-        if r.resolved_module is not None and r.resolved_module != r.declared_module
-    ]
+    aliased = [r.landmark for r in resolved if r.aliased]
 
     verdict: Literal["pass", "fail"] = "fail" if missing else "pass"
 

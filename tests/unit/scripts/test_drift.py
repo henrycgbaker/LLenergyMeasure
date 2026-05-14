@@ -394,19 +394,26 @@ def _install_class_module(
     return cls
 
 
-def test_resolved_landmark_carries_resolved_module(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``_resolve_landmark`` captures both declared and resolved module paths."""
+def test_resolved_landmark_carries_aliased_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``_resolve_landmark`` sets ``aliased`` from declared vs resolved module comparison."""
     _install_class_module(
         monkeypatch,
-        canonical_module="t2_canonical_test_pkg",
+        canonical_module="t2_resolver_canonical_pkg",
         alias_parent=None,
         class_name="Bar",
     )
+    _install_class_module(
+        monkeypatch,
+        canonical_module="t2_resolver_alias_pkg.canonical",
+        alias_parent="t2_resolver_alias_pkg",
+        class_name="Baz",
+    )
 
-    resolved = _drift._resolve_landmark("t2_canonical_test_pkg.Bar")
+    canonical = _drift._resolve_landmark("t2_resolver_canonical_pkg.Bar")
+    aliased = _drift._resolve_landmark("t2_resolver_alias_pkg.Baz")
 
-    assert resolved.declared_module == "t2_canonical_test_pkg"
-    assert resolved.resolved_module == "t2_canonical_test_pkg"
+    assert canonical.aliased is False
+    assert aliased.aliased is True
 
 
 def test_aliased_landmark_surfaces_in_report(
