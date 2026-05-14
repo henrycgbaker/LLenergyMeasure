@@ -15,6 +15,15 @@ every report and are informational - they NEVER affect verdict:
                                   tuples; shifts on real refactors.
     ``fingerprint_drift``       : landmarks whose coordinates moved since
                                   the cached fingerprint was written.
+    ``landmarks_aliased``       : landmarks whose declared path resolves
+                                  through a package re-export rather than
+                                  at the canonical home (e.g. upstream
+                                  refactored a flat module into a subpackage
+                                  and kept the old import paths working
+                                  via ``from X.Y import Z`` in ``__init__``).
+                                  A maintainer-facing hint that the canonical
+                                  module path has moved; future producer cuts
+                                  should declare against the canonical path.
 
 Producer-module discovery uses a per-engine convention table (see
 ``_PRODUCER_MODULES``); each producer module exposes a
@@ -118,6 +127,7 @@ class DriftReport:
     fingerprint: str
     fingerprint_drift: list[str] = field(default_factory=list)
     landmarks_missing: list[str] = field(default_factory=list)
+    landmarks_aliased: list[str] = field(default_factory=list)
     version_inside_envelope: bool = True
 
 
@@ -130,15 +140,24 @@ class DriftReport:
 class _ResolvedLandmark:
     """One successfully-resolved landmark and its source coordinates.
 
-    The fingerprint is a sorted hash of these tuples; ``filename`` +
-    ``lineno`` are advisory but track real refactors (a method moving
-    from line 142 to 187 across a patch release).
+    The fingerprint is a sorted hash of (landmark, qualname, filename, lineno);
+    ``filename`` + ``lineno`` are advisory but track real refactors (a method
+    moving from line 142 to 187 across a patch release).
+
+    ``declared_module`` is the longest importable prefix of ``landmark``
+    (i.e. what we imported to start the getattr chain). ``resolved_module``
+    is ``obj.__module__`` if defined, or ``None`` for objects without one
+    (modules themselves, some C extension types). When the two differ, the
+    landmark resolved through a package re-export shim and joins
+    ``landmarks_aliased`` on the report.
     """
 
     landmark: str
     qualname: str
     filename: str | None
     lineno: int | None
+    declared_module: str
+    resolved_module: str | None
 
 
 def _resolve_landmark(landmark: str) -> _ResolvedLandmark:
@@ -164,6 +183,7 @@ def _resolve_landmark(landmark: str) -> _ResolvedLandmark:
     if module is None:
         raise ImportError(f"No importable prefix in landmark {landmark!r}")
 
+    declared_module = ".".join(parts[:module_idx])
     obj: object = module
     for attr in parts[module_idx:]:
         obj = getattr(obj, attr)
@@ -178,11 +198,14 @@ def _resolve_landmark(landmark: str) -> _ResolvedLandmark:
         lineno = None
 
     qualname = getattr(obj, "__qualname__", None) or getattr(obj, "__name__", landmark)
+    resolved_module = getattr(obj, "__module__", None)
     return _ResolvedLandmark(
         landmark=landmark,
         qualname=str(qualname),
         filename=filename,
         lineno=lineno,
+        declared_module=declared_module,
+        resolved_module=str(resolved_module) if resolved_module is not None else None,
     )
 
 
@@ -372,6 +395,12 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
         # landmarks, not the cause.
         drift = [r.landmark for r in resolved]
 
+    aliased = [
+        r.landmark
+        for r in resolved
+        if r.resolved_module is not None and r.resolved_module != r.declared_module
+    ]
+
     verdict: Literal["pass", "fail"] = "fail" if missing else "pass"
 
     return DriftReport(
@@ -383,6 +412,7 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
         fingerprint=fingerprint,
         fingerprint_drift=drift,
         landmarks_missing=missing,
+        landmarks_aliased=aliased,
         version_inside_envelope=_check_envelope(current, producer, current_version),
     )
 
