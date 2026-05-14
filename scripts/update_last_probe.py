@@ -1,8 +1,8 @@
-"""Update the ``last_probe:`` block in an engine current.yaml from a ProbeReport JSON.
+"""Update the ``last_probe:`` block in an engine current.yaml from a DriftReport JSON.
 
 Helper for the engine-coupling probe-writeback workflow. Reads a
-``ProbeReport`` JSON document on stdin (the shape emitted by
-``scripts._probe``) and rewrites the four mutable fields under
+``DriftReport`` JSON document on stdin (the shape emitted by
+``scripts._drift``) and rewrites the four mutable fields under
 ``last_probe:`` in ``engine_versions/{engine}.yaml``:
 
     verdict
@@ -75,11 +75,6 @@ _MUTABLE_FIELDS: tuple[str, ...] = (
     "fingerprint_drift",
 )
 
-# Phase C: additional field written on a pass verdict so that the next run
-# can compute the delta (new gaps introduced by the PR vs last green main).
-# Only written when the DriftReport carries the field (Phase C invocations).
-_ADDED_BASELINE_FIELD = "added_baseline"
-
 
 def _format_scalar(value: Any) -> str:
     """Render *value* in the current.yaml's canonical scalar style.
@@ -118,8 +113,6 @@ def _format_scalar(value: Any) -> str:
 def _replace_last_probe_block(
     text: str,
     updates: dict[str, Any],
-    *,
-    optional_inserts: dict[str, Any] | None = None,
 ) -> tuple[str, bool]:
     """Replace mutable fields under ``last_probe:``; return (new_text, changed).
 
@@ -128,25 +121,15 @@ def _replace_last_probe_block(
     that prevents the workflow looping on no-op writebacks. Lines whose
     keys are not in ``updates`` are left untouched.
 
-    ``optional_inserts`` contains fields that may or may not already exist in
-    the block. When a key IS present, it is updated in-place like a normal
-    ``updates`` field. When a key is NOT present, it is appended at the end of
-    the ``last_probe:`` block (before the next top-level key or EOF).
-
     Raises :class:`ValueError` if the ``last_probe:`` block cannot be
-    located, or if any field in ``updates`` (not ``optional_inserts``) is
-    missing from the block.
+    located, or if any field in ``updates`` is missing from the block.
     """
-    optional_inserts = optional_inserts or {}
-    all_updates = {**updates, **optional_inserts}
-
     lines = text.splitlines(keepends=True)
     in_block = False
     block_indent: str | None = None
     new_lines = list(lines)
     seen: set[str] = set()
     changed = False
-    block_end_idx: int | None = None  # index where last_probe: block ends
 
     for idx, line in enumerate(lines):
         if line.startswith("last_probe:"):
@@ -163,7 +146,6 @@ def _replace_last_probe_block(
         match = _LAST_PROBE_LINE_RE.match(stripped_no_nl)
         if match is None:
             # Dedent or unexpected shape - block ended.
-            block_end_idx = idx
             break
 
         indent = match.group("indent")
@@ -174,11 +156,11 @@ def _replace_last_probe_block(
             continue
 
         key = match.group("key")
-        if key not in all_updates:
+        if key not in updates:
             continue
         seen.add(key)
 
-        new_value = _format_scalar(all_updates[key])
+        new_value = _format_scalar(updates[key])
         newline = "\n" if line.endswith("\n") else ""
         new_line = f"{indent}{key}: {new_value}{newline}"
         if new_line != line:
@@ -199,18 +181,6 @@ def _replace_last_probe_block(
             "Add them to the current.yaml's last_probe: block before running the "
             "writeback step."
         )
-
-    # Append any optional_inserts that weren't already present in the block.
-    missing_optional = set(optional_inserts) - seen
-    if missing_optional:
-        indent = block_indent
-        insert_lines = [
-            f"{indent}{key}: {_format_scalar(optional_inserts[key])}\n"
-            for key in sorted(missing_optional)
-        ]
-        insert_at = block_end_idx if block_end_idx is not None else len(new_lines)
-        new_lines[insert_at:insert_at] = insert_lines
-        changed = True
 
     return "".join(new_lines), changed
 
@@ -269,7 +239,7 @@ def update(*, engine: str, report: dict[str, Any]) -> int:
     """Apply *report*'s last_probe-relevant fields to the engine current.yaml.
 
     Returns 0 on success (whether or not a change was written), 2 on
-    infrastructure failure (current.yaml missing / malformed, ProbeReport
+    infrastructure failure (current.yaml missing / malformed, DriftReport
     missing required fields).
 
     Also mirrors the last_probe block as a standalone YAML to the
@@ -279,18 +249,12 @@ def update(*, engine: str, report: dict[str, Any]) -> int:
     write failure the current.yaml update is preserved (no rollback). Both paths
     are idempotent so subsequent runs converge.
     """
-    # Accept both the new field name ("current_version", from DriftReport) and
-    # the legacy name ("library_version", from the old ProbeReport) so that any
-    # cached compat.json entries written before the rename still parse cleanly.
-    if "current_version" in report and "library_version" not in report:
-        report = dict(report)
-        report["library_version"] = report["current_version"]
     required = {
         "verdict",
         "version_inside_envelope",
         "fingerprint",
         "fingerprint_drift",
-        "library_version",
+        "current_version",
     }
     missing = required - report.keys()
     if missing:
@@ -314,20 +278,8 @@ def update(*, engine: str, report: dict[str, Any]) -> int:
 
     updates = {field: report[field] for field in _MUTABLE_FIELDS}
 
-    # Phase C: write added_baseline on a pass verdict so the next run can
-    # compute the delta (new high-confidence gaps introduced vs last green main).
-    # The baseline is ``landmarks_added`` from the current DriftReport (post-
-    # exclusion high-confidence gaps). Only written when the report carries
-    # ``landmarks_added`` (Phase B/C DriftReport shapes); older ProbeReport
-    # shapes omit this field and we skip it silently.
-    optional_inserts: dict[str, Any] = {}
-    if report.get("verdict") == "pass" and "landmarks_added" in report:
-        optional_inserts[_ADDED_BASELINE_FIELD] = report["landmarks_added"]
-
     try:
-        new_text, changed = _replace_last_probe_block(
-            text, updates, optional_inserts=optional_inserts
-        )
+        new_text, changed = _replace_last_probe_block(text, updates)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -343,20 +295,20 @@ def update(*, engine: str, report: dict[str, Any]) -> int:
     # current.yaml is authoritative and the archive will be regenerated on the
     # next run. We still surface the failure to stderr so it's visible
     # in CI logs.
-    library_version = str(report["library_version"])
+    current_version = str(report["current_version"])
     try:
         archive_changed = _write_archive_last_probe(
-            engine=engine, version=library_version, report=report
+            engine=engine, version=current_version, report=report
         )
     except (OSError, ValueError) as exc:
         print(
             f"Warning: could not mirror last_probe to archive for {engine} "
-            f"v{library_version}: {exc!r}. current.yaml update preserved.",
+            f"v{current_version}: {exc!r}. current.yaml update preserved.",
             file=sys.stderr,
         )
     else:
         if archive_changed:
-            print(f"Mirrored last_probe to archive at {engine}/v{library_version}.")
+            print(f"Mirrored last_probe to archive at {engine}/v{current_version}.")
 
     _emit_outputs(changed=changed, verdict=verdict)
     return 0

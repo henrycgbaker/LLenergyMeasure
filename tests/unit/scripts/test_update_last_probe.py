@@ -78,12 +78,12 @@ def _pass_report(
     inside_envelope: bool = True,
     verdict: str = "pass",
 ) -> dict[str, object]:
-    """Build a minimal ProbeReport-shaped dict for stdin / direct calls."""
+    """Build a minimal DriftReport-shaped dict for stdin / direct calls."""
     return {
         "engine": "transformers",
         "producer": "invariants",
         "verdict": verdict,
-        "library_version": "4.57.3",
+        "current_version": "4.57.3",
         "version_inside_envelope": inside_envelope,
         "fingerprint": fingerprint,
         "fingerprint_drift": drift or [],
