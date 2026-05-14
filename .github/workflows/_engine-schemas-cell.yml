@@ -251,8 +251,9 @@ jobs:
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
           exit "$DRIFT_RC"
 
-      # last_probe is the invariants cell's: schemas' landmarks_added is empty
-      # and its fingerprint tuple differs. Two writers race the aggregator rsync.
+      # The canonical last_probe writer is in _engine-invariants-cell.yml.
+      # Removed from this cell because schemas' landmarks_added is unconditionally
+      # empty and its fingerprint tuple differs - two writers raced the aggregator rsync.
 
       - name: Save current schema for diffing
         if: steps.probe.outputs.verdict == 'pass'
