@@ -9,24 +9,27 @@ drop-in replacement for the former ``_probe.py`` non-regression gate:
     fail : at least one landmark is missing, OR the producer module
            itself fails to import after one retry.
 
-Phase B (follow-up) will add the "added" direction - validators that exist
-in the live library but are not declared in the per-version archive.
-Phase C will add exclusions and CI gating.
+Phase B adds the "added" direction - validators that exist in the live library
+but are not declared in the per-version archive LANDMARKS. This is the additive
+blind spot coverage check: when Renovate bumps a library to a version with new
+validators, Phase B surfaces them so the maintainer knows to extend LANDMARKS +
+walker logic. Phase B is warning-only: ``verdict`` stays ``pass`` even when
+``landmarks_added`` is non-empty.
+
+Phase C (separate PR) will add CI gating and EXCLUSIONS.yaml.
 
 ``direction`` field semantics:
 
     "removed" : one or more declared landmarks are absent from the live library.
-    "added"   : (Phase B) one or more live validators are absent from LANDMARKS.
+    "added"   : one or more live validators are absent from LANDMARKS.
+    "mixed"   : both removed AND added gaps found simultaneously.
     "stable"  : all declared landmarks resolve; no undeclared validators found.
 
-In Phase A, each ``DriftReport`` carries ``direction`` = "removed" when
-``landmarks_missing`` is non-empty, and ``direction`` = "stable" otherwise.
-``landmarks_added`` is always empty in Phase A.
-
-Diagnostic fields (``version_inside_envelope``, ``fingerprint_drift``)
-ride along on every report and are surfaced in workflow comments. They
-NEVER affect the verdict - those signals steer the human's attention on
-``pass``-but-suspicious bumps without gating the pipeline.
+Diagnostic fields (``version_inside_envelope``, ``fingerprint_drift``,
+``landmarks_added``, ``landmarks_added_low_confidence``) ride along on every
+report. Only ``landmarks_added`` (high-confidence) is surfaced in CI output by
+default. ``landmarks_added_low_confidence`` is present in the JSON for
+completeness.
 
 Producer-module discovery uses a per-engine convention table (see
 ``_PRODUCER_MODULES``); each producer module exposes a
@@ -53,6 +56,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import dataclasses
+import enum
 import hashlib
 import importlib
 import inspect
@@ -79,6 +84,7 @@ from scripts.engine_producers._base import MinerLandmarkMissingError  # noqa: E4
 from scripts.engine_producers._current import current_path  # noqa: E402
 
 ProducerKind = Literal["invariants", "schemas"]
+DirectionKind = Literal["removed", "added", "mixed", "stable"]
 
 # Per-engine producer module map. The drift tool lives one layer above the
 # producers; this table is the single seam where (engine, producer) cells
@@ -110,14 +116,29 @@ class DriftReport:
     Serialised to stdout JSON and to ``engine_versions/{engine}.compat.json``
     for cross-run cache + fingerprint-drift detection.
 
-    Phase A emits ``direction`` = "removed" when ``landmarks_missing`` is
-    non-empty; "stable" otherwise. ``landmarks_added`` is always empty in
-    Phase A - Phase B will fill it by walking the live library surface.
+    Phase A fields
+    --------------
+    ``direction`` = "removed" when ``landmarks_missing`` is non-empty; "stable" otherwise.
+    ``landmarks_added`` and ``landmarks_added_low_confidence`` are empty in a Phase A run
+    (no introspection roots configured for the engine).
+
+    Phase B fields
+    --------------
+    ``landmarks_added`` : high-confidence live validators absent from LANDMARKS. Surfaced
+    in CI workflow comments. Warning-only - does NOT flip verdict to fail.
+    ``landmarks_added_low_confidence`` : medium/low-confidence candidates. Present in JSON
+    for completeness; not surfaced in CI output by default.
+    ``direction`` gains two new values: "added" (only live gaps found) and "mixed"
+    (both removed and added gaps present simultaneously).
+
+    Diagnostic fields (``version_inside_envelope``, ``fingerprint_drift``) ride along on
+    every report and steer human attention on pass-but-suspicious bumps. They NEVER
+    affect verdict.
     """
 
     engine: str
     producer: ProducerKind
-    direction: Literal["removed", "added", "stable"]
+    direction: DirectionKind
     schema_version: int
     current_version: str
     verdict: Literal["pass", "fail"]
@@ -125,6 +146,7 @@ class DriftReport:
     fingerprint_drift: list[str] = field(default_factory=list)
     landmarks_missing: list[str] = field(default_factory=list)
     landmarks_added: list[str] = field(default_factory=list)
+    landmarks_added_low_confidence: list[str] = field(default_factory=list)
     version_inside_envelope: bool = True
 
 
@@ -199,6 +221,329 @@ def _fingerprint(resolved: list[_ResolvedLandmark]) -> str:
         f"{r.landmark}|{r.qualname}|{r.filename or ''}|{r.lineno or 0}" for r in resolved
     )
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Phase B: live library introspection
+# ---------------------------------------------------------------------------
+
+# Engine-specific module roots to walk when discovering live validators.
+# Each value is either a tuple of module paths (import and walk all classes
+# found in each) or a tuple of fully-qualified class paths (import the
+# class directly - used when the module is too broad to walk exhaustively).
+#
+# "transformers" uses class-level targeting: walking all of ``transformers``
+# would pull in thousands of classes and trigger CUDA-sensitive imports
+# (e.g. BitsAndBytesConfig). Instead we enumerate only the 4 classes
+# declared in LANDMARKS.
+#
+# "vllm" and "tensorrt" use module-level targeting: their config modules are
+# narrow enough to walk fully. For tensorrt, the NGC entrypoint sets up CUDA
+# forward-compat; the drift tool is invoked inside the container so imports
+# succeed. vllm's config subpackage refactored from a flat module (0.7.x) to
+# a per-concern subpackage (0.16+); both layouts resolve via importlib.
+_ENGINE_INTROSPECTION_ROOTS: dict[str, tuple[str, ...]] = {
+    "transformers": (
+        # Class-level targets - not module-level. Avoids pulling in the full
+        # transformers import graph (CUDA-bearing BNB, flash-attn, etc.).
+        "transformers.GenerationConfig",
+        "transformers.BitsAndBytesConfig",
+        "transformers.AutoModelForCausalLM",
+        "transformers.PreTrainedModel",
+    ),
+    "vllm": (
+        "vllm.config",
+        "vllm.sampling_params",
+    ),
+    "tensorrt": (
+        "tensorrt_llm.llmapi.llm_args",
+        "tensorrt_llm.builder",
+    ),
+}
+
+# Confidence tier labels (vulture-style: kind-derived, not learned scores).
+_CONF_HIGH = "high"
+_CONF_MEDIUM = "medium"
+_CONF_LOW = "low"
+
+
+def _is_pydantic_v2_model(cls: type) -> bool:
+    """True if ``cls`` is a pydantic v2 BaseModel or pydantic-dataclass."""
+    try:
+        import pydantic  # type: ignore[import]
+
+        return isinstance(cls, type) and issubclass(cls, pydantic.BaseModel)
+    except ImportError:
+        return False
+
+
+def _is_pydantic_v1_model(cls: type) -> bool:
+    """True if ``cls`` appears to be a pydantic v1 model (pre-v2 API)."""
+    # v1 models have __fields__ and __validators__ but NOT __pydantic_decorators__.
+    return (
+        hasattr(cls, "__fields__")
+        and hasattr(cls, "__validators__")
+        and not hasattr(cls, "__pydantic_decorators__")
+        and not hasattr(cls, "model_fields")
+    )
+
+
+def _discover_pydantic_v2(cls: type, module_prefix: str) -> list[tuple[str, str]]:
+    """Discover validator methods from a pydantic v2 BaseModel / pydantic-dataclass.
+
+    Reads ``cls.__pydantic_decorators__`` (a ``DecoratorInfos`` dataclass).
+    Pydantic v2 flattens inherited validators into this attribute - do NOT
+    walk MRO manually; that would double-count.
+
+    Returns ``[(confidence, dotted_path), ...]``.
+
+    ``__pydantic_decorators__`` is documented-internal but the de-facto contract
+    consumed by autodoc-pydantic, LangChain, and others. Not wrapped in
+    try/except so callers see real bugs.
+    """
+    dec = cls.__pydantic_decorators__
+    results: list[tuple[str, str]] = []
+    qualname = _dotted_qualname(cls, module_prefix)
+
+    # Buckets that indicate genuine validator surface.
+    high_buckets = ("field_validators", "model_validators", "root_validators", "validators")
+    # Serializer/computed buckets are validator-adjacent but lower signal.
+    medium_buckets = ("field_serializers", "model_serializers", "computed_fields")
+
+    for bucket_name in high_buckets:
+        bucket = getattr(dec, bucket_name, {})
+        for method_name in bucket:
+            results.append((_CONF_HIGH, f"{qualname}.{method_name}"))
+
+    for bucket_name in medium_buckets:
+        bucket = getattr(dec, bucket_name, {})
+        for method_name in bucket:
+            results.append((_CONF_MEDIUM, f"{qualname}.{method_name}"))
+
+    # model_fields are declared fields - high confidence surface.
+    model_fields = getattr(cls, "model_fields", {})
+    for field_name in model_fields:
+        results.append((_CONF_HIGH, f"{qualname}.{field_name}"))
+
+    return results
+
+
+def _discover_pydantic_v1(cls: type, module_prefix: str) -> list[tuple[str, str]]:
+    """Discover validator methods from a pydantic v1 model."""
+    results: list[tuple[str, str]] = []
+    qualname = _dotted_qualname(cls, module_prefix)
+
+    for field_name in getattr(cls, "__fields__", {}):
+        results.append((_CONF_HIGH, f"{qualname}.{field_name}"))
+    for validator_name in getattr(cls, "__validators__", {}):
+        results.append((_CONF_HIGH, f"{qualname}.{validator_name}"))
+    for method_name in getattr(cls, "__pre_root_validators__", []):
+        results.append((_CONF_HIGH, f"{qualname}.{method_name}"))
+    for method_name in getattr(cls, "__post_root_validators__", []):
+        results.append((_CONF_HIGH, f"{qualname}.{method_name}"))
+    return results
+
+
+def _discover_dataclass(cls: type, module_prefix: str) -> list[tuple[str, str]]:
+    """Discover fields and __post_init__ from a stdlib ``@dataclass``."""
+    results: list[tuple[str, str]] = []
+    qualname = _dotted_qualname(cls, module_prefix)
+
+    try:
+        for f in dataclasses.fields(cls):
+            if not f.name.startswith("_"):
+                results.append((_CONF_HIGH, f"{qualname}.{f.name}"))
+    except TypeError:
+        # Not a dataclass (dataclasses.fields raises TypeError on non-dataclasses).
+        pass
+
+    if hasattr(cls, "__post_init__"):
+        results.append((_CONF_HIGH, f"{qualname}.__post_init__"))
+    return results
+
+
+def _discover_plain_class(cls: type, module_prefix: str) -> list[tuple[str, str]]:
+    """Discover validator-like callables on a plain class via name heuristics.
+
+    Uses ``vars(cls)`` (not ``dir(cls)`` / ``inspect.getmembers``) to avoid
+    triggering descriptors and conflating inherited members.
+
+    Confidence tiers:
+    - ``high``: none from plain classes (no decorator evidence).
+    - ``medium``: public ``validate_*`` / ``check_*`` / ``verify_*`` callables
+      in ``vars(cls)`` (might be a manual validator, might be a passthrough).
+    - ``low``: private ``_validate_*`` / ``_verify_*`` helpers.
+    """
+    results: list[tuple[str, str]] = []
+    qualname = _dotted_qualname(cls, module_prefix)
+
+    for name, obj in vars(cls).items():
+        if not callable(obj):
+            continue
+        lower = name.lower()
+        # Public validate_* / check_* / verify_* (no leading underscore)
+        if not name.startswith("_") and any(
+            lower.startswith(prefix) for prefix in ("validate", "check", "verify")
+        ):
+            results.append((_CONF_MEDIUM, f"{qualname}.{name}"))
+            continue
+        # Private _validate_* / _verify_*
+        if (
+            name.startswith("_")
+            and not name.startswith("__")
+            and any(lower.lstrip("_").startswith(prefix) for prefix in ("validate", "verify"))
+        ):
+            results.append((_CONF_LOW, f"{qualname}.{name}"))
+    return results
+
+
+def _dotted_qualname(cls: type, module_prefix: str) -> str:
+    """Canonical dotted path for ``cls`` relative to its defining module.
+
+    Prefers the module's ``__name__`` attribute for the class's own
+    ``__module__`` + ``__qualname__`` combination. Falls back to
+    ``module_prefix.cls.__qualname__`` when the class's ``__module__``
+    attribute is missing.
+    """
+    own_module = getattr(cls, "__module__", None) or module_prefix
+    qualname = getattr(cls, "__qualname__", None) or cls.__name__
+    return f"{own_module}.{qualname}"
+
+
+def _class_validator_surface(cls: type, module_prefix: str) -> list[tuple[str, str]]:
+    """Layered dispatch: discover validator surface of a single class.
+
+    Dispatch order (first match wins):
+    1. Pydantic v2 BaseModel / pydantic-dataclass - use ``__pydantic_decorators__``
+    2. Pydantic v1 - use ``__fields__`` + ``__validators__``
+    3. stdlib ``@dataclass`` - use ``dataclasses.fields`` + ``__post_init__``
+    4. Enum (StrEnum / IntEnum) - skip, no validator concept
+    5. Plain class - name-heuristic on ``vars(cls)``
+
+    Note: pydantic-dataclasses ARE pydantic v2 BaseModel subclasses after
+    decoration, so step 1 catches them before step 3.
+    """
+    if _is_pydantic_v2_model(cls):
+        return _discover_pydantic_v2(cls, module_prefix)
+    if _is_pydantic_v1_model(cls):
+        return _discover_pydantic_v1(cls, module_prefix)
+    # Enum check before dataclass: StrEnum is also a dataclass in Python 3.11+
+    # when using the functional API, but enum members have no validator surface.
+    if issubclass(cls, enum.Enum):
+        return []
+    if dataclasses.is_dataclass(cls):
+        return _discover_dataclass(cls, module_prefix)
+    return _discover_plain_class(cls, module_prefix)
+
+
+def _import_class_from_path(dotted_path: str) -> type | None:
+    """Import and return a class from a dotted path like ``transformers.GenerationConfig``.
+
+    Returns ``None`` if the import fails (engine not installed in the current
+    Python environment - expected for Docker-only engines on the host).
+    Handles partial-import failures gracefully (one broken class does not
+    abort the whole walk).
+
+    Unlike ``_resolve_landmark`` (which raises on failure and returns a
+    ``_ResolvedLandmark``), this helper returns the raw type or ``None`` - the
+    difference in return contract warrants keeping them separate.
+    """
+    parts = dotted_path.split(".")
+    module: ModuleType | None = None
+    module_idx = 0
+    for split in range(len(parts), 0, -1):
+        try:
+            candidate = importlib.import_module(".".join(parts[:split]))
+            module = candidate
+            module_idx = split
+            break
+        except ImportError:
+            continue
+    if module is None:
+        return None
+    obj: object = module
+    for attr in parts[module_idx:]:
+        try:
+            obj = getattr(obj, attr)
+        except AttributeError:
+            return None
+    if not isinstance(obj, type):
+        return None
+    return obj
+
+
+def _walk_module_classes(module_path: str) -> list[tuple[type, str]]:
+    """Import a module and return ``[(class, module_path), ...]`` for all classes defined there.
+
+    Only returns classes whose ``__module__`` matches ``module_path`` exactly
+    (avoids picking up re-exported classes from other modules). On ImportError
+    returns an empty list - engine not installed in this environment.
+    """
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError:
+        return []
+    results: list[tuple[type, str]] = []
+    for _name, obj in vars(module).items():
+        if isinstance(obj, type) and getattr(obj, "__module__", None) == module_path:
+            results.append((obj, module_path))
+    return results
+
+
+def discover_live_landmarks(engine: str) -> tuple[set[str], set[str]]:
+    """Walk the live library surface for ``engine`` and return discovered paths.
+
+    Returns ``(high_confidence, low_confidence)`` where each is a ``set[str]``
+    of canonical dotted paths like ``"vllm.config.ParallelConfig.validate_X"``.
+
+    High-confidence paths include:
+    - Pydantic v2 field_validators / model_validators / declared model_fields
+    - Pydantic v1 __fields__ + __validators__
+    - Stdlib @dataclass fields + __post_init__
+    - Plain class public ``validate_*`` / ``check_*`` / ``verify_*`` callables
+
+    Low-confidence paths include:
+    - Plain class private ``_validate_*`` / ``_verify_*`` helpers
+    - Pydantic serializer / computed_field buckets (medium tier)
+
+    Returns empty sets when the engine library is not installed in the current
+    Python environment (expected for Docker-only engines running on the host).
+
+    The function is graceful on partial failures: one broken class does not
+    abort the walk. Per-class errors are silently skipped so callers always
+    get a (possibly empty) result.
+    """
+    roots = _ENGINE_INTROSPECTION_ROOTS.get(engine, ())
+    high: set[str] = set()
+    low: set[str] = set()
+
+    def _bucket(cls: type, mod_prefix: str) -> None:
+        """Surface-discover ``cls`` and partition results into ``high`` / ``low``."""
+        try:
+            for conf, path in _class_validator_surface(cls, mod_prefix):
+                if conf == _CONF_HIGH:
+                    high.add(path)
+                else:
+                    low.add(path)
+        except Exception:  # per-class failure is non-fatal
+            pass
+
+    for root in roots:
+        # Determine whether the root is a class path or a module path.
+        # Heuristic: if the last component starts with an uppercase letter,
+        # treat it as a class; otherwise treat as a module to walk.
+        parts = root.split(".")
+        if parts[-1][0].isupper():
+            # Class-level targeting (e.g. ``transformers.GenerationConfig``).
+            cls = _import_class_from_path(root)
+            if cls is not None:
+                _bucket(cls, ".".join(parts[:-1]))
+        else:
+            # Module-level targeting (e.g. ``vllm.config``).
+            for cls, mod_path in _walk_module_classes(root):
+                _bucket(cls, mod_path)
+
+    return high, low
 
 
 # ---------------------------------------------------------------------------
@@ -343,17 +688,25 @@ def _read_landmarks(module: ModuleType) -> tuple[str, ...]:
 def run(*, engine: str, producer: ProducerKind) -> DriftReport:
     """Run the drift check for one ``(engine, producer)`` cell.
 
-    Phase A: "removed" direction only.
+    Phase A + B: "removed" and "added" directions.
 
-    Returns a :class:`DriftReport` with verdict ``pass`` iff every
-    landmark resolves; ``fail`` iff one or more landmarks raise
-    :class:`AttributeError` / :class:`ImportError` during resolution.
+    Returns a :class:`DriftReport` with verdict ``pass`` when every declared
+    landmark resolves (verdict is NOT affected by ``landmarks_added`` - Phase B
+    is warning-only). Verdict ``fail`` requires at least one declared landmark
+    to raise :class:`AttributeError` / :class:`ImportError` during resolution.
 
     Diagnostic fields (envelope check, fingerprint drift) are computed
     regardless of verdict.
 
-    ``direction`` is ``"removed"`` when ``landmarks_missing`` is non-empty;
-    ``"stable"`` otherwise. ``landmarks_added`` is always ``[]`` in Phase A.
+    Direction values:
+    - ``"removed"`` : one or more declared landmarks absent from live library.
+    - ``"added"``   : live validators absent from LANDMARKS (Phase B signal).
+    - ``"mixed"``   : both removed and added gaps found simultaneously.
+    - ``"stable"``  : all declared landmarks resolve; no undeclared validators found.
+
+    Phase B introspection is best-effort: when the engine library is not
+    installed (Docker-only engines on the host), ``discover_live_landmarks``
+    returns empty sets and ``landmarks_added`` stays empty.
     """
     current = _load_current(engine)  # FileNotFoundError -> caller handles as infra error
     library = current.get("library")
@@ -382,8 +735,33 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
         # landmarks, not the cause.
         drift = [r.landmark for r in resolved]
 
+    # Phase B: added-direction discovery.
+    # Only surface for "invariants" producer - schemas use a different surface.
+    # For other producer kinds, skip introspection (no false-positive noise).
+    added_high: list[str] = []
+    added_low: list[str] = []
+    if producer == "invariants":
+        live_high, live_low = discover_live_landmarks(engine)
+        declared = set(landmarks)
+        # "added" = live but not in declared LANDMARKS (the additive blind spot).
+        added_high = sorted(live_high - declared)
+        added_low = sorted(live_low - declared)
+
+    # Verdict: fail only when declared landmarks are missing (Phase A behaviour).
+    # Phase B additions are warning-only - never flip verdict.
     verdict: Literal["pass", "fail"] = "fail" if missing else "pass"
-    direction: Literal["removed", "added", "stable"] = "removed" if missing else "stable"
+
+    # Direction: reflect the combined state of both directions.
+    has_missing = bool(missing)
+    has_added = bool(added_high)
+    if has_missing and has_added:
+        direction: DirectionKind = "mixed"
+    elif has_missing:
+        direction = "removed"
+    elif has_added:
+        direction = "added"
+    else:
+        direction = "stable"
 
     return DriftReport(
         engine=engine,
@@ -395,7 +773,8 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
         fingerprint=fingerprint,
         fingerprint_drift=drift,
         landmarks_missing=missing,
-        landmarks_added=[],
+        landmarks_added=added_high,
+        landmarks_added_low_confidence=added_low,
         version_inside_envelope=_check_envelope(current, producer, current_version),
     )
 
