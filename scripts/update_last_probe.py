@@ -1,8 +1,8 @@
-"""Update the ``last_probe:`` block in an engine current.yaml from a ProbeReport JSON.
+"""Update the ``last_probe:`` block in an engine current.yaml from a DriftReport JSON.
 
 Helper for the engine-coupling probe-writeback workflow. Reads a
-``ProbeReport`` JSON document on stdin (the shape emitted by
-``scripts._probe``) and rewrites the four mutable fields under
+``DriftReport`` JSON document on stdin (the shape emitted by
+``scripts._drift``) and rewrites the four mutable fields under
 ``last_probe:`` in ``engine_versions/{engine}.yaml``:
 
     verdict
@@ -239,7 +239,7 @@ def update(*, engine: str, report: dict[str, Any]) -> int:
     """Apply *report*'s last_probe-relevant fields to the engine current.yaml.
 
     Returns 0 on success (whether or not a change was written), 2 on
-    infrastructure failure (current.yaml missing / malformed, ProbeReport
+    infrastructure failure (current.yaml missing / malformed, DriftReport
     missing required fields).
 
     Also mirrors the last_probe block as a standalone YAML to the
@@ -249,18 +249,12 @@ def update(*, engine: str, report: dict[str, Any]) -> int:
     write failure the current.yaml update is preserved (no rollback). Both paths
     are idempotent so subsequent runs converge.
     """
-    # Accept both the new field name ("current_version", from DriftReport) and
-    # the legacy name ("library_version", from the old ProbeReport) so that any
-    # cached compat.json entries written before the rename still parse cleanly.
-    if "current_version" in report and "library_version" not in report:
-        report = dict(report)
-        report["library_version"] = report["current_version"]
     required = {
         "verdict",
         "version_inside_envelope",
         "fingerprint",
         "fingerprint_drift",
-        "library_version",
+        "current_version",
     }
     missing = required - report.keys()
     if missing:
@@ -301,20 +295,20 @@ def update(*, engine: str, report: dict[str, Any]) -> int:
     # current.yaml is authoritative and the archive will be regenerated on the
     # next run. We still surface the failure to stderr so it's visible
     # in CI logs.
-    library_version = str(report["library_version"])
+    current_version = str(report["current_version"])
     try:
         archive_changed = _write_archive_last_probe(
-            engine=engine, version=library_version, report=report
+            engine=engine, version=current_version, report=report
         )
     except (OSError, ValueError) as exc:
         print(
             f"Warning: could not mirror last_probe to archive for {engine} "
-            f"v{library_version}: {exc!r}. current.yaml update preserved.",
+            f"v{current_version}: {exc!r}. current.yaml update preserved.",
             file=sys.stderr,
         )
     else:
         if archive_changed:
-            print(f"Mirrored last_probe to archive at {engine}/v{library_version}.")
+            print(f"Mirrored last_probe to archive at {engine}/v{current_version}.")
 
     _emit_outputs(changed=changed, verdict=verdict)
     return 0

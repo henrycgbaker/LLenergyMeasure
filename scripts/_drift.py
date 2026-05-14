@@ -16,11 +16,6 @@ every report and are informational - they NEVER affect verdict:
     ``fingerprint_drift``       : landmarks whose coordinates moved since
                                   the cached fingerprint was written.
 
-Direction values:
-
-    "removed" : at least one declared landmark is absent.
-    "stable"  : all declared landmarks resolve.
-
 Producer-module discovery uses a per-engine convention table (see
 ``_PRODUCER_MODULES``); each producer module exposes a
 ``LANDMARKS: tuple[str, ...]`` constant of dotted attribute paths
@@ -71,7 +66,6 @@ from scripts.engine_producers._base import MinerLandmarkMissingError  # noqa: E4
 from scripts.engine_producers._current import current_path  # noqa: E402
 
 ProducerKind = Literal["invariants", "schemas"]
-DirectionKind = Literal["removed", "stable"]
 
 # Per-engine producer module map. The drift tool lives one layer above the
 # producers; this table is the single seam where (engine, producer) cells
@@ -110,8 +104,6 @@ class DriftReport:
     fingerprint-drift detection.
 
     ``verdict`` is ``fail`` iff ``landmarks_missing`` is non-empty.
-    ``direction`` is ``"removed"`` when ``landmarks_missing`` is non-empty,
-    ``"stable"`` otherwise.
 
     Diagnostic fields (``version_inside_envelope``, ``fingerprint_drift``)
     ride along on every report and steer human attention on pass-but-
@@ -120,7 +112,6 @@ class DriftReport:
 
     engine: str
     producer: ProducerKind
-    direction: DirectionKind
     schema_version: int
     current_version: str
     verdict: Literal["pass", "fail"]
@@ -211,9 +202,10 @@ def _fingerprint(resolved: list[_ResolvedLandmark]) -> str:
 def _load_current(engine: str) -> dict[str, object]:
     """Read + parse ``engine_versions/{engine}/current.yaml``.
 
-    Raises :class:`FileNotFoundError` if missing. The drift tool treats
-    current.yaml absence as an infrastructure error (exit code 2) - every
-    supported engine must have a current.yaml before the tool is wired up.
+    Indirects through ``current_path`` from this module's namespace so tests
+    can monkeypatch ``_drift.current_path`` for hermetic fixtures.
+    Equivalent in shape to ``scripts.engine_producers._current.load_current``
+    but kept private here for the test-surface reason above.
     """
     path = current_path(engine)
     text = path.read_text()  # FileNotFoundError surfaces here
@@ -381,12 +373,10 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
         drift = [r.landmark for r in resolved]
 
     verdict: Literal["pass", "fail"] = "fail" if missing else "pass"
-    direction: DirectionKind = "removed" if missing else "stable"
 
     return DriftReport(
         engine=engine,
         producer=producer,
-        direction=direction,
         schema_version=1,
         current_version=current_version,
         verdict=verdict,

@@ -133,41 +133,6 @@ def test_drift_fail_when_landmark_missing(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert report.landmarks_missing == ["json.NonExistentSymbolXYZ"]
 
 
-# ---------------------------------------------------------------------------
-# Direction field (Phase A)
-# ---------------------------------------------------------------------------
-
-
-def test_drift_direction_stable_on_pass(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """All landmarks resolve -> direction is ``stable``."""
-    _redirect_compat_dir(monkeypatch, tmp_path)
-    _install_synthetic_producer(
-        monkeypatch,
-        engine="transformers",
-        producer="invariants",
-        landmarks=("json.JSONDecodeError",),
-    )
-
-    report = _drift.run(engine="transformers", producer="invariants")
-
-    assert report.direction == "stable"
-
-
-def test_drift_direction_removed_on_fail(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Missing landmark -> direction is ``removed``."""
-    _redirect_compat_dir(monkeypatch, tmp_path)
-    _install_synthetic_producer(
-        monkeypatch,
-        engine="transformers",
-        producer="invariants",
-        landmarks=("json.NonExistentSymbolXYZ",),
-    )
-
-    report = _drift.run(engine="transformers", producer="invariants")
-
-    assert report.direction == "removed"
-
-
 def test_drift_schema_version_is_one(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """``schema_version`` is always 1."""
     _redirect_compat_dir(monkeypatch, tmp_path)
@@ -293,8 +258,6 @@ def test_drift_writes_compat_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     assert "invariants" in cache
     assert cache["invariants"]["verdict"] == "pass"
     assert cache["invariants"]["fingerprint"]
-    # New fields present in compat cache
-    assert cache["invariants"]["direction"] == "stable"
     assert cache["invariants"]["schema_version"] == 1
     assert cache["invariants"]["current_version"]
 
@@ -332,7 +295,6 @@ def test_drift_output_flag_writes_to_file_keeps_stdout_clean(
     payload = json.loads(out.read_text())
     assert payload["engine"] == "transformers"
     assert payload["verdict"] == "pass"
-    assert payload["direction"] == "stable"
     assert payload["schema_version"] == 1
     assert "current_version" in payload
     assert "landmarks_missing" in payload
@@ -356,7 +318,6 @@ def test_drift_atomic_output_rename_failure_leaves_destination_intact(
     report = _drift.DriftReport(
         engine="transformers",
         producer="invariants",
-        direction="stable",
         schema_version=1,
         current_version="9.9.9",
         verdict="pass",
