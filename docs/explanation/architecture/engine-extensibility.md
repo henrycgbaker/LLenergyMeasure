@@ -138,13 +138,12 @@ Once items 1-4 exist and a PR is opened, the engine-pipeline CI surface
 - **Image build and cache** - builds the engine image and pushes a cached
   layer to GHCR so subsequent runs start from a warm cache.
 - **Drift detection** - `scripts/_drift.py` runs as the cell's probe step and
-  produces a `DriftReport` JSON. It catches three failure modes: declared
-  `LANDMARKS` missing from the live library (`landmarks_missing`); live surface
-  not yet in `LANDMARKS` (`landmarks_added`); per-version `EXCLUSIONS.yaml`
-  entries with expired suppressions. The `--gate {none,delta,absolute}` option
-  selects how strictly added surface gates the cell. Gate activation in cells
-  is bootstrapped against the `added_baseline` recorded in `current.yaml` on
-  green-main writeback.
+  produces a `DriftReport` JSON. It catches one failure mode: declared
+  `LANDMARKS` symbols that no longer resolve under the live library
+  (`landmarks_missing`). A non-empty `landmarks_missing` flips the verdict
+  to `fail` and blocks the downstream mining step. Diagnostic fields
+  (`fingerprint`, `fingerprint_drift`, `version_inside_envelope`) ride along
+  on every report for human attention but never affect the verdict.
 
 The weekly schedule trigger in `engine-pipeline.yml` also runs a no-cache drift
 detection rebuild every Monday, so version drift is caught even without a PR.

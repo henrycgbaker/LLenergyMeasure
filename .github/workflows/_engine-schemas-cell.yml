@@ -220,15 +220,6 @@ jobs:
             ENTRYPOINT_FLAG=(--entrypoint /opt/nvidia/nvidia_entrypoint.sh)
             CMD_PREFIX=(python3)
           fi
-          # Phase C activation deferred until baselines are bootstrapped on main
-          # (gate=delta would thrash here against the empty added_baseline
-          # written on first encounter). Sticky comment body is written to disk
-          # in-container and POSTED from the runner host in a subsequent step
-          # (the engine images do not ship the gh CLI).
-          DRIFT_EXTRA_FLAGS=()
-          if [[ -n "${{ inputs.pr-number }}" ]]; then
-            DRIFT_EXTRA_FLAGS+=( --comment-output "/llem-probe-out/comment-${ENGINE}.md" )
-          fi
           set +e
           docker run --rm "${DOCKER_FLAGS[@]}" \
             -v "${GITHUB_WORKSPACE}:/repo" \
@@ -239,8 +230,7 @@ jobs:
             "${ENTRYPOINT_FLAG[@]}" \
             "$IMAGE" \
             "${CMD_PREFIX[@]}" -m scripts._drift --engine "$ENGINE" --producer schemas \
-              --output "/llem-probe-out/probe-${ENGINE}.json" \
-              "${DRIFT_EXTRA_FLAGS[@]}"
+              --output "/llem-probe-out/probe-${ENGINE}.json"
           DRIFT_RC=$?
           set -e
           echo "::group::Drift report (probe-${ENGINE}.json)"
@@ -249,26 +239,6 @@ jobs:
           VERDICT=$(jq -r '.verdict' "/tmp/llem-probe-out/probe-${ENGINE}.json")
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
           exit "$DRIFT_RC"
-
-      - name: Post drift sticky comment (runner host)
-        # See invariants cell for the rationale: the drift tool ran in-container
-        # with --comment-output writing the rendered body to the bind-mounted
-        # /tmp/llem-probe-out path. Post it from here, where gh is available.
-        # Runs even on probe failure so the maintainer sees failure context.
-        if: always() && inputs.pr-number != '' && steps.app-token.outputs.token != ''
-        env:
-          ENGINE: ${{ inputs.engine }}
-          PR: ${{ inputs.pr-number }}
-          MARKER: "llem-drift-coverage-${{ inputs.engine }}-schemas"
-          REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          COMMENT_FILE="/tmp/llem-probe-out/comment-${ENGINE}.md"
-          if [[ ! -f "$COMMENT_FILE" ]]; then
-            echo "No drift comment file at $COMMENT_FILE; skipping."
-            exit 0
-          fi
-          bash scripts/ci/upsert_pr_comment.sh < "$COMMENT_FILE"
 
       # The canonical last_probe writer is in _engine-invariants-cell.yml.
       # Removed from this cell because schemas' landmarks_added is unconditionally

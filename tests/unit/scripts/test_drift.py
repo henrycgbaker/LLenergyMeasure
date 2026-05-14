@@ -1,12 +1,13 @@
-"""Tests for :mod:`scripts._drift` - the drift tool Phase A (removed direction).
+"""Tests for :mod:`scripts._drift` - reachability check for producer landmarks.
 
-The drift tool answers the same binary question as the former ``_probe.py``
-("do all landmarks resolve under the live library?") and emits a richly-
-diagnosed :class:`DriftReport`. Phase A covers the "removed" direction only;
-Phase B will add "added" (live validators not in LANDMARKS).
+The drift tool answers a binary question: do all landmarks declared in a
+producer's ``LANDMARKS`` tuple resolve under the live library? Emits a
+:class:`DriftReport` whose ``verdict`` is ``"fail"`` iff
+``landmarks_missing`` is non-empty.
 
-These tests verify pass/fail verdict derivation, fingerprint stability + drift,
-current.yaml envelope checks, and round-tripping through the cache file.
+These tests verify pass/fail verdict derivation, fingerprint stability +
+drift, current.yaml envelope checks, and round-tripping through the cache
+file.
 
 LANDMARKS are stdlib symbols (``json.JSONDecodeError`` etc.) rather than
 real engine symbols: the drift tool imports modules via ``importlib`` and
@@ -150,7 +151,6 @@ def test_drift_direction_stable_on_pass(monkeypatch: pytest.MonkeyPatch, tmp_pat
     report = _drift.run(engine="transformers", producer="invariants")
 
     assert report.direction == "stable"
-    assert report.landmarks_added == []
 
 
 def test_drift_direction_removed_on_fail(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -166,11 +166,10 @@ def test_drift_direction_removed_on_fail(monkeypatch: pytest.MonkeyPatch, tmp_pa
     report = _drift.run(engine="transformers", producer="invariants")
 
     assert report.direction == "removed"
-    assert report.landmarks_added == []  # Phase A always empty
 
 
 def test_drift_schema_version_is_one(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """``schema_version`` is always 1 in Phase A."""
+    """``schema_version`` is always 1."""
     _redirect_compat_dir(monkeypatch, tmp_path)
     _install_synthetic_producer(
         monkeypatch,
@@ -336,7 +335,7 @@ def test_drift_output_flag_writes_to_file_keeps_stdout_clean(
     assert payload["direction"] == "stable"
     assert payload["schema_version"] == 1
     assert "current_version" in payload
-    assert "landmarks_added" in payload
+    assert "landmarks_missing" in payload
 
 
 def test_drift_atomic_output_rename_failure_leaves_destination_intact(
@@ -365,7 +364,6 @@ def test_drift_atomic_output_rename_failure_leaves_destination_intact(
         fingerprint="deadbeef",
         fingerprint_drift=[],
         landmarks_missing=[],
-        landmarks_added=[],
     )
     with pytest.raises(OSError, match="simulated rename failure"):
         _drift._write_report_to_file(out, report)

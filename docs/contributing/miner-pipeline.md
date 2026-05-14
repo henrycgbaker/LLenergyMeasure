@@ -95,7 +95,7 @@ while `vllm/schemas` is not, or vice versa.
 | Rule duplication or merge surprises | `scripts/engine_producers/build_corpus.py` (the merger; deduplication key is `(engine, severity, match_fields)`); look at `cross_validated_by` on the merged rule |
 | Static miner missed a predicate | `scripts/engine_producers/_base.py` (shared detectors) and `engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py` (per-version surface) |
 | Dynamic miner inferred wrong template | `engine_versions/{engine}/v<safe>/producers/dynamic_invariant_miner.py` (predicate-inference logic); the seven templates live in the per-version module or `_base.py` depending on engine |
-| Drift between dispatcher LANDMARKS and live library | `scripts/_drift.py --engine {engine} --producer {invariants,schemas}` reports `landmarks_missing` (removed) and `landmarks_added` (new surface not yet declared). Maintainer flow: patch LANDMARKS in the per-version producer module |
+| Drift between dispatcher LANDMARKS and live library | `scripts/_drift.py --engine {engine} --producer {invariants,schemas}` reports `landmarks_missing` (declared landmarks that don't resolve under the live library). Maintainer flow: patch LANDMARKS in the per-version producer module |
 
 The error classes (`MinerError`, `MinerVersionMismatchError`,
 `MinerLandmarkMissingError`) live in `scripts/engine_producers/_base.py`
