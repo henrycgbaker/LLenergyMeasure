@@ -251,36 +251,9 @@ jobs:
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
           exit "$DRIFT_RC"
 
-      - name: Update last_probe in current.yaml
-        if: always() && steps.probe.outcome == 'success'
-        env:
-          IMAGE: ${{ steps.version.outputs.image }}
-          ENGINE: ${{ inputs.engine }}
-          RUNNER: ${{ inputs.runner }}
-        run: |
-          DOCKER_FLAGS=()
-          if [[ "$RUNNER" == "self-hosted" ]]; then
-            DOCKER_FLAGS+=(
-              --user "$(id -u):$(id -g)"
-              -v /tmp/llem-passwd-synth:/etc/passwd:ro
-              -v /tmp/llem-group-synth:/etc/group:ro
-              -e LD_LIBRARY_PATH
-            )
-          fi
-          ENTRYPOINT_FLAG=(--entrypoint bash)
-          CMD_PREFIX=()
-          if [[ "$ENGINE" == "tensorrt" ]]; then
-            ENTRYPOINT_FLAG=(--entrypoint /opt/nvidia/nvidia_entrypoint.sh)
-            CMD_PREFIX=(bash)
-          fi
-          docker run --rm "${DOCKER_FLAGS[@]}" \
-            -v "${GITHUB_WORKSPACE}:/repo" \
-            -v /tmp/llem-probe-out:/llem-probe-out:ro \
-            -w /repo \
-            -e PYTHONPATH \
-            "${ENTRYPOINT_FLAG[@]}" \
-            "$IMAGE" \
-            "${CMD_PREFIX[@]}" -c "python3 scripts/update_last_probe.py --engine ${ENGINE} < /llem-probe-out/probe-${ENGINE}.json"
+      # The canonical last_probe writer is in _engine-invariants-cell.yml.
+      # Removed from this cell because schemas' landmarks_added is unconditionally
+      # empty and its fingerprint tuple differs - two writers raced the aggregator rsync.
 
       - name: Save current schema for diffing
         if: steps.probe.outputs.verdict == 'pass'
@@ -473,7 +446,6 @@ jobs:
           path: |
             ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/schema.discovered.json
             engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/schema.discovered.json
-            engine_versions/${{ inputs.engine }}/current.yaml
             docs/user/generated/curation-${{ inputs.engine }}.md
             docs/user/generated/schema-${{ inputs.engine }}.md
           # See invariants cell for rationale (archive path gated on engine
