@@ -997,8 +997,18 @@ class TestCliGateFlag:
     ) -> None:
         """--gate delta with no baseline written: warn-only (exit 0)."""
         self._setup(monkeypatch, tmp_path, {"json.JSONEncoder"})
-        # No baseline injected. Drift tool treats this as "first run for engine";
-        # cannot compute delta, so does not fail.
+        # Real current.yaml ships with `added_baseline: []` once a green main
+        # has run; strip it here to simulate the first-run-on-fresh-engine
+        # state where no baseline has ever been written.
+        fake_current = tmp_path / "transformers" / "current.yaml"
+        fake_current.write_text(
+            "\n".join(
+                line
+                for line in fake_current.read_text().splitlines()
+                if not line.strip().startswith("added_baseline")
+            )
+            + "\n"
+        )
         rc = _drift.main(
             [
                 "--engine",
