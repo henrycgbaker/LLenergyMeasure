@@ -220,18 +220,36 @@ jobs:
             ENTRYPOINT_FLAG=(--entrypoint /opt/nvidia/nvidia_entrypoint.sh)
             CMD_PREFIX=(python3)
           fi
+          # Phase C activation deferred until baselines are bootstrapped on main
+          # (gate=delta would thrash here against the empty added_baseline
+          # written on first encounter). Sticky comment posting via --pr-number
+          # remains active.
+          DRIFT_EXTRA_FLAGS=()
+          if [[ -n "${{ inputs.pr-number }}" ]]; then
+            DRIFT_EXTRA_FLAGS+=( --pr-number "${{ inputs.pr-number }}" )
+          fi
+          set +e
           docker run --rm "${DOCKER_FLAGS[@]}" \
             -v "${GITHUB_WORKSPACE}:/repo" \
             -v /tmp/llem-probe-out:/llem-probe-out:rw \
             -w /repo \
             -e PYTHONPATH \
             -e PYTHONDONTWRITEBYTECODE \
+            -e GH_TOKEN="${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}" \
+            -e REPO="${{ github.repository }}" \
             "${ENTRYPOINT_FLAG[@]}" \
             "$IMAGE" \
             "${CMD_PREFIX[@]}" -m scripts._drift --engine "$ENGINE" --producer schemas \
-              --output "/llem-probe-out/probe-${ENGINE}.json"
+              --output "/llem-probe-out/probe-${ENGINE}.json" \
+              "${DRIFT_EXTRA_FLAGS[@]}"
+          DRIFT_RC=$?
+          set -e
+          echo "::group::Drift report (probe-${ENGINE}.json)"
+          cat "/tmp/llem-probe-out/probe-${ENGINE}.json" || true
+          echo "::endgroup::"
           VERDICT=$(jq -r '.verdict' "/tmp/llem-probe-out/probe-${ENGINE}.json")
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
+          exit "$DRIFT_RC"
 
       - name: Update last_probe in current.yaml
         if: always() && steps.probe.outcome == 'success'

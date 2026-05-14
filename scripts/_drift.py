@@ -16,7 +16,25 @@ validators, Phase B surfaces them so the maintainer knows to extend LANDMARKS +
 walker logic. Phase B is warning-only: ``verdict`` stays ``pass`` even when
 ``landmarks_added`` is non-empty.
 
-Phase C (separate PR) will add CI gating and EXCLUSIONS.yaml.
+Phase C adds CI gating, EXCLUSIONS.yaml per archive version, and sticky PR comments.
+
+EXCLUSIONS.yaml (``engine_versions/<engine>/v<safe>/EXCLUSIONS.yaml``) is a
+maintainer-managed allow-list for ``landmarks_added`` entries the maintainer has
+explicitly chosen not to walk. Entries are keyed by stable fingerprint (sha256 of
+the canonical dotted path). Expired entries (``expires:`` date in the past) cause
+the tool to emit an error and CI to fail, forcing periodic re-review.
+
+``--gate {none,delta,absolute}`` controls CI gating behaviour:
+
+    none     : Phase B behaviour - warning only, exit 0 always (default).
+    delta    : exit 1 when Δ_high_added > 0 (new high-confidence gaps since
+               last green main). Baseline read from current.yaml
+               ``last_probe.added_baseline``.
+    absolute : exit 1 when any high-confidence landmark_added present after
+               exclusions.
+
+``--pr-number N`` enables sticky PR comment generation via
+``scripts/ci/upsert_pr_comment.sh`` (marker ``llem-drift-coverage``).
 
 ``direction`` field semantics:
 
@@ -57,12 +75,14 @@ from __future__ import annotations
 import argparse
 import contextlib
 import dataclasses
+import datetime
 import enum
 import hashlib
 import importlib
 import inspect
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from dataclasses import asdict, dataclass, field
@@ -81,7 +101,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts.engine_producers._base import MinerLandmarkMissingError  # noqa: E402
-from scripts.engine_producers._current import current_path  # noqa: E402
+from scripts.engine_producers._current import current_path, safe_version  # noqa: E402
 
 ProducerKind = Literal["invariants", "schemas"]
 DirectionKind = Literal["removed", "added", "mixed", "stable"]
@@ -109,6 +129,123 @@ _SSOT_PIN_FOR_PRODUCER: dict[ProducerKind, str] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Phase C: EXCLUSIONS.yaml support
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ExclusionEntry:
+    """One parsed entry from EXCLUSIONS.yaml.
+
+    ``fingerprint`` is the sha256 of the canonical dotted path of the symbol
+    (the same hash produced by ``_landmark_fingerprint``). ``qualname`` is
+    advisory (human-readable); it is NOT used for matching - fingerprint only.
+
+    ``expires`` is optional. When set and < today, the exclusion is INVALID
+    and causes the drift report to record an error, flipping CI to fail.
+    """
+
+    fingerprint: str
+    qualname: str
+    reason: str
+    added: str
+    expires: str | None = None
+
+
+def _landmark_fingerprint(dotted_path: str) -> str:
+    """Stable sha256 of a canonical dotted landmark path.
+
+    Used both for generating the fingerprint that goes INTO an EXCLUSIONS.yaml
+    entry and for matching incoming ``landmarks_added`` entries against the
+    allow-list. The hash is over the UTF-8-encoded dotted path only (no line
+    numbers, no file paths - those churn; the canonical name doesn't).
+    """
+    return hashlib.sha256(dotted_path.encode()).hexdigest()
+
+
+def load_exclusions(engine: str, version: str) -> dict[str, ExclusionEntry]:
+    """Load ``engine_versions/<engine>/v<safe>/EXCLUSIONS.yaml`` if it exists.
+
+    Returns a dict keyed by fingerprint. Invalid entries (wrong shape, unknown
+    keys) are skipped with a warning to stderr. The file's absence is not an
+    error - most version archives won't have an EXCLUSIONS.yaml.
+
+    ``version`` is the raw library version string (e.g. ``"0.7.3"``); this
+    function computes the ``safe_version`` (``v0_7_3``) internally.
+    """
+    exclusions_path = (
+        _PROJECT_ROOT / "engine_versions" / engine / safe_version(version) / "EXCLUSIONS.yaml"
+    )
+    if not exclusions_path.exists():
+        return {}
+
+    try:
+        raw = yaml.safe_load(exclusions_path.read_text())
+    except yaml.YAMLError as exc:
+        print(
+            f"Warning: could not parse {exclusions_path}: {exc}. Exclusions file skipped.",
+            file=sys.stderr,
+        )
+        return {}
+
+    if not isinstance(raw, list):
+        print(
+            f"Warning: {exclusions_path} did not parse to a list. Exclusions file skipped.",
+            file=sys.stderr,
+        )
+        return {}
+
+    result: dict[str, ExclusionEntry] = {}
+    for idx, item in enumerate(raw):
+        if not isinstance(item, dict):
+            print(
+                f"Warning: {exclusions_path} entry {idx} is not a mapping; skipped.",
+                file=sys.stderr,
+            )
+            continue
+        required_keys = {"fingerprint", "qualname", "reason", "added"}
+        missing = required_keys - item.keys()
+        if missing:
+            print(
+                f"Warning: {exclusions_path} entry {idx} missing keys {sorted(missing)}; skipped.",
+                file=sys.stderr,
+            )
+            continue
+        entry = ExclusionEntry(
+            fingerprint=str(item["fingerprint"]),
+            qualname=str(item["qualname"]),
+            reason=str(item["reason"]),
+            added=str(item["added"]),
+            expires=str(item["expires"]) if item.get("expires") is not None else None,
+        )
+        result[entry.fingerprint] = entry
+
+    return result
+
+
+def _check_exclusion_expiry(
+    entry: ExclusionEntry,
+) -> bool:
+    """Return True iff the exclusion entry is expired (``expires`` < today).
+
+    Returns False when ``expires`` is absent or cannot be parsed. The
+    caller is responsible for converting this into an error in the report.
+    """
+    if entry.expires is None:
+        return False
+    try:
+        expiry = datetime.date.fromisoformat(entry.expires)
+    except ValueError:
+        # Unparseable expiry date - treat as non-expired so it doesn't silently
+        # pass; caller should still log it as a warning.
+        return False
+    return expiry < datetime.datetime.now(tz=datetime.timezone.utc).date()
+
+
+GateKind = Literal["none", "delta", "absolute"]
+
+
 @dataclass(frozen=True)
 class DriftReport:
     """Structured report of one drift-tool run.
@@ -134,6 +271,19 @@ class DriftReport:
     Diagnostic fields (``version_inside_envelope``, ``fingerprint_drift``) ride along on
     every report and steer human attention on pass-but-suspicious bumps. They NEVER
     affect verdict.
+
+    Phase C fields
+    --------------
+    ``exclusions_applied`` : dotted paths from ``landmarks_added`` that were suppressed
+    by a matching EXCLUSIONS.yaml entry. These do NOT appear in ``landmarks_added``.
+    ``expired_exclusions`` : qualnames of EXCLUSIONS.yaml entries whose ``expires``
+    date has passed. When non-empty, verdict flips to ``fail`` regardless of gate mode.
+    ``added_baseline`` : the set of high-confidence added gaps as of the last green
+    main commit, read from ``current.yaml last_probe.added_baseline``. Used by
+    ``--gate delta`` to compute Δ.
+    ``landmarks_added_delta`` : ``landmarks_added`` entries NOT in ``added_baseline``
+    (new gaps introduced by this PR). Only populated when ``--gate delta`` is active.
+    ``gate`` : the gate mode that was active during this run (from ``--gate`` flag).
     """
 
     engine: str
@@ -148,6 +298,11 @@ class DriftReport:
     landmarks_added: list[str] = field(default_factory=list)
     landmarks_added_low_confidence: list[str] = field(default_factory=list)
     version_inside_envelope: bool = True
+    # Phase C fields
+    exclusions_applied: list[str] = field(default_factory=list)
+    expired_exclusions: list[str] = field(default_factory=list)
+    landmarks_added_delta: list[str] = field(default_factory=list)
+    gate: GateKind = "none"
 
 
 # ---------------------------------------------------------------------------
@@ -685,15 +840,37 @@ def _read_landmarks(module: ModuleType) -> tuple[str, ...]:
 # ---------------------------------------------------------------------------
 
 
-def run(*, engine: str, producer: ProducerKind) -> DriftReport:
+def _read_added_baseline(current: dict[str, object]) -> list[str] | None:
+    """Read ``last_probe.added_baseline`` from a parsed current.yaml mapping.
+
+    Returns ``None`` when the field is absent (engines that haven't had
+    a Phase C writeback yet, or first-run on a new engine) so callers can
+    distinguish "no baseline written yet" from "baseline written but empty"
+    (the latter means "no high-confidence gaps as of last green main"; the
+    former means "no comparison possible yet — gate should not fail").
+    """
+    last_probe = current.get("last_probe")
+    if not isinstance(last_probe, dict):
+        return None
+    raw = last_probe.get("added_baseline")
+    if not isinstance(raw, list):
+        return None
+    return [str(x) for x in raw if isinstance(x, str)]
+
+
+def run(*, engine: str, producer: ProducerKind, gate: GateKind = "none") -> DriftReport:
     """Run the drift check for one ``(engine, producer)`` cell.
 
-    Phase A + B: "removed" and "added" directions.
+    Phase A + B + C: "removed" and "added" directions, with optional CI gating
+    and EXCLUSIONS.yaml filtering.
 
     Returns a :class:`DriftReport` with verdict ``pass`` when every declared
-    landmark resolves (verdict is NOT affected by ``landmarks_added`` - Phase B
-    is warning-only). Verdict ``fail`` requires at least one declared landmark
-    to raise :class:`AttributeError` / :class:`ImportError` during resolution.
+    landmark resolves AND gate conditions are satisfied. Verdict ``fail`` when:
+    - At least one declared landmark raises AttributeError/ImportError (Phase A).
+    - An EXCLUSIONS.yaml entry has an expired ``expires`` date (Phase C).
+    - ``gate="delta"`` and Δ_high_added > 0 (new high-confidence gaps since
+      last green main, after exclusions).
+    - ``gate="absolute"`` and any high-confidence added gaps remain after exclusions.
 
     Diagnostic fields (envelope check, fingerprint drift) are computed
     regardless of verdict.
@@ -707,6 +884,12 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
     Phase B introspection is best-effort: when the engine library is not
     installed (Docker-only engines on the host), ``discover_live_landmarks``
     returns empty sets and ``landmarks_added`` stays empty.
+
+    Phase C EXCLUSIONS.yaml is loaded from
+    ``engine_versions/<engine>/v<safe>/EXCLUSIONS.yaml``. Entries with
+    valid (non-expired) fingerprints matching a ``landmarks_added`` entry
+    are moved to ``exclusions_applied`` and omitted from ``landmarks_added``.
+    Expired entries populate ``expired_exclusions`` and force verdict=fail.
     """
     current = _load_current(engine)  # FileNotFoundError -> caller handles as infra error
     library = current.get("library")
@@ -738,18 +921,65 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
     # Phase B: added-direction discovery.
     # Only surface for "invariants" producer - schemas use a different surface.
     # For other producer kinds, skip introspection (no false-positive noise).
-    added_high: list[str] = []
+    added_high_raw: list[str] = []
     added_low: list[str] = []
     if producer == "invariants":
         live_high, live_low = discover_live_landmarks(engine)
         declared = set(landmarks)
         # "added" = live but not in declared LANDMARKS (the additive blind spot).
-        added_high = sorted(live_high - declared)
+        added_high_raw = sorted(live_high - declared)
         added_low = sorted(live_low - declared)
 
-    # Verdict: fail only when declared landmarks are missing (Phase A behaviour).
-    # Phase B additions are warning-only - never flip verdict.
-    verdict: Literal["pass", "fail"] = "fail" if missing else "pass"
+    # Phase C: apply EXCLUSIONS.yaml filtering.
+    exclusions = load_exclusions(engine, current_version)
+    exclusions_applied: list[str] = []
+    expired_exclusions: list[str] = []
+
+    # Check all loaded exclusion entries for expiry, regardless of whether they
+    # match an added gap - expired entries are a hard error.
+    for excl in exclusions.values():
+        if _check_exclusion_expiry(excl):
+            expired_exclusions.append(excl.qualname)
+
+    # Filter added_high_raw through exclusions.
+    added_high: list[str] = []
+    for path in added_high_raw:
+        fp = _landmark_fingerprint(path)
+        if fp in exclusions:
+            excl = exclusions[fp]
+            if not _check_exclusion_expiry(excl):
+                # Valid (non-expired) exclusion - suppress from landmarks_added.
+                exclusions_applied.append(path)
+                continue
+            # Expired exclusion - path stays in added_high, expiry already recorded above.
+        added_high.append(path)
+
+    # Phase C: delta computation.
+    # When gate=delta but no baseline has been written yet (first run for this
+    # engine), treat as warn-only (no comparison possible). Once a green main
+    # commit lands and update_last_probe.py writes the baseline, subsequent
+    # PRs will gate normally.
+    baseline_raw = _read_added_baseline(current) if gate == "delta" else None
+    baseline_absent = gate == "delta" and baseline_raw is None
+    baseline_set = set(baseline_raw or [])
+    landmarks_added_delta: list[str] = []
+    if gate == "delta" and not baseline_absent:
+        landmarks_added_delta = sorted(set(added_high) - baseline_set)
+
+    # Verdict: fail when:
+    # 1. Declared landmarks are missing (Phase A - always fail).
+    # 2. Any exclusion entry has expired (Phase C - force review).
+    # 3. Gate=delta with a baseline present and Δ_high > 0.
+    # 4. Gate=absolute and any high-confidence gaps remain.
+    verdict: Literal["pass", "fail"] = "pass"
+    if missing:
+        verdict = "fail"
+    if expired_exclusions:
+        verdict = "fail"
+    if (gate == "delta" and not baseline_absent and landmarks_added_delta) or (
+        gate == "absolute" and added_high
+    ):
+        verdict = "fail"
 
     # Direction: reflect the combined state of both directions.
     has_missing = bool(missing)
@@ -776,6 +1006,10 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
         landmarks_added=added_high,
         landmarks_added_low_confidence=added_low,
         version_inside_envelope=_check_envelope(current, producer, current_version),
+        exclusions_applied=exclusions_applied,
+        expired_exclusions=expired_exclusions,
+        landmarks_added_delta=landmarks_added_delta,
+        gate=gate,
     )
 
 
@@ -812,6 +1046,28 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "tensorrt-llm's logger), which would otherwise pollute the captured JSON."
         ),
     )
+    # Phase C flags
+    parser.add_argument(
+        "--gate",
+        choices=("none", "delta", "absolute"),
+        default="none",
+        help=(
+            "CI gating mode. "
+            "'none' (default): warning-only, exit 0 always (Phase B behaviour). "
+            "'delta': fail when new high-confidence gaps introduced since last green main. "
+            "'absolute': fail when any high-confidence gaps remain after exclusions."
+        ),
+    )
+    parser.add_argument(
+        "--pr-number",
+        default=None,
+        help=(
+            "PR number to post a sticky coverage comment to. When set, the drift tool "
+            "generates a markdown comment and posts it via "
+            "scripts/ci/upsert_pr_comment.sh (marker: llem-drift-coverage). "
+            "Requires GH_TOKEN and REPO env vars (same as the upsert helper)."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -846,10 +1102,131 @@ def _write_report_to_file(path: Path, report: DriftReport) -> None:
         raise
 
 
+_UPSERT_COMMENT_SCRIPT = _PROJECT_ROOT / "scripts" / "ci" / "upsert_pr_comment.sh"
+_DRIFT_COMMENT_MARKER = "llem-drift-coverage"
+
+
+def _render_drift_comment(report: DriftReport) -> str:
+    """Render a markdown PR comment body for the drift report.
+
+    Comment shape (per design doc):
+
+        <!-- llem-drift-coverage -->
+        ### Coverage drift - {engine} v{ver} ({producer})
+
+        {summary line}
+
+        <details><summary>New gaps (N)</summary>
+        - `qualified.path` (high)
+        ...
+        </details>
+    """
+    safe_ver = safe_version(report.current_version)
+    delta = report.landmarks_added_delta
+    delta_set = set(delta)
+    pre_existing = [p for p in report.landmarks_added if p not in delta_set]
+    n_new = len(delta)
+    n_preexisting = len(pre_existing)
+
+    lines: list[str] = [
+        f"<!-- {_DRIFT_COMMENT_MARKER} -->",
+        f"### Coverage drift - {report.engine} {safe_ver} ({report.producer})",
+        "",
+    ]
+
+    if report.expired_exclusions:
+        lines.append(
+            "> **Expired exclusions:** "
+            + ", ".join(f"`{q}`" for q in sorted(report.expired_exclusions))
+            + " - re-review required."
+        )
+        lines.append("")
+
+    if report.gate == "delta":
+        lines.append(
+            f"Delta +{n_new} added gaps since main, "
+            f"{n_preexisting} pre-existing, "
+            f"{len(report.exclusions_applied)} excluded"
+        )
+    else:
+        total = len(report.landmarks_added)
+        lines.append(
+            f"{total} added gaps (after {len(report.exclusions_applied)} exclusions applied)"
+        )
+
+    lines.append("")
+
+    if delta:
+        lines.append(f"<details><summary>New gaps ({n_new})</summary>")
+        lines.append("")
+        for path in sorted(delta):
+            lines.append(f"- `{path}` (high)")
+        lines.append("")
+        lines.append("</details>")
+        lines.append("")
+
+    if pre_existing:
+        lines.append(f"<details><summary>Pre-existing gaps ({n_preexisting})</summary>")
+        lines.append("")
+        for path in sorted(pre_existing):
+            lines.append(f"- `{path}` (high)")
+        lines.append("")
+        lines.append("</details>")
+        lines.append("")
+
+    if report.exclusions_applied:
+        lines.append(
+            f"<details><summary>Exclusions applied ({len(report.exclusions_applied)})</summary>"
+        )
+        lines.append("")
+        for path in sorted(report.exclusions_applied):
+            lines.append(f"- `{path}`")
+        lines.append("")
+        lines.append("</details>")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _post_drift_comment(pr_number: str, comment_body: str) -> None:
+    """Post (or update) the sticky drift comment via upsert_pr_comment.sh.
+
+    Writes ``comment_body`` to the helper via stdin. The helper uses the
+    stable HTML marker embedded in the body for dedup (PATCH if found, POST
+    if new). Failures are logged to stderr but do not abort the drift tool -
+    a comment failure should not fail CI when the gate itself passed.
+    """
+    script = _UPSERT_COMMENT_SCRIPT
+    env = dict(os.environ)
+    env["PR"] = pr_number
+    env["MARKER"] = _DRIFT_COMMENT_MARKER
+    # REPO must already be set in the environment (set by the workflow).
+    # GH_TOKEN must already be set.
+    try:
+        result = subprocess.run(
+            ["bash", str(script)],
+            input=comment_body.encode(),
+            env=env,
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            print(
+                f"Warning: upsert_pr_comment.sh exited {result.returncode}: "
+                f"{result.stderr.decode(errors='replace')}",
+                file=sys.stderr,
+            )
+        else:
+            print(result.stdout.decode(errors="replace").strip(), file=sys.stderr)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"Warning: could not post drift comment: {exc}", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
+    gate: GateKind = args.gate  # type: ignore[assignment]
     try:
-        report = run(engine=args.engine, producer=args.producer)
+        report = run(engine=args.engine, producer=args.producer, gate=gate)
     except (FileNotFoundError, KeyError, ImportError, AttributeError, TypeError, ValueError) as exc:
         # Infrastructure failure: current.yaml missing / malformed / producer
         # module unimportable / LANDMARKS missing or malformed. Distinct
@@ -878,6 +1255,19 @@ def main(argv: list[str] | None = None) -> int:
             return 2
     else:
         print(json.dumps(asdict(report), indent=2, sort_keys=True))
+
+    # Phase C: post sticky PR comment if --pr-number supplied.
+    if args.pr_number:
+        comment = _render_drift_comment(report)
+        _post_drift_comment(args.pr_number, comment)
+
+    # Exit code: 1 when verdict=fail AND the failure was caused by a gate (not
+    # infra). The probe-fail gate in the cell workflow reads verdict from JSON,
+    # so the exit code here is the CI gate signal for Phase C.
+    # Exit code 0 for Phase A/B probe-fail is preserved: those are surfaced via
+    # the JSON verdict field and the cell workflow's existing probe-fail gate step.
+    if report.verdict == "fail" and gate != "none":
+        return 1
     return 0
 
 

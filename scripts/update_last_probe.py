@@ -65,7 +65,7 @@ from scripts.engine_producers._current import current_path, safe_version  # noqa
 # of the value line so we can reconstruct with the original indentation.
 _LAST_PROBE_LINE_RE = re.compile(r"^(?P<indent> {2,})(?P<key>[a-z_]+):\s*(?P<value>.*)$")
 
-# The four mutable fields under ``last_probe:``. Order intentional -
+# The four core mutable fields under ``last_probe:``. Order intentional -
 # matches the canonical current.yaml layout so the regenerated block is
 # byte-identical when nothing changes.
 _MUTABLE_FIELDS: tuple[str, ...] = (
@@ -74,6 +74,11 @@ _MUTABLE_FIELDS: tuple[str, ...] = (
     "fingerprint",
     "fingerprint_drift",
 )
+
+# Phase C: additional field written on a pass verdict so that the next run
+# can compute the delta (new gaps introduced by the PR vs last green main).
+# Only written when the DriftReport carries the field (Phase C invocations).
+_ADDED_BASELINE_FIELD = "added_baseline"
 
 
 def _format_scalar(value: Any) -> str:
@@ -110,7 +115,12 @@ def _format_scalar(value: Any) -> str:
     return str(value)
 
 
-def _replace_last_probe_block(text: str, updates: dict[str, Any]) -> tuple[str, bool]:
+def _replace_last_probe_block(
+    text: str,
+    updates: dict[str, Any],
+    *,
+    optional_inserts: dict[str, Any] | None = None,
+) -> tuple[str, bool]:
     """Replace mutable fields under ``last_probe:``; return (new_text, changed).
 
     ``changed`` is ``False`` iff every targeted line is byte-identical
@@ -118,15 +128,25 @@ def _replace_last_probe_block(text: str, updates: dict[str, Any]) -> tuple[str, 
     that prevents the workflow looping on no-op writebacks. Lines whose
     keys are not in ``updates`` are left untouched.
 
+    ``optional_inserts`` contains fields that may or may not already exist in
+    the block. When a key IS present, it is updated in-place like a normal
+    ``updates`` field. When a key is NOT present, it is appended at the end of
+    the ``last_probe:`` block (before the next top-level key or EOF).
+
     Raises :class:`ValueError` if the ``last_probe:`` block cannot be
-    located, or if any field in ``updates`` is missing from the block.
+    located, or if any field in ``updates`` (not ``optional_inserts``) is
+    missing from the block.
     """
+    optional_inserts = optional_inserts or {}
+    all_updates = {**updates, **optional_inserts}
+
     lines = text.splitlines(keepends=True)
     in_block = False
     block_indent: str | None = None
     new_lines = list(lines)
     seen: set[str] = set()
     changed = False
+    block_end_idx: int | None = None  # index where last_probe: block ends
 
     for idx, line in enumerate(lines):
         if line.startswith("last_probe:"):
@@ -143,6 +163,7 @@ def _replace_last_probe_block(text: str, updates: dict[str, Any]) -> tuple[str, 
         match = _LAST_PROBE_LINE_RE.match(stripped_no_nl)
         if match is None:
             # Dedent or unexpected shape - block ended.
+            block_end_idx = idx
             break
 
         indent = match.group("indent")
@@ -153,11 +174,11 @@ def _replace_last_probe_block(text: str, updates: dict[str, Any]) -> tuple[str, 
             continue
 
         key = match.group("key")
-        if key not in updates:
+        if key not in all_updates:
             continue
         seen.add(key)
 
-        new_value = _format_scalar(updates[key])
+        new_value = _format_scalar(all_updates[key])
         newline = "\n" if line.endswith("\n") else ""
         new_line = f"{indent}{key}: {new_value}{newline}"
         if new_line != line:
@@ -171,13 +192,25 @@ def _replace_last_probe_block(text: str, updates: dict[str, Any]) -> tuple[str, 
             "see engine_versions/transformers.yaml for the canonical shape."
         )
 
-    missing = set(updates) - seen
-    if missing:
+    missing_required = set(updates) - seen
+    if missing_required:
         raise ValueError(
-            f"last_probe: block missing required fields: {sorted(missing)}. "
+            f"last_probe: block missing required fields: {sorted(missing_required)}. "
             "Add them to the current.yaml's last_probe: block before running the "
             "writeback step."
         )
+
+    # Append any optional_inserts that weren't already present in the block.
+    missing_optional = set(optional_inserts) - seen
+    if missing_optional:
+        indent = block_indent
+        insert_lines = [
+            f"{indent}{key}: {_format_scalar(optional_inserts[key])}\n"
+            for key in sorted(missing_optional)
+        ]
+        insert_at = block_end_idx if block_end_idx is not None else len(new_lines)
+        new_lines[insert_at:insert_at] = insert_lines
+        changed = True
 
     return "".join(new_lines), changed
 
@@ -280,8 +313,21 @@ def update(*, engine: str, report: dict[str, Any]) -> int:
         return 2
 
     updates = {field: report[field] for field in _MUTABLE_FIELDS}
+
+    # Phase C: write added_baseline on a pass verdict so the next run can
+    # compute the delta (new high-confidence gaps introduced vs last green main).
+    # The baseline is ``landmarks_added`` from the current DriftReport (post-
+    # exclusion high-confidence gaps). Only written when the report carries
+    # ``landmarks_added`` (Phase B/C DriftReport shapes); older ProbeReport
+    # shapes omit this field and we skip it silently.
+    optional_inserts: dict[str, Any] = {}
+    if report.get("verdict") == "pass" and "landmarks_added" in report:
+        optional_inserts[_ADDED_BASELINE_FIELD] = report["landmarks_added"]
+
     try:
-        new_text, changed = _replace_last_probe_block(text, updates)
+        new_text, changed = _replace_last_probe_block(
+            text, updates, optional_inserts=optional_inserts
+        )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
