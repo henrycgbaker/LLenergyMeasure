@@ -126,7 +126,6 @@ def _envelope(invariants: list[dict[str, Any]], engine_version: str = "4.56.0") 
         "schema_version": "1.0.0",
         "engine": "transformers",
         "engine_version": engine_version,
-        "miner_pinned_range": ">=4.56,<4.57",
         "mined_at": "2026-04-25T00:00:00Z",
         "invariants": invariants,
     }

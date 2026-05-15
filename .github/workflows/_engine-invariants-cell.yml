@@ -457,7 +457,6 @@ jobs:
         run: |
           REPORT="/tmp/llem-probe-out/probe-${ENGINE}.json"
           MISSING_COUNT=$(jq -r '.landmarks_missing | length' "$REPORT")
-          TOTAL=$(jq -r '(.landmarks_missing | length) + (.landmarks_aliased | length) + (.fingerprint_drift | length) + 0' "$REPORT")
           DRIFT_COUNT=$(jq -r '.fingerprint_drift | length' "$REPORT")
           ALIAS_COUNT=$(jq -r '.landmarks_aliased | length' "$REPORT")
           {

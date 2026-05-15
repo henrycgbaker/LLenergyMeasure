@@ -360,14 +360,6 @@ def test_cluster_probes_without_crashing(cluster):
     rows = probe_cluster(cluster)
     assert isinstance(rows, list)
 
-def test_version_envelope_resolves():
-    """The miner pin loaded from the engine SSOT must be a non-empty SpecifierSet."""
-    from packaging.specifiers import SpecifierSet
-    from scripts.engine_producers._current import load_miner_pin
-    envelope = load_miner_pin("myengine", "static")
-    assert isinstance(envelope, SpecifierSet)
-    assert str(envelope) != ""
-
 def test_landmark_checks_raise_on_missing():
     """find_class returning None must raise MinerLandmarkMissingError."""
     from scripts.engine_producers._base import find_class, MinerLandmarkMissingError

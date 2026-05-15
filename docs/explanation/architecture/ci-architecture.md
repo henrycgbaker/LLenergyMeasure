@@ -118,14 +118,18 @@ Internally the cell:
 3. (tensorrt only) fetches the tensorrt-llm source tarball.
 4. Computes the deterministic mining/discovery anchor.
 5. **Probes** the producer module's landmarks - preserved as its own
-   step for failure-clarity in the GitHub UI.
-6. Updates `last_probe:` in the engine SSOT.
-7. Runs the producer (mine + validate, or discover-schema) inside the
+   step for failure-clarity in the GitHub UI. The dispatcher resolves
+   which `v<safe>/producers/` archive to import for the SSOT-pinned
+   `library.current_version`, falling back to the most-recent prior
+   vendored version when no exact-match archive exists.
+6. Runs the producer (mine + validate, or discover-schema) inside the
    container.
-8. Regenerates host-side digest doc(s).
-9. Classifies the diff (`safe` / `breaking` / `no-changes`).
-10. Posts/upserts a PR comment under `bot-id: <pipeline>-<engine>-*`.
-11. Applies per-pipeline labels (`<pipeline>-{changed,safe,breaking}` +
+7. Regenerates host-side digest doc(s).
+8. Classifies the diff (`safe` / `breaking` / `no-changes`).
+9. Posts/upserts a PR comment under `bot-id: <pipeline>-<engine>-*`,
+   surfacing DriftReport diagnostic counts (`fingerprint_drift`,
+   `landmarks_aliased`) in collapsible blocks when non-empty.
+10. Applies per-pipeline labels (`<pipeline>-{changed,safe,breaking}` +
     `probe-blocked` / cleanup).
 12. **Uploads writeback artefact** (instead of pushing per-cell). The
     aggregate writeback in the orchestrator collects all artefacts and

@@ -197,7 +197,7 @@ flowchart TD
 
 **Route 2 - Vendor a fresh `vN/producers/` directory.** When the library API has genuinely diverged from the prior version (refactor, removal, new subpackage layout), the maintainer creates a new `engine_versions/{engine}/v<safe(N)>/producers/` directory by copying the fallback dir and patching against the new API. The dispatcher's exact-match path then selects the new directory at the bumped version.
 
-No slash commands exist for bypassing the probe. `/rerun`, `/skip-probe`, `/force-merge`, `/approve-reuse` were explicitly rejected as footguns. The dispatcher + probe pair is the contract; manual maintainer intervention is patching landmarks or vendoring a directory.
+No slash commands exist for bypassing the probe. The dispatcher + probe pair is the contract; manual maintainer intervention is patching landmarks or vendoring a fresh `vN/producers/` directory.
 
 ### Adjacent pipelines
 

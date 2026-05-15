@@ -32,7 +32,7 @@ src/llenergymeasure/engines/{engine}/_staging/   (gitignored, miner-only)
 
 scripts/engine_producers/
 ├── _base.py                          Shared AST primitives, detectors, filters
-├── _current.py                       load_current() / load_miner_pin() - resolves SpecifierSet from engine SSOT
+├── _current.py                       load_current() / safe_version() - SSOT loader + identifier-safe version mangler
 ├── _pydantic_lift.py                 Lift module for Pydantic models
 ├── _msgspec_lift.py                  Lift module for msgspec.Struct
 ├── _dataclass_lift.py                Lift module for stdlib @dataclass + Literal
