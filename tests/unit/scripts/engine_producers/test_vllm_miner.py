@@ -33,7 +33,6 @@ from scripts.engine_producers._base import (  # noqa: E402
     MinerLandmarkMissingError,
     RuleCandidate,
 )
-from scripts.engine_producers._current import load_miner_pin  # noqa: E402
 from scripts.engine_producers._dataclass_lift import lift as dataclass_lift  # noqa: E402
 from scripts.engine_producers._msgspec_lift import lift as msgspec_lift  # noqa: E402
 from scripts.engine_producers._pydantic_lift import lift as pydantic_lift  # noqa: E402
@@ -219,10 +218,7 @@ class TestWalkerSmoke:
 
     def test_static_miner_emits_rules(self) -> None:
         """Static miner produces a non-trivial number of invariants on the live library."""
-        candidates, version = walk_vllm_static()
-        assert load_miner_pin("vllm", "static").contains(version, prereleases=True), (
-            f"Installed vllm=={version} outside SSOT miner pin"
-        )
+        candidates, _version = walk_vllm_static()
         assert len(candidates) >= 30, (
             f"Static miner emitted only {len(candidates)} candidates; "
             f"expected >=30 across the AST-target list."

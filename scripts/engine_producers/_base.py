@@ -8,10 +8,8 @@ PRs per engine.
 
 - :class:`InvariantCandidate` - the miner output type, serialised to the YAML
   corpus entry shape in :mod:`llenergymeasure.config.engine_invariants.loader`.
-- :class:`MinerVersionMismatchError`, :class:`MinerLandmarkMissingError` -
-  fail-loud exceptions CI treats as fatal.
-- :func:`check_installed_version` - version-envelope guard for each miner;
-  reads the pin from the engine SSOT (``engine_versions/{engine}.yaml``).
+- :class:`MinerLandmarkMissingError` - fail-loud exception CI treats as fatal
+  when the producer's AST landmarks no longer resolve under the live library.
 - AST helpers (:func:`extract_condition_fields`, :func:`resolve_local_assign`,
   etc.) - deterministic, stateless primitives for AST-based miners.
 - Pattern detectors (``ConditionalRaiseDetector``, etc.) - one class per
@@ -26,11 +24,6 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass, field
 from typing import Any, Literal, get_args, get_origin
-
-from packaging import version as pkg_version
-from packaging.specifiers import SpecifierSet
-
-from scripts.engine_producers._current import Producer, load_miner_pin
 
 # ---------------------------------------------------------------------------
 # Public types
@@ -92,37 +85,6 @@ class MinerError(Exception):
     """Base class for structured miner failures."""
 
 
-class MinerVersionMismatchError(MinerError):
-    """Raised when the installed library version is outside the miner's pin.
-
-    The miner is pinned to the library version it was authored against; on
-    library-bump PRs, Renovate will trip this error and the maintainer
-    widens the SSOT range or updates the miner. The pin lives in
-    ``engine_versions/{engine}.yaml`` under ``miner_pins.{producer}``;
-    ``producer`` is one of ``static`` | ``dynamic`` | ``discovery``.
-    """
-
-    def __init__(
-        self,
-        library: str,
-        installed: str,
-        expected: SpecifierSet,
-        *,
-        engine: str,
-        producer: Producer,
-    ) -> None:
-        super().__init__(
-            f"Installed {library}=={installed} is outside miner-pinned range "
-            f"{expected!s}. Widen engine_versions/{engine}.yaml "
-            f"miner_pins.{producer} or update the miner against the new source."
-        )
-        self.library = library
-        self.installed = installed
-        self.expected = expected
-        self.engine = engine
-        self.producer = producer
-
-
 class MinerLandmarkMissingError(MinerError):
     """Raised when an expected source landmark (class/method/file) is missing.
 
@@ -138,34 +100,6 @@ class MinerLandmarkMissingError(MinerError):
         super().__init__(msg)
         self.landmark = landmark
         self.detail = detail
-
-
-# ---------------------------------------------------------------------------
-# Version pin guard
-# ---------------------------------------------------------------------------
-
-
-def check_installed_version(
-    library: str, installed: str, *, engine: str, producer: Producer
-) -> None:
-    """Raise :class:`MinerVersionMismatchError` if ``installed`` isn't in the SSOT pin.
-
-    The expected range is read from ``engine_versions/{engine}.yaml`` under
-    ``miner_pins.{producer}``. ``SpecifierSet.contains(..., prereleases=True)``
-    allows rc / beta tags, which is what we want for Renovate-opened PRs
-    that bump to a prerelease tag before a stable one exists.
-    """
-    expected = load_miner_pin(engine, producer)
-    try:
-        parsed = pkg_version.Version(installed)
-    except pkg_version.InvalidVersion as exc:
-        raise MinerVersionMismatchError(
-            library, installed, expected, engine=engine, producer=producer
-        ) from exc
-    if not expected.contains(parsed, prereleases=True):
-        raise MinerVersionMismatchError(
-            library, installed, expected, engine=engine, producer=producer
-        )
 
 
 # ---------------------------------------------------------------------------

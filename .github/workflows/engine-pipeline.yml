@@ -41,7 +41,6 @@ on:
       - 'scripts/_invariant_validation_common.py'
       - 'scripts/refresh_invariant_rules.sh'
       - 'scripts/_drift.py'
-      - 'scripts/update_last_probe.py'
       - 'scripts/diff_engine_invariants.py'
       - 'scripts/diff_discovered_schemas.py'
       - 'scripts/generate_invariants_doc.py'

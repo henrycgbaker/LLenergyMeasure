@@ -573,17 +573,6 @@ def merge_staging(
         "engine_version": engine_versions[-1] if engine_versions else "",
     }
 
-    # Surface miner version pin, if any staging file declared one.
-    pinned_ranges = sorted(
-        {
-            str(s.get("miner_pinned_range", ""))
-            for s in staging_envelopes
-            if s.get("miner_pinned_range")
-        }
-    )
-    if pinned_ranges:
-        envelope["miner_pinned_range"] = pinned_ranges[-1]
-
     # mined_at: max across staging (or env override for reproducibility tests).
     frozen = os.environ.get("LLENERGY_MINER_FROZEN_AT")
     if frozen:
@@ -860,8 +849,6 @@ def emit_yaml(invariants: list[dict[str, Any]], envelope: dict[str, Any]) -> str
         "engine": envelope.get("engine", ""),
         "engine_version": envelope.get("engine_version", ""),
     }
-    if "miner_pinned_range" in envelope:
-        doc["miner_pinned_range"] = envelope["miner_pinned_range"]
     doc["mined_at"] = envelope.get("mined_at", "")
     if "staging_engine_versions" in envelope:
         doc["staging_engine_versions"] = envelope["staging_engine_versions"]

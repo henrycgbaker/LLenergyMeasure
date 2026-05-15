@@ -210,13 +210,14 @@ jobs:
           esac
           PATHS=("${BASE_PATHS[@]}" "${ENGINE_PATHS[@]}")
           # Exclude bot writeback commits from anchor calculation. The
-          # writeback bot updates engine_versions/<engine>/current.yaml last_probe
-          # block (and canonical mining outputs) on every successful run,
-          # producing a fresh git author timestamp. Without this filter, the
-          # anchor shifts on each writeback, mining produces a different
-          # mined_at timestamp, the diff classifier fires, writeback fires,
-          # loop. Filtering bot commits anchors mining to the latest
-          # substantive change instead.
+          # writeback bot updates canonical mining outputs on every
+          # successful run, producing a fresh git author timestamp.
+          # Without this filter, the anchor shifts on each writeback,
+          # mining produces a different mined_at timestamp, the diff
+          # classifier fires, writeback fires, loop. Filtering bot commits
+          # anchors mining to the latest substantive change instead.
+          # current.yaml is excluded from the writeback bundle (Renovate is
+          # its only writer) so it never trips this loop.
           SHA=$(git log -1 --format=%H \
             --invert-grep --grep='^chore(bot): writeback' \
             -- "${PATHS[@]}")
@@ -277,37 +278,6 @@ jobs:
           VERDICT=$(jq -r '.verdict' "/tmp/llem-probe-out/probe-${ENGINE}.json")
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
           exit "$DRIFT_RC"
-
-      - name: Update last_probe in current.yaml
-        if: always() && steps.probe.outcome == 'success'
-        env:
-          IMAGE: ${{ steps.version.outputs.image }}
-          ENGINE: ${{ inputs.engine }}
-          RUNNER: ${{ inputs.runner }}
-        run: |
-          DOCKER_FLAGS=()
-          if [[ "$RUNNER" == "self-hosted" ]]; then
-            DOCKER_FLAGS+=(
-              --user "$(id -u):$(id -g)"
-              -v /tmp/llem-passwd-synth:/etc/passwd:ro
-              -v /tmp/llem-group-synth:/etc/group:ro
-              -e LD_LIBRARY_PATH
-            )
-          fi
-          ENTRYPOINT_FLAG=(--entrypoint bash)
-          CMD_PREFIX=()
-          if [[ "$ENGINE" == "tensorrt" ]]; then
-            ENTRYPOINT_FLAG=(--entrypoint /opt/nvidia/nvidia_entrypoint.sh)
-            CMD_PREFIX=(bash)
-          fi
-          docker run --rm "${DOCKER_FLAGS[@]}" \
-            -v "${GITHUB_WORKSPACE}:/repo" \
-            -v /tmp/llem-probe-out:/llem-probe-out:ro \
-            -w /repo \
-            -e PYTHONPATH \
-            "${ENTRYPOINT_FLAG[@]}" \
-            "$IMAGE" \
-            "${CMD_PREFIX[@]}" -c "python3 scripts/update_last_probe.py --engine ${ENGINE} < /llem-probe-out/probe-${ENGINE}.json"
 
       - name: Save current YAMLs for diffing
         if: steps.probe.outputs.verdict == 'pass'
@@ -483,25 +453,47 @@ jobs:
           MARKER: "bot-id: invariants-${{ inputs.engine }}-probe-blocked"
           REPO: ${{ github.repository }}
           ENGINE: ${{ inputs.engine }}
+          VER: ${{ steps.version.outputs.version }}
         run: |
+          REPORT="/tmp/llem-probe-out/probe-${ENGINE}.json"
+          MISSING_COUNT=$(jq -r '.landmarks_missing | length' "$REPORT")
+          TOTAL=$(jq -r '(.landmarks_missing | length) + (.landmarks_aliased | length) + (.fingerprint_drift | length) + 0' "$REPORT")
+          DRIFT_COUNT=$(jq -r '.fingerprint_drift | length' "$REPORT")
+          ALIAS_COUNT=$(jq -r '.landmarks_aliased | length' "$REPORT")
           {
             echo "<!-- ${MARKER} -->"
             echo "## Engine invariants - ${ENGINE} (probe-blocked)"
             echo
-            echo "**Probe failed.** Producer landmarks no longer resolve under the installed library."
+            echo "**Probe failed:** ${MISSING_COUNT} landmarks no longer resolve under ${ENGINE}==${VER}."
             echo
-            echo "**Missing landmarks:**"
+            echo "Missing landmarks (${MISSING_COUNT}):"
             echo
-            jq -r '.landmarks_missing[] | "- `" + . + "`"' "/tmp/llem-probe-out/probe-${ENGINE}.json"
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' "$REPORT"
             echo
-            echo "**Downstream mine + validate steps were skipped.** No corpus changes were committed against this PR."
+            if [[ "$DRIFT_COUNT" -gt 0 ]]; then
+              echo "<details><summary>Fingerprint drift (${DRIFT_COUNT} landmarks)</summary>"
+              echo
+              jq -r '.fingerprint_drift[] | "- `" + . + "`"' "$REPORT"
+              echo
+              echo "</details>"
+              echo
+            fi
+            if [[ "$ALIAS_COUNT" -gt 0 ]]; then
+              echo "<details><summary>Aliased landmarks (${ALIAS_COUNT})</summary>"
+              echo
+              jq -r '.landmarks_aliased[] | "- `" + . + "`"' "$REPORT"
+              echo
+              echo "</details>"
+              echo
+            fi
+            echo "Downstream mine + validate skipped; no corpus changes committed against this PR."
             echo
-            echo "**To unblock,** choose one of:"
+            echo "**To unblock**, one of:"
             echo
-            echo "- **Patch the producer module's landmarks** - required when the library has genuinely renamed or removed the missing symbols. The miner code needs updating to match the new library API."
-            echo "- **Run \`@llem-ci-bot /approve-reuse ${ENGINE} invariants\`** - widens the current.yaml pin envelope to declare \"the existing miner code is valid for this library version too.\" Only useful when the library bumped *past* the miner's previously-validated version range but the landmarks still resolve."
+            echo "- Patch LANDMARKS in the fallback producer the dispatcher resolved (the stderr log in the probe step names the version it used). One set covers both library versions if the symbols still resolve there."
+            echo "- Vendor a fresh \`engine_versions/${ENGINE}/v\$(safe(${VER}))/producers/\` directory by copying the fallback dir and patching LANDMARKS for the new library API."
             echo
-            echo "**The probe is the canonical gate** - \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only a producer-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
+            echo "CI stays red until the probe verdict flips to \`pass\`."
           } | scripts/ci/upsert_pr_comment.sh
           gh pr edit "$PR" --add-label "probe-blocked" 2>/dev/null || true
 
@@ -525,14 +517,15 @@ jobs:
             ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/invariants.validated.yaml
             engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/invariants.proposed.yaml
             engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/invariants.validated.yaml
-            engine_versions/${{ inputs.engine }}/current.yaml
             docs/user/generated/invariants-${{ inputs.engine }}.md
           # ``warn`` rather than ``error``: canonical paths always exist by
           # the time this step runs (mining produced them), but the archive
           # mirror is gated on the engine being vendored at this version.
           # Until the engine's vendor PR lands, the archive paths under
-          # engine_versions/<engine>/<safe>/outputs/ are absent — the upload should
-          # bundle whatever exists rather than fail.
+          # engine_versions/<engine>/<safe>/outputs/ are absent - the upload should
+          # bundle whatever exists rather than fail. current.yaml is NOT in the
+          # writeback bundle: it is Renovate-writable input only, and the
+          # dispatcher + probe pair never need to mutate it.
           if-no-files-found: warn
 
       - name: Post per-pipeline comment
@@ -542,10 +535,30 @@ jobs:
           PR: ${{ inputs.pr-number }}
           MARKER: "bot-id: invariants-${{ inputs.engine }}-diff"
           REPO: ${{ github.repository }}
+          ENGINE: ${{ inputs.engine }}
+          VER: ${{ steps.version.outputs.version }}
         run: |
+          REPORT="/tmp/llem-probe-out/probe-${ENGINE}.json"
+          DRIFT_COUNT=$(jq -r '.fingerprint_drift | length' "$REPORT")
+          ALIAS_COUNT=$(jq -r '.landmarks_aliased | length' "$REPORT")
           {
             echo "<!-- ${MARKER} -->"
-            cat "/tmp/engine-invariants-diff/${{ inputs.engine }}.summary.md"
+            cat "/tmp/engine-invariants-diff/${ENGINE}.summary.md"
+            if [[ "$DRIFT_COUNT" -gt 0 || "$ALIAS_COUNT" -gt 0 ]]; then
+              echo
+              echo "<details><summary>Probe diagnostics</summary>"
+              echo
+              if [[ "$DRIFT_COUNT" -gt 0 ]]; then
+                echo "- Fingerprint drift: ${DRIFT_COUNT} landmarks moved between versions"
+              fi
+              if [[ "$ALIAS_COUNT" -gt 0 ]]; then
+                echo "- Aliased landmarks: ${ALIAS_COUNT} resolve via re-export (canonical paths shifted upstream; harmless)"
+              fi
+              echo
+              echo "Full per-landmark detail in the DriftReport JSON artefact and \`engine_versions/${ENGINE}.compat.json\`."
+              echo
+              echo "</details>"
+            fi
           } | scripts/ci/upsert_pr_comment.sh
 
       - name: Clean up stale probe-blocked comment (probe now passes)

@@ -9,8 +9,6 @@ flips the verdict to ``fail``.
 The verdict is the only signal CI gates on. Diagnostic fields ride along on
 every report and are informational - they NEVER affect verdict:
 
-    ``version_inside_envelope`` : is library.current_version inside the
-                                  producer's miner_pins specifier?
     ``fingerprint``             : sha256 of (qualname, filename, lineno)
                                   tuples; shifts on real refactors.
     ``fingerprint_drift``       : landmarks whose coordinates moved since
@@ -62,7 +60,6 @@ from types import ModuleType
 from typing import Literal
 
 import yaml
-from packaging.specifiers import SpecifierSet
 
 # Make the top-level ``scripts`` package importable when invoked as a
 # plain script (``python scripts/_drift.py``) as well as via
@@ -89,16 +86,6 @@ _PRODUCER_MODULES: dict[tuple[str, ProducerKind], str] = {
     ("tensorrt", "schemas"): "scripts.engine_producers.tensorrt_schema_introspector",
 }
 
-# current.yaml ``miner_pins.*`` keys are typed by extraction strategy
-# (``static | dynamic | discovery``); the drift tool's user-facing producer
-# kinds are typed by concern (``invariants | schemas``). One layer of
-# translation lives here.
-_SSOT_PIN_FOR_PRODUCER: dict[ProducerKind, str] = {
-    "invariants": "static",
-    "schemas": "discovery",
-}
-
-
 # ---------------------------------------------------------------------------
 # DriftReport
 # ---------------------------------------------------------------------------
@@ -114,9 +101,9 @@ class DriftReport:
 
     ``verdict`` is ``fail`` iff ``landmarks_missing`` is non-empty.
 
-    Diagnostic fields (``version_inside_envelope``, ``fingerprint_drift``,
-    ``landmarks_aliased``) ride along on every report and steer human
-    attention on pass-but-suspicious bumps. They NEVER affect verdict.
+    Diagnostic fields (``fingerprint_drift``, ``landmarks_aliased``) ride
+    along on every report and steer human attention on pass-but-suspicious
+    bumps. They NEVER affect verdict.
     """
 
     engine: str
@@ -128,7 +115,6 @@ class DriftReport:
     fingerprint_drift: list[str] = field(default_factory=list)
     landmarks_missing: list[str] = field(default_factory=list)
     landmarks_aliased: list[str] = field(default_factory=list)
-    version_inside_envelope: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -234,18 +220,6 @@ def _load_current(engine: str) -> dict[str, object]:
     if not isinstance(data, dict):
         raise ValueError(f"current.yaml at {path} did not parse to a mapping.")
     return data
-
-
-def _check_envelope(ssot: dict[str, object], producer: ProducerKind, current_version: str) -> bool:
-    """True iff ``current_version`` falls inside ``miner_pins.{ssot_key}``."""
-    pins = ssot.get("miner_pins") or {}
-    if not isinstance(pins, dict):
-        return False
-    raw = pins.get(_SSOT_PIN_FOR_PRODUCER[producer])
-    if raw is None:
-        return False
-    spec = SpecifierSet(str(raw))
-    return spec.contains(current_version, prereleases=True)
 
 
 def _compat_path(engine: str) -> Path:
@@ -362,7 +336,7 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
     landmark resolves under the current library, ``fail`` when at least one
     is absent.
 
-    Diagnostic fields (envelope check, fingerprint drift) are computed
+    Diagnostic fields (fingerprint drift, landmarks aliased) are computed
     regardless of verdict and ride along on the report. They never affect
     verdict.
     """
@@ -407,7 +381,6 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
         fingerprint_drift=drift,
         landmarks_missing=missing,
         landmarks_aliased=aliased,
-        version_inside_envelope=_check_envelope(current, producer, current_version),
     )
 
 

@@ -10,13 +10,15 @@ time.
 
 Pipeline this orchestrator drives:
 
-1. Verify the 0.21.0 source tree is present (canonical location:
-   ``/tmp/trt-llm-0.21.0/tensorrt_llm/``). The TRT-LLM library is pinned at
-   0.21.0 (CUDA 12.6.x); v1.x requires CUDA 13 and is a separate
-   infrastructure milestone.
-2. Read ``tensorrt_llm/version.py`` from the source tree (no import) and
-   pin against the SSOT miner range
-   (``engine_versions/tensorrt.yaml miner_pins.static``).
+1. Verify the source tree is present (canonical location:
+   ``/tmp/trt-llm-<library.current_version>/tensorrt_llm/``). The TRT-LLM
+   library version comes from ``engine_versions/tensorrt/current.yaml``;
+   the per-version dispatcher
+   (:mod:`engine_versions._dispatcher.load_producer`) selects which
+   archived static miner runs, falling back to the most-recent prior
+   vendored version when no exact-match archive exists at the bumped
+   version. Probe verdict (``scripts._drift``) is the runtime gate.
+2. Read ``tensorrt_llm/version.py`` from the source tree (no import).
 3. Run :mod:`scripts.engine_producers.tensorrt_static_invariant_miner` and emit the
    staging YAML.
 
@@ -52,9 +54,6 @@ _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 sys.path[:] = [p for p in sys.path if Path(p).resolve() != Path(_SCRIPT_DIR).resolve()]
 sys.path[:] = [p for p in sys.path if p != ""]
 
-from scripts.engine_producers._base import (  # noqa: E402  (late import after sys.path)
-    check_installed_version,
-)
 from scripts.engine_producers.tensorrt_static_invariant_miner import (  # noqa: E402
     _resolve_producer,
 )
@@ -87,12 +86,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     candidates, source_version, rel_path = walk_tensorrt(args.source_root)
-    # Pin the source-tree version against the SSOT miner range - any drift
-    # (e.g. someone pointed --source-root at a 1.x checkout) becomes a fatal
-    # MinerVersionMismatchError instead of silently emitting drifted invariants.
-    check_installed_version(
-        "tensorrt_llm", source_version, engine="tensorrt", producer="static_invariant_miner"
-    )
 
     text = emit_yaml(candidates, engine_version=source_version, rel_path=rel_path)
     args.out.parent.mkdir(parents=True, exist_ok=True)

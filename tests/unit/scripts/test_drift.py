@@ -202,41 +202,8 @@ def test_drift_fingerprint_drift_listed_on_change(
 
 
 # ---------------------------------------------------------------------------
-# Diagnostics + envelope
+# Cache + diagnostics
 # ---------------------------------------------------------------------------
-
-
-def test_drift_version_inside_envelope_matches_ssot(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """``version_inside_envelope`` reflects the current.yaml ``miner_pins.static`` range."""
-    fake_ssot = _redirect_compat_dir(monkeypatch, tmp_path)
-    _install_synthetic_producer(
-        monkeypatch,
-        engine="transformers",
-        producer="invariants",
-        landmarks=("json.JSONDecodeError",),
-    )
-
-    # Rewrite the current.yaml so the current version sits OUTSIDE the static pin -
-    # version_inside_envelope must flip to False without touching verdict.
-    fake_ssot.write_text(
-        "schema_version: 1\n"
-        "engine: transformers\n"
-        "library:\n"
-        "  pep503_name: transformers\n"
-        '  current_version: "0.0.1"\n'
-        "miner_pins:\n"
-        '  static: ">=99.0,<100.0"\n'
-        '  dynamic: ">=99.0,<100.0"\n'
-        '  discovery: ">=99.0,<100.0"\n'
-    )
-
-    report = _drift.run(engine="transformers", producer="invariants")
-
-    assert report.verdict == "pass"  # landmarks still resolve
-    assert report.version_inside_envelope is False
-    assert report.current_version == "0.0.1"
 
 
 def test_drift_writes_compat_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -321,7 +288,6 @@ def test_drift_atomic_output_rename_failure_leaves_destination_intact(
         schema_version=1,
         current_version="9.9.9",
         verdict="pass",
-        version_inside_envelope=True,
         fingerprint="deadbeef",
         fingerprint_drift=[],
         landmarks_missing=[],

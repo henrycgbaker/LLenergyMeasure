@@ -13,7 +13,7 @@ The repo uses exactly three workflow patterns, picked per-concern:
 |---|---|---|
 | **Orchestrator** | dependency-graph + fan-out (engine pipeline) | `engine-pipeline.yml` |
 | **Reusable workflow** (`workflow_call` only) | per-target body invoked by an orchestrator | `_engine-invariants-cell.yml`, `_engine-schemas-cell.yml`, `docker-publish.yml` |
-| **Monolithic-direct** | single concern, no fan-out | `ci.yml`, `security.yml`, `release.yml`, `gpu-ci.yml`, `auto-release.yml`, `ghcr-prune.yml`, `approve-reuse-bot.yml`, `publish-engine-image.yml` |
+| **Monolithic-direct** | single concern, no fan-out | `ci.yml`, `security.yml`, `release.yml`, `gpu-ci.yml`, `auto-release.yml`, `ghcr-prune.yml`, `publish-engine-image.yml` |
 
 Reusable workflows are file-prefixed `_` to signal "callable only, not a
 top-level entry point". Composite actions in `.github/actions/<name>/action.yml`
@@ -221,7 +221,6 @@ Workflows that CAN'T self-test runtime:
 - `docker-publish.yml` - `workflow_call` / `workflow_dispatch` only.
 - `auto-release.yml` - `pull_request: closed` only.
 - `release.yml` - `push: tags` only.
-- `approve-reuse-bot.yml` - `issue_comment` only.
 
 ## Bot-comment dedup
 

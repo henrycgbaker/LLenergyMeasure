@@ -48,27 +48,14 @@ Step 1 of this guide walks through the shim contract; subsequent steps detail th
 
 Create `scripts/engine_producers/{engine}_static_invariant_miner.py` (and corresponding `_dynamic_invariant_miner` / `_schema_introspector` shims) using `_stub_factory.py`'s `make_static_stub` / `make_dynamic_stub` / `make_schema_stub`. The shim's job is to defer to the per-version producer module via the dispatcher; the fail-loud contract lives inside the per-version producer.
 
-In `engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py`, the first thing the module must do:
+In `engine_versions/{engine}/v<safe>/producers/static_invariant_miner.py`,
+declare the LANDMARKS tuple the dispatcher + probe gate on. The miner
+does not perform a self-check on the installed library version: the
+dispatcher resolves which `v<safe>/` archive to use from the
+SSOT-pinned `library.current_version`, and the probe verifies the
+LANDMARKS resolve under the live library before any mining runs.
 
-```python
-import importlib.metadata
-from scripts.engine_producers._base import check_installed_version, MinerLandmarkMissingError
-from scripts.engine_producers._current import load_miner_pin
-
-# Pin source-of-truth lives in ``engine_versions/{engine}/current.yaml`` under
-# ``miner_pins.{static|dynamic|discovery}``. Pick the producer matching this
-# miner's role; ``load_miner_pin`` returns a ``packaging.SpecifierSet``.
-# Keep the upper bound tight (e.g. <4.60 not <99.0) so
-# MinerVersionMismatchError fires on a library bump.
-
-_envelope = load_miner_pin("myengine", "static")
-_installed = importlib.metadata.version("your-engine-library")
-check_installed_version("your-engine-library", _installed, _envelope)
-# Raises MinerVersionMismatchError if installed version is outside the range.
-# This is CI-fatal: the miner will not emit partial output.
-```
-
-Then declare landmark checks for every class or method the miner will walk:
+Declare landmark checks for every class or method the miner will walk:
 
 ```python
 import ast
@@ -517,19 +504,18 @@ Both static and dynamic miners err toward recall. The validation-CI gate is the 
 
 When Renovate bumps an engine library, the miner pipeline must catch behavioural drift before stale invariants ship. Failures fall into three categories: loud failures caught by the miner pipeline at mining time, loud failures caught by the validation gate at validation time, and one silent failure mode the YAML/JSON split was specifically designed to make visible.
 
-### Loud failures caught by the miner pipeline
+### Loud failures caught by the probe + miner
 
-The miner pipeline's import-time contract (Step 1 above) raises hard CI errors when the library has drifted out of the envelope the miner was written against:
-
-- **`MinerVersionMismatchError`** - installed library version is outside the miner's pinned envelope (read from `engine_versions/{engine}/current.yaml miner_pins.{producer}` via `load_miner_pin`). Forces the maintainer to read release notes and either widen the envelope or update the miner to match new validator semantics.
-  - Example: a vLLM version outside an SSOT pin of `>=0.17,<0.18` raises `MinerVersionMismatchError` at import. Forces the maintainer to update the SSOT envelope or upgrade the miner.
+The probe (`scripts._drift`) runs as the cell's first step and resolves every
+declared LANDMARK against the live library. Failures surface as red CI on the
+Renovate PR, blocking merge until the maintainer addresses them:
 
 - **`MinerLandmarkMissingError`** - an expected class or method symbol is no longer present in the library source. Catches refactors where a class was renamed, moved to a different module, or an API was deprecated and removed.
   - Example: a hypothetical vLLM release dropping `vllm.sampling_params.StructuredOutputsParams` would raise `MinerLandmarkMissingError` at the landmark-check step before any AST walking begins.
 
 - **`ImportError` / `AttributeError`** - propagated raw if the miner uses a library symbol that has been refactored without a landmark guard. The fail-loud principle requires letting these propagate; never wrap landmark imports in a `try/except` that returns `[]`. A previous TRT-LLM extractor was reverted specifically because it caught `ImportError` and silently degraded; the fail-loud contract prevents this class of regression.
 
-These three errors all surface as red CI on the Renovate PR, blocking merge until the miner is updated.
+The probe's verdict (`pass` | `fail`) is the runtime gate. The DriftReport JSON also carries diagnostic fields - `fingerprint_drift` and `landmarks_aliased` - that surface in the PR comment to direct maintainer attention on bumps that probe-pass but suggest the producer cut should advance.
 
 ### Loud failures caught by the validation gate
 
@@ -563,11 +549,9 @@ The historical Stage-1 / Stage-2 split between `auto-mine.yml` and `invariant-mi
 
 ### Tooling for diagnosis
 
-The fail-loud envelope and the YAML diff together cover the failure modes that trip on a routine library bump. Three planned tools extend this for harder cases:
+The fail-loud probe and the YAML diff together cover the failure modes that trip on a routine library bump. One planned tool extends this for harder cases:
 
-- **Pre-mining envelope check (#469).** Verifies the installed library version is inside the SSOT-pinned envelope *before* CI invests effort in mining. Today the check happens at miner import time, which is fine but late - if mining takes 5 minutes and the version is wrong, the maintainer waits 5 minutes to find out.
-- **Compat-matrix sweep (#470).** Runs the miner against every library version in a declared support range and reports per-version `(rule_count, divergences, errors)`. Surfaces "this miner mostly works on the new version but loses 3 rules" before a Renovate PR ever opens.
-- **Coordinated bump command `llem bump-engine` (#471).** A single CLI entry point that updates the Dockerfile ARG, regenerates the corpus, runs the validation gate, and reports the diff in one local invocation - used by maintainers handling library bumps that need manual intervention (e.g. `MinerVersionMismatchError` resolution).
+- **Compat-matrix sweep (#470).** Runs the probe + miner against every library version in a declared support range and reports per-version `(rule_count, divergences, errors)`. Surfaces "this miner mostly works on the new version but loses 3 rules" before a Renovate PR ever opens.
 
 ---
 
@@ -575,7 +559,6 @@ The fail-loud envelope and the YAML diff together cover the failure modes that t
 
 | Mistake | Consequence | Fix |
 |---------|-------------|-----|
-| Not pinning the miner envelope in `engine_versions/{engine}/current.yaml` | Miner runs against wrong library version silently | Set `miner_pins.{static\|dynamic\|discovery}` in the SSOT and call `check_installed_version(load_miner_pin(...))` at import |
 | Catching `ImportError` on landmark imports | Silent degradation (returns `[]` on failure) | Let `ImportError` propagate; or raise `MinerLandmarkMissingError` explicitly |
 | Cartesian-only probing with large clusters | Exponential probe count; CI timeouts | Add Hypothesis supplement for clusters > 200 combinations |
 | Adding `manual_seed` rules for automatable constraints | Pipeline-failure debt | Extend the miner instead |

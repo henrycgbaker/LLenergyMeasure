@@ -1,16 +1,14 @@
 """Tests for :mod:`scripts.engine_producers.tensorrt_miner` - orchestrator surface.
 
 The orchestrator is a thin wrapper around the static miner; it exists to
-match the per-engine ``{engine}_miner.py`` shape that ``transformers_miner.py``
-established and to keep the version-pin check (``check_installed_version``
-against the source-tree's own ``__version__``) in one named place.
+match the per-engine ``{engine}_miner.py`` shape that
+``transformers_miner.py`` established. The probe (``scripts._drift``) is
+the runtime gate for landmark resolution; the dispatcher selects which
+vendored static-miner archive runs for the SSOT-pinned library version.
 
 Coverage:
 
 - TRT-LLM is registered in :data:`scripts.engine_producers.build_corpus._ENGINE_EXTRACTORS`.
-- The orchestrator pins against the SSOT miner range
-  (``engine_versions/tensorrt.yaml miner_pins.static``) and refuses source
-  trees whose version disagrees.
 - The orchestrator never imports ``tensorrt_llm`` at module load.
 """
 
@@ -25,11 +23,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.engine_producers import (  # noqa: E402
-    build_corpus,
-    tensorrt_miner,
-)
-from scripts.engine_producers._base import MinerVersionMismatchError  # noqa: E402
+from scripts.engine_producers import build_corpus  # noqa: E402
 
 
 def test_tensorrt_engine_registered_in_build_corpus() -> None:
@@ -60,51 +54,3 @@ def test_orchestrator_does_not_import_tensorrt_llm() -> None:
         )
     # Re-import the orchestrator and confirm no side effect.
     assert "tensorrt_llm" not in sys.modules
-
-
-def test_orchestrator_main_rejects_version_mismatch(tmp_path: Path) -> None:
-    """A 1.x source tree must be refused by the version-pin guard."""
-    stub_root = tmp_path / "tensorrt_llm"
-    (stub_root / "llmapi").mkdir(parents=True)
-    # Minimal source tree with all required *classes* present so source-load
-    # succeeds, but with a 1.x version stamp so the pin guard fires.
-    (stub_root / "llmapi" / "llm_args.py").write_text(
-        "\n".join(
-            [
-                "class BaseLlmArgs:",
-                "    def validate_dtype(self): pass",
-                "    def validate_model(self): pass",
-                "    def validate_model_format_misc(self): pass",
-                "    def set_runtime_knobs_from_build_config(self): pass",
-                "    def validate_build_config_with_runtime_params(self): pass",
-                "    def validate_build_config_remaining(self): pass",
-                "    def validate_speculative_config(self): pass",
-                "    def validate_lora_config_consistency(self): pass",
-                "class TrtLlmArgs(BaseLlmArgs):",
-                "    def validate_enable_build_cache(self): pass",
-                "class LookaheadDecodingConfig:",
-                "    def validate_positive_values(self): pass",
-                "class CalibConfig: pass",
-                "class BatchingType: pass",
-                "class CapacitySchedulerPolicy: pass",
-                "class ContextChunkingPolicy: pass",
-            ]
-        )
-        + "\n"
-    )
-    (stub_root / "builder.py").write_text("class BuildConfig: pass\n")
-    (stub_root / "version.py").write_text('__version__ = "1.1.0"\n')
-
-    out = tmp_path / "trt.yaml"
-    with pytest.raises(MinerVersionMismatchError):
-        tensorrt_miner.main(["--out", str(out), "--source-root", str(stub_root)])
-
-
-def test_orchestrator_reads_pin_from_ssot() -> None:
-    """The orchestrator's version check resolves through the SSOT loader."""
-    from scripts.engine_producers._current import load_miner_pin
-
-    pin = load_miner_pin("tensorrt", "static")
-    # 0.21.x is in pin; 1.x is rejected.
-    assert pin.contains("0.21.0", prereleases=True)
-    assert not pin.contains("1.1.0", prereleases=True)

@@ -1,4 +1,0 @@
-verdict: fail
-version_inside_envelope: false
-fingerprint: "deadbeefcafebabe1234567890abcdef"
-fingerprint_drift: ["json.JSONDecodeError", "json.JSONEncoder"]

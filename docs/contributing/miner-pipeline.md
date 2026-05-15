@@ -43,7 +43,7 @@ scripts/engine_producers/
 ├── build_corpus.py                   Orchestration: merge + dedup + validate
 └── validate_invariants.py            Replays each rule against the live library
 
-engine_versions/{engine}/current.yaml          SSOT for library version + miner_pins envelopes
+engine_versions/{engine}/current.yaml          SSOT for library version (Renovate-writable input only)
 engine_versions/{engine}/v<safe>/producers/    Per-version vendored producer modules
 ├── static_invariant_miner.py
 ├── dynamic_invariant_miner.py        (when applicable)
@@ -64,23 +64,28 @@ declared shape elsewhere.
 When a producer's landmark check fails, the cell skips the rest of the
 work and the bot posts a `probe-blocked` comment on the PR. The comment
 identifies which engine and which producer (`invariants` or `schemas`)
-the probe failed for, plus the symptom.
+the probe failed for, names the count of missing landmarks, and lists
+each missing dotted path. Collapsible blocks below the headline carry
+the `fingerprint_drift` and `landmarks_aliased` diagnostic lists when
+they are non-empty.
 
-Three resolution routes:
+The dispatcher's stderr log (visible in the probe step output) names
+which `v<safe>/producers/` archive it used. Two resolution routes:
 
-1. **Patch producer code** - the dev edits the affected miner or
-   introspector module to fix the broken landmark (for example, follow
-   an upstream class rename). Pushing the commit re-runs the workflow;
-   the probe re-runs; if it passes, downstream stages proceed.
-2. **Approve reuse** - the dev posts `@llem-ci-bot /approve-reuse <engine> <producer>`
-   as a PR comment. The slash command widens the `miner_pins.{producer}`
-   `SpecifierSet` in the engine SSOT to include the bumped version.
-   The probe re-runs against the widened range.
-3. **Escalate** - the dev applies the `probe-blocked` label. Renovate
-   stops retrying this bump until the label is removed.
+1. **Patch LANDMARKS in the fallback producer.** When the symbols still
+   resolve under both library versions, edit the LANDMARKS tuple (and
+   any related `_CLASS_TARGETS` / `_ASTTarget` definitions) in the
+   fallback producer to follow the upstream rename. One set of code
+   covers both versions.
+2. **Vendor a fresh `vN/producers/` directory.** When the library API
+   has genuinely diverged, create a new
+   `engine_versions/{engine}/v<safe(N)>/producers/` directory by
+   copying the fallback dir and patching against the new API. The
+   dispatcher's exact-match path then selects the new directory at the
+   bumped version.
 
-Per-producer granularity matters: `vllm/invariants` might be reusable
-while `vllm/schemas` is not, or vice versa.
+Per-producer granularity matters: `vllm/invariants` might still resolve
+under the bumped library while `vllm/schemas` does not, or vice versa.
 
 ---
 
@@ -88,8 +93,7 @@ while `vllm/schemas` is not, or vice versa.
 
 | Symptom | Files to inspect first |
 |---|---|
-| Miner produces no rules for a new engine | `engine_versions/{engine}/v<safe>/producers/{static,dynamic}_invariant_miner.py` (does the file exist? imports succeed?); `engine_versions/{engine}/current.yaml` (is `miner_pins` populated?) |
-| `MinerVersionMismatchError` raised at import time | `engine_versions/{engine}/current.yaml miner_pins.{static\|dynamic\|discovery}` vs the live library version (`importlib.metadata.version("{library}")`) |
+| Miner produces no rules for a new engine | `engine_versions/{engine}/v<safe>/producers/{static,dynamic}_invariant_miner.py` (does the file exist? imports succeed?); the dispatcher (`engine_versions/_dispatcher.py`) error message names the path to create when no exact-match archive AND no fallback is present at or below the SSOT-pinned version |
 | `MinerLandmarkMissingError` raised at import time | `engine_versions/{engine}/v<safe>/producers/*.py LANDMARKS` tuple (which dotted path is missing in the live library? `scripts/_drift.py --engine {engine} --producer invariants` will surface it) |
 | Validation gate fails on a previously-passing rule | `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` (locate the rule by id) and `_staging/_failed_validation_{engine}.yaml` (which check failed: `positive_raises`, `message_template_match`, or `negative_does_not_raise`) |
 | Rule duplication or merge surprises | `scripts/engine_producers/build_corpus.py` (the merger; deduplication key is `(engine, severity, match_fields)`); look at `cross_validated_by` on the merged rule |
@@ -97,12 +101,11 @@ while `vllm/schemas` is not, or vice versa.
 | Dynamic miner inferred wrong template | `engine_versions/{engine}/v<safe>/producers/dynamic_invariant_miner.py` (predicate-inference logic); the seven templates live in the per-version module or `_base.py` depending on engine |
 | Drift between dispatcher LANDMARKS and live library | `scripts/_drift.py --engine {engine} --producer {invariants,schemas}` reports `landmarks_missing` (declared landmarks that don't resolve under the live library). Maintainer flow: patch LANDMARKS in the per-version producer module |
 
-The error classes (`MinerError`, `MinerVersionMismatchError`,
-`MinerLandmarkMissingError`) live in `scripts/engine_producers/_base.py`
-and are intentionally fail-loud: a previous extractor that swallowed
-`ImportError` and returned `[]` silently degraded into "no rules
-found", which masked broken extractors. Do not catch these without a
-specific reason.
+The error classes (`MinerError`, `MinerLandmarkMissingError`) live in
+`scripts/engine_producers/_base.py` and are intentionally fail-loud: a
+previous extractor that swallowed `ImportError` and returned `[]`
+silently degraded into "no rules found", which masked broken
+extractors. Do not catch these without a specific reason.
 
 ---
 
