@@ -488,7 +488,7 @@ _PLACEHOLDER_RE = re.compile(r"\{[^{}]*\}")
 
 We deliberately do NOT match nested braces - Python's format-string grammar
 permits them but the corpus's ``message_template`` strings do not use them
-(verified by inspection of ``src/llenergymeasure/engines/transformers/invariants.proposed.yaml``).
+(verified by inspection of ``engine_versions/transformers/v4_57_3/outputs/invariants.proposed.yaml``).
 A non-greedy non-recursive regex is sufficient and simpler to reason about.
 """
 

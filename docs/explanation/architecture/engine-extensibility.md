@@ -103,7 +103,7 @@ pipeline (item 6 below) will verify alignment.
 
 ### 5. Invariants YAML (auto-generated)
 
-`src/llenergymeasure/engines/<engine>/invariants.proposed.yaml` and
+`engine_versions/<engine>/v<current>/outputs/invariants.proposed.yaml` and
 `invariants.validated.yaml` are produced by the miner pipeline running inside
 the engine container. Do not hand-author these - run the pipeline or let CI
 generate them on the first engine-pipeline PR. See
@@ -112,7 +112,7 @@ generate them on the first engine-pipeline PR. See
 
 ### 6. Schema JSON (auto-generated)
 
-`src/llenergymeasure/engines/<engine>/schema.discovered.json` is produced by
+`engine_versions/<engine>/v<current>/outputs/schema.discovered.json` is produced by
 the schema introspector running inside the engine container. Same policy as
 invariants - generated, not authored. Introspectors and miners are per-version
 vendored at `engine_versions/<engine>/v<safe>/producers/`; `scripts/engine_producers/<engine>_*.py`

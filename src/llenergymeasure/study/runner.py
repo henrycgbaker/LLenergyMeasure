@@ -1655,7 +1655,7 @@ class StudyRunner:
             f"{probed!r} but engine_versions/{engine_name}/current.yaml "
             f"::library.current_version is {expected!r}. The vendored "
             f"invariants + discovered schemas in "
-            f"src/llenergymeasure/engines/{engine_name}/ were generated "
+            f"engine_versions/{engine_name}/v<current>/outputs/ were generated "
             f"against {expected!r} and may not be compatible with "
             f"{probed!r}.\n\n"
             f"To fix:\n"

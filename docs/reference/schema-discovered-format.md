@@ -17,7 +17,7 @@ For the runtime-loader side that reads these files at import time, see
 ## File locations
 
 ```
-  src/llenergymeasure/engines/{engine}/
+  engine_versions/{engine}/v<current>/outputs/
   └── schema.discovered.json    Discovered schema artefact (committed)
 
   src/llenergymeasure/config/

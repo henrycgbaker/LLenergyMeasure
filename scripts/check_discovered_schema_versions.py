@@ -3,7 +3,7 @@
 
 Each engine has a canonical version pinned in
 ``engine_versions/<engine>/current.yaml`` under ``library.current_version``. The
-discovered schema at ``src/llenergymeasure/engines/<engine>/schema.discovered.json``
+discovered schema at ``engine_versions/<engine>/v<current>/outputs/schema.discovered.json``
 must agree.
 
 Engines covered:

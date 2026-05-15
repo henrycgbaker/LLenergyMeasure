@@ -219,7 +219,7 @@ flowchart TD
     static[STATIC MINER<br/>inspect.getsource&#40;&#41; + ast.parse&#40;&#41;<br/>conditional detectors]
     dynamic[DYNAMIC MINER<br/>class constructors + validate&#40;&#41; calls<br/>Cartesian probe grid + predicate inference]
     lift[LIFT MODULES<br/>_pydantic_lift / _msgspec_lift / _dataclass_lift]
-    staging[(staging files<br/>src/llenergymeasure/engines/_staging/)]
+    staging[(staging files<br/>engine_versions/{engine}/v<current>/outputs/_staging/)]
     build[build_corpus.py<br/>merge + dedup + fingerprint]
     replay[validate_invariants.py<br/>replay against live library]
     confirmed[(confirmed rules<br/>engines/&lt;e&gt;/invariants.proposed.yaml<br/>engines/&lt;e&gt;/invariants.validated.yaml)]

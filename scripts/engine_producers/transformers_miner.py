@@ -30,7 +30,7 @@ not reachable via this miner's landmarks. Stays hand-written in
 Usage::
 
     python -m scripts.engine_producers.transformers_miner \\
-        --out src/llenergymeasure/engines/transformers/invariants.proposed.yaml
+        --out engine_versions/transformers/v4_57_3/outputs/invariants.proposed.yaml
 
 With ``LLENERGY_MINER_FROZEN_AT`` set for byte-stable reproducibility.
 """

@@ -79,7 +79,7 @@ contributed (for example:
 
 ## The artefacts
 
-Each engine directory under `src/llenergymeasure/engines/<engine>/` contains
+Each engine directory under `engine_versions/<engine>/v<current>/outputs/` contains
 four tracked artefacts:
 
 | File | Produced by | Contents |

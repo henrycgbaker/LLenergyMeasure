@@ -3,7 +3,7 @@
 
 The validation step is the **observe half** of the "observe, don't re-encode"
 design in :doc:`.product/designs/config-deduplication-dormancy/runtime-config-validation.md`.
-The YAML corpus at ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`` declares each
+The YAML corpus at ``engine_versions/{engine}/v<current>/outputs/invariants.proposed.yaml`` declares each
 invariant's ``expected_outcome``; this script executes the invariant through the
 library and records what *actually* happened. Divergence between declared and
 observed fails CI.
@@ -12,8 +12,8 @@ Usage (inside the engine's Docker container)::
 
     python scripts/validate_invariants.py \\
         --engine transformers \\
-        --corpus src/llenergymeasure/engines/transformers/invariants.proposed.yaml \\
-        --out src/llenergymeasure/engines/transformers/invariants.validated.yaml
+        --corpus engine_versions/transformers/v4_57_3/outputs/invariants.proposed.yaml \\
+        --out engine_versions/transformers/v4_57_3/outputs/invariants.validated.yaml
 
 Exit codes:
 
@@ -22,7 +22,7 @@ Exit codes:
     2 - hard error (corpus malformed, engine not importable, etc.)
 
 The envelope structure mirrors the parameter-discovery envelope in
-``src/llenergymeasure/engines/{engine}/schema.discovered.json`` (same field shape,
+``engine_versions/{engine}/v<current>/outputs/schema.discovered.json`` (same field shape,
 YAML serialisation here so the proposed and validated corpora share a single
 human-readable format).
 """

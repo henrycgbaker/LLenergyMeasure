@@ -337,7 +337,7 @@ if __name__ == "__main__":
         "engine": ENGINE,
         "invariants": [candidate_to_dict(c) for c in results],
     }
-    output_path = Path("src/llenergymeasure/engines/_staging/myengine_miner.yaml")
+    output_path = Path("engine_versions/myengine/v<current>/outputs/_staging/myengine_miner.yaml")
     output_path.write_text(yaml.dump(staging, allow_unicode=True))
     print(f"Wrote {len(results)} candidates to {output_path}")
 ```
@@ -422,15 +422,15 @@ Run the miner locally (inside the engine's Docker container if CUDA is required)
 ```bash
 python scripts/engine_producers/build_corpus.py --engine myengine --producer static
 # Runs the per-version vendored static miner via the dispatcher shim,
-# writes src/llenergymeasure/engines/_staging/myengine_static_invariant_miner.yaml
+# writes engine_versions/myengine/v<current>/outputs/_staging/myengine_static_invariant_miner.yaml
 
 python scripts/engine_producers/build_corpus.py --engine myengine
 # Merges staging files, runs validation-CI gate, writes corpus
 
 python scripts/validate_invariants.py \
   --engine myengine \
-  --corpus src/llenergymeasure/engines/myengine.proposed.yaml \
-  --out src/llenergymeasure/engines/myengine.validated.yaml
+  --corpus engine_versions/myengine/v<current>/outputs/invariants.proposed.yaml \
+  --out engine_versions/myengine/v<current>/outputs/invariants.validated.yaml
 # Validates all rules against live library
 ```
 
@@ -533,7 +533,7 @@ Concrete scenario: a refactor in `_pydantic_lift.py` changes how it walks `Field
 
 **Mitigation: the proposed-vs-validated YAML pair (the trust seam).**
 
-The engine-invariants pipeline (`engine-pipeline.yml`, with per-job `if:` gating selecting the right cell for each trigger source: `pull_request: paths` for vllm + tensorrt, `workflow_run` after Build engine image for transformers) mines the proposed corpus into `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` and then validates it into `src/llenergymeasure/engines/{engine}/invariants.validated.yaml` in the same job. Both YAMLs land in one atomic commit-back to the PR branch, and the per-pipeline diff comment includes both diffs.
+The engine-invariants pipeline (`engine-pipeline.yml`, with per-job `if:` gating selecting the right cell for each trigger source: `pull_request: paths` for vllm + tensorrt, `workflow_run` after Build engine image for transformers) mines the proposed corpus into `engine_versions/{engine}/v<current>/outputs/invariants.proposed.yaml` and then validates it into `engine_versions/{engine}/v<current>/outputs/invariants.validated.yaml` in the same job. Both YAMLs land in one atomic commit-back to the PR branch, and the per-pipeline diff comment includes both diffs.
 
 Because the proposed-corpus diff is emitted alongside the validated diff, a miner refactor that silently drops 18 invariants shows up as 18 deletions in the proposed-corpus diff - a maintainer reading the PR notices the regression even when the validation gate's verdict on the surviving invariants is green.
 

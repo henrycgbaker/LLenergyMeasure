@@ -9,7 +9,7 @@ templates the existing invariants corpus does not already match.
 Design:
 
 - **No corpus mutation.** We emit YAML *fragments* to ``--out PATH``; the
-  live ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`` is never touched.
+  live ``engine_versions/{engine}/v<current>/outputs/invariants.proposed.yaml`` is never touched.
 - **Severity is mechanical.** ``warn`` for log-channel emissions;
   ``error`` when ``include_exceptions=True`` and the record is an
   exception. Invariant fragments are always ``added_by: runtime_warning``.
@@ -656,7 +656,7 @@ def _field_value_distribution(
 
 _BANNER = (
     "# Invariant fragment proposed by 'llem report-gaps'. Review and APPEND to\n"
-    "# src/llenergymeasure/engines/{engine}/invariants.proposed.yaml under the 'rules:' key.\n"
+    "# engine_versions/{engine}/v<current>/outputs/invariants.proposed.yaml under the 'rules:' key.\n"
     "# ----------------------------------------------------------------------\n"
     "# added_by: runtime_warning - always, for runtime-derived rules.\n"
     "# needs_generalisation_review: set when the predicate is narrow or\n"

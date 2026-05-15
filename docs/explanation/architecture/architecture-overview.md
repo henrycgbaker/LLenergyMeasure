@@ -48,7 +48,7 @@ flowchart TB
 
 **Inputs:** Engine library source code (at a pinned version).
 
-**Outputs:** `src/llenergymeasure/engines/{engine}/invariants.proposed.yaml` (maintainer-seeded corpus, post-mining) and `src/llenergymeasure/engines/{engine}/invariants.validated.yaml` (CI-validated observed behaviour, post-validate-replay; both ship with the package).
+**Outputs:** `engine_versions/{engine}/v<current>/outputs/invariants.proposed.yaml` (maintainer-seeded corpus, post-mining) and `engine_versions/{engine}/v<current>/outputs/invariants.validated.yaml` (CI-validated observed behaviour, post-validate-replay; both ship with the package).
 
 **Three components:**
 - Static miner - walks Python AST of validator methods; no constructor calls.
