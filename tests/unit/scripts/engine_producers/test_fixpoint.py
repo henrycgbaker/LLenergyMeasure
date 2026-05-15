@@ -204,14 +204,11 @@ class TestCorpusIntegration:
     def test_seeded_transformers_corpus_converges(self) -> None:
         import yaml
 
-        corpus_path = (
-            _PROJECT_ROOT
-            / "src"
-            / "llenergymeasure"
-            / "engines"
-            / "transformers"
-            / "invariants.proposed.yaml"
-        )
+        from scripts.engine_producers._current import current_outputs_dir
+
+        # Resolve via the SSOT-driven helper rather than hardcoding a per-version
+        # path - this test stays valid across Renovate-driven engine bumps.
+        corpus_path = current_outputs_dir("transformers") / "invariants.proposed.yaml"
         corpus = yaml.safe_load(corpus_path.read_text())
         # Should not raise.
         fixpoint_test_corpus(corpus)

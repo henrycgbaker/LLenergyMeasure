@@ -45,7 +45,12 @@ here; Cartesian probing only.
 
 Output
 ------
-Writes ``src/llenergymeasure/engines/vllm/_staging/vllm_dynamic_miner.yaml``.
+The cell invokes the miner with ``--out`` derived from the SSOT, so the
+staging file lands at
+``engine_versions/vllm/v<current>/outputs/_staging/vllm_dynamic_miner.yaml``.
+The argparse default below points at a per-version path derived from
+``engine_versions/vllm/current.yaml`` so direct ``python -m`` invocations
+write to the same location the cell does.
 """
 
 from __future__ import annotations
@@ -843,12 +848,26 @@ def emit_yaml(candidates: list[InvariantCandidate], engine_version: str) -> str:
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
 
 
+def _default_out_path() -> Path:
+    """Resolve the staging YAML default from engine_versions/vllm/current.yaml.
+
+    Per-version path so direct ``python -m`` invocations write to the same
+    location the cell does (``engine_versions/vllm/v<current>/outputs/_staging/``).
+    Falls back to a project-relative path if the SSOT cannot be read - the
+    miner has its own argparse layer above this, so a missing SSOT will
+    surface clearly rather than silently writing somewhere unexpected.
+    """
+    from scripts.engine_producers._current import current_outputs_dir
+
+    return current_outputs_dir("vllm") / "_staging" / "vllm_dynamic_miner.yaml"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path("src/llenergymeasure/engines/vllm/_staging/vllm_dynamic_miner.yaml"),
+        default=_default_out_path(),
         help="Where to write the staging YAML.",
     )
     args = parser.parse_args(argv)

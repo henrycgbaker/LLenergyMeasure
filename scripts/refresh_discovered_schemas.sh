@@ -4,19 +4,19 @@
 #
 # Usage: ./scripts/refresh_discovered_schemas.sh {vllm|tensorrt|transformers}
 #
-# Always writes to src/llenergymeasure/engines/<engine>.json
+# Always writes to engine_versions/<engine>/v<safe>/outputs/schema.discovered.json
 # and prints the resulting `git diff`. Does NOT commit. The discovered JSON
 # file IS the canonical SSOT - authority comes from `git commit`, not from
 # who ran discovery.
 #
-# Legitimate refresh (e.g. you bumped a Dockerfile FROM tag):
+# Legitimate refresh (e.g. you bumped library.current_version in current.yaml):
 #   review the diff, `git add`, and open a PR.
 # Exploring a fork or stale image:
-#   `git checkout src/llenergymeasure/engines/<engine>.json`
+#   `git checkout engine_versions/<engine>/v<safe>/outputs/schema.discovered.json`
 #
 # Discovery image selection:
-#   vllm         -> pristine vllm/vllm-openai:<tag> (vllm pre-installed)
-#   tensorrt     -> pristine nvcr.io/nvidia/tensorrt-llm/release:<tag>
+#   vllm         -> pristine vllm/vllm-openai:v<ver> (vllm pre-installed)
+#   tensorrt     -> pristine nvcr.io/nvidia/tensorrt-llm/release:<ver>
 #                   (works around llenergymeasure:tensorrt's cuKernelGetName bug)
 #   transformers -> llenergymeasure:transformers-<ver> (base pytorch image has no
 #                   transformers package; our Dockerfile pip-installs it at the
@@ -28,7 +28,7 @@ usage() {
 Usage: ./scripts/refresh_discovered_schemas.sh {vllm|tensorrt|transformers}
 
 Builds or pulls the engine's discovery image, runs discovery inside it,
-writes src/llenergymeasure/engines/<engine>.json, and
+writes engine_versions/<engine>/v<safe>/outputs/schema.discovered.json, and
 prints the git diff. Does NOT commit.
 EOF
 }
@@ -40,23 +40,30 @@ fi
 
 ENGINE="$1"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SSOT="${REPO_ROOT}/engine_versions/${ENGINE}/current.yaml"
 
-# Extract ARG default value from a Dockerfile: _arg_default <file> <NAME>
-_arg_default() {
-    grep -oE "^ARG[[:space:]]+${2}=[^[:space:]]+" "$1" | head -1 | cut -d= -f2-
-}
+if [[ ! -f "$SSOT" ]]; then
+    echo "[$ENGINE] SSOT $SSOT not found; unsupported engine?" >&2
+    usage >&2
+    exit 1
+fi
+
+VER="$(yq '.library.current_version' "$SSOT")"
+if [[ -z "$VER" || "$VER" == "null" ]]; then
+    echo "[$ENGINE] Could not resolve library.current_version from $SSOT" >&2
+    exit 1
+fi
+SAFE_VER="v${VER//[.-]/_}"
+OUTPUTS_DIR="engine_versions/${ENGINE}/${SAFE_VER}/outputs"
 
 case "$ENGINE" in
     vllm)
-        VER="$(_arg_default "$REPO_ROOT/docker/Dockerfile.vllm" VLLM_VERSION)"
-        IMAGE="vllm/vllm-openai:${VER}"
+        IMAGE="vllm/vllm-openai:v${VER}"
         ;;
     tensorrt)
-        VER="$(_arg_default "$REPO_ROOT/docker/Dockerfile.tensorrt" TRTLLM_VERSION)"
         IMAGE="nvcr.io/nvidia/tensorrt-llm/release:${VER}"
         ;;
     transformers)
-        VER="$(_arg_default "$REPO_ROOT/docker/Dockerfile.transformers" TRANSFORMERS_VERSION)"
         IMAGE="llenergymeasure:transformers-${VER}"
         if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
             echo "[$ENGINE] Image $IMAGE not found; building from docker/Dockerfile.transformers..." >&2
@@ -70,12 +77,8 @@ case "$ENGINE" in
         ;;
 esac
 
-if [[ -z "${IMAGE:-}" ]]; then
-    echo "Failed to resolve image for engine '$ENGINE'" >&2
-    exit 1
-fi
-
-OUTPUT_REL="src/llenergymeasure/engines/${ENGINE}/schema.discovered.json"
+OUTPUT_REL="${OUTPUTS_DIR}/schema.discovered.json"
+mkdir -p "$REPO_ROOT/$OUTPUTS_DIR"
 
 echo "[$ENGINE] Running discovery inside $IMAGE..." >&2
 # Forward LLENERGY_DISCOVERY_FROZEN_AT into the container if the caller (CI)
