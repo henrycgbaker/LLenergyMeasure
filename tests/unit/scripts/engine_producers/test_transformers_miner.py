@@ -21,29 +21,19 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from scripts.engine_producers import transformers_miner as tf_walker  # noqa: E402
 from scripts.engine_producers._base import InvariantCandidate, MinerSource  # noqa: E402
-from scripts.engine_producers._current import load_miner_pin  # noqa: E402
 
-# Pin guard: tests that actually invoke ``tf_walker.walk()`` depend on
-# transformers being inside the SSOT miner pin
-# (``engine_versions/transformers.yaml miner_pins.dynamic``). CI environments
-# that resolve an older version (e.g. 4.51 via ``uv.lock``) lack
-# ``GenerationConfig.validate(strict=True)``. Mark those tests skipped rather
-# than let them fail with a TypeError unrelated to the change under test.
+# Tests that actually invoke ``tf_walker.walk()`` depend on transformers
+# being importable. The probe is the runtime gate for landmark resolution;
+# tests skip cleanly when the library is not installed.
 try:
-    import transformers as _tf  # type: ignore
-    from packaging import version as _pkg_version
+    import transformers as _tf  # type: ignore  # noqa: F401
 
-    _TF_PIN = load_miner_pin("transformers", "dynamic")
-    _TRANSFORMERS_IN_PIN = _TF_PIN.contains(_pkg_version.Version(_tf.__version__), prereleases=True)
-    _TRANSFORMERS_PIN_REASON = (
-        f"transformers=={_tf.__version__} is outside SSOT miner pin {_TF_PIN!s}"
-    )
+    _TRANSFORMERS_IMPORTABLE = True
 except ImportError:
-    _TRANSFORMERS_IN_PIN = False
-    _TRANSFORMERS_PIN_REASON = "transformers not importable"
+    _TRANSFORMERS_IMPORTABLE = False
 
 requires_pinned_transformers = pytest.mark.skipif(
-    not _TRANSFORMERS_IN_PIN, reason=_TRANSFORMERS_PIN_REASON
+    not _TRANSFORMERS_IMPORTABLE, reason="transformers not importable"
 )
 
 
@@ -96,7 +86,6 @@ def test_emit_yaml_deterministic_ordering() -> None:
         "schema_version": "1.0.0",
         "engine": "transformers",
         "engine_version": "4.56.0",
-        "miner_pinned_range": ">=4.50,<5.0",
         "mined_at": "2026-04-23T00:00:00Z",
     }
     yaml_a = tf_walker.emit_yaml(candidates, envelope)
@@ -110,7 +99,6 @@ def test_emit_yaml_roundtrip_preserves_fields() -> None:
         "schema_version": "1.0.0",
         "engine": "transformers",
         "engine_version": "4.56.0",
-        "miner_pinned_range": ">=4.50,<5.0",
         "mined_at": "2026-04-23T00:00:00Z",
     }
     text = tf_walker.emit_yaml(candidates, envelope)
@@ -235,26 +223,3 @@ def test_walk_confidence_distribution() -> None:
     pytest.importorskip("transformers")
     candidates, _ = tf_walker.walk()
     assert len(candidates) > 0
-
-
-def test_walk_emits_version_mismatch_when_out_of_range(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    pytest.importorskip("transformers")
-    # Force the pinned range to something the installed version can't satisfy.
-    from packaging.specifiers import SpecifierSet
-
-    from scripts.engine_producers import _base as base_mod
-    from scripts.engine_producers import _current
-    from scripts.engine_producers._base import MinerVersionMismatchError
-
-    _current.load_miner_pin.cache_clear()
-
-    def _fake(engine: str, producer: str) -> SpecifierSet:
-        return SpecifierSet(">=99.0")
-
-    monkeypatch.setattr(base_mod, "load_miner_pin", _fake)
-    monkeypatch.setattr(tf_walker, "load_miner_pin", _fake)
-
-    with pytest.raises(MinerVersionMismatchError):
-        tf_walker.walk()

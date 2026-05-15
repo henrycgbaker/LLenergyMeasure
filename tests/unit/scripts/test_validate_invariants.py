@@ -416,7 +416,7 @@ class TestEnvelope:
         corpus_path = tmp_path / "t.yaml"
         corpus_path.write_text(
             "schema_version: 1.0.0\nengine: transformers\nengine_version: 4.56.0\n"
-            "miner_pinned_range: <5.0\nmined_at: 2026-01-01T00:00:00Z\n"
+            "mined_at: 2026-01-01T00:00:00Z\n"
             "invariants: []\n"
         )
         out_path = tmp_path / "t.validated.yaml"
@@ -460,7 +460,7 @@ def test_main_exits_0_on_no_divergence(tmp_path: Path, monkeypatch: pytest.Monke
     corpus_path = tmp_path / "t.yaml"
     corpus_path.write_text(
         "schema_version: 1.0.0\nengine: transformers\nengine_version: 4.56.0\n"
-        "miner_pinned_range: <5.0\nmined_at: 2026-01-01T00:00:00Z\ninvariants: []\n"
+        "mined_at: 2026-01-01T00:00:00Z\ninvariants: []\n"
     )
     out_path = tmp_path / "t.validated.yaml"
 

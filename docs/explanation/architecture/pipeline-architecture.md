@@ -101,7 +101,7 @@ Layers over: parameter-discovery + typed-schema-discovery.
 3. **DIFF vs HEAD**.
 4. **REGENERATE** `docs/reference/engines/curation-{engine}.md` (Parameters section - fact base for the human curator; pre-existing behaviour preserved).
 5. **COMMENT + LABEL** (suppress on empty).
-6. **Probe-fail branch** - post probe-fail comment with 3 routes (per §3 of the design doc: patch code, `/approve-reuse`, escalate). Apply `probe-blocked` label; `exit 0` (not a CI failure).
+6. **Probe-fail branch** - post probe-fail comment with two routes (patch LANDMARKS in the fallback producer, or vendor a fresh `vN/producers/` directory) and the diagnostic counts (missing landmarks, fingerprint drift, aliased landmarks). Apply `probe-blocked` label; `exit 1` (red CI gate).
 
 #### Per-cell artefact contract
 
@@ -123,9 +123,10 @@ git add src/llenergymeasure/engines/{engine}/invariants.proposed.yaml
         docs/reference/engines/curation-{engine}.md
         docs/reference/engines/invariants-{engine}.md
         engine_versions/{engine}.compat.json
-        engine_versions/{engine}/current.yaml   # only if /approve-reuse fired
 git commit && git push --force-with-lease
 ```
+
+`engine_versions/{engine}/current.yaml` is Renovate-writable input only and is **never** part of the bot writeback bundle.
 
 The same workflow then applies the cross-pipeline rollup label (`safe-bump` or `probe-blocked`).
 
@@ -166,7 +167,7 @@ A push triggers a re-run of the CI cycle; the updated summary comment supersedes
 | `corpus-changed` + mechanical | squash-merge |
 | `invariants-breaking` | edit `engine_configs.py` |
 | `schemas-breaking` | edit `engine_configs.py` |
-| `probe-blocked` | resolve via §3 routes: patch producer code, `/approve-reuse`, or escalate |
+| `probe-blocked` | patch LANDMARKS in the fallback producer, or vendor a fresh `engine_versions/{engine}/v<safe(N)>/producers/` directory |
 
 :::note Guided curation UX is deferred
 The guided curation UX (RFC-style YAML decision file + libcst applier) is deferred to [issue #475](https://github.com/henrycgbaker/llenergymeasure/issues/475). The current redesign ships self-serve curation only: devs hand-edit `engine_configs.py` based on the digest. After 2-3 Renovate cycles of operational data, the #475 reactivation will evaluate whether the guided UX pays off.
@@ -174,39 +175,29 @@ The guided curation UX (RFC-style YAML decision file + libcst applier) is deferr
 
 ### Probe-fail human checkpoint
 
-This is the OTHER human touchpoint (per P6) - inside the otherwise-automated CI half. When a probe fails (inline step 1 of either workflow), three resolution routes are available.
+This is the OTHER human touchpoint (per P6) - inside the otherwise-automated CI half. When a probe fails (inline step 1 of either workflow), the maintainer has two resolution routes.
 
 ```mermaid
 flowchart TD
     fail([Probe fails])
     fail --> r1{Choose route}
-    r1 -->|Route 1| patch[Patch producer code]
-    r1 -->|Route 2| approve[/approve-reuse slash command/]
-    r1 -->|Route 3| escalate[Escalate / block]
+    r1 -->|Route 1| patch[Patch LANDMARKS in<br/>the fallback producer]
+    r1 -->|Route 2| vendor[Vendor a fresh<br/>vN/producers/ directory]
 
     patch --> rerun1[Push commit -> workflow re-runs<br/>-> probe re-runs]
     rerun1 --> verdict1{Probe passes?}
     verdict1 -->|yes| proceed[Downstream stages proceed]
     verdict1 -->|no| r1
 
-    approve --> bot[approve-reuse-bot.yml<br/>issue_comment: created listener]
-    bot --> widen[Widen miner_pins SpecifierSet<br/>SSOT commit via App token]
-    widen --> rerun2[Probe re-runs against widened range]
-    rerun2 --> proceed
-
-    escalate --> label[probe-blocked label applied;<br/>Renovate stops retrying until removed]
-    label --> needfollowup[Route 1 or 2 must follow before merge]
+    vendor --> rerun2[Push commit -> workflow re-runs<br/>-> dispatcher selects new dir<br/>-> probe re-runs]
+    rerun2 --> verdict1
 ```
 
-**Route 1 - Patch producer code.** The dev edits `engine_versions/{engine}/v<safe>/producers/{static_invariant_miner,dynamic_invariant_miner,schema_introspector}.py` to fix the broken landmark (e.g. follow an upstream rename). Pushing the commit re-runs the workflow; the probe re-runs; if it passes, downstream stages proceed.
+**Route 1 - Patch LANDMARKS in the fallback producer.** The dispatcher's stderr log (in the probe step output) names which `v<safe>/producers/` archive it used. The dev edits the LANDMARKS tuple (and any related `_CLASS_TARGETS` / `_ASTTarget` definitions) to follow the upstream rename. One set of producer code can cover multiple adjacent library versions when the symbols still resolve under both. Push the commit; the workflow re-runs; the probe verifies the patched landmarks under the live library.
 
-**Route 2 - Approve reuse via slash command.** The dev posts `@llem-ci-bot /approve-reuse <engine> <producer>` as a PR comment. Producer is one of `{invariants, schemas}` (per-producer granularity - vllm invariants might be reusable while vllm schemas are not). `approve-reuse-bot.yml` is the `issue_comment: created` listener; it validates the dev's approval rights, updates `engine_versions/{engine}/current.yaml` `miner_pins.{producer}` to widen the `SpecifierSet` to include the bumped version, and commits the SSOT change via the llem-ci-bot App token (cascades; `GITHUB_TOKEN` would not). The probe re-runs against the widened range; the verdict flips to PASS and downstream stages proceed.
+**Route 2 - Vendor a fresh `vN/producers/` directory.** When the library API has genuinely diverged from the prior version (refactor, removal, new subpackage layout), the maintainer creates a new `engine_versions/{engine}/v<safe(N)>/producers/` directory by copying the fallback dir and patching against the new API. The dispatcher's exact-match path then selects the new directory at the bumped version.
 
-**Route 3 - Escalate / block.** The dev applies the `probe-blocked` label. Renovate stops retrying this bump until the label is removed; route 1 or 2 must follow before merge.
-
-:::caution No other slash commands
-`/rerun`, `/skip-probe`, `/force-merge` were explicitly rejected as footguns. The deliberate scope is one binary approval gate per `(engine, producer)` - no escape hatches.
-:::
+No slash commands exist for bypassing the probe. The dispatcher + probe pair is the contract; manual maintainer intervention is patching landmarks or vendoring a fresh `vN/producers/` directory.
 
 ### Adjacent pipelines
 

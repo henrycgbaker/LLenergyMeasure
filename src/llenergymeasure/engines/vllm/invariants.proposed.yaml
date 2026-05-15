@@ -1,7 +1,6 @@
 schema_version: 1.0.0
 engine: vllm
 engine_version: 0.7.3
-miner_pinned_range: <0.8,>=0.7.3
 mined_at: '2026-05-14T13:25:05+02:00'
 invariants:
 - id: vllm_samplingparams_dormant_seed_eq_neg1

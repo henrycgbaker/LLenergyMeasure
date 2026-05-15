@@ -11,15 +11,11 @@ import ast
 import sys
 from pathlib import Path
 
-import pytest
-from packaging.specifiers import SpecifierSet
-
 # Make the top-level ``scripts`` package importable from tests.
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.engine_producers import _current  # noqa: E402
 from scripts.engine_producers._base import (  # noqa: E402
     ConditionalLoggerWarningDetector,
     ConditionalRaiseDetector,
@@ -27,10 +23,8 @@ from scripts.engine_producers._base import (  # noqa: E402
     ConditionalWarningsWarnDetector,
     DetectedPattern,
     MinerLandmarkMissingError,
-    MinerVersionMismatchError,
     MinorIssuesDictAssignDetector,
     call_func_path,
-    check_installed_version,
     default_detectors,
     extract_assign_target,
     extract_condition_fields,
@@ -408,53 +402,6 @@ def test_filter_kwargs_positive_derivable_accepts_isinstance() -> None:
 # ---------------------------------------------------------------------------
 # Error types
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def _stub_ssot_pin(monkeypatch):
-    """Replace SSOT loader with a synthetic SpecifierSet for unit tests."""
-
-    def _factory(spec: str) -> None:
-        _current.load_miner_pin.cache_clear()
-
-        def _fake(engine: str, producer: str) -> SpecifierSet:
-            return SpecifierSet(spec)
-
-        monkeypatch.setattr(_current, "load_miner_pin", _fake)
-        # _base.py imports load_miner_pin by name; patch the binding there too.
-        from scripts.engine_producers import _base as base_mod
-
-        monkeypatch.setattr(base_mod, "load_miner_pin", _fake)
-
-    return _factory
-
-
-def test_check_installed_version_in_range(_stub_ssot_pin) -> None:
-    _stub_ssot_pin(">=4.50,<5.0")
-    check_installed_version(
-        "transformers", "4.56.0", engine="transformers", producer="static_invariant_miner"
-    )
-
-
-def test_check_installed_version_out_of_range(_stub_ssot_pin) -> None:
-    _stub_ssot_pin(">=4.50,<5.0")
-    with pytest.raises(MinerVersionMismatchError) as exc_info:
-        check_installed_version(
-            "transformers", "5.0.0", engine="transformers", producer="static_invariant_miner"
-        )
-    assert "transformers" in str(exc_info.value)
-    assert "5.0.0" in str(exc_info.value)
-
-
-def test_check_installed_version_invalid_version_string(_stub_ssot_pin) -> None:
-    _stub_ssot_pin(">=4.50,<5.0")
-    with pytest.raises(MinerVersionMismatchError):
-        check_installed_version(
-            "transformers",
-            "not-a-version",
-            engine="transformers",
-            producer="static_invariant_miner",
-        )
 
 
 def test_walker_landmark_missing_error_carries_detail() -> None:

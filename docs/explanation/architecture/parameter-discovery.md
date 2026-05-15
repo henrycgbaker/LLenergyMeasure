@@ -198,7 +198,7 @@ The validated YAML carries the engine version the corpus was validated against. 
 1. It checks `schema_version` major against `SUPPORTED_MAJOR_VERSION`. A major-version mismatch raises `UnsupportedSchemaVersionError` (the package is incompatible with the installed corpus version).
 2. It parses all rules with strict enum validation: unknown `added_by` values raise `UnknownAddedByError`; unknown severity values raise `UnknownSeverityError`.
 
-The loader does not check whether the currently installed engine library version matches the corpus version. That alignment is enforced at corpus-build time (the miner's SSOT-pinned envelope from `engine_versions/{engine}/current.yaml miner_pins.{producer}` + `check_installed_version`) and at runtime via the engine's own constructor validation.
+The loader does not check whether the currently installed engine library version matches the corpus version. That alignment is enforced at corpus-build time: the dispatcher (`engine_versions/_dispatcher.load_producer`) selects which vendored producer to run for the SSOT-pinned library version, and the probe (`scripts/_drift.py`) verifies the producer's LANDMARKS resolve under the live library before mining proceeds. Runtime alignment is enforced via the engine's own constructor validation.
 
 ---
 

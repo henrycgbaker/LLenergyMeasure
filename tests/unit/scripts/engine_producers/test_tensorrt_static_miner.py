@@ -4,8 +4,6 @@ Covers:
 
 - Source-extraction landmarks (fail-loud on missing source root / class /
   validator method).
-- SSOT miner pin (``engine_versions/tensorrt.yaml miner_pins.static``) is
-  in shape and pins 0.21.x.
 - Method resolution via :func:`scripts.engine_producers._base.find_class` /
   :func:`find_method` (so refactors that drop those helpers fail loudly).
 - Per-validator AST extraction emits the predicate shapes we expect for
@@ -32,15 +30,12 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from packaging.specifiers import SpecifierSet  # noqa: E402
-
 from scripts.engine_producers import tensorrt_static_invariant_miner as trt_miner  # noqa: E402
 from scripts.engine_producers._base import (  # noqa: E402
     MinerLandmarkMissingError,
     find_class,
     find_method,
 )
-from scripts.engine_producers._current import load_miner_pin  # noqa: E402
 from scripts.engine_producers._fixpoint_test import assert_gate_soundness_fixpoint  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -80,17 +75,6 @@ _REQUIRES_SOURCE = pytest.mark.skipif(
 
 class TestModuleContract:
     """Static-shape contract that holds regardless of source availability."""
-
-    def test_ssot_miner_pin_declared(self) -> None:
-        assert isinstance(load_miner_pin("tensorrt", "static"), SpecifierSet)
-
-    def test_ssot_miner_pin_pins_021(self) -> None:
-        # The miner must reject 1.x - that's a separate library generation.
-        # The pin must accept 0.21.x and reject 1.x.
-        pin = load_miner_pin("tensorrt", "static")
-        assert pin.contains("0.21.0", prereleases=True)
-        assert not pin.contains("1.1.0", prereleases=True)
-        assert not pin.contains("0.20.5", prereleases=True)
 
     def test_method_landmarks_use_find_class_and_find_method(self) -> None:
         """Pin the contract that the miner uses the shared landmark helpers.

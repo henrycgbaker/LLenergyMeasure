@@ -240,8 +240,6 @@ jobs:
           echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
           exit "$DRIFT_RC"
 
-      # The canonical last_probe writer lives in _engine-invariants-cell.yml.
-
       - name: Save current schema for diffing
         if: steps.probe.outputs.verdict == 'pass'
         env:
@@ -393,25 +391,46 @@ jobs:
           MARKER: "bot-id: schemas-${{ inputs.engine }}-probe-blocked"
           REPO: ${{ github.repository }}
           ENGINE: ${{ inputs.engine }}
+          VER: ${{ steps.version.outputs.version }}
         run: |
+          REPORT="/tmp/llem-probe-out/probe-${ENGINE}.json"
+          MISSING_COUNT=$(jq -r '.landmarks_missing | length' "$REPORT")
+          DRIFT_COUNT=$(jq -r '.fingerprint_drift | length' "$REPORT")
+          ALIAS_COUNT=$(jq -r '.landmarks_aliased | length' "$REPORT")
           {
             echo "<!-- ${MARKER} -->"
             echo "## Engine schemas - ${ENGINE} (probe-blocked)"
             echo
-            echo "**Probe failed.** Introspector landmarks no longer resolve under the installed library."
+            echo "**Probe failed:** ${MISSING_COUNT} landmarks no longer resolve under ${ENGINE}==${VER}."
             echo
-            echo "**Missing landmarks:**"
+            echo "Missing landmarks (${MISSING_COUNT}):"
             echo
-            jq -r '.landmarks_missing[] | "- `" + . + "`"' "/tmp/llem-probe-out/probe-${ENGINE}.json"
+            jq -r '.landmarks_missing[] | "- `" + . + "`"' "$REPORT"
             echo
-            echo "**Downstream discovery was skipped.** No schema changes were committed against this PR."
+            if [[ "$DRIFT_COUNT" -gt 0 ]]; then
+              echo "<details><summary>Fingerprint drift (${DRIFT_COUNT} landmarks)</summary>"
+              echo
+              jq -r '.fingerprint_drift[] | "- `" + . + "`"' "$REPORT"
+              echo
+              echo "</details>"
+              echo
+            fi
+            if [[ "$ALIAS_COUNT" -gt 0 ]]; then
+              echo "<details><summary>Aliased landmarks (${ALIAS_COUNT})</summary>"
+              echo
+              jq -r '.landmarks_aliased[] | "- `" + . + "`"' "$REPORT"
+              echo
+              echo "</details>"
+              echo
+            fi
+            echo "Downstream discovery skipped; no schema changes committed against this PR."
             echo
-            echo "**To unblock,** choose one of:"
+            echo "**To unblock**, one of:"
             echo
-            echo "- **Patch the introspector module's landmarks** - required when the library has genuinely renamed or removed the missing symbols. The introspector code needs updating to match the new library API."
-            echo "- **Run \`@llem-ci-bot /approve-reuse ${ENGINE} schemas\`** - widens the current.yaml pin envelope to declare \"the existing introspector code is valid for this library version too.\" Only useful when the library bumped *past* the introspector's previously-validated version range but the landmarks still resolve."
+            echo "- Patch LANDMARKS in the fallback introspector the dispatcher resolved (the stderr log in the probe step names the version it used)."
+            echo "- Vendor a fresh \`engine_versions/${ENGINE}/v\$(safe(${VER}))/producers/\` directory by copying the fallback dir and patching LANDMARKS for the new library API."
             echo
-            echo "**The probe is the canonical gate** - \`/approve-reuse\` does not bypass it. It only widens the version-pin so the version check stops blocking. If landmarks were genuinely renamed, only an introspector-module patch will turn the probe green. CI stays red until the probe verdict flips to \`pass\`."
+            echo "CI stays red until the probe verdict flips to \`pass\`."
           } | scripts/ci/upsert_pr_comment.sh
           gh pr edit "$PR" --add-label "probe-blocked" 2>/dev/null || true
 
@@ -446,10 +465,30 @@ jobs:
           PR: ${{ inputs.pr-number }}
           MARKER: "bot-id: schemas-${{ inputs.engine }}-diff"
           REPO: ${{ github.repository }}
+          ENGINE: ${{ inputs.engine }}
+          VER: ${{ steps.version.outputs.version }}
         run: |
+          REPORT="/tmp/llem-probe-out/probe-${ENGINE}.json"
+          DRIFT_COUNT=$(jq -r '.fingerprint_drift | length' "$REPORT")
+          ALIAS_COUNT=$(jq -r '.landmarks_aliased | length' "$REPORT")
           {
             echo "<!-- ${MARKER} -->"
-            cat "/tmp/engine-schemas-diff/${{ inputs.engine }}.summary.md"
+            cat "/tmp/engine-schemas-diff/${ENGINE}.summary.md"
+            if [[ "$DRIFT_COUNT" -gt 0 || "$ALIAS_COUNT" -gt 0 ]]; then
+              echo
+              echo "<details><summary>Probe diagnostics</summary>"
+              echo
+              if [[ "$DRIFT_COUNT" -gt 0 ]]; then
+                echo "- Fingerprint drift: ${DRIFT_COUNT} landmarks moved between versions"
+              fi
+              if [[ "$ALIAS_COUNT" -gt 0 ]]; then
+                echo "- Aliased landmarks: ${ALIAS_COUNT} resolve via re-export (canonical paths shifted upstream; harmless)"
+              fi
+              echo
+              echo "Full per-landmark detail in the DriftReport JSON artefact and \`engine_versions/${ENGINE}.compat.json\`."
+              echo
+              echo "</details>"
+            fi
           } | scripts/ci/upsert_pr_comment.sh
 
       - name: Clean up stale probe-blocked comment (probe now passes)

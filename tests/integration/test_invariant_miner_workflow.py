@@ -33,7 +33,6 @@ _FIXTURE_CORPUS = """
 schema_version: 1.0.0
 engine: transformers
 engine_version: test-1.0.0
-miner_pinned_range: test-range
 mined_at: 2026-04-23T00:00:00Z
 invariants:
   - id: synthetic_error

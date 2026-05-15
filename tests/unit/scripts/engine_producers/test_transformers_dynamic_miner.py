@@ -36,30 +36,10 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts.engine_producers import transformers_dynamic_invariant_miner as intro  # noqa: E402
-from scripts.engine_producers._current import load_miner_pin  # noqa: E402
 
 # Every test in this module needs transformers importable - the miner
 # observes the real library. Skip the whole module if it's not installed.
 pytest.importorskip("transformers")
-
-# Pin-check: these tests compare the committed corpus (generated against
-# the miner's version envelope) to live-library output. If the test env's
-# transformers is outside the SSOT miner pin, live-library output drifts
-# from the corpus and every Tier B / D / E test fails noisily for a reason
-# that has nothing to do with the PR. Skip the module up-front so the
-# signal stays clean.
-import transformers as _tf  # noqa: E402
-from packaging import version as _pkg_version  # noqa: E402
-
-_TF_DYNAMIC_PIN = load_miner_pin("transformers", "dynamic")
-if not _TF_DYNAMIC_PIN.contains(_pkg_version.Version(_tf.__version__), prereleases=True):
-    pytest.skip(
-        f"transformers=={_tf.__version__} is outside SSOT miner pin "
-        f"{_TF_DYNAMIC_PIN!s} - introspection tests would compare drifted "
-        f"library output against corpus generated on a different version. "
-        f"Install a pinned transformers to run.",
-        allow_module_level=True,
-    )
 
 
 _CORPUS_PATH = _PROJECT_ROOT / "configs" / "engine_invariants" / "transformers.proposed.yaml"

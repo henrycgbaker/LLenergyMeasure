@@ -32,7 +32,6 @@ alone for local development without a validation run.
 schema_version: "1.0.0"
 engine: transformers
 engine_version: "4.56.0"
-miner_pinned_range: ">=4.50,<5.0"
 mined_at: "2026-04-23T00:00:00Z"
 invariants:
   - id: ...
@@ -45,7 +44,6 @@ invariants:
 - `engine_version` - the library version the corpus was seeded against.
   Informational; the validation-CI pipeline will revalidate against each
   Dockerfile-pinned version.
-- `miner_pinned_range` - echoes the miner module's SSOT pin. CI fails if the installed library is outside range.
 - `mined_at` - ISO-8601 UTC timestamp of the miner run. Byte-reproducibility
   via `LLENERGY_MINER_FROZEN_AT=<timestamp>` env variable.
 

@@ -73,7 +73,6 @@ from scripts.engine_producers._base import (
     find_method,
     first_string_arg,
 )
-from scripts.engine_producers._current import load_miner_pin
 
 # ---------------------------------------------------------------------------
 # Version-pinned configuration (1.2.1)
@@ -1349,7 +1348,6 @@ def emit_yaml(
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
-        "miner_pinned_range": str(load_miner_pin("tensorrt", "static")),
         "mined_at": mined_at,
         "invariants": [_candidate_to_dict(c) for c in sorted_candidates],
     }

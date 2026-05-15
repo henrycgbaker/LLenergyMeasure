@@ -142,9 +142,8 @@ Once items 1-4 exist and a PR is opened, the engine-pipeline CI surface
   `LANDMARKS` symbols that no longer resolve under the live library
   (`landmarks_missing`). A non-empty `landmarks_missing` flips the verdict
   to `fail` and blocks the downstream mining step. Diagnostic fields
-  (`fingerprint`, `fingerprint_drift`, `version_inside_envelope`,
-  `landmarks_aliased`) ride along on every report for human attention but
-  never affect the verdict.
+  (`fingerprint`, `fingerprint_drift`, `landmarks_aliased`) ride along on
+  every report for human attention but never affect the verdict.
 
   `landmarks_aliased` surfaces landmarks whose declared path resolves through
   a package re-export shim - i.e. the upstream library moved the symbol's

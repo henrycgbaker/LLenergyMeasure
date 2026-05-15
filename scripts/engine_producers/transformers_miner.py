@@ -17,12 +17,9 @@ Composes two extraction paths to emit a deterministic invariants corpus:
 
 Landmark verification: imports ``transformers`` and confirms
 ``GenerationConfig``, ``BitsAndBytesConfig``, ``validate`` and ``post_init``
-exist. Missing landmark → :class:`MinerLandmarkMissingError`. Version
-envelope: :func:`check_installed_version` reads the dynamic miner pin from
-``engine_versions/transformers.yaml`` (``miner_pins.dynamic``); a mismatch
-raises :class:`MinerVersionMismatchError` at CI time. Source paths and line
-numbers are derived via :func:`inspect.getsourcefile` and a text grep -
-informational only, not used for invariant matching.
+exist. Missing landmark → :class:`MinerLandmarkMissingError`. Source paths
+and line numbers are derived via :func:`inspect.getsourcefile` and a text
+grep - informational only, not used for invariant matching.
 
 Flash-attention validation (``validate_transformers_flash_attn_dtype``) is
 out of scope: its check lives in ``PreTrainedModel._autoset_attn_implementation``,
@@ -61,9 +58,8 @@ from scripts.engine_producers._base import (  # noqa: E402  (late import after s
     InvariantCandidate,
     MinerLandmarkMissingError,
     MinerSource,
-    check_installed_version,
 )
-from scripts.engine_producers._current import load_current, load_miner_pin  # noqa: E402
+from scripts.engine_producers._current import load_current  # noqa: E402
 from scripts.engine_producers.transformers_dynamic_invariant_miner import (  # noqa: E402
     walk_generation_config_invariants,
 )
@@ -280,12 +276,9 @@ def walk() -> tuple[list[InvariantCandidate], dict[str, Any]]:
 
     Composes the introspection-derived GenerationConfig invariants with the
     hand-curated BNB invariants. Invariants in the returned list carry their own
-    ``added_by`` tag; the envelope captures the shared version pin.
+    ``added_by`` tag; the envelope captures the engine version.
     """
     installed_version, abs_source_path = _check_landmarks()
-    check_installed_version(
-        "transformers", installed_version, engine="transformers", producer="dynamic_invariant_miner"
-    )
 
     # Corpus paths are relative to site-packages so the committed YAML is
     # reproducible across checkouts with different ``~/.local`` roots.
@@ -329,7 +322,6 @@ def walk() -> tuple[list[InvariantCandidate], dict[str, Any]]:
         "schema_version": "1.0.0",
         "engine": "transformers",
         "engine_version": installed_version,
-        "miner_pinned_range": str(load_miner_pin("transformers", "dynamic")),
         "mined_at": mined_at,
     }
     return candidates, envelope
@@ -348,7 +340,6 @@ def emit_yaml(candidates: list[InvariantCandidate], envelope: dict[str, Any]) ->
         "schema_version": envelope["schema_version"],
         "engine": envelope["engine"],
         "engine_version": envelope["engine_version"],
-        "miner_pinned_range": envelope["miner_pinned_range"],
         "mined_at": envelope["mined_at"],
         "invariants": [_candidate_to_dict(c) for c in sorted_candidates],
     }

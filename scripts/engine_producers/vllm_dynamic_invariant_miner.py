@@ -77,9 +77,7 @@ from scripts.engine_producers._base import (  # noqa: E402
     InvariantCandidate,
     MinerLandmarkMissingError,
     MinerSource,
-    check_installed_version,
 )
-from scripts.engine_producers._current import load_miner_pin  # noqa: E402
 from scripts.engine_producers._msgspec_lift import lift as _msgspec_lift  # noqa: E402
 from scripts.engine_producers._pydantic_lift import lift as _pydantic_lift  # noqa: E402
 
@@ -709,9 +707,6 @@ def walk_vllm_dynamic(*, today: str | None = None) -> tuple[list[InvariantCandid
     var, then to ``dt.date.today()``.
     """
     installed_version = _check_landmarks()
-    check_installed_version(
-        "vllm", installed_version, engine="vllm", producer="dynamic_invariant_miner"
-    )
 
     if today is None:
         frozen = os.environ.get("LLENERGY_MINER_FROZEN_AT")
@@ -842,7 +837,6 @@ def emit_yaml(candidates: list[InvariantCandidate], engine_version: str) -> str:
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
-        "miner_pinned_range": str(load_miner_pin("vllm", "dynamic")),
         "mined_at": mined_at,
         "invariants": [_candidate_to_dict(c) for c in sorted_candidates],
     }

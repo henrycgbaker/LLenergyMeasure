@@ -13,7 +13,7 @@ The repo uses exactly three workflow patterns, picked per-concern:
 |---|---|---|
 | **Orchestrator** | dependency-graph + fan-out (engine pipeline) | `engine-pipeline.yml` |
 | **Reusable workflow** (`workflow_call` only) | per-target body invoked by an orchestrator | `_engine-invariants-cell.yml`, `_engine-schemas-cell.yml`, `docker-publish.yml` |
-| **Monolithic-direct** | single concern, no fan-out | `ci.yml`, `security.yml`, `release.yml`, `gpu-ci.yml`, `auto-release.yml`, `ghcr-prune.yml`, `approve-reuse-bot.yml`, `publish-engine-image.yml` |
+| **Monolithic-direct** | single concern, no fan-out | `ci.yml`, `security.yml`, `release.yml`, `gpu-ci.yml`, `auto-release.yml`, `ghcr-prune.yml`, `publish-engine-image.yml` |
 
 Reusable workflows are file-prefixed `_` to signal "callable only, not a
 top-level entry point". Composite actions in `.github/actions/<name>/action.yml`
@@ -118,14 +118,18 @@ Internally the cell:
 3. (tensorrt only) fetches the tensorrt-llm source tarball.
 4. Computes the deterministic mining/discovery anchor.
 5. **Probes** the producer module's landmarks - preserved as its own
-   step for failure-clarity in the GitHub UI.
-6. Updates `last_probe:` in the engine SSOT.
-7. Runs the producer (mine + validate, or discover-schema) inside the
+   step for failure-clarity in the GitHub UI. The dispatcher resolves
+   which `v<safe>/producers/` archive to import for the SSOT-pinned
+   `library.current_version`, falling back to the most-recent prior
+   vendored version when no exact-match archive exists.
+6. Runs the producer (mine + validate, or discover-schema) inside the
    container.
-8. Regenerates host-side digest doc(s).
-9. Classifies the diff (`safe` / `breaking` / `no-changes`).
-10. Posts/upserts a PR comment under `bot-id: <pipeline>-<engine>-*`.
-11. Applies per-pipeline labels (`<pipeline>-{changed,safe,breaking}` +
+7. Regenerates host-side digest doc(s).
+8. Classifies the diff (`safe` / `breaking` / `no-changes`).
+9. Posts/upserts a PR comment under `bot-id: <pipeline>-<engine>-*`,
+   surfacing DriftReport diagnostic counts (`fingerprint_drift`,
+   `landmarks_aliased`) in collapsible blocks when non-empty.
+10. Applies per-pipeline labels (`<pipeline>-{changed,safe,breaking}` +
     `probe-blocked` / cleanup).
 12. **Uploads writeback artefact** (instead of pushing per-cell). The
     aggregate writeback in the orchestrator collects all artefacts and
@@ -221,7 +225,6 @@ Workflows that CAN'T self-test runtime:
 - `docker-publish.yml` - `workflow_call` / `workflow_dispatch` only.
 - `auto-release.yml` - `pull_request: closed` only.
 - `release.yml` - `push: tags` only.
-- `approve-reuse-bot.yml` - `issue_comment` only.
 
 ## Bot-comment dedup
 

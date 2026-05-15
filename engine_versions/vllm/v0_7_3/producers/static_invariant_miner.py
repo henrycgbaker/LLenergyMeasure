@@ -34,12 +34,10 @@ from scripts.engine_producers._base import (
     MinerLandmarkMissingError,
     MinerSource,
     call_func_path,
-    check_installed_version,
     find_class,
     find_method,
     first_string_arg,
 )
-from scripts.engine_producers._current import load_miner_pin
 
 # ---------------------------------------------------------------------------
 # Engine + namespace conventions
@@ -989,9 +987,6 @@ def _check_landmarks() -> tuple[str, dict[str, str]]:
 
 def walk_vllm_static(*, today: str | None = None) -> tuple[list[InvariantCandidate], str]:
     installed_version, abs_paths = _check_landmarks()
-    check_installed_version(
-        "vllm", installed_version, engine="vllm", producer="static_invariant_miner"
-    )
 
     if today is None:
         frozen = os.environ.get("LLENERGY_MINER_FROZEN_AT")
@@ -1070,7 +1065,6 @@ def emit_yaml(candidates: list[InvariantCandidate], engine_version: str) -> str:
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
-        "miner_pinned_range": str(load_miner_pin("vllm", "static")),
         "mined_at": mined_at,
         "invariants": [_candidate_to_dict(c) for c in sorted_candidates],
     }

@@ -494,64 +494,41 @@ sequenceDiagram
 Cross-pipeline state lives on PR labels. The last cell to finish
 performs an atomic writeback covering both pipelines' artefacts plus
 the regenerated docs digests, in a single push. There is no separate
-summariser workflow.
+summariser workflow. The SSOT (`engine_versions/<engine>/current.yaml`)
+is Renovate-writable input only and is never part of the bot writeback
+bundle.
 
-When the bumped library version falls outside a miner's pinned envelope
-(`miner_pins.{static|dynamic|discovery}` in the SSOT), the producer
-raises `MinerVersionMismatchError` and CI fails. This is intentional:
-it forces a maintainer to update the miner against the new library
-version before the corpus is regenerated. The full structural CI
-mechanics, including the per-cell artefact contract and the human
-checkpoint after digest review, live in [pipeline architecture](/explanation/architecture/pipeline-architecture).
+When the bumped library version moves a landmark, the probe verdict
+flips to `fail`: downstream stages are skipped and CI is red. The
+maintainer either patches LANDMARKS in the fallback producer the
+dispatcher resolved (one set of producer code can cover multiple
+adjacent versions if the symbols still resolve under both) or vendors
+a fresh `engine_versions/<engine>/v<safe(N)>/producers/` directory for
+the bumped version. The probe-fail PR comment surfaces missing
+landmark counts, fingerprint drift, and aliased landmark hints in
+collapsible blocks. The full structural CI mechanics, including the
+per-cell artefact contract and the human checkpoint after digest
+review, live in [pipeline architecture](/explanation/architecture/pipeline-architecture).
 
 ## Fail-loud import contract (shared across pipelines)
 
-Both pipelines depend on the same fail-loud contract. Every miner and
-introspector module must resolve its version envelope from the engine
-SSOT and validate it at import time. This is a structural contract,
-not a guideline.
-
-```python
-# Every per-version producer (under engine_versions/{engine}/v<safe>/producers/)
-# must resolve its envelope from the engine's SSOT:
-from scripts.engine_producers._current import load_miner_pin
-
-_envelope = load_miner_pin("transformers", "static")  # SpecifierSet
-
-# And call this at import time:
-check_installed_version(
-    "transformers",
-    importlib.metadata.version("transformers"),
-    _envelope,
-)
-```
-
-The envelope itself lives in `engine_versions/{engine}/current.yaml` under
-`miner_pins.{static|dynamic|discovery}` - one pin per producer role.
-There is no per-module `TESTED_AGAINST_VERSIONS` constant; Renovate
-updates the SSOT and every producer reads through `load_miner_pin`.
+Both pipelines depend on the same fail-loud contract. The probe
+(`scripts/_drift.py`) imports each producer module and reads its
+`LANDMARKS` tuple, then resolves every entry against the live library.
+A missing class, method, or attribute trips
+`MinerLandmarkMissingError` and the probe verdict flips to `fail`.
+Downstream stages skip; CI is red until the maintainer addresses it.
 
 ```mermaid
 flowchart LR
-    cv["check_installed_version&#40;&#41;"]
-    cv --> cvok{version inside<br/>SSOT envelope?}
-    cvok -->|yes| cvcont[continue]
-    cvok -->|no| cverr[MinerVersionMismatchError<br/>CI fatal]
-
     fc["find_class&#40;module, GenerationConfig&#41;"]
     fc --> fcok{class found?}
     fcok -->|yes| fccont[continue]
-    fcok -->|no| fcerr[MinerLandmarkMissingError<br/>CI fatal]
+    fcok -->|no| fcerr[MinerLandmarkMissingError<br/>probe verdict: fail<br/>CI red]
 
     classDef fatal fill:#ffe4e1,stroke:#c00,stroke-width:2px;
-    class cverr,fcerr fatal;
+    class fcerr fatal;
 ```
-
-If the installed library version falls outside the envelope, the
-producer raises `MinerVersionMismatchError` - a hard CI failure. If an
-expected class or method is missing from the library source (for
-example, a class was renamed in a library refactor), it raises
-`MinerLandmarkMissingError` - also a hard CI failure.
 
 A previous extractor that swallowed `ImportError` and returned `[]`
 silently degraded into "no rules found for this engine", which masked a
