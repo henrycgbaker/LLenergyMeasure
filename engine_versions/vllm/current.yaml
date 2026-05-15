@@ -15,11 +15,3 @@ engine: vllm
 library:
   pep503_name: vllm
   current_version: "0.7.3"
-  current_commit_sha: null
-image:
-  base_image_ref: "vllm/vllm-openai:v0.7.3"
-  llem_image_ref: null
-artefact_paths:
-  engine_invariants: src/llenergymeasure/engines/vllm/invariants.proposed.yaml
-  validated_invariants: src/llenergymeasure/engines/vllm/invariants.validated.yaml
-  discovered_schemas: src/llenergymeasure/engines/vllm/schema.discovered.json
