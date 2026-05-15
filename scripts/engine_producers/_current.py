@@ -67,3 +67,31 @@ def safe_version(version: str) -> str:
             f"resulting candidate {safe!r} contains non-alphanumeric chars."
         )
     return safe
+
+
+def current_outputs_dir(engine: str) -> Path:
+    """Return ``engine_versions/{engine}/v<safe>/outputs/`` for the current version.
+
+    Resolves the current ``library.current_version`` from
+    ``engine_versions/<engine>/current.yaml``, derives the safe form, and
+    returns the per-version outputs directory that hosts the bot-written
+    machine artefacts (``invariants.proposed.yaml``,
+    ``invariants.validated.yaml``, ``schema.discovered.json``).
+
+    The directory is the bundling source for hatchling's force-include
+    (see ``pyproject.toml``) and the read target for the doc-generators
+    and refresh shell scripts that previously read from
+    ``<pkg_dir>/llenergymeasure/engines/<engine>/`` (via hatchling force-include from the outputs/ source).
+    """
+    raw_version = load_current(engine).get("library", {})
+    if not isinstance(raw_version, dict):
+        raise ValueError(
+            f"current.yaml for {engine!r} has no 'library' mapping; cannot resolve current version."
+        )
+    version = raw_version.get("current_version")
+    if not isinstance(version, str) or not version:
+        raise ValueError(
+            f"current.yaml for {engine!r} has no 'library.current_version' string; "
+            f"cannot resolve current version."
+        )
+    return current_path(engine).parent / safe_version(version) / "outputs"
