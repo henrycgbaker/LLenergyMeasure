@@ -66,6 +66,66 @@ engine libraries (`import transformers`, `import vllm`, `import
 tensorrt_llm` all fail by design), so every engine's introspection must
 run in the matching container.
 
+## Per-version dispatcher
+
+Producer code (the static miner, dynamic miner, and schema introspector
+for each engine) is vendored per library version under
+`engine_versions/<engine>/v<safe>/producers/`, where `<safe>` is the
+identifier-safe form of the library version (`0.7.3` -> `v0_7_3`). Each
+vendored directory contains a frozen snapshot of the producer authored
+against that specific library API: LANDMARKS, AST targets, introspector
+class targets.
+
+`scripts/engine_producers/<engine>_<producer>.py` is a thin dispatcher
+shim (built via `_stub_factory.make_*_stub`) that resolves to the
+per-version archive at attribute-access time via PEP 562 `__getattr__`.
+The shim has no logic of its own; the version-aware resolution lives in
+`engine_versions/_dispatcher.py:load_producer`.
+
+### Dispatch with auto-fallback
+
+When the SSOT's `library.current_version` is bumped (typically by
+Renovate), the dispatcher first tries the exact-match archive at
+`engine_versions/<engine>/v<safe(current_version)>/producers/`. If that
+archive is not vendored yet, the dispatcher falls back to the most-recent
+prior vendored version, logs the choice to stderr, and the probe
+(`scripts._drift`) gates on landmark resolution under the dispatched
+producer.
+
+This makes patch-version bumps zero-touch when LANDMARKS still resolve
+under the new library: no per-version vendor PR needed for refactor-free
+upstream releases. A maintainer only vendors a fresh `vN/producers/`
+directory when the probe fails (because landmarks moved between
+versions).
+
+```mermaid
+flowchart TD
+    bump[Renovate bumps<br/>library.current_version: N-1 -> N]
+    exact{Exact-match archive at<br/>v&lt;safe&#40;N&#41;&gt;/producers/?}
+    use_exact[Use exact-match producer]
+    scan[Scan engine_versions/&lt;engine&gt;/<br/>for sibling vN_NN_NN dirs]
+    filter[Filter to dirs<br/>where version &lt;= N<br/>AND producers/&lt;producer&gt;.py exists]
+    any{Any candidates?}
+    pick[Pick highest version,<br/>log fallback to stderr]
+    raise[Raise ModuleNotFoundError<br/>with create-this-file path]
+    probe[Run probe against<br/>dispatched producer's LANDMARKS]
+    pass{Probe verdict?}
+    mine[Mine + validate proceeds]
+    fail[Red CI:<br/>maintainer patches LANDMARKS<br/>or vendors vN/producers/]
+
+    bump --> exact
+    exact -->|yes| use_exact --> probe
+    exact -->|no| scan --> filter --> any
+    any -->|yes| pick --> probe
+    any -->|no| raise
+    probe --> pass
+    pass -->|pass| mine
+    pass -->|fail| fail
+```
+
+The probe is the runtime gate: filesystem dispatch decides which code
+runs; probe decides whether that code is valid for the live library.
+
 ## Schema discovery in depth
 
 Schema discovery introspects the engine's native Python API surface to
