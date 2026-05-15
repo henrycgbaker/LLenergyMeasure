@@ -15,11 +15,3 @@ engine: transformers
 library:
   pep503_name: transformers
   current_version: "4.57.3"
-  current_commit_sha: null
-image:
-  base_image_ref: "llenergymeasure:transformers-4.57.3"
-  llem_image_ref: null
-artefact_paths:
-  engine_invariants: src/llenergymeasure/engines/transformers/invariants.proposed.yaml
-  validated_invariants: src/llenergymeasure/engines/transformers/invariants.validated.yaml
-  discovered_schemas: src/llenergymeasure/engines/transformers/schema.discovered.json
