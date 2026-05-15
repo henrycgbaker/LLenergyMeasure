@@ -50,6 +50,12 @@ jobs:
               - 'pyproject.toml'
               - 'uv.lock'
               - '.github/workflows/ci.yml'
+              # Engine SSOT: when current.yaml moves, the engine-bundle-pin
+              # check in the lint job verifies pyproject.toml's force-include
+              # paths moved with it. Renovate's customManagers regex bumps
+              # both in lockstep; the check catches drift if either is
+              # hand-edited out of sync.
+              - 'engine_versions/*/current.yaml'
             docker:
               - 'docker/**'
               - '.dockerignore'
@@ -99,9 +105,17 @@ jobs:
         # fails CI if anyone reintroduces it.
         run: |
           if [ -e docker/Dockerfile.tensorrt ]; then
-            echo "::error::docker/Dockerfile.tensorrt is gone for a reason - see version_handshake.py + scripts/container_entrypoint.sh"
+            echo "::error::docker/Dockerfile.tensorrt is gone for a reason"
             exit 1
           fi
+      - name: Engine bundle pin parity check
+        # Wheel bundles per-engine outputs/<safe>/ (mined per library version).
+        # The force-include path in pyproject.toml MUST match each engine's
+        # library.current_version in engine_versions/<engine>/current.yaml,
+        # else the wheel ships data mined for a different engine version
+        # than the substrate llem talks to. Renovate's customManagers regex
+        # bumps both in lockstep; this check catches manual drift.
+        run: scripts/ci/check_engine_bundle_pin.sh
 
   type-check:
     needs: filter
