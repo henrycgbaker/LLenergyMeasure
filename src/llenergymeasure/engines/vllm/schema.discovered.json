@@ -1,11 +1,11 @@
 {
   "schema_version": "1.0.0",
   "engine": "vllm",
-  "engine_version": "0.7.3",
+  "engine_version": "0.16.0",
   "engine_commit_sha": null,
-  "image_ref": "llenergymeasure:vllm-0.7.3",
+  "image_ref": "llenergymeasure:vllm-0.16.0",
   "base_image_ref": null,
-  "discovered_at": "2026-05-14T20:31:21+02:00",
+  "discovered_at": "2026-05-15T14:49:43+02:00",
   "discovery_method": "dataclasses.fields(EngineArgs) + msgspec.json.schema(SamplingParams)",
   "discovery_limitations": [
     {
@@ -22,7 +22,15 @@
   "engine_params": {
     "model": {
       "type": "str",
-      "default": "facebook/opt-125m"
+      "default": "Qwen/Qwen3-0.6B"
+    },
+    "enable_return_routed_experts": {
+      "type": "bool",
+      "default": false
+    },
+    "model_weights": {
+      "type": "str",
+      "default": ""
     },
     "served_model_name": {
       "type": "str | list[str] | None",
@@ -32,16 +40,28 @@
       "type": "str | None",
       "default": null
     },
-    "task": {
-      "type": "Literal['auto', 'generate', 'embedding', 'embed', 'classify', 'score', 'reward', 'transcription']",
+    "hf_config_path": {
+      "type": "str | None",
+      "default": null
+    },
+    "runner": {
+      "type": "Literal['auto', 'generate', 'pooling', 'draft']",
+      "default": "auto"
+    },
+    "convert": {
+      "type": "Literal['auto', 'none', 'embed', 'classify']",
       "default": "auto"
     },
     "skip_tokenizer_init": {
       "type": "bool",
       "default": false
     },
+    "enable_prompt_embeds": {
+      "type": "bool",
+      "default": false
+    },
     "tokenizer_mode": {
-      "type": "str",
+      "type": "Literal['auto', 'hf', 'slow', 'mistral', 'deepseek_v32'] | str",
       "default": "auto"
     },
     "trust_remote_code": {
@@ -52,24 +72,32 @@
       "type": "str",
       "default": ""
     },
+    "allowed_media_domains": {
+      "type": "list[str] | None",
+      "default": null
+    },
     "download_dir": {
       "type": "str | None",
       "default": null
     },
-    "load_format": {
+    "safetensors_load_strategy": {
       "type": "str",
+      "default": "lazy"
+    },
+    "load_format": {
+      "type": "str | Any",
       "default": "auto"
     },
     "config_format": {
-      "type": "ConfigFormat",
+      "type": "str",
       "default": "auto"
     },
     "dtype": {
-      "type": "str",
+      "type": "Literal['auto', 'half', 'float16', 'bfloat16', 'float', 'float32']",
       "default": "auto"
     },
     "kv_cache_dtype": {
-      "type": "str",
+      "type": "Literal['auto', 'bfloat16', 'fp8', 'fp8_e4m3', 'fp8_e5m2', 'fp8_inc', 'fp8_ds_mla']",
       "default": "auto"
     },
     "seed": {
@@ -80,37 +108,165 @@
       "type": "int | None",
       "default": null
     },
+    "cudagraph_capture_sizes": {
+      "type": "list[int] | None",
+      "default": null
+    },
+    "max_cudagraph_capture_size": {
+      "type": "int | None",
+      "default": null
+    },
     "distributed_executor_backend": {
-      "type": "str | type[ExecutorBase] | None",
+      "type": "str | Literal['ray', 'mp', 'uni', 'external_launcher'] | type[Any] | None",
       "default": null
     },
     "pipeline_parallel_size": {
       "type": "int",
       "default": 1
     },
+    "master_addr": {
+      "type": "str",
+      "default": "127.0.0.1"
+    },
+    "master_port": {
+      "type": "int",
+      "default": 29501
+    },
+    "nnodes": {
+      "type": "int",
+      "default": 1
+    },
+    "node_rank": {
+      "type": "int",
+      "default": 0
+    },
     "tensor_parallel_size": {
       "type": "int",
       "default": 1
+    },
+    "prefill_context_parallel_size": {
+      "type": "int",
+      "default": 1
+    },
+    "decode_context_parallel_size": {
+      "type": "int",
+      "default": 1
+    },
+    "dcp_kv_cache_interleave_size": {
+      "type": "int",
+      "default": 1
+    },
+    "cp_kv_cache_interleave_size": {
+      "type": "int",
+      "default": 1
+    },
+    "data_parallel_size": {
+      "type": "int",
+      "default": 1
+    },
+    "data_parallel_rank": {
+      "type": "int | None",
+      "default": null
+    },
+    "data_parallel_start_rank": {
+      "type": "int | None",
+      "default": null
+    },
+    "data_parallel_size_local": {
+      "type": "int | None",
+      "default": null
+    },
+    "data_parallel_address": {
+      "type": "str | None",
+      "default": null
+    },
+    "data_parallel_rpc_port": {
+      "type": "int | None",
+      "default": null
+    },
+    "data_parallel_hybrid_lb": {
+      "type": "bool",
+      "default": false
+    },
+    "data_parallel_external_lb": {
+      "type": "bool",
+      "default": false
+    },
+    "data_parallel_backend": {
+      "type": "str",
+      "default": "mp"
+    },
+    "enable_expert_parallel": {
+      "type": "bool",
+      "default": false
+    },
+    "all2all_backend": {
+      "type": "str",
+      "default": "allgather_reducescatter"
+    },
+    "enable_dbo": {
+      "type": "bool",
+      "default": false
+    },
+    "ubatch_size": {
+      "type": "int",
+      "default": 0
+    },
+    "dbo_decode_token_threshold": {
+      "type": "int",
+      "default": 32
+    },
+    "dbo_prefill_token_threshold": {
+      "type": "int",
+      "default": 512
+    },
+    "disable_nccl_for_dp_synchronization": {
+      "type": "bool | None",
+      "default": null
+    },
+    "eplb_config": {
+      "type": "EPLBConfig",
+      "default": "EPLBConfig(window_size=1000, step_interval=3000, num_redundant_experts=0, log_balancedness=False, log_balancedness_interval=1, use_async=False, policy='default')"
+    },
+    "enable_eplb": {
+      "type": "bool",
+      "default": false
+    },
+    "expert_placement_strategy": {
+      "type": "Literal['linear', 'round_robin']",
+      "default": "linear"
+    },
+    "_api_process_count": {
+      "type": "int",
+      "default": 1
+    },
+    "_api_process_rank": {
+      "type": "int",
+      "default": 0
     },
     "max_parallel_loading_workers": {
       "type": "int | None",
       "default": null
     },
     "block_size": {
-      "type": "int | None",
+      "type": "Literal[1, 8, 16, 32, 64, 128, 256] | None",
       "default": null
     },
     "enable_prefix_caching": {
       "type": "bool | None",
       "default": null
     },
+    "prefix_caching_hash_algo": {
+      "type": "Literal['sha256', 'sha256_cbor', 'xxhash', 'xxhash_cbor']",
+      "default": "sha256"
+    },
     "disable_sliding_window": {
       "type": "bool",
       "default": false
     },
-    "use_v2_block_manager": {
+    "disable_cascade_attn": {
       "type": "bool",
-      "default": true
+      "default": false
     },
     "swap_space": {
       "type": "float",
@@ -124,20 +280,24 @@
       "type": "float",
       "default": 0.9
     },
+    "kv_cache_memory_bytes": {
+      "type": "int | None",
+      "default": null
+    },
     "max_num_batched_tokens": {
       "type": "int | None",
       "default": null
     },
     "max_num_partial_prefills": {
-      "type": "int | None",
+      "type": "int",
       "default": 1
     },
     "max_long_partial_prefills": {
-      "type": "int | None",
+      "type": "int",
       "default": 1
     },
     "long_prefill_token_threshold": {
-      "type": "int | None",
+      "type": "int",
       "default": 0
     },
     "max_num_seqs": {
@@ -148,7 +308,15 @@
       "type": "int",
       "default": 20
     },
+    "logprobs_mode": {
+      "type": "Literal['raw_logits', 'raw_logprobs', 'processed_logits', 'processed_logprobs']",
+      "default": "raw_logprobs"
+    },
     "disable_log_stats": {
+      "type": "bool",
+      "default": false
+    },
+    "aggregate_engine_logging": {
       "type": "bool",
       "default": false
     },
@@ -160,67 +328,91 @@
       "type": "str | None",
       "default": null
     },
-    "rope_scaling": {
-      "type": "dict[str, Any] | None",
-      "default": null
-    },
-    "rope_theta": {
-      "type": "float | None",
+    "hf_token": {
+      "type": "bool | str | None",
       "default": null
     },
     "hf_overrides": {
-      "type": "dict[str, Any] | Callable[[<class 'transformers.configuration_utils.PretrainedConfig'>], PretrainedConfig] | None",
-      "default": null
+      "type": "dict[str, Any] | Callable[[typing.Any], Any]",
+      "default": {}
     },
     "tokenizer_revision": {
       "type": "str | None",
       "default": null
     },
     "quantization": {
-      "type": "str | None",
+      "type": "Any | None",
       "default": null
+    },
+    "allow_deprecated_quantization": {
+      "type": "bool",
+      "default": false
     },
     "enforce_eager": {
-      "type": "bool | None",
-      "default": null
-    },
-    "max_seq_len_to_capture": {
-      "type": "int",
-      "default": 8192
+      "type": "bool",
+      "default": false
     },
     "disable_custom_all_reduce": {
       "type": "bool",
       "default": false
     },
-    "tokenizer_pool_size": {
-      "type": "int",
-      "default": 0
-    },
-    "tokenizer_pool_type": {
-      "type": "str | type[ForwardRef('BaseTokenizerGroup')]",
-      "default": "ray"
-    },
-    "tokenizer_pool_extra_config": {
-      "type": "dict[str, Any] | None",
-      "default": null
-    },
     "limit_mm_per_prompt": {
-      "type": "Mapping[str, int] | None",
-      "default": null
+      "type": "dict[str, int | dict[str, int]]",
+      "default": {}
+    },
+    "enable_mm_embeds": {
+      "type": "bool",
+      "default": false
+    },
+    "interleave_mm_strings": {
+      "type": "bool",
+      "default": false
+    },
+    "media_io_kwargs": {
+      "type": "dict[str, dict[str, Any]]",
+      "default": {}
     },
     "mm_processor_kwargs": {
       "type": "dict[str, Any] | None",
       "default": null
     },
-    "disable_mm_preprocessor_cache": {
+    "mm_processor_cache_gb": {
+      "type": "float",
+      "default": 4
+    },
+    "mm_processor_cache_type": {
+      "type": "Literal['shm', 'lru'] | None",
+      "default": "lru"
+    },
+    "mm_shm_cache_max_object_size_mb": {
+      "type": "int",
+      "default": 128
+    },
+    "mm_encoder_only": {
       "type": "bool",
       "default": false
+    },
+    "mm_encoder_tp_mode": {
+      "type": "Literal['weights', 'data']",
+      "default": "weights"
+    },
+    "mm_encoder_attn_backend": {
+      "type": "AttentionBackendEnum | str | None",
+      "default": null
+    },
+    "io_processor_plugin": {
+      "type": "str | None",
+      "default": null
+    },
+    "skip_mm_profiling": {
+      "type": "bool",
+      "default": false
+    },
+    "video_pruning_rate": {
+      "type": "float",
+      "default": null
     },
     "enable_lora": {
-      "type": "bool",
-      "default": false
-    },
-    "enable_lora_bias": {
       "type": "bool",
       "default": false
     },
@@ -232,49 +424,29 @@
       "type": "int",
       "default": 16
     },
-    "enable_prompt_adapter": {
-      "type": "bool",
-      "default": false
-    },
-    "max_prompt_adapters": {
-      "type": "int",
-      "default": 1
-    },
-    "max_prompt_adapter_token": {
-      "type": "int",
-      "default": 0
+    "default_mm_loras": {
+      "type": "dict[str, str] | None",
+      "default": null
     },
     "fully_sharded_loras": {
       "type": "bool",
       "default": false
     },
-    "lora_extra_vocab_size": {
-      "type": "int",
-      "default": 256
-    },
-    "long_lora_scaling_factors": {
-      "type": "tuple[float] | None",
+    "max_cpu_loras": {
+      "type": "int | None",
       "default": null
     },
     "lora_dtype": {
       "type": "str | dtype | None",
       "default": "auto"
     },
-    "max_cpu_loras": {
-      "type": "int | None",
-      "default": null
-    },
-    "device": {
-      "type": "str",
-      "default": "auto"
-    },
-    "num_scheduler_steps": {
-      "type": "int",
-      "default": 1
-    },
-    "multi_step_stream_outputs": {
+    "enable_tower_connector_lora": {
       "type": "bool",
-      "default": true
+      "default": false
+    },
+    "specialize_active_lora": {
+      "type": "bool",
+      "default": false
     },
     "ray_workers_use_nsight": {
       "type": "bool",
@@ -284,92 +456,50 @@
       "type": "int | None",
       "default": null
     },
-    "num_lookahead_slots": {
-      "type": "int",
-      "default": 0
-    },
     "model_loader_extra_config": {
-      "type": "dict | None",
-      "default": null
+      "type": "dict",
+      "default": {}
     },
     "ignore_patterns": {
-      "type": "str | list[str] | None",
-      "default": null
-    },
-    "preemption_mode": {
-      "type": "str | None",
-      "default": null
-    },
-    "scheduler_delay_factor": {
-      "type": "float",
-      "default": 0.0
+      "type": "str | list[str]",
+      "default": [
+        "original/**/*"
+      ]
     },
     "enable_chunked_prefill": {
       "type": "bool | None",
       "default": null
     },
-    "guided_decoding_backend": {
+    "disable_chunked_mm_input": {
+      "type": "bool",
+      "default": false
+    },
+    "disable_hybrid_kv_cache_manager": {
+      "type": "bool | None",
+      "default": null
+    },
+    "structured_outputs_config": {
+      "type": "StructuredOutputsConfig",
+      "default": "StructuredOutputsConfig(backend='auto', disable_fallback=False, disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False)"
+    },
+    "reasoning_parser": {
       "type": "str",
-      "default": "xgrammar"
+      "default": ""
+    },
+    "reasoning_parser_plugin": {
+      "type": "str | None",
+      "default": null
     },
     "logits_processor_pattern": {
       "type": "str | None",
       "default": null
     },
-    "speculative_model": {
+    "speculative_config": {
+      "type": "dict[str, Any] | None",
+      "default": null
+    },
+    "show_hidden_metrics_for_version": {
       "type": "str | None",
-      "default": null
-    },
-    "speculative_model_quantization": {
-      "type": "str | None",
-      "default": null
-    },
-    "speculative_draft_tensor_parallel_size": {
-      "type": "int | None",
-      "default": null
-    },
-    "num_speculative_tokens": {
-      "type": "int | None",
-      "default": null
-    },
-    "speculative_disable_mqa_scorer": {
-      "type": "bool | None",
-      "default": false
-    },
-    "speculative_max_model_len": {
-      "type": "int | None",
-      "default": null
-    },
-    "speculative_disable_by_batch_size": {
-      "type": "int | None",
-      "default": null
-    },
-    "ngram_prompt_lookup_max": {
-      "type": "int | None",
-      "default": null
-    },
-    "ngram_prompt_lookup_min": {
-      "type": "int | None",
-      "default": null
-    },
-    "spec_decoding_acceptance_method": {
-      "type": "str",
-      "default": "rejection_sampler"
-    },
-    "typical_acceptance_sampler_posterior_threshold": {
-      "type": "float | None",
-      "default": null
-    },
-    "typical_acceptance_sampler_posterior_alpha": {
-      "type": "float | None",
-      "default": null
-    },
-    "qlora_adapter_name_or_path": {
-      "type": "str | None",
-      "default": null
-    },
-    "disable_logprobs_during_spec_decoding": {
-      "type": "bool | None",
       "default": null
     },
     "otlp_traces_endpoint": {
@@ -377,10 +507,34 @@
       "default": null
     },
     "collect_detailed_traces": {
-      "type": "str | None",
+      "type": "list[Literal['model', 'worker', 'all']] | None",
       "default": null
     },
-    "disable_async_output_proc": {
+    "kv_cache_metrics": {
+      "type": "bool",
+      "default": false
+    },
+    "kv_cache_metrics_sample": {
+      "type": "float",
+      "default": 0.01
+    },
+    "cudagraph_metrics": {
+      "type": "bool",
+      "default": false
+    },
+    "enable_layerwise_nvtx_tracing": {
+      "type": "bool",
+      "default": false
+    },
+    "enable_mfu_metrics": {
+      "type": "bool",
+      "default": false
+    },
+    "enable_logging_iteration_details": {
+      "type": "bool",
+      "default": false
+    },
+    "enable_mm_processor_stats": {
       "type": "bool",
       "default": false
     },
@@ -389,51 +543,143 @@
       "default": "fcfs"
     },
     "scheduler_cls": {
-      "type": "str | type[object]",
-      "default": "vllm.core.scheduler.Scheduler"
-    },
-    "override_neuron_config": {
-      "type": "dict[str, Any] | None",
+      "type": "str | type[object] | None",
       "default": null
     },
-    "override_pooler_config": {
+    "pooler_config": {
       "type": "PoolerConfig | None",
       "default": null
     },
     "compilation_config": {
-      "type": "CompilationConfig | None",
+      "type": "CompilationConfig",
+      "default": "{'level': None, 'mode': None, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': [], 'splitting_ops': None, 'compile_mm_encoder': False, 'compile_sizes': None, 'compile_ranges_split_points': None, 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': None, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': None, 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': None, 'pass_config': {}, 'max_cudagraph_capture_size': None, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': None, 'static_all_moe_layers': []}"
+    },
+    "attention_config": {
+      "type": "AttentionConfig",
+      "default": "AttentionConfig(backend=None, flash_attn_version=None, use_prefill_decode_attention=False, flash_attn_max_num_splits_for_cuda_graph=32, use_cudnn_prefill=False, use_trtllm_ragged_deepseek_prefill=True, use_trtllm_attention=None, disable_flashinfer_prefill=False, disable_flashinfer_q_quantization=False)"
+    },
+    "kernel_config": {
+      "type": "KernelConfig",
+      "default": "KernelConfig(enable_flashinfer_autotune=None)"
+    },
+    "enable_flashinfer_autotune": {
+      "type": "bool",
       "default": null
     },
     "worker_cls": {
       "type": "str",
       "default": "auto"
     },
+    "worker_extension_cls": {
+      "type": "str",
+      "default": ""
+    },
+    "profiler_config": {
+      "type": "ProfilerConfig",
+      "default": "ProfilerConfig(profiler=None, torch_profiler_dir='', torch_profiler_with_stack=True, torch_profiler_with_flops=False, torch_profiler_use_gzip=True, torch_profiler_dump_cuda_time_total=True, torch_profiler_record_shapes=False, torch_profiler_with_memory=False, ignore_frontend=False, delay_iterations=0, max_iterations=0)"
+    },
     "kv_transfer_config": {
       "type": "KVTransferConfig | None",
       "default": null
     },
-    "generation_config": {
-      "type": "str | None",
+    "kv_events_config": {
+      "type": "KVEventsConfig | None",
       "default": null
     },
-    "override_generation_config": {
-      "type": "dict[str, Any] | None",
+    "ec_transfer_config": {
+      "type": "ECTransferConfig | None",
       "default": null
+    },
+    "generation_config": {
+      "type": "str",
+      "default": "auto"
     },
     "enable_sleep_mode": {
       "type": "bool",
       "default": false
     },
+    "override_generation_config": {
+      "type": "dict[str, Any]",
+      "default": {}
+    },
     "model_impl": {
       "type": "str",
       "default": "auto"
     },
+    "override_attention_dtype": {
+      "type": "str",
+      "default": null
+    },
+    "attention_backend": {
+      "type": "AttentionBackendEnum | None",
+      "default": null
+    },
     "calculate_kv_scales": {
+      "type": "bool",
+      "default": false
+    },
+    "mamba_cache_dtype": {
+      "type": "Literal['auto', 'float32', 'float16']",
+      "default": "auto"
+    },
+    "mamba_ssm_cache_dtype": {
+      "type": "Literal['auto', 'float32', 'float16']",
+      "default": "auto"
+    },
+    "mamba_block_size": {
+      "type": "int | None",
+      "default": null
+    },
+    "mamba_cache_mode": {
+      "type": "Literal['all', 'align', 'none']",
+      "default": "none"
+    },
+    "additional_config": {
+      "type": "dict[str, Any]",
+      "default": {}
+    },
+    "use_tqdm_on_load": {
+      "type": "bool",
+      "default": true
+    },
+    "pt_load_map_location": {
+      "type": "str",
+      "default": "cpu"
+    },
+    "logits_processors": {
+      "type": "list[str | type[LogitsProcessor]] | None",
+      "default": null
+    },
+    "async_scheduling": {
       "type": "bool | None",
       "default": null
     },
-    "additional_config": {
-      "type": "dict[str, Any] | None",
+    "stream_interval": {
+      "type": "int",
+      "default": 1
+    },
+    "kv_sharing_fast_prefill": {
+      "type": "bool",
+      "default": false
+    },
+    "optimization_level": {
+      "type": "OptimizationLevel",
+      "default": 2
+    },
+    "kv_offloading_size": {
+      "type": "float | None",
+      "default": null
+    },
+    "kv_offloading_backend": {
+      "type": "Literal['native', 'lmcache']",
+      "default": "native"
+    },
+    "tokens_only": {
+      "type": "bool",
+      "default": false
+    },
+    "weight_transfer_config": {
+      "type": "WeightTransferConfig | None",
       "default": null
     }
   },
@@ -441,14 +687,6 @@
     "n": {
       "type": "integer",
       "default": 1
-    },
-    "best_of": {
-      "type": "unknown",
-      "default": null
-    },
-    "_real_n": {
-      "type": "unknown",
-      "default": null
     },
     "presence_penalty": {
       "type": "number",
@@ -472,7 +710,7 @@
     },
     "top_k": {
       "type": "integer",
-      "default": -1
+      "default": 0
     },
     "min_p": {
       "type": "number",
@@ -487,10 +725,6 @@
       "default": null
     },
     "stop_token_ids": {
-      "type": "unknown",
-      "default": null
-    },
-    "bad_words": {
       "type": "unknown",
       "default": null
     },
@@ -513,6 +747,10 @@
     "prompt_logprobs": {
       "type": "unknown",
       "default": null
+    },
+    "flat_logprobs": {
+      "type": "boolean",
+      "default": false
     },
     "detokenize": {
       "type": "boolean",
@@ -542,6 +780,10 @@
       "type": "unknown",
       "default": 0
     },
+    "skip_clone": {
+      "type": "boolean",
+      "default": false
+    },
     "output_text_buffer_length": {
       "type": "integer",
       "default": 0
@@ -550,7 +792,7 @@
       "type": "array",
       "default": []
     },
-    "guided_decoding": {
+    "structured_outputs": {
       "type": "unknown",
       "default": null
     },
@@ -559,6 +801,22 @@
       "default": null
     },
     "allowed_token_ids": {
+      "type": "unknown",
+      "default": null
+    },
+    "extra_args": {
+      "type": "unknown",
+      "default": null
+    },
+    "bad_words": {
+      "type": "unknown",
+      "default": null
+    },
+    "_bad_words_token_ids": {
+      "type": "unknown",
+      "default": null
+    },
+    "skip_reading_prefix_cache": {
       "type": "unknown",
       "default": null
     }
