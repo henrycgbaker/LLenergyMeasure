@@ -481,11 +481,11 @@ jobs:
             # Cells write under engine_versions/<engine>/v<safe>/outputs/.
             # The v<safe> subdir name is per-version so glob it from the
             # staging tree rather than computing safe_version here.
-            for f in /tmp/writeback-staging/engine_versions/${ENGINE}/*/outputs/invariants.proposed.yaml \
-                     /tmp/writeback-staging/engine_versions/${ENGINE}/*/outputs/invariants.validated.yaml; do
+            for f in "/tmp/writeback-staging/engine_versions/${ENGINE}"/*/outputs/invariants.proposed.yaml \
+                     "/tmp/writeback-staging/engine_versions/${ENGINE}"/*/outputs/invariants.validated.yaml; do
               [[ -f "$f" ]] && INV_PRESENT=true
             done
-            for f in /tmp/writeback-staging/engine_versions/${ENGINE}/*/outputs/schema.discovered.json; do
+            for f in "/tmp/writeback-staging/engine_versions/${ENGINE}"/*/outputs/schema.discovered.json; do
               [[ -f "$f" ]] && SCH_PRESENT=true
             done
             $INV_PRESENT && CONTRIBUTORS+=("invariants:${ENGINE}")
