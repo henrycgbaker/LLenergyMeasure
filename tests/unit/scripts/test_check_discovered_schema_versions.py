@@ -16,6 +16,12 @@ def _current_yaml(version: str) -> str:
     return f"library:\n  current_version: {version}\n"
 
 
+def _safe(version: str) -> str:
+    """Mirror of the script's _safe_version for fixture path construction."""
+    stripped = version.lstrip("v")
+    return "v" + stripped.replace(".", "_").replace("-", "_")
+
+
 def _setup_repo(
     tmp_path: Path,
     *,
@@ -27,9 +33,20 @@ def _setup_repo(
     transformers_schema_version: str = "5.5.4",
     skip_vllm_schema: bool = False,
 ) -> Path:
-    """Create a minimal repo structure for the version check script."""
+    """Create a minimal repo structure for the version check script.
+
+    The script reads the discovered schema from
+    ``engine_versions/<engine>/v<safe(current_version)>/outputs/schema.discovered.json``.
+    """
     repo = tmp_path / "repo"
     engine_versions_dir = repo / "engine_versions"
+
+    def _write_schema(engine: str, current: str, schema_version: str) -> None:
+        outputs_dir = engine_versions_dir / engine / _safe(current) / "outputs"
+        outputs_dir.mkdir(parents=True, exist_ok=True)
+        (outputs_dir / "schema.discovered.json").write_text(
+            json.dumps({"engine_version": schema_version})
+        )
 
     for engine, version in [
         ("vllm", vllm_current),
@@ -37,20 +54,13 @@ def _setup_repo(
         ("transformers", transformers_current),
     ]:
         engine_dir = engine_versions_dir / engine
-        engine_dir.mkdir(parents=True)
+        engine_dir.mkdir(parents=True, exist_ok=True)
         (engine_dir / "current.yaml").write_text(_current_yaml(version))
 
-    engines_dir = repo / "src" / "llenergymeasure" / "engines"
-
-    def _write_schema(engine: str, version: str) -> None:
-        engine_dir = engines_dir / engine
-        engine_dir.mkdir(parents=True, exist_ok=True)
-        (engine_dir / "schema.discovered.json").write_text(json.dumps({"engine_version": version}))
-
     if not skip_vllm_schema:
-        _write_schema("vllm", vllm_schema_version)
-    _write_schema("tensorrt", trt_schema_version)
-    _write_schema("transformers", transformers_schema_version)
+        _write_schema("vllm", vllm_current, vllm_schema_version)
+    _write_schema("tensorrt", trt_current, trt_schema_version)
+    _write_schema("transformers", transformers_current, transformers_schema_version)
 
     return repo
 
