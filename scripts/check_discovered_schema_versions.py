@@ -61,9 +61,12 @@ def _parse_schema_version(schema_path: Path) -> Any:
     return data.get("engine_version")
 
 
+def _safe_version(version: str) -> str:
+    return "v" + version.replace(".", "_").replace("-", "_")
+
+
 def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) -> int:
     root = repo_root or REPO_ROOT
-    engines_dir = root / "src" / "llenergymeasure" / "engines"
     engine_versions_dir = root / "engine_versions"
 
     errors: list[str] = []
@@ -77,15 +80,21 @@ def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) 
             errors.append(f"{engine}: current.yaml not found: {current_yaml}")
             continue
 
-        schema_path = engines_dir / engine / DEFAULT_SCHEMA_FILENAME
+        if pinned_version is None:
+            errors.append(f"{engine}: library.current_version not found in {current_yaml.name}")
+            continue
+
+        schema_path = (
+            engine_versions_dir
+            / engine
+            / _safe_version(pinned_version)
+            / "outputs"
+            / DEFAULT_SCHEMA_FILENAME
+        )
         try:
             schema_version = _parse_schema_version(schema_path)
         except FileNotFoundError:
             errors.append(f"{engine}: schema not found: {schema_path}")
-            continue
-
-        if pinned_version is None:
-            errors.append(f"{engine}: library.current_version not found in {current_yaml.name}")
             continue
 
         if schema_version is None:
