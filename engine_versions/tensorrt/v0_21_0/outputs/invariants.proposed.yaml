@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: tensorrt
 engine_version: 0.21.0
-mined_at: '2026-05-14T13:25:05+02:00'
+mined_at: '2026-05-15T18:05:47+02:00'
 invariants:
 - id: tensorrt_raises_max_ngram_size_le_0_positive_values
   engine: tensorrt

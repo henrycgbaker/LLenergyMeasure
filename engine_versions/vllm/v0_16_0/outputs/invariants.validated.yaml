@@ -1,0 +1,192 @@
+schema_version: 1.0.0
+engine: vllm
+engine_version: 0.16.0
+image_ref: llenergymeasure:vllm
+base_image_ref: llenergymeasure:vllm
+validated_at: '2026-05-15T14:49:43+02:00'
+validation_commit: 5327488921cdf1003f24420e9af8619c146a03a8
+cases:
+- id: vllm_eplbconfig_raises_log_balancedness_interval_le_0
+  outcome: error
+  emission_channel: none
+  observed_messages:
+  - No plugins for group vllm.platform_plugins found.
+  - Checking if TPU platform is available.
+  - 'TPU platform is not available because: No module named ''libtpu'''
+  - Checking if CUDA platform is available.
+  - Confirmed CUDA platform is available.
+  - Checking if ROCm platform is available.
+  - 'ROCm platform is not available because: No module named ''amdsmi'''
+  - Checking if XPU platform is available.
+  - Checking if CPU platform is available.
+  - Checking if CUDA platform is available.
+  - Confirmed CUDA platform is available.
+  - Automatically detected platform cuda.
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValidationError
+    message: "1 validation error for EPLBConfig\n  Value error, log_balancedness_interval\
+      \ must be greater than 0. [type=value_error, input_value=ArgsKwargs((), {'log_bala...ancedness_interval':\
+      \ 0}), input_type=ArgsKwargs]\n    For further information visit https://errors.pydantic.dev/2.12/v/value_error"
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_loraconfig_dormant_max_cpu_loras_unset_true
+  outcome: dormant_silent
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations:
+    max_cpu_loras:
+      declared: null
+      observed: 1
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_parallelconfig_dormant_data_parallel_rank_set_true
+  outcome: dormant_silent
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations:
+    data_parallel_rank:
+      declared: 1
+      observed: 0
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_parallelconfig_raises_api_process_rank_ge_ref_api_process_count
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValidationError
+    message: "1 validation error for ParallelConfig\n  Value error, Invalid value\
+      \ of `_api_process_rank`. Expected to be `-1` or `[0, 2)`, but found: 2 [type=value_error,\
+      \ input_value=ArgsKwargs((), {'_api_pro...'_api_process_rank': 2}), input_type=ArgsKwargs]\n\
+      \    For further information visit https://errors.pydantic.dev/2.12/v/value_error"
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_parallelconfig_raises_data_parallel_external_lb_set_true
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValidationError
+    message: "1 validation error for ParallelConfig\n  Value error, data_parallel_external_lb\
+      \ can only be set when data_parallel_size > 1 [type=value_error, input_value=ArgsKwargs((),\
+      \ {'data_par...rallel_external_lb': 1}), input_type=ArgsKwargs]\n    For further\
+      \ information visit https://errors.pydantic.dev/2.12/v/value_error"
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_parallelconfig_raises_data_parallel_size_local_gt_ref_data_parallel_size
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValidationError
+    message: "1 validation error for ParallelConfig\n  Value error, data_parallel_size_local\
+      \ (3) must be <= data_parallel_size (2) [type=value_error, input_value=ArgsKwargs((),\
+      \ {'data_par...arallel_size_local': 3}), input_type=ArgsKwargs]\n    For further\
+      \ information visit https://errors.pydantic.dev/2.12/v/value_error"
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_dormant_bad_words_unset_true
+  outcome: dormant_silent
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations:
+    bad_words:
+      declared: null
+      observed: []
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_dormant_seed_eq_neg1
+  outcome: dormant_silent
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations:
+    seed:
+      declared: -1
+      observed: null
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_dormant_skip_reading_prefix_cache_unset_true
+  outcome: dormant_silent
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations:
+    skip_reading_prefix_cache:
+      declared: null
+      observed: false
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_min_tokens_gt_ref_max_tokens
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: min_tokens must be less than or equal to max_tokens=1, got 2.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_min_tokens_lt_0
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: min_tokens must be greater than or equal to 0, got -1.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_n_lt_1
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: n must be at least 1, got 0.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_n_not_type_int
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: n must be an int, but is of type <class 'str'>
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_repetition_penalty_le_0p0
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: repetition_penalty must be greater than zero, got 0.0.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_temperature_lt_0p0
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: VLLMValidationError
+    message: temperature must be non-negative, got -1.0. (parameter=temperature, value=-1.0)
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_top_k_lt_neg1
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: top_k must be 0 (disable), or at least 1, got -2.
+  positive_confirmed: true
+  negative_confirmed: true
+divergences: []
