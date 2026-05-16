@@ -477,16 +477,17 @@ jobs:
           # paths themselves.
           CONTRIBUTORS=()
           for ENGINE in transformers vllm tensorrt; do
-            INV_FILES=(
-              "/tmp/writeback-staging/src/llenergymeasure/engines/${ENGINE}/invariants.proposed.yaml"
-              "/tmp/writeback-staging/src/llenergymeasure/engines/${ENGINE}/invariants.validated.yaml"
-            )
-            SCH_FILES=(
-              "/tmp/writeback-staging/src/llenergymeasure/engines/${ENGINE}/schema.discovered.json"
-            )
             INV_PRESENT=false; SCH_PRESENT=false
-            for f in "${INV_FILES[@]}"; do [[ -f "$f" ]] && INV_PRESENT=true; done
-            for f in "${SCH_FILES[@]}"; do [[ -f "$f" ]] && SCH_PRESENT=true; done
+            # Cells write under engine_versions/<engine>/v<safe>/outputs/.
+            # The v<safe> subdir name is per-version so glob it from the
+            # staging tree rather than computing safe_version here.
+            for f in /tmp/writeback-staging/engine_versions/${ENGINE}/*/outputs/invariants.proposed.yaml \
+                     /tmp/writeback-staging/engine_versions/${ENGINE}/*/outputs/invariants.validated.yaml; do
+              [[ -f "$f" ]] && INV_PRESENT=true
+            done
+            for f in /tmp/writeback-staging/engine_versions/${ENGINE}/*/outputs/schema.discovered.json; do
+              [[ -f "$f" ]] && SCH_PRESENT=true
+            done
             $INV_PRESENT && CONTRIBUTORS+=("invariants:${ENGINE}")
             $SCH_PRESENT && CONTRIBUTORS+=("schemas:${ENGINE}")
           done
@@ -497,12 +498,14 @@ jobs:
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${APP_ID}+llem-ci-bot[bot]@users.noreply.github.com"
 
-          # Stage only the paths writeback artefacts may produce.
+          # Stage only the paths writeback artefacts may produce. Cells
+          # write machine artefacts under engine_versions/<engine>/v<safe>/outputs/;
+          # current.yaml is not in the writeback bundle (Renovate-writable
+          # input only).
           git add \
-            'src/llenergymeasure/engines/*/invariants.proposed.yaml' \
-            'src/llenergymeasure/engines/*/invariants.validated.yaml' \
-            'src/llenergymeasure/engines/*/schema.discovered.json' \
-            'engine_versions/*/current.yaml' \
+            'engine_versions/*/*/outputs/invariants.proposed.yaml' \
+            'engine_versions/*/*/outputs/invariants.validated.yaml' \
+            'engine_versions/*/*/outputs/schema.discovered.json' \
             'docs/reference/engines/invariants-*.md' \
             'docs/reference/engines/curation-*.md' \
             'docs/reference/engines/schema-*.md' \
