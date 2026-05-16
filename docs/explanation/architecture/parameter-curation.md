@@ -43,19 +43,22 @@ These JSON files are the ground truth for "what parameters does this engine vers
 
 - **Field names match native engine names.** A field called `quant_config` maps directly to the engine kwarg `quant_config`. No translation layer, no llem aliases.
 - **Sub-configs group related parameters.** e.g. `TensorRTKvCacheConfig` groups all kv-cache knobs under `tensorrt.kv_cache_config.*`. The sub-config name matches the native engine kwarg name.
-- **Types may be narrowed.** A field typed `str` in discovery might become `Literal["bfloat16", "float16", "float32"]` in curation - this is intentional and allowed by the drift checker.
+- **Types may be narrowed.** A field typed `str` in discovery might become `Literal["bfloat16", "float16", "float32"]` in curation, or a `Literal[...]` may narrow further to a subset of upstream's enum - both are intentional and pass the gate's subset semantics (see below).
 - **Descriptions are added.** Pydantic `Field(description=...)` docs are user-facing; discovery has none.
 
 ---
 
-## Drift checker
+## Schema gate (subset semantics)
 
-`scripts/check_pydantic_matches_discovered.py` compares the set of leaf field names in the Pydantic models against the discovered schemas and reports two kinds of drift:
+`scripts/check_pydantic_matches_discovered.py` compares each Pydantic field against the discovered schema and emits a 3-state classification per (engine, field):
 
-| Kind | Meaning |
-|------|---------|
-| `pydantic_only` | Pydantic has a field that discovery doesn't - likely a stale field that was removed from the engine, or a kwargs-passed field invisible to signature inspection |
-| `type_mismatch` | Both sides have the field but with different types (beyond intentional narrowing) |
+| Classification | Meaning | Effect on gate |
+|---|---|---|
+| `SUBSET-COMPATIBLE` | Pydantic type is a valid restriction of discovered (Literal subset, primitive abstraction over a complex class, concrete narrowing of `any`, scalar narrowed to a Literal value set) | Pass, silent |
+| `LLEM-EXTENSION` | Pydantic field absent from discovered, listed in `LLEM_NATIVE_FIELDS` (kwargs passthrough, depth below introspection, llem-orchestration, or pre-transform) | Pass, silent |
+| `CONTRADICTION` | Pydantic widens beyond discovered (e.g. discovered `Literal['a']`, Pydantic `str`) OR Pydantic field absent from discovered without a whitelist entry | Fail |
+
+Binary exit: `0` if no contradictions, `1` otherwise. The full 3-state classification is emitted in stdout JSON for downstream consumers (e.g. the audit-bot in #655 surfacing divergence as an informational PR comment).
 
 Run it locally:
 

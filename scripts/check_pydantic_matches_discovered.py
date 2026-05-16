@@ -1,14 +1,25 @@
 #!/usr/bin/env python3
-"""Check Pydantic engine configs align with discovered schemas.
+"""Check Pydantic engine configs are a valid subset of discovered schemas.
 
-Detects type drift between llem's hand-authored Pydantic models and the
-machine-discovered engine parameter schemas. Catches:
-- Pydantic Literal values going stale relative to engine enums
-- Type narrowing/widening between Pydantic and discovered
-- Pydantic fields with no discovered counterpart (unless whitelisted)
+Detects type CONTRADICTIONS between llem's hand-authored Pydantic models
+and the machine-discovered engine parameter schemas. Pydantic is allowed
+to be narrower than discovered (curating a Literal subset, abstracting a
+complex upstream class to a primitive); only widening or unwhitelisted
+extensions fail.
 
-Exit 0: clean alignment. Exit 1: unexplained drift detected.
-Structured JSON on stdout; human-readable details on stderr.
+Three-state classification per (engine, field):
+- SUBSET-COMPATIBLE: pydantic type is a valid subset/restriction of discovered
+- LLEM-EXTENSION:    pydantic field absent from discovered, listed in
+                     LLEM_NATIVE_FIELDS (kwargs-passthrough, depth-below-
+                     introspection, llem-orchestration, or pre-transform;
+                     see issue #655 for the planned 4-category encoding)
+- CONTRADICTION:     pydantic widens beyond discovered, OR is absent from
+                     discovered without a whitelist entry. Only this state
+                     fails the gate.
+
+Exit 0: no contradictions. Exit 1: at least one CONTRADICTION.
+Structured JSON on stdout (full 3-state classification per field).
+Human-readable contradictions on stderr.
 
 Run: python scripts/check_pydantic_matches_discovered.py
 """
@@ -176,24 +187,70 @@ def _canonicalise_pydantic_type(prop: dict[str, Any], defs: dict[str, Any]) -> s
     return _JSON_TO_PYTHON_TYPE.get(base, base)
 
 
-def _is_intentional_narrowing(discovered: str, pydantic: str) -> bool:
-    """Check if Pydantic intentionally narrows a broad engine type.
+def _parse_literal_values(literal_str: str) -> frozenset[str] | None:
+    """Extract the value set from a canonicalised Literal[...] string.
 
-    Allowed patterns:
-    - str → Literal[...] (curating valid string values)
-    - int → Literal[...] (curating valid int values)
-    - Complex class type → simpler Pydantic type (e.g. CompilationConfig → dict)
+    Returns ``None`` for non-Literal inputs. The canonicaliser already
+    ``repr``-quotes values in a stable order, so we strip the surrounding
+    quotes and return the bare value strings (callers compare set inclusion).
     """
-    if pydantic.startswith("Literal["):
-        # Simple base type → Literal (str → Literal['a', 'b'])
+    if not literal_str.startswith("Literal[") or not literal_str.endswith("]"):
+        return None
+    inner = literal_str[len("Literal[") : -1]
+    if not inner:
+        return frozenset()
+    parts = [p.strip() for p in inner.split(",")]
+    return frozenset(p.strip("'\"") for p in parts)
+
+
+def _is_subset(discovered: str, pydantic: str) -> bool:
+    """Return True iff ``pydantic`` is a valid restriction of ``discovered``.
+
+    The subset relation captures the curation pattern: Pydantic is allowed
+    to be narrower than the upstream-discovered type (a smaller Literal
+    value set, an abstracted primitive over a complex class, a concrete
+    type under an unconstrained ``any``); it is NOT allowed to be wider
+    (Pydantic accepts more values than upstream).
+
+    Patterns recognised (each a separate clause in the if-chain):
+
+    1. **Equal types** - trivial pass.
+    2. **T <= any** - any concrete pydantic type is a valid view of an
+       unconstrained discovered ``any``.
+    3. **Literal[A] <= Literal[B]** - subset of value set; covers the
+       intentional curation case where llem narrows an upstream enum.
+    4. **Literal[A] <= scalar** (str/int/float) - llem curates a finite
+       value set out of a broad upstream scalar (e.g. backend names).
+       Covers the legacy ``_is_intentional_narrowing`` str/int -> Literal
+       case as a special case of the subset relation.
+    5. **Literal[A] <= union containing the scalar** - covers
+       ``str | SomeClass`` discovered narrowed to ``Literal['a','b']``.
+    6. **dict|str|list <= ClassName** - llem abstracts a complex upstream
+       class to a JSON-schema-friendly primitive. Retains today's
+       "complex discovered type mapped to simple Pydantic type" case.
+    """
+    if discovered == pydantic:
+        return True
+    if discovered == "any":
+        return True
+
+    py_values = _parse_literal_values(pydantic)
+    disc_values = _parse_literal_values(discovered)
+
+    if py_values is not None and disc_values is not None:
+        return py_values <= disc_values
+
+    if py_values is not None:
         if discovered in ("str", "int", "float"):
             return True
-        # Compound type containing str → Literal (str | SomeClass → Literal['a', 'b'])
-        if "|" in discovered and any(p.strip() == "str" for p in discovered.split("|")):
+        if "|" in discovered and any(
+            p.strip() in ("str", "int", "float") for p in discovered.split("|")
+        ):
             return True
-    # Complex discovered type (class name) mapped to simple Pydantic type
-    return (
-        discovered[0].isupper()
+
+    return bool(
+        discovered
+        and discovered[0].isupper()
         and not discovered.startswith("Literal[")
         and pydantic in ("dict", "str", "list")
     )
@@ -252,87 +309,138 @@ def _get_pydantic_leaves(engine: str, schema: dict[str, Any]) -> dict[str, dict[
 # ---------------------------------------------------------------------------
 
 
+# Classification labels emitted in the per-field record. Only CONTRADICTION
+# fails the gate; the other two are silent passes (kept in the JSON
+# diagnostic for downstream consumers like the audit-bot in #655).
+CLASSIFICATION_SUBSET = "SUBSET-COMPATIBLE"
+CLASSIFICATION_EXTENSION = "LLEM-EXTENSION"
+CLASSIFICATION_CONTRADICTION = "CONTRADICTION"
+
+
 def check_engine(engine: str, schema: dict[str, Any]) -> list[dict[str, str]]:
-    """Check one engine for drift. Returns list of drift records."""
-    drifts: list[dict[str, str]] = []
+    """Classify each Pydantic field for ``engine`` against the discovered schema.
+
+    Returns one record per (engine, field) pair where the field appears in
+    Pydantic, regardless of classification - downstream consumers (the
+    audit-bot in #655) want the full 3-state picture, not just failures.
+    Discovered-only fields (in upstream but not curated by llem) are out
+    of scope here; they're surveyed separately by the curation doc.
+    """
+    classifications: list[dict[str, str]] = []
     defs = schema.get("$defs", {})
 
     loader = SchemaLoader()
     discovered = loader.load_schema(engine)
 
-    # Combine engine_params and sampling_params from discovered
     all_discovered: dict[str, dict[str, Any]] = {}
     all_discovered.update(discovered.engine_params)
     all_discovered.update(discovered.sampling_params)
 
-    # Get Pydantic leaves
     pydantic_leaves = _get_pydantic_leaves(engine, schema)
 
-    # Check Pydantic fields against discovered
     for leaf_name, prop in pydantic_leaves.items():
         if leaf_name in all_discovered:
-            # Both sides have it - compare types
             discovered_type = all_discovered[leaf_name].get("type", "")
             if not discovered_type or not prop or discovered_type == "unknown":
+                # Discovered type unknown -> can't classify subset relation;
+                # treat as silent pass (no information either way).
                 continue
 
             canon_discovered = _canonicalise_discovered_type(discovered_type)
             canon_pydantic = _canonicalise_pydantic_type(prop, defs)
 
-            if canon_discovered != canon_pydantic:
-                # Allow intentional narrowing: engine exposes broad type,
-                # llem curates to specific Literal values
-                if _is_intentional_narrowing(canon_discovered, canon_pydantic):
-                    continue
-                drifts.append(
+            if _is_subset(canon_discovered, canon_pydantic):
+                classifications.append(
                     {
                         "engine": engine,
                         "field": leaf_name,
-                        "kind": "type_mismatch",
+                        "classification": CLASSIFICATION_SUBSET,
+                        "discovered": canon_discovered,
+                        "pydantic": canon_pydantic,
+                    }
+                )
+            else:
+                classifications.append(
+                    {
+                        "engine": engine,
+                        "field": leaf_name,
+                        "classification": CLASSIFICATION_CONTRADICTION,
+                        "kind": "type_widens_or_disagrees",
                         "discovered": canon_discovered,
                         "pydantic": canon_pydantic,
                     }
                 )
         else:
-            # Pydantic has it, discovered doesn't
-            if (engine, leaf_name) not in LLEM_NATIVE_FIELDS:
-                drifts.append(
+            canon_pydantic = _canonicalise_pydantic_type(prop, defs) if prop else "unknown"
+            if (engine, leaf_name) in LLEM_NATIVE_FIELDS:
+                classifications.append(
                     {
                         "engine": engine,
                         "field": leaf_name,
-                        "kind": "pydantic_only",
+                        "classification": CLASSIFICATION_EXTENSION,
                         "discovered": "(not present)",
-                        "pydantic": _canonicalise_pydantic_type(prop, defs) if prop else "unknown",
+                        "pydantic": canon_pydantic,
+                    }
+                )
+            else:
+                classifications.append(
+                    {
+                        "engine": engine,
+                        "field": leaf_name,
+                        "classification": CLASSIFICATION_CONTRADICTION,
+                        "kind": "pydantic_only_unwhitelisted",
+                        "discovered": "(not present)",
+                        "pydantic": canon_pydantic,
                     }
                 )
 
-    return drifts
+    return classifications
 
 
 def main() -> None:
     schema = ExperimentConfig.model_json_schema()
-    all_drifts: list[dict[str, str]] = []
+    all_classifications: list[dict[str, str]] = []
+    contradictions_total = 0
 
     for engine in ENGINES:
-        drifts = check_engine(engine, schema)
-        all_drifts.extend(drifts)
+        records = check_engine(engine, schema)
+        all_classifications.extend(records)
 
-        if drifts:
-            print(f"\n[{engine}] {len(drifts)} drift(s) detected:", file=sys.stderr)
-            for d in drifts:
+        contradictions = [r for r in records if r["classification"] == CLASSIFICATION_CONTRADICTION]
+        contradictions_total += len(contradictions)
+
+        if contradictions:
+            print(
+                f"\n[{engine}] {len(contradictions)} contradiction(s) detected:",
+                file=sys.stderr,
+            )
+            for d in contradictions:
                 print(
                     f"  {d['field']}: {d['kind']} "
                     f"(discovered={d['discovered']}, pydantic={d['pydantic']})",
                     file=sys.stderr,
                 )
         else:
-            print(f"[{engine}] OK - no drift", file=sys.stderr)
+            subset_n = sum(1 for r in records if r["classification"] == CLASSIFICATION_SUBSET)
+            ext_n = sum(1 for r in records if r["classification"] == CLASSIFICATION_EXTENSION)
+            print(
+                f"[{engine}] OK - no contradictions "
+                f"(subset-compatible: {subset_n}, llem-extension: {ext_n})",
+                file=sys.stderr,
+            )
 
-    # Structured output on stdout
-    json.dump({"drifts": all_drifts, "total": len(all_drifts)}, sys.stdout, indent=2)
+    json.dump(
+        {
+            "classifications": all_classifications,
+            "total_contradictions": contradictions_total,
+            "total_records": len(all_classifications),
+        },
+        sys.stdout,
+        indent=2,
+    )
     print(file=sys.stdout)
 
-    sys.exit(1 if all_drifts else 0)
+    sys.exit(1 if contradictions_total else 0)
 
 
 if __name__ == "__main__":
