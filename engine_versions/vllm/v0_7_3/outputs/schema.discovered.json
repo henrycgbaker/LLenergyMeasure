@@ -5,7 +5,7 @@
   "engine_commit_sha": null,
   "image_ref": "llenergymeasure:vllm-0.7.3",
   "base_image_ref": null,
-  "discovered_at": "2026-05-06T22:57:22+02:00",
+  "discovered_at": "2026-05-14T20:31:21+02:00",
   "discovery_method": "dataclasses.fields(EngineArgs) + msgspec.json.schema(SamplingParams)",
   "discovery_limitations": [
     {

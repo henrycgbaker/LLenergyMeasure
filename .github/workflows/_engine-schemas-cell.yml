@@ -37,7 +37,6 @@ jobs:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.runner == 'ubuntu-latest' && 30 || 360 }}
     env:
-      ENGINES_DIR: src/llenergymeasure/engines
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONPATH: "/repo/src:/repo"
     steps:
@@ -81,10 +80,13 @@ jobs:
           # Python-identifier-safe form (dots and hyphens -> underscores) used as the
           # subpackage name under engine_versions/<engine>/.
           SAFE_VER="v${VER//[.-]/_}"
+          OUTPUTS_DIR="engine_versions/${ENGINE}/${SAFE_VER}/outputs"
+          mkdir -p "${OUTPUTS_DIR}"
           {
             echo "version=${VER}"
             echo "safe_version=${SAFE_VER}"
             echo "image=llenergymeasure:${ENGINE}-${VER}"
+            echo "outputs_dir=${OUTPUTS_DIR}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR (read-only, for image pull)
@@ -244,9 +246,10 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         env:
           ENGINE: ${{ inputs.engine }}
+          OUTPUTS_DIR: ${{ steps.version.outputs.outputs_dir }}
         run: |
           mkdir -p /tmp/engine-schemas-diff
-          OLD="${ENGINES_DIR}/${ENGINE}/schema.discovered.json"
+          OLD="${OUTPUTS_DIR}/schema.discovered.json"
           DEST="/tmp/engine-schemas-diff/${ENGINE}.old.json"
           if [[ -f "$OLD" ]]; then
             cp "$OLD" "$DEST"
@@ -260,6 +263,7 @@ jobs:
           IMAGE: ${{ steps.version.outputs.image }}
           ENGINE: ${{ inputs.engine }}
           VER: ${{ steps.version.outputs.version }}
+          OUTPUTS_DIR: ${{ steps.version.outputs.outputs_dir }}
           ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
           RUNNER: ${{ inputs.runner }}
         run: |
@@ -291,7 +295,7 @@ jobs:
             "${CMD_PREFIX[@]}" -m scripts.engine_producers._schemas_runner \
               --engine "${ENGINE}" \
               --image-ref "${IMAGE}" \
-              --output "${ENGINES_DIR}/${ENGINE}/schema.discovered.json"
+              --output "${OUTPUTS_DIR}/schema.discovered.json"
 
       - name: Set up Python (host) for doc-gen + diff
         if: steps.probe.outputs.verdict == 'pass'
@@ -328,17 +332,18 @@ jobs:
         id: diff
         env:
           ENGINE: ${{ inputs.engine }}
+          OUTPUTS_DIR: ${{ steps.version.outputs.outputs_dir }}
         run: |
           set +e
           uv run python scripts/diff_discovered_schemas.py \
             "/tmp/engine-schemas-diff/${ENGINE}.old.json" \
-            "${ENGINES_DIR}/${ENGINE}/schema.discovered.json" \
+            "${OUTPUTS_DIR}/schema.discovered.json" \
             > "/tmp/engine-schemas-diff/${ENGINE}.diff.json"
           DIFF_EXIT=$?
           set -e
 
           if diff -q "/tmp/engine-schemas-diff/${ENGINE}.old.json" \
-                    "${ENGINES_DIR}/${ENGINE}/schema.discovered.json" >/dev/null 2>&1; then
+                    "${OUTPUTS_DIR}/schema.discovered.json" >/dev/null 2>&1; then
             CLASSIFICATION="no-changes"
           elif [[ $DIFF_EXIT -eq 1 ]]; then
             CLASSIFICATION="breaking"
@@ -365,23 +370,6 @@ jobs:
               echo "</details>"
             fi
           } > "/tmp/engine-schemas-diff/${ENGINE}.summary.md"
-
-      - name: Mirror canonical schema to versioned archive (if engine vendored)
-        if: steps.probe.outputs.verdict == 'pass'
-        env:
-          ENGINE: ${{ inputs.engine }}
-          SAFE_VER: ${{ steps.version.outputs.safe_version }}
-        run: |
-          # Derivative dual-write — see invariants cell for rationale.
-          # Gated on the engine being vendored (per-engine __init__.py present).
-          ARCHIVE_INIT="engine_versions/${ENGINE}/${SAFE_VER}/__init__.py"
-          if [[ ! -f "$ARCHIVE_INIT" ]]; then
-            echo "Engine ${ENGINE} not yet vendored at ${SAFE_VER}; skipping archive mirror." >&2
-            exit 0
-          fi
-          ARCHIVE_DIR="engine_versions/${ENGINE}/${SAFE_VER}/outputs"
-          mkdir -p "${ARCHIVE_DIR}"
-          cp "${ENGINES_DIR}/${ENGINE}/schema.discovered.json" "${ARCHIVE_DIR}/schema.discovered.json"
 
       - name: Probe-fail comment (skip downstream)
         if: steps.probe.outputs.verdict == 'fail' && inputs.pr-number != ''
@@ -450,13 +438,10 @@ jobs:
         with:
           name: schemas-writeback-${{ inputs.engine }}
           path: |
-            ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/schema.discovered.json
-            engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/schema.discovered.json
+            ${{ steps.version.outputs.outputs_dir }}/schema.discovered.json
             docs/user/generated/curation-${{ inputs.engine }}.md
             docs/user/generated/schema-${{ inputs.engine }}.md
-          # See invariants cell for rationale (archive path gated on engine
-          # vendoring at this version).
-          if-no-files-found: warn
+          if-no-files-found: error
 
       - name: Post per-pipeline comment
         if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''

@@ -4,19 +4,20 @@
 #
 # Usage: ./scripts/refresh_invariants.sh {transformers|vllm|tensorrt}
 #
-# Mirror of scripts/refresh_discovered_schemas.sh - same idioms (Dockerfile ARG
-# lookup, image build fallback, diff-only-no-commit output) - different
-# artifact. Run this locally to re-validate against the pinned image before
-# opening a PR; CI will re-run inside the same image on the PR branch.
+# Mirror of scripts/refresh_discovered_schemas.sh - same idioms (current.yaml
+# version lookup, image build fallback, diff-only-no-commit output) -
+# different artifact. Run this locally to re-validate against the pinned
+# image before opening a PR; CI will re-run inside the same image on the PR
+# branch.
 #
-# Output: src/llenergymeasure/engines/<engine>/invariants.validated.yaml
+# Output: engine_versions/<engine>/v<safe>/outputs/invariants.validated.yaml
 # The YAML IS the canonical SSOT - authority comes from `git commit`, not
 # from who ran validation.
 #
-# Legitimate refresh (e.g. you bumped a Dockerfile FROM tag):
+# Legitimate refresh (e.g. you bumped library.current_version in current.yaml):
 #   review the diff, `git add`, and open a PR.
 # Exploring a fork or stale image:
-#   `git checkout src/llenergymeasure/engines/<engine>/invariants.validated.yaml`
+#   `git checkout engine_versions/<engine>/v<safe>/outputs/invariants.validated.yaml`
 set -euo pipefail
 
 usage() {
@@ -24,8 +25,8 @@ usage() {
 Usage: ./scripts/refresh_invariants.sh {transformers|vllm|tensorrt}
 
 Builds or pulls the engine's Docker image, runs scripts/validate_invariants.py inside
-it against the tracked corpus, writes the YAML envelope, and prints the git
-diff. Does NOT commit.
+it against the tracked corpus under engine_versions/<engine>/v<safe>/outputs/,
+writes the YAML envelope, and prints the git diff. Does NOT commit.
 EOF
 }
 
@@ -36,15 +37,24 @@ fi
 
 ENGINE="$1"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SSOT="${REPO_ROOT}/engine_versions/${ENGINE}/current.yaml"
 
-# Extract ARG default value from a Dockerfile: _arg_default <file> <NAME>
-_arg_default() {
-    grep -oE "^ARG[[:space:]]+${2}=[^[:space:]]+" "$1" | head -1 | cut -d= -f2-
-}
+if [[ ! -f "$SSOT" ]]; then
+    echo "[$ENGINE] SSOT $SSOT not found; unsupported engine?" >&2
+    usage >&2
+    exit 1
+fi
+
+VER="$(yq '.library.current_version' "$SSOT")"
+if [[ -z "$VER" || "$VER" == "null" ]]; then
+    echo "[$ENGINE] Could not resolve library.current_version from $SSOT" >&2
+    exit 1
+fi
+SAFE_VER="v${VER//[.-]/_}"
+OUTPUTS_DIR="engine_versions/${ENGINE}/${SAFE_VER}/outputs"
 
 case "$ENGINE" in
     transformers)
-        VER="$(_arg_default "$REPO_ROOT/docker/Dockerfile.transformers" TRANSFORMERS_VERSION)"
         IMAGE="llenergymeasure:transformers-${VER}"
         if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
             echo "[$ENGINE] Image $IMAGE not found; building from docker/Dockerfile.transformers..." >&2
@@ -52,11 +62,9 @@ case "$ENGINE" in
         fi
         ;;
     vllm)
-        VER="$(_arg_default "$REPO_ROOT/docker/Dockerfile.vllm" VLLM_VERSION)"
-        IMAGE="vllm/vllm-openai:${VER}"
+        IMAGE="vllm/vllm-openai:v${VER}"
         ;;
     tensorrt)
-        VER="$(_arg_default "$REPO_ROOT/docker/Dockerfile.tensorrt" TRTLLM_VERSION)"
         IMAGE="nvcr.io/nvidia/tensorrt-llm/release:${VER}"
         ;;
     *)
@@ -66,12 +74,12 @@ case "$ENGINE" in
         ;;
 esac
 
-CORPUS_REL="src/llenergymeasure/engines/${ENGINE}/invariants.proposed.yaml"
-OUTPUT_REL="src/llenergymeasure/engines/${ENGINE}/invariants.validated.yaml"
+CORPUS_REL="${OUTPUTS_DIR}/invariants.proposed.yaml"
+OUTPUT_REL="${OUTPUTS_DIR}/invariants.validated.yaml"
 
 if [[ ! -f "$REPO_ROOT/$CORPUS_REL" ]]; then
-    echo "[$ENGINE] Corpus $CORPUS_REL not found. Run the miner first:" >&2
-    echo "    python -m scripts.engine_producers.${ENGINE}_static_invariant_miner --out $CORPUS_REL" >&2
+    echo "[$ENGINE] Corpus $CORPUS_REL not found. Run the miner first via the cell, or:" >&2
+    echo "    python -m scripts.engine_producers.build_corpus --engine $ENGINE --engine-dir $OUTPUTS_DIR" >&2
     exit 1
 fi
 

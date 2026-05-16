@@ -201,7 +201,7 @@ and extended by the validation-CI gate (`scripts/validate_invariants.py`).
 ### Via miner (preferred)
 
 1. Rerun the miner for the engine:
-   `python -m scripts.engine_producers.{engine}_miner --out src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`
+   `python -m scripts.engine_producers.{engine}_miner --out engine_versions/{engine}/v<current>/outputs/invariants.proposed.yaml`
    (optionally with `LLENERGY_MINER_FROZEN_AT=<iso-utc>` for reproducibility).
 2. Inspect the diff against the previous corpus file. Review the predicate
    shape and verify it matches the library source before merging.

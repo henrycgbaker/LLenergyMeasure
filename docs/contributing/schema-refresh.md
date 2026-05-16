@@ -43,7 +43,7 @@ For local refresh against an installed engine:
 
 The script runs `python -m scripts.engine_producers._schemas_runner --engine <engine>`
 inside the matching container and writes the result to
-`src/llenergymeasure/engines/<engine>/schema.discovered.json`.
+`engine_versions/<engine>/v<current>/outputs/schema.discovered.json`.
 
 ---
 

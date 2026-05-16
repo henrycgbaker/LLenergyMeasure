@@ -53,7 +53,7 @@ class MinerSource:
 class InvariantCandidate:
     """One extracted invariant candidate.
 
-    Serialised verbatim into ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``
+    Serialised verbatim into ``engine_versions/{engine}/v<current>/outputs/invariants.proposed.yaml``
     after human review. Field names match the corpus schema so no
     translation step is needed between miner output and corpus entry.
     """

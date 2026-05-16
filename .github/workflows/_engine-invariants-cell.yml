@@ -37,7 +37,6 @@ jobs:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.runner == 'ubuntu-latest' && 30 || 360 }}
     env:
-      ENGINES_DIR: src/llenergymeasure/engines
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONPATH: "/repo/src:/repo"
     steps:
@@ -83,10 +82,13 @@ jobs:
           # Python-identifier-safe form (dots and hyphens -> underscores) used as the
           # subpackage name under engine_versions/<engine>/.
           SAFE_VER="v${VER//[.-]/_}"
+          OUTPUTS_DIR="engine_versions/${ENGINE}/${SAFE_VER}/outputs"
+          mkdir -p "${OUTPUTS_DIR}"
           {
             echo "version=${VER}"
             echo "safe_version=${SAFE_VER}"
             echo "image=llenergymeasure:${ENGINE}-${VER}"
+            echo "outputs_dir=${OUTPUTS_DIR}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR (read-only, for image pull)
@@ -283,10 +285,11 @@ jobs:
         if: steps.probe.outputs.verdict == 'pass'
         env:
           ENGINE: ${{ inputs.engine }}
+          OUTPUTS_DIR: ${{ steps.version.outputs.outputs_dir }}
         run: |
           mkdir -p /tmp/engine-invariants-diff
           for KIND in proposed validated; do
-            OLD_YAML="${ENGINES_DIR}/${ENGINE}/invariants.${KIND}.yaml"
+            OLD_YAML="${OUTPUTS_DIR}/invariants.${KIND}.yaml"
             DEST="/tmp/engine-invariants-diff/${ENGINE}.${KIND}.old.yaml"
             if [[ -f "$OLD_YAML" ]]; then
               cp "$OLD_YAML" "$DEST"
@@ -301,6 +304,7 @@ jobs:
           IMAGE: ${{ steps.version.outputs.image }}
           ENGINE: ${{ inputs.engine }}
           VER: ${{ steps.version.outputs.version }}
+          OUTPUTS_DIR: ${{ steps.version.outputs.outputs_dir }}
           ANCHOR_SHA: ${{ steps.anchor.outputs.sha }}
           ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
           RUNNER: ${{ inputs.runner }}
@@ -327,17 +331,20 @@ jobs:
             -e LLENERGY_VALIDATION_FROZEN_AT="${ANCHOR_DATE}" \
             -e PYTHONDONTWRITEBYTECODE \
             -e PYTHONPATH \
+            -e OUTPUTS_DIR \
             -v "${GITHUB_WORKSPACE}:/repo" \
             -w /repo \
             "${ENTRYPOINT_FLAG[@]}" \
             "$IMAGE" \
             "${CMD_PREFIX[@]}" -c "
               set -euo pipefail
-              python3 -m scripts.engine_producers.build_corpus --engine ${ENGINE}
+              python3 -m scripts.engine_producers.build_corpus \
+                --engine ${ENGINE} \
+                --engine-dir \"\${OUTPUTS_DIR}\"
               python3 scripts/validate_invariants.py \
                 --engine ${ENGINE} \
-                --corpus '${ENGINES_DIR}/${ENGINE}/invariants.proposed.yaml' \
-                --out '${ENGINES_DIR}/${ENGINE}/invariants.validated.yaml' \
+                --corpus \"\${OUTPUTS_DIR}/invariants.proposed.yaml\" \
+                --out \"\${OUTPUTS_DIR}/invariants.validated.yaml\" \
                 --validation-commit '${ANCHOR_SHA}' \
                 --fail-on-divergence
             "
@@ -368,11 +375,12 @@ jobs:
         id: diff
         env:
           ENGINE: ${{ inputs.engine }}
+          OUTPUTS_DIR: ${{ steps.version.outputs.outputs_dir }}
         run: |
           set +e
           uv run python scripts/diff_engine_invariants.py \
             "/tmp/engine-invariants-diff/${ENGINE}.validated.old.yaml" \
-            "${ENGINES_DIR}/${ENGINE}/invariants.validated.yaml" \
+            "${OUTPUTS_DIR}/invariants.validated.yaml" \
             --out "/tmp/engine-invariants-diff/${ENGINE}.validated.md" \
             --title "${ENGINE^} validated invariants diff"
           VENDORED_EXIT=$?
@@ -380,13 +388,13 @@ jobs:
 
           PROPOSED_CHANGED=true
           if diff -q "/tmp/engine-invariants-diff/${ENGINE}.proposed.old.yaml" \
-                    "${ENGINES_DIR}/${ENGINE}/invariants.proposed.yaml" >/dev/null 2>&1; then
+                    "${OUTPUTS_DIR}/invariants.proposed.yaml" >/dev/null 2>&1; then
             PROPOSED_CHANGED=false
           fi
 
           VENDORED_CHANGED=true
           if diff -q "/tmp/engine-invariants-diff/${ENGINE}.validated.old.yaml" \
-                    "${ENGINES_DIR}/${ENGINE}/invariants.validated.yaml" >/dev/null 2>&1; then
+                    "${OUTPUTS_DIR}/invariants.validated.yaml" >/dev/null 2>&1; then
             VENDORED_CHANGED=false
           fi
 
@@ -411,7 +419,7 @@ jobs:
                 echo '```diff'
                 diff -u --label "${ENGINE}.proposed.yaml" --label "${ENGINE}.proposed.yaml" \
                         "/tmp/engine-invariants-diff/${ENGINE}.proposed.old.yaml" \
-                        "${ENGINES_DIR}/${ENGINE}/invariants.proposed.yaml" | head -n 200 || true
+                        "${OUTPUTS_DIR}/invariants.proposed.yaml" | head -n 200 || true
                 echo '```'
                 echo
               fi
@@ -420,30 +428,6 @@ jobs:
               fi
             fi
           } > "/tmp/engine-invariants-diff/${ENGINE}.summary.md"
-
-      - name: Mirror canonical invariants to versioned archive (if engine vendored)
-        if: steps.probe.outputs.verdict == 'pass'
-        env:
-          ENGINE: ${{ inputs.engine }}
-          SAFE_VER: ${{ steps.version.outputs.safe_version }}
-        run: |
-          # Derivative dual-write: the archive is always a byte-identical
-          # mirror of the canonical mining outputs. Gated on the engine's
-          # versioned archive being present (i.e. the per-engine vendor PR
-          # has landed). When an engine is not yet vendored at this version,
-          # the archive mirror is a no-op — the producer modules still use
-          # hardcoded LANDMARKS until the engine's vendor PR refactors them.
-          # The per-engine __init__.py is the canonical "engine vendored at
-          # this version" marker.
-          ARCHIVE_INIT="engine_versions/${ENGINE}/${SAFE_VER}/__init__.py"
-          if [[ ! -f "$ARCHIVE_INIT" ]]; then
-            echo "Engine ${ENGINE} not yet vendored at ${SAFE_VER}; skipping archive mirror." >&2
-            exit 0
-          fi
-          ARCHIVE_DIR="engine_versions/${ENGINE}/${SAFE_VER}/outputs"
-          mkdir -p "${ARCHIVE_DIR}"
-          cp "${ENGINES_DIR}/${ENGINE}/invariants.proposed.yaml" "${ARCHIVE_DIR}/invariants.proposed.yaml"
-          cp "${ENGINES_DIR}/${ENGINE}/invariants.validated.yaml" "${ARCHIVE_DIR}/invariants.validated.yaml"
 
       - name: Probe-fail comment (skip downstream)
         if: steps.probe.outputs.verdict == 'fail' && inputs.pr-number != ''
@@ -512,20 +496,12 @@ jobs:
         with:
           name: invariants-writeback-${{ inputs.engine }}
           path: |
-            ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/invariants.proposed.yaml
-            ${{ env.ENGINES_DIR }}/${{ inputs.engine }}/invariants.validated.yaml
-            engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/invariants.proposed.yaml
-            engine_versions/${{ inputs.engine }}/${{ steps.version.outputs.safe_version }}/outputs/invariants.validated.yaml
+            ${{ steps.version.outputs.outputs_dir }}/invariants.proposed.yaml
+            ${{ steps.version.outputs.outputs_dir }}/invariants.validated.yaml
             docs/user/generated/invariants-${{ inputs.engine }}.md
-          # ``warn`` rather than ``error``: canonical paths always exist by
-          # the time this step runs (mining produced them), but the archive
-          # mirror is gated on the engine being vendored at this version.
-          # Until the engine's vendor PR lands, the archive paths under
-          # engine_versions/<engine>/<safe>/outputs/ are absent - the upload should
-          # bundle whatever exists rather than fail. current.yaml is NOT in the
-          # writeback bundle: it is Renovate-writable input only, and the
-          # dispatcher + probe pair never need to mutate it.
-          if-no-files-found: warn
+          # current.yaml is NOT in the writeback bundle: it is Renovate-writable
+          # input only, and the dispatcher + probe pair never need to mutate it.
+          if-no-files-found: error
 
       - name: Post per-pipeline comment
         if: steps.probe.outputs.verdict == 'pass' && inputs.pr-number != ''

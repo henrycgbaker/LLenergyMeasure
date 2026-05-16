@@ -50,14 +50,26 @@ llem = "llenergymeasure.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/llenergymeasure"]
-# Hatchling includes non-Python files in package dirs by default, so the
-# Z-engines runtime data (src/llenergymeasure/engines/<engine>/{invariants.*.yaml,
-# schema.discovered.json}) ships automatically in the wheel - no force-include
-# needed (and adding one creates duplicates).
-#
-# The per-version machinery archive now lives at the repo root under
-# engine_versions/ (outside src/), so it is automatically excluded from the
-# wheel - no explicit exclude needed.
+# Engine corpus + schema artefacts are mined per-version and live at
+# engine_versions/<engine>/v<safe>/outputs/ (Tier 1, outside src/, machine-
+# written, not part of the package tree). Hatchling bundles the current-
+# version artefacts into the wheel at the same logical path the runtime
+# loaders have always read from, so EngineInvariantsLoader and SchemaLoader
+# need zero code change. The v<safe> path must stay in lockstep with each
+# engine's library.current_version in engine_versions/<engine>/current.yaml -
+# enforced by scripts/ci/check_engine_bundle_pin.sh and a renovate.json
+# customManagers regex that bumps the matching line on engine releases.
+
+[tool.hatch.build.targets.wheel.force-include]
+"engine_versions/vllm/v0_7_3/outputs/invariants.proposed.yaml" = "llenergymeasure/engines/vllm/invariants.proposed.yaml"
+"engine_versions/vllm/v0_7_3/outputs/invariants.validated.yaml" = "llenergymeasure/engines/vllm/invariants.validated.yaml"
+"engine_versions/vllm/v0_7_3/outputs/schema.discovered.json" = "llenergymeasure/engines/vllm/schema.discovered.json"
+"engine_versions/tensorrt/v0_21_0/outputs/invariants.proposed.yaml" = "llenergymeasure/engines/tensorrt/invariants.proposed.yaml"
+"engine_versions/tensorrt/v0_21_0/outputs/invariants.validated.yaml" = "llenergymeasure/engines/tensorrt/invariants.validated.yaml"
+"engine_versions/tensorrt/v0_21_0/outputs/schema.discovered.json" = "llenergymeasure/engines/tensorrt/schema.discovered.json"
+"engine_versions/transformers/v4_57_3/outputs/invariants.proposed.yaml" = "llenergymeasure/engines/transformers/invariants.proposed.yaml"
+"engine_versions/transformers/v4_57_3/outputs/invariants.validated.yaml" = "llenergymeasure/engines/transformers/invariants.validated.yaml"
+"engine_versions/transformers/v4_57_3/outputs/schema.discovered.json" = "llenergymeasure/engines/transformers/schema.discovered.json"
 
 [tool.ruff]
 line-length = 100

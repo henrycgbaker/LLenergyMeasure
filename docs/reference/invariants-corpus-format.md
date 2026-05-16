@@ -14,11 +14,11 @@ see [parameter discovery](/explanation/architecture/parameter-discovery).
 ## File locations
 
 ```
-  src/llenergymeasure/engines/{engine}/
+  engine_versions/{engine}/v<current>/outputs/
   ├── invariants.proposed.yaml    Maintainer-seeded corpus, post-mining
   └── invariants.validated.yaml   CI-validated overlay, post-validate-replay
 
-  src/llenergymeasure/engines/{engine}/_staging/   (gitignored, miner-only)
+  engine_versions/{engine}/v<current>/outputs/_staging/   (gitignored, miner-only)
   ├── {engine}_static_miner.yaml   Per-miner staging output (not committed)
   ├── {engine}_dynamic_miner.yaml
   └── _failed_validation_{engine}.yaml   Quarantined rules

@@ -103,9 +103,12 @@ def test_invalidate_all_clears_all(tmp_path: Path) -> None:
 
 
 def test_missing_corpus_raises_file_not_found(tmp_path: Path) -> None:
+    # Use an unknown engine name so the dev-mode fallback (which resolves via
+    # engine_versions/<engine>/current.yaml) cannot find a SSOT either - this
+    # exercises the FileNotFoundError path in both wheel + editable installs.
     loader = EngineInvariantsLoader(corpus_root=tmp_path)
     with pytest.raises(FileNotFoundError):
-        loader.load_invariants("transformers")
+        loader.load_invariants("not-a-real-engine")
 
 
 def test_unsupported_major_version_raises(tmp_path: Path) -> None:

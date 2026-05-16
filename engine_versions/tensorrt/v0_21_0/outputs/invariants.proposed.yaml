@@ -1,13 +1,13 @@
 schema_version: 1.0.0
 engine: tensorrt
 engine_version: 0.21.0
-mined_at: '2026-05-06T20:35:47+02:00'
+mined_at: '2026-05-14T13:25:05+02:00'
 invariants:
 - id: tensorrt_raises_max_ngram_size_le_0_positive_values
   engine: tensorrt
   library: tensorrt_llm
-  invariant_under_test: LookaheadDecodingConfig.validate_positive_values raises when max_ngram_size <= 0 (via
-    raise ValueError)
+  invariant_under_test: LookaheadDecodingConfig.validate_positive_values raises when max_ngram_size <=
+    0 (via raise ValueError)
   severity: error
   native_type: tensorrt_llm.LookaheadDecodingConfig
   miner_source:
@@ -64,8 +64,8 @@ invariants:
 - id: tensorrt_raises_max_window_size_le_0_positive_values
   engine: tensorrt
   library: tensorrt_llm
-  invariant_under_test: LookaheadDecodingConfig.validate_positive_values raises when max_window_size <= 0 (via
-    raise ValueError)
+  invariant_under_test: LookaheadDecodingConfig.validate_positive_values raises when max_window_size <=
+    0 (via raise ValueError)
   severity: error
   native_type: tensorrt_llm.LookaheadDecodingConfig
   miner_source:

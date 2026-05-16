@@ -2,10 +2,10 @@
 
 The validation-invariants pipeline is split into independent miners (dynamic miner,
 static miner, future runtime-warning miner) that each write to a staging file
-under ``src/llenergymeasure/engines/{engine}/_staging/{engine}_{name}.yaml``. This
+under ``<engine-dir>/_staging/{engine}_{name}.yaml``. This
 module is the single canonical entry point that runs them, merges their outputs
 into one :class:`~llenergymeasure.config.engine_invariants.loader.EngineInvariants`-shaped
-document, and writes ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``.
+document, and writes ``engine_versions/{engine}/v<current>/outputs/invariants.proposed.yaml``.
 
 Pipeline: miners → staging → merge → **validation-gate** → write canonical corpus.
 
@@ -154,7 +154,7 @@ class _Extractor:
     each subagent's extractor must accept a single ``--out`` argument.
 
     ``staging_basename`` is the filename written under
-    ``src/llenergymeasure/engines/{engine}/_staging/``. Convention:
+    ``<engine-dir>/_staging/``. Convention:
     ``{engine}_{source_name}.yaml`` so the merger's glob pattern stays
     predictable.
     """
@@ -199,12 +199,30 @@ _ENGINE_EXTRACTORS: dict[str, tuple[_Extractor, ...]] = {
 }
 
 
-def _staging_dir(corpus_root: Path, engine: str) -> Path:
-    return corpus_root / engine / "_staging"
+def _staging_dir(engine_dir: Path) -> Path:
+    return engine_dir / "_staging"
 
 
-def _canonical_path(corpus_root: Path, engine: str) -> Path:
-    return corpus_root / engine / "invariants.proposed.yaml"
+def _canonical_path(engine_dir: Path) -> Path:
+    return engine_dir / "invariants.proposed.yaml"
+
+
+def _resolve_engine_dir(corpus_root: Path, engine: str, engine_dir_override: Path | None) -> Path:
+    """Return the directory holding ``engine``'s canonical corpus + ``_staging/``.
+
+    Two layouts coexist while the engine-output-layering migration is in
+    flight:
+
+    - Legacy ``--corpus-root <root>``: ``<root>/<engine>/`` holds the
+      canonical corpus; left in place for tests and local-dev runs that
+      still use the per-engine subdir under ``src/``.
+    - Direct ``--engine-dir <dir>``: the cell passes the per-version
+      ``engine_versions/<engine>/v<safe>/outputs/`` path, which is flat
+      (no engine subdir wrapping). Override wins when supplied.
+    """
+    if engine_dir_override is not None:
+        return engine_dir_override
+    return corpus_root / engine
 
 
 # ---------------------------------------------------------------------------
@@ -302,12 +320,16 @@ def fingerprint_invariant(invariant: dict[str, Any]) -> bytes:
 # ---------------------------------------------------------------------------
 
 
-def run_extractors(engine: str, corpus_root: Path) -> None:
+def run_extractors(engine: str, corpus_root: Path, *, engine_dir: Path | None = None) -> None:
     """Invoke each registered extractor for ``engine`` to produce its staging file.
 
     Each extractor must accept ``--out <path>`` and write a corpus-shaped
     YAML document. Extractor failures bubble up as :class:`subprocess.CalledProcessError`
     so CI sees them as fatal, matching the miner-landmark contract.
+
+    ``engine_dir`` (kwarg) overrides the legacy ``corpus_root/<engine>/`` path
+    resolution; pass it from the cell when staging should land directly under
+    the per-version ``engine_versions/<engine>/v<safe>/outputs/`` tree.
     """
     extractors = _ENGINE_EXTRACTORS.get(engine)
     if not extractors:
@@ -315,7 +337,8 @@ def run_extractors(engine: str, corpus_root: Path) -> None:
             f"No extractors registered for engine={engine!r}. "
             f"Add an entry to _ENGINE_EXTRACTORS in {__file__}."
         )
-    staging = _staging_dir(corpus_root, engine)
+    effective_dir = _resolve_engine_dir(corpus_root, engine, engine_dir)
+    staging = _staging_dir(effective_dir)
     staging.mkdir(parents=True, exist_ok=True)
     for extractor in extractors:
         out_path = staging / extractor.staging_basename
@@ -330,7 +353,9 @@ def run_extractors(engine: str, corpus_root: Path) -> None:
         subprocess.run(cmd, check=True, env=env, cwd=str(_PROJECT_ROOT))
 
 
-def discover_staging_files(engine: str, corpus_root: Path) -> list[Path]:
+def discover_staging_files(
+    engine: str, corpus_root: Path, *, engine_dir: Path | None = None
+) -> list[Path]:
     """Return all staging YAMLs for ``engine``, sorted alphabetically.
 
     The sort makes merger output deterministic when two staging files have
@@ -343,8 +368,11 @@ def discover_staging_files(engine: str, corpus_root: Path) -> list[Path]:
     fixes (the previous merged file's stale kwargs would dominate the
     re-merge under fingerprint dedup) and giving every successive run
     monotonically older data.
+
+    ``engine_dir`` (kwarg): see :func:`run_extractors`.
     """
-    staging = _staging_dir(corpus_root, engine)
+    effective_dir = _resolve_engine_dir(corpus_root, engine, engine_dir)
+    staging = _staging_dir(effective_dir)
     if not staging.is_dir():
         return []
     merged_self = _MERGED_CANDIDATES_BASENAME.format(engine=engine)
@@ -679,7 +707,7 @@ Schema::
 
 
 def _write_merged_candidates(
-    corpus_root: Path,
+    engine_dir: Path,
     engine: str,
     invariants: list[dict[str, Any]],
     envelope: dict[str, Any],
@@ -691,7 +719,7 @@ def _write_merged_candidates(
     same on-disk shape :func:`emit_yaml` produces. The file lives under
     ``_staging`` so it's never confused with the canonical corpus.
     """
-    staging = _staging_dir(corpus_root, engine)
+    staging = _staging_dir(engine_dir)
     staging.mkdir(parents=True, exist_ok=True)
     path = staging / _MERGED_CANDIDATES_BASENAME.format(engine=engine)
     path.write_text(emit_yaml(invariants, envelope))
@@ -701,7 +729,7 @@ def _write_merged_candidates(
 def _validate_candidates(
     candidates: list[dict[str, Any]],
     engine: str,
-    corpus_root: Path,
+    engine_dir: Path,
     envelope: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Re-run each candidate through the real engine library; filter divergent invariants.
@@ -716,9 +744,9 @@ def _validate_candidates(
     as a side effect - that file is the input to :func:`validate_engine`. The
     YAML envelope ``validate_engine`` writes goes to a sibling temp path
     (``_staging/_validation_envelope_{engine}.yaml``) so the canonical
-    ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml`` (the
-    runtime-loaded sidecar) is never overwritten by this build step. The
-    leading-underscore prefix keeps the temp file out of the
+    ``invariants.validated.yaml`` (the runtime-loaded sidecar at
+    ``<engine_dir>/invariants.validated.yaml``) is never overwritten by this
+    build step. The leading-underscore prefix keeps the temp file out of the
     ``{engine}_*.yaml`` glob that ``discover_staging_files`` walks.
     """
     # Local import keeps the merger importable in environments that don't have
@@ -726,10 +754,8 @@ def _validate_candidates(
     # callers need to load validate_invariants.
     from scripts.validate_invariants import validate_engine
 
-    candidates_path = _write_merged_candidates(corpus_root, engine, candidates, envelope)
-    validation_envelope_path = (
-        _staging_dir(corpus_root, engine) / f"_validation_envelope_{engine}.yaml"
-    )
+    candidates_path = _write_merged_candidates(engine_dir, engine, candidates, envelope)
+    validation_envelope_path = _staging_dir(engine_dir) / f"_validation_envelope_{engine}.yaml"
 
     # validate_engine returns (envelope, divergences). Divergences carry invariant_id,
     # field, expected, observed - exactly the diagnostic we need to surface in
@@ -769,7 +795,7 @@ def _validate_candidates(
 
 
 def _emit_failed_validation_yaml(
-    corpus_root: Path,
+    engine_dir: Path,
     engine: str,
     divergent: list[dict[str, Any]],
     envelope: dict[str, Any],
@@ -780,7 +806,7 @@ def _emit_failed_validation_yaml(
     (in which case any stale quarantine file is removed so the next reviewer
     isn't misled by leftover state from a previous run).
     """
-    staging = _staging_dir(corpus_root, engine)
+    staging = _staging_dir(engine_dir)
     path = staging / _FAILED_VALIDATION_BASENAME.format(engine=engine)
     if not divergent:
         if path.exists():
@@ -882,6 +908,7 @@ def build_corpus_text_and_outcome(
     corpus_root: Path,
     *,
     skip_validation: bool = False,
+    engine_dir: Path | None = None,
 ) -> _BuildResult:
     """Discover staging files, merge, validation-gate, return canonical YAML.
 
@@ -889,11 +916,15 @@ def build_corpus_text_and_outcome(
     pre-populating the staging directory. When ``skip_validation`` is true,
     all merged candidates land in the canonical YAML regardless of validation
     outcomes - useful for fast local iteration but never appropriate in CI.
+
+    ``engine_dir`` (kwarg) overrides ``corpus_root/<engine>/`` resolution -
+    see :func:`run_extractors`.
     """
-    paths = discover_staging_files(engine, corpus_root)
+    effective_dir = _resolve_engine_dir(corpus_root, engine, engine_dir)
+    paths = discover_staging_files(engine, corpus_root, engine_dir=engine_dir)
     if not paths:
         raise FileNotFoundError(
-            f"No staging files at {_staging_dir(corpus_root, engine)}/{engine}_*.yaml. "
+            f"No staging files at {_staging_dir(effective_dir)}/{engine}_*.yaml. "
             f"Run extractors first (omit --skip-extract)."
         )
     envelopes = [_load_staging(p) for p in paths]
@@ -904,18 +935,16 @@ def build_corpus_text_and_outcome(
     # prior canonical-corpus entry keep their original discovery date
     # instead of being stamped with today's anchor. Stops every Renovate-
     # driven rebuild from producing a noise diff on every invariant.
-    prior_added_at = _load_prior_added_at_map(_canonical_path(corpus_root, engine))
+    prior_added_at = _load_prior_added_at_map(_canonical_path(effective_dir))
     _preserve_added_at(candidates, prior_added_at)
 
     if skip_validation:
         # Still write the merged-candidates staging file so reviewers can
         # inspect the recall-first list; just don't run the validation gate.
-        _write_merged_candidates(corpus_root, engine, candidates, envelope)
+        _write_merged_candidates(effective_dir, engine, candidates, envelope)
         # Drop any stale quarantine file - running --skip-validation with a
         # leftover file from a previous validating run would be misleading.
-        stale = _staging_dir(corpus_root, engine) / _FAILED_VALIDATION_BASENAME.format(
-            engine=engine
-        )
+        stale = _staging_dir(effective_dir) / _FAILED_VALIDATION_BASENAME.format(engine=engine)
         if stale.exists():
             stale.unlink()
         text = emit_yaml(candidates, envelope)
@@ -928,8 +957,8 @@ def build_corpus_text_and_outcome(
             validation_skipped=True,
         )
 
-    kept, divergent = _validate_candidates(candidates, engine, corpus_root, envelope)
-    _emit_failed_validation_yaml(corpus_root, engine, divergent, envelope)
+    kept, divergent = _validate_candidates(candidates, engine, effective_dir, envelope)
+    _emit_failed_validation_yaml(effective_dir, engine, divergent, envelope)
 
     quarantined_ids = tuple(sorted(str(entry["invariant"].get("id", "")) for entry in divergent))
     text = emit_yaml(kept, envelope)
@@ -948,10 +977,11 @@ def build_corpus_text(
     corpus_root: Path,
     *,
     skip_validation: bool = False,
+    engine_dir: Path | None = None,
 ) -> str:
     """Return the canonical YAML text for ``engine``."""
     return build_corpus_text_and_outcome(
-        engine, corpus_root, skip_validation=skip_validation
+        engine, corpus_root, skip_validation=skip_validation, engine_dir=engine_dir
     ).canonical_text
 
 
@@ -960,13 +990,19 @@ def write_corpus(
     corpus_root: Path,
     *,
     skip_validation: bool = False,
+    engine_dir: Path | None = None,
 ) -> _BuildResult:
     """Build and write the canonical corpus.
 
     Returns the :class:`_BuildResult` so the CLI can report counts.
+
+    ``engine_dir`` (kwarg) overrides ``corpus_root/<engine>/`` resolution.
     """
-    result = build_corpus_text_and_outcome(engine, corpus_root, skip_validation=skip_validation)
-    out_path = _canonical_path(corpus_root, engine)
+    effective_dir = _resolve_engine_dir(corpus_root, engine, engine_dir)
+    result = build_corpus_text_and_outcome(
+        engine, corpus_root, skip_validation=skip_validation, engine_dir=engine_dir
+    )
+    out_path = _canonical_path(effective_dir)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(result.canonical_text)
     return result
@@ -977,6 +1013,7 @@ def check_drift(
     corpus_root: Path,
     *,
     skip_validation: bool = False,
+    engine_dir: Path | None = None,
 ) -> tuple[int, str]:
     """Re-run merger (with validation); compare against checked-in corpus.
 
@@ -990,12 +1027,17 @@ def check_drift(
     validated checked-in corpus against an unvalidated rebuild and surface
     spurious "drift" for every quarantined candidate. ``skip_validation``
     here exists for parity with the build path but should not be used in CI.
+
+    ``engine_dir`` (kwarg) overrides ``corpus_root/<engine>/`` resolution.
     """
-    canonical_path = _canonical_path(corpus_root, engine)
+    effective_dir = _resolve_engine_dir(corpus_root, engine, engine_dir)
+    canonical_path = _canonical_path(effective_dir)
     if not canonical_path.exists():
         return 2, f"Canonical corpus not found at {canonical_path}"
     try:
-        rebuilt = build_corpus_text(engine, corpus_root, skip_validation=skip_validation)
+        rebuilt = build_corpus_text(
+            engine, corpus_root, skip_validation=skip_validation, engine_dir=engine_dir
+        )
     except FileNotFoundError as exc:
         return 2, str(exc)
     actual = canonical_path.read_text()
@@ -1031,7 +1073,24 @@ def main(argv: list[str] | None = None) -> int:
         "--corpus-root",
         type=Path,
         default=Path(_PROJECT_ROOT) / "src" / "llenergymeasure" / "engines",
-        help="Engines root; each engine's corpus + _staging/ live under <engines>/<engine>/.",
+        help=(
+            "Engines root; each engine's corpus + _staging/ live under "
+            "<engines>/<engine>/. Ignored when --engine-dir is set. "
+            "Retained for tests + local-dev runs that still use the per-engine "
+            "subdir under src/."
+        ),
+    )
+    parser.add_argument(
+        "--engine-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Override the per-engine output directory. When set, the canonical "
+            "corpus is written to <engine-dir>/invariants.proposed.yaml and "
+            "staging to <engine-dir>/_staging/, rather than under "
+            "<corpus-root>/<engine>/. Cells pass the per-version "
+            "engine_versions/<engine>/v<safe>/outputs/ path."
+        ),
     )
     parser.add_argument(
         "--skip-extract",
@@ -1058,23 +1117,33 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    corpus_root: Path = args.corpus_root
+    effective_dir: Path = _resolve_engine_dir(args.corpus_root, args.engine, args.engine_dir)
 
     if not args.skip_extract:
         try:
-            run_extractors(args.engine, corpus_root)
+            run_extractors(args.engine, args.corpus_root, engine_dir=args.engine_dir)
         except subprocess.CalledProcessError as exc:
             print(f"[build_corpus] extractor failed: {exc}", file=sys.stderr)
             return 3
 
     if args.check:
-        code, diff = check_drift(args.engine, corpus_root, skip_validation=args.skip_validation)
+        code, diff = check_drift(
+            args.engine,
+            args.corpus_root,
+            skip_validation=args.skip_validation,
+            engine_dir=args.engine_dir,
+        )
         if code != 0:
             print(diff, file=sys.stdout)
         return code
 
-    result = write_corpus(args.engine, corpus_root, skip_validation=args.skip_validation)
-    out_path = _canonical_path(corpus_root, args.engine)
+    result = write_corpus(
+        args.engine,
+        args.corpus_root,
+        skip_validation=args.skip_validation,
+        engine_dir=args.engine_dir,
+    )
+    out_path = _canonical_path(effective_dir)
     print(f"[build_corpus] wrote {out_path}", file=sys.stderr)
     if result.validation_skipped:
         print(
@@ -1090,9 +1159,9 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         if result.invariants_quarantined:
-            quarantine_path = _staging_dir(
-                corpus_root, args.engine
-            ) / _FAILED_VALIDATION_BASENAME.format(engine=args.engine)
+            quarantine_path = _staging_dir(effective_dir) / _FAILED_VALIDATION_BASENAME.format(
+                engine=args.engine
+            )
             print(
                 f"[build_corpus] divergent invariants written to {quarantine_path}",
                 file=sys.stderr,

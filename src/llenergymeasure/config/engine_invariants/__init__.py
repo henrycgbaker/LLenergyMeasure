@@ -1,6 +1,6 @@
 """Engine invariants: loader, matcher, predicate engine.
 
-The corpus at ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``
+The corpus at ``engine_versions/{engine}/v<current>/outputs/invariants.proposed.yaml``
 is the SSOT for what runtime config validation tells users about their configs.
 This package consumes that corpus and exposes a typed matcher API used by the
 generic ``@model_validator`` on :class:`llenergymeasure.config.models.ExperimentConfig`

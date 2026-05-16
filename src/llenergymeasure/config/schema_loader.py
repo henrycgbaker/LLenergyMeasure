@@ -19,7 +19,10 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from importlib import resources
+from pathlib import Path
 from typing import Any
+
+import yaml
 
 from llenergymeasure.config.ssot import Engine
 
@@ -108,10 +111,18 @@ class SchemaLoader:
             raw_text = (resources.files(engine_package) / _SCHEMA_FILENAME).read_text()
         except (FileNotFoundError, ModuleNotFoundError) as exc:
             # resources.files raises ModuleNotFoundError on a missing engine sub-package.
-            raise FileNotFoundError(
-                f"Discovered schema for engine {engine!r} not found. "
-                f"Run `./scripts/refresh_discovered_schemas.sh {engine}` to generate it."
-            ) from exc
+            # In editable installs (`pip install -e .`), hatchling force-include
+            # doesn't materialise the bundled schema at the package path - fall
+            # back to the source-of-truth in engine_versions/<engine>/v<safe>/outputs/.
+            fallback = _resolve_dev_fallback(engine, _SCHEMA_FILENAME)
+            if fallback is not None and fallback.is_file():
+                raw_text = fallback.read_text()
+            else:
+                raise FileNotFoundError(
+                    f"Discovered schema for engine {engine!r} not found "
+                    f"(or dev-mode fallback under engine_versions/). "
+                    f"Run `./scripts/refresh_discovered_schemas.sh {engine}` to generate."
+                ) from exc
 
         parsed = _parse_envelope(engine=engine, raw_text=raw_text)
         self._cache[engine] = parsed
@@ -132,6 +143,39 @@ class SchemaLoader:
             self._cache.clear()
         else:
             self._cache.pop(engine, None)
+
+
+def _resolve_dev_fallback(engine: str, filename: str) -> Path | None:
+    """Resolve the in-repo per-version path for ``engine``'s machine artefact.
+
+    Mirror of the same-named helper in
+    :mod:`llenergymeasure.config.engine_invariants.loader`. See that
+    docstring for the rationale (editable-install force-include gap +
+    transparent fallback to engine_versions/<engine>/v<safe>/outputs/).
+    Duplicated here rather than imported across config/ siblings so neither
+    module imports the other.
+    """
+    here = Path(__file__).resolve()
+    repo_root: Path | None = None
+    for candidate in (here, *here.parents):
+        if (candidate / "pyproject.toml").is_file():
+            repo_root = candidate
+            break
+    if repo_root is None:
+        return None
+    ssot_path = repo_root / "engine_versions" / engine / "current.yaml"
+    if not ssot_path.is_file():
+        return None
+    try:
+        ssot = yaml.safe_load(ssot_path.read_text()) or {}
+    except (yaml.YAMLError, OSError):
+        return None
+    library = ssot.get("library") if isinstance(ssot.get("library"), dict) else {}
+    version = library.get("current_version") if isinstance(library, dict) else None
+    if not isinstance(version, str) or not version:
+        return None
+    safe = "v" + version.replace(".", "_").replace("-", "_")
+    return repo_root / "engine_versions" / engine / safe / "outputs" / filename
 
 
 def _parse_envelope(*, engine: str, raw_text: str) -> DiscoveredSchema:

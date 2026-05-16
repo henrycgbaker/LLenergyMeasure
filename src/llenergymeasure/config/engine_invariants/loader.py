@@ -1,6 +1,6 @@
 """Load, match, and render validation invariants from the YAML corpus.
 
-The corpus at ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``
+The corpus at ``engine_versions/{engine}/v<current>/outputs/invariants.proposed.yaml``
 is parsed here into typed :class:`Invariant` entries. Each invariant carries a match
 predicate (operators defined in :func:`evaluate_predicate`) and a message
 template. The generic ``@model_validator`` in ``config/models.py`` calls
@@ -16,7 +16,7 @@ Lifecycle pair (per the engine-coupling architecture, 2026-04-28):
   The proposed YAML carries each invariant's declared ``expected_outcome``. The
   ``engine-invariants`` (validation gate) CI pipeline (see
   ``scripts/validate_invariants.py``) runs every invariant through the real library
-  and emits ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml``
+  and emits ``engine_versions/{engine}/v<current>/outputs/invariants.validated.yaml``
   - this YAML captures observed outcomes. When present, the loader overlays
   the validated observations onto the corpus so downstream consumers see
   CI-validated truth; absent, the loader falls back to the proposed YAML so
@@ -636,6 +636,50 @@ def _parse_envelope(engine: str, raw_text: str) -> EngineInvariants:
 _DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parents[2] / "engines"
 
 
+def _resolve_dev_fallback(engine: str, filename: str) -> Path | None:
+    """Resolve the in-repo per-version path for ``engine``'s machine artefact.
+
+    In wheel installs, hatchling force-includes the artefacts at
+    ``<package_dir>/engines/<engine>/<filename>`` so the primary read in
+    :class:`EngineInvariantsLoader` and :class:`SchemaLoader` succeeds. In
+    editable installs (``pip install -e .``), force-include doesn't
+    materialise files at the package path, so the primary read raises
+    :class:`FileNotFoundError`. This helper resolves the source-of-truth
+    location at ``<repo>/engine_versions/<engine>/v<safe>/outputs/<filename>``
+    so the loader can fall back transparently in dev. ``v<safe>`` is derived
+    by reading ``library.current_version`` from
+    ``<repo>/engine_versions/<engine>/current.yaml`` and applying the same
+    safe-version mangling the cells use to name vendored archive directories.
+
+    Returns ``None`` if a repo root cannot be located, ``current.yaml`` is
+    absent, or the version field is missing - in which case the caller's
+    primary FileNotFoundError surfaces as before. Reading current.yaml
+    failures are swallowed silently because this is a best-effort dev-mode
+    convenience, not a runtime contract.
+    """
+    here = Path(__file__).resolve()
+    repo_root: Path | None = None
+    for candidate in (here, *here.parents):
+        if (candidate / "pyproject.toml").is_file():
+            repo_root = candidate
+            break
+    if repo_root is None:
+        return None
+    ssot_path = repo_root / "engine_versions" / engine / "current.yaml"
+    if not ssot_path.is_file():
+        return None
+    try:
+        ssot = yaml.safe_load(ssot_path.read_text()) or {}
+    except (yaml.YAMLError, OSError):
+        return None
+    library = ssot.get("library") if isinstance(ssot.get("library"), dict) else {}
+    version = library.get("current_version") if isinstance(library, dict) else None
+    if not isinstance(version, str) or not version:
+        return None
+    safe = "v" + version.replace(".", "_").replace("-", "_")
+    return repo_root / "engine_versions" / engine / safe / "outputs" / filename
+
+
 class EngineInvariantsLoader:
     """Load, cache, and serve :class:`EngineInvariants` per engine.
 
@@ -643,9 +687,9 @@ class EngineInvariantsLoader:
     a loader and monkeypatch ``corpus_root`` without polluting other tests.
 
     Load order (picked up automatically; per-engine sub-package layout):
-      1. **Proposed YAML** under ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml`` -
+      1. **Proposed YAML** under ``engine_versions/{engine}/v<current>/outputs/invariants.proposed.yaml`` -
          the maintainer-seeded source of truth; always present in-repo.
-      2. **Validated YAML** under ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml`` -
+      2. **Validated YAML** under ``engine_versions/{engine}/v<current>/outputs/invariants.validated.yaml`` -
          CI-validated observed behaviour, overlaid onto the corpus's invariants
          when present. Written by ``scripts/validate_invariants.py`` under the
          engine-invariants CI.
@@ -671,11 +715,17 @@ class EngineInvariantsLoader:
         try:
             yaml_text = yaml_path.read_text()
         except FileNotFoundError as exc:
-            raise FileNotFoundError(
-                f"Engine invariants for {engine!r} not found at {yaml_path}. "
-                f"Run `python -m scripts.engine_producers.{engine}_miner "
-                f"--out {yaml_path}` to generate."
-            ) from exc
+            fallback = _resolve_dev_fallback(engine, "invariants.proposed.yaml")
+            if fallback is not None and fallback.is_file():
+                yaml_text = fallback.read_text()
+            else:
+                raise FileNotFoundError(
+                    f"Engine invariants for {engine!r} not found at {yaml_path} "
+                    f"(or dev-mode fallback under engine_versions/). "
+                    f"Run the engine cell on this branch to mine outputs/<safe>/, "
+                    f"or rebuild the wheel via `pip install .` so hatchling's "
+                    f"force-include populates the package path."
+                ) from exc
 
         parsed = _parse_envelope(engine, yaml_text)
 
@@ -711,7 +761,10 @@ def _try_load_validated_yaml(corpus_root: Path, engine: str) -> dict[str, Any] |
     try:
         raw = path.read_text()
     except FileNotFoundError:
-        return None
+        fallback = _resolve_dev_fallback(engine, "invariants.validated.yaml")
+        if fallback is None or not fallback.is_file():
+            return None
+        raw = fallback.read_text()
     try:
         parsed = yaml.safe_load(raw)
     except yaml.YAMLError:

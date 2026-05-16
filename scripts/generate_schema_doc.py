@@ -2,7 +2,7 @@
 """Generate the discovered-schema doc for one engine.
 
 Produces ``docs/reference/engines/schema-{engine}.md`` from the introspector-mined
-JSON at ``src/llenergymeasure/engines/<engine>/schema.discovered.json``. The output
+JSON at ``engine_versions/<engine>/v<current>/outputs/schema.discovered.json``. The output
 is a per-engine reference of every parameter the engine exposes, with
 type, default, description, and deprecation state, plus any limitations
 the introspector flagged.
@@ -27,6 +27,7 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 
 from llenergymeasure.config.ssot import Engine  # noqa: E402
 from scripts.engine_producers._common import DEFAULT_SCHEMA_FILENAME  # noqa: E402
+from scripts.engine_producers._current import current_outputs_dir  # noqa: E402
 
 _ENGINE_DISPLAY_NAMES: dict[str, str] = {
     "transformers": "Transformers",
@@ -41,7 +42,7 @@ def _load_schema(engine: str) -> dict[str, Any]:
     Returns ``{}`` for missing/empty schemas to degrade gracefully when
     discovery hasn't run yet, rather than failing the markdown render.
     """
-    path = _PROJECT_ROOT / "src" / "llenergymeasure" / "engines" / engine / DEFAULT_SCHEMA_FILENAME
+    path = current_outputs_dir(engine) / DEFAULT_SCHEMA_FILENAME
     if not path.is_file():
         return {}
     text = path.read_text()

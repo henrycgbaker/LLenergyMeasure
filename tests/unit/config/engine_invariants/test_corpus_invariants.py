@@ -213,16 +213,15 @@ def test_corpus_added_by_values_valid(transformers_corpus) -> None:
 def test_corpus_file_is_valid_yaml() -> None:
     # Sanity: the on-disk file is parseable YAML (redundant with loader, but
     # guards against accidental corruption by direct edits).
+    import sys
+
     import yaml
 
-    path = (
-        Path(__file__).resolve().parents[4]
-        / "src"
-        / "llenergymeasure"
-        / "engines"
-        / "transformers"
-        / "invariants.proposed.yaml"
-    )
+    repo_root = Path(__file__).resolve().parents[4]
+    sys.path.insert(0, str(repo_root))
+    from scripts.engine_producers._current import current_outputs_dir
+
+    path = current_outputs_dir("transformers") / "invariants.proposed.yaml"
     assert path.exists()
     doc = yaml.safe_load(path.read_text())
     assert isinstance(doc, dict)
