@@ -62,7 +62,7 @@ def _parse_schema_version(schema_path: Path) -> Any:
 
 
 def _safe_version(version: str) -> str:
-    return "v" + version.replace(".", "_").replace("-", "_")
+    return "v" + _normalize_version(version).replace(".", "_").replace("-", "_")
 
 
 def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) -> int:
