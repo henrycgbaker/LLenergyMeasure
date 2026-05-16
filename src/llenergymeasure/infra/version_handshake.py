@@ -44,6 +44,7 @@ __all__ = [
     "ENV_SKIP_IMAGE_CHECK",
     "LABEL_IMAGE_VERSION",
     "LABEL_SCHEMA_FINGERPRINT",
+    "BundledEngineVersionMismatchError",
     "ImageStamp",
     "SchemaStatus",
     "VersionMismatchError",
@@ -53,6 +54,7 @@ __all__ = [
     "inspect_image_stamp",
     "parse_image_stamp",
     "probe_image_engine_version",
+    "read_bundled_engine_version",
     "read_ssot_engine_version",
     "rebuild_hint",
     "skip_check_enabled",
@@ -217,8 +219,86 @@ def probe_image_engine_version(
     return None
 
 
+class BundledEngineVersionMismatchError(RuntimeError):
+    """Raised when the bundled invariants and schema artefacts disagree on engine_version.
+
+    Both artefacts are sourced from the same per-version
+    ``engine_versions/<engine>/v<safe>/outputs/`` directory at wheel build
+    time, so disagreement here indicates a build-time bundling bug
+    (mismatched force-include paths, half-applied refresh, or one artefact
+    re-mined without the other). Surfaces loud rather than picking one of
+    the two arbitrarily as the runtime expectation.
+    """
+
+
+def read_bundled_engine_version(engine: str) -> str | None:
+    """Return the engine_version field from the loaded invariants + schema artefacts.
+
+    The wheel ships per-engine machine artefacts whose envelope carries the
+    engine_version they were mined for. This function reads through
+    :class:`EngineInvariantsLoader` and :class:`SchemaLoader` (so the
+    primary read goes via the same mechanism the runtime experiment path
+    uses), cross-checks that both bundled artefacts agree on
+    engine_version, and returns the version string.
+
+    Returns ``None`` if either artefact is absent (e.g. wheel built before
+    the engine was vendored). Raises
+    :class:`BundledEngineVersionMismatchError` if the two bundled artefacts
+    disagree - that disagreement only happens via a build-time bundling
+    bug, never via a runtime configuration choice, so silent handling
+    would mask the real issue.
+
+    Preferred over :func:`read_ssot_engine_version` for the runtime
+    handshake because the bundled artefact is in the wheel (so it works
+    for installed users without an in-repo SSOT file), and because the
+    artefact's engine_version is the one llem actually applies at
+    experiment time - the SSOT version describes the build's INTENT;
+    the bundled envelope describes what shipped.
+    """
+    from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
+    from llenergymeasure.config.schema_loader import SchemaLoader
+
+    try:
+        invariants = EngineInvariantsLoader().load_invariants(engine)
+    except FileNotFoundError as exc:
+        logger.debug("Bundled invariants read failed for %s: %s", engine, exc)
+        return None
+    try:
+        schema = SchemaLoader().load_schema(engine)
+    except (FileNotFoundError, ValueError) as exc:
+        # ValueError covers SchemaLoader rejecting an unknown engine name.
+        logger.debug("Bundled schema read failed for %s: %s", engine, exc)
+        return None
+
+    inv_version = (invariants.engine_version or "").strip()
+    sch_version = (schema.engine_version or "").strip()
+    if not inv_version and not sch_version:
+        return None
+    if inv_version != sch_version:
+        raise BundledEngineVersionMismatchError(
+            f"Bundled artefacts for {engine!r} disagree on engine_version: "
+            f"invariants envelope says {inv_version!r}, schema envelope says "
+            f"{sch_version!r}. This indicates a build-time bundling bug - "
+            f"both artefacts must be sourced from the same per-version "
+            f"engine_versions/<engine>/v<safe>/outputs/ directory. Check "
+            f"pyproject.toml's [tool.hatch.build.targets.wheel.force-include] "
+            f"entries for the engine and rebuild the wheel."
+        )
+    return inv_version
+
+
 def read_ssot_engine_version(engine: str) -> str | None:
     """Read ``engine_versions/{engine}/current.yaml::library.current_version``.
+
+    Legacy/dev-mode helper. Use :func:`read_bundled_engine_version` for the
+    runtime handshake - it reads from the bundled wheel artefact (works
+    for installed users, no dependency on an in-repo
+    ``engine_versions/`` tree) and cross-checks invariants/schema agreement.
+
+    This SSOT-file reader returns ``None`` for wheel-installed users
+    (engine_versions/ is not in the wheel), so it can't drive the
+    runtime handshake on its own. Retained for in-repo dev tooling and
+    for the parity guard at ``scripts/ci/check_engine_bundle_pin.sh``.
 
     Returns ``None`` if the file is absent, unreadable, or the field is
     missing. The repo root is resolved via
