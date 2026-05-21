@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from llenergymeasure.config.ssot import ALL_ENGINES
 from llenergymeasure.infra.version_handshake import (
     ENV_SKIP_IMAGE_CHECK,
     LABEL_IMAGE_VERSION,
@@ -247,12 +248,12 @@ class TestReadSsotEngineVersion:
 
 
 class TestReadBundledEngineVersion:
-    def test_known_engine_returns_envelope_version(self) -> None:
+    @pytest.mark.parametrize("engine", sorted(ALL_ENGINES))
+    def test_known_engine_returns_envelope_version(self, engine: str) -> None:
         """Bundled invariants + schema envelopes carry engine_version; both agree."""
-        for engine in ("vllm", "tensorrt", "transformers"):
-            version = read_bundled_engine_version(engine)
-            assert isinstance(version, str)
-            assert version  # non-empty
+        version = read_bundled_engine_version(engine)
+        assert isinstance(version, str)
+        assert version  # non-empty
 
     def test_unknown_engine_returns_none(self) -> None:
         # SchemaLoader rejects unknown engines with ValueError; helper swallows

@@ -270,10 +270,8 @@ def read_bundled_engine_version(engine: str) -> str | None:
         logger.debug("Bundled schema read failed for %s: %s", engine, exc)
         return None
 
-    inv_version = (invariants.engine_version or "").strip()
-    sch_version = (schema.engine_version or "").strip()
-    if not inv_version and not sch_version:
-        return None
+    inv_version = invariants.engine_version.strip()
+    sch_version = schema.engine_version.strip()
     if inv_version != sch_version:
         raise BundledEngineVersionMismatchError(
             f"Bundled artefacts for {engine!r} disagree on engine_version: "
@@ -290,15 +288,9 @@ def read_bundled_engine_version(engine: str) -> str | None:
 def read_ssot_engine_version(engine: str) -> str | None:
     """Read ``engine_versions/{engine}/current.yaml::library.current_version``.
 
-    Legacy/dev-mode helper. Use :func:`read_bundled_engine_version` for the
-    runtime handshake - it reads from the bundled wheel artefact (works
-    for installed users, no dependency on an in-repo
-    ``engine_versions/`` tree) and cross-checks invariants/schema agreement.
-
-    This SSOT-file reader returns ``None`` for wheel-installed users
-    (engine_versions/ is not in the wheel), so it can't drive the
-    runtime handshake on its own. Retained for in-repo dev tooling and
-    for the parity guard at ``scripts/ci/check_engine_bundle_pin.sh``.
+    Legacy: use :func:`read_bundled_engine_version` for the runtime handshake.
+    This helper is retained for in-repo dev tooling that needs the SSOT
+    file directly (it's not shipped in the wheel).
 
     Returns ``None`` if the file is absent, unreadable, or the field is
     missing. The repo root is resolved via
