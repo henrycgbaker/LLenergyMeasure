@@ -378,15 +378,18 @@ A container stack trace full of `extra_forbidden` Pydantic errors (often with
 URLs mixing `errors.pydantic.dev/2.10/…` and `errors.pydantic.dev/2.12/…`, a
 tell for version skew).
 
-> **Legacy: the schema-fingerprint handshake no longer catches this.** Earlier
-> versions of `llem` stamped each image with an `llem.expconf.schema.fingerprint`
-> label and `StudyRunner._prepare_images` compared it to the host fingerprint
-> before any experiment ran. Once images stopped baking the project source (it
-> is bind-mounted at runtime), the handshake became structurally redundant: the
-> in-container source always equals the host source. The label is no longer
-> set on any engine image; `llem doctor` reports `UNVERIFIED` and does not
-> block. The dead `version_handshake.py` plumbing is tracked for removal in a
-> follow-up issue.
+> **What the runtime gate now catches.** The original
+> `llem.expconf.schema.fingerprint` label is gone (bind-mounted source made
+> the schema-fingerprint check structurally redundant: in-container source
+> always equals the host source). What `StudyRunner._prepare_images` does
+> today is a different check: it probes the in-container engine library
+> version and compares it against the engine_version envelope on the
+> wheel-bundled invariants + schema artefacts. The Pydantic-shape errors
+> above are exactly the symptom that probe is meant to catch ahead of
+> dispatch, so on current builds the gate should hard-error before the
+> container ever runs. If you reached this section anyway, either the image
+> shipped without engine-version visibility or `LLEM_SKIP_IMAGE_CHECK=1`
+> was set.
 
 **Cause:** all three engines now bind-mount the host project source at
 runtime, so a Pydantic-shape error here means the engine library inside the
