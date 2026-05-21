@@ -17,9 +17,12 @@ from check_pydantic_matches_discovered import (
     _canonicalise_discovered_type,
     _canonicalise_pydantic_type,
     _is_subset,
-    _parse_literal_values,
     check_engine,
 )
+
+from llenergymeasure.config.ssot import ALL_ENGINES
+
+_ENGINES = sorted(ALL_ENGINES)
 
 # ---------------------------------------------------------------------------
 # Canonicalisation unit tests
@@ -89,30 +92,6 @@ class TestCanonicalisePydanticType:
 
 
 # ---------------------------------------------------------------------------
-# Literal value parsing
-# ---------------------------------------------------------------------------
-
-
-class TestParseLiteralValues:
-    def test_single_value(self) -> None:
-        assert _parse_literal_values("Literal['a']") == frozenset({"a"})
-
-    def test_multiple_values(self) -> None:
-        assert _parse_literal_values("Literal['a', 'b', 'c']") == frozenset({"a", "b", "c"})
-
-    def test_int_values_unquoted(self) -> None:
-        assert _parse_literal_values("Literal['8', '16']") == frozenset({"8", "16"})
-
-    def test_empty_literal(self) -> None:
-        assert _parse_literal_values("Literal[]") == frozenset()
-
-    def test_non_literal_returns_none(self) -> None:
-        assert _parse_literal_values("str") is None
-        assert _parse_literal_values("int") is None
-        assert _parse_literal_values("dict[str, int]") is None
-
-
-# ---------------------------------------------------------------------------
 # Subset relation
 # ---------------------------------------------------------------------------
 
@@ -128,11 +107,14 @@ class TestSubsetRelation:
         assert _is_subset("any", "Literal['a', 'b']") is True
         assert _is_subset("any", "ClassName") is True
 
-    def test_literal_value_set_inclusion(self) -> None:
-        # Pydantic narrows discovered Literal: subset.
-        assert _is_subset("Literal['a', 'b', 'c']", "Literal['a', 'b']") is True
-        assert _is_subset("Literal['a', 'b']", "Literal['a']") is True
-        # Equal Literals.
+    def test_literal_to_literal_narrowing_fails(self) -> None:
+        # Engine enumerated the value set; llem must match it.
+        # Narrowing is a CONTRADICTION (engine owns the value contract).
+        assert _is_subset("Literal['a', 'b', 'c']", "Literal['a', 'b']") is False
+        assert _is_subset("Literal['a', 'b']", "Literal['a']") is False
+
+    def test_literal_to_literal_equal_passes(self) -> None:
+        # Equal Literals pass via clause 1 (equal types), not via narrowing.
         assert _is_subset("Literal['a', 'b']", "Literal['a', 'b']") is True
 
     def test_literal_widening_fails(self) -> None:
@@ -141,13 +123,15 @@ class TestSubsetRelation:
         # Pydantic Literal disjoint from discovered: not a subset.
         assert _is_subset("Literal['a', 'b']", "Literal['c', 'd']") is False
 
-    def test_str_to_literal_curation(self) -> None:
-        # Existing curation pattern: str -> Literal[some-strings].
+    def test_str_to_literal_enrichment(self) -> None:
+        # Engine signature uninformative (str/int); llem enriches with the
+        # runtime-valid value set. Engine signature didn't enumerate, so
+        # this is type enrichment, not narrowing.
         assert _is_subset("str", "Literal['mp', 'ray']") is True
         assert _is_subset("int", "Literal['8', '16']") is True
 
-    def test_compound_containing_str_to_literal(self) -> None:
-        # Discovered exposes a union including str; pydantic narrows to specific values.
+    def test_compound_containing_str_to_literal_enrichment(self) -> None:
+        # Discovered exposes a union including str; pydantic enriches to specific values.
         assert _is_subset("str | type[Foo]", "Literal['mp', 'ray']") is True
 
     def test_class_to_primitive_abstraction(self) -> None:
@@ -171,13 +155,13 @@ class TestSubsetRelation:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
+@pytest.mark.parametrize("engine", _ENGINES)
 def test_live_schemas_have_no_contradictions(engine: str) -> None:
     """Real repo schemas should classify with zero CONTRADICTIONs.
 
     SUBSET-COMPATIBLE and LLEM-EXTENSION classifications are permitted
-    (they represent intentional curation + whitelisted llem-native
-    fields). Only CONTRADICTION fails the gate.
+    (they represent type enrichment + whitelisted llem-native fields).
+    Only CONTRADICTION fails the gate.
     """
     from llenergymeasure.config.models import ExperimentConfig
 
@@ -187,7 +171,7 @@ def test_live_schemas_have_no_contradictions(engine: str) -> None:
     assert contradictions == [], f"Contradictions detected for {engine}: {contradictions}"
 
 
-@pytest.mark.parametrize("engine", ["transformers", "vllm", "tensorrt"])
+@pytest.mark.parametrize("engine", _ENGINES)
 def test_live_schemas_emit_full_classifications(engine: str) -> None:
     """Each (engine, field) record carries a recognised classification.
 

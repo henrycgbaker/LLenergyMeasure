@@ -2,10 +2,12 @@
 """Check Pydantic engine configs are a valid subset of discovered schemas.
 
 Detects type CONTRADICTIONS between llem's hand-authored Pydantic models
-and the machine-discovered engine parameter schemas. Pydantic is allowed
-to be narrower than discovered (curating a Literal subset, abstracting a
-complex upstream class to a primitive); only widening or unwhitelisted
-extensions fail.
+and the machine-discovered engine parameter schemas. llem curates which
+fields to expose; the value set within an exposed field is the engine's
+contract. Pydantic may provide more precise type information than the
+engine signature exposes (e.g. ``Literal[...]`` over a discovered
+``str``), but may not silently narrow an already-enumerated engine
+type.
 
 Three-state classification per (engine, field):
 - SUBSET-COMPATIBLE: pydantic type is a valid subset/restriction of discovered
@@ -187,60 +189,41 @@ def _canonicalise_pydantic_type(prop: dict[str, Any], defs: dict[str, Any]) -> s
     return _JSON_TO_PYTHON_TYPE.get(base, base)
 
 
-def _parse_literal_values(literal_str: str) -> frozenset[str] | None:
-    """Extract the value set from a canonicalised Literal[...] string.
-
-    Returns ``None`` for non-Literal inputs. The canonicaliser already
-    ``repr``-quotes values in a stable order, so we strip the surrounding
-    quotes and return the bare value strings (callers compare set inclusion).
-    """
-    if not literal_str.startswith("Literal[") or not literal_str.endswith("]"):
-        return None
-    inner = literal_str[len("Literal[") : -1]
-    if not inner:
-        return frozenset()
-    parts = [p.strip() for p in inner.split(",")]
-    return frozenset(p.strip("'\"") for p in parts)
-
-
 def _is_subset(discovered: str, pydantic: str) -> bool:
     """Return True iff ``pydantic`` is a valid restriction of ``discovered``.
 
-    The subset relation captures the curation pattern: Pydantic is allowed
-    to be narrower than the upstream-discovered type (a smaller Literal
-    value set, an abstracted primitive over a complex class, a concrete
-    type under an unconstrained ``any``); it is NOT allowed to be wider
-    (Pydantic accepts more values than upstream).
+    llem curates which fields to expose, but the value set within an
+    exposed field is the engine's contract. The subset relation accepts
+    only TYPE-ENRICHMENT cases - where llem provides more precise type
+    information than the engine's signature alone exposes - never
+    VALUE-NARROWING of an already-enumerated engine type.
 
-    Patterns recognised (each a separate clause in the if-chain):
+    Patterns recognised:
 
     1. **Equal types** - trivial pass.
     2. **T <= any** - any concrete pydantic type is a valid view of an
-       unconstrained discovered ``any``.
-    3. **Literal[A] <= Literal[B]** - subset of value set; covers the
-       intentional curation case where llem narrows an upstream enum.
-    4. **Literal[A] <= scalar** (str/int/float) - llem curates a finite
-       value set out of a broad upstream scalar (e.g. backend names).
-       Covers the legacy ``_is_intentional_narrowing`` str/int -> Literal
-       case as a special case of the subset relation.
-    5. **Literal[A] <= union containing the scalar** - covers
-       ``str | SomeClass`` discovered narrowed to ``Literal['a','b']``.
-    6. **dict|str|list <= ClassName** - llem abstracts a complex upstream
-       class to a JSON-schema-friendly primitive. Retains today's
-       "complex discovered type mapped to simple Pydantic type" case.
+       unconstrained discovered ``any`` (signature carried no type info).
+    3. **Literal[A] <= scalar** (str/int/float) - llem types the
+       concrete value set the engine accepts at runtime, where the
+       signature only said ``str`` / ``int`` / ``float``.
+    4. **Literal[A] <= union containing the scalar** - same enrichment
+       pattern for ``str | SomeClass``-style signatures.
+    5. **dict|str|list <= ClassName** - llem abstracts a complex upstream
+       class to a JSON-schema-friendly primitive for serialisation.
+
+    Literal-to-Literal narrowing is NOT accepted: when the engine
+    enumerates a value set, llem must match it. A maintainer who wants
+    to drop values should remove the field or surface the divergence
+    explicitly, not silently shrink the accepted set.
     """
     if discovered == pydantic:
         return True
     if discovered == "any":
         return True
 
-    py_values = _parse_literal_values(pydantic)
-    disc_values = _parse_literal_values(discovered)
+    pydantic_is_literal = pydantic.startswith("Literal[")
 
-    if py_values is not None and disc_values is not None:
-        return py_values <= disc_values
-
-    if py_values is not None:
+    if pydantic_is_literal:
         if discovered in ("str", "int", "float"):
             return True
         if "|" in discovered and any(

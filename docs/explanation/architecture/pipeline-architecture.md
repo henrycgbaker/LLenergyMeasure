@@ -153,9 +153,11 @@ The dev consumes auto-generated digests:
 The dev manually edits `engine_configs.py`:
 
 - which discovered params to expose in Pydantic;
-- which `Literal` narrowings to pin;
+- where to enrich a loose discovered scalar (e.g. `str`) into a curated `Literal[...]` value set;
 - which sub-config taxonomy to use;
 - which custom `@model_validator` decorators to add.
+
+Llem does not narrow enumerated upstream Literals - the engine owns the value contract for fields it has enumerated. If a maintainer wants to drop values, they remove the field or surface the divergence explicitly; the schema gate will hard-error on silent narrowing.
 
 A push triggers a re-run of the CI cycle; the updated summary comment supersedes the prior one (edited via comment-id key, no proliferation).
 
