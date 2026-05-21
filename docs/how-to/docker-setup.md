@@ -427,16 +427,22 @@ docker image inspect llenergymeasure:transformers \
     --format '{{json .Config.Labels}}' | python3 -m json.tool
 ```
 
-> **Legacy: schema-fingerprint handshake.** Earlier versions stamped
-> `org.opencontainers.image.version` and `llem.expconf.schema.fingerprint`
-> labels at build time so `llem doctor` could detect host/container schema
-> skew via `StudyRunner._prepare_images`. Once the image stopped baking the
-> project source (the project is bind-mounted at runtime - see
-> `docs/development.md`), the bound-in source always matches the host source,
-> so the handshake became structurally redundant. The labels are no longer
-> set on any engine image; `llem doctor` reports `UNVERIFIED` for all engines
-> and does not block. Removing the dead `version_handshake.py` code is
-> tracked separately.
+> **Schema-fingerprint label is legacy; engine-version probe is live.**
+> Earlier versions stamped `org.opencontainers.image.version` and
+> `llem.expconf.schema.fingerprint` labels at build time so
+> `StudyRunner._prepare_images` could detect host/container schema skew.
+> Once the image stopped baking the project source (it is bind-mounted at
+> runtime - see `docs/development.md`), the schema-fingerprint check
+> became structurally redundant: the in-container source always equals
+> the host source. That label is no longer set on first-party images and
+> never existed on upstream-direct images (vllm, tensorrt). What
+> `version_handshake.py` does today is a different check: it probes each
+> image's engine library version (`vllm.__version__`,
+> `tensorrt_llm.__version__`, `transformers.__version__`) and compares
+> it against the engine_version envelope on the wheel-bundled invariants
+> + schema artefacts. A real library/artefact mismatch is a hard error;
+> set `LLEM_SKIP_IMAGE_CHECK=1` to bypass if you know the skew is
+> harmless.
 
 See [troubleshooting.md](/how-to/troubleshoot#schema-skew-between-host-and-docker-image)
 for the remediation flow when a mismatch is reported.

@@ -119,11 +119,11 @@ sharing across machines on cluster storage.
   ritual; first dispatch primes automatically.
 - **Not a permanent host pollution**. The cache is a single bind-mounted
   directory; `rm -rf ~/.cache/llem/deps/` cleans it.
-- **Not an alternative to the engine-version SSOT**. The probed engine
+- **Not an alternative to the engine-version gate**. The probed engine
   library version (`vllm.__version__`, `tensorrt_llm.__version__`,
-  `transformers.__version__`) is compared at study setup against
-  `engine_versions/{engine}.yaml::library.current_version` and a
-  mismatch is a hard error (see `version_handshake.py`).
+  `transformers.__version__`) is compared at study setup against the
+  `engine_version` envelope on the wheel-bundled invariants + schema
+  artefacts, and a mismatch is a hard error (see `version_handshake.py`).
 
 ## Engine image strategy
 

@@ -8,10 +8,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from llenergymeasure.config.ssot import ALL_ENGINES
 from llenergymeasure.infra.version_handshake import (
     ENV_SKIP_IMAGE_CHECK,
     LABEL_IMAGE_VERSION,
     LABEL_SCHEMA_FINGERPRINT,
+    BundledEngineVersionMismatchError,
     ImageStamp,
     SchemaStatus,
     classify_engine_version,
@@ -19,6 +21,7 @@ from llenergymeasure.infra.version_handshake import (
     compute_expconf_fingerprint,
     inspect_image_stamp,
     probe_image_engine_version,
+    read_bundled_engine_version,
     read_ssot_engine_version,
     skip_check_enabled,
 )
@@ -237,6 +240,49 @@ class TestReadSsotEngineVersion:
 
     def test_unknown_engine_returns_none(self) -> None:
         assert read_ssot_engine_version("nonexistent_engine_xyz") is None
+
+
+# ---------------------------------------------------------------------------
+# read_bundled_engine_version - reads bundled invariants + schema envelopes
+# ---------------------------------------------------------------------------
+
+
+class TestReadBundledEngineVersion:
+    @pytest.mark.parametrize("engine", sorted(ALL_ENGINES))
+    def test_known_engine_returns_envelope_version(self, engine: str) -> None:
+        """Bundled invariants + schema envelopes carry engine_version; both agree."""
+        version = read_bundled_engine_version(engine)
+        assert isinstance(version, str)
+        assert version  # non-empty
+
+    def test_unknown_engine_returns_none(self) -> None:
+        # SchemaLoader rejects unknown engines with ValueError; helper swallows
+        # to None (caller's contract: "no answer" rather than "raise").
+        assert read_bundled_engine_version("nonexistent_engine_xyz") is None
+
+    def test_invariants_schema_disagreement_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Bundled artefact disagreement is a build-time bundling bug; raise loud."""
+        from dataclasses import replace
+
+        from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
+        from llenergymeasure.config.schema_loader import SchemaLoader
+
+        original_load_invariants = EngineInvariantsLoader.load_invariants
+        original_load_schema = SchemaLoader.load_schema
+
+        def fake_load_invariants(self, engine):  # type: ignore[no-untyped-def]
+            real = original_load_invariants(self, engine)
+            return replace(real, engine_version="1.2.3")
+
+        def fake_load_schema(self, engine):  # type: ignore[no-untyped-def]
+            real = original_load_schema(self, engine)
+            return replace(real, engine_version="9.9.9")
+
+        monkeypatch.setattr(EngineInvariantsLoader, "load_invariants", fake_load_invariants)
+        monkeypatch.setattr(SchemaLoader, "load_schema", fake_load_schema)
+
+        with pytest.raises(BundledEngineVersionMismatchError, match=r"1\.2\.3.*9\.9\.9"):
+            read_bundled_engine_version("vllm")
 
 
 # ---------------------------------------------------------------------------

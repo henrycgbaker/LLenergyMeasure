@@ -50,6 +50,7 @@ from llenergymeasure.domain.progress import STEP_BASELINE, STEPS_LOCAL, docker_s
 from llenergymeasure.infra.version_handshake import (
     ENV_SKIP_IMAGE_CHECK,
     LABEL_SCHEMA_FINGERPRINT,
+    BundledEngineVersionMismatchError,
     ImageStamp,
     SchemaStatus,
     VersionMismatchError,
@@ -58,7 +59,7 @@ from llenergymeasure.infra.version_handshake import (
     compute_expconf_fingerprint,
     parse_image_stamp,
     probe_image_engine_version,
-    read_ssot_engine_version,
+    read_bundled_engine_version,
     rebuild_hint,
     skip_check_enabled,
 )
@@ -1583,14 +1584,15 @@ class StudyRunner:
 
         1. **Label-based fingerprint check** (preferred when present).
            Definitive ``OK`` / ``MISMATCH`` answers are trusted directly.
-        2. **SSOT engine-version probe** (fallback). When the label is
+        2. **Bundled engine-version probe** (fallback). When the label is
            absent or stamped ``"unknown"``, probe the engine library's
-           ``__version__`` inside the image and compare against
-           ``engine_versions/{engine}.yaml::library.current_version``.
-           Closes the verification gap for upstream-direct images (vllm,
-           tensorrt) which never had a llem schema-fingerprint label,
-           and for legacy local images where the fingerprint was stamped
-           as ``"unknown"``.
+           ``__version__`` inside the image and compare against the
+           ``engine_version`` envelope field on the bundled invariants +
+           schema artefacts (read via :func:`read_bundled_engine_version`,
+           which cross-checks both bundled artefacts agree). Closes the
+           verification gap for upstream-direct images (vllm, tensorrt)
+           which never had a llem schema-fingerprint label, and for legacy
+           local images where the fingerprint was stamped as ``"unknown"``.
         """
         if skip_check_enabled():
             return "bypassed", None
@@ -1620,14 +1622,22 @@ class StudyRunner:
 
         # label_status is UNVERIFIED or UNREACHABLE: fall back to engine-
         # version probe. The probe takes one docker-run (a few seconds)
-        # and is cached per (image, engine).
+        # and is cached per (image, engine). The "expected" version comes
+        # from the bundled invariants/schema envelopes (the artefacts llem
+        # actually applies at experiment time), not from current.yaml -
+        # current.yaml isn't shipped in the wheel, so an SSOT-based check
+        # is silently UNREACHABLE for installed users. The bundled envelope
+        # works in both wheel and editable installs.
         probed = probe_image_engine_version(image, engine_name)
-        expected = read_ssot_engine_version(engine_name)
+        try:
+            expected = read_bundled_engine_version(engine_name)
+        except BundledEngineVersionMismatchError as exc:
+            return "mismatch (bundled artefact disagreement)", exc
         probe_status = classify_engine_version(probed, expected)
 
         if probe_status is SchemaStatus.OK:
             logger.debug(
-                "Image %s verified via engine-version probe: %s matches SSOT",
+                "Image %s verified via engine-version probe: %s matches bundled envelope",
                 image,
                 probed,
             )
@@ -1640,7 +1650,7 @@ class StudyRunner:
             # verify the engine version.
             logger.warning(
                 "Image %s has no %s label and the engine-version probe was "
-                "inconclusive (probed=%r, SSOT=%r). Dispatch will proceed; "
+                "inconclusive (probed=%r, bundled=%r). Dispatch will proceed; "
                 "the bind-mounted framework defines the contract regardless.",
                 image,
                 LABEL_SCHEMA_FINGERPRINT,
@@ -1652,19 +1662,17 @@ class StudyRunner:
         # probe_status is MISMATCH
         error = VersionMismatchError(
             f"Docker image '{image}' has {engine_name} library version "
-            f"{probed!r} but engine_versions/{engine_name}/current.yaml "
-            f"::library.current_version is {expected!r}. The vendored "
-            f"invariants + discovered schemas in "
-            f"src/llenergymeasure/engines/{engine_name}/ were generated "
-            f"against {expected!r} and may not be compatible with "
-            f"{probed!r}.\n\n"
+            f"{probed!r} but the bundled invariants + discovered schemas "
+            f"in this wheel were mined against {expected!r}. Applying "
+            f"version-{expected!r} validation rules to a version-{probed!r} "
+            f"substrate is not safe.\n\n"
             f"To fix:\n"
-            f"  Update engine_versions/{engine_name}/current.yaml to {probed!r}, "
-            f"or pull an image matching {expected!r}.\n\n"
+            f"  Pull an image matching {expected!r}, or install a wheel "
+            f"built against {probed!r}.\n\n"
             f"If you're certain the skew is harmless, set "
             f"{ENV_SKIP_IMAGE_CHECK}=1."
         )
-        return f"mismatch (engine {probed} vs SSOT {expected})", error
+        return f"mismatch (engine {probed} vs bundled {expected})", error
 
     def _run_gap(self, seconds: float, label: str) -> None:
         """Run a thermal gap, rendering countdown in the live display or terminal."""
