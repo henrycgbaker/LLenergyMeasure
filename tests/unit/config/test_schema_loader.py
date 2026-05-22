@@ -27,7 +27,9 @@ def test_load_schema_returns_discovered_schema(engine: str) -> None:
 
     assert isinstance(schema, DiscoveredSchema)
     assert schema.engine == engine
-    assert schema.schema_version.startswith("1.")
+    # v2.0.0 carries JSON Schema constraints alongside the legacy type/default;
+    # v1.x remains accepted for environments that haven't regenerated yet.
+    assert schema.schema_version.startswith(("1.", "2."))
     assert schema.engine_version
     assert schema.image_ref
     assert schema.base_image_ref
@@ -82,8 +84,9 @@ def test_load_schema_missing_file_raises_with_hint(tmp_path: Path) -> None:
 
 
 def test_major_version_mismatch_raises() -> None:
-    envelope = _minimal_envelope(schema_version="2.0.0")
-    with pytest.raises(UnsupportedSchemaVersionError, match="major=2"):
+    # The loader's supported allowlist is {1, 2}; major 3 is rejected.
+    envelope = _minimal_envelope(schema_version="3.0.0")
+    with pytest.raises(UnsupportedSchemaVersionError, match="major=3"):
         _parse_envelope(engine="vllm", raw_text=json.dumps(envelope))
 
 
@@ -97,6 +100,28 @@ def test_minor_version_accepted() -> None:
     envelope = _minimal_envelope(schema_version="1.7.3")
     parsed = _parse_envelope(engine="vllm", raw_text=json.dumps(envelope))
     assert parsed.schema_version == "1.7.3"
+
+
+def test_major_version_two_accepted() -> None:
+    # v2 envelopes are part of the loader's supported allowlist.
+    envelope = _minimal_envelope(schema_version="2.0.0")
+    parsed = _parse_envelope(engine="vllm", raw_text=json.dumps(envelope))
+    assert parsed.schema_version == "2.0.0"
+
+
+def test_engine_params_defs_parsed_when_present() -> None:
+    envelope = _minimal_envelope(schema_version="2.0.0")
+    envelope["engine_params_defs"] = {"Foo": {"type": "object"}}
+    parsed = _parse_envelope(engine="vllm", raw_text=json.dumps(envelope))
+    assert parsed.engine_params_defs == {"Foo": {"type": "object"}}
+    assert parsed.sampling_params_defs == {}
+
+
+def test_defs_default_to_empty_when_absent() -> None:
+    envelope = _minimal_envelope()
+    parsed = _parse_envelope(engine="vllm", raw_text=json.dumps(envelope))
+    assert parsed.engine_params_defs == {}
+    assert parsed.sampling_params_defs == {}
 
 
 def test_iso_z_termination_accepted() -> None:

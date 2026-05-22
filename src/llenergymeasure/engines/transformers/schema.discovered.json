@@ -1,11 +1,11 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "2.0.0",
   "engine": "transformers",
   "engine_version": "4.57.3",
   "engine_commit_sha": null,
   "image_ref": "llenergymeasure:transformers-4.57.3",
   "base_image_ref": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
-  "discovered_at": "2026-05-14T20:31:21+02:00",
+  "discovered_at": "2026-05-22T00:00:00+00:00",
   "discovery_method": "inspect.signature(from_pretrained) + GenerationConfig().to_dict()",
   "discovery_limitations": [
     {
@@ -59,309 +59,385 @@
   "engine_params": {
     "config": {
       "type": "PretrainedConfig | str | PathLike | None",
-      "default": null
+      "default": null,
+      "x-source": "signature_param"
     },
     "cache_dir": {
       "type": "str | PathLike | None",
-      "default": null
+      "default": null,
+      "x-source": "signature_param"
     },
     "ignore_mismatched_sizes": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "signature_param"
     },
     "force_download": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "signature_param"
     },
     "local_files_only": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "signature_param"
     },
     "token": {
       "type": "str | bool | None",
-      "default": null
+      "default": null,
+      "x-source": "signature_param"
     },
     "revision": {
       "type": "str",
-      "default": "main"
+      "default": "main",
+      "x-source": "signature_param"
     },
     "use_safetensors": {
       "type": "bool | None",
-      "default": null
+      "default": null,
+      "x-source": "signature_param"
     },
     "weights_only": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "x-source": "signature_param"
     }
   },
   "sampling_params": {
     "max_length": {
       "type": "int",
-      "default": 20
+      "default": 20,
+      "x-source": "instance_dict"
     },
     "max_new_tokens": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "min_length": {
       "type": "int",
-      "default": 0
+      "default": 0,
+      "x-source": "instance_dict"
     },
     "min_new_tokens": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "early_stopping": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "instance_dict"
     },
     "max_time": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "stop_strings": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "do_sample": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "instance_dict"
     },
     "num_beams": {
       "type": "int",
-      "default": 1
+      "default": 1,
+      "x-source": "instance_dict"
     },
     "use_cache": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "x-source": "instance_dict"
     },
     "cache_implementation": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "cache_config": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "return_legacy_cache": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "prefill_chunk_size": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "temperature": {
       "type": "float",
-      "default": 1.0
+      "default": 1.0,
+      "x-source": "instance_dict"
     },
     "top_k": {
       "type": "int",
-      "default": 50
+      "default": 50,
+      "x-source": "instance_dict"
     },
     "top_p": {
       "type": "float",
-      "default": 1.0
+      "default": 1.0,
+      "x-source": "instance_dict"
     },
     "min_p": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "typical_p": {
       "type": "float",
-      "default": 1.0
+      "default": 1.0,
+      "x-source": "instance_dict"
     },
     "epsilon_cutoff": {
       "type": "float",
-      "default": 0.0
+      "default": 0.0,
+      "x-source": "instance_dict"
     },
     "eta_cutoff": {
       "type": "float",
-      "default": 0.0
+      "default": 0.0,
+      "x-source": "instance_dict"
     },
     "repetition_penalty": {
       "type": "float",
-      "default": 1.0
+      "default": 1.0,
+      "x-source": "instance_dict"
     },
     "encoder_repetition_penalty": {
       "type": "float",
-      "default": 1.0
+      "default": 1.0,
+      "x-source": "instance_dict"
     },
     "length_penalty": {
       "type": "float",
-      "default": 1.0
+      "default": 1.0,
+      "x-source": "instance_dict"
     },
     "no_repeat_ngram_size": {
       "type": "int",
-      "default": 0
+      "default": 0,
+      "x-source": "instance_dict"
     },
     "bad_words_ids": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "renormalize_logits": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "instance_dict"
     },
     "forced_bos_token_id": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "forced_eos_token_id": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "remove_invalid_values": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "instance_dict"
     },
     "exponential_decay_length_penalty": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "suppress_tokens": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "begin_suppress_tokens": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "sequence_bias": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "token_healing": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "instance_dict"
     },
     "guidance_scale": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "watermarking_config": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "num_return_sequences": {
       "type": "int",
-      "default": 1
+      "default": 1,
+      "x-source": "instance_dict"
     },
     "output_attentions": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "instance_dict"
     },
     "output_hidden_states": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "instance_dict"
     },
     "output_scores": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "instance_dict"
     },
     "output_logits": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "return_dict_in_generate": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "instance_dict"
     },
     "pad_token_id": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "bos_token_id": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "eos_token_id": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "encoder_no_repeat_ngram_size": {
       "type": "int",
-      "default": 0
+      "default": 0,
+      "x-source": "instance_dict"
     },
     "decoder_start_token_id": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "is_assistant": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "instance_dict"
     },
     "num_assistant_tokens": {
       "type": "int",
-      "default": 20
+      "default": 20,
+      "x-source": "instance_dict"
     },
     "num_assistant_tokens_schedule": {
       "type": "str",
-      "default": "constant"
+      "default": "constant",
+      "x-source": "instance_dict"
     },
     "assistant_confidence_threshold": {
       "type": "float",
-      "default": 0.4
+      "default": 0.4,
+      "x-source": "instance_dict"
     },
     "prompt_lookup_num_tokens": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "max_matching_ngram_size": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "assistant_early_exit": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "assistant_lookbehind": {
       "type": "int",
-      "default": 10
+      "default": 10,
+      "x-source": "instance_dict"
     },
     "target_lookbehind": {
       "type": "int",
-      "default": 10
+      "default": 10,
+      "x-source": "instance_dict"
     },
     "disable_compile": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "instance_dict"
     },
     "low_memory": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "penalty_alpha": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "dola_layers": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "diversity_penalty": {
       "type": "float",
-      "default": 0.0
+      "default": 0.0,
+      "x-source": "instance_dict"
     },
     "num_beam_groups": {
       "type": "int",
-      "default": 1
+      "default": 1,
+      "x-source": "instance_dict"
     },
     "constraints": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "force_words_ids": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "x-source": "instance_dict"
     },
     "_from_model_config": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "instance_dict"
     },
     "transformers_version": {
       "type": "str",
-      "default": "4.57.3"
+      "default": "4.57.3",
+      "x-source": "instance_dict"
     }
   }
 }

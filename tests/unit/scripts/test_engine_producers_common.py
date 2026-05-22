@@ -187,9 +187,314 @@ def test_make_envelope_fills_required_keys() -> None:
     assert "engine_params" in env and "sampling_params" in env
 
 
-def test_schema_version_is_semver_with_major_one() -> None:
+def test_schema_version_is_semver_at_supported_major() -> None:
     major = int(_common.SCHEMA_VERSION.split(".")[0])
-    assert major == 1, "ships schema_version 1.x; bumping major requires loader update"
+    # The loader supports majors 1 and 2 (see SchemaLoader.SUPPORTED_MAJOR_VERSIONS);
+    # bumping the introspector past 2 requires extending that allowlist.
+    assert major in {1, 2}, "ships schema_version <=2.x; bumping major requires loader update"
+
+
+# ---------------------------------------------------------------------------
+# literal_to_json_schema
+# ---------------------------------------------------------------------------
+
+
+def test_literal_to_json_schema_string_literal() -> None:
+    got = _common.literal_to_json_schema(Literal["a", "b", "c"])
+    assert got == {"type": "string", "enum": ["a", "b", "c"]}
+
+
+def test_literal_to_json_schema_int_literal() -> None:
+    got = _common.literal_to_json_schema(Literal[1, 2, 3])
+    assert got == {"type": "integer", "enum": [1, 2, 3]}
+
+
+def test_literal_to_json_schema_bool_literal() -> None:
+    # Bool checked first because bool is subclass of int in Python.
+    got = _common.literal_to_json_schema(Literal[True, False])
+    assert got == {"type": "boolean", "enum": [True, False]}
+
+
+def test_literal_to_json_schema_enum_subclass() -> None:
+    import enum as _enum
+
+    class Color(_enum.Enum):
+        RED = "red"
+        BLUE = "blue"
+
+    got = _common.literal_to_json_schema(Color)
+    assert got == {"type": "string", "enum": ["red", "blue"]}
+
+
+def test_literal_to_json_schema_returns_none_for_non_literal() -> None:
+    assert _common.literal_to_json_schema(int) is None
+    assert _common.literal_to_json_schema(str | None) is None
+    assert _common.literal_to_json_schema(list[int]) is None
+
+
+def test_literal_to_json_schema_mixed_types_falls_back_to_string() -> None:
+    got = _common.literal_to_json_schema(Literal["one", 2])
+    # Mixed types are rare; helper falls back to string + jsonable values.
+    assert got is not None
+    assert got["type"] == "string"
+    assert got["enum"] == ["one", 2]
+
+
+# ---------------------------------------------------------------------------
+# pydantic_to_json_schema + pydantic_properties_to_specs
+# ---------------------------------------------------------------------------
+
+
+def test_pydantic_to_json_schema_preserves_constraints() -> None:
+    from pydantic import BaseModel, Field
+
+    class _Model(BaseModel):
+        ratio: float = Field(default=0.5, ge=0.0, le=1.0, description="A ratio")
+        mode: Literal["fast", "slow"] = Field(default="fast")
+
+    raw = _common.pydantic_to_json_schema(_Model)
+    props = raw["properties"]
+    assert props["ratio"]["minimum"] == 0.0
+    assert props["ratio"]["maximum"] == 1.0
+    assert props["ratio"]["description"] == "A ratio"
+    assert props["ratio"]["x-source"] == "pydantic_field"
+    assert props["mode"]["enum"] == ["fast", "slow"]
+
+
+def test_pydantic_to_json_schema_emits_defs_for_nested_models() -> None:
+    from pydantic import BaseModel
+
+    class _Sub(BaseModel):
+        inner: int = 1
+
+    class _Outer(BaseModel):
+        child: _Sub | None = None
+
+    raw = _common.pydantic_to_json_schema(_Outer)
+    assert "$defs" in raw
+    assert "_Sub" in raw["$defs"]
+    assert raw["$defs"]["_Sub"]["properties"]["inner"]["type"] == "integer"
+
+
+def test_pydantic_to_json_schema_rejects_non_pydantic() -> None:
+    class _Plain:
+        x: int = 0
+
+    import pytest as _pytest  # ensure no cross-import noise
+
+    with _pytest.raises(TypeError, match="not a Pydantic"):
+        _common.pydantic_to_json_schema(_Plain)
+
+
+def test_pydantic_properties_to_specs_preserves_legacy_type_string() -> None:
+    from pydantic import BaseModel
+
+    class _Inner(BaseModel):
+        v: int = 0
+
+    class _M(BaseModel):
+        child: _Inner | None = None
+        flag: bool = False
+        mode: Literal["a", "b"] = "a"
+
+    props, defs = _common.pydantic_properties_to_specs(_M)
+    # legacy compact type string preserved
+    assert props["child"]["type"] == "_Inner | None"
+    assert props["flag"]["type"] == "boolean"
+    assert props["mode"]["type"] == "string"
+    # enum carried alongside the type string
+    assert props["mode"]["enum"] == ["a", "b"]
+    # default backfill when Pydantic omits it
+    for spec in props.values():
+        assert "default" in spec, "v2 contract: every leaf carries default"
+        assert "deprecated" in spec, "v2 contract: every leaf carries deprecated"
+    # nested $defs surfaced
+    assert "_Inner" in defs
+
+
+def test_pydantic_properties_skip_private_default() -> None:
+    from pydantic import BaseModel
+
+    class _M(BaseModel):
+        x: int = 1
+        # Pydantic doesn't typically expose ``_y`` in schema, but the helper
+        # still honours the skip_private flag at the property level.
+
+    props, _ = _common.pydantic_properties_to_specs(_M)
+    assert "x" in props
+
+
+# ---------------------------------------------------------------------------
+# msgspec_properties_to_specs
+# ---------------------------------------------------------------------------
+
+
+def test_msgspec_properties_to_specs_flattens_ref_envelope() -> None:
+    msgspec = pytest.importorskip("msgspec")
+
+    class _M(msgspec.Struct):
+        x: int = 1
+        mode: str = "auto"
+
+    props, defs = _common.msgspec_properties_to_specs(_M)
+    assert "x" in props
+    assert props["x"]["type"] == "integer"
+    assert props["x"]["x-source"] == "msgspec_field"
+    # defs envelope is preserved (msgspec wraps in $ref by default)
+    assert defs
+
+
+# ---------------------------------------------------------------------------
+# dataclass_fields_to_specs enrichment
+# ---------------------------------------------------------------------------
+
+
+def test_dataclass_fields_surfaces_literal_enum() -> None:
+    # Build the dataclass via dataclasses.make_dataclass so the type
+    # annotations stay as live typing objects rather than the stringified
+    # form ``from __future__ import annotations`` produces at module top.
+    # The helper only resolves Literal/Enum from live annotations; engines
+    # like vLLM's EngineArgs use that shape in practice.
+    import dataclasses
+
+    _D = dataclasses.make_dataclass(
+        "_D",
+        [
+            ("mode", Literal["fast", "slow"], dataclasses.field(default="fast")),
+            ("count", int, dataclasses.field(default=0)),
+        ],
+    )
+
+    specs = _common.dataclass_fields_to_specs(_D)
+    assert specs["mode"]["enum"] == ["fast", "slow"]
+    # Legacy compact ``type`` string is preserved (v1 backward compat);
+    # the JSON Schema primitive sits alongside under ``json_schema_type``.
+    assert specs["mode"]["type"] == "Literal['fast', 'slow']"
+    assert specs["mode"]["json_schema_type"] == "string"
+    assert specs["count"].get("enum") is None
+    # All leaves carry x-source provenance.
+    assert specs["mode"]["x-source"] == "dataclass_field"
+    assert specs["count"]["x-source"] == "dataclass_field"
+
+
+def test_dataclass_fields_surfaces_description_metadata() -> None:
+    import dataclasses
+
+    _D = dataclasses.make_dataclass(
+        "_D",
+        [
+            (
+                "name",
+                str,
+                dataclasses.field(default="anon", metadata={"description": "The user's name"}),
+            ),
+            ("age", int, dataclasses.field(default=0)),
+        ],
+    )
+
+    specs = _common.dataclass_fields_to_specs(_D)
+    assert specs["name"]["description"] == "The user's name"
+    assert "description" not in specs["age"]
+
+
+# ---------------------------------------------------------------------------
+# signature_param_to_spec
+# ---------------------------------------------------------------------------
+
+
+def test_signature_param_to_spec_basic() -> None:
+    # Build via inspect.Parameter directly so annotations stay as live
+    # typing objects rather than the stringified form the file-level
+    # ``from __future__ import annotations`` produces.
+    import inspect as _inspect
+
+    x_param = _inspect.Parameter(
+        "x",
+        kind=_inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        default=5,
+        annotation=int,
+    )
+    mode_param = _inspect.Parameter(
+        "mode",
+        kind=_inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        default="a",
+        annotation=Literal["a", "b"],
+    )
+
+    x_spec = _common.signature_param_to_spec(x_param)
+    assert x_spec == {
+        "type": "int",
+        "default": 5,
+        "x-source": "signature_param",
+    }
+    mode_spec = _common.signature_param_to_spec(mode_param)
+    assert mode_spec["enum"] == ["a", "b"]
+    # Legacy compact ``type`` string preserved (v1 backward compat).
+    assert mode_spec["type"] == "Literal['a', 'b']"
+    assert mode_spec["json_schema_type"] == "string"
+
+
+# ---------------------------------------------------------------------------
+# compact_type_from_jsonschema
+# ---------------------------------------------------------------------------
+
+
+def test_compact_type_from_jsonschema_ref() -> None:
+    spec = {"$ref": "#/$defs/Foo"}
+    assert _common.compact_type_from_jsonschema(spec) == "Foo"
+
+
+def test_compact_type_from_jsonschema_anyof_with_null() -> None:
+    spec = {"anyOf": [{"type": "integer"}, {"type": "null"}]}
+    assert _common.compact_type_from_jsonschema(spec) == "integer | None"
+
+
+def test_compact_type_from_jsonschema_anyof_with_ref() -> None:
+    spec = {"anyOf": [{"$ref": "#/$defs/Foo"}, {"type": "null"}]}
+    assert _common.compact_type_from_jsonschema(spec) == "Foo | None"
+
+
+def test_compact_type_from_jsonschema_plain() -> None:
+    assert _common.compact_type_from_jsonschema({"type": "string"}) == "string"
+    assert _common.compact_type_from_jsonschema({"type": "null"}) == "None"
+    assert _common.compact_type_from_jsonschema({}) == "unknown"
+
+
+# ---------------------------------------------------------------------------
+# make_envelope optional defs
+# ---------------------------------------------------------------------------
+
+
+def test_envelope_omits_empty_defs_keys() -> None:
+    env = _common.make_envelope(
+        engine="vllm",
+        engine_version="x",
+        engine_commit_sha=None,
+        image_ref="x",
+        base_image_ref="x",
+        discovery_method="t",
+        discovery_limitations=[],
+        engine_params={},
+        sampling_params={},
+    )
+    assert "engine_params_defs" not in env
+    assert "sampling_params_defs" not in env
+
+
+def test_envelope_includes_defs_when_present() -> None:
+    env = _common.make_envelope(
+        engine="vllm",
+        engine_version="x",
+        engine_commit_sha=None,
+        image_ref="x",
+        base_image_ref="x",
+        discovery_method="t",
+        discovery_limitations=[],
+        engine_params={},
+        sampling_params={},
+        engine_params_defs={"Foo": {"type": "object"}},
+    )
+    assert env["engine_params_defs"] == {"Foo": {"type": "object"}}
 
 
 # ---------------------------------------------------------------------------

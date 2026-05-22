@@ -1,11 +1,11 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "2.0.0",
   "engine": "tensorrt",
   "engine_version": "0.21.0",
   "engine_commit_sha": null,
-  "image_ref": "llenergymeasure:tensorrt-0.21.0",
+  "image_ref": "nvcr.io/nvidia/tensorrt-llm/release:0.21.0",
   "base_image_ref": null,
-  "discovered_at": "2026-05-14T13:25:05+02:00",
+  "discovered_at": "2026-05-22T00:00:00+00:00",
   "discovery_method": "TrtLlmArgs.model_json_schema() + dataclasses.fields(SamplingParams)",
   "discovery_limitations": [
     {
@@ -18,559 +18,1999 @@
     {
       "section": "sampling_params",
       "fields": [],
-      "reason": "SamplingParams is a dataclass; no per-field descriptions"
+      "reason": "SamplingParams is a dataclass with no per-field field(metadata={'description': ...}) metadata; descriptions unavailable"
     }
   ],
   "engine_params": {
     "model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "format": "path",
+          "type": "string"
+        }
+      ],
+      "description": "The path to the model checkpoint or the model name from the Hugging Face Hub.",
+      "x-source": "pydantic_field",
       "type": "string",
       "default": null,
-      "description": "The path to the model checkpoint or the model name from the Hugging Face Hub.",
       "deprecated": false
     },
     "tokenizer": {
-      "type": "string | None",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "format": "path",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The path to the tokenizer checkpoint or the tokenizer name from the Hugging Face Hub.",
+      "x-source": "pydantic_field",
+      "type": "string | None",
       "deprecated": false
     },
     "tokenizer_mode": {
-      "type": "Literal['auto', 'slow']",
       "default": "auto",
       "description": "The mode to initialize the tokenizer.",
+      "enum": [
+        "auto",
+        "slow"
+      ],
+      "type": "Literal['auto', 'slow']",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "skip_tokenizer_init": {
-      "type": "boolean",
       "default": false,
       "description": "Whether to skip the tokenizer initialization.",
+      "type": "boolean",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "trust_remote_code": {
-      "type": "boolean",
       "default": false,
       "description": "Whether to trust the remote code.",
+      "type": "boolean",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "tensor_parallel_size": {
-      "type": "integer",
       "default": 1,
       "description": "The tensor parallel size.",
+      "type": "integer",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "dtype": {
-      "type": "string",
       "default": "auto",
       "description": "The data type to use for the model.",
+      "type": "string",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "revision": {
-      "type": "string | None",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The revision to use for the model.",
+      "x-source": "pydantic_field",
+      "type": "string | None",
       "deprecated": false
     },
     "tokenizer_revision": {
-      "type": "string | None",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The revision to use for the tokenizer.",
+      "x-source": "pydantic_field",
+      "type": "string | None",
       "deprecated": false
     },
     "pipeline_parallel_size": {
-      "type": "integer",
       "default": 1,
       "description": "The pipeline parallel size.",
+      "type": "integer",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "context_parallel_size": {
-      "type": "integer",
       "default": 1,
       "description": "The context parallel size.",
+      "type": "integer",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "gpus_per_node": {
-      "type": "integer | None",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The number of GPUs per node.",
+      "x-source": "pydantic_field",
+      "type": "integer | None",
       "deprecated": false
     },
     "moe_cluster_parallel_size": {
-      "type": "integer | None",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The cluster parallel size for MoE models's expert weights.",
+      "x-source": "pydantic_field",
+      "type": "integer | None",
       "deprecated": false
     },
     "moe_tensor_parallel_size": {
-      "type": "integer | None",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The tensor parallel size for MoE models's expert weights.",
+      "x-source": "pydantic_field",
+      "type": "integer | None",
       "deprecated": false
     },
     "moe_expert_parallel_size": {
-      "type": "integer | None",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The expert parallel size for MoE models's expert weights.",
+      "x-source": "pydantic_field",
+      "type": "integer | None",
       "deprecated": false
     },
     "enable_attention_dp": {
-      "type": "boolean",
       "default": false,
       "description": "Enable attention data parallel.",
+      "type": "boolean",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "cp_config": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Context parallel config.",
+      "x-source": "pydantic_field",
       "type": "object | None",
       "default": null,
-      "description": "Context parallel config.",
       "deprecated": false
     },
     "load_format": {
-      "type": "Literal['auto', 'dummy']",
       "default": "auto",
       "description": "The format to load the model.",
+      "enum": [
+        "auto",
+        "dummy"
+      ],
+      "type": "Literal['auto', 'dummy']",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "enable_lora": {
-      "type": "boolean",
       "default": false,
       "description": "Enable LoRA.",
+      "type": "boolean",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "max_lora_rank": {
-      "type": "integer | None",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
+      "deprecated": true,
       "description": "The maximum LoRA rank.",
-      "deprecated": true
+      "x-source": "pydantic_field",
+      "type": "integer | None"
     },
     "max_loras": {
-      "type": "integer",
       "default": 4,
+      "deprecated": true,
       "description": "The maximum number of LoRA.",
-      "deprecated": true
+      "type": "integer",
+      "x-source": "pydantic_field"
     },
     "max_cpu_loras": {
-      "type": "integer",
       "default": 4,
+      "deprecated": true,
       "description": "The maximum number of LoRA on CPU.",
-      "deprecated": true
+      "type": "integer",
+      "x-source": "pydantic_field"
     },
     "lora_config": {
-      "type": "LoraConfig | None",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LoraConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "LoRA configuration for the model.",
+      "x-source": "pydantic_field",
+      "type": "LoraConfig | None",
       "deprecated": false
     },
     "enable_prompt_adapter": {
-      "type": "boolean",
       "default": false,
       "description": "Enable prompt adapter.",
+      "type": "boolean",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "max_prompt_adapter_token": {
-      "type": "integer",
       "default": 0,
       "description": "The maximum number of prompt adapter tokens.",
+      "type": "integer",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "quant_config": {
-      "type": "QuantConfig | None",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QuantConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Quantization config.",
+      "x-source": "pydantic_field",
+      "type": "QuantConfig | None",
       "deprecated": false
     },
     "kv_cache_config": {
+      "$ref": "#/$defs/KvCacheConfig",
+      "description": "KV cache config.",
+      "x-source": "pydantic_field",
       "type": "KvCacheConfig",
       "default": null,
-      "description": "KV cache config.",
       "deprecated": false
     },
     "enable_chunked_prefill": {
-      "type": "boolean",
       "default": false,
       "description": "Enable chunked prefill.",
+      "type": "boolean",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "guided_decoding_backend": {
-      "type": "string | None",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Guided decoding backend.",
+      "x-source": "pydantic_field",
+      "type": "string | None",
       "deprecated": false
     },
     "batched_logits_processor": {
-      "type": "Optional[tensorrt_llm.sampling_params.BatchedLogitsProcessor]",
+      "anyOf": [
+        {},
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Batched logits processor.",
+      "type": "Optional[tensorrt_llm.sampling_params.BatchedLogitsProcessor]",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "iter_stats_max_iterations": {
-      "type": "integer | None",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The maximum number of iterations for iter stats.",
+      "x-source": "pydantic_field",
+      "type": "integer | None",
       "deprecated": false
     },
     "request_stats_max_iterations": {
-      "type": "integer | None",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The maximum number of iterations for request stats.",
+      "x-source": "pydantic_field",
+      "type": "integer | None",
       "deprecated": false
     },
     "peft_cache_config": {
-      "type": "PeftCacheConfig | None",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PeftCacheConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "PEFT cache config.",
+      "x-source": "pydantic_field",
+      "type": "PeftCacheConfig | None",
       "deprecated": false
     },
     "scheduler_config": {
+      "$ref": "#/$defs/SchedulerConfig",
+      "description": "Scheduler config.",
+      "x-source": "pydantic_field",
       "type": "SchedulerConfig",
       "default": null,
-      "description": "Scheduler config.",
       "deprecated": false
     },
     "cache_transceiver_config": {
-      "type": "CacheTransceiverConfig | None",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CacheTransceiverConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Cache transceiver config.",
+      "x-source": "pydantic_field",
+      "type": "CacheTransceiverConfig | None",
       "deprecated": false
     },
     "speculative_config": {
-      "type": "LookaheadDecodingConfig | MedusaDecodingConfig | EagleDecodingConfig | MTPDecodingConfig | NGramDecodingConfig | DraftTargetDecodingConfig | None",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LookaheadDecodingConfig"
+        },
+        {
+          "$ref": "#/$defs/MedusaDecodingConfig"
+        },
+        {
+          "$ref": "#/$defs/EagleDecodingConfig"
+        },
+        {
+          "$ref": "#/$defs/MTPDecodingConfig"
+        },
+        {
+          "$ref": "#/$defs/NGramDecodingConfig"
+        },
+        {
+          "$ref": "#/$defs/DraftTargetDecodingConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Speculative decoding config.",
+      "x-source": "pydantic_field",
+      "type": "LookaheadDecodingConfig | MedusaDecodingConfig | EagleDecodingConfig | MTPDecodingConfig | NGramDecodingConfig | DraftTargetDecodingConfig | None",
       "deprecated": false
     },
     "batching_type": {
-      "type": "BatchingType | None",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BatchingType"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Batching type.",
+      "x-source": "pydantic_field",
+      "type": "BatchingType | None",
       "deprecated": false
     },
     "normalize_log_probs": {
-      "type": "boolean",
       "default": false,
       "description": "Normalize log probabilities.",
+      "type": "boolean",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "max_batch_size": {
-      "type": "integer | None",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The maximum batch size.",
+      "x-source": "pydantic_field",
+      "type": "integer | None",
       "deprecated": false
     },
     "max_input_len": {
-      "type": "integer | None",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The maximum input length.",
+      "x-source": "pydantic_field",
+      "type": "integer | None",
       "deprecated": false
     },
     "max_seq_len": {
-      "type": "integer | None",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The maximum sequence length.",
+      "x-source": "pydantic_field",
+      "type": "integer | None",
       "deprecated": false
     },
     "max_beam_width": {
-      "type": "integer | None",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The maximum beam width.",
+      "x-source": "pydantic_field",
+      "type": "integer | None",
       "deprecated": false
     },
     "max_num_tokens": {
-      "type": "integer | None",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The maximum number of tokens.",
+      "x-source": "pydantic_field",
+      "type": "integer | None",
       "deprecated": false
     },
     "gather_generation_logits": {
-      "type": "boolean",
       "default": false,
       "description": "Gather generation logits.",
+      "type": "boolean",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "num_postprocess_workers": {
-      "type": "integer",
       "default": 0,
       "description": "The number of processes used for postprocessing the generated tokens, including detokenization.",
+      "type": "integer",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "postprocess_tokenizer_dir": {
-      "type": "string | None",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The path to the tokenizer directory for postprocessing.",
+      "x-source": "pydantic_field",
+      "type": "string | None",
       "deprecated": false
     },
     "reasoning_parser": {
-      "type": "string | None",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The parser to separate reasoning content from output.",
+      "x-source": "pydantic_field",
+      "type": "string | None",
       "deprecated": false
     },
     "garbage_collection_gen0_threshold": {
-      "type": "integer",
       "default": 20000,
       "description": "Threshold for Python garbage collection of generation 0 objects.Lower values trigger more frequent garbage collection.",
+      "type": "integer",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "decoding_config": {
-      "type": "Optional[DecodingConfig]",
+      "anyOf": [
+        {},
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
+      "deprecated": true,
       "description": "The decoding config.",
-      "deprecated": true
+      "type": "Optional[DecodingConfig]",
+      "x-source": "pydantic_field"
     },
     "backend": {
-      "type": "string | None",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The backend to use for this LLM instance.",
+      "exclude_json_schema": true,
+      "x-source": "pydantic_field",
+      "type": "string | None",
       "deprecated": false
     },
     "auto_parallel": {
-      "type": "boolean",
       "default": false,
+      "deprecated": true,
       "description": "Enable auto parallel mode.",
-      "deprecated": true
+      "type": "boolean",
+      "x-source": "pydantic_field"
     },
     "auto_parallel_world_size": {
-      "type": "integer | None",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
+      "deprecated": true,
       "description": "The world size for auto parallel mode.",
-      "deprecated": true
+      "x-source": "pydantic_field",
+      "type": "integer | None"
     },
     "enable_tqdm": {
-      "type": "boolean",
       "default": false,
       "description": "Enable tqdm for progress bar.",
+      "type": "boolean",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "workspace": {
-      "type": "string | None",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "The workspace for the model.",
+      "x-source": "pydantic_field",
+      "type": "string | None",
       "deprecated": false
     },
     "enable_build_cache": {
-      "type": "Union[tensorrt_llm.llmapi.build_cache.BuildCacheConfig, bool]",
       "default": false,
       "description": "Enable build cache.",
+      "type": "Union[tensorrt_llm.llmapi.build_cache.BuildCacheConfig, bool]",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "extended_runtime_perf_knob_config": {
-      "type": "ExtendedRuntimePerfKnobConfig | None",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExtendedRuntimePerfKnobConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Extended runtime perf knob config.",
+      "x-source": "pydantic_field",
+      "type": "ExtendedRuntimePerfKnobConfig | None",
       "deprecated": false
     },
     "calib_config": {
-      "type": "CalibConfig | None",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CalibConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Calibration config.",
+      "x-source": "pydantic_field",
+      "type": "CalibConfig | None",
       "deprecated": false
     },
     "embedding_parallel_mode": {
-      "type": "string",
       "default": "SHARDING_ALONG_VOCAB",
       "description": "The embedding parallel mode.",
+      "type": "string",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "fast_build": {
-      "type": "boolean",
       "default": false,
       "description": "Enable fast build.",
+      "type": "boolean",
+      "x-source": "pydantic_field",
       "deprecated": false
     },
     "build_config": {
-      "type": "Optional[tensorrt_llm.builder.BuildConfig]",
+      "anyOf": [
+        {},
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Build config.",
+      "type": "Optional[tensorrt_llm.builder.BuildConfig]",
+      "x-source": "pydantic_field",
       "deprecated": false
     }
   },
   "sampling_params": {
     "end_id": {
       "type": "int | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "pad_id": {
       "type": "int | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "max_tokens": {
       "type": "int",
-      "default": 32
+      "default": 32,
+      "x-source": "dataclass_field"
     },
     "bad": {
       "type": "str | list[str] | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "bad_token_ids": {
       "type": "list[int] | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "stop": {
       "type": "str | list[str] | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "stop_token_ids": {
       "type": "list[int] | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "include_stop_str_in_output": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "dataclass_field"
     },
     "embedding_bias": {
       "type": "Tensor | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "logits_processor": {
       "type": "LogitsProcessor | list[LogitsProcessor] | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "apply_batched_logits_processor": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "dataclass_field"
     },
     "n": {
       "type": "int",
-      "default": 1
+      "default": 1,
+      "x-source": "dataclass_field"
     },
     "best_of": {
       "type": "int | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "use_beam_search": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "dataclass_field"
     },
     "top_k": {
       "type": "int | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "top_p": {
       "type": "float | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "top_p_min": {
       "type": "float | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "top_p_reset_ids": {
       "type": "int | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "top_p_decay": {
       "type": "float | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "seed": {
       "type": "int | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "temperature": {
       "type": "float | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "min_tokens": {
       "type": "int | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "beam_search_diversity_rate": {
       "type": "float | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "repetition_penalty": {
       "type": "float | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "presence_penalty": {
       "type": "float | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "frequency_penalty": {
       "type": "float | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "length_penalty": {
       "type": "float | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "early_stopping": {
       "type": "int | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "no_repeat_ngram_size": {
       "type": "int | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "min_p": {
       "type": "float | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "beam_width_array": {
       "type": "list[int] | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "logprobs": {
       "type": "int | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "prompt_logprobs": {
       "type": "int | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "return_context_logits": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "dataclass_field"
     },
     "return_generation_logits": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "dataclass_field"
     },
     "exclude_input_from_output": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "x-source": "dataclass_field"
     },
     "return_encoder_output": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "dataclass_field"
     },
     "return_perf_metrics": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "dataclass_field"
     },
     "additional_model_outputs": {
       "type": "list[AdditionalModelOutput] | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "lookahead_config": {
       "type": "LookaheadDecodingConfig | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "guided_decoding": {
       "type": "GuidedDecodingParams | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "ignore_eos": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "x-source": "dataclass_field"
     },
     "detokenize": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "x-source": "dataclass_field"
     },
     "add_special_tokens": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "x-source": "dataclass_field"
     },
     "truncate_prompt_tokens": {
       "type": "int | None",
-      "default": null
+      "default": null,
+      "x-source": "dataclass_field"
     },
     "skip_special_tokens": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "x-source": "dataclass_field"
     },
     "spaces_between_special_tokens": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "x-source": "dataclass_field"
+    }
+  },
+  "engine_params_defs": {
+    "BatchingType": {
+      "enum": [
+        "STATIC",
+        "INFLIGHT"
+      ],
+      "title": "BatchingType",
+      "type": "string"
+    },
+    "CacheTransceiverConfig": {
+      "description": "Configuration for the cache transceiver.",
+      "properties": {
+        "max_num_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The max number of tokens the transfer buffer can fit.",
+          "title": "Max Num Tokens"
+        }
+      },
+      "title": "CacheTransceiverConfig",
+      "type": "object"
+    },
+    "CalibConfig": {
+      "description": "Calibration configuration.",
+      "properties": {
+        "device": {
+          "default": "cuda",
+          "description": "The device to run calibration.",
+          "enum": [
+            "cuda",
+            "cpu"
+          ],
+          "title": "Device",
+          "type": "string"
+        },
+        "calib_dataset": {
+          "default": "cnn_dailymail",
+          "description": "The name or local path of calibration dataset.",
+          "title": "Calib Dataset",
+          "type": "string"
+        },
+        "calib_batches": {
+          "default": 512,
+          "description": "The number of batches that the calibration runs.",
+          "title": "Calib Batches",
+          "type": "integer"
+        },
+        "calib_batch_size": {
+          "default": 1,
+          "description": "The batch size that the calibration runs.",
+          "title": "Calib Batch Size",
+          "type": "integer"
+        },
+        "calib_max_seq_length": {
+          "default": 512,
+          "description": "The maximum sequence length that the calibration runs.",
+          "title": "Calib Max Seq Length",
+          "type": "integer"
+        },
+        "random_seed": {
+          "default": 1234,
+          "description": "The random seed used for calibration.",
+          "title": "Random Seed",
+          "type": "integer"
+        },
+        "tokenizer_max_seq_length": {
+          "default": 2048,
+          "description": "The maximum sequence length to initialize tokenizer for calibration.",
+          "title": "Tokenizer Max Seq Length",
+          "type": "integer"
+        }
+      },
+      "title": "CalibConfig",
+      "type": "object"
+    },
+    "CapacitySchedulerPolicy": {
+      "enum": [
+        "MAX_UTILIZATION",
+        "GUARANTEED_NO_EVICT",
+        "STATIC_BATCH"
+      ],
+      "title": "CapacitySchedulerPolicy",
+      "type": "string"
+    },
+    "ContextChunkingPolicy": {
+      "description": "Context chunking policy. ",
+      "enum": [
+        "FIRST_COME_FIRST_SERVED",
+        "EQUAL_PROGRESS"
+      ],
+      "title": "ContextChunkingPolicy",
+      "type": "string"
+    },
+    "DraftTargetDecodingConfig": {
+      "properties": {
+        "max_draft_len": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Draft Len"
+        },
+        "speculative_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speculative Model"
+        },
+        "pytorch_weights_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pytorch Weights Path"
+        }
+      },
+      "title": "DraftTargetDecodingConfig",
+      "type": "object"
+    },
+    "DynamicBatchConfig": {
+      "description": "Dynamic batch configuration.\n\nControls how batch size and token limits are dynamically adjusted at runtime.",
+      "properties": {
+        "enable_batch_size_tuning": {
+          "description": "Controls if the batch size should be tuned dynamically",
+          "title": "Enable Batch Size Tuning",
+          "type": "boolean"
+        },
+        "enable_max_num_tokens_tuning": {
+          "description": "Controls if the max num tokens should be tuned dynamically",
+          "title": "Enable Max Num Tokens Tuning",
+          "type": "boolean"
+        },
+        "dynamic_batch_moving_average_window": {
+          "description": "The window size for moving average of input and output length which is used to calculate dynamic batch size and max num tokens",
+          "title": "Dynamic Batch Moving Average Window",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "enable_batch_size_tuning",
+        "enable_max_num_tokens_tuning",
+        "dynamic_batch_moving_average_window"
+      ],
+      "title": "DynamicBatchConfig",
+      "type": "object"
+    },
+    "EagleDecodingConfig": {
+      "properties": {
+        "max_draft_len": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Draft Len"
+        },
+        "speculative_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speculative Model"
+        },
+        "eagle_choices": {
+          "anyOf": [
+            {
+              "items": {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Eagle Choices"
+        },
+        "greedy_sampling": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": true,
+          "title": "Greedy Sampling"
+        },
+        "posterior_threshold": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Posterior Threshold"
+        },
+        "use_dynamic_tree": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": false,
+          "title": "Use Dynamic Tree"
+        },
+        "dynamic_tree_max_topK": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dynamic Tree Max Topk"
+        },
+        "num_eagle_layers": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Num Eagle Layers"
+        },
+        "max_non_leaves_per_layer": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Non Leaves Per Layer"
+        },
+        "pytorch_weights_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pytorch Weights Path"
+        },
+        "eagle3_one_model": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": true,
+          "title": "Eagle3 One Model"
+        }
+      },
+      "title": "EagleDecodingConfig",
+      "type": "object"
+    },
+    "ExtendedRuntimePerfKnobConfig": {
+      "description": "Configuration for extended runtime performance knobs.",
+      "properties": {
+        "multi_block_mode": {
+          "default": true,
+          "description": "Whether to use multi-block mode.",
+          "title": "Multi Block Mode",
+          "type": "boolean"
+        },
+        "enable_context_fmha_fp32_acc": {
+          "default": false,
+          "description": "Whether to enable context FMHA FP32 accumulation.",
+          "title": "Enable Context Fmha Fp32 Acc",
+          "type": "boolean"
+        },
+        "cuda_graph_mode": {
+          "default": false,
+          "description": "Whether to use CUDA graph mode.",
+          "title": "Cuda Graph Mode",
+          "type": "boolean"
+        },
+        "cuda_graph_cache_size": {
+          "default": 0,
+          "description": "Number of cuda graphs to be cached in the runtime. The larger the cache, the better the perf, but more GPU memory is consumed.",
+          "title": "Cuda Graph Cache Size",
+          "type": "integer"
+        }
+      },
+      "title": "ExtendedRuntimePerfKnobConfig",
+      "type": "object"
+    },
+    "KvCacheConfig": {
+      "description": "Configuration for the KV cache.",
+      "properties": {
+        "enable_block_reuse": {
+          "default": true,
+          "description": "Controls if KV cache blocks can be reused for different requests.",
+          "title": "Enable Block Reuse",
+          "type": "boolean"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The maximum number of tokens that should be stored in the KV cache. If both `max_tokens` and `free_gpu_memory_fraction` are specified, memory corresponding to the minimum will be used.",
+          "title": "Max Tokens"
+        },
+        "max_attention_window": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Size of the attention window for each sequence. Only the last tokens will be stored in the KV cache. If the number of elements in `max_attention_window` is less than the number of layers, `max_attention_window` will be repeated multiple times to the number of layers.",
+          "title": "Max Attention Window"
+        },
+        "sink_token_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Number of sink tokens (tokens to always keep in attention window).",
+          "title": "Sink Token Length"
+        },
+        "free_gpu_memory_fraction": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The fraction of GPU memory fraction that should be allocated for the KV cache. Default is 90%. If both `max_tokens` and `free_gpu_memory_fraction` are specified, memory corresponding to the minimum will be used.",
+          "title": "Free Gpu Memory Fraction"
+        },
+        "host_cache_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Size of the host cache in bytes. If both `max_tokens` and `host_cache_size` are specified, memory corresponding to the minimum will be used.",
+          "title": "Host Cache Size"
+        },
+        "onboard_blocks": {
+          "default": true,
+          "description": "Controls if blocks are onboarded.",
+          "title": "Onboard Blocks",
+          "type": "boolean"
+        },
+        "cross_kv_cache_fraction": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The fraction of the KV Cache memory should be reserved for cross attention. If set to p, self attention will use 1-p of KV Cache memory and cross attention will use p of KV Cache memory. Default is 50%. Should only be set when using encoder-decoder model.",
+          "title": "Cross Kv Cache Fraction"
+        },
+        "secondary_offload_min_priority": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only blocks with priority > mSecondaryOfflineMinPriority can be offloaded to secondary memory.",
+          "title": "Secondary Offload Min Priority"
+        },
+        "event_buffer_max_size": {
+          "default": 0,
+          "description": "Maximum size of the event buffer. If set to 0, the event buffer will not be used.",
+          "title": "Event Buffer Max Size",
+          "type": "integer"
+        },
+        "enable_partial_reuse": {
+          "default": true,
+          "description": "Whether blocks that are only partially matched can be reused.",
+          "title": "Enable Partial Reuse",
+          "type": "boolean"
+        },
+        "copy_on_partial_reuse": {
+          "default": true,
+          "description": "Whether partially matched blocks that are in use can be reused after copying them.",
+          "title": "Copy On Partial Reuse",
+          "type": "boolean"
+        }
+      },
+      "title": "KvCacheConfig",
+      "type": "object"
+    },
+    "LookaheadDecodingConfig": {
+      "description": "Configuration for lookahead speculative decoding.",
+      "properties": {
+        "max_draft_len": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Draft Len"
+        },
+        "speculative_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speculative Model"
+        },
+        "max_window_size": {
+          "default": 4,
+          "description": "Number of NGrams in lookahead branch per step.",
+          "title": "Max Window Size",
+          "type": "integer"
+        },
+        "max_ngram_size": {
+          "default": 3,
+          "description": "Number of tokens per NGram.",
+          "title": "Max Ngram Size",
+          "type": "integer"
+        },
+        "max_verification_set_size": {
+          "default": 4,
+          "description": "Number of NGrams in verification branch per step.",
+          "title": "Max Verification Set Size",
+          "type": "integer"
+        }
+      },
+      "title": "LookaheadDecodingConfig",
+      "type": "object"
+    },
+    "LoraConfig": {
+      "properties": {
+        "lora_dir": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Lora Dir",
+          "type": "array"
+        },
+        "lora_ckpt_source": {
+          "default": "hf",
+          "title": "Lora Ckpt Source",
+          "type": "string"
+        },
+        "max_lora_rank": {
+          "default": 64,
+          "title": "Max Lora Rank",
+          "type": "integer"
+        },
+        "lora_target_modules": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Lora Target Modules",
+          "type": "array"
+        },
+        "trtllm_modules_to_hf_modules": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Trtllm Modules To Hf Modules",
+          "type": "object"
+        },
+        "max_loras": {
+          "default": 4,
+          "title": "Max Loras",
+          "type": "integer"
+        },
+        "max_cpu_loras": {
+          "default": 4,
+          "title": "Max Cpu Loras",
+          "type": "integer"
+        }
+      },
+      "title": "LoraConfig",
+      "type": "object"
+    },
+    "MTPDecodingConfig": {
+      "properties": {
+        "max_draft_len": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Draft Len"
+        },
+        "speculative_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speculative Model"
+        },
+        "num_nextn_predict_layers": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 1,
+          "title": "Num Nextn Predict Layers"
+        },
+        "use_relaxed_acceptance_for_thinking": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": false,
+          "title": "Use Relaxed Acceptance For Thinking"
+        },
+        "relaxed_topk": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 1,
+          "title": "Relaxed Topk"
+        },
+        "relaxed_delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.0,
+          "title": "Relaxed Delta"
+        }
+      },
+      "title": "MTPDecodingConfig",
+      "type": "object"
+    },
+    "MedusaDecodingConfig": {
+      "properties": {
+        "max_draft_len": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Draft Len"
+        },
+        "speculative_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speculative Model"
+        },
+        "medusa_choices": {
+          "anyOf": [
+            {
+              "items": {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Medusa Choices"
+        },
+        "num_medusa_heads": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Num Medusa Heads"
+        }
+      },
+      "title": "MedusaDecodingConfig",
+      "type": "object"
+    },
+    "NGramDecodingConfig": {
+      "description": "Configuration for NGram drafter speculative decoding.\n\nArguments:\n    prompt_lookup_num_tokens: int\n            The length maximum of draft tokens (can be understood as length maximum of output draft tokens).\n\n    max_matching_ngram_size: int\n        The length maximum of searching tokens (can be understood as length maximum of input tokens to search).\n\n    is_keep_all: bool = True\n        Whether to keep all candidate pattern-matches pairs, only one match is kept for each pattern if False.\n\n    is_use_oldest: bool = True\n        Whether to provide the oldest match when pattern is hit, the newest one is provided if False.\n\n    is_public_pool: bool = True\n        Whether to use a common pool for all requests, or the pool is private for each request if False.",
+      "properties": {
+        "max_draft_len": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Draft Len"
+        },
+        "speculative_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speculative Model"
+        },
+        "prompt_lookup_num_tokens": {
+          "default": 2,
+          "title": "Prompt Lookup Num Tokens",
+          "type": "integer"
+        },
+        "max_matching_ngram_size": {
+          "default": 4,
+          "title": "Max Matching Ngram Size",
+          "type": "integer"
+        },
+        "is_keep_all": {
+          "default": true,
+          "title": "Is Keep All",
+          "type": "boolean"
+        },
+        "is_use_oldest": {
+          "default": true,
+          "title": "Is Use Oldest",
+          "type": "boolean"
+        },
+        "is_public_pool": {
+          "default": true,
+          "title": "Is Public Pool",
+          "type": "boolean"
+        }
+      },
+      "title": "NGramDecodingConfig",
+      "type": "object"
+    },
+    "PeftCacheConfig": {
+      "description": "Configuration for the PEFT cache.",
+      "properties": {
+        "num_host_module_layer": {
+          "default": 0,
+          "description": "number of max sized 1-layer 1-module adapterSize=1 sets of weights that can be stored in host cache",
+          "title": "Num Host Module Layer",
+          "type": "integer"
+        },
+        "num_device_module_layer": {
+          "default": 0,
+          "description": "number of max sized 1-layer 1-module sets of weights that can be stored in host cache",
+          "title": "Num Device Module Layer",
+          "type": "integer"
+        },
+        "optimal_adapter_size": {
+          "default": 8,
+          "description": "optimal adapter size used to set page width",
+          "title": "Optimal Adapter Size",
+          "type": "integer"
+        },
+        "max_adapter_size": {
+          "default": 64,
+          "description": "max supported adapter size. Used to compute minimum",
+          "title": "Max Adapter Size",
+          "type": "integer"
+        },
+        "num_put_workers": {
+          "default": 1,
+          "description": "number of worker threads used to put weights into host cache",
+          "title": "Num Put Workers",
+          "type": "integer"
+        },
+        "num_ensure_workers": {
+          "default": 1,
+          "description": "number of worker threads used to copy weights from host to device",
+          "title": "Num Ensure Workers",
+          "type": "integer"
+        },
+        "num_copy_streams": {
+          "default": 1,
+          "description": "number of streams used to copy weights from host to device",
+          "title": "Num Copy Streams",
+          "type": "integer"
+        },
+        "max_pages_per_block_host": {
+          "default": 24,
+          "description": "Number of cache pages per allocation block (host)",
+          "title": "Max Pages Per Block Host",
+          "type": "integer"
+        },
+        "max_pages_per_block_device": {
+          "default": 8,
+          "description": "Number of cache pages per allocation block (device)",
+          "title": "Max Pages Per Block Device",
+          "type": "integer"
+        },
+        "device_cache_percent": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "percent of memory after engine load to use for cache",
+          "title": "Device Cache Percent"
+        },
+        "host_cache_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "size in bytes to use for host cache",
+          "title": "Host Cache Size"
+        },
+        "lora_prefetch_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "folder to store the LoRA weights we hope to load during engine initialization",
+          "title": "Lora Prefetch Dir"
+        }
+      },
+      "title": "PeftCacheConfig",
+      "type": "object"
+    },
+    "QuantAlgo": {
+      "enum": [
+        "W8A16",
+        "W4A16",
+        "W4A16_AWQ",
+        "W4A8_AWQ",
+        "W8A16_GPTQ",
+        "W4A16_GPTQ",
+        "W8A8_SQ_PER_CHANNEL",
+        "W8A8_SQ_PER_TENSOR_PLUGIN",
+        "W8A8_SQ_PER_CHANNEL_PER_TOKEN_PLUGIN",
+        "W8A8_SQ_PER_CHANNEL_PER_TENSOR_PLUGIN",
+        "W8A8_SQ_PER_TENSOR_PER_TOKEN_PLUGIN",
+        "W4A8_QSERVE_PER_GROUP",
+        "W4A8_QSERVE_PER_CHANNEL",
+        "FP8",
+        "FP8_PER_CHANNEL_PER_TOKEN",
+        "FP8_BLOCK_SCALES",
+        "INT8",
+        "MIXED_PRECISION",
+        "NVFP4",
+        "W4A8_MXFP4_FP8",
+        "NO_QUANT"
+      ],
+      "title": "QuantAlgo",
+      "type": "string"
+    },
+    "QuantConfig": {
+      "properties": {
+        "quant_algo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QuantAlgo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kv_cache_quant_algo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QuantAlgo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "group_size": {
+          "default": 128,
+          "title": "Group Size",
+          "type": "integer"
+        },
+        "smoothquant_val": {
+          "default": 0.5,
+          "title": "Smoothquant Val",
+          "type": "number"
+        },
+        "clamp_val": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clamp Val"
+        },
+        "use_meta_recipe": {
+          "default": false,
+          "title": "Use Meta Recipe",
+          "type": "boolean"
+        },
+        "has_zero_point": {
+          "default": false,
+          "title": "Has Zero Point",
+          "type": "boolean"
+        },
+        "pre_quant_scale": {
+          "default": false,
+          "title": "Pre Quant Scale",
+          "type": "boolean"
+        },
+        "exclude_modules": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exclude Modules"
+        }
+      },
+      "title": "QuantConfig",
+      "type": "object"
+    },
+    "SchedulerConfig": {
+      "properties": {
+        "capacity_scheduler_policy": {
+          "$ref": "#/$defs/CapacitySchedulerPolicy",
+          "default": "GUARANTEED_NO_EVICT",
+          "description": "The capacity scheduler policy to use"
+        },
+        "context_chunking_policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContextChunkingPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The context chunking policy to use"
+        },
+        "dynamic_batch_config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DynamicBatchConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The dynamic batch config to use"
+        }
+      },
+      "title": "SchedulerConfig",
+      "type": "object"
     }
   }
 }

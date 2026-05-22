@@ -23,7 +23,20 @@ from typing import Any
 
 from llenergymeasure.config.ssot import Engine
 
-SUPPORTED_MAJOR_VERSION = 1
+SUPPORTED_MAJOR_VERSIONS: frozenset[int] = frozenset({1, 2})
+"""Major schema versions this loader can parse.
+
+v1 was the original ``{type, default}`` per-field shape. v2 layers JSON
+Schema-conformant keys (``enum``, ``minimum``, ``$defs``, etc.) on top of
+that shape; the loader doesn't need any new logic to read v2 because the
+DiscoveredSchema dataclass keeps ``engine_params`` / ``sampling_params``
+as raw dicts and lets downstream consumers pick up the new keys
+opportunistically.
+"""
+
+# Retained for backward compatibility with any external code that imported
+# the singular constant; new code should consult ``SUPPORTED_MAJOR_VERSIONS``.
+SUPPORTED_MAJOR_VERSION = 2
 
 # Engines known to ship a discovered schema. Test-patchable module attribute
 # (tests monkeypatch this to inject fake engines); derived from Engine SSOT.
@@ -60,6 +73,14 @@ class DiscoveredSchema:
     carry ``description`` and ``deprecated`` from its Pydantic schema, while
     vLLM and Transformers fields only have ``type`` and ``default``. Consumers
     that need uniform shape should adapt at read time.
+
+    From schema_version 2.0.0 onward the per-field dicts may additionally
+    carry JSON Schema keys (``enum``, ``minimum``, ``maximum``,
+    ``exclusiveMinimum``, ``exclusiveMaximum``, ``pattern``, ``multipleOf``,
+    ``$ref``, ``anyOf``). Nested ``$defs`` blocks referenced by Pydantic
+    sub-models are surfaced in :attr:`engine_params_defs` /
+    :attr:`sampling_params_defs`, which default to empty dicts for engines
+    that don't emit them.
     """
 
     schema_version: str
@@ -73,6 +94,8 @@ class DiscoveredSchema:
     discovery_limitations: list[DiscoveryLimitation] = field(default_factory=list)
     engine_params: dict[str, dict[str, Any]] = field(default_factory=dict)
     sampling_params: dict[str, dict[str, Any]] = field(default_factory=dict)
+    engine_params_defs: dict[str, Any] = field(default_factory=dict)
+    sampling_params_defs: dict[str, Any] = field(default_factory=dict)
 
 
 class SchemaLoader:
@@ -93,7 +116,7 @@ class SchemaLoader:
             ValueError: ``engine`` is not a known engine name.
             FileNotFoundError: No discovered JSON exists for ``engine``.
             UnsupportedSchemaVersionError: Discovered schema major version
-                doesn't match ``SUPPORTED_MAJOR_VERSION``.
+                isn't in ``SUPPORTED_MAJOR_VERSIONS``.
             json.JSONDecodeError: Discovered file is not valid JSON.
         """
         if engine not in _KNOWN_ENGINES:
@@ -139,12 +162,12 @@ def _parse_envelope(*, engine: str, raw_text: str) -> DiscoveredSchema:
 
     schema_version = data["schema_version"]
     major = _major_version(schema_version)
-    if major != SUPPORTED_MAJOR_VERSION:
+    if major not in SUPPORTED_MAJOR_VERSIONS:
         raise UnsupportedSchemaVersionError(
             f"Discovered schema for {engine!r} has schema_version={schema_version!r} "
-            f"(major={major}); this SchemaLoader only supports major "
-            f"{SUPPORTED_MAJOR_VERSION}. Regenerate with a matching discovery script, "
-            f"or upgrade the loader."
+            f"(major={major}); this SchemaLoader only supports majors "
+            f"{sorted(SUPPORTED_MAJOR_VERSIONS)}. Regenerate with a matching discovery "
+            f"script, or upgrade the loader."
         )
 
     limitations_raw = data.get("discovery_limitations", [])
@@ -177,6 +200,8 @@ def _parse_envelope(*, engine: str, raw_text: str) -> DiscoveredSchema:
         discovery_limitations=limitations,
         engine_params=data.get("engine_params", {}),
         sampling_params=data.get("sampling_params", {}),
+        engine_params_defs=data.get("engine_params_defs", {}),
+        sampling_params_defs=data.get("sampling_params_defs", {}),
     )
 
 

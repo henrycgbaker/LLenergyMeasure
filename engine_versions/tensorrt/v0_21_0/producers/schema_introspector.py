@@ -26,6 +26,7 @@ from typing import Any
 from scripts.engine_producers._common import (
     dataclass_fields_to_specs,
     make_envelope,
+    pydantic_properties_to_specs,
 )
 
 LANDMARKS: tuple[str, ...] = (
@@ -38,8 +39,11 @@ LANDMARKS: tuple[str, ...] = (
 def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     """Discover TensorRT-LLM 0.21.0 engine and sampling schemas.
 
-    engine_params:   TrtLlmArgs.model_json_schema() properties (with description + deprecated)
-    sampling_params: dataclasses.fields(SamplingParams)
+    engine_params:   TrtLlmArgs Pydantic JSON Schema properties + nested $defs
+                     (preserves enum, minimum, maximum, $ref, description,
+                     deprecated)
+    sampling_params: dataclasses.fields(SamplingParams) (Literal annotations
+                     surface as ``enum`` on the spec dict)
     """
     import tensorrt_llm  # type: ignore[import-not-found]
     from tensorrt_llm import SamplingParams  # type: ignore[import-not-found]
@@ -47,36 +51,7 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
 
     limitations: list[dict[str, Any]] = []
 
-    raw_schema = TrtLlmArgs.model_json_schema()
-    engine_params: dict[str, Any] = {}
-    for name, spec in raw_schema.get("properties", {}).items():
-        if name.startswith("_"):
-            continue
-        type_repr: Any = spec.get("type")
-        if type_repr is None and "anyOf" in spec:
-            parts: list[str] = []
-            for sub in spec["anyOf"]:
-                if "type" in sub:
-                    part = "None" if sub["type"] == "null" else str(sub["type"])
-                elif "$ref" in sub:
-                    part = str(sub["$ref"]).rsplit("/", 1)[-1]
-                else:
-                    continue
-                if part not in parts:  # dedupe string | string etc.
-                    parts.append(part)
-            type_repr = " | ".join(parts) if parts else "unknown"
-        elif type_repr is None and "$ref" in spec:
-            type_repr = str(spec["$ref"]).rsplit("/", 1)[-1]
-        if isinstance(type_repr, list):
-            type_repr = " | ".join("None" if t == "null" else str(t) for t in type_repr)
-        elif type_repr == "null":
-            type_repr = "None"
-        engine_params[name] = {
-            "type": type_repr or "unknown",
-            "default": spec.get("default"),
-            "description": spec.get("description"),
-            "deprecated": spec.get("deprecated", False),
-        }
+    engine_params, engine_defs = pydantic_properties_to_specs(TrtLlmArgs)
 
     limitations.append(
         {
@@ -88,13 +63,18 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
 
     sampling_params = dataclass_fields_to_specs(SamplingParams, skip_private=True)
 
-    limitations.append(
-        {
-            "section": "sampling_params",
-            "fields": [],
-            "reason": "SamplingParams is a dataclass; no per-field descriptions",
-        }
-    )
+    # TRT-LLM's SamplingParams dataclass doesn't set field.metadata['description']
+    # for any field, so the dataclass_fields_to_specs description path stays empty
+    # here. Literal-annotated fields still surface ``enum`` via the helper.
+    if not any(spec.get("description") for spec in sampling_params.values()):
+        limitations.append(
+            {
+                "section": "sampling_params",
+                "fields": [],
+                "reason": "SamplingParams is a dataclass with no per-field "
+                "field(metadata={'description': ...}) metadata; descriptions unavailable",
+            }
+        )
 
     # tensorrt-llm runs inside the NGC release image; the workflow passes
     # its concrete reference via --image-ref. No first-party Dockerfile
@@ -109,4 +89,5 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,
+        engine_params_defs=engine_defs,
     )

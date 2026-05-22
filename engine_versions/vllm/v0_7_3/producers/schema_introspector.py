@@ -21,6 +21,7 @@ from typing import Any
 from scripts.engine_producers._common import (
     dataclass_fields_to_specs,
     make_envelope,
+    msgspec_properties_to_specs,
 )
 
 LANDMARKS: tuple[str, ...] = (
@@ -32,8 +33,13 @@ LANDMARKS: tuple[str, ...] = (
 def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     """Discover vLLM 0.7.3 engine and sampling schemas.
 
-    engine_params:   dataclasses.fields(EngineArgs)
-    sampling_params: msgspec.json.schema(SamplingParams)
+    engine_params:   dataclasses.fields(EngineArgs) (Literal annotations
+                     surface as ``enum``; per-field descriptions remain
+                     absent because EngineArgs uses positional defaults
+                     rather than field(metadata={'description': ...}))
+    sampling_params: msgspec.json.schema(SamplingParams) preserved with
+                     nested ``$defs``; per-leaf ``enum`` / ``minimum`` /
+                     ``maximum`` / ``exclusiveMinimum`` etc kept as-is
     """
     import vllm  # type: ignore[import-not-found]
     from vllm.engine.arg_utils import EngineArgs  # type: ignore[import-not-found]
@@ -42,23 +48,14 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     engine_params = dataclass_fields_to_specs(EngineArgs)
 
     sampling_params: dict[str, Any] = {}
+    sampling_defs: dict[str, Any] = {}
     try:
-        import msgspec  # type: ignore[import-not-found]
-
-        raw_schema = msgspec.json.schema(vllm.SamplingParams)
-        props = raw_schema.get("properties")
-        if not props:
-            defs = raw_schema.get("$defs") or raw_schema.get("definitions") or {}
-            sp_def: Any = defs.get("SamplingParams") or next(iter(defs.values()), {})
-            props = sp_def.get("properties", {}) if isinstance(sp_def, dict) else {}
-        for name, spec in (props or {}).items():
-            type_repr: Any = spec.get("type", "unknown")
-            if isinstance(type_repr, list):
-                type_repr = " | ".join(str(t) for t in type_repr)
-            sampling_params[name] = {
-                "type": type_repr,
-                "default": spec.get("default"),
-            }
+        # Preserve private-prefixed fields (e.g. ``_all_stop_token_ids``,
+        # ``_real_n``) for v1-shape parity. msgspec's own JSON Schema lists
+        # them as msgspec exposes them.
+        sampling_params, sampling_defs = msgspec_properties_to_specs(
+            vllm.SamplingParams, skip_private=False
+        )
     except Exception as exc:
         limitations.append(
             {
@@ -68,12 +65,16 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
             }
         )
 
+    # The msgspec schema captures field-level enum + min/max where present;
+    # constraints that live solely in _verify_args() (e.g. mutual-exclusion
+    # checks across fields) remain undiscoverable from field metadata, so
+    # the cross-field caveat stays.
     limitations.append(
         {
             "section": "sampling_params",
             "fields": [],
-            "reason": "constraints (e.g. temperature>=0, top_p in (0,1]) live in imperative "
-            "_verify_args() and are not introspectable from field metadata",
+            "reason": "cross-field constraints (e.g. top_p + top_k interactions) live in "
+            "imperative _verify_args() and are not introspectable from field metadata",
         }
     )
     limitations.append(
@@ -94,4 +95,5 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,
+        sampling_params_defs=sampling_defs,
     )

@@ -19,10 +19,11 @@ from typing import Any
 
 from scripts.engine_producers._common import (
     TRANSFORMERS_DOCKERFILE,
-    annotation_to_type_str,
     jsonable,
+    literal_to_json_schema,
     make_envelope,
     read_dockerfile_from,
+    signature_param_to_spec,
 )
 
 # Schema-introspector LANDMARKS for Transformers 5.6.2.
@@ -86,11 +87,7 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
                 continue
             if name in engine_params:
                 continue  # prefer AutoModelForCausalLM over PreTrainedModel
-            default = None if param.default is inspect.Parameter.empty else param.default
-            engine_params[name] = {
-                "type": annotation_to_type_str(param.annotation),
-                "default": jsonable(default),
-            }
+            engine_params[name] = signature_param_to_spec(param)
 
     if kwargs_points:
         limitations.append(
@@ -105,19 +102,43 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     sampling_params: dict[str, Any] = {}
     none_default_fields: list[str] = []
     gc = GenerationConfig()
+    gc_fields = type(gc).__dataclass_fields__ if hasattr(type(gc), "__dataclass_fields__") else {}
     for name, value in gc.to_dict().items():
         if value is None:
-            sampling_params[name] = {"type": "unknown", "default": None}
+            spec: dict[str, Any] = {
+                "type": "unknown",
+                "default": None,
+                "x-source": "instance_dict",
+            }
             none_default_fields.append(name)
         elif isinstance(value, (list, tuple)):
-            sampling_params[name] = {"type": type(value).__name__, "default": jsonable(value)}
-        elif isinstance(value, dict):
-            sampling_params[name] = {"type": "dict", "default": jsonable(value)}
-        else:
-            sampling_params[name] = {
+            spec = {
                 "type": type(value).__name__,
                 "default": jsonable(value),
+                "x-source": "instance_dict",
             }
+        elif isinstance(value, dict):
+            spec = {
+                "type": "dict",
+                "default": jsonable(value),
+                "x-source": "instance_dict",
+            }
+        else:
+            spec = {
+                "type": type(value).__name__,
+                "default": jsonable(value),
+                "x-source": "instance_dict",
+            }
+        # GenerationConfig may become a dataclass in v5+; if a field carries
+        # a Literal / Enum annotation, surface it as ``enum`` (additive
+        # JSON Schema key). The hasattr guard keeps this safe even when
+        # GenerationConfig stays a plain class.
+        fld = gc_fields.get(name) if isinstance(gc_fields, dict) else None
+        if fld is not None:
+            enum_shape = literal_to_json_schema(fld.type)
+            if enum_shape is not None:
+                spec["enum"] = enum_shape["enum"]
+        sampling_params[name] = spec
 
     if none_default_fields:
         limitations.append(
