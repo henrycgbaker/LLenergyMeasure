@@ -3,14 +3,14 @@
 .PHONY: test test-unit test-integration test-all
 .PHONY: test-runtime test-runtime-vllm test-runtime-tensorrt test-runtime-all
 .PHONY: test-runtime-quick test-runtime-check test-runtime-list test-runtime-docker
-.PHONY: docs-all docs-check check-docs docs-generate docs-serve docs-build docs-clean
+.PHONY: docs-all docs-check docs-generate docs-serve docs-build docs-clean
 .PHONY: discover-schema discover-schemas-all refresh-invariants refresh-invariants-all
 .PHONY: package-check
-.PHONY: docker-smoke docker-smoke-transformers docker-smoke-compose
+.PHONY: docker-smoke
 .PHONY: ci ci-all ci-docker
-.PHONY: gpu-ci gpu-ci-transformers
+.PHONY: gpu-ci
 .PHONY: docker-builder-setup docker-builder-rm
-.PHONY: docker-build-all docker-build-transformers docker-seed-transformers
+.PHONY: docker-build docker-seed-transformers
 .PHONY: docker-pull docker-images docker-check
 .PHONY: llem docker-shell docker-build-dev docker-dev
 .PHONY: llem-clean-cache
@@ -155,9 +155,6 @@ docs-check: ## Verify generated docs are up to date (used by CI)
 	@uv run python scripts/generate_invalid_combos_doc.py > /dev/null
 	@echo "Generated docs are up to date"
 
-# Backwards-compat alias.
-check-docs: docs-check
-
 # Rediscover a vendored engine schema by running introspection inside the
 # engine's Docker image. Writes to src/llenergymeasure/engines/<engine>/schema.discovered.json
 # and prints the git diff. Committing (or not) is the review gate.
@@ -196,24 +193,18 @@ package-check: ## Build wheel, validate install, and check pyproject/_version sy
 
 # =============================================================================
 # Docker smoke + CI helpers
+#   docker-smoke runs `llem --version` and `llem config` against each
+#   first-party compose-managed engine image, in an isolated compose project
+#   that is torn down on exit. Assumes the image is already built (use
+#   `make docker-build` first). To add new engines as they get first-party
+#   wrappers, append further `docker compose ... run --rm <engine> ...` lines.
 # =============================================================================
 
-docker-smoke: docker-smoke-transformers ## Build transformers image and run llem --version / config
-
-docker-smoke-transformers:
-	docker build -f docker/Dockerfile.transformers --build-arg INSTALL_FA3=false . -t smoke-transformers
-	docker run --rm smoke-transformers llem --version
-	docker run --rm smoke-transformers llem config
-
-# Stand up an isolated docker compose project, run a smoke command, tear it
-# down on exit even if the command fails. The `trap ... EXIT` guarantees
-# cleanup of containers AND named volumes (-v) so the host stays tidy after
-# repeated runs. Pattern borrowed from pragmata's test-stack target.
-docker-smoke-compose: ## Smoke-test the full compose stack with guaranteed teardown
+docker-smoke: ## Smoke-test compose-managed engine image(s) with guaranteed teardown
 	@PROJECT=smoke-llem-$$$$; \
-	echo "Standing up compose project: $$PROJECT"; \
 	trap "docker compose -p $$PROJECT down -v >/dev/null 2>&1" EXIT; \
-	docker compose -p $$PROJECT run --rm transformers llem --version
+	docker compose -p $$PROJECT run --rm transformers llem --version && \
+	docker compose -p $$PROJECT run --rm transformers llem config
 
 # CI targets - run the same checks as GitHub Actions ci.yml
 ci: lint typecheck test package-check docs-check ## Local equivalent of GitHub Actions ci.yml
@@ -250,12 +241,12 @@ ci-docker: ## Run ci inside a clean Ubuntu container (matches GitHub Actions env
 
 # =============================================================================
 # GPU CI - mirrors .github/workflows/gpu-ci.yml
-#   Requires: Docker, NVIDIA GPUs, nvidia-container-toolkit.
+#   Requires: Docker, NVIDIA GPUs, nvidia-container-toolkit. When additional
+#   engines get first-party Dockerfiles, fan out the build + test steps below
+#   (or extract a per-engine sub-recipe).
 # =============================================================================
 
-gpu-ci: gpu-ci-transformers ## GPU integration tests (mirrors gpu-ci.yml)
-
-gpu-ci-transformers:
+gpu-ci: ## GPU integration tests (mirrors gpu-ci.yml; transformers engine)
 	docker build -f docker/Dockerfile.transformers -t llenergymeasure-ci:transformers .
 	docker run --name llem-ci-setup llenergymeasure-ci:transformers pip install --no-cache-dir pytest pytest-xdist
 	docker commit llem-ci-setup llenergymeasure-ci:transformers
@@ -301,14 +292,12 @@ docker-builder-setup: ## Create the BuildKit builder with tuned cache limits (20
 docker-builder-rm: ## Remove the BuildKit builder (e.g. to recreate with new config)
 	docker buildx rm $(BUILDER_NAME) 2>/dev/null || true
 
-CACHE_HINT := @echo "First build pulls cache layers from ghcr.io; warm rebuilds < 5 min."
-BUILD_WITH_REPORT := scripts/docker_build_with_cache_report.sh
-
-docker-build-all: docker-build-transformers ## Build all first-party engine images
-
-docker-build-transformers: ## Build the transformers engine image (default, recommended)
-	$(CACHE_HINT)
-	$(BUILD_WITH_REPORT) transformers
+# Build first-party engine images. When additional engines get first-party
+# Dockerfiles, append further `scripts/docker_build_with_cache_report.sh <engine>`
+# lines.
+docker-build: ## Build first-party engine images (currently: transformers)
+	@echo "First build pulls cache layers from ghcr.io; warm rebuilds < 5 min."
+	scripts/docker_build_with_cache_report.sh transformers
 
 # Seed GHCR build cache from a local machine with sufficient RAM.
 # Intended for seeding the Transformers image cache (FA3 Hopper compile,
@@ -383,8 +372,11 @@ docker-dev: ## Interactive dev shell with source bind-mounted (transformers-dev)
 # =============================================================================
 
 llem-clean-cache: ## Remove the HuggingFace model cache volume (forces re-download)
-	docker volume rm llem-hf-cache 2>/dev/null || true
-	@echo "Cleared HuggingFace cache"
+	@if docker volume inspect llem-hf-cache >/dev/null 2>&1; then \
+		docker volume rm llem-hf-cache && echo "Cleared HuggingFace cache"; \
+	else \
+		echo "No HuggingFace cache volume to clear"; \
+	fi
 
 # =============================================================================
 # Docs site (Docusaurus)
