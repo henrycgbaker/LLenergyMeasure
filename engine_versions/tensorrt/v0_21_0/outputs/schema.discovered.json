@@ -1,12 +1,11 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "2.0.0",
   "engine": "tensorrt",
   "engine_version": "0.21.0",
   "engine_commit_sha": null,
   "image_ref": "llenergymeasure:tensorrt-0.21.0",
   "base_image_ref": null,
   "discovered_at": "2026-05-06T20:20:57+02:00",
-  "discovery_method": "TrtLlmArgs.model_json_schema() + dataclasses.fields(SamplingParams)",
   "discovery_limitations": [
     {
       "section": "engine_params",
@@ -29,13 +28,20 @@
       "deprecated": false
     },
     "tokenizer": {
-      "type": "string | None",
+      "type": [
+        "string",
+        "null"
+      ],
       "default": null,
       "description": "The path to the tokenizer checkpoint or the tokenizer name from the Hugging Face Hub.",
       "deprecated": false
     },
     "tokenizer_mode": {
-      "type": "Literal['auto', 'slow']",
+      "type": "string",
+      "enum": [
+        "auto",
+        "slow"
+      ],
       "default": "auto",
       "description": "The mode to initialize the tokenizer.",
       "deprecated": false
@@ -65,13 +71,19 @@
       "deprecated": false
     },
     "revision": {
-      "type": "string | None",
+      "type": [
+        "string",
+        "null"
+      ],
       "default": null,
       "description": "The revision to use for the model.",
       "deprecated": false
     },
     "tokenizer_revision": {
-      "type": "string | None",
+      "type": [
+        "string",
+        "null"
+      ],
       "default": null,
       "description": "The revision to use for the tokenizer.",
       "deprecated": false
@@ -89,25 +101,37 @@
       "deprecated": false
     },
     "gpus_per_node": {
-      "type": "integer | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null,
       "description": "The number of GPUs per node.",
       "deprecated": false
     },
     "moe_cluster_parallel_size": {
-      "type": "integer | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null,
       "description": "The cluster parallel size for MoE models's expert weights.",
       "deprecated": false
     },
     "moe_tensor_parallel_size": {
-      "type": "integer | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null,
       "description": "The tensor parallel size for MoE models's expert weights.",
       "deprecated": false
     },
     "moe_expert_parallel_size": {
-      "type": "integer | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null,
       "description": "The expert parallel size for MoE models's expert weights.",
       "deprecated": false
@@ -119,13 +143,20 @@
       "deprecated": false
     },
     "cp_config": {
-      "type": "object | None",
+      "type": [
+        "object",
+        "null"
+      ],
       "default": null,
       "description": "Context parallel config.",
       "deprecated": false
     },
     "load_format": {
-      "type": "Literal['auto', 'dummy']",
+      "type": "string",
+      "enum": [
+        "auto",
+        "dummy"
+      ],
       "default": "auto",
       "description": "The format to load the model.",
       "deprecated": false
@@ -137,7 +168,10 @@
       "deprecated": false
     },
     "max_lora_rank": {
-      "type": "integer | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null,
       "description": "The maximum LoRA rank.",
       "deprecated": true
@@ -155,7 +189,15 @@
       "deprecated": true
     },
     "lora_config": {
-      "type": "LoraConfig | None",
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "LoraConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "LoRA configuration for the model.",
       "deprecated": false
@@ -173,15 +215,23 @@
       "deprecated": false
     },
     "quant_config": {
-      "type": "QuantConfig | None",
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "QuantConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Quantization config.",
       "deprecated": false
     },
     "kv_cache_config": {
-      "type": "KvCacheConfig",
-      "default": null,
+      "type": "object",
       "description": "KV cache config.",
+      "default": null,
       "deprecated": false
     },
     "enable_chunked_prefill": {
@@ -191,55 +241,116 @@
       "deprecated": false
     },
     "guided_decoding_backend": {
-      "type": "string | None",
+      "type": [
+        "string",
+        "null"
+      ],
       "default": null,
       "description": "Guided decoding backend.",
       "deprecated": false
     },
     "batched_logits_processor": {
-      "type": "Optional[tensorrt_llm.sampling_params.BatchedLogitsProcessor]",
-      "default": null,
+      "type": "object",
       "description": "Batched logits processor.",
+      "default": null,
       "deprecated": false
     },
     "iter_stats_max_iterations": {
-      "type": "integer | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null,
       "description": "The maximum number of iterations for iter stats.",
       "deprecated": false
     },
     "request_stats_max_iterations": {
-      "type": "integer | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null,
       "description": "The maximum number of iterations for request stats.",
       "deprecated": false
     },
     "peft_cache_config": {
-      "type": "PeftCacheConfig | None",
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "PeftCacheConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "PEFT cache config.",
       "deprecated": false
     },
     "scheduler_config": {
-      "type": "SchedulerConfig",
-      "default": null,
+      "type": "object",
       "description": "Scheduler config.",
+      "default": null,
       "deprecated": false
     },
     "cache_transceiver_config": {
-      "type": "CacheTransceiverConfig | None",
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "CacheTransceiverConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Cache transceiver config.",
       "deprecated": false
     },
     "speculative_config": {
-      "type": "LookaheadDecodingConfig | MedusaDecodingConfig | EagleDecodingConfig | MTPDecodingConfig | NGramDecodingConfig | DraftTargetDecodingConfig | None",
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "LookaheadDecodingConfig"
+        },
+        {
+          "type": "object",
+          "description": "MedusaDecodingConfig"
+        },
+        {
+          "type": "object",
+          "description": "EagleDecodingConfig"
+        },
+        {
+          "type": "object",
+          "description": "MTPDecodingConfig"
+        },
+        {
+          "type": "object",
+          "description": "NGramDecodingConfig"
+        },
+        {
+          "type": "object",
+          "description": "DraftTargetDecodingConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Speculative decoding config.",
       "deprecated": false
     },
     "batching_type": {
-      "type": "BatchingType | None",
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "BatchingType"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Batching type.",
       "deprecated": false
@@ -251,31 +362,46 @@
       "deprecated": false
     },
     "max_batch_size": {
-      "type": "integer | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null,
       "description": "The maximum batch size.",
       "deprecated": false
     },
     "max_input_len": {
-      "type": "integer | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null,
       "description": "The maximum input length.",
       "deprecated": false
     },
     "max_seq_len": {
-      "type": "integer | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null,
       "description": "The maximum sequence length.",
       "deprecated": false
     },
     "max_beam_width": {
-      "type": "integer | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null,
       "description": "The maximum beam width.",
       "deprecated": false
     },
     "max_num_tokens": {
-      "type": "integer | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null,
       "description": "The maximum number of tokens.",
       "deprecated": false
@@ -293,13 +419,19 @@
       "deprecated": false
     },
     "postprocess_tokenizer_dir": {
-      "type": "string | None",
+      "type": [
+        "string",
+        "null"
+      ],
       "default": null,
       "description": "The path to the tokenizer directory for postprocessing.",
       "deprecated": false
     },
     "reasoning_parser": {
-      "type": "string | None",
+      "type": [
+        "string",
+        "null"
+      ],
       "default": null,
       "description": "The parser to separate reasoning content from output.",
       "deprecated": false
@@ -311,13 +443,16 @@
       "deprecated": false
     },
     "decoding_config": {
-      "type": "Optional[DecodingConfig]",
-      "default": null,
+      "type": "object",
       "description": "The decoding config.",
+      "default": null,
       "deprecated": true
     },
     "backend": {
-      "type": "string | None",
+      "type": [
+        "string",
+        "null"
+      ],
       "default": null,
       "description": "The backend to use for this LLM instance.",
       "deprecated": false
@@ -329,7 +464,10 @@
       "deprecated": true
     },
     "auto_parallel_world_size": {
-      "type": "integer | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null,
       "description": "The world size for auto parallel mode.",
       "deprecated": true
@@ -341,25 +479,44 @@
       "deprecated": false
     },
     "workspace": {
-      "type": "string | None",
+      "type": [
+        "string",
+        "null"
+      ],
       "default": null,
       "description": "The workspace for the model.",
       "deprecated": false
     },
     "enable_build_cache": {
-      "type": "Union[tensorrt_llm.llmapi.build_cache.BuildCacheConfig, bool]",
-      "default": false,
+      "type": "object",
       "description": "Enable build cache.",
+      "default": false,
       "deprecated": false
     },
     "extended_runtime_perf_knob_config": {
-      "type": "ExtendedRuntimePerfKnobConfig | None",
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "ExtendedRuntimePerfKnobConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Extended runtime perf knob config.",
       "deprecated": false
     },
     "calib_config": {
-      "type": "CalibConfig | None",
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "CalibConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
       "description": "Calibration config.",
       "deprecated": false
@@ -377,199 +534,371 @@
       "deprecated": false
     },
     "build_config": {
-      "type": "Optional[tensorrt_llm.builder.BuildConfig]",
-      "default": null,
+      "type": "object",
       "description": "Build config.",
+      "default": null,
       "deprecated": false
     }
   },
   "sampling_params": {
     "end_id": {
-      "type": "int | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null
     },
     "pad_id": {
-      "type": "int | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null
     },
     "max_tokens": {
-      "type": "int",
+      "type": "integer",
       "default": 32
     },
     "bad": {
-      "type": "str | list[str] | None",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null
     },
     "bad_token_ids": {
-      "type": "list[int] | None",
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null
     },
     "stop": {
-      "type": "str | list[str] | None",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null
     },
     "stop_token_ids": {
-      "type": "list[int] | None",
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null
     },
     "include_stop_str_in_output": {
-      "type": "bool",
+      "type": "boolean",
       "default": false
     },
     "embedding_bias": {
-      "type": "Tensor | None",
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "Tensor"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null
     },
     "logits_processor": {
-      "type": "LogitsProcessor | list[LogitsProcessor] | None",
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "LogitsProcessor"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "LogitsProcessor"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null
     },
     "apply_batched_logits_processor": {
-      "type": "bool",
+      "type": "boolean",
       "default": false
     },
     "n": {
-      "type": "int",
+      "type": "integer",
       "default": 1
     },
     "best_of": {
-      "type": "int | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null
     },
     "use_beam_search": {
-      "type": "bool",
+      "type": "boolean",
       "default": false
     },
     "top_k": {
-      "type": "int | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null
     },
     "top_p": {
-      "type": "float | None",
+      "type": [
+        "number",
+        "null"
+      ],
       "default": null
     },
     "top_p_min": {
-      "type": "float | None",
+      "type": [
+        "number",
+        "null"
+      ],
       "default": null
     },
     "top_p_reset_ids": {
-      "type": "int | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null
     },
     "top_p_decay": {
-      "type": "float | None",
+      "type": [
+        "number",
+        "null"
+      ],
       "default": null
     },
     "seed": {
-      "type": "int | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null
     },
     "temperature": {
-      "type": "float | None",
+      "type": [
+        "number",
+        "null"
+      ],
       "default": null
     },
     "min_tokens": {
-      "type": "int | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null
     },
     "beam_search_diversity_rate": {
-      "type": "float | None",
+      "type": [
+        "number",
+        "null"
+      ],
       "default": null
     },
     "repetition_penalty": {
-      "type": "float | None",
+      "type": [
+        "number",
+        "null"
+      ],
       "default": null
     },
     "presence_penalty": {
-      "type": "float | None",
+      "type": [
+        "number",
+        "null"
+      ],
       "default": null
     },
     "frequency_penalty": {
-      "type": "float | None",
+      "type": [
+        "number",
+        "null"
+      ],
       "default": null
     },
     "length_penalty": {
-      "type": "float | None",
+      "type": [
+        "number",
+        "null"
+      ],
       "default": null
     },
     "early_stopping": {
-      "type": "int | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null
     },
     "no_repeat_ngram_size": {
-      "type": "int | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null
     },
     "min_p": {
-      "type": "float | None",
+      "type": [
+        "number",
+        "null"
+      ],
       "default": null
     },
     "beam_width_array": {
-      "type": "list[int] | None",
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null
     },
     "logprobs": {
-      "type": "int | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null
     },
     "prompt_logprobs": {
-      "type": "int | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null
     },
     "return_context_logits": {
-      "type": "bool",
+      "type": "boolean",
       "default": false
     },
     "return_generation_logits": {
-      "type": "bool",
+      "type": "boolean",
       "default": false
     },
     "exclude_input_from_output": {
-      "type": "bool",
+      "type": "boolean",
       "default": true
     },
     "return_encoder_output": {
-      "type": "bool",
+      "type": "boolean",
       "default": false
     },
     "return_perf_metrics": {
-      "type": "bool",
+      "type": "boolean",
       "default": false
     },
     "additional_model_outputs": {
-      "type": "list[AdditionalModelOutput] | None",
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "AdditionalModelOutput"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null
     },
     "lookahead_config": {
-      "type": "LookaheadDecodingConfig | None",
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "LookaheadDecodingConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null
     },
     "guided_decoding": {
-      "type": "GuidedDecodingParams | None",
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "GuidedDecodingParams"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null
     },
     "ignore_eos": {
-      "type": "bool",
+      "type": "boolean",
       "default": false
     },
     "detokenize": {
-      "type": "bool",
+      "type": "boolean",
       "default": true
     },
     "add_special_tokens": {
-      "type": "bool",
+      "type": "boolean",
       "default": true
     },
     "truncate_prompt_tokens": {
-      "type": "int | None",
+      "type": [
+        "integer",
+        "null"
+      ],
       "default": null
     },
     "skip_special_tokens": {
-      "type": "bool",
+      "type": "boolean",
       "default": true
     },
     "spaces_between_special_tokens": {
-      "type": "bool",
+      "type": "boolean",
       "default": true
     }
   }

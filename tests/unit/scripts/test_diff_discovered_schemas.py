@@ -15,16 +15,15 @@ def _make_schema(
     sampling_params: dict | None = None,
     engine_version: str = "0.7.3",
 ) -> dict:
-    """Build a minimal schema dict."""
+    """Build a minimal v2.0.0 schema dict (canonical JSON Schema per field)."""
     return {
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "engine": "test",
         "engine_version": engine_version,
         "engine_commit_sha": None,
         "image_ref": "test:latest",
         "base_image_ref": "test:latest",
         "discovered_at": "2026-01-01T00:00:00Z",
-        "discovery_method": "test",
         "discovery_limitations": [],
         "engine_params": engine_params or {},
         "sampling_params": sampling_params or {},
@@ -49,7 +48,7 @@ def _run_diff(old: dict, new: dict, tmp_path: Path) -> tuple[int, dict, str]:
 
 class TestIdenticalSchemas:
     def test_no_changes(self, tmp_path: Path):
-        schema = _make_schema(engine_params={"model": {"type": "str", "default": "gpt2"}})
+        schema = _make_schema(engine_params={"model": {"type": "string", "default": "gpt2"}})
         code, output, _ = _run_diff(schema, schema, tmp_path)
         assert code == 0
         assert output["is_breaking"] is False
@@ -59,11 +58,11 @@ class TestIdenticalSchemas:
 
 class TestSafeChanges:
     def test_field_added(self, tmp_path: Path):
-        old = _make_schema(engine_params={"model": {"type": "str", "default": "gpt2"}})
+        old = _make_schema(engine_params={"model": {"type": "string", "default": "gpt2"}})
         new = _make_schema(
             engine_params={
-                "model": {"type": "str", "default": "gpt2"},
-                "new_param": {"type": "int", "default": 0},
+                "model": {"type": "string", "default": "gpt2"},
+                "new_param": {"type": "integer", "default": 0},
             }
         )
         code, output, _ = _run_diff(old, new, tmp_path)
@@ -72,22 +71,26 @@ class TestSafeChanges:
         assert any(c["kind"] == "added" and c["field"] == "new_param" for c in output["safe"])
 
     def test_type_widened(self, tmp_path: Path):
-        old = _make_schema(engine_params={"x": {"type": "int", "default": 0}})
-        new = _make_schema(engine_params={"x": {"type": "int | None", "default": 0}})
+        old = _make_schema(engine_params={"x": {"type": "integer", "default": 0}})
+        new = _make_schema(engine_params={"x": {"type": ["integer", "null"], "default": 0}})
         code, output, _ = _run_diff(old, new, tmp_path)
         assert code == 0
         assert any(c["kind"] == "type_widened" for c in output["safe"])
 
     def test_default_changed(self, tmp_path: Path):
-        old = _make_schema(engine_params={"x": {"type": "float", "default": 0.9}})
-        new = _make_schema(engine_params={"x": {"type": "float", "default": 0.95}})
+        old = _make_schema(engine_params={"x": {"type": "number", "default": 0.9}})
+        new = _make_schema(engine_params={"x": {"type": "number", "default": 0.95}})
         code, output, _ = _run_diff(old, new, tmp_path)
         assert code == 0
         assert any(c["kind"] == "default_changed" for c in output["safe"])
 
     def test_description_changed(self, tmp_path: Path):
-        old = _make_schema(engine_params={"x": {"type": "int", "default": 0, "description": "old"}})
-        new = _make_schema(engine_params={"x": {"type": "int", "default": 0, "description": "new"}})
+        old = _make_schema(
+            engine_params={"x": {"type": "integer", "default": 0, "description": "old"}}
+        )
+        new = _make_schema(
+            engine_params={"x": {"type": "integer", "default": 0, "description": "new"}}
+        )
         code, output, _ = _run_diff(old, new, tmp_path)
         assert code == 0
         assert any(c["kind"] == "description_changed" for c in output["safe"])
@@ -97,19 +100,19 @@ class TestBreakingChanges:
     def test_field_removed(self, tmp_path: Path):
         old = _make_schema(
             engine_params={
-                "model": {"type": "str", "default": "gpt2"},
-                "old_param": {"type": "int", "default": 0},
+                "model": {"type": "string", "default": "gpt2"},
+                "old_param": {"type": "integer", "default": 0},
             }
         )
-        new = _make_schema(engine_params={"model": {"type": "str", "default": "gpt2"}})
+        new = _make_schema(engine_params={"model": {"type": "string", "default": "gpt2"}})
         code, output, _ = _run_diff(old, new, tmp_path)
         assert code == 1
         assert output["is_breaking"] is True
         assert any(c["kind"] == "removed" and c["field"] == "old_param" for c in output["breaking"])
 
     def test_type_narrowed(self, tmp_path: Path):
-        old = _make_schema(engine_params={"x": {"type": "int | None", "default": None}})
-        new = _make_schema(engine_params={"x": {"type": "int", "default": 0}})
+        old = _make_schema(engine_params={"x": {"type": ["integer", "null"], "default": None}})
+        new = _make_schema(engine_params={"x": {"type": "integer", "default": 0}})
         code, output, _ = _run_diff(old, new, tmp_path)
         assert code == 1
         assert any(c["kind"] == "type_narrowed" for c in output["breaking"])

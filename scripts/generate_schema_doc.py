@@ -80,6 +80,29 @@ def _format_field_name(name: str, deprecated: bool) -> str:
     return f"`{name}`"
 
 
+def _render_type_cell(meta: dict[str, Any]) -> str:
+    """Render a canonical JSON Schema type spec as a compact human-readable string."""
+    if "anyOf" in meta:
+        parts: list[str] = []
+        for sub in meta["anyOf"]:
+            if not isinstance(sub, dict):
+                continue
+            parts.append(_render_type_cell(sub))
+        return " \\| ".join(parts) if parts else "-"
+    type_val = meta.get("type")
+    if type_val is None:
+        return "-"
+    if isinstance(type_val, list):
+        return " \\| ".join("null" if t is None else str(t) for t in type_val)
+    if "enum" in meta:
+        members = ", ".join(repr(v) for v in meta["enum"])
+        return f"Literal[{members}]"
+    if type_val == "object" and meta.get("description"):
+        # Class-typed fields surface the class name on description.
+        return str(meta["description"])
+    return str(type_val)
+
+
 def _render_table(params: dict[str, Any]) -> list[str]:
     """Render a parameter dict as a GFM table; returns list of lines."""
     if not params:
@@ -91,9 +114,15 @@ def _render_table(params: dict[str, Any]) -> list[str]:
     for name, meta in params.items():
         if not isinstance(meta, dict):
             continue
-        type_str = str(meta.get("type", "-"))
+        type_str = _render_type_cell(meta)
         default_str = _format_default(meta.get("default"))
-        description = str(meta.get("description") or "").strip()
+        # ``description`` is reserved for the rendered class-name hint when
+        # ``type == "object"``; otherwise (e.g. TRT-LLM Pydantic field docs)
+        # it's the human description. Avoid double-printing when used as type.
+        if meta.get("type") == "object" and meta.get("description") == type_str:
+            description = ""
+        else:
+            description = str(meta.get("description") or "").strip()
         description = _escape_pipe(description.replace("\n", " "))
         deprecated = bool(meta.get("deprecated"))
         field = _format_field_name(name, deprecated)
@@ -130,7 +159,6 @@ def _render(engine: str) -> str:
     display = _ENGINE_DISPLAY_NAMES.get(engine, engine.title())
     engine_version = str(schema.get("engine_version", "<unknown>"))
     discovered_at = schema.get("discovered_at", "<unknown>")
-    discovery_method = schema.get("discovery_method", "<unknown>")
     schema_version = schema.get("schema_version", "<unknown>")
     engine_params = schema.get("engine_params") or {}
     sampling_params = schema.get("sampling_params") or {}
@@ -143,7 +171,6 @@ def _render(engine: str) -> str:
         "",
         f"Engine version: **{engine_version}**  ",
         f"Discovered at: {discovered_at}  ",
-        f"Discovery method: {discovery_method}  ",
         f"Schema version: {schema_version}",
         "",
         f"**Summary:** {len(engine_params)} engine parameters, "

@@ -116,9 +116,22 @@ _JSON_TO_PYTHON_TYPE = {
 }
 
 
-def _canonicalise_discovered_type(type_str: str) -> str:
-    """Canonicalise a discovered schema type string."""
-    type_str = type_str.strip()
+def _canonicalise_discovered_type(type_repr: Any) -> str:
+    """Canonicalise a discovered schema type representation into a Python-ish string.
+
+    Accepts the legacy compact-string form (``"int | None"``), the canonical
+    JSON-Schema-2020-12 array form (``["integer", "null"]``), or the
+    canonical primitive name (``"string"``). Returns the equivalent Python
+    type string with ``| None`` stripped (llem always wraps optionals) and
+    JSON Schema primitives normalised to their Python counterparts.
+    """
+    if isinstance(type_repr, list):
+        # ["string", "null"] -> "string" (after stripping null)
+        parts = sorted(
+            _JSON_TO_PYTHON_TYPE.get(str(t), str(t)) for t in type_repr if str(t) != "null"
+        )
+        return " | ".join(parts) if parts else "None"
+    type_str = str(type_repr).strip() if type_repr is not None else ""
 
     # Remove | None suffix (llem always wraps in Optional)
     type_str = re.sub(r"\s*\|\s*None\s*$", "", type_str)
@@ -137,6 +150,34 @@ def _canonicalise_discovered_type(type_str: str) -> str:
 
     # Normalise single JSON Schema type names to Python
     return _JSON_TO_PYTHON_TYPE.get(type_str, type_str)
+
+
+def _discovered_to_python_str(spec: dict[str, Any]) -> str:
+    """Render a discovered field spec (v2 canonical or v1 compact-string) as a Python-ish string.
+
+    v2 ``anyOf`` branches are unwound and joined with ``|``; v2 ``enum`` lifts
+    to ``Literal[...]``. v1 legacy ``type`` strings pass through
+    :func:`_canonicalise_discovered_type` unchanged.
+    """
+    if not isinstance(spec, dict):
+        return ""
+    # Enum lifts to Literal regardless of branch shape.
+    if "enum" in spec:
+        values = sorted(str(v) for v in spec["enum"])
+        return f"Literal[{', '.join(repr(v) for v in values)}]"
+    if "anyOf" in spec:
+        # Mirror legacy ``_canonicalise_discovered_type``: drop the ``null``
+        # branch (llem always wraps optionals in Optional) and union the rest.
+        parts: list[str] = []
+        for branch in spec["anyOf"]:
+            if not isinstance(branch, dict):
+                continue
+            if branch.get("type") == "null":
+                continue
+            parts.append(_discovered_to_python_str(branch))
+        deduped = sorted({p for p in parts if p})
+        return " | ".join(deduped) if deduped else "None"
+    return _canonicalise_discovered_type(spec.get("type"))
 
 
 def _canonicalise_pydantic_type(prop: dict[str, Any], defs: dict[str, Any]) -> str:
@@ -272,11 +313,17 @@ def check_engine(engine: str, schema: dict[str, Any]) -> list[dict[str, str]]:
     for leaf_name, prop in pydantic_leaves.items():
         if leaf_name in all_discovered:
             # Both sides have it - compare types
-            discovered_type = all_discovered[leaf_name].get("type", "")
-            if not discovered_type or not prop or discovered_type == "unknown":
+            discovered_spec = all_discovered[leaf_name]
+            if not prop or not isinstance(discovered_spec, dict):
+                continue
+            # ``type=='unknown'`` (v1) and untyped specs (v2 ``{"description": ...}``
+            # without ``type``/``anyOf``) carry no useful drift signal.
+            if discovered_spec.get("type") == "unknown" or (
+                not discovered_spec.get("type") and not discovered_spec.get("anyOf")
+            ):
                 continue
 
-            canon_discovered = _canonicalise_discovered_type(discovered_type)
+            canon_discovered = _discovered_to_python_str(discovered_spec)
             canon_pydantic = _canonicalise_pydantic_type(prop, defs)
 
             if canon_discovered != canon_pydantic:

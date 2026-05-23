@@ -20,6 +20,7 @@ from typing import Any
 
 from scripts.engine_producers._common import (
     dataclass_fields_to_specs,
+    jsonschema_property_to_canonical,
     make_envelope,
 )
 
@@ -52,13 +53,7 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
             sp_def: Any = defs.get("SamplingParams") or next(iter(defs.values()), {})
             props = sp_def.get("properties", {}) if isinstance(sp_def, dict) else {}
         for name, spec in (props or {}).items():
-            type_repr: Any = spec.get("type", "unknown")
-            if isinstance(type_repr, list):
-                type_repr = " | ".join(str(t) for t in type_repr)
-            sampling_params[name] = {
-                "type": type_repr,
-                "default": spec.get("default"),
-            }
+            sampling_params[name] = jsonschema_property_to_canonical(spec)
     except Exception as exc:
         limitations.append(
             {
@@ -90,7 +85,6 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         engine_commit_sha=getattr(vllm, "__commit__", None),
         image_ref=image_ref,
         base_image_ref=None,
-        discovery_method="dataclasses.fields(EngineArgs) + msgspec.json.schema(SamplingParams)",
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,
