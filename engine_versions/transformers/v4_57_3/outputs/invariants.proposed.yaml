@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: transformers
 engine_version: 4.57.3
-mined_at: '2026-05-06T22:57:22+02:00'
+mined_at: '2026-05-15T12:49:19+02:00'
 invariants:
 - id: transformers_beam_search_num_beams_eq_1
   engine: transformers
@@ -34,7 +34,7 @@ invariants:
   message_template: '`num_beams` is set to 1. However, `early_stopping` is set to `True` -- this flag
     is only used in beam-based generation modes. You should set `num_beams>1` or unset `early_stopping`.'
   references:
-  - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
+  - transformers.GenerationConfig.validate() - observed via validate(strict=True)
   added_by: dynamic_miner
   added_at: '2026-04-30'
   conflict_note: 'id: dynamic_miner -> ''transformers_beam_search_num_beams_eq_1''; dynamic_miner -> ''transformers_early_stopping_type_num_beams_eq_1'''
@@ -71,7 +71,7 @@ invariants:
     ''sliding_window'', ''hybrid'', ''hybrid_chunked'', ''offloaded_hybrid'', ''offloaded_hybrid_chunked'',
     ''dynamic'', ''dynamic_full'', ''offloaded'', ''quantized'')'
   references:
-  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  - transformers.GenerationConfig - observed via construction-time ValueError
   added_by: dynamic_miner
   added_at: '2026-04-30'
 - id: transformers_cache_choice_use_cache_eq_false
@@ -101,7 +101,7 @@ invariants:
   message_template: You have set `use_cache` to `False`, but cache_implementation is set to static. cache_implementation
     will have no effect.
   references:
-  - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
+  - transformers.GenerationConfig.validate() - observed via validate(strict=True)
   added_by: dynamic_miner
   added_at: '2026-04-30'
 - id: transformers_compile_config_type_compile_config_exceeds_zero
@@ -127,7 +127,7 @@ invariants:
   message_template: You provided `compile_config` as an instance of <class 'int'>, but it must be an instance
     of `CompileConfig`.
   references:
-  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  - transformers.GenerationConfig - observed via construction-time ValueError
   added_by: dynamic_miner
   added_at: '2026-04-30'
 - id: transformers_compile_config_type_compile_config_type_not_in_CompileConfig
@@ -155,7 +155,7 @@ invariants:
   message_template: You provided `compile_config` as an instance of <class 'str'>, but it must be an instance
     of `CompileConfig`.
   references:
-  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  - transformers.GenerationConfig - observed via construction-time ValueError
   added_by: dynamic_miner
   added_at: '2026-04-30'
 - id: transformers_dormant_early_stopping_set_true
@@ -280,7 +280,7 @@ invariants:
   expected_outcome: *id002
   message_template: '`early_stopping` must be a boolean or ''never'', but is 1.5.'
   references:
-  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  - transformers.GenerationConfig - observed via construction-time ValueError
   added_by: dynamic_miner
   added_at: '2026-04-30'
 - id: transformers_early_stopping_type_early_stopping_not_in_allowlist
@@ -311,7 +311,7 @@ invariants:
   expected_outcome: *id002
   message_template: '`early_stopping` must be a boolean or ''never'', but is sometimes.'
   references:
-  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  - transformers.GenerationConfig - observed via construction-time ValueError
   added_by: dynamic_miner
   added_at: '2026-04-30'
 - id: transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str
@@ -343,7 +343,7 @@ invariants:
   expected_outcome: *id002
   message_template: '`early_stopping` must be a boolean or ''never'', but is 1.5.'
   references:
-  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  - transformers.GenerationConfig - observed via construction-time ValueError
   added_by: dynamic_miner
   added_at: '2026-04-30'
 - id: transformers_greedy_strips_epsilon_cutoff
@@ -614,7 +614,7 @@ invariants:
     if there is padding. Please set `pad_token_id` explicitly as `model.generation_config.pad_token_id=PAD_TOKEN_ID`
     to avoid errors in generation'
   references:
-  - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
+  - transformers.GenerationConfig.validate() - observed via validate(strict=True)
   added_by: dynamic_miner
   added_at: '2026-04-30'
   conflict_note: 'id: dynamic_miner -> ''transformers_negative_pad_token_id''; dynamic_miner -> ''transformers_output_token_ids_pad_token_id_lt_zero'''
@@ -750,7 +750,7 @@ invariants:
   message_template: Greedy methods without beam search do not support `num_return_sequences` different
     than 1 (got 2).
   references:
-  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  - transformers.GenerationConfig - observed via construction-time ValueError
   added_by: dynamic_miner
   added_at: '2026-04-30'
 - id: transformers_num_return_vs_beams_num_beams_lt_num_return_sequences
@@ -779,7 +779,7 @@ invariants:
   expected_outcome: *id002
   message_template: '`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2).'
   references:
-  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  - transformers.GenerationConfig - observed via construction-time ValueError
   added_by: dynamic_miner
   added_at: '2026-04-30'
 - id: transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences
@@ -809,7 +809,7 @@ invariants:
   expected_outcome: *id002
   message_template: '`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2).'
   references:
-  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  - transformers.GenerationConfig - observed via construction-time ValueError
   added_by: dynamic_miner
   added_at: '2026-04-30'
 - id: transformers_output_token_ids_max_new_tokens_le_zero
@@ -838,7 +838,7 @@ invariants:
   expected_outcome: *id002
   message_template: '`max_new_tokens` must be greater than 0, but is -1.'
   references:
-  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  - transformers.GenerationConfig - observed via construction-time ValueError
   added_by: dynamic_miner
   added_at: '2026-04-30'
 - id: transformers_output_token_ids_max_new_tokens_not_in_allowlist
@@ -870,7 +870,7 @@ invariants:
   expected_outcome: *id002
   message_template: '`max_new_tokens` must be greater than 0, but is -1.'
   references:
-  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  - transformers.GenerationConfig - observed via construction-time ValueError
   added_by: dynamic_miner
   added_at: '2026-04-30'
 - id: transformers_output_token_ids_pad_token_id_not_in_allowlist
@@ -904,7 +904,7 @@ invariants:
     if there is padding. Please set `pad_token_id` explicitly as `model.generation_config.pad_token_id=PAD_TOKEN_ID`
     to avoid errors in generation'
   references:
-  - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
+  - transformers.GenerationConfig.validate() - observed via validate(strict=True)
   added_by: dynamic_miner
   added_at: '2026-04-30'
 - id: transformers_raises_bnb_4bit_quant_type_not_type_str
@@ -1298,6 +1298,6 @@ invariants:
   message_template: transformers.generation.configuration_utils.WatermarkingConfig() argument after **
     must be a mapping, not int
   references:
-  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  - transformers.GenerationConfig - observed via construction-time ValueError
   added_by: dynamic_miner
   added_at: '2026-04-30'
