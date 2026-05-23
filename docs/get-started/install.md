@@ -81,7 +81,7 @@ To get engine images:
 
 ```bash
 # Transformers - build from source (one-time, ~30 min cold; seconds from cache)
-make docker-build-transformers
+make docker-build
 
 # vLLM - pull upstream image
 docker pull vllm/vllm-openai:0.7.3

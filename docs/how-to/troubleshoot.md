@@ -301,7 +301,7 @@ Notes:
 
 ## Docker rebuild is slow / recompiling flash-attn
 
-**Symptom:** `make docker-build-transformers` takes 15-20 minutes and the post-build
+**Symptom:** `make docker-build` takes 15-20 minutes and the post-build
 summary line reports `⚠ no GHCR cache imported (cold build)` (or BuildKit
 output shows `flash-attn` source downloads and nvcc compilation for every
 build).
@@ -399,7 +399,7 @@ the SSOT bumped transformers but the local image is still on an older tag).
 **Fix:** rebuild or repull the affected engine image. One of:
 
 ```bash
-make docker-build-transformers                          # local build, Transformers
+make docker-build                                       # local build, Transformers
 docker pull vllm/vllm-openai:0.7.3                      # repull vLLM upstream
 docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0  # repull TensorRT-LLM upstream
 make docker-pull                                        # pull the newest published Transformers tag

@@ -290,7 +290,7 @@ follows a precedence chain (highest wins):
 5. **Smart default**: local build image if present, otherwise registry image
 
 In practice, most users rely on the smart default (level 5). If you have built images locally
-with `make docker-build-all`, those are used. Otherwise, `llem` uses the GHCR registry image
+with `make docker-build`, those are used. Otherwise, `llem` uses the GHCR registry image
 matching your installed version.
 
 ### Auto-pull on first use
@@ -356,7 +356,7 @@ project source at run time.
 
 ```bash
 # Transformers - build from project source
-make docker-build-transformers
+make docker-build
 
 # vLLM - pull upstream
 docker pull vllm/vllm-openai:0.7.3
@@ -365,9 +365,10 @@ docker pull vllm/vllm-openai:0.7.3
 docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0
 ```
 
-`make docker-build-all` is an alias for `make docker-build-transformers`
-(the only project-built image). It uses `docker compose build` under the
-hood and pulls cached layers from GHCR on first build (see
+`make docker-build` builds the project's first-party engine images
+(currently just transformers - the only project-built image). It uses
+`docker compose build` under the hood and pulls cached layers from GHCR
+on first build (see
 [Fast rebuilds and first-pull cost](/how-to/install#fast-rebuilds-and-first-pull-cost)
 for the full mechanism).
 
@@ -375,7 +376,7 @@ for the full mechanism).
 > parallel multi-engine builds. With the current cache architecture this is rarely
 > worth enabling - vLLM/TRT cold builds are already 4-13 min and warm rebuilds are
 > seconds, so the parallelism gain is small. Left out of `.env.example` to avoid
-> noise; opt in only if you frequently run `make docker-build-all` from cold.
+> noise; opt in only if you frequently run `make docker-build` from cold.
 
 > **When to rebuild.** Images bundle the `llenergymeasure` source at build time. If you
 > modify config models, engines, or the container entrypoint, rebuild for changes to take
