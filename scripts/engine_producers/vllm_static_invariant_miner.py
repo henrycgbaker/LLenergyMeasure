@@ -2,7 +2,7 @@
 
 Forwards module-level attribute access to the per-version archive at
 ``engine_versions/vllm/v<safe>/producers/static_invariant_miner.py``,
-resolved from ``library.current_version`` in ``engine_versions/vllm/current.yaml``.
+resolved from ``library.current_version`` in ``engine_versions/vllm/current.toml``.
 See ``_stub_factory`` for the shared factory.
 """
 

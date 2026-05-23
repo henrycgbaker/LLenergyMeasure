@@ -183,7 +183,7 @@ audit unexpected shapes against this table.
 | PR shape | `engine-pipeline` triggered? | Cells that fire | Writeback fires? |
 |---|---|---|---|
 | **Workflow-only edit** (only `engine-pipeline.yml` or `_*-cell.yml` or `.github/actions/**` changed) | Yes (self-test) | All 6 cells (filter file in every group) + build-transformers | Yes if any cell changed an artefact |
-| **One-engine SSOT bump** (e.g. `engine_versions/vllm/current.yaml`) | Yes | `invariants-vllm` + `schemas-vllm` only | Yes if either cell changed an artefact |
+| **One-engine SSOT bump** (e.g. `engine_versions/vllm/current.toml`) | Yes | `invariants-vllm` + `schemas-vllm` only | Yes if either cell changed an artefact |
 | **Miner-code change** (`scripts/engine_producers/<engine>_*.py`) | Yes | `invariants-<engine>` only | Yes if cell changed an artefact |
 | **Hand-edit corpus** (`engines/<engine>/invariants.proposed.yaml`) | Yes | `invariants-<engine>` only (re-validates) | Yes if cell changed validated yaml |
 | **Pure ci.yml / docs change** | **Absent** | - | - |
@@ -328,7 +328,7 @@ Actions tab (with their reusable's `name:` as the workflow name).
 
 A future engine (e.g. SGLang) is absorbed in three places:
 
-1. New SSOT: `engine_versions/sglang/current.yaml`.
+1. New SSOT: `engine_versions/sglang/current.toml`.
 2. Either upstream image (e.g. `lmsysorg/sglang:<VER>` on Docker Hub) or
    first-party Dockerfile + extension to `build-transformers` job.
 3. Append `sglang` to the `invariants_others_cells` and

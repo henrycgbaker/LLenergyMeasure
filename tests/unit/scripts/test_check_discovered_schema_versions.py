@@ -11,9 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 from check_discovered_schema_versions import main
 
 
-def _current_yaml(version: str) -> str:
-    """Render a minimal engine current.yaml carrying ``library.current_version``."""
-    return f"library:\n  current_version: {version}\n"
+def _current_toml(version: str) -> str:
+    """Render a minimal engine current.toml carrying ``library.current_version``."""
+    return f'[library]\ncurrent_version = "{version}"\n'
 
 
 def _setup_repo(
@@ -38,7 +38,7 @@ def _setup_repo(
     ]:
         engine_dir = engine_versions_dir / engine
         engine_dir.mkdir(parents=True)
-        (engine_dir / "current.yaml").write_text(_current_yaml(version))
+        (engine_dir / "current.toml").write_text(_current_toml(version))
 
     engines_dir = repo / "src" / "llenergymeasure" / "engines"
 
@@ -61,7 +61,7 @@ class TestVersionsMatch:
         assert main(repo_root=repo) == 0
 
     def test_v_prefix_normalised(self, tmp_path: Path):
-        """v0.7.3 in current.yaml should match 0.7.3 in schema."""
+        """v0.7.3 in current.toml should match 0.7.3 in schema."""
         repo = _setup_repo(tmp_path, vllm_current="v0.7.3", vllm_schema_version="0.7.3")
         assert main(repo_root=repo) == 0
 

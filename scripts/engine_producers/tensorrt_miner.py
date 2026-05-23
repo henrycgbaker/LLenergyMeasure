@@ -12,7 +12,7 @@ Pipeline this orchestrator drives:
 
 1. Verify the source tree is present (canonical location:
    ``/tmp/trt-llm-<library.current_version>/tensorrt_llm/``). The TRT-LLM
-   library version comes from ``engine_versions/tensorrt/current.yaml``;
+   library version comes from ``engine_versions/tensorrt/current.toml``;
    the per-version dispatcher
    (:mod:`engine_versions._dispatcher.load_producer`) selects which
    archived static miner runs, falling back to the most-recent prior

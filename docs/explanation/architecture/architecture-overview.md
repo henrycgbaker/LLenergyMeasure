@@ -105,7 +105,7 @@ The invariant miner pipeline lives in `scripts/engine_producers/` - it is a buil
 ```mermaid
 flowchart TB
     bump[Library version bump<br/>e.g. transformers 4.56.0 → 4.57.0]
-    renovate[Renovate opens PR bumping<br/>engine_versions/engine_versions/&lt;engine&gt;.yamllt;engineengine_versions/&lt;engine&gt;.yamlgt;/current.yaml]
+    renovate[Renovate opens PR bumping<br/>engine_versions/engine_versions/&lt;engine&gt;.yamllt;engineengine_versions/&lt;engine&gt;.yamlgt;/current.toml]
     pipeline[engine-pipeline.yml fires:<br/>probe + mine + validate]
 
     bump --> renovate --> pipeline

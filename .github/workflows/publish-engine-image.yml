@@ -6,7 +6,7 @@ name: Publish engine image (transformers)
 # pointing at the same image digest. Production users get the
 # bit-identical image that CI validated before merge.
 #
-# Triggered ONLY on push to main when current.yaml or Dockerfile changed
+# Triggered ONLY on push to main when current.toml or Dockerfile changed
 # (i.e. a Renovate-driven version bump or a Dockerfile edit landed). On
 # such pushes, the cache image at transformers-cache:<VER> is already
 # in the registry from the merging PR's build. We just promote it.
@@ -20,16 +20,16 @@ on:
   push:
     branches: [main]
     paths:
-      - "engine_versions/transformers/current.yaml"
+      - "engine_versions/transformers/current.toml"
       - "docker/Dockerfile.transformers"
   workflow_dispatch:
     # Ad-hoc trigger for re-promotion (e.g. recovering from a transient
     # registry failure, or promoting after a manual dispatch of
-    # build-engine-image.yml). Reads current.yaml current_version + tag-copies
+    # build-engine-image.yml). Reads current.toml current_version + tag-copies
     # the existing transformers-cache:<VER> to canonical tags.
     inputs:
       version:
-        description: "Override version (defaults to current.yaml current_version)"
+        description: "Override version (defaults to current.toml current_version)"
         required: false
         type: string
 
@@ -50,15 +50,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Resolve transformers version from current.yaml
+      - name: Resolve transformers version from current.toml
         id: version
         run: |
           VER="${{ github.event.inputs.version }}"
           if [[ -z "$VER" ]]; then
-            VER=$(yq '.library.current_version' engine_versions/transformers/current.yaml)
+            VER=$(python3 scripts/ci/read_toml_value.py \
+              engine_versions/transformers/current.toml \
+              library.current_version)
           fi
-          if [[ -z "$VER" || "$VER" == "null" ]]; then
-            echo "Could not resolve transformers version from engine_versions/transformers/current.yaml" >&2
+          if [[ -z "$VER" ]]; then
+            echo "Could not resolve transformers version from engine_versions/transformers/current.toml" >&2
             exit 1
           fi
           echo "version=${VER}" >> "$GITHUB_OUTPUT"

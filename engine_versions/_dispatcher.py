@@ -13,7 +13,7 @@ Producer kinds match the producer-archive subpackage names:
 - ``dynamic_invariant_miner``: combinatorial miners (no probe contract today; reserved)
 
 The version string is the dotted form from
-``engine_versions/<engine>/current.yaml`` ``library.current_version`` (e.g.
+``engine_versions/<engine>/current.toml`` ``library.current_version`` (e.g.
 ``"0.7.3"``); the dispatcher converts it to a Python-identifier-safe form
 (``v0_7_3``) via :func:`scripts.engine_producers._current.safe_version`.
 

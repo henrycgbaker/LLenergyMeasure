@@ -33,11 +33,12 @@ uv sync --dev --extra zeus --extra codecarbon
 The dispatch path for experiments goes through `docker_runner.py`, which
 bind-mounts the project source + a tiny entrypoint script + the host's
 runtime-deps cache into the container. The image tag is derived from the
-SSOT (`engine_versions/{engine}/current.yaml`); the framework code is bind-mounted
+SSOT (`engine_versions/{engine}/current.toml`); the framework code is bind-mounted
 rather than baked.
 
 ```bash
-VER=$(yq '.library.current_version' engine_versions/transformers/current.yaml)
+VER=$(python3 scripts/ci/read_toml_value.py \
+  engine_versions/transformers/current.toml library.current_version)
 docker build -f docker/Dockerfile.transformers \
   --build-arg TRANSFORMERS_VERSION="$VER" \
   -t llenergymeasure:transformers-${VER} .
@@ -204,7 +205,7 @@ flowchart LR
     sch_other --> writeback
 ```
 
-When Renovate (or a maintainer) bumps `engine_versions/transformers/current.yaml`
+When Renovate (or a maintainer) bumps `engine_versions/transformers/current.toml`
 or `docker/Dockerfile.transformers`, the orchestrator fires:
 
 1. **`filter`** computes which cells to expand.
@@ -221,8 +222,8 @@ or `docker/Dockerfile.transformers`, the orchestrator fires:
    availability: a cell that succeeded still lands its changes even if
    another cell failed.
 
-When Renovate bumps `engine_versions/vllm/current.yaml` or
-`engine_versions/tensorrt/current.yaml`, the corresponding cells (in the
+When Renovate bumps `engine_versions/vllm/current.toml` or
+`engine_versions/tensorrt/current.toml`, the corresponding cells (in the
 `invariants-others` / `schemas-others` matrix) fire and pull upstream
 images directly (no first-party build).
 

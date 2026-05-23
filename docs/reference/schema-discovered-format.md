@@ -75,7 +75,7 @@ when multiple schemas are loaded.
 ### `engine_version`
 
 Library version the schema was discovered against. Sourced from the
-SSOT (`engine_versions/{engine}/current.yaml`) at discovery time. Renovate-driven
+SSOT (`engine_versions/{engine}/current.toml`) at discovery time. Renovate-driven
 bumps re-fire discovery so this field tracks the pinned upstream version
 on `main`.
 

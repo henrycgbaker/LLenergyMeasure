@@ -1,10 +1,10 @@
 """Per-engine version-bundle current-state loader.
 
-The current-state file lives at ``<repo_root>/engine_versions/{engine}/current.yaml``.
+The current-state file lives at ``<repo_root>/engine_versions/{engine}/current.toml``.
 This module exposes the lookup helpers that read it:
 
-- :func:`current_path` - absolute path to the engine's current.yaml.
-- :func:`load_current` - parse the YAML to a dict.
+- :func:`current_path` - absolute path to the engine's current.toml.
+- :func:`load_current` - parse the TOML to a dict.
 - :func:`safe_version` - identifier-safe mangling of a PEP 440 version.
 
 The current-state path is resolved by walking up from this file until a
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
+import tomllib
 
 
 def _find_repo_root(start: Path) -> Path:
@@ -29,26 +29,26 @@ def _find_repo_root(start: Path) -> Path:
 
 
 def current_path(engine: str) -> Path:
-    """Return the absolute path to ``engine_versions/{engine}/current.yaml``."""
-    return _find_repo_root(Path(__file__).resolve()) / "engine_versions" / engine / "current.yaml"
+    """Return the absolute path to ``engine_versions/{engine}/current.toml``."""
+    return _find_repo_root(Path(__file__).resolve()) / "engine_versions" / engine / "current.toml"
 
 
 def load_current(engine: str) -> dict[str, object]:
-    """Read + parse ``engine_versions/{engine}/current.yaml`` into a dict.
+    """Read + parse ``engine_versions/{engine}/current.toml`` into a dict.
 
     Intentionally uncached: callers (probe, producer modules) all run at
     most once per cell invocation, and tests rely on hermetic per-test
     fixtures that an ``@cache`` decorator would silently shadow across
     test cases.
 
-    Raises :class:`FileNotFoundError` if current.yaml is missing,
+    Raises :class:`FileNotFoundError` if current.toml is missing,
     :class:`ValueError` if it does not parse to a mapping.
     """
     path = current_path(engine)
-    text = path.read_text()
-    data = yaml.safe_load(text)
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
     if not isinstance(data, dict):
-        raise ValueError(f"current.yaml at {path} did not parse to a mapping.")
+        raise ValueError(f"current.toml at {path} did not parse to a mapping.")
     return data
 
 
