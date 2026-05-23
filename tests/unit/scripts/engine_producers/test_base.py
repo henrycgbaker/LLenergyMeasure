@@ -399,6 +399,36 @@ def test_filter_kwargs_positive_derivable_accepts_isinstance() -> None:
     assert filter_kwargs_positive_derivable(expr) is True
 
 
+def test_filter_kwargs_positive_derivable_accepts_current_platform_is_cuda() -> None:
+    # vLLM hardware-compat gate idiom: predicate combines a self-attr
+    # check with current_platform.is_cuda(). The platform call is
+    # allowlisted so the whole condition stays derivable.
+    expr = _parse_expr(
+        "self.enable_qk_norm_rope_fusion and not current_platform.is_cuda_alike()"
+    )
+    assert filter_kwargs_positive_derivable(expr) is True
+
+
+def test_filter_kwargs_positive_derivable_accepts_has_device_capability() -> None:
+    expr = _parse_expr(
+        "self.dtype == 'bfloat16' and not current_platform.has_device_capability(80)"
+    )
+    assert filter_kwargs_positive_derivable(expr) is True
+
+
+def test_filter_kwargs_positive_derivable_accepts_cls_has_device_capability() -> None:
+    # Classmethod self-call shape used inside vllm.platforms.cuda itself
+    # (e.g. CudaPlatformBase.check_if_supports_dtype).
+    expr = _parse_expr("self.dtype == 'bfloat16' and not cls.has_device_capability(80)")
+    assert filter_kwargs_positive_derivable(expr) is True
+
+
+def test_filter_kwargs_positive_derivable_still_rejects_unrelated_external_call() -> None:
+    # Regression: unrelated module-level calls must still be rejected.
+    expr = _parse_expr("self.foo and importlib.util.find_spec('scipy')")
+    assert filter_kwargs_positive_derivable(expr) is False
+
+
 # ---------------------------------------------------------------------------
 # Error types
 # ---------------------------------------------------------------------------

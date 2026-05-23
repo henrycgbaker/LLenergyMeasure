@@ -1,0 +1,1717 @@
+schema_version: 1.0.0
+engine: vllm
+engine_version: 0.16.0
+mined_at: '2026-05-21'
+invariants:
+- id: vllm_compilationconfig_dormant_backend_eq
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'CompilationConfig.__post_init__: marks dormant when backend == '
+  severity: dormant
+  native_type: vllm.config.CompilationConfig
+  miner_source:
+    path: compilation.py
+    method: __post_init__
+    line_at_scan: 871
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.backend: ''
+  kwargs_positive:
+    backend: ''
+  kwargs_negative:
+    backend: _x
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - backend
+  message_template: null
+  references:
+  - compilation.py:871 (vllm.config.CompilationConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_compilationconfig_dormant_mode_unset_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'CompilationConfig.__post_init__: marks dormant when level present True AND mode
+    absent True'
+  severity: dormant
+  native_type: vllm.config.CompilationConfig
+  miner_source:
+    path: compilation.py
+    method: __post_init__
+    line_at_scan: 789
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.level:
+        present: true
+      vllm.engine.mode:
+        absent: true
+  kwargs_positive:
+    level: 1
+    mode: null
+  kwargs_negative:
+    level: 1
+    mode: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - mode
+  message_template: null
+  references:
+  - compilation.py:789 (vllm.config.CompilationConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_compilationconfig_raises_backend_not_in
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'CompilationConfig.__post_init__: raises when backend not_in ['''', ''eager'',
+    ''inductor'']'
+  severity: error
+  native_type: vllm.config.CompilationConfig
+  miner_source:
+    path: compilation.py
+    method: __post_init__
+    line_at_scan: 866
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.backend:
+        not_in:
+        - ''
+        - eager
+        - inductor
+  kwargs_positive:
+    backend: __vllm_static_synth__
+  kwargs_negative:
+    backend: ''
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'Invalid backend for piecewise compilation: {backend}'
+  references:
+  - compilation.py:866 (vllm.config.CompilationConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_compilationconfig_raises_use_inductor_graph_partition_set_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'CompilationConfig.__post_init__: raises when use_inductor_graph_partition present
+    True'
+  severity: error
+  native_type: vllm.config.CompilationConfig
+  miner_source:
+    path: compilation.py
+    method: __post_init__
+    line_at_scan: 844
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.use_inductor_graph_partition:
+        present: true
+  kwargs_positive:
+    use_inductor_graph_partition: 1
+  kwargs_negative:
+    use_inductor_graph_partition: null
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: use_inductor_graph_partition is only supported with torch>=2.9.0.dev. Set use_inductor_graph_partition=False
+    instead.
+  references:
+  - compilation.py:844 (vllm.config.CompilationConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_compilationconfig_warns_level_set_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'CompilationConfig.__post_init__: warns when level present True'
+  severity: warn
+  native_type: vllm.config.CompilationConfig
+  miner_source:
+    path: compilation.py
+    method: __post_init__
+    line_at_scan: 781
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.level:
+        present: true
+  kwargs_positive:
+    level: 1
+  kwargs_negative:
+    level: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: Level is deprecated and will be removed in the next release,either 0.12.0 or 0.11.2
+    whichever is soonest.Use mode instead.If both level and mode are given,only mode will be used.
+  references:
+  - compilation.py:781 (vllm.config.CompilationConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_modelconfig_dormant_hf_config_path_type_str
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ModelConfig.__post_init__: marks dormant when hf_config_path type_is str'
+  severity: dormant
+  native_type: vllm.config.ModelConfig
+  miner_source:
+    path: model.py
+    method: __post_init__
+    line_at_scan: 441
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.hf_config_path:
+        type_is: str
+  kwargs_positive:
+    hf_config_path: x
+  kwargs_negative:
+    hf_config_path: null
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - hf_config_path
+  message_template: null
+  references:
+  - model.py:441 (vllm.config.ModelConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_modelconfig_dormant_pooler_config_unset_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ModelConfig.__post_init__: marks dormant when pooler_config absent True'
+  severity: dormant
+  native_type: vllm.config.ModelConfig
+  miner_source:
+    path: model.py
+    method: __post_init__
+    line_at_scan: 534
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.pooler_config:
+        absent: true
+  kwargs_positive:
+    pooler_config: null
+  kwargs_negative:
+    pooler_config: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - pooler_config
+  message_template: null
+  references:
+  - model.py:534 (vllm.config.ModelConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_modelconfig_dormant_tokenizer_revision_unset_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ModelConfig.__post_init__: marks dormant when tokenizer_revision absent True'
+  severity: dormant
+  native_type: vllm.config.ModelConfig
+  miner_source:
+    path: model.py
+    method: __post_init__
+    line_at_scan: 437
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tokenizer_revision:
+        absent: true
+  kwargs_positive:
+    tokenizer_revision: null
+  kwargs_negative:
+    tokenizer_revision: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - tokenizer_revision
+  message_template: null
+  references:
+  - model.py:437 (vllm.config.ModelConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_modelconfig_dormant_tokenizer_unset_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ModelConfig.__post_init__: marks dormant when tokenizer absent True'
+  severity: dormant
+  native_type: vllm.config.ModelConfig
+  miner_source:
+    path: model.py
+    method: __post_init__
+    line_at_scan: 435
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tokenizer:
+        absent: true
+  kwargs_positive:
+    tokenizer: null
+  kwargs_negative:
+    tokenizer: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - tokenizer
+  message_template: null
+  references:
+  - model.py:435 (vllm.config.ModelConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_modelconfig_raises_enable_sleep_mode_set_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ModelConfig.__post_init__: raises when enable_sleep_mode present True'
+  severity: error
+  native_type: vllm.config.ModelConfig
+  miner_source:
+    path: model.py
+    method: __post_init__
+    line_at_scan: 470
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.enable_sleep_mode:
+        present: true
+  kwargs_positive:
+    enable_sleep_mode: 1
+  kwargs_negative:
+    enable_sleep_mode: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Sleep mode is not supported on current platform.
+  references:
+  - model.py:470 (vllm.config.ModelConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_modelconfig_warns_platform_ne_rocm
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ModelConfig.__post_init__: warns when override_attention_dtype present True AND
+    platform != rocm'
+  severity: warn
+  native_type: vllm.config.ModelConfig
+  miner_source:
+    path: model.py
+    method: __post_init__
+    line_at_scan: 464
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.override_attention_dtype:
+        present: true
+      vllm.engine.platform:
+        '!=': rocm
+  kwargs_positive:
+    override_attention_dtype: 1
+    platform: rocm_x
+  kwargs_negative:
+    override_attention_dtype: 1
+    platform: rocm
+  expected_outcome:
+    outcome: warn
+    emission_channel: warnings_warn
+    normalised_fields: []
+  message_template: override-attention-dtype is set but not using ROCm platform
+  references:
+  - model.py:464 (vllm.config.ModelConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_parallelconfig_dormant_data_parallel_master_port_list_unset_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig.__post_init__: marks dormant when _data_parallel_master_port_list
+    absent True'
+  severity: dormant
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: __post_init__
+    line_at_scan: 572
+  match:
+    engine: vllm
+    fields:
+      vllm.engine._data_parallel_master_port_list:
+        absent: true
+  kwargs_positive:
+    _data_parallel_master_port_list: null
+  kwargs_negative:
+    _data_parallel_master_port_list: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - _data_parallel_master_port_list
+  message_template: null
+  references:
+  - parallel.py:572 (vllm.config.ParallelConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_parallelconfig_dormant_data_parallel_rank_set_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig.__post_init__: marks dormant when distributed_executor_backend
+    == external_launcher AND data_parallel_rank present True'
+  severity: dormant
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: __post_init__
+    line_at_scan: 564
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.distributed_executor_backend: external_launcher
+      vllm.engine.data_parallel_rank:
+        present: true
+  kwargs_positive:
+    distributed_executor_backend: external_launcher
+    data_parallel_rank: 1
+  kwargs_negative:
+    distributed_executor_backend: external_launcher
+    data_parallel_rank: 0
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - data_parallel_rank
+  message_template: null
+  references:
+  - parallel.py:564 (vllm.config.ParallelConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_parallelconfig_dormant_world_size_eq_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig.__post_init__: marks dormant when distributed_executor_backend
+    absent True AND world_size == 1'
+  severity: dormant
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: __post_init__
+    line_at_scan: 645
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.distributed_executor_backend:
+        absent: true
+      vllm.engine.world_size: 1
+  kwargs_positive:
+    distributed_executor_backend: null
+    world_size: 1
+  kwargs_negative:
+    distributed_executor_backend: null
+    world_size: 2
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - distributed_executor_backend
+  message_template: null
+  references:
+  - parallel.py:645 (vllm.config.ParallelConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_parallelconfig_dormant_world_size_gt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig.__post_init__: marks dormant when distributed_executor_backend
+    absent True AND world_size > 1'
+  severity: dormant
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: __post_init__
+    line_at_scan: 641
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.distributed_executor_backend:
+        absent: true
+      vllm.engine.world_size:
+        '>': 1
+  kwargs_positive:
+    distributed_executor_backend: null
+    world_size: 2
+  kwargs_negative:
+    distributed_executor_backend: null
+    world_size: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - distributed_executor_backend
+  message_template: null
+  references:
+  - parallel.py:641 (vllm.config.ParallelConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_parallelconfig_raises_nnodes_gt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig.__post_init__: raises when nnodes > 1'
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: __post_init__
+    line_at_scan: 657
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.nnodes:
+        '>': 1
+  kwargs_positive:
+    nnodes: 2
+  kwargs_negative:
+    nnodes: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: nnodes > 1 can only be set when distributed executor backend is mp, uni or external_launcher.
+  references:
+  - parallel.py:657 (vllm.config.ParallelConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_parallelconfig_warns_max_parallel_loading_workers_set_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig.__post_init__: warns when max_parallel_loading_workers present
+    True'
+  severity: warn
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: __post_init__
+    line_at_scan: 648
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_parallel_loading_workers:
+        present: true
+  kwargs_positive:
+    max_parallel_loading_workers: 1
+  kwargs_negative:
+    max_parallel_loading_workers: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: max_parallel_loading_workers is currently not supported and will be ignored.
+  references:
+  - parallel.py:648 (vllm.config.ParallelConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_dormant_bad_words_unset_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams.__post_init__: marks dormant when bad_words absent True'
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 352
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.bad_words:
+        absent: true
+  kwargs_positive:
+    bad_words: null
+  kwargs_negative:
+    bad_words: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - bad_words
+  message_template: null
+  references:
+  - sampling_params.py:352 (vllm.SamplingParams.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_dormant_output_text_buffer_length_set_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams.__post_init__: marks dormant when stop present True AND include_stop_str_in_output
+    absent True AND output_text_buffer_length present True'
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 363
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop:
+        present: true
+      vllm.sampling.include_stop_str_in_output:
+        absent: true
+      vllm.sampling.output_text_buffer_length:
+        present: true
+  kwargs_positive:
+    stop: 1
+    include_stop_str_in_output: null
+    output_text_buffer_length: 1
+  kwargs_negative:
+    stop: 1
+    include_stop_str_in_output: null
+    output_text_buffer_length: null
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - output_text_buffer_length
+  message_template: null
+  references:
+  - sampling_params.py:363 (vllm.SamplingParams.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_dormant_seed_eq_neg1
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams.__post_init__: marks dormant when seed == -1'
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 341
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.seed: -1
+  kwargs_positive:
+    seed: -1
+  kwargs_negative:
+    seed: 0
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - seed
+  message_template: null
+  references:
+  - sampling_params.py:341 (vllm.SamplingParams.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_dormant_skip_reading_prefix_cache_unset_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams.__post_init__: marks dormant when skip_reading_prefix_cache absent
+    True'
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 381
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.skip_reading_prefix_cache:
+        absent: true
+  kwargs_positive:
+    skip_reading_prefix_cache: null
+  kwargs_negative:
+    skip_reading_prefix_cache: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - skip_reading_prefix_cache
+  message_template: null
+  references:
+  - sampling_params.py:381 (vllm.SamplingParams.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_dormant_stop_token_ids_unset_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams.__post_init__: marks dormant when stop_token_ids absent True'
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 349
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop_token_ids:
+        absent: true
+  kwargs_positive:
+    stop_token_ids: null
+  kwargs_negative:
+    stop_token_ids: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - stop_token_ids
+  message_template: null
+  references:
+  - sampling_params.py:349 (vllm.SamplingParams.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_dormant_stop_type_str
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams.__post_init__: marks dormant when stop type_is str'
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 346
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop:
+        type_is: str
+  kwargs_positive:
+    stop: x
+  kwargs_negative:
+    stop: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - stop
+  message_template: null
+  references:
+  - sampling_params.py:346 (vllm.SamplingParams.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_dormant_stop_unset_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams.__post_init__: marks dormant when stop absent True'
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 344
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop:
+        absent: true
+  kwargs_positive:
+    stop: null
+  kwargs_negative:
+    stop: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - stop
+  message_template: null
+  references:
+  - sampling_params.py:344 (vllm.SamplingParams.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_dormant_temperature_gt_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams.__post_init__: marks dormant when temperature > 0'
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 338
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.temperature:
+        '>': 0
+  kwargs_positive:
+    temperature: 1
+  kwargs_negative:
+    temperature: 0
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - temperature
+  message_template: null
+  references:
+  - sampling_params.py:338 (vllm.SamplingParams.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_warns_temperature_gt_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams.__post_init__: warns when temperature > 0'
+  severity: warn
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 331
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.temperature:
+        '>': 0
+  kwargs_positive:
+    temperature: 1
+  kwargs_negative:
+    temperature: 0
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: temperature %s is less than %s, which may cause numerical errors nan or inf in tensors.
+    We have maxed it out to %s.
+  references:
+  - sampling_params.py:331 (vllm.SamplingParams.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_schedulerconfig_dormant_long_prefill_token_threshold_eq_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SchedulerConfig.__post_init__: marks dormant when max_num_partial_prefills >
+    1 AND long_prefill_token_threshold == 0'
+  severity: dormant
+  native_type: vllm.config.SchedulerConfig
+  miner_source:
+    path: scheduler.py
+    method: __post_init__
+    line_at_scan: 231
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_num_partial_prefills:
+        '>': 1
+      vllm.engine.long_prefill_token_threshold: 0
+  kwargs_positive:
+    max_num_partial_prefills: 2
+    long_prefill_token_threshold: 0
+  kwargs_negative:
+    max_num_partial_prefills: 2
+    long_prefill_token_threshold: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - long_prefill_token_threshold
+  message_template: null
+  references:
+  - scheduler.py:231 (vllm.config.SchedulerConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_eplbconfig_raises_log_balancedness_interval_le_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'EPLBConfig._validate_eplb_config: raises when log_balancedness present True AND
+    log_balancedness_interval <= 0'
+  severity: error
+  native_type: vllm.config.EPLBConfig
+  miner_source:
+    path: parallel.py
+    method: _validate_eplb_config
+    line_at_scan: 89
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.log_balancedness:
+        present: true
+      vllm.engine.log_balancedness_interval:
+        <=: 0
+  kwargs_positive:
+    log_balancedness: 1
+    log_balancedness_interval: 0
+  kwargs_negative:
+    log_balancedness: 1
+    log_balancedness_interval: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: log_balancedness_interval must be greater than 0.
+  references:
+  - parallel.py:89 (vllm.config.EPLBConfig._validate_eplb_config)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_eplbconfig_raises_policy_ne_default
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'EPLBConfig._validate_eplb_config: raises when use_async present True AND policy
+    != default'
+  severity: error
+  native_type: vllm.config.EPLBConfig
+  miner_source:
+    path: parallel.py
+    method: _validate_eplb_config
+    line_at_scan: 87
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.use_async:
+        present: true
+      vllm.engine.policy:
+        '!=': default
+  kwargs_positive:
+    use_async: 1
+    policy: default_x
+  kwargs_negative:
+    use_async: 1
+    policy: default
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Async EPLB is only supported with the default policy.
+  references:
+  - parallel.py:87 (vllm.config.EPLBConfig._validate_eplb_config)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_loraconfig_dormant_max_cpu_loras_unset_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'LoRAConfig._validate_lora_config: marks dormant when max_cpu_loras absent True'
+  severity: dormant
+  native_type: vllm.config.LoRAConfig
+  miner_source:
+    path: lora.py
+    method: _validate_lora_config
+    line_at_scan: 94
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_cpu_loras:
+        absent: true
+  kwargs_positive:
+    max_cpu_loras: null
+  kwargs_negative:
+    max_cpu_loras: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - max_cpu_loras
+  message_template: null
+  references:
+  - lora.py:94 (vllm.config.LoRAConfig._validate_lora_config)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_loraconfig_raises_max_cpu_loras_lt_ref_max_loras
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'LoRAConfig._validate_lora_config: raises when max_cpu_loras < @max_loras'
+  severity: error
+  native_type: vllm.config.LoRAConfig
+  miner_source:
+    path: lora.py
+    method: _validate_lora_config
+    line_at_scan: 96
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_cpu_loras:
+        <: '@max_loras'
+  kwargs_positive:
+    max_loras: 2
+    max_cpu_loras: 1
+  kwargs_negative:
+    max_loras: 2
+    max_cpu_loras: null
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_cpu_loras ({max_cpu_loras}) must be >= max_loras ({max_loras}).
+  references:
+  - lora.py:96 (vllm.config.LoRAConfig._validate_lora_config)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_multimodalconfig_raises_mm_processor_cache_type_ne_shm
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'MultiModalConfig._validate_multimodal_config: raises when mm_processor_cache_type
+    != shm'
+  severity: error
+  native_type: vllm.config.MultiModalConfig
+  miner_source:
+    path: multimodal.py
+    method: _validate_multimodal_config
+    line_at_scan: 199
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mm_processor_cache_type:
+        '!=': shm
+  kwargs_positive:
+    mm_processor_cache_type: shm_x
+  kwargs_negative:
+    mm_processor_cache_type: lru
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '''mm_shm_cache_max_object_size_mb'' should only be set when ''mm_processor_cache_type''
+    is ''shm''.'
+  references:
+  - multimodal.py:199 (vllm.config.MultiModalConfig._validate_multimodal_config)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_parallelconfig_raises_api_process_rank_ge_ref_api_process_count
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig._validate_parallel_config: raises when _api_process_rank >= @_api_process_count'
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: _validate_parallel_config
+    line_at_scan: 307
+  match:
+    engine: vllm
+    fields:
+      vllm.engine._api_process_rank:
+        '>=': '@_api_process_count'
+  kwargs_positive:
+    _api_process_count: 2
+    _api_process_rank: 2
+  kwargs_negative:
+    _api_process_count: 2
+    _api_process_rank: 0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'Invalid value of `_api_process_rank`. Expected to be `-1` or `[0, {_api_process_count})`,
+    but found: {_api_process_rank}'
+  references:
+  - parallel.py:307 (vllm.config.ParallelConfig._validate_parallel_config)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_parallelconfig_raises_data_parallel_external_lb_set_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig._validate_parallel_config: raises when data_parallel_size <= 1
+    AND data_parallel_external_lb present True'
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: _validate_parallel_config
+    line_at_scan: 320
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.data_parallel_size:
+        <=: 1
+      vllm.engine.data_parallel_external_lb:
+        present: true
+  kwargs_positive:
+    data_parallel_size: 1
+    data_parallel_external_lb: 1
+  kwargs_negative:
+    data_parallel_size: 1
+    data_parallel_external_lb: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: data_parallel_external_lb can only be set when data_parallel_size > 1
+  references:
+  - parallel.py:320 (vllm.config.ParallelConfig._validate_parallel_config)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_parallelconfig_raises_data_parallel_size_local_gt_ref_data_parallel_size
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig._validate_parallel_config: raises when data_parallel_size_local
+    > @data_parallel_size'
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: _validate_parallel_config
+    line_at_scan: 314
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.data_parallel_size_local:
+        '>': '@data_parallel_size'
+  kwargs_positive:
+    data_parallel_size: 2
+    data_parallel_size_local: 3
+  kwargs_negative:
+    data_parallel_size: 2
+    data_parallel_size_local: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: data_parallel_size_local ({data_parallel_size_local}) must be <= data_parallel_size
+    ({data_parallel_size})
+  references:
+  - parallel.py:314 (vllm.config.ParallelConfig._validate_parallel_config)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_parallelconfig_raises_enable_expert_parallel_unset_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig._validate_parallel_config: raises when enable_eplb present True
+    AND enable_expert_parallel absent True'
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: _validate_parallel_config
+    line_at_scan: 331
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.enable_eplb:
+        present: true
+      vllm.engine.enable_expert_parallel:
+        absent: true
+  kwargs_positive:
+    enable_eplb: 1
+    enable_expert_parallel: null
+  kwargs_negative:
+    enable_eplb: 1
+    enable_expert_parallel: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: enable_expert_parallel must be True to use EPLB.
+  references:
+  - parallel.py:331 (vllm.config.ParallelConfig._validate_parallel_config)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_structuredoutputsconfig_raises_backend_ne_guidance
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'StructuredOutputsConfig._validate_structured_output_config: raises when disable_additional_properties
+    present True AND backend != guidance'
+  severity: error
+  native_type: vllm.config.StructuredOutputsConfig
+  miner_source:
+    path: structured_outputs.py
+    method: _validate_structured_output_config
+    line_at_scan: 72
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.disable_additional_properties:
+        present: true
+      vllm.engine.backend:
+        '!=': guidance
+  kwargs_positive:
+    disable_additional_properties: 1
+    backend: guidance_x
+  kwargs_negative:
+    disable_additional_properties: 1
+    backend: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: disable_additional_properties is only supported for the guidance backend.
+  references:
+  - structured_outputs.py:72 (vllm.config.StructuredOutputsConfig._validate_structured_output_config)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_structuredoutputsconfig_raises_backend_not_in
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'StructuredOutputsConfig._validate_structured_output_config: raises when disable_any_whitespace
+    present True AND backend not_in [''xgrammar'', ''guidance'']'
+  severity: error
+  native_type: vllm.config.StructuredOutputsConfig
+  miner_source:
+    path: structured_outputs.py
+    method: _validate_structured_output_config
+    line_at_scan: 67
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.disable_any_whitespace:
+        present: true
+      vllm.engine.backend:
+        not_in:
+        - xgrammar
+        - guidance
+  kwargs_positive:
+    disable_any_whitespace: 1
+    backend: __vllm_static_synth__
+  kwargs_negative:
+    disable_any_whitespace: 1
+    backend: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: disable_any_whitespace is only supported for xgrammar and guidance backends.
+  references:
+  - structured_outputs.py:67 (vllm.config.StructuredOutputsConfig._validate_structured_output_config)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_parallelconfig_dormant_disable_custom_all_reduce_set_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig._verify_args: marks dormant when nnodes > 1 AND disable_custom_all_reduce
+    present True'
+  severity: dormant
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: _verify_args
+    line_at_scan: 704
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.nnodes:
+        '>': 1
+      vllm.engine.disable_custom_all_reduce:
+        present: true
+  kwargs_positive:
+    nnodes: 2
+    disable_custom_all_reduce: 1
+  kwargs_negative:
+    nnodes: 2
+    disable_custom_all_reduce: false
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - disable_custom_all_reduce
+  message_template: null
+  references:
+  - parallel.py:704 (vllm.config.ParallelConfig._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_parallelconfig_raises_distributed_executor_backend_not_type_type
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig._verify_args: raises when distributed_executor_backend present
+    True AND distributed_executor_backend type_is_not str AND distributed_executor_backend type_is_not
+    type'
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: _verify_args
+    line_at_scan: 686
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.distributed_executor_backend:
+        present: true
+        type_is_not: type
+  kwargs_positive:
+    distributed_executor_backend: 1
+  kwargs_negative:
+    distributed_executor_backend: null
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Unrecognized distributed executor backend {distributed_executor_backend}. Supported
+    values are 'ray', 'mp' 'uni', 'external_launcher',  custom Executor subclass or its import path.
+  references:
+  - parallel.py:686 (vllm.config.ParallelConfig._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_parallelconfig_raises_use_ray_unset_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig._verify_args: raises when ray_workers_use_nsight present True
+    AND use_ray absent True'
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: _verify_args
+    line_at_scan: 709
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.ray_workers_use_nsight:
+        present: true
+      vllm.engine.use_ray:
+        absent: true
+  kwargs_positive:
+    ray_workers_use_nsight: 1
+    use_ray: null
+  kwargs_negative:
+    ray_workers_use_nsight: 1
+    use_ray: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Unable to use nsight profiling unless workers run with Ray.
+  references:
+  - parallel.py:709 (vllm.config.ParallelConfig._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_raises_detokenize_unset_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when stop present True AND detokenize absent
+    True'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 474
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop:
+        present: true
+      vllm.sampling.detokenize:
+        absent: true
+  kwargs_positive:
+    stop: 1
+    detokenize: null
+  kwargs_negative:
+    stop: 1
+    detokenize: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: stop strings are only supported when detokenize is True. Set detokenize=True to use
+    stop.
+  references:
+  - sampling_params.py:474 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_raises_logprobs_lt_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when logprobs present True AND logprobs !=
+    -1 AND logprobs < 0'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 440
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.logprobs:
+        present: true
+        '!=': -1
+        <: 0
+  kwargs_positive:
+    logprobs: 1
+  kwargs_negative:
+    logprobs: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: logprobs must be non-negative or -1, got {logprobs}.
+  references:
+  - sampling_params.py:440 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_raises_max_tokens_lt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when max_tokens present True AND max_tokens
+    < 1'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 425
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.max_tokens:
+        present: true
+        <: 1
+  kwargs_positive:
+    max_tokens: 1
+  kwargs_negative:
+    max_tokens: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_tokens must be at least 1, got {max_tokens}.
+  references:
+  - sampling_params.py:425 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_raises_min_tokens_gt_ref_max_tokens
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when max_tokens present True AND min_tokens
+    > @max_tokens'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 435
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.max_tokens:
+        present: true
+      vllm.sampling.min_tokens:
+        '>': '@max_tokens'
+  kwargs_positive:
+    max_tokens: 1
+    min_tokens: 2
+  kwargs_negative:
+    max_tokens: 1
+    min_tokens: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: min_tokens must be less than or equal to max_tokens={max_tokens}, got {min_tokens}.
+  references:
+  - sampling_params.py:435 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_raises_min_tokens_lt_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when min_tokens < 0'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 431
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_tokens:
+        <: 0
+  kwargs_positive:
+    min_tokens: -1
+  kwargs_negative:
+    min_tokens: 0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: min_tokens must be greater than or equal to 0, got {min_tokens}.
+  references:
+  - sampling_params.py:431 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_raises_n_lt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when n < 1'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 387
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        <: 1
+  kwargs_positive:
+    n: 0
+  kwargs_negative:
+    n: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: n must be at least 1, got {n}.
+  references:
+  - sampling_params.py:387 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_raises_n_not_type_int
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when n type_is_not int'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 385
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        type_is_not: int
+  kwargs_positive:
+    n: x
+  kwargs_negative:
+    n: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: n must be an int, but is of type {type(self.n)}
+  references:
+  - sampling_params.py:385 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_raises_prompt_logprobs_lt_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when prompt_logprobs present True AND prompt_logprobs
+    != -1 AND prompt_logprobs < 0'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 450
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.prompt_logprobs:
+        present: true
+        '!=': -1
+        <: 0
+  kwargs_positive:
+    prompt_logprobs: 1
+  kwargs_negative:
+    prompt_logprobs: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: prompt_logprobs must be non-negative or -1, got {prompt_logprobs}.
+  references:
+  - sampling_params.py:450 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_raises_repetition_penalty_le_0p0
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when repetition_penalty <= 0.0'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 397
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.repetition_penalty:
+        <=: 0.0
+  kwargs_positive:
+    repetition_penalty: 0.0
+  kwargs_negative:
+    repetition_penalty: 1.0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: repetition_penalty must be greater than zero, got {repetition_penalty}.
+  references:
+  - sampling_params.py:397 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_raises_temperature_lt_0p0
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when temperature < 0.0'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 402
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.temperature:
+        <: 0.0
+  kwargs_positive:
+    temperature: -1.0
+  kwargs_negative:
+    temperature: 0.0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: temperature must be non-negative, got {temperature}.
+  references:
+  - sampling_params.py:402 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_raises_top_k_lt_neg1
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when top_k < -1'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 415
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_k:
+        <: -1
+  kwargs_positive:
+    top_k: -2
+  kwargs_negative:
+    top_k: -1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: top_k must be 0 (disable), or at least 1, got {top_k}.
+  references:
+  - sampling_params.py:415 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_raises_top_k_not_type_int
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when top_k type_is_not int'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 419
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_k:
+        type_is_not: int
+  kwargs_positive:
+    top_k: x
+  kwargs_negative:
+    top_k: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: top_k must be an integer, got {type(self.top_k).__name__}
+  references:
+  - sampling_params.py:419 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_raises_truncate_prompt_tokens_set_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when truncate_prompt_tokens present True'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 459
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.truncate_prompt_tokens:
+        present: true
+  kwargs_positive:
+    truncate_prompt_tokens: 1
+  kwargs_negative:
+    truncate_prompt_tokens: null
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: truncate_prompt_tokens must be an integer >= 1 or -1, got {truncate_prompt_tokens}
+  references:
+  - sampling_params.py:459 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_samplingparams_raises_n_gt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_greedy_sampling: raises when n > 1'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_greedy_sampling
+    line_at_scan: 481
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        '>': 1
+  kwargs_positive:
+    n: 2
+  kwargs_negative:
+    n: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: n must be 1 when using greedy sampling, got {n}.
+  references:
+  - sampling_params.py:481 (vllm.SamplingParams._verify_greedy_sampling)
+  added_by: static_miner
+  added_at: '2026-05-21'
+- id: vllm_cudaplatformbase_raises_compute_capability_lt_80
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'CudaPlatformBase.check_if_supports_dtype: raises when compute_capability < 80'
+  severity: error
+  native_type: vllm.platforms.cuda.CudaPlatformBase
+  miner_source:
+    path: cuda.py
+    method: check_if_supports_dtype
+    line_at_scan: 454
+  match:
+    engine: vllm
+    fields:
+      vllm.platform.compute_capability:
+        <: 80
+  kwargs_positive:
+    compute_capability: 79
+  kwargs_negative:
+    compute_capability: 80
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'Bfloat16 is only supported on GPUs with compute capability of at least 8.0. Your
+    {gpu_name} GPU {compute_str}. You can use float16 instead by explicitly setting the `dtype` flag in
+    CLI, for example: --dtype=half.'
+  references:
+  - cuda.py:454 (vllm.platforms.cuda.CudaPlatformBase.check_if_supports_dtype)
+  added_by: static_miner
+  added_at: '2026-05-21'

@@ -542,6 +542,22 @@ def filter_kwargs_positive_derivable(condition: ast.expr) -> bool:
         # A condition must reference self at all to be useful.
         return False
     safe_call_names = {"isinstance", "hasattr", "getattr", "len", "version"}
+    # vLLM platform-shim methods (current_platform.is_cuda(),
+    # current_platform.has_device_capability(N), etc.) are
+    # mechanically synthesisable via the platform / compute_capability
+    # synthetic fields; treat them as derivable.
+    safe_platform_methods = {
+        "is_cuda",
+        "is_rocm",
+        "is_cpu",
+        "is_cuda_alike",
+        "is_tpu",
+        "is_xpu",
+        "is_neuron",
+        "is_hpu",
+        "has_device_capability",
+    }
+    safe_platform_receivers = {"current_platform", "cls"}
     for node in ast.walk(condition):
         if not isinstance(node, ast.Call):
             continue
@@ -552,6 +568,12 @@ def filter_kwargs_positive_derivable(condition: ast.expr) -> bool:
             # self.<method>(...) - accept (helper-call; tracer may expand).
             continue
         if path[-1] in safe_call_names:
+            continue
+        if (
+            len(path) >= 2
+            and path[-2] in safe_platform_receivers
+            and path[-1] in safe_platform_methods
+        ):
             continue
         # Opaque external call (e.g., importlib.util.find_spec) - not
         # mechanically derivable into positive kwargs.

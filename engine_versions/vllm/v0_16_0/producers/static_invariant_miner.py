@@ -44,6 +44,7 @@ LIBRARY = "vllm"
 NS_SAMPLING = "vllm.sampling"
 NS_STRUCTURED = "vllm.sampling.structured_outputs"
 NS_ENGINE = "vllm.engine"
+NS_PLATFORM = "vllm.platform"
 
 
 # Probe-contract landmarks. Read by ``scripts._probe`` before the miner
@@ -75,6 +76,8 @@ LANDMARKS: tuple[str, ...] = (
     "vllm.config.compilation.CompilationConfig.__post_init__",
     "vllm.config.scheduler.SchedulerConfig",
     "vllm.config.scheduler.SchedulerConfig.__post_init__",
+    "vllm.platforms.cuda.CudaPlatformBase",
+    "vllm.platforms.cuda.CudaPlatformBase.check_if_supports_dtype",
 )
 
 
@@ -193,6 +196,16 @@ _CLASS_TARGETS: tuple[_ASTTarget, ...] = (
         method="__post_init__",
         namespace=NS_ENGINE,
         native_type="vllm.config.SchedulerConfig",
+    ),
+    # vllm.platforms.cuda hardware-compat gate. ``check_if_supports_dtype``
+    # raises ValueError when ``cls.has_device_capability(80)`` is false on
+    # bfloat16 - exercises the extractor's new ``has_device_capability``
+    # recognition on the cls-receiver shape.
+    _ASTTarget(
+        module_attr="platforms.cuda.CudaPlatformBase",
+        method="check_if_supports_dtype",
+        namespace=NS_PLATFORM,
+        native_type="vllm.platforms.cuda.CudaPlatformBase",
     ),
 )
 
@@ -445,6 +458,21 @@ def _extract_compare(cmp: ast.Compare) -> list[_Predicate]:
     return preds
 
 
+_PLATFORM_BOOL_METHODS: dict[str, str] = {
+    # Maps a vllm.platforms.current_platform.<method>() (or any
+    # equivalently-named classmethod self-call) to the canonical
+    # platform-equality rhs the corpus uses to express the predicate.
+    "is_cuda": "cuda",
+    "is_rocm": "rocm",
+    "is_cpu": "cpu",
+    "is_cuda_alike": "cuda_alike",
+    "is_tpu": "tpu",
+    "is_xpu": "xpu",
+    "is_neuron": "neuron",
+    "is_hpu": "hpu",
+}
+
+
 def _extract_call(call: ast.Call) -> list[_Predicate]:
     path = call_func_path(call)
     if path is None:
@@ -471,6 +499,22 @@ def _extract_call(call: ast.Call) -> list[_Predicate]:
             return []
         rhs: Any = names[0] if len(names) == 1 else names
         return [_Predicate(field=field_name, op="type_is", rhs=rhs)]
+    # vLLM hardware-compat gates use predicates on the platform shim
+    # (current_platform.is_cuda() / has_device_capability(N)) or the
+    # equivalent classmethod self-call (cls.has_device_capability(N))
+    # used inside vllm.platforms.cuda itself. Treat both receivers
+    # uniformly: only the method name + arg shape matter.
+    if len(path) >= 2:
+        receiver = path[-2]
+        if receiver in {"current_platform", "cls", "self"}:
+            if head == "has_device_capability" and len(call.args) == 1:
+                arg = call.args[0]
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, int):
+                    return [_Predicate(field="compute_capability", op=">=", rhs=arg.value)]
+            if head in _PLATFORM_BOOL_METHODS and len(call.args) == 0:
+                return [
+                    _Predicate(field="platform", op="==", rhs=_PLATFORM_BOOL_METHODS[head])
+                ]
     return []
 
 
