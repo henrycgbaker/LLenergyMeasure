@@ -15,18 +15,56 @@ discovery loop below handles both shapes.
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from typing import Any
 
 from scripts.engine_producers._common import (
     dataclass_fields_to_specs,
+    discover_validation_collections,
     make_envelope,
+    merge_validation_collections,
 )
 
 LANDMARKS: tuple[str, ...] = (
     "vllm.SamplingParams",
     "vllm.engine.arg_utils.EngineArgs",
 )
+
+# Validation-collection source modules. v0.7.3 keeps the config surface
+# monolithic under ``vllm.config`` (later versions split into
+# ``vllm.config.model``, ``vllm.config.compilation``, etc.). All entries
+# are scoped to ``engine_params``; sampling_params constants surface from
+# msgspec's schema directly. Per-version filter: any module that doesn't
+# exist in this version raises ImportError / AttributeError and is skipped.
+_VALIDATION_COLLECTION_MODULES: tuple[tuple[str, str], ...] = (
+    ("vllm.config", "engine_params"),
+    ("vllm.transformers_utils.config", "engine_params"),
+)
+
+
+def _collect_validation_collections() -> dict[str, dict[str, dict[str, Any]]]:
+    """Return ``{section: {field_name: enum_spec}}`` lifted from validator gates.
+
+    See :data:`_VALIDATION_COLLECTION_MODULES` for sources. Per-version
+    filter: modules absent in this vllm version are skipped silently.
+    """
+    by_section: dict[str, dict[str, dict[str, Any]]] = {
+        "engine_params": {},
+        "sampling_params": {},
+    }
+    for module_path, section in _VALIDATION_COLLECTION_MODULES:
+        try:
+            module = importlib.import_module(module_path)
+        except (ImportError, AttributeError):
+            continue
+        try:
+            collections = discover_validation_collections(module)
+        except Exception:
+            continue
+        for field_name, spec in collections.items():
+            by_section[section].setdefault(field_name, spec)
+    return by_section
 
 
 def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
@@ -84,13 +122,22 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         }
     )
 
+    # PR-0.5: lift module-scope validation-collection constants (e.g.
+    # ``_STR_DTYPE_TO_TORCH_DTYPE`` keys) into ``enum`` entries on the
+    # matching fields. Walker only lifts constants actually referenced in a
+    # validator-body ``if v [not] in <Name>:`` check.
+    collections = _collect_validation_collections()
+    merge_validation_collections(engine_params, collections["engine_params"])
+    merge_validation_collections(sampling_params, collections["sampling_params"])
+
     return make_envelope(
         engine="vllm",
         engine_version=vllm.__version__,
         engine_commit_sha=getattr(vllm, "__commit__", None),
         image_ref=image_ref,
         base_image_ref=None,
-        discovery_method="dataclasses.fields(EngineArgs) + msgspec.json.schema(SamplingParams)",
+        discovery_method="dataclasses.fields(EngineArgs) + msgspec.json.schema(SamplingParams) "
+        "+ discover_validation_collections()",
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,

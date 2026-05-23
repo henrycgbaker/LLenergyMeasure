@@ -5,8 +5,8 @@
   "engine_commit_sha": null,
   "image_ref": "llenergymeasure:transformers-4.57.3",
   "base_image_ref": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
-  "discovered_at": "2026-05-14T20:31:21+02:00",
-  "discovery_method": "inspect.signature(from_pretrained) + GenerationConfig().to_dict()",
+  "discovered_at": "2026-05-23T00:00:00+00:00",
+  "discovery_method": "inspect.signature(from_pretrained) + GenerationConfig().to_dict() + discover_validation_collections()",
   "discovery_limitations": [
     {
       "section": "engine_params",
@@ -137,7 +137,22 @@
     },
     "cache_implementation": {
       "type": "unknown",
-      "default": null
+      "default": null,
+      "enum": [
+        "static",
+        "offloaded_static",
+        "sliding_window",
+        "hybrid",
+        "hybrid_chunked",
+        "offloaded_hybrid",
+        "offloaded_hybrid_chunked",
+        "dynamic",
+        "dynamic_full",
+        "offloaded",
+        "quantized"
+      ],
+      "x-source": "module_validation_collection",
+      "x-source-ref": "transformers.generation.configuration_utils.ALL_CACHE_IMPLEMENTATIONS"
     },
     "cache_config": {
       "type": "unknown",

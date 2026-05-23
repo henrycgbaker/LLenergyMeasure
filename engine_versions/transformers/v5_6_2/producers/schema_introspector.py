@@ -13,6 +13,7 @@ per-version archive via the SSOT's ``library.current_version``.
 
 from __future__ import annotations
 
+import importlib
 import inspect
 from pathlib import Path
 from typing import Any
@@ -20,8 +21,10 @@ from typing import Any
 from scripts.engine_producers._common import (
     TRANSFORMERS_DOCKERFILE,
     annotation_to_type_str,
+    discover_validation_collections,
     jsonable,
     make_envelope,
+    merge_validation_collections,
     read_dockerfile_from,
 )
 
@@ -41,6 +44,47 @@ LANDMARKS: tuple[str, ...] = (
     "transformers.GenerationConfig",
     "transformers.GenerationConfig.to_dict",
 )
+
+# Validation-collection source modules. Each entry is a (module_path,
+# section) tuple where ``section`` is ``"engine_params"`` or
+# ``"sampling_params"``. The walker (PR-0.5) lifts module-scope
+# set/frozenset/tuple/list/dict constants that are referenced in
+# ``if v [not] in <Name>:`` from validator bodies in the SAME module. Per-
+# version filter: a module that doesn't exist in this version raises
+# ``ImportError`` / ``AttributeError`` and is skipped silently.
+_VALIDATION_COLLECTION_MODULES: tuple[tuple[str, str], ...] = (
+    # Cache-implementation gates (cache_implementation lives on GenerationConfig).
+    ("transformers.generation.configuration_utils", "sampling_params"),
+    # Quantizer / quantization-config registries (engine-side fields).
+    ("transformers.quantizers.auto", "engine_params"),
+)
+
+
+def _collect_validation_collections() -> dict[str, dict[str, dict[str, Any]]]:
+    """Return ``{section: {field_name: enum_spec}}`` lifted from validator gates.
+
+    See :data:`_VALIDATION_COLLECTION_MODULES` for sources. Modules absent
+    in the installed transformers version are skipped silently (per-version
+    filter).
+    """
+    by_section: dict[str, dict[str, dict[str, Any]]] = {
+        "engine_params": {},
+        "sampling_params": {},
+    }
+    for module_path, section in _VALIDATION_COLLECTION_MODULES:
+        try:
+            module = importlib.import_module(module_path)
+        except (ImportError, AttributeError):
+            continue
+        try:
+            collections = discover_validation_collections(module)
+        except Exception:
+            # Walker is best-effort; any AST surprise just yields nothing for
+            # this module rather than tanking the whole introspection.
+            continue
+        for field_name, spec in collections.items():
+            by_section[section].setdefault(field_name, spec)
+    return by_section
 
 
 def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
@@ -128,6 +172,15 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
             }
         )
 
+    # PR-0.5: lift module-scope validation-collection constants (e.g.
+    # ``ALL_CACHE_IMPLEMENTATIONS``) into ``enum`` entries on the matching
+    # fields. Walker only lifts constants that are actually referenced in a
+    # validator-body ``if v [not] in <Name>:`` check, so unused
+    # ``_VALID_X``-style naming heuristics don't produce false positives.
+    collections = _collect_validation_collections()
+    merge_validation_collections(engine_params, collections["engine_params"])
+    merge_validation_collections(sampling_params, collections["sampling_params"])
+
     base_image_ref = read_dockerfile_from(repo_root / TRANSFORMERS_DOCKERFILE)
     return make_envelope(
         engine="transformers",
@@ -135,7 +188,8 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         engine_commit_sha=getattr(transformers, "__commit__", None),
         image_ref=image_ref or base_image_ref,
         base_image_ref=base_image_ref,
-        discovery_method="inspect.signature(from_pretrained) + GenerationConfig().to_dict()",
+        discovery_method="inspect.signature(from_pretrained) + GenerationConfig().to_dict() "
+        "+ discover_validation_collections()",
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,
