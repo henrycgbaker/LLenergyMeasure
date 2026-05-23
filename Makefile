@@ -1,18 +1,26 @@
-.PHONY: format lint lint-fix typecheck check test test-unit test-integration test-all install dev clean
+.PHONY: help setup docker-setup dev install clean pre-pr
+.PHONY: format lint lint-fix typecheck check
+.PHONY: test test-unit test-integration test-all
 .PHONY: test-runtime test-runtime-vllm test-runtime-tensorrt test-runtime-all
-.PHONY: test-runtime-quick test-runtime-local test-runtime-docker
-.PHONY: docker-build docker-build-all docker-build-transformers docker-seed-transformers
-.PHONY: docker-build-dev docker-check docker-builder-setup docker-builder-rm
-.PHONY: experiment datasets validate docker-shell docker-dev
-.PHONY: setup docker-setup lem-clean lem-clean-all lem-clean-state lem-clean-cache lem-clean-trt generate-docs check-docs
-.PHONY: discover-schema discover-schemas-all
-.PHONY: package-check docs-check docker-smoke docker-smoke-pytorch ci ci-all ci-docker
-.PHONY: gpu-ci gpu-ci-pytorch
-.PHONY: docs-generate docs-serve docs-build docs-clean
+.PHONY: test-runtime-quick test-runtime-check test-runtime-list test-runtime-docker
+.PHONY: docs-all docs-check check-docs docs-generate docs-serve docs-build docs-clean
+.PHONY: discover-schema discover-schemas-all refresh-invariants refresh-invariants-all
+.PHONY: package-check
+.PHONY: docker-smoke docker-smoke-transformers docker-smoke-compose
+.PHONY: ci ci-all ci-docker
+.PHONY: gpu-ci gpu-ci-transformers
+.PHONY: docker-builder-setup docker-builder-rm
+.PHONY: docker-build-all docker-build-transformers docker-seed-transformers
+.PHONY: docker-pull docker-images docker-check
+.PHONY: llem docker-shell docker-build-dev docker-dev
+.PHONY: lem-clean-cache
 
 # Optional per-developer extension hook. Add personal targets (e.g. local
 # snapshot/sync helpers) in Makefile.local; it is intentionally not tracked.
 -include Makefile.local
+
+# Default target prints help when `make` is invoked with no arguments.
+.DEFAULT_GOAL := help
 
 # PUID/PGID for correct file ownership on bind mounts (LinuxServer.io pattern)
 export PUID := $(shell id -u)
@@ -26,18 +34,27 @@ export LLEM_PKG_VERSION := $(shell python3 -c "from llenergymeasure._version imp
 export LLEM_EXPCONF_SCHEMA_FINGERPRINT := $(shell python3 scripts/compute_expconf_fingerprint.py 2>/dev/null || echo unknown)
 
 # =============================================================================
-# Quick Start
-#   Local:  make setup       (uv sync --dev + pre-commit)
-#   Docker: make docker-setup (above + docker compose build)
-#   Dev:    make dev          (uv sync --dev + pre-commit)
+# Help
+#   Targets with a `## description` suffix are listed by `make help`.
+#   Anything without is treated as internal (still invokable, just hidden).
 # =============================================================================
 
-setup:
+help: ## Show available make targets and their descriptions
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z][a-zA-Z0-9_-]*:.*?## / {printf "  \033[36m%-30s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST) | sort
+
+# =============================================================================
+# Quick Start
+#   Local:  make setup         (uv sync --dev + pre-commit)
+#   Docker: make docker-setup  (above + docker compose build)
+#   Dev:    make dev            (uv sync --dev + pre-commit)
+# =============================================================================
+
+setup: ## Install local dev environment (uv sync --dev + pre-commit hooks)
 	uv sync --dev
 	pre-commit install
-	@echo "Dev environment ready. Run: lem --help"
+	@echo "Dev environment ready. Run: llem --help"
 
-docker-setup: setup
+docker-setup: setup ## setup + docker compose build (transformers engine image)
 	docker compose build
 	@echo "Docker environment ready. Run: llem run <config.yaml>"
 	@echo "Tip: run 'make docker-builder-setup' for a BuildKit builder with larger cache limits"
@@ -46,109 +63,127 @@ docker-setup: setup
 # Local Development
 # =============================================================================
 
-format:
+format: ## Auto-format src/ and tests/ with ruff
 	uv run ruff format src/ tests/
 
-lint:
+lint: ## Run ruff check, ruff format --check, and import-linter
 	uv run ruff check src/ tests/
 	uv run ruff format --check src/ tests/
 	uv run lint-imports
 
-lint-fix:
+lint-fix: ## Auto-fix lint issues (ruff check --fix + format)
 	uv run ruff check src/ tests/ --fix
 	uv run ruff format src/ tests/
 
-typecheck:
+typecheck: ## Run mypy on src/
 	uv run mypy src/
 
-check: lint typecheck
+check: lint typecheck ## lint + typecheck (no tests)
 
-test:
+test: ## Host tests (excludes gpu and docker markers)
 	uv run pytest tests/ -m "not gpu and not docker" -x -q --tb=short
 
-test-unit:
+test-unit: ## Unit tests with verbose output
 	uv run pytest tests/unit/ -v
 
-test-integration:
+test-integration: ## Integration tests with verbose output
 	uv run pytest tests/integration/ -v
 
-test-all:
+test-all: ## All tests (excludes tests/runtime/)
 	uv run pytest tests/ -v --ignore=tests/runtime/
 
+# =============================================================================
 # Runtime tests with Docker container dispatch
-# These tests use SSOT introspection to discover ALL params, then dispatch
-# each test to the correct engine container (pytorch, vllm, tensorrt).
-# Uses the same dispatch pattern as `lem campaign`.
+#   Uses SSOT introspection to discover ALL params and dispatch each test to
+#   the matching engine container. Valid engines: transformers, vllm, tensorrt.
+# =============================================================================
 
-test-runtime:
-	python scripts/runtime-test-orchestrator.py --engine pytorch
+test-runtime: ## Runtime tests on the transformers engine container
+	uv run python scripts/runtime-test-orchestrator.py --engine transformers
 
-test-runtime-vllm:
-	python scripts/runtime-test-orchestrator.py --engine vllm
+test-runtime-vllm: ## Runtime tests on the vLLM engine container
+	uv run python scripts/runtime-test-orchestrator.py --engine vllm
 
-test-runtime-tensorrt:
-	python scripts/runtime-test-orchestrator.py --engine tensorrt
+test-runtime-tensorrt: ## Runtime tests on the TensorRT-LLM engine container
+	uv run python scripts/runtime-test-orchestrator.py --engine tensorrt
 
-# Run all engines - discovers params via SSOT, dispatches to correct containers
-test-runtime-all:
-	python scripts/runtime-test-orchestrator.py --engine all
+test-runtime-all: ## Runtime tests across all engines
+	uv run python scripts/runtime-test-orchestrator.py --engine all
 
-test-runtime-quick:
-	python scripts/runtime-test-orchestrator.py --engine pytorch --quick
+test-runtime-quick: ## Quick smoke pass of runtime tests (transformers)
+	uv run python scripts/runtime-test-orchestrator.py --engine transformers --quick
 
-# Check Docker setup and list params without running
-test-runtime-check:
-	python scripts/runtime-test-orchestrator.py --check-docker
+test-runtime-check: ## Check Docker setup; list params without running
+	uv run python scripts/runtime-test-orchestrator.py --check-docker
 
-test-runtime-list:
-	python scripts/runtime-test-orchestrator.py --list-params
+test-runtime-list: ## List the params runtime tests would dispatch over
+	uv run python scripts/runtime-test-orchestrator.py --list-params
 
-# Build missing images automatically before running
-test-runtime-docker:
-	python scripts/runtime-test-orchestrator.py --engine pytorch --build
+test-runtime-docker: ## Build missing engine images then run runtime tests (transformers)
+	uv run python scripts/runtime-test-orchestrator.py --engine transformers --build
 
-install:
+install: ## uv sync (runtime deps only, no dev tooling)
 	uv sync
 
-dev:
+dev: ## uv sync --dev + pre-commit install (same as setup)
 	uv sync --dev
 	uv run pre-commit install
 
-clean:
+clean: ## Remove local caches and build artefacts
 	rm -rf .pytest_cache .ruff_cache .mypy_cache htmlcov .coverage dist/ build/
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
-# Generate documentation from SSOT sources
-generate-docs:
-	python scripts/generate_invalid_combos_doc.py
-	python scripts/generate_config_docs.py
-	@echo "Generated docs in docs/reference/"
+# =============================================================================
+# Generated documentation
+#   docs-all regenerates every SSOT-derived artefact under docs/.
+#   docs-check verifies the artefacts are up to date (CI gate).
+#   docs-generate is the smaller, website-only subset depended on by serve/build.
+# =============================================================================
 
-# Check if generated docs are stale (CI validation)
-check-docs: docs-check
+docs-all: ## Regenerate every SSOT-derived doc (CLI, config, invariants, schema, curation, invalid combos, API)
+	uv run python scripts/generate_invalid_combos_doc.py
+	uv run python scripts/generate_config_docs.py
+	uv run python scripts/generate_cli_reference.py
+	uv run python scripts/generate_invariants_doc.py
+	uv run python scripts/generate_schema_doc.py
+	uv run python scripts/generate_curation_doc.py
+	uv run python scripts/generate_api_docs.py
+	@echo "All generated docs refreshed"
 
-# Rediscover a vendored engine schema by running introspection inside the
-# engine's Docker image. Writes to src/llenergymeasure/engines/<engine>/schema.discovered.json
-# and prints the git diff. Committing (or not) is the review gate.
-# Usage: make discover-schema ENGINE=vllm
-discover-schema:
-	@test -n "$(ENGINE)" || (echo "Usage: make discover-schema ENGINE={vllm|tensorrt|transformers}" && exit 1)
-	./scripts/refresh_discovered_schemas.sh $(ENGINE)
-
-# Rediscover all three engine schemas in sequence.
-discover-schemas-all:
-	./scripts/refresh_discovered_schemas.sh vllm
-	./scripts/refresh_discovered_schemas.sh tensorrt
-	./scripts/refresh_discovered_schemas.sh transformers
-
-docs-check:
+docs-check: ## Verify generated docs are up to date (used by CI)
 	@uv run python scripts/generate_config_docs.py > /dev/null
 	@uv run python scripts/generate_cli_reference.py > /dev/null
 	@uv run python scripts/generate_invalid_combos_doc.py > /dev/null
 	@echo "Generated docs are up to date"
 
+# Backwards-compat alias.
+check-docs: docs-check
+
+# Rediscover a vendored engine schema by running introspection inside the
+# engine's Docker image. Writes to src/llenergymeasure/engines/<engine>/schema.discovered.json
+# and prints the git diff. Committing (or not) is the review gate.
+discover-schema: ## Rediscover one engine schema (ENGINE=vllm|tensorrt|transformers)
+	@test -n "$(ENGINE)" || (echo "Usage: make discover-schema ENGINE={vllm|tensorrt|transformers}" && exit 1)
+	./scripts/refresh_discovered_schemas.sh $(ENGINE)
+
+discover-schemas-all: ## Rediscover all three engine schemas in sequence
+	./scripts/refresh_discovered_schemas.sh vllm
+	./scripts/refresh_discovered_schemas.sh tensorrt
+	./scripts/refresh_discovered_schemas.sh transformers
+
+# Mine engine invariants. Sibling of discover-schema; both halves of the engine
+# knowledge SSOT pipeline.
+refresh-invariants: ## Mine invariants for one engine (ENGINE=vllm|tensorrt|transformers)
+	@test -n "$(ENGINE)" || (echo "Usage: make refresh-invariants ENGINE={vllm|tensorrt|transformers}" && exit 1)
+	./scripts/refresh_invariants.sh $(ENGINE)
+
+refresh-invariants-all: ## Mine invariants for all three engines in sequence
+	./scripts/refresh_invariants.sh vllm
+	./scripts/refresh_invariants.sh tensorrt
+	./scripts/refresh_invariants.sh transformers
+
 # Build wheel + validate package install + check version consistency
-package-check:
+package-check: ## Build wheel, validate install, and check pyproject/_version sync
 	uv build --wheel
 	@python3 -m venv /tmp/pkg-check-local 2>/dev/null || true
 	@/tmp/pkg-check-local/bin/pip install dist/*.whl --quiet --force-reinstall
@@ -160,18 +195,33 @@ package-check:
 	 [ "$$PYPROJECT_VER" = "$$VERSION_VER" ] || { echo "ERROR: Version mismatch"; exit 1; }
 	@echo "Package validation OK"
 
-# Docker smoke tests - mirrors CI docker-smoke job
-docker-smoke: docker-smoke-pytorch
+# =============================================================================
+# Docker smoke + CI helpers
+# =============================================================================
 
-docker-smoke-pytorch:
-	docker build -f docker/Dockerfile.pytorch --build-arg INSTALL_FA3=false . -t smoke-pytorch
-	docker run --rm smoke-pytorch llem --version
-	docker run --rm smoke-pytorch llem config
+docker-smoke: docker-smoke-transformers ## Build transformers image and run llem --version / config
 
-# CI targets - run the same checks as GitHub Actions
-ci: lint typecheck test package-check docs-check
+docker-smoke-transformers:
+	docker build -f docker/Dockerfile.transformers --build-arg INSTALL_FA3=false . -t smoke-transformers
+	docker run --rm smoke-transformers llem --version
+	docker run --rm smoke-transformers llem config
 
-ci-all: ci docker-smoke
+# Stand up an isolated docker compose project, run a smoke command, tear it
+# down on exit even if the command fails. The `trap ... EXIT` guarantees
+# cleanup of containers AND named volumes (-v) so the host stays tidy after
+# repeated runs. Pattern borrowed from pragmata's test-stack target.
+docker-smoke-compose: ## Smoke-test the full compose stack with guaranteed teardown
+	@PROJECT=smoke-llem-$$$$; \
+	echo "Standing up compose project: $$PROJECT"; \
+	trap "docker compose -p $$PROJECT down -v >/dev/null 2>&1" EXIT; \
+	docker compose -p $$PROJECT run --rm transformers llem --version
+
+# CI targets - run the same checks as GitHub Actions ci.yml
+ci: lint typecheck test package-check docs-check ## Local equivalent of GitHub Actions ci.yml
+
+pre-pr: ci ## Run the local CI suite before opening a PR (alias of ci)
+
+ci-all: ci docker-smoke ## ci + docker smoke
 
 # Run CI in a clean container matching GitHub Actions (ubuntu + Python 3.12 + uv)
 # Catches "works on my machine" issues before pushing
@@ -185,10 +235,10 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
 COPY . .
 ENV UV_FROZEN=true UV_NO_PROGRESS=1
-RUN uv sync --dev --extra pytorch --extra codecarbon --extra zeus
+RUN uv sync --dev --extra codecarbon --extra zeus
 endef
 export CI_DOCKERFILE
-ci-docker:
+ci-docker: ## Run ci inside a clean Ubuntu container (matches GitHub Actions environment)
 	echo "$$CI_DOCKERFILE" | docker build -t $(CI_IMAGE) -f - .
 	docker run --rm $(CI_IMAGE) sh -c '\
 		uv run ruff check src/ tests/ && \
@@ -199,41 +249,44 @@ ci-docker:
 		echo "=== CI-docker: all checks passed ==="'
 	@docker rmi $(CI_IMAGE) 2>/dev/null || true
 
-# GPU CI targets - mirrors .github/workflows/gpu-ci.yml
-# Requires: Docker, NVIDIA GPUs, nvidia-container-toolkit
-gpu-ci: gpu-ci-pytorch
+# =============================================================================
+# GPU CI - mirrors .github/workflows/gpu-ci.yml
+#   Requires: Docker, NVIDIA GPUs, nvidia-container-toolkit.
+# =============================================================================
 
-gpu-ci-pytorch:
-	docker build -f docker/Dockerfile.pytorch -t llenergymeasure-ci:pytorch .
-	docker run --name llem-ci-setup llenergymeasure-ci:pytorch pip install --no-cache-dir pytest pytest-xdist
-	docker commit llem-ci-setup llenergymeasure-ci:pytorch
+gpu-ci: gpu-ci-transformers ## GPU integration tests (mirrors gpu-ci.yml)
+
+gpu-ci-transformers:
+	docker build -f docker/Dockerfile.transformers -t llenergymeasure-ci:transformers .
+	docker run --name llem-ci-setup llenergymeasure-ci:transformers pip install --no-cache-dir pytest pytest-xdist
+	docker commit llem-ci-setup llenergymeasure-ci:transformers
 	docker rm llem-ci-setup
 	mkdir -p results/
 	docker run --rm --gpus all \
 		-v "$(CURDIR)/tests":/app/tests:ro \
 		-v "$(CURDIR)/results":/app/results \
-		llenergymeasure-ci:pytorch \
+		llenergymeasure-ci:transformers \
 		python3 -m pytest tests/ -v --tb=short -o "addopts="
 	docker run --rm --gpus all \
 		-v "$(CURDIR)/tests":/app/tests:ro \
 		-v "$(CURDIR)/results":/app/results \
-		llenergymeasure-ci:pytorch \
+		llenergymeasure-ci:transformers \
 		bash tests/integration/sigint_verify.sh
-	docker rmi llenergymeasure-ci:pytorch 2>/dev/null || true
+	docker rmi llenergymeasure-ci:transformers 2>/dev/null || true
 
 # =============================================================================
-# Docker Commands (Production)
+# Docker - first-party image builds and registry pulls
+#   Only the transformers engine has a first-party image. vLLM and TensorRT-LLM
+#   run inside upstream images (vllm/vllm-openai, nvcr.io/nvidia/tensorrt-llm/release)
+#   with the llenergymeasure source bind-mounted at runtime.
 # =============================================================================
-
 
 # Builder name read by docker compose / buildx via BUILDX_BUILDER for
 # registry-cached builds. The docker-container driver is required to import
 # cache_from registry refs (the default `docker` driver cannot).
 BUILDER_NAME := llem-builder
 
-# Create the BuildKit builder with tuned GC limits (200 GiB).
-# Idempotent - skips if builder already exists.
-docker-builder-setup:
+docker-builder-setup: ## Create the BuildKit builder with tuned cache limits (200 GiB)
 	@if docker buildx inspect $(BUILDER_NAME) >/dev/null 2>&1; then \
 		echo "Builder '$(BUILDER_NAME)' already exists"; \
 	else \
@@ -246,21 +299,15 @@ docker-builder-setup:
 		echo "Builder '$(BUILDER_NAME)' created. Use with: BUILDX_BUILDER=$(BUILDER_NAME) docker compose build"; \
 	fi
 
-# Remove the builder (e.g. to recreate with new config)
-docker-builder-rm:
+docker-builder-rm: ## Remove the BuildKit builder (e.g. to recreate with new config)
 	docker buildx rm $(BUILDER_NAME) 2>/dev/null || true
 
 CACHE_HINT := @echo "First build pulls cache layers from ghcr.io; warm rebuilds < 5 min."
 BUILD_WITH_REPORT := scripts/docker_build_with_cache_report.sh
 
-# Build the Transformers engine image - the only first-party image we
-# build. vLLM and TensorRT-LLM use upstream images directly
-# (vllm/vllm-openai, nvcr.io/nvidia/tensorrt-llm/release) with the
-# llenergymeasure source bind-mounted at runtime.
-docker-build-all: docker-build-transformers
+docker-build-all: docker-build-transformers ## Build all first-party engine images
 
-# Build Transformers engine (default, recommended for most users)
-docker-build-transformers:
+docker-build-transformers: ## Build the transformers engine image (default, recommended)
 	$(CACHE_HINT)
 	$(BUILD_WITH_REPORT) transformers
 
@@ -270,7 +317,7 @@ docker-build-transformers:
 # the build. Requires: docker login ghcr.io, llem-builder buildx builder.
 # Uses Dockerfile default MAX_JOBS=32 - matches local layer cache so FA3
 # is not recompiled if already built locally.
-docker-seed-transformers:
+docker-seed-transformers: ## Seed the GHCR build cache for the transformers image
 	@version=$$(python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo "dev"); \
 	fingerprint=$$(python3 scripts/compute_expconf_fingerprint.py 2>/dev/null || echo "unknown"); \
 	ref=ghcr.io/henrycgbaker/llenergymeasure/transformers; \
@@ -288,106 +335,75 @@ docker-seed-transformers:
 	  --tag $$ref:latest \
 	  .
 
-# Pull the versioned transformers registry image (ghcr.io) instead of
-# building locally. vLLM and TensorRT-LLM are pulled directly from
-# upstream registries at runtime by DockerRunner; no first-party tag
-# exists for them post-mount-pivot.
-docker-pull:
+docker-pull: ## Pull the versioned transformers image from GHCR
 	@version=$$(python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo "latest"); \
 	echo "Pulling ghcr.io/henrycgbaker/llenergymeasure/transformers:v$$version"; \
 	docker pull "ghcr.io/henrycgbaker/llenergymeasure/transformers:v$$version"
 
-# Show which images llem will use (local vs registry)
-docker-images:
+docker-images: ## Show which images llem will use (local vs registry)
 	@python3 -c "from llenergymeasure.infra.image_registry import show_image_resolution; show_image_resolution()"
 
-# Validate Docker setup
-docker-check:
+docker-check: ## Validate the docker-compose config parses cleanly
 	@docker compose config -q || (echo "Error: Invalid docker-compose config"; exit 1)
 	@echo "Docker config OK"
 
-# Run any lem command in Docker
-# Usage: make lem CMD="experiment configs/my_experiment.yaml"
-#        make lem CMD="config validate configs/test.yaml"
-#        make lem CMD="results list"
+# =============================================================================
+# llem in Docker
+#   `make llem CMD=...` runs the llem CLI inside the transformers container.
+#   The current llem subcommand surface is: run, config, doctor, report-gaps.
+#
+# Examples:
+#   make llem CMD="--help"
+#   make llem CMD="config"
+#   make llem CMD="run configs/example-study-full.yaml"
+# =============================================================================
+
 CMD ?= --help
-lem: docker-check
-	docker compose run --rm pytorch lem $(CMD)
 
-# Run experiment (num_processes auto-inferred from config)
-# Usage: make experiment CONFIG=test_tiny.yaml DATASET=alpaca SAMPLES=100
-CONFIG ?= test_tiny.yaml
-DATASET ?= alpaca
-SAMPLES ?= 100
-experiment: docker-check
-	docker compose run --rm pytorch \
-		lem experiment /app/configs/$(CONFIG) \
-		--dataset $(DATASET) -n $(SAMPLES)
+llem: docker-check ## Run any llem command in the transformers container (use CMD="...")
+	docker compose run --rm transformers llem $(CMD)
 
-# List available datasets
-datasets:
-	docker compose run --rm pytorch lem datasets
-
-# Validate a config file
-# Usage: make validate CONFIG=test_tiny.yaml
-validate: docker-check
-	docker compose run --rm pytorch lem config validate /app/configs/$(CONFIG)
-
-# Interactive shell in production container
-docker-shell:
-	docker compose run --rm pytorch /bin/bash
+docker-shell: ## Interactive bash shell in the transformers container
+	docker compose run --rm transformers /bin/bash
 
 # =============================================================================
-# Docker Commands (Development)
+# Dev shells - transformers-dev profile (source bind-mounted, dev tooling)
 # =============================================================================
 
-# Build the dev Docker image
-docker-build-dev:
-	docker compose --profile dev build pytorch-dev
+docker-build-dev: ## Build the transformers-dev image (dev profile)
+	docker compose --profile dev build transformers-dev
 
-# Interactive dev shell with source mounted
-docker-dev:
-	docker compose --profile dev run --rm pytorch-dev
+docker-dev: ## Interactive dev shell with source bind-mounted (transformers-dev)
+	docker compose --profile dev run --rm transformers-dev
 
 # =============================================================================
-# Volume Management
+# Volume management
+#   The only named volume in docker-compose.yml is lem-hf-cache. Experiment
+#   state (.state/) and the TensorRT engine cache are bind mounts on the host,
+#   so there are no named volumes to clear for them.
 # =============================================================================
 
-# Clean experiment state volume (preserves caches)
-lem-clean-state:
-	docker volume rm lem-experiment-state 2>/dev/null || true
-	@echo "Cleared experiment state"
-
-# Clean HuggingFace cache volume (will need to re-download models)
-lem-clean-cache:
+lem-clean-cache: ## Remove the HuggingFace model cache volume (forces re-download)
 	docker volume rm lem-hf-cache 2>/dev/null || true
 	@echo "Cleared HuggingFace cache"
-
-# Clean TensorRT engine cache
-lem-clean-trt:
-	docker volume rm lem-trt-engine-cache 2>/dev/null || true
-	@echo "Cleared TensorRT engine cache"
-
-# Clean all named volumes (state + caches)
-lem-clean-all:
-	docker volume rm lem-experiment-state lem-hf-cache lem-trt-engine-cache 2>/dev/null || true
-	@echo "Cleared all LEM volumes"
 
 # =============================================================================
 # Docs site (Docusaurus)
 #   Source content lives in docs/; site infra lives in website/.
-#   Run `make docs-serve` for a local dev server (auto-reloads on edits).
+#   For a complete SSOT regen (config, CLI, invariants, schema, curation,
+#   invalid combos, API) use `make docs-all`. docs-generate covers only the
+#   API reference subset the website depends on at serve/build time.
 # =============================================================================
 
-docs-generate:
+docs-generate: ## Regenerate API docs only (subset of docs-all that website needs)
 	uv run python scripts/generate_api_docs.py
 
-docs-serve: docs-generate
+docs-serve: docs-generate ## Serve docs site locally with auto-reload
 	cd website && npm start
 
-docs-build: docs-generate
+docs-build: docs-generate ## Build docs site for production
 	cd website && npm run build
 
-docs-clean:
+docs-clean: ## Remove docs site build artefacts
 	rm -rf website/node_modules website/build website/.docusaurus website/.cache-loader \
 	       docs/reference/api
