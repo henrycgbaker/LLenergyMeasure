@@ -13,10 +13,9 @@
 .PHONY: docker-build-all docker-build-transformers docker-seed-transformers
 .PHONY: docker-pull docker-images docker-check
 .PHONY: llem docker-shell docker-build-dev docker-dev
-.PHONY: lem-clean-cache
+.PHONY: llem-clean-cache
 
-# Optional per-developer extension hook. Add personal targets (e.g. local
-# snapshot/sync helpers) in Makefile.local; it is intentionally not tracked.
+# per-dev extension hook for personal targets; not git tracked.
 -include Makefile.local
 
 # Default target prints help when `make` is invoked with no arguments.
@@ -378,13 +377,13 @@ docker-dev: ## Interactive dev shell with source bind-mounted (transformers-dev)
 
 # =============================================================================
 # Volume management
-#   The only named volume in docker-compose.yml is lem-hf-cache. Experiment
+#   The only named volume in docker-compose.yml is llem-hf-cache. Experiment
 #   state (.state/) and the TensorRT engine cache are bind mounts on the host,
 #   so there are no named volumes to clear for them.
 # =============================================================================
 
-lem-clean-cache: ## Remove the HuggingFace model cache volume (forces re-download)
-	docker volume rm lem-hf-cache 2>/dev/null || true
+llem-clean-cache: ## Remove the HuggingFace model cache volume (forces re-download)
+	docker volume rm llem-hf-cache 2>/dev/null || true
 	@echo "Cleared HuggingFace cache"
 
 # =============================================================================
