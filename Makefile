@@ -10,6 +10,10 @@
 .PHONY: gpu-ci gpu-ci-pytorch
 .PHONY: docs-generate docs-serve docs-build docs-clean
 
+# Optional per-developer extension hook. Add personal targets (e.g. local
+# snapshot/sync helpers) in Makefile.local; it is intentionally not tracked.
+-include Makefile.local
+
 # PUID/PGID for correct file ownership on bind mounts (LinuxServer.io pattern)
 export PUID := $(shell id -u)
 export PGID := $(shell id -g)
