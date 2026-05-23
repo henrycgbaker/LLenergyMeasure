@@ -88,6 +88,7 @@ field.
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import itertools
 import os
@@ -1804,17 +1805,31 @@ def _resolve_source_paths() -> tuple[str, str, str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the introspection extractor end-to-end and write the staging YAML."""
-    out_path = (
-        Path(_PROJECT_ROOT)
-        / "src"
-        / "llenergymeasure"
-        / "engines"
-        / "transformers"
-        / "_staging"
-        / "transformers_dynamic_miner.yaml"
+    """Run the introspection extractor end-to-end and write the staging YAML.
+
+    Honours ``--out`` so the orchestrator (and direct ``python -m`` callers)
+    can route the staging file to any location. The default mirrors the
+    static miner's shape: a project-relative path under
+    ``src/llenergymeasure/engines/transformers/_staging/`` that the
+    orchestrator's ``_staging_dir`` resolves to when run from the repo
+    root. Basename matches the entry in ``build_corpus._ENGINE_EXTRACTORS``
+    (``transformers_dynamic_invariant_miner.yaml``) so the orchestrator's
+    registry name is the single source of truth instead of relying on the
+    ``transformers_*.yaml`` discovery glob.
+    """
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=Path(
+            "src/llenergymeasure/engines/transformers/_staging/transformers_dynamic_invariant_miner.yaml"
+        ),
+        help=(
+            "Where to write the staging YAML "
+            "(default: src/llenergymeasure/engines/transformers/_staging/transformers_dynamic_invariant_miner.yaml)"
+        ),
     )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    args = parser.parse_args(argv)
 
     version, abs_source_path, rel_source_path = _resolve_source_paths()
     today = os.environ.get("LLENERGY_MINER_FROZEN_AT", dt.date.today().isoformat())[:10]
@@ -1841,10 +1856,11 @@ def main(argv: list[str] | None = None) -> int:
         "extractor": "transformers_dynamic_miner",
         "invariants": [_candidate_to_dict(c) for c in candidates_sorted],
     }
-    out_path.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100))
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100))
 
     print(
-        f"Wrote {len(candidates_sorted)} introspection-derived invariants to {out_path}",
+        f"Wrote {len(candidates_sorted)} introspection-derived invariants to {args.out}",
         file=sys.stderr,
     )
     return 0
