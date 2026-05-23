@@ -6,6 +6,8 @@ This module exposes the lookup helpers that read it:
 - :func:`current_path` - absolute path to the engine's current.yaml.
 - :func:`load_current` - parse the YAML to a dict.
 - :func:`safe_version` - identifier-safe mangling of a PEP 440 version.
+- :func:`current_outputs_dir` - directory holding the engine's per-version
+  mined outputs (``engine_versions/{engine}/v{safe}/outputs/``).
 
 The current-state path is resolved by walking up from this file until a
 ``pyproject.toml`` marker is found - the canonical project-root marker
@@ -67,3 +69,32 @@ def safe_version(version: str) -> str:
             f"resulting candidate {safe!r} contains non-alphanumeric chars."
         )
     return safe
+
+
+def current_outputs_dir(engine: str) -> Path:
+    """Return ``engine_versions/{engine}/v{safe}/outputs/`` for the current pin.
+
+    Resolves ``library.current_version`` from the engine's ``current.yaml``,
+    mangles it via :func:`safe_version`, and joins under the engine's
+    version-bundle root. The returned path is the SSOT directory holding the
+    per-version mined corpus artefacts (``invariants.proposed.yaml``,
+    ``invariants.validated.yaml``, ``schema.discovered.json``).
+
+    Used by sync scripts that mirror the per-version archive into the loader's
+    expected location under ``src/llenergymeasure/engines/<engine>/`` (the
+    "data shadow" the wheel ships).
+    """
+    data = load_current(engine)
+    library = data.get("library")
+    if not isinstance(library, dict):
+        raise ValueError(f"current.yaml for {engine!r} missing required 'library' mapping.")
+    version = library.get("current_version")
+    if not isinstance(version, str) or not version:
+        raise ValueError(f"current.yaml for {engine!r} missing 'library.current_version' string.")
+    return (
+        _find_repo_root(Path(__file__).resolve())
+        / "engine_versions"
+        / engine
+        / safe_version(version)
+        / "outputs"
+    )

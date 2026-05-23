@@ -461,6 +461,19 @@ jobs:
           merge-multiple: true
           path: /tmp/writeback-staging
 
+      - name: Set up Python for codegen sync
+        # Provisions the Python used by regen_engine_corpus.py. Lightweight:
+        # the script only depends on PyYAML, which is in this project's
+        # base runtime deps so uv resolves it from uv.lock.
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: writeback-3.12
+          python-version: "3.12"
+
+      - name: Install sync-script deps (PyYAML)
+        run: uv sync
+
       - name: Apply artefacts and emit single commit
         env:
           APP_ID: ${{ secrets.APP_ID }}
@@ -494,14 +507,26 @@ jobs:
           # Apply staging onto the working tree, preserving relative paths.
           rsync -a /tmp/writeback-staging/ ./
 
+          # Re-derive the data shadow (src/llenergymeasure/engines/<e>/*)
+          # from the per-version SSOT (engine_versions/<e>/v<current>/outputs/*).
+          # Belt-and-braces: per-cell Mirror steps already write both copies,
+          # but this guarantees the commit is internally consistent even if a
+          # cell's mirror gate (engine vendored at this version) skipped.
+          uv run python scripts/engine_producers/regen_engine_corpus.py --write
+
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${APP_ID}+llem-ci-bot[bot]@users.noreply.github.com"
 
-          # Stage only the paths writeback artefacts may produce.
+          # Stage only the paths writeback artefacts may produce. Both the
+          # SSOT (engine_versions/<e>/v<safe>/outputs/*) and the shadow
+          # (src/llenergymeasure/engines/<e>/*) land atomically in one commit.
           git add \
             'src/llenergymeasure/engines/*/invariants.proposed.yaml' \
             'src/llenergymeasure/engines/*/invariants.validated.yaml' \
             'src/llenergymeasure/engines/*/schema.discovered.json' \
+            'engine_versions/*/*/outputs/invariants.proposed.yaml' \
+            'engine_versions/*/*/outputs/invariants.validated.yaml' \
+            'engine_versions/*/*/outputs/schema.discovered.json' \
             'engine_versions/*/current.yaml' \
             'docs/reference/engines/invariants-*.md' \
             'docs/reference/engines/curation-*.md' \
