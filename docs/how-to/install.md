@@ -116,7 +116,7 @@ vLLM or TensorRT-LLM.
 
 ```bash
 # Transformers - build from source (FA3 compile is the slow step)
-make docker-build-transformers
+make docker-build
 
 # vLLM - pull upstream
 docker pull vllm/vllm-openai:0.7.3
@@ -212,7 +212,7 @@ subsequent rebuilds for vLLM/TRT are seconds - the slow part doesn't repeat.
 **Build (or pull) as normal:**
 
 ```bash
-make docker-build-transformers                       # build Transformers from source
+make docker-build                                    # build Transformers from source
 docker pull vllm/vllm-openai:0.7.3                   # pull vLLM upstream
 docker pull nvcr.io/nvidia/tensorrt-llm/release:0.21.0  # pull TensorRT-LLM upstream
 ```
