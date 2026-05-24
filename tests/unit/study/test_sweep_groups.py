@@ -500,18 +500,22 @@ class TestCombinatorialWarnings:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "transformers.dtype": ["float32", "float16", "bfloat16"],
-                "transformers.batch_size": [1, 4, 8, 16, 32],
-                "transformers.attn_implementation": ["sdpa", "flash_attention_2", "eager"],
+                "transformers.engine_params.dtype": ["float32", "float16", "bfloat16"],
+                "harness.transformers.batch_size": [1, 4, 8, 16, 32],
+                "transformers.engine_params.attn_implementation": [
+                    "sdpa",
+                    "flash_attention_2",
+                    "eager",
+                ],
                 "transformers.compilation": [
-                    {"transformers.torch_compile": False},
+                    {"harness.transformers.torch_compile": False},
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "default",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "default",
                     },
                     {
-                        "transformers.torch_compile": True,
-                        "transformers.torch_compile_mode": "max-autotune",
+                        "harness.transformers.torch_compile": True,
+                        "harness.transformers.torch_compile_mode": "max-autotune",
                     },
                 ],
             },

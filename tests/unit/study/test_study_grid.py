@@ -181,10 +181,10 @@ class TestExpandGridSweep:
             "task": {"model": "gpt2"},
             "engine": ["transformers", "vllm"],
             "sweep": {
-                "transformers.dtype": ["float16", "bfloat16"],
-                "vllm.dtype": ["float16", "bfloat16"],
-                "transformers.batch_size": [1, 8],
-                "vllm.engine.max_num_seqs": [64, 256],
+                "transformers.engine_params.dtype": ["float16", "bfloat16"],
+                "vllm.engine_params.dtype": ["float16", "bfloat16"],
+                "transformers.engine_params.batch_size": [1, 8],
+                "vllm.engine_params.max_num_seqs": [64, 256],
             },
         }
         valid, skipped = expand_grid(raw)
@@ -202,7 +202,7 @@ class TestExpandGridSweep:
             assert c.vllm is None
         for c in vllm_configs:
             assert c.transformers is None
-            assert c.vllm.engine.max_num_seqs in (64, 256)
+            assert c.vllm.engine_params.max_num_seqs in (64, 256)
 
 
 # =============================================================================
