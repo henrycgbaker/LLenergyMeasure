@@ -62,9 +62,12 @@ ENGINES = [e.value for e in Engine]
 
 # Quick mode: reduced param set for faster iteration
 QUICK_PARAMS = {
-    "transformers": ["transformers.batch_size", "decoder.temperature"],
-    "vllm": ["vllm.max_num_seqs", "decoder.temperature"],
-    "tensorrt": ["tensorrt.max_batch_size", "decoder.temperature"],
+    "transformers": ["transformers.sampling_params.temperature"],
+    "vllm": ["vllm.engine_params.max_num_seqs", "vllm.sampling_params.temperature"],
+    "tensorrt": [
+        "tensorrt.engine_params.max_batch_size",
+        "tensorrt.sampling_params.temperature",
+    ],
 }
 
 
