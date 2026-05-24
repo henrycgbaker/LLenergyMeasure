@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -111,6 +112,28 @@ def _copy_resilient(src: Path, dst: Path) -> None:
             raise
 
 
+def _path_has_uncommitted_changes(path: Path) -> bool:
+    """Return True if ``path`` differs from its git HEAD version.
+
+    Used by the F#3 destructive-write warning: if a dev has local edits
+    in ``src/llenergymeasure/engines/<e>/<file>`` that --write is about
+    to clobber, surface that loudly so the edit doesn't silently vanish.
+
+    Returns False on any git error (file untracked, not in repo, git not
+    on PATH) - those cases don't warrant a warning.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--quiet", "HEAD", "--", str(path)],
+            check=False,
+            capture_output=True,
+        )
+    except (FileNotFoundError, OSError):
+        return False
+    # `git diff --quiet`: 0 = same, 1 = differs, 128 = not-in-repo / other.
+    return result.returncode == 1
+
+
 def sync_engine(engine: str, *, write: bool) -> tuple[list[str], list[str]]:
     """Sync (or check) one engine.
 
@@ -152,11 +175,41 @@ def sync_engine(engine: str, *, write: bool) -> tuple[list[str], list[str]]:
                 f"Trigger cells to populate."
             )
             continue
+        src_bytes = src.read_bytes()
+        # F#12: zero-byte SSOT is a corruption signal, not "in parity with
+        # an empty shadow". Surface it as a distinct skip rather than
+        # silently passing as "no drift".
+        if not src_bytes:
+            skipped.append(
+                f"{engine}/{filename}: SSOT is zero bytes ({src}). "
+                f"Likely a corrupted writeback or interrupted mining run. "
+                f"Re-trigger cells; do not overwrite the shadow from this."
+            )
+            continue
         if write:
+            # F#3 (option a): warn loudly when --write would clobber
+            # uncommitted local edits in src/<e>/. Dev escape valve
+            # preserved (no --force gate); the warning just makes the
+            # destructiveness visible.
+            if (
+                dst.exists()
+                and dst.read_bytes() != src_bytes
+                and _path_has_uncommitted_changes(dst)
+            ):
+                print(
+                    f"[regen-corpus] WARNING: {dst} has uncommitted "
+                    f"local edits that --write is about to overwrite "
+                    f"with SSOT content from {src}.\n"
+                    f"  If those edits are intentional, commit them "
+                    f"first OR move the change to the SSOT and re-run.\n"
+                    f"  Pipeline is meant to be archive -> shadow only; "
+                    f"local src/<e>/ edits are a dev escape valve, not "
+                    f"the supported workflow.",
+                    file=sys.stderr,
+                )
             _copy_resilient(src, dst)
             continue
         # --check mode: compare bytes and accumulate diff per file.
-        src_bytes = src.read_bytes()
         dst_bytes = dst.read_bytes() if dst.exists() else b""
         if src_bytes == dst_bytes:
             continue

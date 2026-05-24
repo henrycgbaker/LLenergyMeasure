@@ -319,6 +319,151 @@ class TestMissingSource:
 
 
 # ---------------------------------------------------------------------------
+# F#12 - zero-byte SSOT guard
+# ---------------------------------------------------------------------------
+
+
+class TestZeroByteSsotGuard:
+    """Empty SSOT file is a corruption signal, not in-parity with empty
+    shadow. Must surface as a distinct skip - never overwrite shadow."""
+
+    def test_zero_byte_ssot_treated_as_skip_in_check(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        outputs, _shadow = _install_engine(
+            tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=True
+        )
+        (outputs["vllm"] / "schema.discovered.json").write_text("")
+        rc = regen_engine_corpus.main(["--check"])
+        # zero-byte is informational, not exit-1. Other files match.
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "zero bytes" in err
+        assert "vllm/schema.discovered.json" in err
+
+    def test_zero_byte_ssot_not_overwritten_in_write(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        outputs, shadow = _install_engine(
+            tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=True
+        )
+        (outputs["vllm"] / "schema.discovered.json").write_text("")
+        # Shadow still has valid content; --write must NOT overwrite it
+        # with zero bytes.
+        original_shadow = (shadow["vllm"] / "schema.discovered.json").read_bytes()
+        rc = regen_engine_corpus.main(["--write"])
+        assert rc == 0
+        assert (shadow["vllm"] / "schema.discovered.json").read_bytes() == original_shadow
+        err = capsys.readouterr().err
+        assert "zero bytes" in err
+
+
+# ---------------------------------------------------------------------------
+# F#3 - destructive --write UX warning when shadow has uncommitted edits
+# ---------------------------------------------------------------------------
+
+
+class TestDestructiveWriteWarning:
+    """When --write would overwrite shadow content that has uncommitted
+    local edits (vs git HEAD), surface a loud stderr warning so the
+    destructiveness is visible. Dev escape valve preserved - no gating."""
+
+    def test_warning_fires_when_shadow_has_uncommitted_edit(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        outputs, shadow = _install_engine(
+            tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=True
+        )
+        # Hand-edit the shadow so its bytes differ from SSOT.
+        (shadow["vllm"] / "invariants.proposed.yaml").write_text(
+            "schema_version: 1.0.0\nengine: vllm\ninvariants: [HAND_EDIT]\n"
+        )
+        # Stub the git-uncommitted-changes probe to claim YES for this file.
+        monkeypatch.setattr(
+            regen_engine_corpus, "_path_has_uncommitted_changes", lambda p: True
+        )
+        rc = regen_engine_corpus.main(["--write"])
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "WARNING" in err
+        assert "uncommitted" in err
+        # File IS overwritten (no gate) - just warned.
+        assert "HAND_EDIT" not in (
+            shadow["vllm"] / "invariants.proposed.yaml"
+        ).read_text()
+
+    def test_no_warning_when_shadow_is_clean(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        outputs, shadow = _install_engine(
+            tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=True
+        )
+        (shadow["vllm"] / "invariants.proposed.yaml").write_text(
+            "schema_version: 1.0.0\nengine: vllm\ninvariants: [DRIFT]\n"
+        )
+        # git probe says "clean" (no uncommitted changes - e.g. dst is
+        # untracked, or git not available, or matches HEAD).
+        monkeypatch.setattr(
+            regen_engine_corpus, "_path_has_uncommitted_changes", lambda p: False
+        )
+        rc = regen_engine_corpus.main(["--write"])
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "WARNING" not in err
+
+    def test_no_warning_when_bytes_match(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        # Shadow == SSOT, so --write is no-op semantically. Warning would
+        # be noise; suppressed by the bytes-differ guard.
+        _install_engine(
+            tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=True
+        )
+        # Even if probe says uncommitted, no warning fires when bytes
+        # match (nothing destructive to flag).
+        monkeypatch.setattr(
+            regen_engine_corpus, "_path_has_uncommitted_changes", lambda p: True
+        )
+        rc = regen_engine_corpus.main(["--write"])
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "WARNING" not in err
+
+    def test_no_warning_on_new_shadow_file(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        # First-time write (no existing shadow) - nothing to clobber.
+        _install_engine(
+            tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=False
+        )
+        monkeypatch.setattr(
+            regen_engine_corpus, "_path_has_uncommitted_changes", lambda p: True
+        )
+        rc = regen_engine_corpus.main(["--write"])
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "WARNING" not in err
+
+
+# ---------------------------------------------------------------------------
 # --engine filter (F#10)
 # ---------------------------------------------------------------------------
 

@@ -37,6 +37,7 @@ jobs:
       docker: ${{ steps.changes.outputs.docker }}
       workflows: ${{ steps.changes.outputs.workflows }}
       docs_inputs: ${{ steps.changes.outputs.docs_inputs }}
+      corpus_parity: ${{ steps.changes.outputs.corpus_parity }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v4
@@ -66,6 +67,20 @@ jobs:
               - 'src/**'
               - 'scripts/**'
               - '.github/workflows/ci.yml'
+            corpus_parity:
+              # F#6: triggers the corpus + config parity checks in the
+              # lint job. The `src:` filter excludes engine_versions/**
+              # and scripts/engine_producers/**, so PRs editing ONLY the
+              # archive (e.g. cells writeback, manual archive correction)
+              # would silently bypass the parity gate. This filter closes
+              # that hole without forcing test + type-check + package
+              # validation to also run on pure-data PRs.
+              - 'engine_versions/**'
+              - 'src/llenergymeasure/engines/**'
+              - 'scripts/engine_producers/regen_engine_corpus.py'
+              - 'scripts/engine_producers/regen_engine_configs.py'
+              - 'scripts/engine_producers/_current.py'
+              - '.github/workflows/ci.yml'
 
   lint:
     needs: filter
@@ -74,6 +89,7 @@ jobs:
       && (
         (github.event_name == 'workflow_dispatch' && (inputs.job == 'all' || inputs.job == 'lint'))
         || needs.filter.outputs.src == 'true'
+        || needs.filter.outputs.corpus_parity == 'true'
       )
     runs-on: ubuntu-latest
     steps:
