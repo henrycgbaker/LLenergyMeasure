@@ -1101,3 +1101,144 @@ def merge_validation_collections(
         else:
             field_specs[field_name] = dict(enum_spec)
     return field_specs
+
+
+# ---------------------------------------------------------------------------
+# Move 1 walker: Sphinx-style kwargs-docstring extractor.
+#
+# Many engine APIs document their **kwargs in the class / method docstring
+# rather than the signature (HuggingFace transformers in particular -
+# `AutoModelForCausalLM.from_pretrained(*model_args, **kwargs)` documents
+# attention impl, dtype, device_map, tp_plan etc. only in the docstring).
+# `inspect.signature` misses them; this walker recovers them.
+#
+# Matches the standard HuggingFace / pytorch Sphinx pattern:
+#
+#     name (`type-expr`, *optional*[, defaults to `default-expr`]):
+#         <multi-line description>
+#
+# Where `type-expr` is a backtick-quoted Python type expression (possibly
+# multi-typed via " or "), optional is literal, and defaults-clause is
+# optional.
+# ---------------------------------------------------------------------------
+
+
+_SPHINX_PARAM_RE = re.compile(
+    r"""
+    ^[ \t]+                              # leading indent (matters under MULTILINE)
+    (?P<name>[a-z_][a-z0-9_]*)           # parameter name (lowercase ident)
+    [ \t]*\(                              # opening paren
+    [ \t]*`(?P<type>[^`]+)`               # primary backticked type
+    (?P<types_rest>                       # zero+ additional or-joined types,
+        (?:                               # each "or <alt>" where <alt> is
+            [ \t]*or[ \t]*                #   either backticked OR a bare
+            (?:                           #   identifier (HF docstrings mix
+                `[^`]+`                   #   both forms - e.g. `torch.dtype`
+                |                         #   or str).
+                [A-Za-z_][A-Za-z0-9_.\[\],\ ]*
+            )
+        )*
+    )
+    [ \t]*,
+    [ \t]*\*optional\*                    # *optional* marker (literal)
+    (?:[ \t]*,[ \t]*defaults?[ \t]+to[ \t]+(?P<default>[^)]+?))?  # optional default
+    [ \t]*\)\s*:\s*$                     # closing paren + colon
+    """,
+    re.MULTILINE | re.VERBOSE | re.IGNORECASE,
+)
+
+# Canonical JSON Schema type for simple Python type expressions.
+_PYTYPE_TO_JSONSCHEMA: dict[str, str] = {
+    "bool": "boolean",
+    "int": "integer",
+    "float": "number",
+    "str": "string",
+    "string": "string",
+    "list": "array",
+    "tuple": "array",
+    "set": "array",
+    "dict": "object",
+}
+
+
+def _parse_sphinx_default(raw: str) -> Any:
+    """Parse a Sphinx ``defaults to <expr>`` value to a Python literal.
+
+    Returns ``ast.literal_eval(stripped)`` when the expression parses;
+    otherwise returns the stripped string itself (so non-literal defaults
+    like ``the engine's own default`` round-trip without crashing).
+    """
+    s = raw.strip()
+    # Strip backticks around a literal-ish expression.
+    if s.startswith("`") and s.endswith("`"):
+        s = s[1:-1]
+    try:
+        return ast.literal_eval(s)
+    except (ValueError, SyntaxError):
+        return s
+
+
+def _sphinx_type_to_jsonschema(type_expr: str) -> str | None:
+    """Map a Sphinx type expression to a JSON Schema type keyword.
+
+    Returns one of ``"string"`` / ``"integer"`` / ``"number"`` /
+    ``"boolean"`` / ``"array"`` / ``"object"`` for a recognisable Python
+    type. Returns ``None`` for complex / union / parameterised types
+    (e.g. ``"Union[A, B]"``, ``"dict[str, ...]"``, ``"torch.dtype"``);
+    the caller should emit no ``type`` key in that case rather than guess.
+    """
+    s = type_expr.strip().lower()
+    # Strip generic parameters: dict[str, int] -> dict
+    if "[" in s:
+        s = s.split("[", 1)[0].strip()
+    # Strip qualifiers: typing.optional[str] won't appear here but be safe
+    if "." in s:
+        s = s.split(".")[-1]
+    return _PYTYPE_TO_JSONSCHEMA.get(s)
+
+
+def parse_sphinx_kwargs(
+    docstring: str,
+    *,
+    skip_names: set[str] | None = None,
+    source_ref: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Extract `name (`type`, *optional*[, defaults to <default>]):` blocks.
+
+    Args:
+        docstring: The text to scan; pass ``cls.method.__doc__`` directly.
+        skip_names: Names already present in the API signature - skip
+            these so callers can use the walker for kwargs-only coverage.
+            ``None`` returns every match.
+        source_ref: Dotted source path written to ``x-source-ref`` on
+            every emitted field (e.g.
+            ``"transformers.PreTrainedModel.from_pretrained.__doc__"``).
+            ``None`` omits the key.
+
+    Returns:
+        ``{field_name: {"type": <canonical>, "default": <parsed>,
+        "description": <body>, "x-source": "kwargs_docstring",
+        "x-source-ref": <source_ref>}}``. Fields whose Sphinx type
+        doesn't map cleanly to JSON Schema omit the ``type`` key.
+
+    The function is pure (input docstring + skip set -> output dict);
+    no I/O, no inspect calls. Safe to test against synthetic docstrings.
+    """
+    skip = skip_names or set()
+    out: dict[str, dict[str, Any]] = {}
+    for match in _SPHINX_PARAM_RE.finditer(docstring):
+        name = match.group("name")
+        if name in skip or name in out:
+            continue
+        spec: dict[str, Any] = {}
+        json_type = _sphinx_type_to_jsonschema(match.group("type"))
+        if json_type is not None:
+            spec["type"] = json_type
+        default_raw = match.group("default")
+        if default_raw is not None:
+            spec["default"] = _parse_sphinx_default(default_raw)
+        spec["x-source"] = "kwargs_docstring"
+        if source_ref is not None:
+            spec["x-source-ref"] = source_ref
+        out[name] = spec
+    return out

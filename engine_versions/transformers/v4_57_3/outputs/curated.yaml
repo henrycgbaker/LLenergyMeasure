@@ -1,29 +1,38 @@
 # Per-version curation: which schema-discovered fields llem exposes as
-# a typed Pydantic config (Phase 2-T pilot scope).
+# a typed Pydantic config.
 #
-# Source of truth for codegen: regen_engine_configs.py reads
-# schema.discovered.json (field shape) AND this file (the allowlist)
-# together; only fields named here AND present in the schema survive
-# into the generated config.py.
+# Phase 2-T scope expanded 2026-05-24 (Move 1 kwargs-docstring walker
+# + BitsAndBytesConfig LANDMARK landed): 11 new engine_params fields
+# are now mineable from PreTrainedModel.from_pretrained's docstring +
+# BitsAndBytesConfig's docstring. Curated set grows from 14 -> 25
+# fields, matching ~73% of the hand-written TransformersConfig surface.
 #
-# Curation rules:
-# - Fields llem already exposes today (hand-written TransformersConfig +
-#   TransformersSamplingConfig) AND that the introspector already mines
-#   from upstream.
-# - 20 hand-written fields are NOT yet mined (load_in_4bit, dtype,
-#   batch_size, torch_compile*, tp_*, attn_implementation, etc.); they
-#   stay in the hand-written class until Move 1 deepens the walker.
-#   Tracked in _spike/findings/move1_mining_gaps.md.
-#
-# Renovate-driven bump flow: on each upstream version bump (engine_versions
-# /transformers/current.toml changes), maintainer reviews the diff between
-# the old schema.discovered.json and the freshly-mined one; adds new
-# fields to this file as appropriate; codegen propagates the change.
+# Still not mined (stay in hand-written or future llem-domain wrapper):
+# - batch_size: llem concept (not in transformers API)
+# - torch_compile / torch_compile_mode / torch_compile_backend: llem
+#   applies torch.compile() post-load; not in transformers API surface
+# - allow_tf32 / autocast_enabled / autocast_dtype: torch global state
+# - low_cpu_mem_usage: dropped from HF docstring in 4.57.3 (was
+#   present in earlier versions; walker correctly reflects the upstream
+#   reality)
 schema_version: 1.0.0
 engine: transformers
 engine_version: 4.57.3
 exposed_fields:
-  engine_params: []
+  engine_params:
+    # from PreTrainedModel.from_pretrained kwargs (Move 1 docstring walker)
+    - dtype
+    - attn_implementation
+    - device_map
+    - max_memory
+    - tp_plan
+    - tp_size
+    # from BitsAndBytesConfig docstring (Move 1 BNB LANDMARK)
+    - load_in_4bit
+    - load_in_8bit
+    - bnb_4bit_compute_dtype
+    - bnb_4bit_quant_type
+    - bnb_4bit_use_double_quant
   sampling_params:
     - cache_implementation
     - do_sample

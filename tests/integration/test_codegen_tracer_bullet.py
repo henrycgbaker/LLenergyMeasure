@@ -32,7 +32,10 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from llenergymeasure.config.engine_configs import TransformersSamplingConfig
+from llenergymeasure.config.engine_configs import (
+    TransformersConfig,
+    TransformersSamplingConfig,
+)
 from llenergymeasure.engines.transformers import (
     Config,
     EngineParams,
@@ -89,6 +92,113 @@ class TestTracerBulletTemperature:
         # class doesn't impose llem's narrow bound.
         sp = SamplingParams(temperature=10.0)
         assert sp.temperature == 10.0
+
+
+class TestTracerBulletDtypeHalf:
+    """The design's canonical tracer-bullet (`.product/designs/
+    engine-knowledge-as-data.md` § Phase 2 verification): a config
+    value previously rejected by hand-curated ``Literal`` (e.g.
+    ``dtype: "half"``) now validates through the generated class.
+
+    transformers accepts ``dtype="half"`` (alias for float16); the
+    hand-written ``TransformersConfig.dtype`` is
+    ``Literal["float32", "float16", "bfloat16"] | None`` which
+    rejects it. The Move 1 kwargs-docstring walker lifts
+    ``dtype: str`` from the from_pretrained docstring (which simply
+    documents it as ``str``); the generated ``EngineParams.dtype``
+    is therefore ``str | None`` and accepts the engine's actual
+    valid set.
+    """
+
+    def test_handwritten_rejects_half(self) -> None:
+        with pytest.raises(ValidationError) as exc_info:
+            TransformersConfig(dtype="half")
+        assert "dtype" in str(exc_info.value)
+
+    def test_generated_accepts_half(self) -> None:
+        ep = EngineParams(dtype="half")
+        assert ep.dtype == "half"
+
+    def test_generated_accepts_any_string_engine_actually_takes(self) -> None:
+        # Engine accepts torch.dtype objects + several string aliases:
+        # 'float32', 'float16', 'bfloat16', 'half', 'auto'. The generated
+        # class doesn't enforce a narrow set; it lets the engine validate.
+        for v in ("float32", "float16", "bfloat16", "half", "auto"):
+            ep = EngineParams(dtype=v)
+            assert ep.dtype == v
+
+
+class TestTracerBulletAttnImplementation:
+    """Same pattern: hand-written attn_implementation is
+    ``Literal["sdpa", "flash_attention_2", "flash_attention_3", "eager"] | None``
+    - narrow. Mined ``str | None`` accepts whatever transformers ships
+    next (e.g. a new ``"sage_attention"`` backend) without llem-side
+    code change.
+    """
+
+    def test_handwritten_rejects_novel_backend(self) -> None:
+        with pytest.raises(ValidationError):
+            TransformersConfig(attn_implementation="hypothetical_new_backend_v2")
+
+    def test_generated_accepts_novel_backend(self) -> None:
+        ep = EngineParams(attn_implementation="hypothetical_new_backend_v2")
+        assert ep.attn_implementation == "hypothetical_new_backend_v2"
+
+
+class TestTracerBulletBitsAndBytesFields:
+    """BitsAndBytesConfig fields land in the generated class via the
+    Move 1 BNB LANDMARK + companion-config docstring walk. Five fields:
+    load_in_4bit, load_in_8bit, bnb_4bit_compute_dtype,
+    bnb_4bit_quant_type, bnb_4bit_use_double_quant.
+    """
+
+    def test_load_in_4bit_lifted_to_generated_class(self) -> None:
+        ep = EngineParams(load_in_4bit=True)
+        assert ep.load_in_4bit is True
+
+    def test_bnb_4bit_quant_type_lifted_and_typed(self) -> None:
+        # bnb_4bit_quant_type docstring: (`str`, *optional*, defaults to `fp4`)
+        ep = EngineParams(bnb_4bit_quant_type="nf4")
+        assert ep.bnb_4bit_quant_type == "nf4"
+        # default surfaces too
+        ep_default = EngineParams()
+        assert ep_default.bnb_4bit_quant_type == "fp4"
+
+    def test_bnb_4bit_compute_dtype_untyped(self) -> None:
+        # docstring: (`torch.dtype` or str, ...) - walker leaves type
+        # unset (torch.dtype isn't a JSON-Schema primitive); generated
+        # class types as Any | None.
+        ep = EngineParams(bnb_4bit_compute_dtype="bfloat16")
+        assert ep.bnb_4bit_compute_dtype == "bfloat16"
+
+
+class TestProvenancePreservation:
+    """The x-source / x-source-ref provenance keys (Move 1 walker
+    populates them) survive end-to-end through datamodel-codegen as
+    ``json_schema_extra`` on the generated ``Field``."""
+
+    def test_dtype_carries_kwargs_docstring_provenance(self) -> None:
+        # datamodel-codegen renders --field-extra-keys-mapped keys
+        # as Field(json_schema_extra={...}). Pydantic exposes that on
+        # model_fields[name].json_schema_extra.
+        field_info = EngineParams.model_fields["dtype"]
+        extra = field_info.json_schema_extra
+        assert isinstance(extra, dict)
+        assert extra.get("x-source") == "kwargs_docstring"
+        assert (
+            extra.get("x-source-ref")
+            == "transformers.PreTrainedModel.from_pretrained.__doc__"
+        )
+
+    def test_load_in_4bit_carries_bnb_provenance(self) -> None:
+        field_info = EngineParams.model_fields["load_in_4bit"]
+        extra = field_info.json_schema_extra
+        assert isinstance(extra, dict)
+        assert extra.get("x-source") == "kwargs_docstring"
+        assert (
+            extra.get("x-source-ref")
+            == "transformers.BitsAndBytesConfig.__doc__"
+        )
 
 
 class TestExtraAllowContract:

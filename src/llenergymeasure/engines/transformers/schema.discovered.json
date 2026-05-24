@@ -5,7 +5,7 @@
   "engine_commit_sha": null,
   "image_ref": "llenergymeasure:transformers-4.57.3",
   "base_image_ref": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
-  "discovered_at": "2026-05-06T22:57:22+02:00",
+  "discovered_at": "2026-05-24T11:15:20.926476+00:00",
   "discovery_limitations": [
     {
       "section": "engine_params",
@@ -15,7 +15,7 @@
         "PreTrainedModel.from_pretrained.**model_args",
         "PreTrainedModel.from_pretrained.**kwargs"
       ],
-      "reason": "from_pretrained accepts **kwargs; kwargs are not in the signature (documented kwargs live in the class docstring only)"
+      "reason": "from_pretrained accepts **kwargs; documented entries lifted via parse_sphinx_kwargs; this entry tracks the catchall."
     },
     {
       "section": "sampling_params",
@@ -130,6 +130,167 @@
     "weights_only": {
       "type": "boolean",
       "default": true
+    },
+    "pretrained_model_name_or_path": {
+      "type": "string",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "state_dict": {
+      "type": "object",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "from_tf": {
+      "type": "boolean",
+      "default": false,
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "from_flax": {
+      "type": "boolean",
+      "default": false,
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "proxies": {
+      "type": "object",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "output_loading_info": {
+      "type": "boolean",
+      "default": false,
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "attn_implementation": {
+      "type": "string",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "dtype": {
+      "type": "string",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "device_map": {
+      "type": "string",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "max_memory": {
+      "type": "object",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "tp_plan": {
+      "type": "string",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "tp_size": {
+      "type": "string",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "device_mesh": {
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "offload_folder": {
+      "type": "string",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "offload_buffers": {
+      "type": "boolean",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "quantization_config": {
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "subfolder": {
+      "type": "string",
+      "default": "",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "variant": {
+      "type": "string",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
+    },
+    "trust_remote_code": {
+      "type": "boolean",
+      "default": false,
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.AutoModelForCausalLM.from_pretrained.__doc__"
+    },
+    "code_revision": {
+      "type": "string",
+      "default": "main",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.AutoModelForCausalLM.from_pretrained.__doc__"
+    },
+    "load_in_8bit": {
+      "type": "boolean",
+      "default": false,
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.BitsAndBytesConfig.__doc__"
+    },
+    "load_in_4bit": {
+      "type": "boolean",
+      "default": false,
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.BitsAndBytesConfig.__doc__"
+    },
+    "llm_int8_threshold": {
+      "type": "number",
+      "default": 6.0,
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.BitsAndBytesConfig.__doc__"
+    },
+    "llm_int8_skip_modules": {
+      "type": "array",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.BitsAndBytesConfig.__doc__"
+    },
+    "llm_int8_enable_fp32_cpu_offload": {
+      "type": "boolean",
+      "default": false,
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.BitsAndBytesConfig.__doc__"
+    },
+    "llm_int8_has_fp16_weight": {
+      "type": "boolean",
+      "default": false,
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.BitsAndBytesConfig.__doc__"
+    },
+    "bnb_4bit_compute_dtype": {
+      "default": "torch.float32",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.BitsAndBytesConfig.__doc__"
+    },
+    "bnb_4bit_quant_type": {
+      "type": "string",
+      "default": "fp4",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.BitsAndBytesConfig.__doc__"
+    },
+    "bnb_4bit_use_double_quant": {
+      "type": "boolean",
+      "default": false,
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.BitsAndBytesConfig.__doc__"
+    },
+    "bnb_4bit_quant_storage": {
+      "default": "torch.uint8",
+      "x-source": "kwargs_docstring",
+      "x-source-ref": "transformers.BitsAndBytesConfig.__doc__"
     }
   },
   "sampling_params": {
@@ -138,7 +299,7 @@
       "default": 20
     },
     "max_new_tokens": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "min_length": {
@@ -146,7 +307,7 @@
       "default": 0
     },
     "min_new_tokens": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "early_stopping": {
@@ -154,11 +315,11 @@
       "default": false
     },
     "max_time": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "stop_strings": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "do_sample": {
@@ -174,19 +335,34 @@
       "default": true
     },
     "cache_implementation": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
-      "default": null
+      "description": "runtime default was None; upstream has no type annotation",
+      "default": null,
+      "enum": [
+        "static",
+        "offloaded_static",
+        "sliding_window",
+        "hybrid",
+        "hybrid_chunked",
+        "offloaded_hybrid",
+        "offloaded_hybrid_chunked",
+        "dynamic",
+        "dynamic_full",
+        "offloaded",
+        "quantized"
+      ],
+      "x-source": "module_validation_collection",
+      "x-source-ref": "transformers.generation.configuration_utils.ALL_CACHE_IMPLEMENTATIONS"
     },
     "cache_config": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "return_legacy_cache": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "prefill_chunk_size": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "temperature": {
@@ -202,7 +378,7 @@
       "default": 1.0
     },
     "min_p": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "typical_p": {
@@ -234,7 +410,7 @@
       "default": 0
     },
     "bad_words_ids": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "renormalize_logits": {
@@ -242,11 +418,11 @@
       "default": false
     },
     "forced_bos_token_id": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "forced_eos_token_id": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "remove_invalid_values": {
@@ -254,19 +430,19 @@
       "default": false
     },
     "exponential_decay_length_penalty": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "suppress_tokens": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "begin_suppress_tokens": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "sequence_bias": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "token_healing": {
@@ -274,11 +450,11 @@
       "default": false
     },
     "guidance_scale": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "watermarking_config": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "num_return_sequences": {
@@ -298,7 +474,7 @@
       "default": false
     },
     "output_logits": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "return_dict_in_generate": {
@@ -306,15 +482,15 @@
       "default": false
     },
     "pad_token_id": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "bos_token_id": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "eos_token_id": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "encoder_no_repeat_ngram_size": {
@@ -322,7 +498,7 @@
       "default": 0
     },
     "decoder_start_token_id": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "is_assistant": {
@@ -342,15 +518,15 @@
       "default": 0.4
     },
     "prompt_lookup_num_tokens": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "max_matching_ngram_size": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "assistant_early_exit": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "assistant_lookbehind": {
@@ -366,15 +542,15 @@
       "default": false
     },
     "low_memory": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "penalty_alpha": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "dola_layers": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "diversity_penalty": {
@@ -386,11 +562,11 @@
       "default": 1
     },
     "constraints": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "force_words_ids": {
-      "description": "discovery emitted 'unknown' (untyped upstream)",
+      "description": "runtime default was None; upstream has no type annotation",
       "default": null
     },
     "_from_model_config": {

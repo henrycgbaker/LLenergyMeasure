@@ -25,6 +25,7 @@ from scripts.engine_producers._common import (
     jsonable,
     make_envelope,
     merge_validation_collections,
+    parse_sphinx_kwargs,
     read_dockerfile_from,
     runtime_value_to_spec,
     signature_param_to_spec,
@@ -45,6 +46,10 @@ LANDMARKS: tuple[str, ...] = (
     "transformers.PreTrainedModel.from_pretrained",
     "transformers.GenerationConfig",
     "transformers.GenerationConfig.to_dict",
+    # Move 1 (2026-05-24): BitsAndBytesConfig companion-config landmark.
+    # Provides docstring source for load_in_4bit / load_in_8bit /
+    # bnb_4bit_* fields lifted via the Sphinx-kwargs walker.
+    "transformers.BitsAndBytesConfig",
 )
 
 # Validation-collection source modules. Each entry is a (module_path,
@@ -135,13 +140,61 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
                 continue  # prefer AutoModelForCausalLM over PreTrainedModel
             engine_params[name] = signature_param_to_spec(param)
 
+    # Move 1 (2026-05-24): lift kwargs documented in the class docstring
+    # via parse_sphinx_kwargs. HuggingFace from_pretrained accepts most
+    # of its interesting kwargs (dtype, attn_implementation, device_map,
+    # tp_plan, ...) via **kwargs documented in PreTrainedModel's
+    # Sphinx-formatted Args block. skip_names = the params we ALREADY
+    # discovered via inspect.signature so we don't double-count.
+    sig_field_names = set(engine_params.keys())
+    docstring_sources = (
+        (
+            "transformers.PreTrainedModel.from_pretrained.__doc__",
+            PreTrainedModel.from_pretrained.__doc__ or "",
+        ),
+        (
+            "transformers.AutoModelForCausalLM.from_pretrained.__doc__",
+            AutoModelForCausalLM.from_pretrained.__doc__ or "",
+        ),
+    )
+    for source_ref, doc in docstring_sources:
+        for field_name, spec in parse_sphinx_kwargs(
+            doc, skip_names=sig_field_names | set(engine_params.keys()), source_ref=source_ref
+        ).items():
+            # First docstring wins (PreTrainedModel is more authoritative);
+            # AutoModel's pass only adds fields that PreTrainedModel didn't.
+            engine_params.setdefault(field_name, spec)
+
+    # BitsAndBytesConfig companion-config: lift load_in_4bit / load_in_8bit
+    # / bnb_4bit_* via its own Sphinx Args block. These live inside
+    # `quantization_config` semantically; flatten into engine_params so
+    # the generated Config class exposes them at the engine level (matches
+    # llem's existing hand-written TransformersConfig shape).
+    try:
+        from transformers import BitsAndBytesConfig  # type: ignore[import-not-found]
+    except ImportError:
+        BitsAndBytesConfig = None  # type: ignore[assignment]
+    if BitsAndBytesConfig is not None:
+        bnb_doc = BitsAndBytesConfig.__doc__ or ""
+        for field_name, spec in parse_sphinx_kwargs(
+            bnb_doc,
+            skip_names={"kwargs"} | set(engine_params.keys()),
+            source_ref="transformers.BitsAndBytesConfig.__doc__",
+        ).items():
+            engine_params.setdefault(field_name, spec)
+
+    # `kwargs_points` still records that **kwargs accept arbitrary keys
+    # beyond what we documented; surface as informational not blocking.
     if kwargs_points:
         limitations.append(
             {
                 "section": "engine_params",
                 "fields": kwargs_points,
-                "reason": "from_pretrained accepts **kwargs; kwargs are not in the signature "
-                "(documented kwargs live in the class docstring only)",
+                "reason": (
+                    "from_pretrained accepts **kwargs; "
+                    "documented entries lifted via parse_sphinx_kwargs; "
+                    "this entry tracks the catchall."
+                ),
             }
         )
 
