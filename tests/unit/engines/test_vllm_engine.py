@@ -683,23 +683,6 @@ class TestBeamSearchParams:
         assert config.vllm.sampling_params is not None
         assert config.vllm.sampling_params.model_extra.get("beam_width") == 4
 
-    def test_beam_search_mutual_exclusion_with_sampling(self):
-        """Old VLLMConfig had beam_search/sampling mutual exclusion (still testable via old class)."""
-        import pydantic
-
-        from llenergymeasure.config.engine_configs import (
-            VLLMConfig as OldVLLMConfig,
-            VLLMSamplingConfig as OldVLLMSamplingConfig,
-        )
-
-        with pytest.raises(
-            pydantic.ValidationError, match=r"beam_search.*sampling|sampling.*beam_search"
-        ):
-            OldVLLMConfig(
-                beam_search=VLLMBeamSearchConfig(beam_width=4),
-                sampling=OldVLLMSamplingConfig(max_tokens=100),
-            )
-
     def test_beam_search_config_accepts_all_fields(self):
         """VLLMBeamSearchConfig accepts beam_width, length_penalty, early_stopping, max_tokens."""
         bs = VLLMBeamSearchConfig(

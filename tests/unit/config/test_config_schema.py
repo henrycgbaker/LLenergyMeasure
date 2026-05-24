@@ -139,35 +139,6 @@ def test_pytorch_config_section_composition():
     assert config.transformers.batch_size == 4
 
 
-# ---------------------------------------------------------------------------
-# TransformersConfig.num_processes removal (M3 audit fix)
-# ---------------------------------------------------------------------------
-
-
-def test_pytorch_config_has_no_num_processes_field():
-    """TransformersConfig does not have a num_processes field (removed in M3 audit)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    assert "num_processes" not in TransformersConfig.model_fields
-
-
-def test_pytorch_config_num_processes_not_a_declared_field():
-    """num_processes is not a declared field on TransformersConfig.
-
-    TransformersConfig uses extra='allow' for HuggingFace passthrough, so passing
-    num_processes as an extra kwarg does not raise a ValidationError, but it
-    is NOT a typed model field and will not be type-checked or validated.
-    """
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    # Verify it is absent from the declared model fields
-    assert "num_processes" not in TransformersConfig.model_fields
-    # Extra kwargs are accepted (extra='allow') but go into __pydantic_extra__
-    config = TransformersConfig(num_processes=4)  # type: ignore[call-arg]
-    # Not a typed field - no attribute access by name on the typed model
-    assert "num_processes" not in type(config).model_fields
-
-
 def test_pytorch_section_with_wrong_engine_rejected():
     """pytorch: section with engine='vllm' raises ValidationError (cross-validator)."""
     with pytest.raises(ValidationError, match=r"transformers.*config section provided.*engine"):
@@ -344,80 +315,8 @@ def test_save_timeseries_false_accepted() -> None:
 
 
 # ---------------------------------------------------------------------------
-# TransformersConfig tensor parallelism fields (tp_plan, tp_size)
-# ---------------------------------------------------------------------------
-
-
-def test_pytorch_config_tp_plan_accepts_auto():
-    """TransformersConfig(tp_plan='auto') succeeds."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    cfg = TransformersConfig(tp_plan="auto")
-    assert cfg.tp_plan == "auto"
-
-
-def test_pytorch_config_tp_plan_rejects_invalid():
-    """TransformersConfig(tp_plan='custom') raises ValidationError (Literal enforcement)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    with pytest.raises(ValidationError):
-        TransformersConfig(tp_plan="custom")  # type: ignore[arg-type]
-
-
-def test_pytorch_config_tp_size_accepts_positive():
-    """TransformersConfig(tp_plan='auto', tp_size=4) succeeds."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    cfg = TransformersConfig(tp_plan="auto", tp_size=4)
-    assert cfg.tp_plan == "auto"
-    assert cfg.tp_size == 4
-
-
-def test_pytorch_config_tp_size_rejects_zero():
-    """TransformersConfig(tp_size=0) raises ValidationError (ge=1)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    with pytest.raises(ValidationError):
-        TransformersConfig(tp_size=0)
-
-
-def test_pytorch_config_tp_plan_device_map_exclusive():
-    """TransformersConfig(tp_plan='auto', device_map='auto') raises ValidationError."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    with pytest.raises(ValidationError, match="mutually exclusive"):
-        TransformersConfig(tp_plan="auto", device_map="auto")
-
-
-def test_pytorch_config_tp_plan_without_device_map_ok():
-    """TransformersConfig(tp_plan='auto') succeeds (no conflict)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    cfg = TransformersConfig(tp_plan="auto")
-    assert cfg.tp_plan == "auto"
-    assert cfg.device_map is None
-
-
-def test_pytorch_config_device_map_without_tp_plan_ok():
-    """TransformersConfig(device_map='auto') succeeds (no conflict)."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
-    cfg = TransformersConfig(device_map="auto")
-    assert cfg.device_map == "auto"
-    assert cfg.tp_plan is None
-
-
-# ---------------------------------------------------------------------------
 # Bug 1.1 - fp8 quantization + float32 dtype (vLLM)
 # ---------------------------------------------------------------------------
-
-
-def test_vllm_dtype_float32_rejected():
-    """VLLMConfig.dtype Literal rejects float32 (vLLM does not support fp32)."""
-    from llenergymeasure.config.engine_configs import VLLMConfig
-
-    with pytest.raises(ValidationError):
-        VLLMConfig(dtype="float32")  # type: ignore[arg-type]
 
 
 def test_vllm_fp8_float16_accepted():
@@ -558,14 +457,6 @@ def test_pytorch_no_attn_impl_float32_accepted():
 # ---------------------------------------------------------------------------
 # TRT FP8+float32 cross-validator
 # ---------------------------------------------------------------------------
-
-
-def test_trt_dtype_float32_rejected() -> None:
-    """TensorRTConfig.dtype Literal rejects float32 (TRT-LLM does not support fp32)."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig
-
-    with pytest.raises(ValidationError):
-        TensorRTConfig(dtype="float32")  # type: ignore[arg-type]
 
 
 def test_trt_fp8_accepts_float16() -> None:

@@ -32,10 +32,6 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from llenergymeasure.config.engine_configs import (
-    TransformersConfig,
-    TransformersSamplingConfig,
-)
 from llenergymeasure.config.models import ExperimentConfig, TaskConfig
 from llenergymeasure.engines.transformers import (
     Config,
@@ -68,13 +64,6 @@ class TestTracerBulletTemperature:
     """The Phase 2 acceptance criterion: a value previously rejected by
     hand-curated bounds now validates through the generated class.
     """
-
-    def test_handwritten_rejects_temperature_above_two(self) -> None:
-        # Hand-written carries Field(ge=0.0, le=2.0) - rejects > 2.0.
-        with pytest.raises(ValidationError) as exc_info:
-            TransformersSamplingConfig(temperature=3.0)
-        # The error names the field and the bound.
-        assert "temperature" in str(exc_info.value)
 
     def test_generated_accepts_temperature_above_two(self) -> None:
         # Generated class has no upper bound (mined schema only records
@@ -111,11 +100,6 @@ class TestTracerBulletDtypeHalf:
     valid set.
     """
 
-    def test_handwritten_rejects_half(self) -> None:
-        with pytest.raises(ValidationError) as exc_info:
-            TransformersConfig(dtype="half")
-        assert "dtype" in str(exc_info.value)
-
     def test_generated_accepts_half(self) -> None:
         ep = EngineParams(dtype="half")
         assert ep.dtype == "half"
@@ -136,10 +120,6 @@ class TestTracerBulletAttnImplementation:
     next (e.g. a new ``"sage_attention"`` backend) without llem-side
     code change.
     """
-
-    def test_handwritten_rejects_novel_backend(self) -> None:
-        with pytest.raises(ValidationError):
-            TransformersConfig(attn_implementation="hypothetical_new_backend_v2")
 
     def test_generated_accepts_novel_backend(self) -> None:
         ep = EngineParams(attn_implementation="hypothetical_new_backend_v2")
@@ -355,13 +335,6 @@ class TestExtraAllowContract:
         dumped = sp.model_dump()
         assert dumped["novel_future_field"] == "adaptive"
 
-    def test_handwritten_also_allows_extra_for_back_compat(self) -> None:
-        # Confirm hand-written has the same extra='allow' contract -
-        # this is a property of the existing class, not new.
-        c = TransformersSamplingConfig(temperature=0.7, undocumented_param=1)
-        dumped = c.model_dump()
-        assert dumped["undocumented_param"] == 1
-
 
 class TestNestedConfigShape:
     """``Config`` nests ``EngineParams`` + ``SamplingParams`` per design
@@ -387,11 +360,3 @@ class TestNestedConfigShape:
         assert sp.top_k == 50  # generated default from schema
         assert sp.num_beams == 1  # generated default from schema
 
-    def test_handwritten_uses_none_default(self) -> None:
-        # Property of the existing hand-written class; useful contrast.
-        # llem's None-as-default convention says "let engine apply its own
-        # default at execution time"; the generated class instead exposes
-        # the engine's real default.
-        c = TransformersSamplingConfig()
-        assert c.temperature is None  # hand-written default is None
-        assert c.top_k is None  # hand-written default is None

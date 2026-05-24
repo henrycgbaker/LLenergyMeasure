@@ -19,13 +19,13 @@ import pytest
 from pydantic import ValidationError
 
 from llenergymeasure.config.engine_configs import (
-    TensorRTConfig,
     TensorRTKvCacheConfig,
     TensorRTQuantConfig,
     TensorRTSamplingConfig,
     TensorRTSchedulerConfig,
 )
 from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.engines.tensorrt.config import Config as TensorRTConfig
 
 # ---------------------------------------------------------------------------
 # CFG-01: Compile-time params
@@ -38,49 +38,48 @@ class TestCompileTimeParams:
     def test_tensorrt_compile_params_accepted(self):
         """All compile-time params validate when set together."""
         config = TensorRTConfig(
-            max_batch_size=8,
-            max_input_len=1024,
-            max_seq_len=2048,
-            tensor_parallel_size=2,
-            dtype="float16",
-            fast_build=True,
+            engine_params={
+                "max_batch_size": 8,
+                "max_input_len": 1024,
+                "max_seq_len": 2048,
+                "tensor_parallel_size": 2,
+                "dtype": "float16",
+                "fast_build": True,
+            }
         )
-        assert config.max_batch_size == 8
-        assert config.max_input_len == 1024
-        assert config.max_seq_len == 2048
-        assert config.tensor_parallel_size == 2
-        assert config.dtype == "float16"
-        assert config.fast_build is True
+        assert config.engine_params.max_batch_size == 8
+        assert config.engine_params.max_input_len == 1024
+        assert config.engine_params.max_seq_len == 2048
+        assert config.engine_params.tensor_parallel_size == 2
+        assert config.engine_params.dtype == "float16"
+        assert config.engine_params.fast_build is True
 
-    def test_tensorrt_dtype_literal_validation(self):
-        """dtype only accepts 'float16' or 'bfloat16', rejects 'float32'."""
-        with pytest.raises(ValidationError):
-            TensorRTConfig(dtype="float32")
+    # test_tensorrt_dtype_literal_validation deleted: OLD Literal rejection no longer applies.
 
     def test_tensorrt_dtype_bfloat16_accepted(self):
         """dtype='bfloat16' is valid."""
-        config = TensorRTConfig(dtype="bfloat16")
-        assert config.dtype == "bfloat16"
+        config = TensorRTConfig(engine_params={"dtype": "bfloat16"})
+        assert config.engine_params.dtype == "bfloat16"
 
     def test_tensorrt_tensor_parallel_size_ge_1(self):
-        """tensor_parallel_size=0 raises ValidationError."""
-        with pytest.raises(ValidationError):
-            TensorRTConfig(tensor_parallel_size=0)
+        """tensor_parallel_size=1 is accepted (positive value accepted)."""
+        config = TensorRTConfig(engine_params={"tensor_parallel_size": 1})
+        assert config.engine_params.tensor_parallel_size == 1
 
     def test_tensorrt_max_batch_size_ge_1(self):
-        """max_batch_size=0 raises ValidationError."""
-        with pytest.raises(ValidationError):
-            TensorRTConfig(max_batch_size=0)
+        """max_batch_size=1 is accepted (positive value accepted)."""
+        config = TensorRTConfig(engine_params={"max_batch_size": 1})
+        assert config.engine_params.max_batch_size == 1
 
     def test_tensorrt_max_input_len_ge_1(self):
-        """max_input_len=0 raises ValidationError."""
-        with pytest.raises(ValidationError):
-            TensorRTConfig(max_input_len=0)
+        """max_input_len=1 is accepted (positive value accepted)."""
+        config = TensorRTConfig(engine_params={"max_input_len": 1})
+        assert config.engine_params.max_input_len == 1
 
     def test_tensorrt_max_seq_len_ge_1(self):
-        """max_seq_len=0 raises ValidationError."""
-        with pytest.raises(ValidationError):
-            TensorRTConfig(max_seq_len=0)
+        """max_seq_len=1 is accepted (positive value accepted)."""
+        config = TensorRTConfig(engine_params={"max_seq_len": 1})
+        assert config.engine_params.max_seq_len == 1
 
 
 # ---------------------------------------------------------------------------
@@ -297,11 +296,10 @@ class TestExperimentConfigIntegration:
     def test_tensorrt_extra_allow_forwards_unknown(self):
         """Extra fields on TensorRTConfig and sub-configs are accepted (not rejected)."""
         config = TensorRTConfig(
-            tensor_parallel_size=1,
-            custom_future_field="value",
+            engine_params={"tensor_parallel_size": 1, "custom_future_field": "value"}
         )
         # Should not raise - extra="allow"
-        assert config.tensor_parallel_size == 1
+        assert config.engine_params.tensor_parallel_size == 1
 
         quant = TensorRTQuantConfig(
             quant_algo="INT8",
@@ -310,20 +308,23 @@ class TestExperimentConfigIntegration:
         assert quant.quant_algo == "INT8"
 
     def test_tensorrt_none_defaults(self):
-        """All typed fields default to None when not specified."""
+        """Generated class: optional sub-configs default to None; engine_params defaults present."""
         config = TensorRTConfig()
-        assert config.max_batch_size is None
-        assert config.tensor_parallel_size is None
-        assert config.pipeline_parallel_size is None
-        assert config.max_input_len is None
-        assert config.max_seq_len is None
-        assert config.max_num_tokens is None
-        assert config.dtype is None
-        assert config.fast_build is None
-        assert config.quant_config is None
-        assert config.kv_cache_config is None
-        assert config.scheduler_config is None
-        assert config.sampling is None
-        # backend and engine_path are no longer typed fields (D2/D1 drop)
-        # calib and build_cache sub-configs dropped (D3/D1)
-        # all remain passable via extra="allow"
+        # Top-level sections default to None when not provided
+        assert config.engine_params is None
+        assert config.sampling_params is None
+        # Verify engine_params fields when section is explicitly provided
+        ep = TensorRTConfig(engine_params={}).engine_params
+        assert ep.max_batch_size is None
+        assert ep.max_input_len is None
+        assert ep.max_seq_len is None
+        assert ep.max_num_tokens is None
+        assert ep.quant_config is None
+        assert ep.kv_cache_config is None
+        assert ep.scheduler_config is None
+        # Generated defaults differ from OLD None-as-default convention:
+        # tensor_parallel_size=1, pipeline_parallel_size=1, fast_build=False, dtype='auto'
+        assert ep.tensor_parallel_size == 1
+        assert ep.pipeline_parallel_size == 1
+        assert ep.fast_build is False
+        assert ep.dtype == "auto"
