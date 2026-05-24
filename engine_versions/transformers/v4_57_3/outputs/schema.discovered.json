@@ -5,7 +5,7 @@
   "engine_commit_sha": null,
   "image_ref": "llenergymeasure:transformers-4.57.3",
   "base_image_ref": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
-  "discovered_at": "2026-05-24T11:15:20.926476+00:00",
+  "discovered_at": "2026-05-24T11:34:57.065941+00:00",
   "discovery_limitations": [
     {
       "section": "engine_params",
@@ -195,6 +195,7 @@
       "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
     },
     "device_mesh": {
+      "description": "Upstream type: torch.distributed.DeviceMesh",
       "x-source": "kwargs_docstring",
       "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
     },
@@ -209,6 +210,7 @@
       "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
     },
     "quantization_config": {
+      "description": "Upstream type: Union[QuantizationConfigMixin,Dict]",
       "x-source": "kwargs_docstring",
       "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__"
     },
@@ -271,6 +273,7 @@
       "x-source-ref": "transformers.BitsAndBytesConfig.__doc__"
     },
     "bnb_4bit_compute_dtype": {
+      "description": "Upstream type: torch.dtype",
       "default": "torch.float32",
       "x-source": "kwargs_docstring",
       "x-source-ref": "transformers.BitsAndBytesConfig.__doc__"
@@ -288,6 +291,7 @@
       "x-source-ref": "transformers.BitsAndBytesConfig.__doc__"
     },
     "bnb_4bit_quant_storage": {
+      "description": "Upstream type: torch.dtype",
       "default": "torch.uint8",
       "x-source": "kwargs_docstring",
       "x-source-ref": "transformers.BitsAndBytesConfig.__doc__"

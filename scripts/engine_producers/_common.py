@@ -1231,9 +1231,18 @@ def parse_sphinx_kwargs(
         if name in skip or name in out:
             continue
         spec: dict[str, Any] = {}
-        json_type = _sphinx_type_to_jsonschema(match.group("type"))
+        type_expr = match.group("type")
+        json_type = _sphinx_type_to_jsonschema(type_expr)
         if json_type is not None:
             spec["type"] = json_type
+        else:
+            # Untyped (complex / union / parameterised / dotted) - preserve
+            # the upstream type expression as a description so the schema
+            # entry carries SOME informational content (the schema-shape
+            # contract: every field has type, anyOf, OR description). Also
+            # surfaces in the generated config's docstring per
+            # --use-attribute-docstrings.
+            spec["description"] = f"Upstream type: {type_expr}"
         default_raw = match.group("default")
         if default_raw is not None:
             spec["default"] = _parse_sphinx_default(default_raw)

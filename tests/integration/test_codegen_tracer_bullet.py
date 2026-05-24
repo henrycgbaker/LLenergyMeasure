@@ -36,6 +36,7 @@ from llenergymeasure.config.engine_configs import (
     TransformersConfig,
     TransformersSamplingConfig,
 )
+from llenergymeasure.config.models import ExperimentConfig, TaskConfig
 from llenergymeasure.engines.transformers import (
     Config,
     EngineParams,
@@ -199,6 +200,104 @@ class TestProvenancePreservation:
             extra.get("x-source-ref")
             == "transformers.BitsAndBytesConfig.__doc__"
         )
+
+
+class TestExperimentConfigWireUp:
+    """Phase 2-T pilot wire-up: the architectural payoff reaches the
+    ExperimentConfig boundary via the spike's ``engine_v2`` field. The
+    full type swap (replacing ``transformers: TransformersConfig`` with
+    ``transformers: engines.transformers.Config``) is deferred pending
+    a real loader migration; the wire-up here demonstrates the
+    mechanism works without disturbing 125 references across the
+    codebase.
+    """
+
+    def test_engine_v2_accepts_nested_shape(self) -> None:
+        cfg = ExperimentConfig(
+            task=TaskConfig(model="gpt2"),
+            engine="transformers",
+            engine_v2={
+                "engine_params": {"dtype": "half"},
+                "sampling_params": {"temperature": 0.7},
+            },
+        )
+        typed = cfg.as_v2_config()
+        # as_v2_config returns the parsed engines.transformers.Config
+        assert type(typed).__name__ == "Config"
+        assert typed.engine_params.dtype == "half"
+        assert typed.sampling_params.temperature == 0.7
+
+    def test_tracer_bullet_through_experiment_config(self) -> None:
+        # The design's canonical demo, threaded through the
+        # ExperimentConfig boundary.
+
+        # Hand-written `transformers:` rejects dtype="half"
+        with pytest.raises(ValidationError):
+            ExperimentConfig(
+                task=TaskConfig(model="gpt2"),
+                engine="transformers",
+                transformers={"dtype": "half"},  # narrow Literal rejects
+            )
+
+        # Generated `engine_v2:` accepts the same value end-to-end
+        cfg = ExperimentConfig(
+            task=TaskConfig(model="gpt2"),
+            engine="transformers",
+            engine_v2={"engine_params": {"dtype": "half"}},
+        )
+        assert cfg.as_v2_config().engine_params.dtype == "half"
+
+    def test_tracer_bullet_temperature_through_experiment_config(self) -> None:
+        # temperature=3.0 also flows through (hand-written rejects > 2.0).
+        with pytest.raises(ValidationError):
+            ExperimentConfig(
+                task=TaskConfig(model="gpt2"),
+                engine="transformers",
+                transformers={"sampling": {"temperature": 3.0}},
+            )
+        cfg = ExperimentConfig(
+            task=TaskConfig(model="gpt2"),
+            engine="transformers",
+            engine_v2={"sampling_params": {"temperature": 3.0}},
+        )
+        assert cfg.as_v2_config().sampling_params.temperature == 3.0
+
+    def test_engine_v2_validation_errors_surface_at_construction(self) -> None:
+        # Bad engine_v2 shape - missing required nested structure -
+        # surfaces as ValidationError at ExperimentConfig construction
+        # time, not lazily at as_v2_config() call time.
+        with pytest.raises(ValidationError) as exc_info:
+            ExperimentConfig(
+                task=TaskConfig(model="gpt2"),
+                engine="transformers",
+                # engine_params must be an object, not a list
+                engine_v2={"engine_params": ["not", "a", "dict"]},
+            )
+        assert "engine_v2" in str(exc_info.value).lower() or "EngineParams" in str(
+            exc_info.value
+        )
+
+    def test_engine_v2_none_returns_none(self) -> None:
+        # No engine_v2 set - as_v2_config returns None.
+        cfg = ExperimentConfig(
+            task=TaskConfig(model="gpt2"),
+            engine="transformers",
+        )
+        assert cfg.as_v2_config() is None
+
+    def test_engine_v2_works_for_vllm(self) -> None:
+        # Wire-up is engine-agnostic; vllm parses through vllm.Config.
+        cfg = ExperimentConfig(
+            task=TaskConfig(model="gpt2"),
+            engine="vllm",
+            engine_v2={
+                "engine_params": {"tensor_parallel_size": 2, "gpu_memory_utilization": 0.85},
+                "sampling_params": {"temperature": 0.5},
+            },
+        )
+        typed = cfg.as_v2_config()
+        assert typed.engine_params.tensor_parallel_size == 2
+        assert typed.engine_params.gpu_memory_utilization == 0.85
 
 
 class TestExtraAllowContract:

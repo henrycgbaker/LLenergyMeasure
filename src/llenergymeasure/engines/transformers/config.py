@@ -94,6 +94,9 @@ class EngineParams(BaseModel):
             }
         ),
     ] = 'torch.float32'
+    """
+    Upstream type: torch.dtype
+    """
     bnb_4bit_quant_type: Annotated[
         str | None,
         Field(

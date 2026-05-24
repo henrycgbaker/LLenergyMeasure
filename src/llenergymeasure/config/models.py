@@ -398,6 +398,24 @@ class ExperimentConfig(BaseModel):
         "Keys must not collide with ExperimentConfig top-level fields.",
     )
 
+    # Phase 2-T pilot wire-up (spike-only, 2026-05-24): nested
+    # ``engine_params`` / ``sampling_params`` shape accepted via the
+    # generated per-engine ``Config`` class. Validated at construction
+    # time via the engine-discriminated post-validator below. Coexists
+    # with the legacy ``transformers:`` / ``vllm:`` / ``tensorrt:``
+    # fields above pending loader migration.
+    engine_v2: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Generated-config-shaped engine section "
+            "(engine_params + sampling_params nested per the mined schema). "
+            "Discriminated by the ``engine`` field. Validated through "
+            "``llenergymeasure.engines.<engine>.Config`` so the architectural "
+            "payoff (data-mined classes accepting values hand-curated "
+            "Literals rejected) reaches the ExperimentConfig boundary."
+        ),
+    )
+
     # -------------------------------------------------------------------------
     # Pre-validators (run before field parsing)
     # -------------------------------------------------------------------------
@@ -479,6 +497,52 @@ class ExperimentConfig(BaseModel):
                     f"{sorted(collisions)}. Use the named fields instead."
                 )
         return self
+
+    @model_validator(mode="after")
+    def validate_engine_v2(self) -> ExperimentConfig:
+        """Phase 2-T pilot validator: parse ``engine_v2`` through the
+        generated per-engine ``Config`` class so the architectural payoff
+        reaches the ExperimentConfig boundary.
+
+        ``engine_v2`` is held as a dict on the model (for back-compat with
+        the existing extra='forbid' contract); this validator parses it
+        through ``llenergymeasure.engines.<self.engine>.Config`` and
+        raises ValidationError loudly if the dict doesn't fit. The parsed
+        object can be retrieved via :meth:`as_v2_config`.
+
+        Spike-only: coexists with the legacy ``transformers:`` / ``vllm:``
+        / ``tensorrt:`` fields. Loader migration replaces both with the
+        v2 path; until then, both are accepted.
+        """
+        if self.engine_v2 is None:
+            return self
+        # Lazy + explicit imports so the engine subpackages don't load
+        # at module-import time; only the engine actually selected is
+        # parsed.
+        if self.engine == Engine.TRANSFORMERS:
+            from llenergymeasure.engines.transformers import Config as _Cfg
+        elif self.engine == Engine.VLLM:
+            from llenergymeasure.engines.vllm import Config as _Cfg
+        elif self.engine == Engine.TENSORRT:
+            from llenergymeasure.engines.tensorrt import Config as _Cfg
+        else:
+            return self
+        # Parse to surface field-level ValidationError to the user. The
+        # parsed object is cached on the instance for as_v2_config().
+        parsed = _Cfg.model_validate(self.engine_v2)
+        object.__setattr__(self, "_parsed_engine_v2", parsed)
+        return self
+
+    def as_v2_config(self) -> Any | None:
+        """Return the parsed generated-Config object for ``engine_v2``,
+        or ``None`` if ``engine_v2`` wasn't set.
+
+        The return type is the engine-specific ``Config`` class
+        (``engines.transformers.Config`` / ``engines.vllm.Config`` /
+        ``engines.tensorrt.Config``); kept loose here to avoid a
+        runtime-circular import.
+        """
+        return getattr(self, "_parsed_engine_v2", None)
 
     # vLLM fp8 + float32 and TRT FP8 + float32 are rejected by the respective
     # VLLMConfig.dtype / TensorRTConfig.dtype Literal types at field validation
