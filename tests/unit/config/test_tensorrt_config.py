@@ -251,23 +251,25 @@ class TestExperimentConfigIntegration:
             task={"model": "gpt2"},
             engine="tensorrt",
             tensorrt={
-                "tensor_parallel_size": 2,
-                "pipeline_parallel_size": 2,
-                "max_batch_size": 8,
-                "max_input_len": 1024,
-                "max_seq_len": 2048,
-                "max_num_tokens": 4096,
-                "dtype": "bfloat16",
-                "fast_build": True,
-                "quant_config": {"quant_algo": "W4A16_AWQ"},
-                "kv_cache_config": {
-                    "enable_block_reuse": True,
-                    "free_gpu_memory_fraction": 0.9,
+                "engine_params": {
+                    "tensor_parallel_size": 2,
+                    "pipeline_parallel_size": 2,
+                    "max_batch_size": 8,
+                    "max_input_len": 1024,
+                    "max_seq_len": 2048,
+                    "max_num_tokens": 4096,
+                    "dtype": "bfloat16",
+                    "fast_build": True,
+                    "quant_config": {"quant_algo": "W4A16_AWQ"},
+                    "kv_cache_config": {
+                        "enable_block_reuse": True,
+                        "free_gpu_memory_fraction": 0.9,
+                    },
+                    "scheduler_config": {
+                        "capacity_scheduling_policy": "MAX_UTILIZATION",
+                    },
                 },
-                "scheduler_config": {
-                    "capacity_scheduling_policy": "MAX_UTILIZATION",
-                },
-                "sampling": {
+                "sampling_params": {
                     "min_tokens": 5,
                     "n": 1,
                     "ignore_eos": False,
@@ -276,17 +278,21 @@ class TestExperimentConfigIntegration:
         )
         assert config.engine == "tensorrt"
         assert config.tensorrt is not None
-        assert config.tensorrt.tensor_parallel_size == 2
-        assert config.tensorrt.pipeline_parallel_size == 2
-        assert config.tensorrt.max_num_tokens == 4096
-        assert config.tensorrt.quant_config is not None
-        assert config.tensorrt.quant_config.quant_algo == "W4A16_AWQ"
-        assert config.tensorrt.kv_cache_config is not None
-        assert config.tensorrt.kv_cache_config.enable_block_reuse is True
-        assert config.tensorrt.scheduler_config is not None
-        assert config.tensorrt.scheduler_config.capacity_scheduling_policy == "MAX_UTILIZATION"
-        assert config.tensorrt.sampling is not None
-        assert config.tensorrt.sampling.n == 1
+        ep = config.tensorrt.engine_params
+        assert ep is not None
+        assert ep.tensor_parallel_size == 2
+        assert ep.pipeline_parallel_size == 2
+        assert ep.max_num_tokens == 4096
+        assert ep.quant_config is not None
+        # quant_config is a raw dict in the generated engine config
+        assert ep.quant_config["quant_algo"] == "W4A16_AWQ"
+        assert ep.kv_cache_config is not None
+        assert ep.kv_cache_config["enable_block_reuse"] is True
+        assert ep.scheduler_config is not None
+        assert ep.scheduler_config["capacity_scheduling_policy"] == "MAX_UTILIZATION"
+        sp = config.tensorrt.sampling_params
+        assert sp is not None
+        assert sp.n == 1
 
     def test_tensorrt_extra_allow_forwards_unknown(self):
         """Extra fields on TensorRTConfig and sub-configs are accepted (not rejected)."""

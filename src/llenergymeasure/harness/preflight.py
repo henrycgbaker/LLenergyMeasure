@@ -140,8 +140,12 @@ def _check_tensorrt_checkpoint_compat(config: ExperimentConfig) -> str | None:
         return None
 
     trt = config.tensorrt
-    if trt is not None and getattr(trt, "engine_path", None):
-        return None
+    if trt is not None:
+        # engine_path lives on engine_params (new schema) or directly on trt (old schema).
+        ep = getattr(trt, "engine_params", None)
+        engine_path = (getattr(ep, "engine_path", None) if ep is not None else None) or getattr(trt, "engine_path", None)
+        if engine_path:
+            return None
 
     method = _read_model_quant_method(config.task.model)
     if method is None or method not in _TRT_UNSUPPORTED_HF_QUANT_METHODS:

@@ -204,11 +204,15 @@ def test_tensorrt_section_with_wrong_engine_rejected():
 
 
 def test_invalid_dtype_raises_validation_error():
-    """Invalid dtype value raises ValidationError."""
-    with pytest.raises(ValidationError):
-        ExperimentConfig(
-            task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "fp16"}
-        )  # old shorthand
+    """dtype='fp16' shorthand is now accepted (dtype is str | None in generated config).
+
+    The old hand-written Literal enforcement is gone; the generated engine config
+    accepts any string and defers to the engine at runtime.
+    """
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "fp16"}
+    )  # goes into model_extra via extra='allow'
+    assert cfg.transformers is not None
 
 
 def test_valid_dtype_float32():
@@ -239,7 +243,7 @@ def test_valid_dtype_bfloat16():
 def test_all_pytorch_dtypes_valid(dt):
     """Schema-driven: all SSOT DTYPE_SUPPORT['transformers'] values are valid."""
     config = make_config(dtype=dt)
-    assert config.transformers.dtype == dt
+    assert config.transformers.engine_params.dtype == dt
 
 
 # ---------------------------------------------------------------------------
@@ -280,10 +284,10 @@ def test_make_config_helper_returns_valid_config():
 
 
 def test_make_config_override():
-    """make_config(**overrides) applies overrides over defaults (dtype -> engine section)."""
+    """make_config(**overrides) applies overrides over defaults (dtype -> engine_params)."""
     config = make_config(model="bert-base", dtype="float32")
     assert config.task.model == "bert-base"
-    assert config.transformers.dtype == "float32"
+    assert config.transformers.engine_params.dtype == "float32"
 
 
 # ---------------------------------------------------------------------------
@@ -418,50 +422,43 @@ def test_vllm_dtype_float32_rejected():
 
 def test_vllm_fp8_float16_accepted():
     """fp8 quantization with dtype=float16 is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(dtype="float16", engine=VLLMEngineConfig(quantization="fp8")),
+        vllm={"engine_params": {"dtype": "float16", "quantization": "fp8"}},
     )
-    assert cfg.vllm.dtype == "float16"
+    assert cfg.vllm.engine_params.dtype == "float16"
 
 
 def test_vllm_fp8_bfloat16_accepted():
     """fp8 quantization with dtype=bfloat16 is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(dtype="bfloat16", engine=VLLMEngineConfig(quantization="fp8")),
+        vllm={"engine_params": {"dtype": "bfloat16", "quantization": "fp8"}},
     )
-    assert cfg.vllm.dtype == "bfloat16"
+    assert cfg.vllm.engine_params.dtype == "bfloat16"
 
 
 def test_vllm_non_fp8_float16_accepted():
     """Non-fp8 quantization (awq) with dtype=float16 is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(dtype="float16", engine=VLLMEngineConfig(quantization="awq")),
+        vllm={"engine_params": {"dtype": "float16", "quantization": "awq"}},
     )
-    assert cfg.vllm.dtype == "float16"
+    assert cfg.vllm.engine_params.dtype == "float16"
 
 
 def test_vllm_no_quantization_default_dtype_accepted():
     """No quantization set, no explicit dtype, is accepted (engine default applies)."""
-    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(engine=VLLMEngineConfig()),
+        vllm={"engine_params": {}},
     )
-    assert cfg.vllm.dtype is None
+    # New generated config defaults dtype to 'auto' (mined from vLLM EngineArgs)
+    assert cfg.vllm.engine_params.dtype == "auto"
 
 
 # ---------------------------------------------------------------------------
@@ -510,66 +507,52 @@ def test_vllm_batched_tokens_one_none_accepted():
 
 def test_pytorch_flash_attn2_float32_rejected():
     """flash_attention_2 with dtype=float32 raises ValidationError at parse time."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
     with pytest.raises(ValidationError, match=r"flash_attention_2.*requires.*float16"):
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
-            transformers=TransformersConfig(
-                dtype="float32", attn_implementation="flash_attention_2"
-            ),
+            transformers={"engine_params": {"dtype": "float32", "attn_implementation": "flash_attention_2"}},
         )
 
 
 def test_pytorch_flash_attn3_float32_rejected():
     """flash_attention_3 with dtype=float32 raises ValidationError at parse time."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
     with pytest.raises(ValidationError, match=r"flash_attention_3.*requires.*float16"):
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
-            transformers=TransformersConfig(
-                dtype="float32", attn_implementation="flash_attention_3"
-            ),
+            transformers={"engine_params": {"dtype": "float32", "attn_implementation": "flash_attention_3"}},
         )
 
 
 def test_pytorch_flash_attn2_bfloat16_accepted():
     """flash_attention_2 with dtype=bfloat16 is accepted."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        transformers=TransformersConfig(dtype="bfloat16", attn_implementation="flash_attention_2"),
+        transformers={"engine_params": {"dtype": "bfloat16", "attn_implementation": "flash_attention_2"}},
     )
-    assert cfg.transformers.dtype == "bfloat16"
+    assert cfg.transformers.engine_params.dtype == "bfloat16"
 
 
 def test_pytorch_eager_float32_accepted():
     """attn_implementation=eager with dtype=float32 is accepted."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        transformers=TransformersConfig(dtype="float32", attn_implementation="eager"),
+        transformers={"engine_params": {"dtype": "float32", "attn_implementation": "eager"}},
     )
-    assert cfg.transformers.dtype == "float32"
+    assert cfg.transformers.engine_params.dtype == "float32"
 
 
 def test_pytorch_no_attn_impl_float32_accepted():
     """No attn_implementation set with dtype=float32 is accepted."""
-    from llenergymeasure.config.engine_configs import TransformersConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        transformers=TransformersConfig(dtype="float32"),
+        transformers={"engine_params": {"dtype": "float32"}},
     )
-    assert cfg.transformers.dtype == "float32"
+    assert cfg.transformers.engine_params.dtype == "float32"
 
 
 # ---------------------------------------------------------------------------
@@ -587,44 +570,32 @@ def test_trt_dtype_float32_rejected() -> None:
 
 def test_trt_fp8_accepts_float16() -> None:
     """FP8 quantization with dtype=float16 is accepted."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt=TensorRTConfig(
-            dtype="float16", quant_config=TensorRTQuantConfig(quant_algo="FP8")
-        ),
+        tensorrt={"engine_params": {"dtype": "float16", "quant_config": {"quant_algo": "FP8"}}},
     )
-    assert cfg.tensorrt.dtype == "float16"
+    assert cfg.tensorrt.engine_params.dtype == "float16"
 
 
 def test_trt_fp8_accepts_bfloat16() -> None:
     """FP8 quantization with dtype=bfloat16 is accepted."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt=TensorRTConfig(
-            dtype="bfloat16", quant_config=TensorRTQuantConfig(quant_algo="FP8")
-        ),
+        tensorrt={"engine_params": {"dtype": "bfloat16", "quant_config": {"quant_algo": "FP8"}}},
     )
-    assert cfg.tensorrt.dtype == "bfloat16"
+    assert cfg.tensorrt.engine_params.dtype == "bfloat16"
 
 
 def test_trt_non_fp8_accepts_float16() -> None:
     """Non-FP8 quantization (INT8) with dtype=float16 is accepted."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
-
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt=TensorRTConfig(
-            dtype="float16", quant_config=TensorRTQuantConfig(quant_algo="INT8")
-        ),
+        tensorrt={"engine_params": {"dtype": "float16", "quant_config": {"quant_algo": "INT8"}}},
     )
-    assert cfg.tensorrt.dtype == "float16"
+    assert cfg.tensorrt.engine_params.dtype == "float16"
 
 
 # ---------------------------------------------------------------------------

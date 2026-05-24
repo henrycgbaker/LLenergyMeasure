@@ -55,12 +55,19 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     engine_name = config.engine.value if hasattr(config.engine, "value") else str(config.engine)
     section: Any = getattr(config, engine_name, None)
     dump: dict[str, Any] = section.model_dump(mode="python") if section is not None else {}
-    sampling = dump.pop("sampling", None) or {}
+    # New nested shape: sampling lives under sampling_params (new) or sampling (old compat).
+    sampling_nested = dump.pop("sampling_params", None)
+    if sampling_nested is None:
+        sampling_nested = dump.pop("sampling", None)
+    sampling: dict[str, Any] = sampling_nested or {}
+    # engine_params is a nested sub-object; flatten it into observed_engine_params.
+    engine_params = dump.pop("engine_params", None) or {}
+    observed_engine: dict[str, Any] = {**engine_params, **dump}
 
     return ConfigHashView(
         engine=engine_name,
         task=config.task.model_dump(mode="python"),
-        observed_engine_params=dump,
+        observed_engine_params=observed_engine,
         observed_sampling_params=sampling,
         lora=None,  # No LoRA field yet on ExperimentConfig - reserved for future.
         passthrough_kwargs=dict(config.passthrough_kwargs or {}),

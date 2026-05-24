@@ -21,6 +21,7 @@ engine-generic.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -33,6 +34,33 @@ from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.study.hashing import build_resolved_view, hash_config
 
 logger = logging.getLogger(__name__)
+
+_SAMPLING_PATH_RE = re.compile(r"^([a-z]+)\.sampling\.")
+
+
+def _translate_corpus_path(path: str) -> str:
+    """Remap legacy corpus field paths to the new nested schema.
+
+    Invariant corpus YAML files use the old flat schema path
+    ``<engine>.sampling.<field>``. The new schema places sampling fields
+    under ``<engine>.sampling_params.<field>``. This one-line remap is
+    applied whenever a corpus path is used for attribute traversal or
+    assignment against a live ExperimentConfig.
+    """
+    return _SAMPLING_PATH_RE.sub(r"\1.sampling_params.", path)
+
+
+def _translate_invariant(invariant: "Invariant") -> "Invariant":
+    """Return a copy of ``invariant`` with corpus field paths translated to the new schema.
+
+    Creates a shallow copy with ``match_fields`` keys remapped via
+    :func:`_translate_corpus_path`. All other fields are unchanged.
+    """
+    import dataclasses
+
+    translated_fields = {_translate_corpus_path(k): v for k, v in invariant.match_fields.items()}
+    return dataclasses.replace(invariant, match_fields=translated_fields)
+
 
 _MAX_ITER = 10
 """Maximum fixpoint passes before declaring non-convergence.
@@ -83,7 +111,7 @@ def _apply_invariants_fixpoint(
         LibraryResolutionCycleError: If the fixpoint loop exceeds
             :data:`_MAX_ITER` passes - the validated corpus has an invariant cycle.
     """
-    dormant_rules = [r for r in invariants if r.severity in ("dormant", "dormant_silent")]
+    dormant_rules = [_translate_invariant(r) for r in invariants if r.severity in ("dormant", "dormant_silent")]
     if not dormant_rules:
         return config.model_copy(deep=True)
 
@@ -311,9 +339,14 @@ def _canonical_excerpt(config: ExperimentConfig) -> dict[str, Any]:
         "task.model": config.task.model,
     }
     section = getattr(config, engine, None)
-    sampling = getattr(section, "sampling", None) if section is not None else None
+    sampling = getattr(section, "sampling_params", None) if section is not None else None
     if sampling is not None:
-        dumped = sampling.model_dump(mode="python", exclude_none=True)
+        if hasattr(sampling, "model_dump"):
+            dumped = sampling.model_dump(mode="python", exclude_none=True)
+        elif isinstance(sampling, dict):
+            dumped = {k: v for k, v in sampling.items() if v is not None}
+        else:
+            dumped = {}
         for key, value in dumped.items():
-            excerpt[f"{engine}.sampling.{key}"] = value
+            excerpt[f"{engine}.sampling_params.{key}"] = value
     return excerpt

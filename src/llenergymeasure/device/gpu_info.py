@@ -548,20 +548,22 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
     if config.engine == Engine.VLLM and config.vllm is not None:
         tp = 1
         pp = 1
-        if config.vllm.engine is not None:
-            tp = config.vllm.engine.tensor_parallel_size or 1
-            pp = config.vllm.engine.pipeline_parallel_size or 1
+        if config.vllm.engine_params is not None:
+            tp = config.vllm.engine_params.tensor_parallel_size or 1
+            pp = config.vllm.engine_params.pipeline_parallel_size or 1
         total = tp * pp
         if total > 1:
             return list(range(total))
     elif config.engine == Engine.TENSORRT and config.tensorrt is not None:
-        tp = config.tensorrt.tensor_parallel_size or 1
+        ep = config.tensorrt.engine_params
+        tp = (ep.tensor_parallel_size if ep is not None else None) or 1
         if tp > 1:
             return list(range(tp))
     elif (
         config.engine == Engine.TRANSFORMERS
         and config.transformers is not None
-        and config.transformers.device_map is not None
+        and config.transformers.engine_params is not None
+        and config.transformers.engine_params.device_map is not None
     ):
         # Model will shard across all visible GPUs - measure all of them.
         # Best-effort: if pynvml is absent or no NVIDIA GPU, fall through to [0].

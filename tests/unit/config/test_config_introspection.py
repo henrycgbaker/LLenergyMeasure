@@ -251,7 +251,7 @@ def test_list_all_param_paths_unknown_engine_raises():
 def test_all_pytorch_dtype_values_produce_valid_config(dt):
     """Schema-driven: each SSOT DTYPE_SUPPORT['transformers'] value creates a valid config."""
     config = make_config(dtype=dt)
-    assert config.transformers.dtype == dt
+    assert config.transformers.engine_params.dtype == dt
 
 
 def test_ssot_dtype_values_match_param_test_values():
@@ -345,13 +345,13 @@ def test_get_swept_field_paths_single_experiment():
 def test_get_swept_field_paths_dtype_swept():
     """Two experiments with different engine dtypes sweep the engine subconfig path."""
     exp1 = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "float16"}
+        task={"model": "gpt2"}, engine="transformers", transformers={"engine_params": {"dtype": "float16"}}
     )
     exp2 = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "bfloat16"}
+        task={"model": "gpt2"}, engine="transformers", transformers={"engine_params": {"dtype": "bfloat16"}}
     )
     result = get_swept_field_paths([exp1, exp2])
-    assert "transformers.dtype" in result
+    assert "transformers.engine_params.dtype" in result
 
 
 def test_get_swept_field_paths_nested_field():
@@ -371,17 +371,16 @@ def test_get_swept_field_paths_multi_engine_none_subconfigs():
     get_swept_field_paths must handle None values in optional sub-config lists
     rather than raising AttributeError.
     """
-    from llenergymeasure.config.engine_configs import TransformersConfig, VLLMConfig
-
     exp_pt = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        transformers=TransformersConfig(dtype="float16", batch_size=4),
+        transformers={"engine_params": {"dtype": "float16"}},
+        harness={"transformers": {"batch_size": 4}},
     )
     exp_vllm = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        vllm=VLLMConfig(dtype="float16"),
+        vllm={"engine_params": {"dtype": "float16"}},
     )
     # Must not raise AttributeError
     result = get_swept_field_paths([exp_pt, exp_vllm])

@@ -124,7 +124,8 @@ def print_dry_run(
         return ""
 
     engine_section = getattr(config, config.engine, None)
-    engine_dtype = getattr(engine_section, "dtype", None)
+    _engine_params = getattr(engine_section, "engine_params", None)
+    engine_dtype = getattr(_engine_params, "dtype", None) or getattr(engine_section, "dtype", None)
 
     print("Config (resolved)")
     print(f"  Model          {config.task.model}")
@@ -134,8 +135,8 @@ def print_dry_run(
 
     # Batch size - from transformers section if present
     batch_size: int | None = None
-    if config.transformers is not None and hasattr(config.transformers, "batch_size"):
-        batch_size = config.transformers.batch_size
+    if config.harness is not None and config.harness.transformers is not None and hasattr(config.harness.transformers, "batch_size"):
+        batch_size = config.harness.transformers.batch_size
     if batch_size is not None:
         print(f"  Batch size     {batch_size}")
 

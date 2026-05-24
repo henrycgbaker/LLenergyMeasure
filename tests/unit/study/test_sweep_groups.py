@@ -343,9 +343,9 @@ class TestExpandGridSweepGroups:
                 "transformers.decoding": [
                     {},  # baseline: use engine default sampling
                     {
-                        "transformers.sampling.do_sample": False,
-                        "transformers.sampling.temperature": 0.0,
-                        "transformers.num_beams": 4,
+                        "transformers.sampling_params.do_sample": False,
+                        "transformers.sampling_params.temperature": 0.0,
+                        "transformers.sampling_params.num_beams": 4,
                     },
                 ],
             },
@@ -353,11 +353,11 @@ class TestExpandGridSweepGroups:
         valid, _skipped = expand_grid(raw)
         assert len(valid) == 2
         beam_config = next(
-            c for c in valid if c.transformers is not None and c.transformers.num_beams is not None
+            c for c in valid if c.transformers is not None and c.transformers.sampling_params is not None and c.transformers.sampling_params.num_beams is not None
         )
-        assert beam_config.transformers.sampling.do_sample is False
-        assert beam_config.transformers.sampling.temperature == 0.0
-        assert beam_config.transformers.num_beams == 4
+        assert beam_config.transformers.sampling_params.do_sample is False
+        assert beam_config.transformers.sampling_params.temperature == 0.0
+        assert beam_config.transformers.sampling_params.num_beams == 4
 
     def test_group_plus_explicit_experiments(self):
         """Groups and explicit experiments coexist."""

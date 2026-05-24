@@ -80,12 +80,11 @@ def make_config(**overrides) -> ExperimentConfig:
         engine_name = ec.get("engine", TEST_ENGINE)
         engine_key = engine_name.value if hasattr(engine_name, "value") else str(engine_name)
         existing = ec.get(engine_key)
-        if hasattr(existing, "model_copy"):
-            ec[engine_key] = existing.model_copy(update={"dtype": dtype})
-        elif isinstance(existing, dict):
-            ec[engine_key] = {**existing, "dtype": dtype}
+        if isinstance(existing, dict):
+            existing_ep = existing.get("engine_params", {})
+            ec[engine_key] = {**existing, "engine_params": {**existing_ep, "dtype": dtype}}
         else:
-            ec[engine_key] = {"dtype": dtype}
+            ec[engine_key] = {"engine_params": {"dtype": dtype}}
 
     return ExperimentConfig(**ec)
 

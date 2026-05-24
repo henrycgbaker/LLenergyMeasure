@@ -14,10 +14,6 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from llenergymeasure.config.engine_configs import (
-    TransformersConfig,
-    TransformersSamplingConfig,
-)
 from llenergymeasure.config.engine_invariants.loader import EngineInvariants, Invariant
 from llenergymeasure.config.models import (
     ExperimentConfig,
@@ -96,7 +92,7 @@ def test_error_severity_raises_validation_error(monkeypatch: pytest.MonkeyPatch)
     invariant = _make_invariant(
         "test_error_rule",
         "error",
-        {"transformers.attn_implementation": "sdpa"},
+        {"transformers.engine_params.attn_implementation": "sdpa"},
     )
     _install_test_invariants(monkeypatch, [invariant])
 
@@ -104,7 +100,7 @@ def test_error_severity_raises_validation_error(monkeypatch: pytest.MonkeyPatch)
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
-            transformers=TransformersConfig(attn_implementation="sdpa"),
+            transformers={"engine_params": {"attn_implementation": "sdpa"}},
         )
     assert "test_error_rule" in str(exc_info.value)
 
@@ -113,14 +109,14 @@ def test_error_severity_no_raise_when_match_misses(monkeypatch: pytest.MonkeyPat
     invariant = _make_invariant(
         "test_error_rule",
         "error",
-        {"transformers.attn_implementation": "flash_attention_2"},
+        {"transformers.engine_params.attn_implementation": "flash_attention_2"},
     )
     _install_test_invariants(monkeypatch, [invariant])
 
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        transformers=TransformersConfig(attn_implementation="sdpa"),
+        transformers={"engine_params": {"attn_implementation": "sdpa"}},
     )
     assert cfg._dormant_observations == {}
 
@@ -134,7 +130,7 @@ def test_warn_severity_emits_config_validation_warning(monkeypatch: pytest.Monke
     invariant = _make_invariant(
         "test_warn_rule",
         "warn",
-        {"transformers.attn_implementation": "eager"},
+        {"transformers.engine_params.attn_implementation": "eager"},
     )
     _install_test_invariants(monkeypatch, [invariant])
 
@@ -143,7 +139,7 @@ def test_warn_severity_emits_config_validation_warning(monkeypatch: pytest.Monke
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
-            transformers=TransformersConfig(attn_implementation="eager"),
+            transformers={"engine_params": {"attn_implementation": "eager"}},
         )
 
     matched = [w for w in caught if issubclass(w.category, ConfigValidationWarning)]
@@ -158,7 +154,7 @@ def test_warn_severity_not_fatal_under_simplefilter_error(
     invariant = _make_invariant(
         "test_warn_rule",
         "warn",
-        {"transformers.attn_implementation": "eager"},
+        {"transformers.engine_params.attn_implementation": "eager"},
     )
     _install_test_invariants(monkeypatch, [invariant])
 
@@ -168,7 +164,7 @@ def test_warn_severity_not_fatal_under_simplefilter_error(
             ExperimentConfig(
                 task={"model": "gpt2"},
                 engine="transformers",
-                transformers=TransformersConfig(attn_implementation="eager"),
+                transformers={"engine_params": {"attn_implementation": "eager"}},
             )
 
 
@@ -181,7 +177,7 @@ def test_dormant_severity_populates_observations(monkeypatch: pytest.MonkeyPatch
     invariant = _make_invariant(
         "test_dormant_rule",
         "dormant",
-        {"transformers.sampling.temperature": {"present": True, "not_equal": 1.0}},
+        {"transformers.sampling_params.temperature": {"present": True, "not_equal": 1.0}},
         outcome="dormant_announced",
     )
     _install_test_invariants(monkeypatch, [invariant])
@@ -189,9 +185,7 @@ def test_dormant_severity_populates_observations(monkeypatch: pytest.MonkeyPatch
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        transformers=TransformersConfig(
-            sampling=TransformersSamplingConfig(temperature=0.9),
-        ),
+        transformers={"sampling_params": {"temperature": 0.9}},
     )
 
     observations = cfg._dormant_observations
@@ -230,29 +224,27 @@ def test_empty_invariant_set_populates_empty_observations(monkeypatch: pytest.Mo
 
 def test_multiple_dormant_invariants_all_recorded(monkeypatch: pytest.MonkeyPatch) -> None:
     invariant_a = _make_invariant(
-        "a", "dormant", {"transformers.sampling.temperature": {"present": True}}
+        "a", "dormant", {"transformers.sampling_params.temperature": {"present": True}}
     )
     invariant_b = _make_invariant(
-        "b", "dormant", {"transformers.sampling.top_p": {"present": True}}
+        "b", "dormant", {"transformers.sampling_params.top_p": {"present": True}}
     )
     _install_test_invariants(monkeypatch, [invariant_a, invariant_b])
 
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        transformers=TransformersConfig(
-            sampling=TransformersSamplingConfig(temperature=0.9, top_p=0.95),
-        ),
+        transformers={"sampling_params": {"temperature": 0.9, "top_p": 0.95}},
     )
     assert len(cfg._dormant_observations) == 2
 
 
 def test_error_invariant_shortcircuits_later_invariants(monkeypatch: pytest.MonkeyPatch) -> None:
-    err = _make_invariant("err", "error", {"transformers.attn_implementation": "eager"})
+    err = _make_invariant("err", "error", {"transformers.engine_params.attn_implementation": "eager"})
     dormant = _make_invariant(
         "dormant_after_error",
         "dormant",
-        {"transformers.sampling.temperature": {"present": True}},
+        {"transformers.sampling_params.temperature": {"present": True}},
     )
     _install_test_invariants(monkeypatch, [err, dormant])
 
@@ -260,10 +252,7 @@ def test_error_invariant_shortcircuits_later_invariants(monkeypatch: pytest.Monk
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
-            transformers=TransformersConfig(
-                attn_implementation="eager",
-                sampling=TransformersSamplingConfig(temperature=0.9),
-            ),
+            transformers={"engine_params": {"attn_implementation": "eager"}, "sampling_params": {"temperature": 0.9}},
         )
 
 
@@ -276,7 +265,7 @@ def test_unknown_severity_emits_warning(monkeypatch: pytest.MonkeyPatch) -> None
     invariant = _make_invariant(
         "weird_severity",
         "not_a_real_severity",
-        {"transformers.attn_implementation": "sdpa"},
+        {"transformers.engine_params.attn_implementation": "sdpa"},
     )
     _install_test_invariants(monkeypatch, [invariant])
 
@@ -285,7 +274,7 @@ def test_unknown_severity_emits_warning(monkeypatch: pytest.MonkeyPatch) -> None
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
-            transformers=TransformersConfig(attn_implementation="sdpa"),
+            transformers={"engine_params": {"attn_implementation": "sdpa"}},
         )
 
     matched = [w for w in caught if issubclass(w.category, ConfigValidationWarning)]

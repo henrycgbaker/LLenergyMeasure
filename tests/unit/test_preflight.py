@@ -623,7 +623,6 @@ def test_trt_checkpoint_compat_skips_non_tensorrt_engine(monkeypatch: pytest.Mon
 
 def test_trt_checkpoint_compat_passes_non_quantised(monkeypatch: pytest.MonkeyPatch) -> None:
     """Non-quantised models on TRT-LLM pass the gate."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig
     from llenergymeasure.harness.preflight import _check_tensorrt_checkpoint_compat
 
     monkeypatch.setattr(
@@ -631,13 +630,12 @@ def test_trt_checkpoint_compat_passes_non_quantised(monkeypatch: pytest.MonkeyPa
         "_read_model_quant_method",
         lambda _: None,
     )
-    config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=1))
+    config = make_config(engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}})
     assert _check_tensorrt_checkpoint_compat(config) is None
 
 
 def test_trt_checkpoint_compat_rejects_awq(monkeypatch: pytest.MonkeyPatch) -> None:
     """HF AWQ checkpoint on TRT-LLM yields an actionable error."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig
     from llenergymeasure.harness.preflight import _check_tensorrt_checkpoint_compat
 
     monkeypatch.setattr(
@@ -647,7 +645,7 @@ def test_trt_checkpoint_compat_rejects_awq(monkeypatch: pytest.MonkeyPatch) -> N
     )
     config = make_config(
         engine="tensorrt",
-        tensorrt=TensorRTConfig(tensor_parallel_size=1),
+        tensorrt={"engine_params": {"tensor_parallel_size": 1}},
         model="Qwen/Qwen2.5-7B-Instruct-AWQ",
     )
     err = _check_tensorrt_checkpoint_compat(config)
@@ -659,7 +657,6 @@ def test_trt_checkpoint_compat_rejects_awq(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_trt_checkpoint_compat_rejects_gptq(monkeypatch: pytest.MonkeyPatch) -> None:
     """HF GPTQ checkpoint on TRT-LLM yields an actionable error."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig
     from llenergymeasure.harness.preflight import _check_tensorrt_checkpoint_compat
 
     monkeypatch.setattr(
@@ -669,7 +666,7 @@ def test_trt_checkpoint_compat_rejects_gptq(monkeypatch: pytest.MonkeyPatch) -> 
     )
     config = make_config(
         engine="tensorrt",
-        tensorrt=TensorRTConfig(tensor_parallel_size=1),
+        tensorrt={"engine_params": {"tensor_parallel_size": 1}},
         model="Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4",
     )
     err = _check_tensorrt_checkpoint_compat(config)
@@ -681,7 +678,6 @@ def test_trt_checkpoint_compat_skips_when_engine_path_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Explicit engine_path means the user pre-built the engine; do not block."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig
     from llenergymeasure.harness.preflight import _check_tensorrt_checkpoint_compat
 
     monkeypatch.setattr(
@@ -691,7 +687,7 @@ def test_trt_checkpoint_compat_skips_when_engine_path_set(
     )
     config = make_config(
         engine="tensorrt",
-        tensorrt=TensorRTConfig(tensor_parallel_size=1, engine_path="/some/built/engine"),
+        tensorrt={"engine_params": {"tensor_parallel_size": 1, "engine_path": "/some/built/engine"}},
     )
     assert _check_tensorrt_checkpoint_compat(config) is None
 
@@ -700,7 +696,6 @@ def test_trt_checkpoint_compat_network_failure_does_not_block(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Transient HF Hub failures must not block dispatch."""
-    from llenergymeasure.config.engine_configs import TensorRTConfig
     from llenergymeasure.harness.preflight import _check_tensorrt_checkpoint_compat
 
     monkeypatch.setattr(
@@ -708,7 +703,7 @@ def test_trt_checkpoint_compat_network_failure_does_not_block(
         "_read_model_quant_method",
         lambda _: None,  # Simulates "couldn't determine"
     )
-    config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=1))
+    config = make_config(engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}})
     assert _check_tensorrt_checkpoint_compat(config) is None
 
 

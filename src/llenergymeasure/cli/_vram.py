@@ -88,7 +88,10 @@ def estimate_vram(config: ExperimentConfig) -> dict[str, float] | None:
 
     # Weights memory
     engine_section = getattr(config, config.engine, None)
-    dtype = getattr(engine_section, "dtype", None)
+    # dtype lives under engine_params in the new nested schema; fall back to
+    # a top-level attribute for any extra-field usage.
+    engine_params = getattr(engine_section, "engine_params", None)
+    dtype = getattr(engine_params, "dtype", None) or getattr(engine_section, "dtype", None)
     bytes_per_param = DTYPE_BYTES.get(dtype or "bfloat16", 2)
     weights_gb = (param_count * bytes_per_param) / 1e9
 

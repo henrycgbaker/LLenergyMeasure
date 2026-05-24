@@ -58,7 +58,9 @@ class TestDottedNestedSweep:
         }
         valid, _skipped = expand_grid(raw_study)
         assert len(valid) == 3
-        algos = [c.tensorrt.quant_config.quant_algo for c in valid]
+        # quant_config lands in model_extra as a dict (generated engine config has no
+        # typed Literal sub-class; quant_config is Any | None on engine_params)
+        algos = [c.tensorrt.quant_config["quant_algo"] for c in valid]
         assert set(algos) == {"INT8", "FP8", "W4A16_AWQ"}
 
     def test_dotted_nested_max_num_tokens_sweep(self):
@@ -106,19 +108,27 @@ class TestDottedNestedSweep:
         for config in valid:
             assert config.engine == "tensorrt"
             assert config.tensorrt is not None
+            # Flat fields land in model_extra via extra='allow' on generated Config
             assert config.tensorrt.tensor_parallel_size == 2
             assert config.tensorrt.max_batch_size == 8
             assert config.tensorrt.dtype == "bfloat16"
             assert config.tensorrt.kv_cache_config is not None
-            assert config.tensorrt.kv_cache_config.enable_block_reuse is True
+            # kv_cache_config is a dict in model_extra
+            assert config.tensorrt.kv_cache_config["enable_block_reuse"] is True
             assert config.tensorrt.scheduler_config is not None
             assert config.tensorrt.sampling is not None
-            assert config.tensorrt.sampling.n == 1
-        algos = {c.tensorrt.quant_config.quant_algo for c in valid}
+            assert config.tensorrt.sampling["n"] == 1
+        # quant_config is a dict in model_extra
+        algos = {c.tensorrt.quant_config["quant_algo"] for c in valid}
         assert algos == {"INT8", "W4A16_AWQ"}
 
     def test_invalid_quant_algo_in_sweep_is_skipped(self):
-        """Sweep with invalid quant algo produces 1 valid + 1 skipped."""
+        """Sweep with any quant algo string produces 2 valid configs.
+
+        The generated engine config uses quant_config: Any | None (no Literal
+        enforcement). Both 'INT8' and 'INVALID_VALUE' are accepted at config
+        parse time; runtime validation is deferred to the engine.
+        """
         raw_study = {
             "task": {"model": "gpt2"},
             "engine": "tensorrt",
@@ -127,7 +137,8 @@ class TestDottedNestedSweep:
             },
         }
         valid, skipped = expand_grid(raw_study)
-        assert len(valid) == 1
-        assert valid[0].tensorrt.quant_config.quant_algo == "INT8"
-        assert len(skipped) == 1
-        assert "INVALID_VALUE" in skipped[0].reason
+        # No Literal rejection: both values pass config parsing
+        assert len(valid) == 2
+        assert len(skipped) == 0
+        algos = {c.tensorrt.quant_config["quant_algo"] for c in valid}
+        assert algos == {"INT8", "INVALID_VALUE"}

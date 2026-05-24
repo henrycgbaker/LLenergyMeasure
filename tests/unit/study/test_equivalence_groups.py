@@ -68,8 +68,8 @@ class TestRoundTripSerialisation:
 
 class TestBuildPreRunGroups:
     def test_binds_indices_to_experiment_ids(self):
-        cfg_a = _mk_config(transformers={"sampling": {"do_sample": False, "temperature": 0.5}})
-        cfg_b = _mk_config(transformers={"sampling": {"do_sample": False, "temperature": 0.7}})
+        cfg_a = _mk_config(transformers={"sampling_params": {"do_sample": False, "temperature": 0.5}})
+        cfg_b = _mk_config(transformers={"sampling_params": {"do_sample": False, "temperature": 0.7}})
         result = resolve_library_effective([cfg_a, cfg_b])
         # Both collapse via the real corpus' greedy invariants.
         pre = build_pre_run_groups(result, experiment_ids=["exp_a", "exp_b"])
@@ -80,8 +80,8 @@ class TestBuildPreRunGroups:
         assert pre[0].deduplicated is True
 
     def test_without_dedup_groups_record_would_dedup(self):
-        cfg_a = _mk_config(transformers={"sampling": {"do_sample": False, "temperature": 0.5}})
-        cfg_b = _mk_config(transformers={"sampling": {"do_sample": False, "temperature": 0.7}})
+        cfg_a = _mk_config(transformers={"sampling_params": {"do_sample": False, "temperature": 0.5}})
+        cfg_b = _mk_config(transformers={"sampling_params": {"do_sample": False, "temperature": 0.7}})
         result = resolve_library_effective([cfg_a, cfg_b], deduplicate=False)
         pre = build_pre_run_groups(result, experiment_ids=["exp_a", "exp_b"])
         assert len(pre) == 1
