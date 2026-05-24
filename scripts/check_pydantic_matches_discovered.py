@@ -30,75 +30,30 @@ from llenergymeasure.config.ssot import Engine
 
 ENGINES = tuple(e.value for e in Engine)
 
-# Pydantic fields intentionally added by llem without an engine counterpart.
-# Each entry: (engine, leaf_name) with explanation.
+# Pydantic fields present in the generated class but with no engine-discovered
+# counterpart. Post engine-knowledge-as-data option-A migration this list is
+# tiny: the codegen pipeline (regen_engine_configs.py) projects the curated
+# subset of schema.discovered.json into Pydantic, so the old "llem invented
+# this field" category mostly dissolved (20 RESOLVED + 7 STAYS_ALLOWLISTED
+# entries from the pre-migration allowlist no longer surface as drift -
+# they're either now discovered, or simply not on the generated class).
+#
+# What remains: fields that landed via overlay.yaml COMPLETIONS - llem-
+# authored Pydantic shapes bridging a mining gap (e.g. CompileConfig is the
+# torch.compile dataclass that the Move 1 walker doesn't yet traverse).
+# Each entry below corresponds to such a bridge; entries dissolve naturally
+# once the walker enhancement lands and the discovered schema gains the
+# corresponding $defs.
+#
+# Audit: _spike/findings/phase3_audit_llem_fields.md (52 -> 5).
 LLEM_NATIVE_FIELDS: set[tuple[str, str]] = {
-    # -- transformers --
-    # Quantization params surfaced at engine level for consistent interface
-    ("transformers", "batch_size"),
-    # dtype is HF-native (torch_dtype is a deprecated BC alias). Passed via
-    # from_pretrained **kwargs, so signature-based discovery misses it.
-    ("transformers", "dtype"),
-    ("transformers", "load_in_4bit"),
-    ("transformers", "load_in_8bit"),
-    ("transformers", "bnb_4bit_compute_dtype"),
-    ("transformers", "bnb_4bit_quant_type"),
-    ("transformers", "bnb_4bit_use_double_quant"),
-    # Runtime/compile params not in from_pretrained or GenerationConfig
-    ("transformers", "attn_implementation"),
-    ("transformers", "torch_compile"),
-    ("transformers", "torch_compile_mode"),
-    ("transformers", "torch_compile_backend"),
-    # Device/memory params
-    ("transformers", "device_map"),
-    ("transformers", "max_memory"),
-    ("transformers", "allow_tf32"),
-    ("transformers", "autocast_enabled"),
-    ("transformers", "autocast_dtype"),
-    ("transformers", "low_cpu_mem_usage"),
-    # Parallelism
-    ("transformers", "tp_plan"),
-    ("transformers", "tp_size"),
-    # -- vLLM --
-    # Speculative decoding sub-config
-    ("vllm", "method"),
-    ("vllm", "offload_group_size"),
-    ("vllm", "offload_num_in_group"),
-    ("vllm", "offload_prefetch_step"),
-    ("vllm", "offload_params"),
-    ("vllm", "kv_cache_memory_bytes"),
-    # Attention sub-config (engine-internal knobs)
-    ("vllm", "backend"),
-    ("vllm", "flash_attn_version"),
-    ("vllm", "flash_attn_max_num_splits_for_cuda_graph"),
-    ("vllm", "use_prefill_decode_attention"),
-    ("vllm", "use_prefill_query_quantization"),
-    ("vllm", "use_cudnn_prefill"),
-    ("vllm", "disable_flashinfer_prefill"),
-    ("vllm", "disable_flashinfer_q_quantization"),
-    ("vllm", "use_trtllm_attention"),
-    ("vllm", "use_trtllm_ragged_deepseek_prefill"),
-    # Beam search params (llem surfaces from vLLM internals)
-    ("vllm", "beam_width"),
-    ("vllm", "length_penalty"),
-    ("vllm", "early_stopping"),
-    # -- TensorRT --
-    # Sub-config structure differs from engine API
-    ("tensorrt", "max_batch_size"),
-    ("tensorrt", "max_input_len"),
-    ("tensorrt", "max_seq_len"),
-    ("tensorrt", "max_num_tokens"),
-    ("tensorrt", "free_gpu_memory_fraction"),
-    ("tensorrt", "quant_algo"),
-    ("tensorrt", "kv_cache_quant_algo"),
-    ("tensorrt", "enable_block_reuse"),
-    ("tensorrt", "host_cache_size"),
-    ("tensorrt", "capacity_scheduling_policy"),
-    # Sampling params (TRT-LLM SamplingConfig; sub-config differs from flat engine API)
-    ("tensorrt", "top_k"),
-    ("tensorrt", "top_p"),
-    ("tensorrt", "temperature"),
-    ("tensorrt", "repetition_penalty"),
+    # CompileConfig (sampling_params.compile_config.*) - overlay completion.
+    # Dissolves once #671 (transformers CompileConfig walker) lands.
+    ("transformers", "mode"),
+    ("transformers", "backend"),
+    ("transformers", "fullgraph"),
+    ("transformers", "dynamic"),
+    ("transformers", "options"),
 }
 
 
@@ -254,22 +209,23 @@ def _get_pydantic_leaves(engine: str, schema: dict[str, Any]) -> dict[str, dict[
     params = get_engine_params(engine)
     result: dict[str, dict[str, Any]] = {}
 
-    # Build a lookup from the JSON schema for detailed type info
+    # Per-engine def names in the ExperimentConfig JSON schema. Generated
+    # nested classes share names (EngineParams, SamplingParams) so Pydantic
+    # disambiguates via the module-path-qualified key. CompileConfig has no
+    # collision and lands as a bare def.
     engine_config_names = {
-        "transformers": ["TransformersConfig"],
+        "transformers": [
+            "llenergymeasure__engines__transformers__config__EngineParams",
+            "llenergymeasure__engines__transformers__config__SamplingParams",
+            "CompileConfig",
+        ],
         "vllm": [
-            "VLLMEngineConfig",
-            "VLLMSamplingConfig",
-            "VLLMBeamSearchConfig",
-            "VLLMAttentionConfig",
-            "VLLMSpeculativeConfig",
+            "llenergymeasure__engines__vllm__config__EngineParams",
+            "llenergymeasure__engines__vllm__config__SamplingParams",
         ],
         "tensorrt": [
-            "TensorRTConfig",
-            "TensorRTQuantConfig",
-            "TensorRTKvCacheConfig",
-            "TensorRTSamplingConfig",
-            "TensorRTSchedulerConfig",
+            "llenergymeasure__engines__tensorrt__config__EngineParams",
+            "llenergymeasure__engines__tensorrt__config__SamplingParams",
         ],
     }
 
