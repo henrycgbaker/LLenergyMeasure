@@ -1,7 +1,11 @@
 """Configuration models for LLM efficiency measurement experiments (v2.0 schema).
 
 This module defines the Tier 1 (Universal) configuration that applies identically
-across all engines. Engine-specific parameters live in engine_configs.py.
+across all engines. Engine-specific parameters live on the codegen-emitted
+``engines.<engine>.Config`` (nested ``EngineParams`` / ``SamplingParams``)
+classes, which are produced from
+``engine_versions/<engine>/v<safe>/outputs/{schema.discovered.json,curated.yaml}``
+via ``scripts/engine_producers/regen_engine_configs.py``.
 
 v2.0 field renames from v1.x:
     model_name         -> model
