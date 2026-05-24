@@ -222,10 +222,7 @@ class TestParseSphinxKwargsProvenance:
         out = parse_sphinx_kwargs(
             doc, source_ref="transformers.PreTrainedModel.from_pretrained.__doc__"
         )
-        assert (
-            out["foo"]["x-source-ref"]
-            == "transformers.PreTrainedModel.from_pretrained.__doc__"
-        )
+        assert out["foo"]["x-source-ref"] == "transformers.PreTrainedModel.from_pretrained.__doc__"
 
     def test_source_ref_omitted_when_none(self) -> None:
         doc = textwrap.dedent(

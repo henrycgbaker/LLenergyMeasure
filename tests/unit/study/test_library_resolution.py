@@ -190,8 +190,12 @@ class TestDedupSweep:
     def test_collapse_equivalent_configs(self):
         # Two configs differ only by a dormant field under greedy decoding; they
         # must collapse into one after canonicalisation.
-        cfg_a = _mk_config(transformers={"sampling_params": {"do_sample": False, "temperature": 0.5}})
-        cfg_b = _mk_config(transformers={"sampling_params": {"do_sample": False, "temperature": 0.7}})
+        cfg_a = _mk_config(
+            transformers={"sampling_params": {"do_sample": False, "temperature": 0.5}}
+        )
+        cfg_b = _mk_config(
+            transformers={"sampling_params": {"do_sample": False, "temperature": 0.7}}
+        )
         invariant = _mk_rule(
             invariant_id="greedy_normalises_temperature",
             match_fields={
@@ -207,8 +211,12 @@ class TestDedupSweep:
         assert result.would_dedup is True
 
     def test_distinct_configs_stay_distinct(self):
-        cfg_a = _mk_config(transformers={"sampling_params": {"do_sample": True, "temperature": 0.5}})
-        cfg_b = _mk_config(transformers={"sampling_params": {"do_sample": True, "temperature": 0.7}})
+        cfg_a = _mk_config(
+            transformers={"sampling_params": {"do_sample": True, "temperature": 0.5}}
+        )
+        cfg_b = _mk_config(
+            transformers={"sampling_params": {"do_sample": True, "temperature": 0.7}}
+        )
         invariant = _mk_rule(
             invariant_id="greedy_normalises_temperature",
             match_fields={
@@ -223,8 +231,12 @@ class TestDedupSweep:
         assert result.deduplicated is False
 
     def test_dedup_disabled_preserves_all_but_groups_still_populated(self):
-        cfg_a = _mk_config(transformers={"sampling_params": {"do_sample": False, "temperature": 0.5}})
-        cfg_b = _mk_config(transformers={"sampling_params": {"do_sample": False, "temperature": 0.7}})
+        cfg_a = _mk_config(
+            transformers={"sampling_params": {"do_sample": False, "temperature": 0.5}}
+        )
+        cfg_b = _mk_config(
+            transformers={"sampling_params": {"do_sample": False, "temperature": 0.7}}
+        )
         invariant = _mk_rule(
             invariant_id="greedy_normalises_temperature",
             match_fields={
@@ -263,7 +275,9 @@ class TestDedupSweep:
             for temp in (0.5, 1.0, 1.5):
                 configs.append(
                     _mk_config(
-                        transformers={"sampling_params": {"do_sample": do_sample, "temperature": temp}}
+                        transformers={
+                            "sampling_params": {"do_sample": do_sample, "temperature": temp}
+                        }
                     )
                 )
         result = resolve_library_effective(configs, invariants=invariants)
@@ -293,8 +307,12 @@ class TestDedupSweep:
 
 class TestH1HashSymmetry:
     def test_equivalent_canonical_forms_share_h1(self):
-        cfg_a = _mk_config(transformers={"sampling_params": {"do_sample": False, "temperature": 0.5}})
-        cfg_b = _mk_config(transformers={"sampling_params": {"do_sample": False, "temperature": 0.7}})
+        cfg_a = _mk_config(
+            transformers={"sampling_params": {"do_sample": False, "temperature": 0.5}}
+        )
+        cfg_b = _mk_config(
+            transformers={"sampling_params": {"do_sample": False, "temperature": 0.7}}
+        )
         invariant = _mk_rule(
             invariant_id="greedy",
             match_fields={

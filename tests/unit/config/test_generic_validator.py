@@ -240,7 +240,9 @@ def test_multiple_dormant_invariants_all_recorded(monkeypatch: pytest.MonkeyPatc
 
 
 def test_error_invariant_shortcircuits_later_invariants(monkeypatch: pytest.MonkeyPatch) -> None:
-    err = _make_invariant("err", "error", {"transformers.engine_params.attn_implementation": "eager"})
+    err = _make_invariant(
+        "err", "error", {"transformers.engine_params.attn_implementation": "eager"}
+    )
     dormant = _make_invariant(
         "dormant_after_error",
         "dormant",
@@ -252,7 +254,10 @@ def test_error_invariant_shortcircuits_later_invariants(monkeypatch: pytest.Monk
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
-            transformers={"engine_params": {"attn_implementation": "eager"}, "sampling_params": {"temperature": 0.9}},
+            transformers={
+                "engine_params": {"attn_implementation": "eager"},
+                "sampling_params": {"temperature": 0.9},
+            },
         )
 
 

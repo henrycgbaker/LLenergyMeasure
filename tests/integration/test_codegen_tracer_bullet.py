@@ -166,20 +166,14 @@ class TestProvenancePreservation:
         extra = field_info.json_schema_extra
         assert isinstance(extra, dict)
         assert extra.get("x-source") == "kwargs_docstring"
-        assert (
-            extra.get("x-source-ref")
-            == "transformers.PreTrainedModel.from_pretrained.__doc__"
-        )
+        assert extra.get("x-source-ref") == "transformers.PreTrainedModel.from_pretrained.__doc__"
 
     def test_load_in_4bit_carries_bnb_provenance(self) -> None:
         field_info = EngineParams.model_fields["load_in_4bit"]
         extra = field_info.json_schema_extra
         assert isinstance(extra, dict)
         assert extra.get("x-source") == "kwargs_docstring"
-        assert (
-            extra.get("x-source-ref")
-            == "transformers.BitsAndBytesConfig.__doc__"
-        )
+        assert extra.get("x-source-ref") == "transformers.BitsAndBytesConfig.__doc__"
 
 
 class TestExperimentConfigNewShape:
@@ -249,9 +243,8 @@ class TestExperimentConfigNewShape:
                 # engine_params must be an object, not a list
                 transformers={"engine_params": ["not", "a", "dict"]},
             )
-        assert (
-            "transformers" in str(exc_info.value).lower()
-            or "EngineParams" in str(exc_info.value)
+        assert "transformers" in str(exc_info.value).lower() or "EngineParams" in str(
+            exc_info.value
         )
 
     def test_no_transformers_section_returns_none(self) -> None:
@@ -359,4 +352,3 @@ class TestNestedConfigShape:
         assert sp.temperature == 1.0  # generated default from schema
         assert sp.top_k == 50  # generated default from schema
         assert sp.num_beams == 1  # generated default from schema
-

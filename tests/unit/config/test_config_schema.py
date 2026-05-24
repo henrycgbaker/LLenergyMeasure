@@ -384,7 +384,9 @@ def test_pytorch_flash_attn2_float32_rejected():
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
-            transformers={"engine_params": {"dtype": "float32", "attn_implementation": "flash_attention_2"}},
+            transformers={
+                "engine_params": {"dtype": "float32", "attn_implementation": "flash_attention_2"}
+            },
         )
 
 
@@ -394,7 +396,9 @@ def test_pytorch_flash_attn3_float32_rejected():
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
-            transformers={"engine_params": {"dtype": "float32", "attn_implementation": "flash_attention_3"}},
+            transformers={
+                "engine_params": {"dtype": "float32", "attn_implementation": "flash_attention_3"}
+            },
         )
 
 
@@ -403,7 +407,9 @@ def test_pytorch_flash_attn2_bfloat16_accepted():
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        transformers={"engine_params": {"dtype": "bfloat16", "attn_implementation": "flash_attention_2"}},
+        transformers={
+            "engine_params": {"dtype": "bfloat16", "attn_implementation": "flash_attention_2"}
+        },
     )
     assert cfg.transformers.engine_params.dtype == "bfloat16"
 

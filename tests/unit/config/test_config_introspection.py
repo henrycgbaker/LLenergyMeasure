@@ -340,10 +340,14 @@ def test_get_swept_field_paths_single_experiment():
 def test_get_swept_field_paths_dtype_swept():
     """Two experiments with different engine dtypes sweep the engine subconfig path."""
     exp1 = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers={"engine_params": {"dtype": "float16"}}
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"dtype": "float16"}},
     )
     exp2 = ExperimentConfig(
-        task={"model": "gpt2"}, engine="transformers", transformers={"engine_params": {"dtype": "bfloat16"}}
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers={"engine_params": {"dtype": "bfloat16"}},
     )
     result = get_swept_field_paths([exp1, exp2])
     assert "transformers.engine_params.dtype" in result

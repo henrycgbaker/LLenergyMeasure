@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     # forward references and resolved at module-end via
     # _rebuild_experiment_config() to break the engines.<e>.__init__ ->
     # plugin -> models import cycle.
+    from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
     from llenergymeasure.engines.tensorrt.config import (
         Config as TensorRTEngineConfig,
     )
@@ -53,7 +54,6 @@ if TYPE_CHECKING:
         Config as TransformersEngineConfig,
     )
     from llenergymeasure.engines.vllm.config import Config as VLLMEngineConfig
-    from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
 
 
 @lru_cache(maxsize=1)

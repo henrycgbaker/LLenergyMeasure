@@ -394,9 +394,7 @@ class VLLMEngine:
         """
         vllm_cfg = config.vllm
         sp = vllm_cfg.sampling_params if vllm_cfg is not None else None
-        kwargs: dict[str, Any] = (
-            sp.model_dump(exclude_none=True) if sp is not None else {}
-        )
+        kwargs: dict[str, Any] = sp.model_dump(exclude_none=True) if sp is not None else {}
         if config.task.max_output_tokens is not None:
             kwargs["max_tokens"] = config.task.max_output_tokens
         return kwargs

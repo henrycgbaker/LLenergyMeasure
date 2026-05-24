@@ -380,7 +380,7 @@ class TestDestructiveWriteWarning:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        outputs, shadow = _install_engine(
+        _outputs, shadow = _install_engine(
             tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=True
         )
         # Hand-edit the shadow so its bytes differ from SSOT.
@@ -388,18 +388,14 @@ class TestDestructiveWriteWarning:
             "schema_version: 1.0.0\nengine: vllm\ninvariants: [HAND_EDIT]\n"
         )
         # Stub the git-uncommitted-changes probe to claim YES for this file.
-        monkeypatch.setattr(
-            regen_engine_corpus, "_path_has_uncommitted_changes", lambda p: True
-        )
+        monkeypatch.setattr(regen_engine_corpus, "_path_has_uncommitted_changes", lambda p: True)
         rc = regen_engine_corpus.main(["--write"])
         assert rc == 0
         err = capsys.readouterr().err
         assert "WARNING" in err
         assert "uncommitted" in err
         # File IS overwritten (no gate) - just warned.
-        assert "HAND_EDIT" not in (
-            shadow["vllm"] / "invariants.proposed.yaml"
-        ).read_text()
+        assert "HAND_EDIT" not in (shadow["vllm"] / "invariants.proposed.yaml").read_text()
 
     def test_no_warning_when_shadow_is_clean(
         self,
@@ -407,7 +403,7 @@ class TestDestructiveWriteWarning:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        outputs, shadow = _install_engine(
+        _outputs, shadow = _install_engine(
             tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=True
         )
         (shadow["vllm"] / "invariants.proposed.yaml").write_text(
@@ -415,9 +411,7 @@ class TestDestructiveWriteWarning:
         )
         # git probe says "clean" (no uncommitted changes - e.g. dst is
         # untracked, or git not available, or matches HEAD).
-        monkeypatch.setattr(
-            regen_engine_corpus, "_path_has_uncommitted_changes", lambda p: False
-        )
+        monkeypatch.setattr(regen_engine_corpus, "_path_has_uncommitted_changes", lambda p: False)
         rc = regen_engine_corpus.main(["--write"])
         assert rc == 0
         err = capsys.readouterr().err
@@ -431,14 +425,10 @@ class TestDestructiveWriteWarning:
     ) -> None:
         # Shadow == SSOT, so --write is no-op semantically. Warning would
         # be noise; suppressed by the bytes-differ guard.
-        _install_engine(
-            tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=True
-        )
+        _install_engine(tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=True)
         # Even if probe says uncommitted, no warning fires when bytes
         # match (nothing destructive to flag).
-        monkeypatch.setattr(
-            regen_engine_corpus, "_path_has_uncommitted_changes", lambda p: True
-        )
+        monkeypatch.setattr(regen_engine_corpus, "_path_has_uncommitted_changes", lambda p: True)
         rc = regen_engine_corpus.main(["--write"])
         assert rc == 0
         err = capsys.readouterr().err
@@ -451,12 +441,8 @@ class TestDestructiveWriteWarning:
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         # First-time write (no existing shadow) - nothing to clobber.
-        _install_engine(
-            tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=False
-        )
-        monkeypatch.setattr(
-            regen_engine_corpus, "_path_has_uncommitted_changes", lambda p: True
-        )
+        _install_engine(tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=False)
+        monkeypatch.setattr(regen_engine_corpus, "_path_has_uncommitted_changes", lambda p: True)
         rc = regen_engine_corpus.main(["--write"])
         assert rc == 0
         err = capsys.readouterr().err
@@ -482,9 +468,7 @@ class TestEngineFilter:
         )
         rc = regen_engine_corpus.main(["--engine", "transformers", "--write"])
         assert rc == 0
-        transformers_shadow = (
-            tmp_path / "src" / "llenergymeasure" / "engines" / "transformers"
-        )
+        transformers_shadow = tmp_path / "src" / "llenergymeasure" / "engines" / "transformers"
         vllm_shadow = tmp_path / "src" / "llenergymeasure" / "engines" / "vllm"
         assert (transformers_shadow / "invariants.proposed.yaml").is_file()
         assert not (vllm_shadow / "invariants.proposed.yaml").exists()
@@ -499,16 +483,19 @@ class TestEngineFilter:
             engines=("vllm", "tensorrt", "transformers"),
             populate_shadow=False,
         )
-        rc = regen_engine_corpus.main(
-            ["--engine", "vllm", "--engine", "transformers", "--write"]
-        )
+        rc = regen_engine_corpus.main(["--engine", "vllm", "--engine", "transformers", "--write"])
         assert rc == 0
         for name in ("vllm", "transformers"):
             assert (
                 tmp_path / "src" / "llenergymeasure" / "engines" / name / "invariants.proposed.yaml"
             ).is_file()
         assert not (
-            tmp_path / "src" / "llenergymeasure" / "engines" / "tensorrt" / "invariants.proposed.yaml"
+            tmp_path
+            / "src"
+            / "llenergymeasure"
+            / "engines"
+            / "tensorrt"
+            / "invariants.proposed.yaml"
         ).exists()
 
     def test_engine_filter_rejects_unknown_engine(

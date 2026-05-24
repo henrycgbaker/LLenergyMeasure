@@ -808,19 +808,25 @@ class TestEngineDispatchEnvVars:
 
     def test_mpi_np_set_for_tensorrt_tp2(self, tmp_path):
         """TRT-LLM with tensor_parallel_size=2 sets LLEM_MPI_NP=2 for the entry script."""
-        config = make_config(engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 2}})
+        config = make_config(
+            engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 2}}
+        )
         cmd = self._capture_cmd(config, tmp_path)
         assert self._env_value(cmd, "LLEM_MPI_NP") == "2"
 
     def test_mpi_np_set_for_tensorrt_tp4(self, tmp_path):
         """TRT-LLM with tensor_parallel_size=4 sets LLEM_MPI_NP=4."""
-        config = make_config(engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 4}})
+        config = make_config(
+            engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 4}}
+        )
         cmd = self._capture_cmd(config, tmp_path)
         assert self._env_value(cmd, "LLEM_MPI_NP") == "4"
 
     def test_mpi_np_absent_for_tensorrt_tp1(self, tmp_path):
         """TRT-LLM with tensor_parallel_size=1 omits LLEM_MPI_NP (single-GPU path)."""
-        config = make_config(engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}})
+        config = make_config(
+            engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}}
+        )
         cmd = self._capture_cmd(config, tmp_path)
         assert self._env_value(cmd, "LLEM_MPI_NP") is None
 
@@ -849,7 +855,9 @@ class TestEngineDispatchEnvVars:
             (make_config(), "transformers"),
             (make_config(engine="vllm"), "vllm"),
             (
-                make_config(engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}}),
+                make_config(
+                    engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}}
+                ),
                 "tensorrt",
             ),
         ]
@@ -926,7 +934,9 @@ class TestExtraMounts:
 
     def test_tensorrt_auto_cache_mount(self, tmp_path):
         """TRT-LLM engine auto-mounts ~/.cache/trt-llm:/root/.cache/trt-llm."""
-        config = make_config(engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}})
+        config = make_config(
+            engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}}
+        )
         runner = DockerRunner(image=IMAGE)
 
         with patch(
@@ -940,7 +950,9 @@ class TestExtraMounts:
 
     def test_tensorrt_auto_cache_mount_not_duplicated(self, tmp_path):
         """User's custom /root/.cache/trt-llm path prevents auto-mount duplication."""
-        config = make_config(engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}})
+        config = make_config(
+            engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}}
+        )
         runner = DockerRunner(
             image=IMAGE,
             extra_mounts=[("/custom/cache", "/root/.cache/trt-llm")],
@@ -1398,7 +1410,9 @@ class TestMountPivot:
     @staticmethod
     def _build(engine_name: str, tmp_path) -> list[str]:
         if engine_name == "tensorrt":
-            config = make_config(engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}})
+            config = make_config(
+                engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}}
+            )
         else:
             config = make_config(engine=engine_name)
         return DockerRunner(image=IMAGE)._build_docker_cmd(config, "abc123", "/tmp/llem-test")

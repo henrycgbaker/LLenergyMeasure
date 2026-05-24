@@ -685,7 +685,9 @@ def test_model_load_kwargs_tp_size_without_tp_plan_ignored(monkeypatch):
 
     monkeypatch.setenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", "auto")
     engine = TransformersEngine()
-    config = ExperimentConfig(task={"model": "gpt2"}, transformers={"engine_params": {"tp_size": 4}})
+    config = ExperimentConfig(
+        task={"model": "gpt2"}, transformers={"engine_params": {"tp_size": 4}}
+    )
     kwargs = engine._model_load_kwargs(config)
 
     assert "tp_size" not in kwargs

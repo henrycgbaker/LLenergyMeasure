@@ -135,7 +135,11 @@ def print_dry_run(
 
     # Batch size - from transformers section if present
     batch_size: int | None = None
-    if config.harness is not None and config.harness.transformers is not None and hasattr(config.harness.transformers, "batch_size"):
+    if (
+        config.harness is not None
+        and config.harness.transformers is not None
+        and hasattr(config.harness.transformers, "batch_size")
+    ):
         batch_size = config.harness.transformers.batch_size
     if batch_size is not None:
         print(f"  Batch size     {batch_size}")

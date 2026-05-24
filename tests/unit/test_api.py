@@ -1061,21 +1061,27 @@ class TestResolveGpuIndicesTensorrt:
         """tensor_parallel_size=1 -> [0] (single GPU)."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
-        config = make_config(engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}})
+        config = make_config(
+            engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 1}}
+        )
         assert _resolve_gpu_indices(config) == [0]
 
     def test_tensorrt_tp2_returns_two_indices(self):
         """tensor_parallel_size=2 -> [0, 1] (two GPUs for energy monitoring)."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
-        config = make_config(engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 2}})
+        config = make_config(
+            engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 2}}
+        )
         assert _resolve_gpu_indices(config) == [0, 1]
 
     def test_tensorrt_tp4_returns_four_indices(self):
         """tensor_parallel_size=4 -> [0, 1, 2, 3]."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
-        config = make_config(engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 4}})
+        config = make_config(
+            engine="tensorrt", tensorrt={"engine_params": {"tensor_parallel_size": 4}}
+        )
         assert _resolve_gpu_indices(config) == [0, 1, 2, 3]
 
     def test_tensorrt_tp_none_returns_single_index(self):

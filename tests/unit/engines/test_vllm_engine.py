@@ -242,7 +242,9 @@ class TestBuildLlmKwargs:
 class TestBuildSamplingParams:
     def test_greedy_via_temperature_zero(self):
         """temperature=0.0 on sampling_params forwards as-is."""
-        config = make_config(**_VLLM_DEFAULTS, vllm={"sampling_params": {"temperature": 0.0}}, max_output_tokens=64)
+        config = make_config(
+            **_VLLM_DEFAULTS, vllm={"sampling_params": {"temperature": 0.0}}, max_output_tokens=64
+        )
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["temperature"] == 0.0
@@ -278,7 +280,9 @@ class TestBuildSamplingParams:
 
     def test_repetition_penalty_propagated(self):
         """repetition_penalty on sampling_params is forwarded."""
-        config = make_config(**_VLLM_DEFAULTS, vllm={"sampling_params": {"repetition_penalty": 1.1}})
+        config = make_config(
+            **_VLLM_DEFAULTS, vllm={"sampling_params": {"repetition_penalty": 1.1}}
+        )
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["repetition_penalty"] == pytest.approx(1.1)
@@ -530,19 +534,25 @@ class TestSamplingConfigOverrides:
 class TestNewEngineFields:
     def test_disable_custom_all_reduce_wired(self):
         """disable_custom_all_reduce=True -> kwargs['disable_custom_all_reduce'] is True."""
-        config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"disable_custom_all_reduce": True}})
+        config = make_config(
+            **_VLLM_DEFAULTS, vllm={"engine_params": {"disable_custom_all_reduce": True}}
+        )
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["disable_custom_all_reduce"] is True
 
     def test_kv_cache_memory_bytes_wired(self):
         """kv_cache_memory_bytes=2**30 -> kwargs['kv_cache_memory_bytes'] == 2**30."""
-        config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"kv_cache_memory_bytes": 2**30}})
+        config = make_config(
+            **_VLLM_DEFAULTS, vllm={"engine_params": {"kv_cache_memory_bytes": 2**30}}
+        )
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["kv_cache_memory_bytes"] == 2**30
 
     def test_offload_params_list_to_set_conversion(self):
         """offload_params=['weight', 'bias'] -> kwargs['offload_params'] passes through (list or set)."""
-        config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"offload_params": ["weight", "bias"]}})
+        config = make_config(
+            **_VLLM_DEFAULTS, vllm={"engine_params": {"offload_params": ["weight", "bias"]}}
+        )
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert set(kwargs["offload_params"]) == {"weight", "bias"}
 

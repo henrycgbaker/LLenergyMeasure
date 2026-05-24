@@ -50,7 +50,7 @@ def _translate_corpus_path(path: str) -> str:
     return _SAMPLING_PATH_RE.sub(r"\1.sampling_params.", path)
 
 
-def _translate_invariant(invariant: "Invariant") -> "Invariant":
+def _translate_invariant(invariant: Invariant) -> Invariant:
     """Return a copy of ``invariant`` with corpus field paths translated to the new schema.
 
     Creates a shallow copy with ``match_fields`` keys remapped via
@@ -111,7 +111,9 @@ def _apply_invariants_fixpoint(
         LibraryResolutionCycleError: If the fixpoint loop exceeds
             :data:`_MAX_ITER` passes - the validated corpus has an invariant cycle.
     """
-    dormant_rules = [_translate_invariant(r) for r in invariants if r.severity in ("dormant", "dormant_silent")]
+    dormant_rules = [
+        _translate_invariant(r) for r in invariants if r.severity in ("dormant", "dormant_silent")
+    ]
     if not dormant_rules:
         return config.model_copy(deep=True)
 

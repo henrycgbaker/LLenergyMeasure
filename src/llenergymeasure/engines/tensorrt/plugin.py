@@ -522,9 +522,7 @@ class TensorRTEngine:
         trt = config.tensorrt
         sp = trt.sampling_params if trt is not None else None
 
-        kwargs: dict[str, Any] = (
-            sp.model_dump(exclude_none=True) if sp is not None else {}
-        )
+        kwargs: dict[str, Any] = sp.model_dump(exclude_none=True) if sp is not None else {}
         kwargs["seed"] = config.task.random_seed
         if config.task.max_output_tokens is not None:
             kwargs["max_tokens"] = config.task.max_output_tokens

@@ -15,9 +15,6 @@ Tests cover:
 
 from __future__ import annotations
 
-import pytest
-from pydantic import ValidationError
-
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.engines.tensorrt.config import Config as TensorRTConfig
 
@@ -103,9 +100,7 @@ class TestSampling:
 
     def test_sampling_config_accepted(self):
         """Sampling section with valid values validates."""
-        config = TensorRTConfig(
-            sampling_params={"min_tokens": 10, "n": 4, "ignore_eos": True}
-        )
+        config = TensorRTConfig(sampling_params={"min_tokens": 10, "n": 4, "ignore_eos": True})
         assert config.sampling_params.min_tokens == 10
         assert config.sampling_params.n == 4
         assert config.sampling_params.ignore_eos is True

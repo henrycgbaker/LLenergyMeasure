@@ -27,7 +27,6 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from scripts.engine_producers import _current  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # current_path / load_current (sanity against the live tree)
 # ---------------------------------------------------------------------------
@@ -89,9 +88,9 @@ class TestCurrentOutputsDir:
         synth = tmp_path / "current.toml"
         _write_synthetic_toml(
             synth,
-            'schema_version = 1\n'
+            "schema_version = 1\n"
             'engine = "transformers"\n'
-            '[library]\n'
+            "[library]\n"
             'pep503_name = "transformers"\n'
             'current_version = "4.57.3"\n',
         )
@@ -121,10 +120,7 @@ class TestCurrentOutputsDir:
         synth = tmp_path / "current.toml"
         _write_synthetic_toml(
             synth,
-            'schema_version = 1\n'
-            'engine = "vllm"\n'
-            '[library]\n'
-            'pep503_name = "vllm"\n',
+            'schema_version = 1\nengine = "vllm"\n[library]\npep503_name = "vllm"\n',
         )
         monkeypatch.setattr(_current, "current_path", lambda engine: synth)
         with pytest.raises(ValueError, match=r"'library\.current_version'"):
@@ -139,11 +135,11 @@ class TestCurrentOutputsDir:
         synth = tmp_path / "current.toml"
         _write_synthetic_toml(
             synth,
-            'schema_version = 1\n'
+            "schema_version = 1\n"
             'engine = "vllm"\n'
-            '[library]\n'
+            "[library]\n"
             'pep503_name = "vllm"\n'
-            'current_version = 4.73\n',
+            "current_version = 4.73\n",
         )
         monkeypatch.setattr(_current, "current_path", lambda engine: synth)
         with pytest.raises(ValueError, match=r"'library\.current_version'"):

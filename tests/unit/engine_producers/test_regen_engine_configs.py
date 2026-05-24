@@ -15,7 +15,6 @@ Tests exercise:
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -30,9 +29,7 @@ from scripts.engine_producers import regen_engine_configs  # noqa: E402
 
 class TestFieldShapeToProperty:
     def test_typed_field_passes_through(self) -> None:
-        out = regen_engine_configs._field_shape_to_property(
-            {"type": "number", "default": 1.0}
-        )
+        out = regen_engine_configs._field_shape_to_property({"type": "number", "default": 1.0})
         assert out == {"type": "number", "default": 1.0}
 
     def test_untyped_field_skips_missing_type(self) -> None:
@@ -74,18 +71,16 @@ class TestComposeSyntheticSchema:
             "sampling_params": {"b": {"type": "integer", "default": 1}},
         }
         curated = {"engine_params": ["a"], "sampling_params": ["b"]}
-        out = regen_engine_configs._compose_synthetic_schema(discovered, curated, {"narrowings": {}, "completions": {}})
+        out = regen_engine_configs._compose_synthetic_schema(
+            discovered, curated, {"narrowings": {}, "completions": {}}
+        )
         assert out["$schema"] == "https://json-schema.org/draft/2020-12/schema"
         assert out["type"] == "object"
         assert out["additionalProperties"] is True
         # Sections are $refs into $defs (uniform class generation - empty
         # sections still emit a named class).
-        assert out["properties"]["engine_params"] == {
-            "$ref": "#/$defs/EngineParams"
-        }
-        assert out["properties"]["sampling_params"] == {
-            "$ref": "#/$defs/SamplingParams"
-        }
+        assert out["properties"]["engine_params"] == {"$ref": "#/$defs/EngineParams"}
+        assert out["properties"]["sampling_params"] == {"$ref": "#/$defs/SamplingParams"}
         assert "EngineParams" in out["$defs"]
         assert "SamplingParams" in out["$defs"]
 
@@ -98,7 +93,9 @@ class TestComposeSyntheticSchema:
             "engine_params": {},
         }
         curated = {"engine_params": [], "sampling_params": ["exposed"]}
-        out = regen_engine_configs._compose_synthetic_schema(discovered, curated, {"narrowings": {}, "completions": {}})
+        out = regen_engine_configs._compose_synthetic_schema(
+            discovered, curated, {"narrowings": {}, "completions": {}}
+        )
         props = out["$defs"]["SamplingParams"]["properties"]
         assert "exposed" in props
         assert "hidden" not in props
@@ -117,7 +114,9 @@ class TestComposeSyntheticSchema:
             "engine_params": [],
             "sampling_params": ["only_real", "ghost_field"],
         }
-        out = regen_engine_configs._compose_synthetic_schema(discovered, curated, {"narrowings": {}, "completions": {}})
+        out = regen_engine_configs._compose_synthetic_schema(
+            discovered, curated, {"narrowings": {}, "completions": {}}
+        )
         props = out["$defs"]["SamplingParams"]["properties"]
         assert set(props.keys()) == {"only_real"}
 
@@ -127,7 +126,9 @@ class TestComposeSyntheticSchema:
         # collapse the section into an inline dict.
         discovered = {"sampling_params": {}, "engine_params": {}}
         curated = {"engine_params": [], "sampling_params": []}
-        out = regen_engine_configs._compose_synthetic_schema(discovered, curated, {"narrowings": {}, "completions": {}})
+        out = regen_engine_configs._compose_synthetic_schema(
+            discovered, curated, {"narrowings": {}, "completions": {}}
+        )
         assert out["$defs"]["EngineParams"]["properties"] == {}
         assert out["$defs"]["EngineParams"]["additionalProperties"] is True
         assert out["$defs"]["SamplingParams"]["properties"] == {}
@@ -142,10 +143,7 @@ class TestLoadCurated:
 
     def test_partial_curated_yaml_defaults_missing_sections(self, tmp_path: Path) -> None:
         (tmp_path / "curated.yaml").write_text(
-            "schema_version: 1.0.0\n"
-            "exposed_fields:\n"
-            "  sampling_params:\n"
-            "    - temperature\n",
+            "schema_version: 1.0.0\nexposed_fields:\n  sampling_params:\n    - temperature\n",
             encoding="utf-8",
         )
         out = regen_engine_configs._load_curated(tmp_path)
@@ -169,23 +167,17 @@ class TestSyncEngineSkipBehaviour:
     ) -> None:
         # Point current_outputs_dir at a non-existent path.
         bogus = tmp_path / "engine_versions" / "transformers" / "v9_9_9" / "outputs"
-        monkeypatch.setattr(
-            regen_engine_configs, "current_outputs_dir", lambda engine: bogus
-        )
+        monkeypatch.setattr(regen_engine_configs, "current_outputs_dir", lambda engine: bogus)
         drift, skipped = regen_engine_configs.sync_engine("transformers", write=False)
         assert drift == []
         assert len(skipped) == 1
         assert "outputs directory not present" in skipped[0]
 
-    def test_missing_schema_skips(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_missing_schema_skips(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # outputs/ dir exists but is empty.
         outputs = tmp_path / "engine_versions" / "transformers" / "v0_0_0" / "outputs"
         outputs.mkdir(parents=True)
-        monkeypatch.setattr(
-            regen_engine_configs, "current_outputs_dir", lambda engine: outputs
-        )
+        monkeypatch.setattr(regen_engine_configs, "current_outputs_dir", lambda engine: outputs)
         drift, skipped = regen_engine_configs.sync_engine("transformers", write=False)
         assert drift == []
         assert len(skipped) == 1
@@ -228,9 +220,7 @@ class TestCliFlags:
             regen_engine_configs.main(["--check", "--write"])
         assert exc_info.value.code == 2
 
-    def test_default_mode_is_check(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_default_mode_is_check(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # Default-mode test must not mutate the working tree. We point
         # the target at tmp_path then assert no file appears there.
         # Use --engine transformers to scope to one engine - the
@@ -238,9 +228,7 @@ class TestCliFlags:
         # all engines, which would compose drift incorrectly under the
         # default all-engines iteration.
         target = tmp_path / "config.py"
-        monkeypatch.setattr(
-            regen_engine_configs, "_shadow_config_path", lambda engine: target
-        )
+        monkeypatch.setattr(regen_engine_configs, "_shadow_config_path", lambda engine: target)
         rc = regen_engine_configs.main(["--engine", "transformers"])
         assert rc == 1
         assert not target.exists()
@@ -252,15 +240,11 @@ class TestCliFlags:
 
 
 class TestRoundtripIdempotency:
-    def test_write_then_check_clean(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_write_then_check_clean(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # Scope to one engine since the monkeypatched _shadow_config_path
         # collapses all engines onto the same target file.
         target = tmp_path / "config.py"
-        monkeypatch.setattr(
-            regen_engine_configs, "_shadow_config_path", lambda engine: target
-        )
+        monkeypatch.setattr(regen_engine_configs, "_shadow_config_path", lambda engine: target)
         rc_write = regen_engine_configs.main(["--write", "--engine", "transformers"])
         assert rc_write == 0
         assert target.is_file()
@@ -274,9 +258,7 @@ class TestRoundtripIdempotency:
         # back-to-back invocations. If this test ever fails, dmcg has
         # regressed or our flag combo lost --disable-timestamp.
         target = tmp_path / "config.py"
-        monkeypatch.setattr(
-            regen_engine_configs, "_shadow_config_path", lambda engine: target
-        )
+        monkeypatch.setattr(regen_engine_configs, "_shadow_config_path", lambda engine: target)
         regen_engine_configs.main(["--write", "--engine", "transformers"])
         first = target.read_bytes()
         regen_engine_configs.main(["--write", "--engine", "transformers"])

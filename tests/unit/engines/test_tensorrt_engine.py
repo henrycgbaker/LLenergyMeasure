@@ -187,7 +187,9 @@ class TestBuildLlmKwargs:
 
     def test_build_llm_kwargs_backend_autodeploy(self):
         """tensorrt.backend='_autodeploy' → kwargs['backend'] == '_autodeploy' (experimental)."""
-        config = make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"backend": "_autodeploy"}})
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt={"engine_params": {"backend": "_autodeploy"}}
+        )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
@@ -201,7 +203,9 @@ class TestBuildLlmKwargs:
 
     def test_build_llm_kwargs_tensor_parallel_size(self):
         """tensor_parallel_size=2 maps to kwargs tensor_parallel_size=2."""
-        config = make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"tensor_parallel_size": 2}})
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt={"engine_params": {"tensor_parallel_size": 2}}
+        )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
@@ -246,7 +250,9 @@ class TestBuildLlmKwargs:
     def test_build_llm_kwargs_default_build_cache_when_no_build_cache_section(self, monkeypatch):
         """When no build_cache section and .env ships LLEM_TRT_BUILD_CACHE_ENABLED=1, enable_build_cache=True."""
         monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "1")
-        config = make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"tensor_parallel_size": 1}})
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt={"engine_params": {"tensor_parallel_size": 1}}
+        )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
@@ -278,7 +284,9 @@ class TestBuildLlmKwargs:
         """Pure passthrough: LLEM_TRT_BUILD_CACHE_ENABLED unset → kwarg absent (TRT-LLM default)."""
         monkeypatch.delenv("LLEM_TRT_BUILD_CACHE_ENABLED", raising=False)
         monkeypatch.delenv("LLEM_TRT_BUILD_CACHE_PATH", raising=False)
-        config = make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"tensor_parallel_size": 1}})
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt={"engine_params": {"tensor_parallel_size": 1}}
+        )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
@@ -288,7 +296,9 @@ class TestBuildLlmKwargs:
         """LLEM_TRT_BUILD_CACHE_ENABLED=0 → kwarg absent."""
         monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "0")
         monkeypatch.delenv("LLEM_TRT_BUILD_CACHE_PATH", raising=False)
-        config = make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"tensor_parallel_size": 1}})
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt={"engine_params": {"tensor_parallel_size": 1}}
+        )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
@@ -307,7 +317,9 @@ class TestBuildLlmKwargs:
         monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "1")
         monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_PATH", "/tmp/test")
 
-        config = make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"tensor_parallel_size": 1}})
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt={"engine_params": {"tensor_parallel_size": 1}}
+        )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
@@ -321,7 +333,9 @@ class TestBuildLlmKwargs:
         """LLEM_TRT_BUILD_CACHE_ENABLED=1, path unset → enable_build_cache is bare True."""
         monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "1")
         monkeypatch.delenv("LLEM_TRT_BUILD_CACHE_PATH", raising=False)
-        config = make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"tensor_parallel_size": 1}})
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt={"engine_params": {"tensor_parallel_size": 1}}
+        )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
@@ -331,7 +345,9 @@ class TestBuildLlmKwargs:
         """LLEM_TRT_BUILD_CACHE_PATH set but ENABLED unset → kwarg absent (passthrough invariant)."""
         monkeypatch.delenv("LLEM_TRT_BUILD_CACHE_ENABLED", raising=False)
         monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_PATH", "/tmp/test")
-        config = make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"tensor_parallel_size": 1}})
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt={"engine_params": {"tensor_parallel_size": 1}}
+        )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
@@ -621,7 +637,9 @@ class TestBuildLlmKwargsEnginePath:
         (tmp_path / "config.json").write_text(json.dumps(config_data))
         (tmp_path / "rank0.engine").write_bytes(b"fake")
 
-        config = make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"engine_path": str(tmp_path)}})
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt={"engine_params": {"engine_path": str(tmp_path)}}
+        )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
@@ -677,7 +695,9 @@ class TestBuildLlmKwargsEnginePath:
         (tmp_path / "config.json").write_text(json.dumps(config_data))
         (tmp_path / "rank0.engine").write_bytes(b"fake")
 
-        config = make_config(**_TRT_DEFAULTS, tensorrt={"engine_params": {"engine_path": str(tmp_path)}})
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt={"engine_params": {"engine_path": str(tmp_path)}}
+        )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 

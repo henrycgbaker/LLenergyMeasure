@@ -599,12 +599,8 @@ def get_param_skip_conditions() -> dict[str, str]:
         ),
         "vllm.engine_params.quantization=awq": "Requires AWQ-quantized model",
         "vllm.engine_params.quantization=gptq": "Requires GPTQ-quantized model",
-        "transformers.engine_params.load_in_4bit": (
-            "Requires compatible bitsandbytes version"
-        ),
-        "transformers.engine_params.load_in_8bit": (
-            "Requires compatible bitsandbytes version"
-        ),
+        "transformers.engine_params.load_in_4bit": ("Requires compatible bitsandbytes version"),
+        "transformers.engine_params.load_in_8bit": ("Requires compatible bitsandbytes version"),
         "transformers.engine_params.bnb_4bit_compute_dtype": (
             "Requires load_in_4bit=True and bitsandbytes package"
         ),
@@ -844,8 +840,7 @@ def get_validation_rules() -> list[dict[str, str]]:
             "combination": "cache_implementation with use_cache=False",
             "reason": "Cannot specify a cache strategy when caching is explicitly disabled",
             "resolution": (
-                "Remove transformers.sampling_params.use_cache=false or remove "
-                "cache_implementation"
+                "Remove transformers.sampling_params.use_cache=false or remove cache_implementation"
             ),
         },
         {

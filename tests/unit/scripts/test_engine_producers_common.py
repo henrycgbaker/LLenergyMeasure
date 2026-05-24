@@ -36,7 +36,7 @@ from scripts.engine_producers import _common  # noqa: E402
 # they're not in ``__module__``'s globals.
 # ---------------------------------------------------------------------------
 try:
-    from pydantic import BaseModel as _BaseModel  # noqa: E402
+    from pydantic import BaseModel as _BaseModel
 except ImportError:  # pragma: no cover - pydantic is a hard dep
     _BaseModel = None  # type: ignore[assignment]
 
@@ -286,7 +286,9 @@ class TestMakeEnvelopeWithDefs:
     envelope so consumers (datamodel-code-generator) can resolve ``$ref``
     pointers to nested config classes."""
 
-    def _envelope_with_defs(self, defs: dict[str, dict[str, _common.Any]] | None) -> dict[str, _common.Any]:
+    def _envelope_with_defs(
+        self, defs: dict[str, dict[str, _common.Any]] | None
+    ) -> dict[str, _common.Any]:
         return _common.make_envelope(
             engine="tensorrt",
             engine_version="0.21.0",
@@ -480,9 +482,7 @@ class TestAnnotationToJsonSchema:
         scoping (irrelevant for this direct-call test, but consistent
         with the dataclass-walker tests below)."""
         defs_acc: dict[str, _common.Any] = {}
-        result = _common.annotation_to_json_schema(
-            _FixtureKvCacheConfig, defs_acc=defs_acc
-        )
+        result = _common.annotation_to_json_schema(_FixtureKvCacheConfig, defs_acc=defs_acc)
         assert result == {"$ref": "#/$defs/_FixtureKvCacheConfig"}
         assert "_FixtureKvCacheConfig" in defs_acc
 

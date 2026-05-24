@@ -113,18 +113,14 @@ class TransformersEngine:
                 else:
                     cc_dict = {k: v for k, v in dict(compile_cfg).items() if v is not None}
                 model.generation_config.compile_config = CompileConfig(**cc_dict)
-                logger.debug(
-                    "compile_config attached to generation_config: %s", cc_dict
-                )
+                logger.debug("compile_config attached to generation_config: %s", cc_dict)
                 if on_substep is not None:
                     on_substep(
                         f"compile_config({cc_dict.get('mode', 'default')})",
                         _time.perf_counter() - t0,
                     )
             except Exception as e:
-                logger.warning(
-                    "compile_config setup failed (non-fatal, continuing without): %s", e
-                )
+                logger.warning("compile_config setup failed (non-fatal, continuing without): %s", e)
 
         logger.debug("Model loaded successfully")
         return model, tokenizer
@@ -304,11 +300,7 @@ class TransformersEngine:
             logger.debug("transformers GenerationConfig capture failed: %s", exc)
 
         engine_params: dict[str, Any] = {}
-        ep = (
-            config.transformers.engine_params
-            if config.transformers is not None
-            else None
-        )
+        ep = config.transformers.engine_params if config.transformers is not None else None
         if ep is not None and (
             getattr(ep, "load_in_4bit", None) or getattr(ep, "load_in_8bit", None)
         ):
@@ -379,11 +371,7 @@ class TransformersEngine:
         in PreTrainedModel.from_pretrained); see
         ``_spike/findings/walker_validation_set.md``.
         """
-        ep = (
-            config.transformers.engine_params
-            if config.transformers is not None
-            else None
-        )
+        ep = config.transformers.engine_params if config.transformers is not None else None
         dtype = getattr(ep, "dtype", None) if ep is not None else None
         kwargs: dict[str, Any] = {
             "torch_dtype": self._resolve_torch_dtype(dtype or "bfloat16"),
@@ -562,11 +550,7 @@ class TransformersEngine:
         from contextlib import nullcontext
 
         _hp = config.harness.transformers if (config.harness is not None) else None
-        if (
-            _hp is not None
-            and _hp.autocast_enabled is True
-            and torch.cuda.is_available()
-        ):
+        if _hp is not None and _hp.autocast_enabled is True and torch.cuda.is_available():
             _dtype_map = {"float16": torch.float16, "bfloat16": torch.bfloat16}
             _amp_ctx = torch.autocast(
                 device_type="cuda", dtype=_dtype_map[_hp.autocast_dtype or "bfloat16"]
@@ -617,9 +601,7 @@ class TransformersEngine:
         # the field names supplied at construction.
         explicit = sp.__pydantic_fields_set__
         kwargs: dict[str, Any] = {
-            name: getattr(sp, name)
-            for name in explicit
-            if getattr(sp, name) is not None
+            name: getattr(sp, name) for name in explicit if getattr(sp, name) is not None
         }
         # compile_config is attached to model.generation_config at load
         # time (HF compiles inside generate()), not passed to .generate().
