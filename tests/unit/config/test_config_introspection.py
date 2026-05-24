@@ -31,10 +31,10 @@ from tests.conftest import make_config
 
 
 def test_get_engine_params_returns_pytorch_params():
-    """get_engine_params('transformers') returns a dict with batch_size field."""
+    """get_engine_params('transformers') returns a dict including engine_params.dtype."""
     params = get_engine_params("transformers")
     assert isinstance(params, dict)
-    assert "transformers.batch_size" in params
+    assert "transformers.engine_params.dtype" in params
 
 
 def test_get_engine_params_pytorch_has_engine_support():
@@ -46,27 +46,32 @@ def test_get_engine_params_pytorch_has_engine_support():
 
 
 def test_get_engine_params_vllm_returns_params():
-    """get_engine_params('vllm') returns params including vllm.engine.max_num_seqs."""
+    """get_engine_params('vllm') returns nested engine_params.max_num_seqs path."""
     params = get_engine_params("vllm")
     assert isinstance(params, dict)
-    assert "vllm.engine.max_num_seqs" in params
+    assert "vllm.engine_params.max_num_seqs" in params
 
 
 def test_get_engine_params_tensorrt_returns_params():
-    """get_engine_params('tensorrt') returns params including nested sub-config paths."""
+    """get_engine_params('tensorrt') returns expected nested engine_params/sampling_params paths.
+
+    Nested sub-bundle inner fields (quant_config.*, kv_cache_config.*,
+    scheduler_config.*) are currently dict[str, Any] terminal entries and
+    will surface as inner paths once vllm/tensorrt producer cells re-run
+    with the $defs propagation commit
+    (see _spike/findings/phase3_audit_llem_fields.md NEEDS_DEFS_PROPAGATION).
+    """
     params = get_engine_params("tensorrt")
     assert isinstance(params, dict)
-    assert "tensorrt.max_batch_size" in params
-    # Verify expanded nested sub-config params are registered
-    assert "tensorrt.quant_config.quant_algo" in params
-    assert "tensorrt.kv_cache_config.free_gpu_memory_fraction" in params
-    assert "tensorrt.scheduler_config.capacity_scheduling_policy" in params
-    # build_cache and calib sub-configs dropped (D1/D3); return_perf_metrics dropped (D1)
-    assert "tensorrt.build_cache.max_records" not in params
-    assert "tensorrt.sampling.return_perf_metrics" not in params
-    # New fields from C.2
-    assert "tensorrt.pipeline_parallel_size" in params
-    assert "tensorrt.max_num_tokens" in params
+    assert "tensorrt.engine_params.max_batch_size" in params
+    assert "tensorrt.engine_params.pipeline_parallel_size" in params
+    assert "tensorrt.engine_params.max_num_tokens" in params
+    # Sub-bundles surface as terminal entries today (dict[str, Any])
+    assert "tensorrt.engine_params.quant_config" in params
+    assert "tensorrt.engine_params.kv_cache_config" in params
+    assert "tensorrt.engine_params.scheduler_config" in params
+    # Sampling params surface under sampling_params.*
+    assert "tensorrt.sampling_params.temperature" in params
     assert len(params) >= 10
 
 
@@ -152,22 +157,16 @@ def test_get_experiment_config_schema_contains_engine_field():
 # ---------------------------------------------------------------------------
 
 
-def test_get_param_test_values_pytorch_batch_size_returns_list():
-    """get_param_test_values('transformers.batch_size') returns a list containing 1."""
-    values = get_param_test_values("transformers.batch_size")
+def test_get_param_test_values_tensorrt_max_batch_size_returns_invalid_probe():
+    """tensorrt.engine_params.max_batch_size has a hand-curated invalid probe [0]."""
+    values = get_param_test_values("tensorrt.engine_params.max_batch_size")
     assert isinstance(values, list)
-    assert 1 in values
+    assert values == [0]  # custom invalid probe; ge=1 violation
 
 
-def test_get_param_test_values_dtype_returns_all_options():
-    """get_param_test_values('transformers.dtype') returns all 3 dtype options."""
-    values = get_param_test_values("transformers.dtype")
-    assert set(values) == {"float32", "float16", "bfloat16"}
-
-
-def test_get_param_test_values_decoder_temperature_returns_floats():
-    """get_param_test_values('decoder.temperature') returns a list of floats."""
-    values = get_param_test_values("decoder.temperature")
+def test_get_param_test_values_sampling_temperature_returns_floats():
+    """Per-engine sampling_params.temperature returns synthesized float test values."""
+    values = get_param_test_values("transformers.sampling_params.temperature")
     assert isinstance(values, list)
     assert all(isinstance(v, int | float) for v in values)
 
@@ -197,10 +196,10 @@ def test_get_all_params_has_shared_key():
     assert "shared" in all_params
 
 
-def test_get_all_params_pytorch_section_contains_batch_size():
-    """get_all_params()['transformers'] contains the batch_size param."""
+def test_get_all_params_pytorch_section_contains_engine_dtype():
+    """get_all_params()['transformers'] contains the engine_params.dtype param."""
     all_params = get_all_params()
-    assert "transformers.batch_size" in all_params["transformers"]
+    assert "transformers.engine_params.dtype" in all_params["transformers"]
 
 
 # ---------------------------------------------------------------------------
@@ -209,25 +208,23 @@ def test_get_all_params_pytorch_section_contains_batch_size():
 
 
 def test_list_all_param_paths_contains_expected_paths():
-    """list_all_param_paths() returns a sorted list containing known param paths."""
+    """list_all_param_paths() returns a sorted list containing known nested paths."""
     paths = list_all_param_paths()
     assert isinstance(paths, list)
-    assert "transformers.batch_size" in paths
-    assert "transformers.dtype" in paths
+    assert "transformers.engine_params.dtype" in paths
 
 
 def test_list_all_param_paths_contains_known_paths():
-    """list_all_param_paths() contains expected well-known param paths."""
+    """list_all_param_paths() contains expected well-known nested param paths."""
     paths = list_all_param_paths()
-    assert "transformers.batch_size" in paths
-    # Sampling params live per-engine, not on a universal decoder
-    assert "transformers.sampling.temperature" in paths
-    assert "vllm.sampling.temperature" in paths
-    assert "tensorrt.sampling.temperature" in paths
-    # dtype also lives per-engine
-    assert "transformers.dtype" in paths
-    assert "vllm.dtype" in paths
-    assert "tensorrt.dtype" in paths
+    # Sampling params live per-engine under sampling_params
+    assert "transformers.sampling_params.temperature" in paths
+    assert "vllm.sampling_params.temperature" in paths
+    assert "tensorrt.sampling_params.temperature" in paths
+    # dtype lives per-engine under engine_params
+    assert "transformers.engine_params.dtype" in paths
+    assert "vllm.engine_params.dtype" in paths
+    assert "tensorrt.engine_params.dtype" in paths
 
 
 def test_list_all_param_paths_filtered_by_engine():
@@ -249,17 +246,15 @@ def test_list_all_param_paths_unknown_engine_raises():
 
 @pytest.mark.parametrize("dt", DTYPE_SUPPORT["transformers"])
 def test_all_pytorch_dtype_values_produce_valid_config(dt):
-    """Schema-driven: each SSOT DTYPE_SUPPORT['transformers'] value creates a valid config."""
+    """Each SSOT DTYPE_SUPPORT['transformers'] value creates a valid config.
+
+    The generated engines.transformers.Config types dtype as ``str | None`` with
+    extra='allow' (upstream mining did not surface a finite enum for dtype),
+    so all string values are accepted. SSOT DTYPE_SUPPORT remains the
+    authoritative llem-side curation of which values we test against.
+    """
     config = make_config(dtype=dt)
     assert config.transformers.engine_params.dtype == dt
-
-
-def test_ssot_dtype_values_match_param_test_values():
-    """DTYPE_SUPPORT['transformers'] values match get_param_test_values('transformers.dtype')."""
-    from_ssot = set(DTYPE_SUPPORT["transformers"])
-    from_introspection = set(get_param_test_values("transformers.dtype"))
-    # The test values from introspection should cover all SSOT dtype values
-    assert from_ssot == from_introspection
 
 
 # ---------------------------------------------------------------------------
