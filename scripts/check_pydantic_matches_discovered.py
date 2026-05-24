@@ -323,6 +323,16 @@ def check_engine(engine: str, schema: dict[str, Any]) -> list[dict[str, str]]:
             ):
                 continue
 
+            # Docstring-mined types (Move 1 kwargs walker) are loose by
+            # construction - HF/upstream Sphinx docs often type kwargs as
+            # `str` when the actual semantic type is `int` (e.g.
+            # ``tp_size``). Skip the type-mismatch check for these; the
+            # Pydantic type is authoritative when the source is a
+            # docstring. The schema gate still catches signature-mined
+            # mismatches (the high-signal case).
+            if discovered_spec.get("x-source") == "kwargs_docstring":
+                continue
+
             canon_discovered = _discovered_to_python_str(discovered_spec)
             canon_pydantic = _canonicalise_pydantic_type(prop, defs)
 
