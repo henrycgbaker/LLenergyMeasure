@@ -31,30 +31,16 @@ from llenergymeasure.config.ssot import Engine
 ENGINES = tuple(e.value for e in Engine)
 
 # Pydantic fields present in the generated class but with no engine-discovered
-# counterpart. Post engine-knowledge-as-data option-A migration this list is
-# tiny: the codegen pipeline (regen_engine_configs.py) projects the curated
-# subset of schema.discovered.json into Pydantic, so the old "llem invented
-# this field" category mostly dissolved (20 RESOLVED + 7 STAYS_ALLOWLISTED
-# entries from the pre-migration allowlist no longer surface as drift -
-# they're either now discovered, or simply not on the generated class).
+# counterpart. Post engine-knowledge-as-data option-A migration the list is
+# empty: the codegen pipeline (regen_engine_configs.py) projects the curated
+# subset of schema.discovered.json into Pydantic, so any Pydantic-only field
+# necessarily comes from a curated mining surface. The previous 5
+# CompileConfig entries dissolved when #671 (transformers nested-dataclass
+# walker) landed: CompileConfig now mines as a proper $def and the codegen
+# emits a nested Pydantic sub-class driven by mining rather than overlay.
 #
-# What remains: fields that landed via overlay.yaml COMPLETIONS - llem-
-# authored Pydantic shapes bridging a mining gap (e.g. CompileConfig is the
-# torch.compile dataclass that the Move 1 walker doesn't yet traverse).
-# Each entry below corresponds to such a bridge; entries dissolve naturally
-# once the walker enhancement lands and the discovered schema gains the
-# corresponding $defs.
-#
-# Audit: _spike/findings/phase3_audit_llem_fields.md (52 -> 5).
-LLEM_NATIVE_FIELDS: set[tuple[str, str]] = {
-    # CompileConfig (sampling_params.compile_config.*) - overlay completion.
-    # Dissolves once #671 (transformers CompileConfig walker) lands.
-    ("transformers", "mode"),
-    ("transformers", "backend"),
-    ("transformers", "fullgraph"),
-    ("transformers", "dynamic"),
-    ("transformers", "options"),
-}
+# Audit: _spike/findings/phase3_audit_llem_fields.md (52 -> 5 -> 0).
+LLEM_NATIVE_FIELDS: set[tuple[str, str]] = set()
 
 
 # ---------------------------------------------------------------------------
@@ -257,10 +243,26 @@ def check_engine(engine: str, schema: dict[str, Any]) -> list[dict[str, str]]:
     loader = SchemaLoader()
     discovered = loader.load_schema(engine)
 
-    # Combine engine_params and sampling_params from discovered
+    # Combine engine_params + sampling_params + flattened $defs properties.
+    # The Pydantic-side leaf walker descends into nested sub-classes
+    # (CompileConfig, KvCacheConfig etc.) and surfaces inner field names as
+    # leaves. To detect drift correctly, the discovered side must include
+    # the corresponding inner fields too - they live under
+    # ``$defs.<ClassName>.properties.<field>`` in the canonical JSON Schema
+    # envelope. Without this flattening, every nested sub-class field looks
+    # like a "pydantic_only" drift even when it's a faithful mining of an
+    # engine-side dataclass.
     all_discovered: dict[str, dict[str, Any]] = {}
     all_discovered.update(discovered.engine_params)
     all_discovered.update(discovered.sampling_params)
+    for def_spec in discovered.defs.values():
+        if not isinstance(def_spec, dict):
+            continue
+        props = def_spec.get("properties")
+        if isinstance(props, dict):
+            for field_name, field_spec in props.items():
+                if isinstance(field_spec, dict):
+                    all_discovered.setdefault(field_name, field_spec)
 
     # Get Pydantic leaves
     pydantic_leaves = _get_pydantic_leaves(engine, schema)

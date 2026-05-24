@@ -83,6 +83,11 @@ class DiscoveredSchema:
     discovery_limitations: list[DiscoveryLimitation] = field(default_factory=list)
     engine_params: dict[str, dict[str, Any]] = field(default_factory=dict)
     sampling_params: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # JSON Schema 2020-12 ``$defs`` block. Populated by producers that walk
+    # nested classes (Pydantic via model_json_schema, msgspec via
+    # msgspec.json.schema, stdlib dataclasses via the #671 walker
+    # enhancement). Empty when the engine producer doesn't yet emit $defs.
+    defs: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class SchemaLoader:
@@ -186,6 +191,7 @@ def _parse_envelope(*, engine: str, raw_text: str) -> DiscoveredSchema:
         discovery_limitations=limitations,
         engine_params=data.get("engine_params", {}),
         sampling_params=data.get("sampling_params", {}),
+        defs=data.get("$defs", {}),
     )
 
 

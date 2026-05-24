@@ -48,3 +48,6 @@ exposed_fields:
     - top_k
     - top_p
     - use_cache
+    # CompileConfig now mined via #671 nested-dataclass walker; was overlay
+    # completion prior. Surfaces as $ref into the $defs block.
+    - compile_config

@@ -46,33 +46,7 @@ narrowings:
         doesn't validate.
 
 # Completions: engine-exposed fields the walker missed entirely.
-completions:
-  sampling_params:
-    compile_config:
-      type: object
-      description: |
-        torch.compile config (HF GenerationConfig.compile_config).
-        Set on model.generation_config; HF compiles inside generate().
-      properties:
-        mode:
-          type: string
-          default: "reduce-overhead"
-        backend:
-          type: string
-          default: "inductor"
-        fullgraph:
-          type: boolean
-          default: false
-        dynamic:
-          type: boolean
-          nullable: true
-          default: null
-        options:
-          type: object
-          nullable: true
-          default: null
-      x-completion-reason: |
-        GenerationConfig.compile_config is typed as a CompileConfig
-        dataclass; Move 1 walker depth doesn't traverse nested
-        dataclasses yet. Bridges via this overlay completion until
-        the walker is deepened (validation set entry: compile_config).
+# (Empty: the prior compile_config completion is now mined directly via the
+# transformers schema introspector's nested-dataclass walker; see #671 and
+# the $defs block in schema.discovered.json.)
+completions: {}

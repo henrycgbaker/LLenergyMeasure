@@ -20,7 +20,9 @@ from typing import Any
 
 from scripts.engine_producers._common import (
     TRANSFORMERS_DOCKERFILE,
+    annotation_to_json_schema,
     annotation_to_type_str,
+    canonicalize_defs,
     discover_validation_collections,
     jsonable,
     make_envelope,
@@ -64,6 +66,22 @@ _VALIDATION_COLLECTION_MODULES: tuple[tuple[str, str], ...] = (
     ("transformers.generation.configuration_utils", "sampling_params"),
     # Quantizer / quantization-config registries (engine-side fields).
     ("transformers.quantizers.auto", "engine_params"),
+)
+
+# #671: Nested-dataclass fields on GenerationConfig that ``to_dict()`` lifts
+# as ``None`` (so ``runtime_value_to_spec(None)`` gives an empty schema with
+# no shape info). The docstring claims a class type but the field has no
+# class-level annotation that ``typing.get_type_hints`` can resolve; HF
+# accepts these via ``kwargs.pop("<name>", None)``. Walk each class via
+# :func:`annotation_to_json_schema` with a ``defs_acc`` so the field
+# surfaces as ``$ref: "#/$defs/<ClassName>"`` and the class's fields land
+# in the envelope ``$defs`` block.
+#
+# Format: (sampling_param_field_name, "module.path:ClassName"). Module path
+# is the import path; ClassName is resolved via ``getattr``. A missing
+# module / attribute is logged as a discovery limitation, not fatal.
+_NESTED_SAMPLING_DATACLASSES: tuple[tuple[str, str], ...] = (
+    ("compile_config", "transformers.generation.configuration_utils:CompileConfig"),
 )
 
 
@@ -206,6 +224,41 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         if value is None:
             none_default_fields.append(name)
 
+    # #671: Nested-dataclass walker. For each known nested-dataclass field
+    # in _NESTED_SAMPLING_DATACLASSES, resolve the class and replace its
+    # empty-shape spec with a ``$ref`` into ``defs``. Fields the docstring
+    # types as a nested config but kwargs.pop() consumes opaquely (so
+    # to_dict() reports them as None) move out of the
+    # ``none_default_fields`` limitation and into proper $defs entries.
+    defs: dict[str, Any] = {}
+    resolved_nested_fields: set[str] = set()
+    for field_name, fqn in _NESTED_SAMPLING_DATACLASSES:
+        module_path, _, class_name = fqn.partition(":")
+        try:
+            module = importlib.import_module(module_path)
+            cls = getattr(module, class_name)
+        except (ImportError, AttributeError) as exc:
+            limitations.append(
+                {
+                    "section": "sampling_params",
+                    "fields": [field_name],
+                    "reason": (
+                        f"_NESTED_SAMPLING_DATACLASSES entry for {field_name!r} "
+                        f"failed to resolve {fqn!r}: {exc!r}"
+                    ),
+                }
+            )
+            continue
+        # annotation_to_json_schema with defs_acc emits a $ref entry AND
+        # populates defs[cls.__name__] with the walked dataclass schema.
+        ref_spec = annotation_to_json_schema(cls, defs_acc=defs)
+        sampling_params[field_name] = ref_spec
+        resolved_nested_fields.add(field_name)
+
+    # Trim resolved nested fields from the None-default limitation - they
+    # now have a $ref shape, not an empty schema.
+    none_default_fields = [n for n in none_default_fields if n not in resolved_nested_fields]
+
     if none_default_fields:
         limitations.append(
             {
@@ -237,4 +290,5 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,
+        defs=canonicalize_defs(defs) or None,
     )

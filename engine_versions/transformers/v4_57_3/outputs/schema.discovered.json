@@ -3,9 +3,9 @@
   "engine": "transformers",
   "engine_version": "4.57.3",
   "engine_commit_sha": null,
-  "image_ref": "llenergymeasure:transformers-4.57.3",
+  "image_ref": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
   "base_image_ref": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
-  "discovered_at": "2026-05-24T11:34:57.065941+00:00",
+  "discovered_at": "2026-05-24T20:54:41.044347+00:00",
   "discovery_limitations": [
     {
       "section": "engine_params",
@@ -580,6 +580,50 @@
     "transformers_version": {
       "type": "string",
       "default": "4.57.3"
+    },
+    "compile_config": {
+      "$ref": "#/$defs/CompileConfig"
+    }
+  },
+  "$defs": {
+    "CompileConfig": {
+      "type": "object",
+      "properties": {
+        "fullgraph": {
+          "type": "boolean",
+          "default": false
+        },
+        "dynamic": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "backend": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "description": "Callable"
+            }
+          ],
+          "default": "inductor"
+        },
+        "mode": {
+          "type": "string",
+          "default": "reduce-overhead"
+        },
+        "options": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "default": null
+        }
+      }
     }
   }
 }

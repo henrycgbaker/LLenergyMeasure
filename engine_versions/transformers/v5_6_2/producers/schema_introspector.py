@@ -20,7 +20,9 @@ from typing import Any
 
 from scripts.engine_producers._common import (
     TRANSFORMERS_DOCKERFILE,
+    annotation_to_json_schema,
     annotation_to_type_str,
+    canonicalize_defs,
     discover_validation_collections,
     jsonable,
     make_envelope,
@@ -59,6 +61,16 @@ _VALIDATION_COLLECTION_MODULES: tuple[tuple[str, str], ...] = (
     ("transformers.generation.configuration_utils", "sampling_params"),
     # Quantizer / quantization-config registries (engine-side fields).
     ("transformers.quantizers.auto", "engine_params"),
+)
+
+# #671: Nested-dataclass fields on GenerationConfig. See v4_57_3 for the
+# rationale; same pattern works across versions since CompileConfig has
+# lived in transformers.generation.configuration_utils since well before
+# 5.x. Module-resolve failures are recorded as discovery limitations
+# (per-version filter), so a future version that drops or renames
+# CompileConfig won't break mining - it just won't surface the field.
+_NESTED_SAMPLING_DATACLASSES: tuple[tuple[str, str], ...] = (
+    ("compile_config", "transformers.generation.configuration_utils:CompileConfig"),
 )
 
 
@@ -153,6 +165,32 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         if value is None:
             none_default_fields.append(name)
 
+    # #671: Nested-dataclass walker. See v4_57_3 introspector for rationale.
+    defs: dict[str, Any] = {}
+    resolved_nested_fields: set[str] = set()
+    for field_name, fqn in _NESTED_SAMPLING_DATACLASSES:
+        module_path, _, class_name = fqn.partition(":")
+        try:
+            module = importlib.import_module(module_path)
+            cls = getattr(module, class_name)
+        except (ImportError, AttributeError) as exc:
+            limitations.append(
+                {
+                    "section": "sampling_params",
+                    "fields": [field_name],
+                    "reason": (
+                        f"_NESTED_SAMPLING_DATACLASSES entry for {field_name!r} "
+                        f"failed to resolve {fqn!r}: {exc!r}"
+                    ),
+                }
+            )
+            continue
+        ref_spec = annotation_to_json_schema(cls, defs_acc=defs)
+        sampling_params[field_name] = ref_spec
+        resolved_nested_fields.add(field_name)
+
+    none_default_fields = [n for n in none_default_fields if n not in resolved_nested_fields]
+
     if none_default_fields:
         limitations.append(
             {
@@ -184,4 +222,5 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,
+        defs=canonicalize_defs(defs) or None,
     )

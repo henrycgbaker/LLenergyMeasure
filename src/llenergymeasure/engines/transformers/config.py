@@ -8,6 +8,17 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class CompileConfig(BaseModel):
+    model_config = ConfigDict(
+        use_attribute_docstrings=True,
+    )
+    fullgraph: bool | None = False
+    dynamic: bool | None = None
+    backend: str | dict[str, Any] | None = 'inductor'
+    mode: str | None = 'reduce-overhead'
+    options: dict[str, Any] | None = None
+
+
 class EngineParams(BaseModel):
     model_config = ConfigDict(
         extra='allow',
@@ -119,17 +130,6 @@ class EngineParams(BaseModel):
     ] = False
 
 
-class CompileConfig(BaseModel):
-    model_config = ConfigDict(
-        use_attribute_docstrings=True,
-    )
-    mode: str | None = 'reduce-overhead'
-    backend: str | None = 'inductor'
-    fullgraph: bool | None = False
-    dynamic: bool | None = None
-    options: dict[str, Any] | None = None
-
-
 class SamplingParams(BaseModel):
     model_config = ConfigDict(
         extra='allow',
@@ -215,20 +215,7 @@ class SamplingParams(BaseModel):
         ),
     ] = 1.0
     use_cache: bool | None = True
-    compile_config: Annotated[
-        CompileConfig | None,
-        Field(
-            json_schema_extra={
-                'x-source': 'engine_overlay',
-                'x-completion-applied': "GenerationConfig.compile_config is typed as a CompileConfig\ndataclass; Move 1 walker depth doesn't traverse nested\ndataclasses yet. Bridges via this overlay completion until\nthe walker is deepened (validation set entry: compile_config).",
-            }
-        ),
-    ] = None
-    """
-    torch.compile config (HF GenerationConfig.compile_config).
-    Set on model.generation_config; HF compiles inside generate().
-
-    """
+    compile_config: CompileConfig | None = None
 
 
 class Config(BaseModel):

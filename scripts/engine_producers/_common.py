@@ -233,6 +233,46 @@ def _emit_pydantic_ref(cls: type, defs_acc: dict[str, Any]) -> dict[str, Any]:
     return {"$ref": f"#/$defs/{name}"}
 
 
+def _is_stdlib_dataclass(cls: Any) -> bool:
+    """Detect a stdlib ``@dataclass``-decorated class (not a Pydantic model).
+
+    Pydantic v2 ``BaseModel`` subclasses can also satisfy ``is_dataclass`` in
+    some configurations; check Pydantic first to keep the two emission paths
+    disjoint.
+    """
+    if not isinstance(cls, type):
+        return False
+    if _is_pydantic_model(cls):
+        return False
+    return dataclasses.is_dataclass(cls)
+
+
+def _emit_dataclass_ref(cls: type, defs_acc: dict[str, Any]) -> dict[str, Any]:
+    """Add a stdlib-dataclass schema to ``defs_acc`` and return a ``$ref`` to it.
+
+    Mirrors :func:`_emit_pydantic_ref` for HF / stdlib ``@dataclass`` classes
+    (e.g. ``transformers.generation.configuration_utils.CompileConfig``).
+    Idempotent on ``cls.__name__``. Walks the dataclass fields via
+    :func:`dataclass_fields_to_specs` (which itself recurses for nested
+    dataclass / Pydantic fields, passing the same ``defs_acc``).
+
+    The emitted def shape is canonical JSON Schema 2020-12:
+    ``{"type": "object", "properties": {<field>: <spec>}, "default": null}``.
+    """
+    name = cls.__name__
+    if name in defs_acc:
+        return {"$ref": f"#/$defs/{name}"}
+    # Reserve the slot first to prevent infinite recursion on self-referential dataclasses.
+    defs_acc[name] = {"type": "object"}
+    try:
+        properties = dataclass_fields_to_specs(cls, defs_acc=defs_acc)
+    except Exception:
+        defs_acc.pop(name, None)
+        return {"type": "object", "description": name}
+    defs_acc[name] = {"type": "object", "properties": properties}
+    return {"$ref": f"#/$defs/{name}"}
+
+
 def annotation_to_json_schema(
     annotation: Any,
     *,
@@ -300,14 +340,16 @@ def annotation_to_json_schema(
     if origin is None:
         # A bare type (int, str, MyClass, ...). Map builtins to primitives;
         # Pydantic BaseModel subclasses get a $ref (when an accumulator is
-        # available); everything else is an opaque object with the class
-        # name as a hint.
+        # available); stdlib @dataclass classes get a $ref the same way;
+        # everything else is an opaque object with the class name as a hint.
         name = getattr(annotation, "__name__", str(annotation))
         primitive = _PYTHON_TO_JSONSCHEMA_PRIMITIVE.get(name)
         if primitive is not None:
             return {"type": primitive}
         if defs_acc is not None and _is_pydantic_model(annotation):
             return _emit_pydantic_ref(annotation, defs_acc)
+        if defs_acc is not None and _is_stdlib_dataclass(annotation):
+            return _emit_dataclass_ref(annotation, defs_acc)
         return {"type": "object", "description": name}
 
     if origin is Union or origin is types.UnionType:

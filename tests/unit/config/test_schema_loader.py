@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -161,17 +162,27 @@ def test_discovered_schema_has_expected_shape(engine: str) -> None:
     schema = SchemaLoader().load_schema(engine)
     # Every param entry must be a dict; canonical v2 specs surface either
     # a ``type`` key (primitive or array including null), an ``anyOf``
-    # branch list (for multi-type / class-typed unions), or neither when
-    # the upstream had no annotation (description-only opaque shape).
+    # branch list (for multi-type / class-typed unions), a ``$ref``
+    # entry (#671 nested-dataclass walker emits these for fields whose
+    # type resolves to a stdlib dataclass / Pydantic class via the
+    # envelope ``$defs`` block), or a ``description`` when the upstream
+    # had no annotation (opaque shape).
+    _ACCEPTABLE_KEYS = ("type", "anyOf", "$ref", "description")
+
+    def _has_shape(spec: dict[str, Any]) -> bool:
+        return any(k in spec for k in _ACCEPTABLE_KEYS)
+
     for name, spec in schema.engine_params.items():
         assert isinstance(spec, dict), f"{engine}.engine_params[{name}] is not a dict"
-        assert "type" in spec or "anyOf" in spec or "description" in spec, (
-            f"{engine}.engine_params[{name}] has no 'type', 'anyOf', or 'description' key"
+        assert _has_shape(spec), (
+            f"{engine}.engine_params[{name}] has none of "
+            f"{_ACCEPTABLE_KEYS}: {spec!r}"
         )
     for name, spec in schema.sampling_params.items():
         assert isinstance(spec, dict), f"{engine}.sampling_params[{name}] is not a dict"
-        assert "type" in spec or "anyOf" in spec or "description" in spec, (
-            f"{engine}.sampling_params[{name}] has no 'type', 'anyOf', or 'description' key"
+        assert _has_shape(spec), (
+            f"{engine}.sampling_params[{name}] has none of "
+            f"{_ACCEPTABLE_KEYS}: {spec!r}"
         )
 
 
