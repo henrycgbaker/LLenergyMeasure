@@ -184,6 +184,18 @@ _PASSTHROUGH_KEYS: tuple[str, ...] = (
     "maximum",
     "exclusiveMinimum",
     "exclusiveMaximum",
+    # Nested-class machinery (post-#540 $defs propagation): when the
+    # mined envelope carries a nested Pydantic class via $ref to a
+    # top-level $defs entry, $ref + anyOf (for nullable refs) + items
+    # (for arrays of refs) + additionalProperties + properties all need
+    # to survive the curated/narrowed projection so datamodel-codegen
+    # can emit nested sub-classes. Canonical JSON Schema 2020-12
+    # vocabulary; safe to pass through.
+    "$ref",
+    "anyOf",
+    "items",
+    "additionalProperties",
+    "properties",
     "x-source",
     "x-source-ref",
 )
@@ -304,7 +316,14 @@ def _compose_synthetic_schema(
     narrowings = overlay.get("narrowings", {})
     completions = overlay.get("completions", {})
 
-    defs: dict[str, Any] = {}
+    # Seed the synthetic schema's $defs with whatever the discovery envelope
+    # propagated from the upstream tool (post-#540). These are the nested
+    # config classes (KvCacheConfig, CompileConfig, BeamSearchParams, ...)
+    # referenced by $ref from engine_params / sampling_params entries.
+    # datamodel-codegen emits one nested Pydantic sub-class per entry.
+    # Per-section EngineParams / SamplingParams entries below are added on
+    # top of these.
+    defs: dict[str, Any] = dict(discovered.get("$defs") or {})
     properties: dict[str, Any] = {}
     for section in SECTIONS:
         section_fields = discovered.get(section, {}) or {}

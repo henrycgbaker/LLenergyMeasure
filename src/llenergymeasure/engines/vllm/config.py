@@ -26,7 +26,7 @@ class EngineParams(BaseModel):
     num_scheduler_steps: int | None = 1
     tensor_parallel_size: int | None = 1
     pipeline_parallel_size: int | None = 1
-    distributed_executor_backend: Any | None = None
+    distributed_executor_backend: str | dict[str, Any] | None = None
     enable_prefix_caching: bool | None = None
     dtype: str | None = 'auto'
     quantization: str | None = None

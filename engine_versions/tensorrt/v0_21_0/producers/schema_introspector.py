@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.engine_producers._common import (
+    canonicalize_defs,
     dataclass_fields_to_specs,
     discover_validation_collections,
     jsonschema_property_to_canonical,
@@ -95,6 +96,14 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
             continue
         engine_params[name] = jsonschema_property_to_canonical(spec)
 
+    # Shared $defs accumulator across both engine_params (from
+    # TrtLlmArgs.model_json_schema()) and sampling_params (from dataclass
+    # walk + Pydantic-typed nested-field recursion). The walker only emits
+    # $refs when defs_acc is provided; tensorrt SamplingParams is a
+    # dataclass of primitives today but the accumulator stays uniform with
+    # the design.
+    all_defs: dict[str, Any] = dict(raw_schema.get("$defs") or {})
+
     limitations.append(
         {
             "section": "engine_params",
@@ -103,7 +112,7 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         }
     )
 
-    sampling_params = dataclass_fields_to_specs(SamplingParams, skip_private=True)
+    sampling_params = dataclass_fields_to_specs(SamplingParams, skip_private=True, defs_acc=all_defs)
 
     limitations.append(
         {
@@ -132,4 +141,5 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,
+        defs=canonicalize_defs(all_defs),
     )

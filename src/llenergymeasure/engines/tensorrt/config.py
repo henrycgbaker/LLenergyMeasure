@@ -49,7 +49,7 @@ class EngineParams(BaseModel):
     """
     The backend to use for this LLM instance.
     """
-    quant_config: Any | None = None
+    quant_config: dict[str, Any] | None = None
     """
     Quantization config.
     """

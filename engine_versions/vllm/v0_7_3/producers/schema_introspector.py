@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.engine_producers._common import (
+    canonicalize_defs,
     dataclass_fields_to_specs,
     discover_validation_collections,
     jsonschema_property_to_canonical,
@@ -78,17 +79,28 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     from vllm.engine.arg_utils import EngineArgs  # type: ignore[import-not-found]
 
     limitations: list[dict[str, Any]] = []
-    engine_params = dataclass_fields_to_specs(EngineArgs)
+    # Shared $defs accumulator across both engine_params (Pydantic-typed
+    # nested fields surface via dataclass walker's defs_acc; only when
+    # vllm.EngineArgs has Pydantic-typed sub-configs) and sampling_params
+    # (upstream $defs from msgspec.json.schema(SamplingParams)).
+    all_defs: dict[str, Any] = {}
+    engine_params = dataclass_fields_to_specs(EngineArgs, defs_acc=all_defs)
 
     sampling_params: dict[str, Any] = {}
+    sampling_defs: dict[str, Any] = {}
     try:
         import msgspec  # type: ignore[import-not-found]
 
         raw_schema = msgspec.json.schema(vllm.SamplingParams)
+        # Capture the upstream $defs block (nested config classes referenced
+        # via $ref from sampling fields). Excluded from the envelope's $defs
+        # at canonicalize time: ``SamplingParams`` itself - it's the root we
+        # unpacked into ``sampling_params`` below; keeping it would be a
+        # redundant duplicate.
+        sampling_defs = raw_schema.get("$defs") or raw_schema.get("definitions") or {}
         props = raw_schema.get("properties")
         if not props:
-            defs = raw_schema.get("$defs") or raw_schema.get("definitions") or {}
-            sp_def: Any = defs.get("SamplingParams") or next(iter(defs.values()), {})
+            sp_def: Any = sampling_defs.get("SamplingParams") or next(iter(sampling_defs.values()), {})
             props = sp_def.get("properties", {}) if isinstance(sp_def, dict) else {}
         for name, spec in (props or {}).items():
             sampling_params[name] = jsonschema_property_to_canonical(spec)
@@ -125,6 +137,14 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     merge_validation_collections(engine_params, collections["engine_params"])
     merge_validation_collections(sampling_params, collections["sampling_params"])
 
+    # Merge the msgspec-emitted sampling_defs into the shared accumulator.
+    # ``all_defs`` already holds anything the dataclass walker accumulated
+    # while walking EngineArgs; sampling_defs may overlap (a nested config
+    # could be referenced by both sections) and the dataclass walker takes
+    # precedence on duplicates because it ran first.
+    for name, spec in sampling_defs.items():
+        all_defs.setdefault(name, spec)
+
     return make_envelope(
         engine="vllm",
         engine_version=vllm.__version__,
@@ -134,4 +154,5 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,
+        defs=canonicalize_defs(all_defs, exclude=["SamplingParams"]),
     )

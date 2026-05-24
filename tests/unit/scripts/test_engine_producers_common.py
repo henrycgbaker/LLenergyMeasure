@@ -28,6 +28,47 @@ if str(REPO_ROOT) not in sys.path:
 
 from scripts.engine_producers import _common  # noqa: E402
 
+# ---------------------------------------------------------------------------
+# Module-scope fixtures for Pydantic-in-dataclass recursion tests
+# (TestDataclassFieldsToSpecs + TestAnnotationToJsonSchema). Module-scope so
+# ``typing.get_type_hints`` can resolve PEP 563 string annotations against
+# this module's namespace - test-method-local classes don't work because
+# they're not in ``__module__``'s globals.
+# ---------------------------------------------------------------------------
+try:
+    from pydantic import BaseModel as _BaseModel  # noqa: E402
+except ImportError:  # pragma: no cover - pydantic is a hard dep
+    _BaseModel = None  # type: ignore[assignment]
+
+
+if _BaseModel is not None:
+
+    class _FixtureKvCacheConfig(_BaseModel):
+        enable_block_reuse: bool = False
+        dtype: str = "auto"
+
+    @dataclasses.dataclass
+    class _FixtureEngineArgs:
+        kv_cache_config: _FixtureKvCacheConfig | None = None
+
+    class _FixtureInner(_BaseModel):
+        level: int = 0
+
+    class _FixtureOuter(_BaseModel):
+        inner: _FixtureInner = _FixtureInner()
+        name: str = "x"
+
+    @dataclasses.dataclass
+    class _FixtureNestedArgs:
+        outer: _FixtureOuter | None = None
+
+    class _FixtureForwardConf(_BaseModel):
+        x: int = 1
+
+    @dataclasses.dataclass
+    class _FixtureForwardArgs:
+        conf: _FixtureForwardConf | None = None
+
 
 def _load_synthetic_module(tmp_path: Path, source: str) -> ModuleType:
     """Write ``source`` to a uniquely named file under ``tmp_path`` and import it.
@@ -235,6 +276,111 @@ def test_schema_version_is_semver_with_major_two() -> None:
 
 
 # ---------------------------------------------------------------------------
+# $defs propagation (post-#540): make_envelope + canonicalize_defs
+# ---------------------------------------------------------------------------
+
+
+class TestMakeEnvelopeWithDefs:
+    """The optional ``defs`` parameter carries JSON Schema ``$defs``
+    reusable sub-schemas from Pydantic / msgspec discovery through to the
+    envelope so consumers (datamodel-code-generator) can resolve ``$ref``
+    pointers to nested config classes."""
+
+    def _envelope_with_defs(self, defs: dict[str, dict[str, _common.Any]] | None) -> dict[str, _common.Any]:
+        return _common.make_envelope(
+            engine="tensorrt",
+            engine_version="0.21.0",
+            engine_commit_sha=None,
+            image_ref="foo:1",
+            base_image_ref="foo:1",
+            discovery_limitations=[],
+            engine_params={"kv_cache_config": {"$ref": "#/$defs/KvCacheConfig"}},
+            sampling_params={},
+            defs=defs,
+        )
+
+    def test_populated_defs_round_trip(self) -> None:
+        env = self._envelope_with_defs(
+            {"KvCacheConfig": {"type": "object", "properties": {"enable": {"type": "boolean"}}}}
+        )
+        assert "$defs" in env
+        assert env["$defs"]["KvCacheConfig"]["properties"]["enable"] == {"type": "boolean"}
+
+    def test_empty_defs_omits_key(self) -> None:
+        """Pre-existing envelopes round-trip byte-identical: no $defs key
+        when caller passes None or empty dict."""
+        env_none = self._envelope_with_defs(None)
+        env_empty = self._envelope_with_defs({})
+        assert "$defs" not in env_none
+        assert "$defs" not in env_empty
+
+
+class TestCanonicalizeDefs:
+    """``canonicalize_defs`` strips ``title`` (Pydantic restates the class
+    name; noise) and canonicalizes inner ``properties`` so the envelope's
+    $defs entries land in the same leaf shape as engine_params /
+    sampling_params entries."""
+
+    def test_none_input_returns_empty(self) -> None:
+        assert _common.canonicalize_defs(None) == {}
+
+    def test_empty_input_returns_empty(self) -> None:
+        assert _common.canonicalize_defs({}) == {}
+
+    def test_drops_title_at_def_level(self) -> None:
+        out = _common.canonicalize_defs(
+            {"Inner": {"title": "Inner", "type": "object", "properties": {}}}
+        )
+        assert "title" not in out["Inner"]
+        assert out["Inner"]["type"] == "object"
+
+    def test_canonicalizes_inner_properties(self) -> None:
+        """Inner property dicts get jsonschema_property_to_canonical
+        treatment: ``title`` dropped on each property too."""
+        out = _common.canonicalize_defs(
+            {
+                "Inner": {
+                    "type": "object",
+                    "properties": {
+                        "foo": {"title": "Foo", "type": "integer", "default": 0},
+                    },
+                }
+            }
+        )
+        assert "title" not in out["Inner"]["properties"]["foo"]
+        assert out["Inner"]["properties"]["foo"]["type"] == "integer"
+
+    def test_exclude_drops_named_entries(self) -> None:
+        """msgspec's ``msgspec.json.schema(SamplingParams)`` returns
+        SamplingParams as a root entry in $defs whose properties have
+        already been unpacked into the envelope's sampling_params section;
+        exclude drops it so the envelope's $defs isn't a redundant
+        duplicate."""
+        out = _common.canonicalize_defs(
+            {
+                "SamplingParams": {"type": "object", "properties": {}},
+                "BeamSearchParams": {"type": "object", "properties": {}},
+            },
+            exclude=["SamplingParams"],
+        )
+        assert "SamplingParams" not in out
+        assert "BeamSearchParams" in out
+
+    def test_idempotent(self) -> None:
+        """Calling twice produces the same shape (already-canonical input
+        round-trips byte-identical)."""
+        defs = {
+            "Inner": {
+                "type": "object",
+                "properties": {"foo": {"type": "integer", "default": 0}},
+            }
+        }
+        once = _common.canonicalize_defs(defs)
+        twice = _common.canonicalize_defs(once)
+        assert once == twice
+
+
+# ---------------------------------------------------------------------------
 # annotation_to_json_schema (canonical JSON Schema 2020-12 emitters)
 # ---------------------------------------------------------------------------
 
@@ -327,6 +473,29 @@ class TestAnnotationToJsonSchema:
         assert "type" not in result
         assert "no annotation" in result["description"]
 
+    def test_pydantic_class_emits_ref_when_defs_acc_provided(self) -> None:
+        """A bare Pydantic class annotation (post-#540) emits ``$ref`` and
+        populates the accumulator with the class's full schema.
+        Module-scope fixture used so we don't depend on test-local class
+        scoping (irrelevant for this direct-call test, but consistent
+        with the dataclass-walker tests below)."""
+        defs_acc: dict[str, _common.Any] = {}
+        result = _common.annotation_to_json_schema(
+            _FixtureKvCacheConfig, defs_acc=defs_acc
+        )
+        assert result == {"$ref": "#/$defs/_FixtureKvCacheConfig"}
+        assert "_FixtureKvCacheConfig" in defs_acc
+
+    def test_pydantic_class_falls_back_without_defs_acc(self) -> None:
+        """Legacy path: without an accumulator, a Pydantic class collapses
+        to an opaque object schema with the class name as description.
+        Producers that don't opt in get pre-#540 behaviour."""
+        result = _common.annotation_to_json_schema(_FixtureKvCacheConfig)
+        assert result == {
+            "type": "object",
+            "description": "_FixtureKvCacheConfig",
+        }
+
 
 # ---------------------------------------------------------------------------
 # dataclass_fields_to_specs (canonical output)
@@ -380,6 +549,65 @@ class TestDataclassFieldsToSpecs:
         kept = _common.dataclass_fields_to_specs(M, skip_private=False)
         assert "_private" not in skipped
         assert "_private" in kept
+
+    def test_pydantic_typed_field_surfaces_as_ref_when_defs_acc_provided(self) -> None:
+        """A stdlib dataclass with a Pydantic-typed field (the vllm
+        ``EngineArgs`` pattern) emits ``$ref`` and populates ``defs_acc``
+        when the accumulator is provided. The fixture classes are
+        module-level so ``typing.get_type_hints`` can resolve them through
+        PEP 563 stringification."""
+        defs_acc: dict[str, _common.Any] = {}
+        specs = _common.dataclass_fields_to_specs(_FixtureEngineArgs, defs_acc=defs_acc)
+        # The field surfaces as anyOf [$ref, null] (the Optional shape).
+        assert specs["kv_cache_config"] == {
+            "anyOf": [{"$ref": "#/$defs/_FixtureKvCacheConfig"}, {"type": "null"}],
+            "default": None,
+        }
+        # Accumulator populated with the Pydantic class's schema.
+        assert "_FixtureKvCacheConfig" in defs_acc
+        assert defs_acc["_FixtureKvCacheConfig"]["type"] == "object"
+        assert set(defs_acc["_FixtureKvCacheConfig"]["properties"]) == {
+            "enable_block_reuse",
+            "dtype",
+        }
+
+    def test_pydantic_typed_field_legacy_fallback_without_defs_acc(self) -> None:
+        """When ``defs_acc`` is None (legacy path), a Pydantic-typed field
+        falls back to ``{type: object, description: ClassName}``. This is
+        the pre-#540 behaviour; producers that don't opt in get the same
+        output as before."""
+        specs = _common.dataclass_fields_to_specs(_FixtureEngineArgs)
+        # No $ref; opaque object with class-name hint.
+        assert specs["kv_cache_config"] == {
+            "anyOf": [
+                {"type": "object", "description": "_FixtureKvCacheConfig"},
+                {"type": "null"},
+            ],
+            "default": None,
+        }
+
+    def test_pydantic_recursion_captures_transitive_defs(self) -> None:
+        """When a Pydantic class itself references other Pydantic classes,
+        ``model_json_schema()`` emits its own ``$defs`` block; the walker
+        flattens those into ``defs_acc`` so the envelope has every
+        transitively-referenced sub-class."""
+        defs_acc: dict[str, _common.Any] = {}
+        _common.dataclass_fields_to_specs(_FixtureNestedArgs, defs_acc=defs_acc)
+        # Both Outer and its transitive Inner land in defs_acc.
+        assert "_FixtureOuter" in defs_acc
+        assert "_FixtureInner" in defs_acc
+
+    def test_resolves_string_annotations_via_get_type_hints(self) -> None:
+        """PEP 563 / ``from __future__ import annotations`` makes
+        ``fld.type`` a literal string. The walker uses
+        ``typing.get_type_hints`` to resolve to actual classes so the
+        Pydantic-detection branch fires for forward-annotated fields.
+        This whole test file uses PEP 563; if resolution failed we'd see
+        opaque-object output with no ``$ref``."""
+        defs_acc: dict[str, _common.Any] = {}
+        specs = _common.dataclass_fields_to_specs(_FixtureForwardArgs, defs_acc=defs_acc)
+        assert specs["conf"]["anyOf"][0] == {"$ref": "#/$defs/_FixtureForwardConf"}
+        assert "_FixtureForwardConf" in defs_acc
 
 
 # ---------------------------------------------------------------------------

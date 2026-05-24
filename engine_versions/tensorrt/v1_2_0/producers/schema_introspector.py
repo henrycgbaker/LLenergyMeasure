@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.engine_producers._common import (
+    canonicalize_defs,
     dataclass_fields_to_specs,
     discover_validation_collections,
     jsonschema_property_to_canonical,
@@ -98,6 +99,9 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
             continue
         engine_params[name] = jsonschema_property_to_canonical(spec)
 
+    # Shared $defs accumulator: see v0_21_0 introspector comment.
+    all_defs: dict[str, Any] = dict(raw_schema.get("$defs") or {})
+
     limitations.append(
         {
             "section": "engine_params",
@@ -106,7 +110,7 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         }
     )
 
-    sampling_params = dataclass_fields_to_specs(SamplingParams, skip_private=True)
+    sampling_params = dataclass_fields_to_specs(SamplingParams, skip_private=True, defs_acc=all_defs)
 
     limitations.append(
         {
@@ -135,4 +139,5 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,
+        defs=canonicalize_defs(all_defs),
     )

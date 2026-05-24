@@ -23,6 +23,8 @@ import inspect
 import os
 import re
 import types
+import typing
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
@@ -186,7 +188,56 @@ _JSONSCHEMA_PRIMITIVES: frozenset[str] = frozenset(
 )
 
 
-def annotation_to_json_schema(annotation: Any) -> dict[str, Any]:
+def _is_pydantic_model(cls: Any) -> bool:
+    """Detect a Pydantic v2 ``BaseModel`` subclass without forcing pydantic import.
+
+    Returns False for strings, generics, non-class objects, ImportError on
+    pydantic, or anything that isn't a BaseModel subclass.
+    """
+    try:
+        import pydantic  # type: ignore[import-not-found]
+    except ImportError:
+        return False
+    return isinstance(cls, type) and issubclass(cls, pydantic.BaseModel)
+
+
+def _emit_pydantic_ref(cls: type, defs_acc: dict[str, Any]) -> dict[str, Any]:
+    """Add ``cls.model_json_schema()`` to ``defs_acc`` and return a ``$ref`` to it.
+
+    Idempotent on ``cls.__name__``: a second call with the same class is a
+    no-op on ``defs_acc`` (we don't re-emit schemas that already landed).
+    Pydantic's transitive ``$defs`` (sub-classes referenced from ``cls``'s
+    fields) are flattened into ``defs_acc`` as siblings.
+
+    On failure (some Pydantic classes raise during schema generation, e.g.
+    classes with un-resolvable forward refs), falls back to an opaque
+    ``{"type": "object", "description": "<class-name>"}`` so discovery
+    never aborts.
+
+    The emitted entries are NOT canonicalized here; canonicalize at envelope
+    assembly via :func:`canonicalize_defs` so the cleanup pass is uniform
+    across all defs sources.
+    """
+    name = cls.__name__
+    if name in defs_acc:
+        return {"$ref": f"#/$defs/{name}"}
+    try:
+        schema = cls.model_json_schema(ref_template="#/$defs/{model}")
+    except Exception:
+        return {"type": "object", "description": name}
+    sub_defs = schema.pop("$defs", None) or {}
+    defs_acc[name] = schema
+    for sub_name, sub_schema in sub_defs.items():
+        if sub_name not in defs_acc:
+            defs_acc[sub_name] = sub_schema
+    return {"$ref": f"#/$defs/{name}"}
+
+
+def annotation_to_json_schema(
+    annotation: Any,
+    *,
+    defs_acc: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Render a Python type annotation as a canonical JSON Schema 2020-12 dict.
 
     Mapping:
@@ -199,7 +250,14 @@ def annotation_to_json_schema(annotation: Any) -> dict[str, Any]:
       ``{"anyOf": [{"type": "<canonical-X>"}, {"type": "<canonical-Y>"}]}``.
     - Generic containers (``list[str]``, ``dict[str, int]``) ->
       ``{"type": "array", "items": {...}}`` / ``{"type": "object"}``.
-    - Class names (e.g. ``PretrainedConfig``, ``BitsAndBytesConfig``) ->
+    - Pydantic ``BaseModel`` subclasses (only when ``defs_acc`` is provided)
+      -> ``{"$ref": "#/$defs/<ClassName>"}``; the class's
+      ``model_json_schema()`` is added to ``defs_acc`` so consumers can
+      resolve the reference. This is how vllm ``EngineArgs`` Pydantic-typed
+      sub-config fields (``KVTransferConfig``, ``CompilationConfig`` etc.)
+      surface as nested classes rather than opaque ``{"type": "object"}``.
+    - Other class names (e.g. ``PretrainedConfig``, ``BitsAndBytesConfig``
+      when ``defs_acc`` is None or class is not Pydantic) ->
       ``{"type": "object", "description": "<class-name>"}``.
     - ``inspect.Parameter.empty`` -> ``{"description": "no annotation"}`` (any type).
     - String annotations (from ``from __future__ import annotations`` or
@@ -211,6 +269,10 @@ def annotation_to_json_schema(annotation: Any) -> dict[str, Any]:
     Never raises: any unrecognised annotation falls back to
     ``{"type": "object", "description": "<repr>"}`` so discovery never
     aborts on an exotic upstream type.
+
+    ``defs_acc`` is mutated in place when provided. Callers that don't care
+    about Pydantic-class recursion pass ``None`` (default) and get the
+    pre-``$defs`` behaviour byte-identical to the historical helper.
     """
     if annotation is type(None):
         return {"type": "null"}
@@ -237,17 +299,21 @@ def annotation_to_json_schema(annotation: Any) -> dict[str, Any]:
 
     if origin is None:
         # A bare type (int, str, MyClass, ...). Map builtins to primitives;
-        # everything else is an opaque object with the class name as a hint.
+        # Pydantic BaseModel subclasses get a $ref (when an accumulator is
+        # available); everything else is an opaque object with the class
+        # name as a hint.
         name = getattr(annotation, "__name__", str(annotation))
         primitive = _PYTHON_TO_JSONSCHEMA_PRIMITIVE.get(name)
         if primitive is not None:
             return {"type": primitive}
+        if defs_acc is not None and _is_pydantic_model(annotation):
+            return _emit_pydantic_ref(annotation, defs_acc)
         return {"type": "object", "description": name}
 
     if origin is Union or origin is types.UnionType:
         non_none = [a for a in args if a is not type(None)]
         has_none = len(non_none) < len(args)
-        sub_schemas = [annotation_to_json_schema(a) for a in non_none]
+        sub_schemas = [annotation_to_json_schema(a, defs_acc=defs_acc) for a in non_none]
         return _union_schema(sub_schemas, nullable=has_none)
 
     origin_str = str(origin)
@@ -261,14 +327,14 @@ def annotation_to_json_schema(annotation: Any) -> dict[str, Any]:
     if primitive == "array":
         # list[X] / tuple[X, ...] / set[X] -> {"type": "array", "items": <X>}
         if args:
-            return {"type": "array", "items": annotation_to_json_schema(args[0])}
+            return {"type": "array", "items": annotation_to_json_schema(args[0], defs_acc=defs_acc)}
         return {"type": "array"}
     if primitive == "object":
         # dict[K, V] -> {"type": "object", "additionalProperties": <V>}
         if len(args) == 2:
             return {
                 "type": "object",
-                "additionalProperties": annotation_to_json_schema(args[1]),
+                "additionalProperties": annotation_to_json_schema(args[1], defs_acc=defs_acc),
             }
         return {"type": "object"}
 
@@ -612,8 +678,60 @@ def jsonschema_property_to_canonical(spec: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def canonicalize_defs(
+    defs: dict[str, Any] | None,
+    *,
+    exclude: Iterable[str] = (),
+) -> dict[str, Any]:
+    """Canonicalize a JSON Schema ``$defs`` block for the envelope.
+
+    Each value in ``$defs`` is an object schema (the definition of a reusable
+    nested config class - ``KvCacheConfig``, ``CompileConfig`` etc.). This
+    helper drops ``title`` on each def (Pydantic restates the class name; it
+    just adds noise) and canonicalizes the inner ``properties`` via
+    :func:`jsonschema_property_to_canonical` so leaf-level shape is consistent
+    with the top-level ``engine_params`` / ``sampling_params`` entries.
+
+    ``exclude`` drops named root entries that have already been projected into
+    the envelope's ``engine_params`` / ``sampling_params`` sections (e.g.
+    msgspec's ``msgspec.json.schema(SamplingParams)`` returns a
+    ``$ref: "#/$defs/SamplingParams"`` envelope with ``SamplingParams`` as a
+    ``$def``; producers unpack its ``properties`` into ``sampling_params``
+    directly, so the root ``SamplingParams`` entry would be a redundant
+    duplicate). Pass ``exclude=["SamplingParams"]`` to drop it.
+
+    Idempotent. ``None`` or empty input returns ``{}``.
+
+    Out of scope: recursive flattening / inlining of ``$ref`` chains. The
+    envelope keeps the original reference structure; downstream consumers
+    (``datamodel-code-generator``) resolve refs natively.
+    """
+    if not defs:
+        return {}
+    excluded = set(exclude)
+    out: dict[str, Any] = {}
+    for name, spec in defs.items():
+        if name in excluded:
+            continue
+        if not isinstance(spec, dict):
+            continue
+        canon = {k: v for k, v in spec.items() if k != "title"}
+        props = canon.get("properties")
+        if isinstance(props, dict):
+            canon["properties"] = {
+                pname: jsonschema_property_to_canonical(pspec)
+                for pname, pspec in props.items()
+                if isinstance(pspec, dict)
+            }
+        out[name] = canon
+    return out
+
+
 def dataclass_fields_to_specs(
-    cls: type, *, skip_private: bool = False
+    cls: type,
+    *,
+    skip_private: bool = False,
+    defs_acc: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Extract ``{name: <canonical-JSON-Schema-spec>}`` mapping from a dataclass.
 
@@ -621,7 +739,28 @@ def dataclass_fields_to_specs(
     name (or array including ``"null"``), ``default`` is JSON-safe via
     :func:`jsonable`. ``default_factory`` is evaluated (errors swallowed to
     ``None``) so output stays concrete.
+
+    String annotations (from ``from __future__ import annotations`` or
+    explicit forward refs) are resolved at the class level via
+    :func:`typing.get_type_hints` before being passed to
+    :func:`annotation_to_json_schema`. This is what makes Pydantic-class
+    recognition work for libraries that opt into PEP 563 deferred
+    evaluation: without it, ``fld.type`` is the literal string
+    ``"KVTransferConfig | None"`` and the ``$ref`` emission path can't
+    fire. Falls back to ``fld.type`` when hint resolution itself fails
+    (some classes have un-importable forward refs).
+
+    When ``defs_acc`` is provided, Pydantic-typed fields surface as ``$ref``
+    entries and the referenced class's ``model_json_schema()`` is added to
+    ``defs_acc`` (recursively flattening any transitive ``$defs``). When
+    ``defs_acc`` is None, Pydantic fields fall through to opaque
+    ``{"type": "object", "description": "<class-name>"}`` (legacy
+    pre-``$defs`` behaviour).
     """
+    try:
+        resolved_hints = typing.get_type_hints(cls)
+    except Exception:
+        resolved_hints = {}
     specs: dict[str, dict[str, Any]] = {}
     for fld in dataclasses.fields(cls):
         if skip_private and fld.name.startswith("_"):
@@ -634,7 +773,8 @@ def dataclass_fields_to_specs(
                 default = fld.default_factory()
             except Exception:
                 default = None
-        spec = dict(annotation_to_json_schema(fld.type))
+        annotation = resolved_hints.get(fld.name, fld.type)
+        spec = dict(annotation_to_json_schema(annotation, defs_acc=defs_acc))
         spec["default"] = jsonable(default)
         specs[fld.name] = spec
     return specs
@@ -650,12 +790,23 @@ def make_envelope(
     discovery_limitations: list[dict[str, Any]],
     engine_params: dict[str, Any],
     sampling_params: dict[str, Any],
+    defs: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a discovered-schema envelope at the current :data:`SCHEMA_VERSION`.
 
     The free-form ``discovery_method`` key (a per-engine string describing the
     introspection technique) was dropped in 2.0.0: engine + version + the
     producer file path together carry equivalent information.
+
+    The optional ``defs`` parameter carries JSON Schema ``$defs`` reusable
+    sub-schemas (nested config classes). When the upstream discovery surface
+    is Pydantic (``model_json_schema()``) or msgspec (``msgspec.json.schema()``)
+    those tools emit ``$defs`` natively for nested classes; producers pass them
+    through here so the structural shape survives envelope assembly. Without
+    this, ``kv_cache_config: {"$ref": "#/$defs/KvCacheConfig"}`` references go
+    nowhere when consumers (e.g. ``datamodel-code-generator``) try to resolve
+    them. ``defs`` is omitted from the emitted envelope when None or empty so
+    pre-existing envelopes round-trip identically.
     """
     # Honour LLENERGY_DISCOVERY_FROZEN_AT when the caller (CI) wants the
     # envelope pinned to a stable anchor - typically the author date of the
@@ -667,7 +818,7 @@ def make_envelope(
     discovered_at = (
         os.environ.get("LLENERGY_DISCOVERY_FROZEN_AT") or datetime.now(timezone.utc).isoformat()
     )
-    return {
+    envelope: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "engine": engine,
         "engine_version": engine_version,
@@ -679,6 +830,9 @@ def make_envelope(
         "engine_params": engine_params,
         "sampling_params": sampling_params,
     }
+    if defs:
+        envelope["$defs"] = defs
+    return envelope
 
 
 # ---------------------------------------------------------------------------
