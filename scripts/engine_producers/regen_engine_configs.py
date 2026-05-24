@@ -51,8 +51,8 @@ from scripts.engine_producers._current import (  # noqa: E402
     current_outputs_dir,
 )
 
-# Pilot scope: transformers only. vllm + tensorrt added in their phases.
-ENGINES: tuple[str, ...] = ("transformers",)
+# Phase 2-T pilot expanded to vllm + tensorrt in their own phases.
+ENGINES: tuple[str, ...] = ("transformers", "vllm", "tensorrt")
 
 # Subset of schema.discovered.json fields used by codegen. The pre-step
 # walks both keys and emits one JSON Schema sub-object per key, nested

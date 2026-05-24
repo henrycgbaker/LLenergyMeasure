@@ -216,14 +216,15 @@ class TestCliFlags:
     ) -> None:
         # Default-mode test must not mutate the working tree. We point
         # the target at tmp_path then assert no file appears there.
+        # Use --engine transformers to scope to one engine - the
+        # monkeypatched _shadow_config_path returns the same target for
+        # all engines, which would compose drift incorrectly under the
+        # default all-engines iteration.
         target = tmp_path / "config.py"
         monkeypatch.setattr(
             regen_engine_configs, "_shadow_config_path", lambda engine: target
         )
-        # Bare invocation against the live transformers outputs would
-        # detect drift (target doesn't exist yet) and return 1 without
-        # writing.
-        rc = regen_engine_configs.main([])
+        rc = regen_engine_configs.main(["--engine", "transformers"])
         assert rc == 1
         assert not target.exists()
 
@@ -237,14 +238,16 @@ class TestRoundtripIdempotency:
     def test_write_then_check_clean(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # Scope to one engine since the monkeypatched _shadow_config_path
+        # collapses all engines onto the same target file.
         target = tmp_path / "config.py"
         monkeypatch.setattr(
             regen_engine_configs, "_shadow_config_path", lambda engine: target
         )
-        rc_write = regen_engine_configs.main(["--write"])
+        rc_write = regen_engine_configs.main(["--write", "--engine", "transformers"])
         assert rc_write == 0
         assert target.is_file()
-        rc_check = regen_engine_configs.main(["--check"])
+        rc_check = regen_engine_configs.main(["--check", "--engine", "transformers"])
         assert rc_check == 0
 
     def test_write_twice_byte_identical(
@@ -257,8 +260,8 @@ class TestRoundtripIdempotency:
         monkeypatch.setattr(
             regen_engine_configs, "_shadow_config_path", lambda engine: target
         )
-        regen_engine_configs.main(["--write"])
+        regen_engine_configs.main(["--write", "--engine", "transformers"])
         first = target.read_bytes()
-        regen_engine_configs.main(["--write"])
+        regen_engine_configs.main(["--write", "--engine", "transformers"])
         second = target.read_bytes()
         assert first == second

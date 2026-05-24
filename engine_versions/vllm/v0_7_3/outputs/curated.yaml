@@ -1,0 +1,44 @@
+# vLLM curation: which mined fields llem exposes as a typed Pydantic
+# config (Phase 2-T pilot, vllm 0.7.3).
+#
+# Coverage at this pin (intersection of existing hand-written VLLMConfig
+# sub-classes and schema.discovered.json):
+# - VLLMEngineConfig: 19 / 26 fields mined (75%)
+# - VLLMSamplingConfig: 10 / 10 fields mined (100%)
+# Total: 29 fields generated; 23 hand-written fields not yet mined
+# (tracked in _spike/findings/move1_mining_gaps.md).
+schema_version: 1.0.0
+engine: vllm
+engine_version: 0.7.3
+exposed_fields:
+  engine_params:
+    - gpu_memory_utilization
+    - swap_space
+    - cpu_offload_gb
+    - block_size
+    - kv_cache_dtype
+    - enforce_eager
+    - enable_chunked_prefill
+    - max_num_seqs
+    - max_num_batched_tokens
+    - max_model_len
+    - num_scheduler_steps
+    - tensor_parallel_size
+    - pipeline_parallel_size
+    - distributed_executor_backend
+    - enable_prefix_caching
+    - dtype
+    - quantization
+    - speculative_model
+    - num_speculative_tokens
+  sampling_params:
+    - temperature
+    - top_k
+    - top_p
+    - repetition_penalty
+    - min_p
+    - min_tokens
+    - presence_penalty
+    - frequency_penalty
+    - ignore_eos
+    - n

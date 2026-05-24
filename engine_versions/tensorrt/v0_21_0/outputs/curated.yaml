@@ -1,0 +1,41 @@
+# TensorRT-LLM curation: which mined fields llem exposes as a typed
+# Pydantic config (Phase 2-T pilot, tensorrt-llm 0.21.0).
+#
+# Coverage at this pin (intersection of hand-written TensorRT* classes
+# and schema.discovered.json):
+# - TensorRTConfig: 12 / 13 mined (sampling is a nested sub-config)
+# - TensorRTSamplingConfig: 8 / 8 mined (100%)
+# - TensorRTQuantConfig / TensorRTKvCacheConfig / TensorRTSchedulerConfig:
+#   most fields NOT yet flattened into the top-level schema (they live
+#   inside their respective sub-classes which the walker doesn't yet
+#   surface as nested $defs). Tracked in
+#   _spike/findings/move1_mining_gaps.md.
+#
+# Total: 20 fields generated; 10 hand-written fields in nested sub-config
+# classes deferred to Move 1 nested-class enrichment.
+schema_version: 1.0.0
+engine: tensorrt
+engine_version: 0.21.0
+exposed_fields:
+  engine_params:
+    - max_batch_size
+    - tensor_parallel_size
+    - pipeline_parallel_size
+    - max_input_len
+    - max_seq_len
+    - max_num_tokens
+    - dtype
+    - fast_build
+    - backend
+    - quant_config
+    - kv_cache_config
+    - scheduler_config
+  sampling_params:
+    - temperature
+    - top_k
+    - top_p
+    - repetition_penalty
+    - min_p
+    - min_tokens
+    - n
+    - ignore_eos
