@@ -43,6 +43,11 @@ dev = [
     "types-pyyaml>=6.0.12",
     "import-linter>=2.9",
     "msgspec",
+    # Move 3 codegen wrapper (regen_engine_configs.py). Version pin per
+    # the BUY decision in .product/designs/engine-knowledge-as-data.md
+    # Move 3 + the .product/research/datamodel-codegen-spike-2026-05-23.md
+    # flag verification.
+    "datamodel-code-generator==0.57.0",
 ]
 
 [project.scripts]

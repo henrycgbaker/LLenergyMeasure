@@ -110,6 +110,15 @@ jobs:
         # without re-syncing the other.
         run: uv run python scripts/engine_producers/regen_engine_corpus.py --check
 
+      - name: Engine config.py codegen parity check
+        # Generated Pydantic class src/llenergymeasure/engines/<e>/config.py
+        # must match what regen_engine_configs.py would produce from the
+        # per-version schema.discovered.json + curated.yaml. Drift means
+        # someone hand-edited the generated file (should NOT happen - it
+        # has a DO NOT EDIT header) or forgot to regen after editing
+        # curated.yaml. Either way, this gate makes it loud.
+        run: uv run python scripts/engine_producers/regen_engine_configs.py --check
+
   type-check:
     needs: filter
     if: >-

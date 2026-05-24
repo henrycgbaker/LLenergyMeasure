@@ -62,3 +62,14 @@ repos:
         language: system
         pass_filenames: false
         files: ^(engine_versions/.*/outputs/.*|engine_versions/[^/]+/current\.toml|src/llenergymeasure/engines/.*\.(yaml|json)|scripts/engine_producers/regen_engine_corpus\.py|scripts/engine_producers/_current\.py)$
+
+      - id: engine-configs-codegen-parity
+        name: Engine config.py codegen parity check
+        # Verifies src/llenergymeasure/engines/<engine>/config.py matches
+        # what regen_engine_configs.py would produce from the per-version
+        # schema.discovered.json + curated.yaml.
+        # To fix: uv run python scripts/engine_producers/regen_engine_configs.py --write
+        entry: uv run python scripts/engine_producers/regen_engine_configs.py --check
+        language: system
+        pass_filenames: false
+        files: ^(engine_versions/.*/outputs/(schema\.discovered\.json|curated\.yaml)|engine_versions/[^/]+/current\.toml|src/llenergymeasure/engines/.*/config\.py|scripts/engine_producers/regen_engine_configs\.py)$

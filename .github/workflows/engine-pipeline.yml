@@ -522,6 +522,12 @@ jobs:
           # so stale SSOT for unrelated engines doesn't propagate.
           if [[ ${#ENGINES_TOUCHED[@]} -gt 0 ]]; then
             uv run python scripts/engine_producers/regen_engine_corpus.py --write "${ENGINES_TOUCHED[@]}"
+
+            # Regenerate per-engine Pydantic config.py (Move 3 codegen).
+            # Reads engine_versions/<e>/v<safe>/outputs/{schema.discovered.json,
+            # curated.yaml} -> emits src/llenergymeasure/engines/<e>/config.py.
+            # Only run for engines whose cells touched this pipeline run.
+            uv run python scripts/engine_producers/regen_engine_configs.py --write "${ENGINES_TOUCHED[@]}"
           fi
 
           git config user.name  "llem-ci-bot[bot]"
@@ -530,13 +536,19 @@ jobs:
           # Stage only the paths writeback artefacts may produce. Both the
           # SSOT (engine_versions/<e>/v<safe>/outputs/*) and the shadow
           # (src/llenergymeasure/engines/<e>/*) land atomically in one commit.
+          # Generated config.py (Move 3 codegen) lives at
+          # src/llenergymeasure/engines/<e>/config.py and is staged here
+          # too so it lands in the same commit as the schema/curated.yaml
+          # that produced it.
           git add \
             'src/llenergymeasure/engines/*/invariants.proposed.yaml' \
             'src/llenergymeasure/engines/*/invariants.validated.yaml' \
             'src/llenergymeasure/engines/*/schema.discovered.json' \
+            'src/llenergymeasure/engines/*/config.py' \
             'engine_versions/*/*/outputs/invariants.proposed.yaml' \
             'engine_versions/*/*/outputs/invariants.validated.yaml' \
             'engine_versions/*/*/outputs/schema.discovered.json' \
+            'engine_versions/*/*/outputs/curated.yaml' \
             'engine_versions/*/current.toml' \
             'docs/reference/engines/invariants-*.md' \
             'docs/reference/engines/curation-*.md' \
