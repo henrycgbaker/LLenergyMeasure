@@ -447,23 +447,12 @@ class TensorRTEngine:
                 f"TensorRT-LLM requires SM >= 7.5 (Turing). This GPU has SM {major}.{minor}."
             )
 
-        trt = config.tensorrt
-        if trt is not None and trt.quant_config is not None:
-            if trt.quant_config.quant_algo == "FP8" and sm_float < 8.9:
-                errors.append(
-                    f"FP8 quantisation requires SM >= 8.9 (Ada Lovelace or Hopper). "
-                    f"This GPU has SM {major}.{minor} "
-                    f"(A100=8.0, H100=9.0, RTX4090=8.9). "
-                    f"Use W8A16, W4A16_AWQ, or W4A16_GPTQ instead."
-                )
-            if trt.quant_config.kv_cache_quant_algo == "FP8" and sm_float < 8.9:
-                errors.append(
-                    f"FP8 KV cache quantisation requires SM >= 8.9 (Ada Lovelace or Hopper). "
-                    f"This GPU has SM {major}.{minor} "
-                    f"(A100=8.0, H100=9.0, RTX4090=8.9). "
-                    f"Use INT8 KV cache quantisation instead."
-                )
-
+        # quant_config nested sub-class is a Move 1 walker gap; the FP8/SM89
+        # hardware gate moves to a hand-written invariant in models.py (or
+        # gets mined when the walker walks TensorRT QuantConfig). For the
+        # spike, this check is parked - dict-shaped quant_config under
+        # engine_params.quant_config (overlay completion or extras) won't
+        # trigger this preflight.
         return errors
 
     # -------------------------------------------------------------------------
@@ -473,130 +462,68 @@ class TensorRTEngine:
     def _build_llm_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
         """Build kwargs dict for tensorrt_llm.LLM() constructor.
 
-        Starts with {"model": config.model} and applies all non-None fields
-        from TensorRTConfig, including the typed ``backend`` field when set.
-        When ``backend`` is unset (None), TRT-LLM auto-picks (respecting
-        ``TLLM_USE_TRT_ENGINE``) - the previous hardcoded ``"trt"`` default
-        is removed.
-
-        When engine_path is set, returns early with only {"model": engine_path}
-        plus ``backend`` iff the typed field was supplied. Compile-time kwargs
-        are baked into the engine and must not be re-specified.
+        Post-Phase-2-T shape: engine fields live flat on
+        ``config.tensorrt.engine_params``. Nested sub-configs (quant_config,
+        kv_cache_config, scheduler_config) are Move 1 walker gaps and not
+        yet typed; users can pass them as dicts via extra='allow' on
+        engine_params (the plugin forwards them straight to vllm.LLM).
         """
         kwargs: dict[str, Any] = {
             "model": config.task.model,
         }
 
         trt = config.tensorrt
+        ep = trt.engine_params if trt is not None else None
 
-        # engine_path early-return: pass engine dir as model, skip all compile-time kwargs
-        # engine_path is no longer a typed field (D1 drop); accessed via extra="allow" passthrough.
-        raw_engine_path = getattr(trt, "engine_path", None) if trt is not None else None
-        if trt is not None and raw_engine_path is not None:
+        # engine_path early-return: pass engine dir as model, skip all
+        # compile-time kwargs. engine_path is via extra='allow'.
+        raw_engine_path = getattr(ep, "engine_path", None) if ep is not None else None
+        if ep is not None and raw_engine_path is not None:
             engine_path = Path(str(raw_engine_path))
-            tp_size = trt.tensor_parallel_size if trt.tensor_parallel_size is not None else 1
+            tp_size = (
+                ep.tensor_parallel_size
+                if getattr(ep, "tensor_parallel_size", None) is not None
+                else 1
+            )
             errors = _validate_engine_directory(engine_path, tp_size=tp_size)
             if errors:
                 raise ConfigError(f"engine_path validation failed: {'; '.join(errors)}")
-            # Pass engine dir as model - TRT-LLM auto-detects TLLM_ENGINE format.
-            # Compile-time kwargs are baked into the engine; don't pass them.
-            # enable_build_cache is not set - engine format bypasses it.
             early_kwargs: dict[str, Any] = {"model": str(raw_engine_path)}
-            if trt.backend is not None:
-                early_kwargs["backend"] = trt.backend
+            backend = getattr(ep, "backend", None)
+            if backend is not None:
+                early_kwargs["backend"] = backend
             return early_kwargs
 
-        if trt is None:
-            # No tensorrt section - apply env-var-gated default build cache.
+        if ep is None:
             _apply_default_build_cache(kwargs)
             return kwargs
 
-        # Scalar fields: map directly
-        if trt.tensor_parallel_size is not None:
-            kwargs["tensor_parallel_size"] = trt.tensor_parallel_size
-        if trt.pipeline_parallel_size is not None:
-            kwargs["pipeline_parallel_size"] = trt.pipeline_parallel_size
-        if trt.max_batch_size is not None:
-            kwargs["max_batch_size"] = trt.max_batch_size
-        if trt.max_input_len is not None:
-            kwargs["max_input_len"] = trt.max_input_len
-        if trt.max_seq_len is not None:
-            kwargs["max_seq_len"] = trt.max_seq_len
-        if trt.max_num_tokens is not None:
-            kwargs["max_num_tokens"] = trt.max_num_tokens
-        if trt.dtype is not None:
-            kwargs["dtype"] = trt.dtype
-        if trt.fast_build is not None:
-            kwargs["fast_build"] = trt.fast_build
-        if trt.backend is not None:
-            kwargs["backend"] = trt.backend
+        # Flat engine_params: dump all non-None fields. quant_config /
+        # kv_cache_config / scheduler_config flow through as dicts; the
+        # plugin used to type-wrap them (QuantConfig / KvCacheConfig /
+        # SchedulerConfig), but those nested sub-classes are Move 1 walker
+        # gaps now. Bare-dict pass-through still works for tensorrt_llm.LLM
+        # (it accepts both dataclass + dict for these fields).
+        ep_kwargs = ep.model_dump(exclude_none=True)
+        # Build-cache field migrates to overlay/extras; drop legacy alias if
+        # present.
+        ep_kwargs.pop("compile_config", None)
+        kwargs.update(ep_kwargs)
 
-        # Quantisation config
-        if trt.quant_config is not None:
-            try:
-                from tensorrt_llm.llmapi import QuantAlgo, QuantConfig
-
-                qc_kwargs: dict[str, Any] = {}
-                if trt.quant_config.quant_algo is not None:
-                    qc_kwargs["quant_algo"] = QuantAlgo[trt.quant_config.quant_algo]
-                if trt.quant_config.kv_cache_quant_algo is not None:
-                    qc_kwargs["kv_cache_quant_algo"] = QuantAlgo[
-                        trt.quant_config.kv_cache_quant_algo
-                    ]
-                if qc_kwargs:
-                    kwargs["quantization"] = QuantConfig(**qc_kwargs)
-            except ImportError:
-                logger.debug("tensorrt_llm.llmapi not available; skipping QuantConfig")
-
-        # Build cache - env-var-gated default.
-        # TensorRTBuildCacheConfig was dropped (D1); advanced config via extra="allow".
         _apply_default_build_cache(kwargs)
-
-        # KV cache config
-        if trt.kv_cache_config is not None:
-            try:
-                from tensorrt_llm.llmapi import KvCacheConfig
-
-                kv = trt.kv_cache_config
-                kv_kwargs: dict[str, Any] = {}
-                if kv.enable_block_reuse is not None:
-                    kv_kwargs["enable_block_reuse"] = kv.enable_block_reuse
-                if kv.free_gpu_memory_fraction is not None:
-                    kv_kwargs["free_gpu_memory_fraction"] = kv.free_gpu_memory_fraction
-                if kv.max_tokens is not None:
-                    kv_kwargs["max_tokens"] = kv.max_tokens
-                if kv.host_cache_size is not None:
-                    kv_kwargs["host_cache_size"] = kv.host_cache_size
-                if kv_kwargs:
-                    kwargs["kv_cache_config"] = KvCacheConfig(**kv_kwargs)
-            except ImportError:
-                logger.debug("tensorrt_llm.llmapi not available; skipping KvCacheConfig")
-
-        # Scheduler config
-        if trt.scheduler_config is not None:
-            try:
-                from tensorrt_llm.llmapi import CapacitySchedulerPolicy, SchedulerConfig
-
-                sc = trt.scheduler_config
-                sc_kwargs: dict[str, Any] = {}
-                if sc.capacity_scheduling_policy is not None:
-                    sc_kwargs["capacity_scheduling_policy"] = CapacitySchedulerPolicy[
-                        sc.capacity_scheduling_policy
-                    ]
-                if sc_kwargs:
-                    kwargs["scheduler_config"] = SchedulerConfig(**sc_kwargs)
-            except ImportError:
-                logger.debug("tensorrt_llm.llmapi not available; skipping SchedulerConfig")
-
         return kwargs
 
     def _build_sampling_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
-        """Build the effective TRT-LLM SamplingParams kwargs (no constructor call)."""
+        """Build the effective TRT-LLM SamplingParams kwargs (no constructor call).
+
+        Post-Phase-2-T shape: sampling fields live on
+        ``config.tensorrt.sampling_params`` (the generated class).
+        """
         trt = config.tensorrt
-        sampling = trt.sampling if trt is not None else None
+        sp = trt.sampling_params if trt is not None else None
 
         kwargs: dict[str, Any] = (
-            sampling.model_dump(exclude_none=True) if sampling is not None else {}
+            sp.model_dump(exclude_none=True) if sp is not None else {}
         )
         kwargs["seed"] = config.task.random_seed
         if config.task.max_output_tokens is not None:
@@ -604,10 +531,8 @@ class TensorRTEngine:
         return kwargs
 
     def _build_sampling_params(self, config: ExperimentConfig) -> Any:
-        """Build tensorrt_llm.SamplingParams from TensorRTSamplingConfig.
+        """Build tensorrt_llm.SamplingParams from sampling_params section.
 
-        All sampling fields live on ``config.tensorrt.sampling``. None values
-        mean "use TRT-LLM's default", so we forward only explicit values.
         User writes top_k=0 to disable (TRT convention, matches HF).
         """
         from tensorrt_llm import SamplingParams

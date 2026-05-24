@@ -74,7 +74,7 @@ class TestComposeSyntheticSchema:
             "sampling_params": {"b": {"type": "integer", "default": 1}},
         }
         curated = {"engine_params": ["a"], "sampling_params": ["b"]}
-        out = regen_engine_configs._compose_synthetic_schema(discovered, curated)
+        out = regen_engine_configs._compose_synthetic_schema(discovered, curated, {"narrowings": {}, "completions": {}})
         assert out["$schema"] == "https://json-schema.org/draft/2020-12/schema"
         assert out["type"] == "object"
         assert out["additionalProperties"] is True
@@ -98,7 +98,7 @@ class TestComposeSyntheticSchema:
             "engine_params": {},
         }
         curated = {"engine_params": [], "sampling_params": ["exposed"]}
-        out = regen_engine_configs._compose_synthetic_schema(discovered, curated)
+        out = regen_engine_configs._compose_synthetic_schema(discovered, curated, {"narrowings": {}, "completions": {}})
         props = out["$defs"]["SamplingParams"]["properties"]
         assert "exposed" in props
         assert "hidden" not in props
@@ -117,7 +117,7 @@ class TestComposeSyntheticSchema:
             "engine_params": [],
             "sampling_params": ["only_real", "ghost_field"],
         }
-        out = regen_engine_configs._compose_synthetic_schema(discovered, curated)
+        out = regen_engine_configs._compose_synthetic_schema(discovered, curated, {"narrowings": {}, "completions": {}})
         props = out["$defs"]["SamplingParams"]["properties"]
         assert set(props.keys()) == {"only_real"}
 
@@ -127,7 +127,7 @@ class TestComposeSyntheticSchema:
         # collapse the section into an inline dict.
         discovered = {"sampling_params": {}, "engine_params": {}}
         curated = {"engine_params": [], "sampling_params": []}
-        out = regen_engine_configs._compose_synthetic_schema(discovered, curated)
+        out = regen_engine_configs._compose_synthetic_schema(discovered, curated, {"narrowings": {}, "completions": {}})
         assert out["$defs"]["EngineParams"]["properties"] == {}
         assert out["$defs"]["EngineParams"]["additionalProperties"] is True
         assert out["$defs"]["SamplingParams"]["properties"] == {}

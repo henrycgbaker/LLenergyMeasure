@@ -59,12 +59,14 @@ class EngineParams(BaseModel):
         ),
     ] = None
     tp_size: Annotated[
-        str | None,
+        int | None,
         Field(
+            ge=1,
             json_schema_extra={
                 'x-source': 'kwargs_docstring',
                 'x-source-ref': 'transformers.PreTrainedModel.from_pretrained.__doc__',
-            }
+                'x-narrowing-applied': 'from_pretrained docstring (L167 of modeling_utils.py) claims\n`str`; actual code path at L326/L330 uses it as int via\ndevice_mesh.size() / torch.distributed.get_world_size().\nWalker faithfully reflects the docstring; this overlay corrects\nthe type to match runtime usage.',
+            },
         ),
     ] = None
     load_in_4bit: Annotated[
@@ -117,6 +119,17 @@ class EngineParams(BaseModel):
     ] = False
 
 
+class CompileConfig(BaseModel):
+    model_config = ConfigDict(
+        use_attribute_docstrings=True,
+    )
+    mode: str | None = 'reduce-overhead'
+    backend: str | None = 'inductor'
+    fullgraph: bool | None = False
+    dynamic: bool | None = None
+    options: dict[str, Any] | None = None
+
+
 class SamplingParams(BaseModel):
     model_config = ConfigDict(
         extra='allow',
@@ -164,11 +177,58 @@ class SamplingParams(BaseModel):
     """
     runtime default was None; upstream has no type annotation
     """
-    repetition_penalty: float | None = 1.0
-    temperature: float | None = 1.0
-    top_k: int | None = 50
-    top_p: float | None = 1.0
+    repetition_penalty: Annotated[
+        float | None,
+        Field(
+            gt=0.0,
+            json_schema_extra={
+                'x-narrowing-applied': "Multiplicative penalty; <=0 breaks logits ranking. Engine\ndoesn't validate."
+            },
+        ),
+    ] = 1.0
+    temperature: Annotated[
+        float | None,
+        Field(
+            ge=0.0,
+            json_schema_extra={
+                'x-narrowing-applied': 'Engine accepts t<0 but produces NaN in softmax. Refuse at\nconfig-time rather than let inference produce garbage.'
+            },
+        ),
+    ] = 1.0
+    top_k: Annotated[
+        int | None,
+        Field(
+            ge=0,
+            json_schema_extra={
+                'x-narrowing-applied': 'Cardinality; negative k has no meaning. 0 means greedy (handled\nby HF).'
+            },
+        ),
+    ] = 50
+    top_p: Annotated[
+        float | None,
+        Field(
+            ge=0.0,
+            json_schema_extra={
+                'x-narrowing-applied': "Probability mass; <0 or >1 has no meaning. Engine doesn't\nvalidate; we refuse at config-time."
+            },
+            le=1.0,
+        ),
+    ] = 1.0
     use_cache: bool | None = True
+    compile_config: Annotated[
+        CompileConfig | None,
+        Field(
+            json_schema_extra={
+                'x-source': 'engine_overlay',
+                'x-completion-applied': "GenerationConfig.compile_config is typed as a CompileConfig\ndataclass; Move 1 walker depth doesn't traverse nested\ndataclasses yet. Bridges via this overlay completion until\nthe walker is deepened (validation set entry: compile_config).",
+            }
+        ),
+    ] = None
+    """
+    torch.compile config (HF GenerationConfig.compile_config).
+    Set on model.generation_config; HF compiles inside generate().
+
+    """
 
 
 class Config(BaseModel):

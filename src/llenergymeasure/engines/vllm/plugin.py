@@ -95,11 +95,12 @@ class VLLMEngine:
 
         logger.debug("vLLM model loaded successfully")
 
-        # Build SamplingParams or BeamSearchParams depending on config
-        if config.vllm is not None and config.vllm.beam_search is not None:
-            sampling_params = self._build_beam_search_params(config, config.vllm.beam_search)
-        else:
-            sampling_params = self._build_sampling_params(config, SamplingParams)
+        # Build SamplingParams or BeamSearchParams depending on config.
+        # beam_search sub-config is a Move 1 walker gap (vllm BeamSearchParams
+        # not walked yet); for the spike, fall back to standard SamplingParams.
+        # Users wanting beam search route via extra='allow' under sampling_params
+        # until Move 1 lands the nested class.
+        sampling_params = self._build_sampling_params(config, SamplingParams)
         if on_substep is not None:
             on_substep("sampling params built", 0.0)
         return llm, sampling_params
@@ -210,12 +211,9 @@ class VLLMEngine:
                 ).total_memory / (1024 * 1024)
                 vllm_cfg = config.vllm
                 gpu_util = 0.9  # vLLM default
-                if (
-                    vllm_cfg is not None
-                    and vllm_cfg.engine is not None
-                    and vllm_cfg.engine.gpu_memory_utilization is not None
-                ):
-                    gpu_util = vllm_cfg.engine.gpu_memory_utilization
+                ep = vllm_cfg.engine_params if vllm_cfg is not None else None
+                if ep is not None and getattr(ep, "gpu_memory_utilization", None) is not None:
+                    gpu_util = ep.gpu_memory_utilization
                 expected_prealloc = total_vram * gpu_util
                 if abs(peak_mb - expected_prealloc) / expected_prealloc < 0.05:
                     logger.debug(
@@ -352,7 +350,15 @@ class VLLMEngine:
     # -------------------------------------------------------------------------
 
     def _build_llm_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
-        """Build kwargs dict for vllm.LLM() constructor."""
+        """Build kwargs dict for vllm.LLM() constructor.
+
+        Post-Phase-2-T shape: all engine fields live flat on
+        ``config.vllm.engine_params`` (no nested .engine / .attention /
+        .speculative_config sub-configs - those were hand-written nested
+        classes the generator hasn't walked yet). Users can pass arbitrary
+        vllm.LLM kwargs (including ``attention_backend``, ``speculative_config``)
+        via extra='allow' on engine_params.
+        """
         from llenergymeasure.utils.security import trust_remote_code_enabled
 
         vllm_cfg = config.vllm
@@ -361,72 +367,19 @@ class VLLMEngine:
             "trust_remote_code": trust_remote_code_enabled(),
             "seed": config.task.random_seed,
         }
-        if vllm_cfg is not None and vllm_cfg.dtype is not None:
-            kwargs["dtype"] = vllm_cfg.dtype
+        ep = vllm_cfg.engine_params if vllm_cfg is not None else None
+        if ep is None:
+            return kwargs
 
-        # Apply VLLMEngineConfig fields if provided - only set non-None values
-        if vllm_cfg is not None and vllm_cfg.engine is not None:
-            engine = vllm_cfg.engine
-
-            def _set(k: str, v: Any) -> None:
-                if v is not None:
-                    kwargs[k] = v
-
-            _set("gpu_memory_utilization", engine.gpu_memory_utilization)
-            _set("swap_space", engine.swap_space)
-            _set("cpu_offload_gb", engine.cpu_offload_gb)
-            _set("block_size", engine.block_size)
-            _set("kv_cache_dtype", engine.kv_cache_dtype)
-            _set("enforce_eager", engine.enforce_eager)
-            _set("enable_chunked_prefill", engine.enable_chunked_prefill)
-            _set("max_num_seqs", engine.max_num_seqs)
-            _set("max_num_batched_tokens", engine.max_num_batched_tokens)
-            _set("max_model_len", engine.max_model_len)
-            _set("tensor_parallel_size", engine.tensor_parallel_size)
-            _set("pipeline_parallel_size", engine.pipeline_parallel_size)
-            _set("enable_prefix_caching", engine.enable_prefix_caching)
-            _set("quantization", engine.quantization)
-            _set("num_scheduler_steps", engine.num_scheduler_steps)
-            _set("max_seq_len_to_capture", engine.max_seq_len_to_capture)
-            _set("distributed_executor_backend", engine.distributed_executor_backend)
-
-            # Speculative decoding - dump the typed sub-config straight into kwargs.
-            if engine.speculative_config is not None:
-                spec_dict = engine.speculative_config.model_dump(exclude_none=True)
-                if spec_dict:
-                    kwargs["speculative_config"] = spec_dict
-
-            _set("disable_custom_all_reduce", engine.disable_custom_all_reduce)
-            _set("kv_cache_memory_bytes", engine.kv_cache_memory_bytes)
-            _set("offload_group_size", engine.offload_group_size)
-            _set("offload_num_in_group", engine.offload_num_in_group)
-            _set("offload_prefetch_step", engine.offload_prefetch_step)
-            _set("compilation_config", engine.compilation_config)
-
-            if engine.offload_params is not None:
-                kwargs["offload_params"] = set(engine.offload_params)
-
-            if engine.attention is not None:
-                attn = engine.attention
-                if attn.backend is not None:
-                    kwargs["attention_backend"] = attn.backend
-                _set("flash_attn_version", attn.flash_attn_version)
-                _set(
-                    "flash_attn_max_num_splits_for_cuda_graph",
-                    attn.flash_attn_max_num_splits_for_cuda_graph,
-                )
-                _set("use_prefill_decode_attention", attn.use_prefill_decode_attention)
-                _set("use_prefill_query_quantization", attn.use_prefill_query_quantization)
-                _set("use_cudnn_prefill", attn.use_cudnn_prefill)
-                _set("disable_flashinfer_prefill", attn.disable_flashinfer_prefill)
-                _set("disable_flashinfer_q_quantization", attn.disable_flashinfer_q_quantization)
-                _set("use_trtllm_attention", attn.use_trtllm_attention)
-                _set("use_trtllm_ragged_deepseek_prefill", attn.use_trtllm_ragged_deepseek_prefill)
-                if attn.model_extra:
-                    kwargs.update(attn.model_extra)
-
-            if engine.model_extra:
-                kwargs.update(engine.model_extra)
+        # Flat engine_params: dump all non-None fields. Pydantic
+        # model_dump(exclude_none=True) handles both declared fields and
+        # extras (extra='allow').
+        ep_kwargs = ep.model_dump(exclude_none=True)
+        # Drop fields that aren't valid vllm.LLM kwargs but might end up here
+        # via mining (none today, but defensive against future overlay
+        # additions that target documentation rather than the constructor).
+        ep_kwargs.pop("compile_config", None)
+        kwargs.update(ep_kwargs)
 
         return kwargs
 
@@ -434,16 +387,15 @@ class VLLMEngine:
     def _build_sampling_kwargs(config: ExperimentConfig) -> dict[str, Any]:
         """Build the effective SamplingParams kwargs dict (no constructor call).
 
-        Returns ``{}`` when beam search is active (sampling path preempted);
-        the caller dispatches to :meth:`_build_beam_search_params` in that case.
+        Post-Phase-2-T shape: sampling fields live flat on
+        ``config.vllm.sampling_params`` (the generated SamplingParams
+        class). Beam search nested sub-config is a Move 1 walker gap and
+        not surfaced here; users wanting beam search route via extra='allow'.
         """
         vllm_cfg = config.vllm
-        if vllm_cfg is not None and vllm_cfg.beam_search is not None:
-            return {}
-
-        sampling = vllm_cfg.sampling if vllm_cfg is not None else None
+        sp = vllm_cfg.sampling_params if vllm_cfg is not None else None
         kwargs: dict[str, Any] = (
-            sampling.model_dump(exclude_none=True) if sampling is not None else {}
+            sp.model_dump(exclude_none=True) if sp is not None else {}
         )
         if config.task.max_output_tokens is not None:
             kwargs["max_tokens"] = config.task.max_output_tokens
@@ -451,43 +403,14 @@ class VLLMEngine:
 
     @staticmethod
     def _build_sampling_params(config: ExperimentConfig, sampling_params_cls: Any) -> Any:
-        """Build vllm.SamplingParams from VLLMSamplingConfig.
+        """Build vllm.SamplingParams from sampling_params section.
 
-        All sampling fields live on ``config.vllm.sampling``. None values mean
-        "use vLLM's default", so we forward only explicit values.
-        User writes top_k=-1 directly to disable (vLLM convention). No translation.
+        Post-Phase-2-T shape: all sampling fields live on
+        ``config.vllm.sampling_params``. User writes top_k=-1 to disable
+        (vLLM convention). No translation.
         """
-        vllm_cfg = config.vllm
-        if vllm_cfg is not None and vllm_cfg.beam_search is not None:
-            return VLLMEngine._build_beam_search_params(config, vllm_cfg.beam_search)
         kwargs = VLLMEngine._build_sampling_kwargs(config)
         return sampling_params_cls(**kwargs)
-
-    @staticmethod
-    def _build_beam_search_params(config: ExperimentConfig, beam_cfg: Any) -> Any:
-        """Build vllm.BeamSearchParams from VLLMBeamSearchConfig."""
-        try:
-            from vllm import BeamSearchParams
-        except ImportError:
-            raise EngineError(
-                "beam_search config requires vllm.BeamSearchParams which is not "
-                "available in the installed vLLM version (added in vLLM >=0.8). "
-                "Either upgrade vLLM or remove the beam_search section from "
-                "vllm config."
-            ) from None
-
-        kwargs: dict[str, Any] = {}
-        if beam_cfg.beam_width is not None:
-            kwargs["beam_width"] = beam_cfg.beam_width
-        if beam_cfg.length_penalty is not None:
-            kwargs["length_penalty"] = beam_cfg.length_penalty
-        if beam_cfg.early_stopping is not None:
-            kwargs["early_stopping"] = beam_cfg.early_stopping
-        if config.task.max_output_tokens is not None:
-            kwargs["max_tokens"] = config.task.max_output_tokens
-        if beam_cfg.model_extra:
-            kwargs.update(beam_cfg.model_extra)
-        return BeamSearchParams(**kwargs)
 
     # -------------------------------------------------------------------------
     # Private: inference helpers

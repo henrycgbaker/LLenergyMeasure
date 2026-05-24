@@ -202,102 +202,143 @@ class TestProvenancePreservation:
         )
 
 
-class TestExperimentConfigWireUp:
-    """Phase 2-T pilot wire-up: the architectural payoff reaches the
-    ExperimentConfig boundary via the spike's ``engine_v2`` field. The
-    full type swap (replacing ``transformers: TransformersConfig`` with
-    ``transformers: engines.transformers.Config``) is deferred pending
-    a real loader migration; the wire-up here demonstrates the
-    mechanism works without disturbing 125 references across the
-    codebase.
+class TestExperimentConfigNewShape:
+    """Phase 2-T pilot: post-migration the generated Config IS the
+    production type for ``ExperimentConfig.transformers`` (and vllm,
+    tensorrt). The tracer-bullet payoff (e.g. ``dtype="half"`` accepted,
+    ``temperature=3.0`` accepted, narrow Literals replaced with mined
+    str type) now reaches ExperimentConfig natively without an
+    ``engine_v2`` wire-up.
     """
 
-    def test_engine_v2_accepts_nested_shape(self) -> None:
+    def test_new_shape_accepts_nested_engine_params(self) -> None:
         cfg = ExperimentConfig(
             task=TaskConfig(model="gpt2"),
             engine="transformers",
-            engine_v2={
+            transformers={
                 "engine_params": {"dtype": "half"},
                 "sampling_params": {"temperature": 0.7},
             },
         )
-        typed = cfg.as_v2_config()
-        # as_v2_config returns the parsed engines.transformers.Config
-        assert type(typed).__name__ == "Config"
-        assert typed.engine_params.dtype == "half"
-        assert typed.sampling_params.temperature == 0.7
+        # cfg.transformers is the parsed engines.transformers.Config
+        assert type(cfg.transformers).__name__ == "Config"
+        assert cfg.transformers.engine_params.dtype == "half"
+        assert cfg.transformers.sampling_params.temperature == 0.7
 
-    def test_tracer_bullet_through_experiment_config(self) -> None:
-        # The design's canonical demo, threaded through the
-        # ExperimentConfig boundary.
-
-        # Hand-written `transformers:` rejects dtype="half"
-        with pytest.raises(ValidationError):
-            ExperimentConfig(
-                task=TaskConfig(model="gpt2"),
-                engine="transformers",
-                transformers={"dtype": "half"},  # narrow Literal rejects
-            )
-
-        # Generated `engine_v2:` accepts the same value end-to-end
+    def test_tracer_bullet_dtype_half_through_experiment_config(self) -> None:
+        # The design's canonical demo: dtype="half" flows through the
+        # new shape end-to-end. The old hand-written TransformersConfig
+        # rejected this with a narrow Literal; the generated class
+        # mirrors HF's actual surface and accepts it.
         cfg = ExperimentConfig(
             task=TaskConfig(model="gpt2"),
             engine="transformers",
-            engine_v2={"engine_params": {"dtype": "half"}},
+            transformers={"engine_params": {"dtype": "half"}},
         )
-        assert cfg.as_v2_config().engine_params.dtype == "half"
+        assert cfg.transformers.engine_params.dtype == "half"
 
     def test_tracer_bullet_temperature_through_experiment_config(self) -> None:
-        # temperature=3.0 also flows through (hand-written rejects > 2.0).
-        with pytest.raises(ValidationError):
-            ExperimentConfig(
-                task=TaskConfig(model="gpt2"),
-                engine="transformers",
-                transformers={"sampling": {"temperature": 3.0}},
-            )
+        # temperature=3.0 flows through (old class rejected with
+        # le=2.0; generated class has no upper bound, only the
+        # overlay-applied ge=0.0 narrowing).
         cfg = ExperimentConfig(
             task=TaskConfig(model="gpt2"),
             engine="transformers",
-            engine_v2={"sampling_params": {"temperature": 3.0}},
+            transformers={"sampling_params": {"temperature": 3.0}},
         )
-        assert cfg.as_v2_config().sampling_params.temperature == 3.0
+        assert cfg.transformers.sampling_params.temperature == 3.0
 
-    def test_engine_v2_validation_errors_surface_at_construction(self) -> None:
-        # Bad engine_v2 shape - missing required nested structure -
-        # surfaces as ValidationError at ExperimentConfig construction
-        # time, not lazily at as_v2_config() call time.
+    def test_overlay_narrowing_rejects_negative_temperature(self) -> None:
+        # Overlay narrowing (engine_versions/.../overlay.yaml) added
+        # minimum: 0.0 to temperature. Engine accepts t<0 but produces
+        # NaN softmax; overlay refuses at config time.
+        with pytest.raises(ValidationError) as exc_info:
+            ExperimentConfig(
+                task=TaskConfig(model="gpt2"),
+                engine="transformers",
+                transformers={"sampling_params": {"temperature": -0.5}},
+            )
+        assert "temperature" in str(exc_info.value).lower()
+
+    def test_validation_errors_surface_at_construction(self) -> None:
+        # Bad nested shape surfaces as ValidationError at construction.
         with pytest.raises(ValidationError) as exc_info:
             ExperimentConfig(
                 task=TaskConfig(model="gpt2"),
                 engine="transformers",
                 # engine_params must be an object, not a list
-                engine_v2={"engine_params": ["not", "a", "dict"]},
+                transformers={"engine_params": ["not", "a", "dict"]},
             )
-        assert "engine_v2" in str(exc_info.value).lower() or "EngineParams" in str(
-            exc_info.value
+        assert (
+            "transformers" in str(exc_info.value).lower()
+            or "EngineParams" in str(exc_info.value)
         )
 
-    def test_engine_v2_none_returns_none(self) -> None:
-        # No engine_v2 set - as_v2_config returns None.
+    def test_no_transformers_section_returns_none(self) -> None:
+        # No transformers section - cfg.transformers stays None.
         cfg = ExperimentConfig(
             task=TaskConfig(model="gpt2"),
             engine="transformers",
         )
-        assert cfg.as_v2_config() is None
+        assert cfg.transformers is None
 
-    def test_engine_v2_works_for_vllm(self) -> None:
-        # Wire-up is engine-agnostic; vllm parses through vllm.Config.
+    def test_new_shape_works_for_vllm(self) -> None:
         cfg = ExperimentConfig(
             task=TaskConfig(model="gpt2"),
             engine="vllm",
-            engine_v2={
-                "engine_params": {"tensor_parallel_size": 2, "gpu_memory_utilization": 0.85},
+            vllm={
+                "engine_params": {
+                    "tensor_parallel_size": 2,
+                    "gpu_memory_utilization": 0.85,
+                },
                 "sampling_params": {"temperature": 0.5},
             },
         )
-        typed = cfg.as_v2_config()
-        assert typed.engine_params.tensor_parallel_size == 2
-        assert typed.engine_params.gpu_memory_utilization == 0.85
+        assert cfg.vllm.engine_params.tensor_parallel_size == 2
+        assert cfg.vllm.engine_params.gpu_memory_utilization == 0.85
+
+    def test_harness_config_carries_llem_orchestration(self) -> None:
+        # HarnessConfig is the sibling holding llem-side orchestration
+        # (batch_size, allow_tf32, autocast_*). Separated from engine
+        # knowledge per the design's engine-vs-llem split.
+        cfg = ExperimentConfig(
+            task=TaskConfig(model="gpt2"),
+            engine="transformers",
+            transformers={"engine_params": {"dtype": "bfloat16"}},
+            harness={
+                "transformers": {
+                    "batch_size": 4,
+                    "allow_tf32": True,
+                    "autocast_enabled": False,
+                }
+            },
+        )
+        assert cfg.harness.transformers.batch_size == 4
+        assert cfg.harness.transformers.allow_tf32 is True
+        assert cfg.harness.transformers.autocast_enabled is False
+
+    def test_compile_config_overlay_completion_lands(self) -> None:
+        # compile_config landed via overlay.yaml completion (Move 1
+        # walker gap - nested CompileConfig dataclass not walked).
+        # Flows through to cfg.transformers.sampling_params.compile_config
+        # as a nested object.
+        cfg = ExperimentConfig(
+            task=TaskConfig(model="gpt2"),
+            engine="transformers",
+            transformers={
+                "sampling_params": {
+                    "compile_config": {
+                        "mode": "reduce-overhead",
+                        "backend": "inductor",
+                        "fullgraph": False,
+                    }
+                }
+            },
+        )
+        cc = cfg.transformers.sampling_params.compile_config
+        assert cc.mode == "reduce-overhead"
+        assert cc.backend == "inductor"
+        assert cc.fullgraph is False
 
 
 class TestExtraAllowContract:

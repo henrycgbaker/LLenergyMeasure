@@ -1,0 +1,78 @@
+# Per-version engine-overlay: hand-authored shape ON ENGINE FIELDS that
+# mining missed or got wrong. ENGINE knowledge only -- llem orchestration
+# fields (batch_size, allow_tf32, autocast_*) belong in HarnessConfig at
+# src/llenergymeasure/config/harness.py, NOT here.
+#
+# Reviewer rejects PRs that proliferate entries; the default answer is
+# "improve the miner instead". See walker_validation_set.md for the
+# evidence supporting each entry.
+schema_version: 1.0.0
+engine: transformers
+engine_version: 4.57.3
+
+# Narrowings: tighten an already-mined field's surface.
+narrowings:
+  engine_params:
+    tp_size:
+      type: integer
+      minimum: 1
+      x-narrowing-reason: |
+        from_pretrained docstring (L167 of modeling_utils.py) claims
+        `str`; actual code path at L326/L330 uses it as int via
+        device_mesh.size() / torch.distributed.get_world_size().
+        Walker faithfully reflects the docstring; this overlay corrects
+        the type to match runtime usage.
+  sampling_params:
+    temperature:
+      minimum: 0.0
+      x-narrowing-reason: |
+        Engine accepts t<0 but produces NaN in softmax. Refuse at
+        config-time rather than let inference produce garbage.
+    top_p:
+      minimum: 0.0
+      maximum: 1.0
+      x-narrowing-reason: |
+        Probability mass; <0 or >1 has no meaning. Engine doesn't
+        validate; we refuse at config-time.
+    top_k:
+      minimum: 0
+      x-narrowing-reason: |
+        Cardinality; negative k has no meaning. 0 means greedy (handled
+        by HF).
+    repetition_penalty:
+      exclusiveMinimum: 0.0
+      x-narrowing-reason: |
+        Multiplicative penalty; <=0 breaks logits ranking. Engine
+        doesn't validate.
+
+# Completions: engine-exposed fields the walker missed entirely.
+completions:
+  sampling_params:
+    compile_config:
+      type: object
+      description: |
+        torch.compile config (HF GenerationConfig.compile_config).
+        Set on model.generation_config; HF compiles inside generate().
+      properties:
+        mode:
+          type: string
+          default: "reduce-overhead"
+        backend:
+          type: string
+          default: "inductor"
+        fullgraph:
+          type: boolean
+          default: false
+        dynamic:
+          type: boolean
+          nullable: true
+          default: null
+        options:
+          type: object
+          nullable: true
+          default: null
+      x-completion-reason: |
+        GenerationConfig.compile_config is typed as a CompileConfig
+        dataclass; Move 1 walker depth doesn't traverse nested
+        dataclasses yet. Bridges via this overlay completion until
+        the walker is deepened (validation set entry: compile_config).

@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from llenergymeasure.config.harness import HarnessConfig
 from llenergymeasure.config.ssot import SAMPLING_PRESETS, Engine
 from llenergymeasure.config.warnings import ConfigValidationWarning
 
@@ -36,11 +37,18 @@ EnergySamplerName = Literal["auto", "nvml", "zeus", "codecarbon"]
 SamplingPreset = Literal["deterministic", "standard", "creative", "factual"]
 
 if TYPE_CHECKING:
-    from llenergymeasure.config.engine_configs import (
-        TensorRTConfig,
-        TransformersConfig,
-        VLLMConfig,
+    # Engine configs are generated from mined schema + per-version overlay
+    # (see scripts/engine_producers/regen_engine_configs.py). Loaded as
+    # forward references and resolved at module-end via
+    # _rebuild_experiment_config() to break the engines.<e>.__init__ ->
+    # plugin -> models import cycle.
+    from llenergymeasure.engines.tensorrt.config import (
+        Config as TensorRTEngineConfig,
     )
+    from llenergymeasure.engines.transformers.config import (
+        Config as TransformersEngineConfig,
+    )
+    from llenergymeasure.engines.vllm.config import Config as VLLMEngineConfig
     from llenergymeasure.config.engine_invariants.loader import EngineInvariantsLoader
 
 
@@ -374,18 +382,33 @@ class ExperimentConfig(BaseModel):
         ),
     )
 
-    # Engine sections (None = use engine's own defaults)
-    transformers: TransformersConfig | None = Field(
+    # Engine sections - per-engine generated Config classes (engine-knowledge
+    # only: engine_params + sampling_params, both projected from mined
+    # schema + overlay completions/narrowings). Llem-side orchestration
+    # lives on the sibling `harness` field below.
+    transformers: TransformersEngineConfig | None = Field(
         default=None,
-        description="HuggingFace Transformers engine configuration (only used when engine=transformers)",
+        description="Transformers engine knowledge (engine_params + sampling_params). Used when engine=transformers.",
     )
-    vllm: VLLMConfig | None = Field(
+    vllm: VLLMEngineConfig | None = Field(
         default=None,
-        description="vLLM-specific configuration (only used when engine=vllm)",
+        description="vLLM engine knowledge (engine_params + sampling_params). Used when engine=vllm.",
     )
-    tensorrt: TensorRTConfig | None = Field(
+    tensorrt: TensorRTEngineConfig | None = Field(
         default=None,
-        description="TensorRT-LLM configuration (only used when engine=tensorrt)",
+        description="TensorRT-LLM engine knowledge (engine_params + sampling_params). Used when engine=tensorrt.",
+    )
+
+    # Llem-side harness orchestration (per-engine sub-shapes; small residual
+    # of features with no engine-native API; see src/llenergymeasure/config/
+    # harness.py).
+    harness: HarnessConfig | None = Field(
+        default=None,
+        description=(
+            "Llem-orchestration knobs (batch_size, allow_tf32, autocast_*) "
+            "for features that have no engine-native API. Per-engine "
+            "sub-shapes; only the sub-section matching `engine` is used."
+        ),
     )
 
     # LoRA adapter (optional)
@@ -398,24 +421,6 @@ class ExperimentConfig(BaseModel):
         "Keys must not collide with ExperimentConfig top-level fields.",
     )
 
-    # Phase 2-T pilot wire-up (spike-only, 2026-05-24): nested
-    # ``engine_params`` / ``sampling_params`` shape accepted via the
-    # generated per-engine ``Config`` class. Validated at construction
-    # time via the engine-discriminated post-validator below. Coexists
-    # with the legacy ``transformers:`` / ``vllm:`` / ``tensorrt:``
-    # fields above pending loader migration.
-    engine_v2: dict[str, Any] | None = Field(
-        default=None,
-        description=(
-            "Generated-config-shaped engine section "
-            "(engine_params + sampling_params nested per the mined schema). "
-            "Discriminated by the ``engine`` field. Validated through "
-            "``llenergymeasure.engines.<engine>.Config`` so the architectural "
-            "payoff (data-mined classes accepting values hand-curated "
-            "Literals rejected) reaches the ExperimentConfig boundary."
-        ),
-    )
-
     # -------------------------------------------------------------------------
     # Pre-validators (run before field parsing)
     # -------------------------------------------------------------------------
@@ -423,11 +428,14 @@ class ExperimentConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def expand_sampling_preset(cls, data: Any) -> Any:
-        """Merge ``sampling_preset`` values into the active engine's sampling section.
+        """Merge ``sampling_preset`` values into the active engine's sampling_params section.
 
         Explicit YAML values take precedence over preset values (each preset key
         is applied via ``setdefault``). The preset name itself stays on the
         top-level model so it remains inspectable after parsing.
+
+        Post-Phase-2-T shape: engine sections nest sampling fields under
+        ``sampling_params`` (matches the generated Config classes).
         """
         if not isinstance(data, dict):
             return data
@@ -436,16 +444,17 @@ class ExperimentConfig(BaseModel):
             return data
         engine = data.get("engine", Engine.TRANSFORMERS)
         engine_key = engine.value if hasattr(engine, "value") else str(engine)
-        # Ensure the engine section and its sampling sub-dict exist as dicts
-        # (an explicit ``engine: null`` in YAML would otherwise leave None here).
+        # Ensure the engine section and its sampling_params sub-dict exist as
+        # dicts (an explicit ``engine: null`` in YAML would otherwise leave
+        # None here).
         engine_section = data.get(engine_key)
         if not isinstance(engine_section, dict):
             engine_section = {}
             data[engine_key] = engine_section
-        sampling_section = engine_section.get("sampling")
+        sampling_section = engine_section.get("sampling_params")
         if not isinstance(sampling_section, dict):
             sampling_section = {}
-            engine_section["sampling"] = sampling_section
+            engine_section["sampling_params"] = sampling_section
         for key, value in SAMPLING_PRESETS[preset_name].items():
             sampling_section.setdefault(key, value)
         return data
@@ -498,55 +507,11 @@ class ExperimentConfig(BaseModel):
                 )
         return self
 
-    @model_validator(mode="after")
-    def validate_engine_v2(self) -> ExperimentConfig:
-        """Phase 2-T pilot validator: parse ``engine_v2`` through the
-        generated per-engine ``Config`` class so the architectural payoff
-        reaches the ExperimentConfig boundary.
-
-        ``engine_v2`` is held as a dict on the model (for back-compat with
-        the existing extra='forbid' contract); this validator parses it
-        through ``llenergymeasure.engines.<self.engine>.Config`` and
-        raises ValidationError loudly if the dict doesn't fit. The parsed
-        object can be retrieved via :meth:`as_v2_config`.
-
-        Spike-only: coexists with the legacy ``transformers:`` / ``vllm:``
-        / ``tensorrt:`` fields. Loader migration replaces both with the
-        v2 path; until then, both are accepted.
-        """
-        if self.engine_v2 is None:
-            return self
-        # Lazy + explicit imports so the engine subpackages don't load
-        # at module-import time; only the engine actually selected is
-        # parsed.
-        if self.engine == Engine.TRANSFORMERS:
-            from llenergymeasure.engines.transformers import Config as _Cfg
-        elif self.engine == Engine.VLLM:
-            from llenergymeasure.engines.vllm import Config as _Cfg
-        elif self.engine == Engine.TENSORRT:
-            from llenergymeasure.engines.tensorrt import Config as _Cfg
-        else:
-            return self
-        # Parse to surface field-level ValidationError to the user. The
-        # parsed object is cached on the instance for as_v2_config().
-        parsed = _Cfg.model_validate(self.engine_v2)
-        object.__setattr__(self, "_parsed_engine_v2", parsed)
-        return self
-
-    def as_v2_config(self) -> Any | None:
-        """Return the parsed generated-Config object for ``engine_v2``,
-        or ``None`` if ``engine_v2`` wasn't set.
-
-        The return type is the engine-specific ``Config`` class
-        (``engines.transformers.Config`` / ``engines.vllm.Config`` /
-        ``engines.tensorrt.Config``); kept loose here to avoid a
-        runtime-circular import.
-        """
-        return getattr(self, "_parsed_engine_v2", None)
-
-    # vLLM fp8 + float32 and TRT FP8 + float32 are rejected by the respective
-    # VLLMConfig.dtype / TensorRTConfig.dtype Literal types at field validation
-    # (neither engine accepts float32). No separate cross-validator needed.
+    # vLLM fp8 + float32 and TRT FP8 + float32: previously rejected by
+    # hand-written VLLMConfig.dtype / TensorRTConfig.dtype Literals. With
+    # the generated Config classes, these constraints land in the mined
+    # invariants corpus (or via overlay narrowing) rather than as a
+    # hand-written cross-validator.
 
     @model_validator(mode="after")
     def validate_transformers_flash_attn_dtype(self) -> ExperimentConfig:
@@ -555,17 +520,20 @@ class ExperimentConfig(BaseModel):
         Retained as a hand-written validator until a ``PreTrainedModel``
         introspection miner can derive this invariant programmatically (the check
         lives in ``_autoset_attn_implementation``, not in
-        ``GenerationConfig.validate``). See memory note
-        ``project_phase_50_pipeline_replan.md``.
+        ``GenerationConfig.validate``). Navigates the post-Phase-2-T nested
+        shape: ``self.transformers.engine_params.attn_implementation`` and
+        ``self.transformers.engine_params.dtype``.
         """
-        if (
-            self.engine == "transformers"
-            and self.transformers is not None
-            and self.transformers.attn_implementation in self._FLASH_ATTENTION_IMPLS
-            and (self.transformers.dtype or "bfloat16") == "float32"
-        ):
+        if self.engine != "transformers" or self.transformers is None:
+            return self
+        ep = self.transformers.engine_params
+        if ep is None:
+            return self
+        attn = getattr(ep, "attn_implementation", None)
+        dtype = getattr(ep, "dtype", None) or "bfloat16"
+        if attn in self._FLASH_ATTENTION_IMPLS and dtype == "float32":
             raise ValueError(
-                f"attn_implementation='{self.transformers.attn_implementation}' requires "
+                f"attn_implementation={attn!r} requires "
                 "dtype='float16' or dtype='bfloat16'. FlashAttention does not support "
                 "float32 computation."
             )
@@ -614,20 +582,25 @@ class ExperimentConfig(BaseModel):
         return self
 
 
-# Rebuild to resolve forward references for engine configs
+# Rebuild to resolve forward references for engine configs (engines.<e>.config
+# modules are loaded here at module-end so engines/<e>/__init__.py ->
+# plugin.py -> models.py cycle is avoided during module load).
 def _rebuild_experiment_config() -> None:
     """Rebuild ExperimentConfig to resolve forward references."""
-    from llenergymeasure.config.engine_configs import (
-        TensorRTConfig,
-        TransformersConfig,
-        VLLMConfig,
+    from llenergymeasure.engines.tensorrt.config import (
+        Config as TensorRTEngineConfig,
     )
+    from llenergymeasure.engines.transformers.config import (
+        Config as TransformersEngineConfig,
+    )
+    from llenergymeasure.engines.vllm.config import Config as VLLMEngineConfig
 
     ExperimentConfig.model_rebuild(
         _types_namespace={
-            "VLLMConfig": VLLMConfig,
-            "TransformersConfig": TransformersConfig,
-            "TensorRTConfig": TensorRTConfig,
+            "TransformersEngineConfig": TransformersEngineConfig,
+            "VLLMEngineConfig": VLLMEngineConfig,
+            "TensorRTEngineConfig": TensorRTEngineConfig,
+            "HarnessConfig": HarnessConfig,
         }
     )
 

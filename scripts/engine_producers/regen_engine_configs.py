@@ -1,7 +1,7 @@
 """Per-engine Pydantic config codegen wrapper (Move 3).
 
 For each engine, reads ``engine_versions/<engine>/v<safe>/outputs/{
-schema.discovered.json, curated.yaml}`` and emits
+schema.discovered.json, curated.yaml, overlay.yaml (optional)}`` and emits
 ``src/llenergymeasure/engines/<engine>/config.py`` as a generated Pydantic
 v2 class via ``datamodel-code-generator``.
 
@@ -18,9 +18,16 @@ Pipeline:
    the fields listed under ``exposed_fields.{engine_params,sampling_params}``
    so the generated class matches llem's curation - not the full mined
    surface.
-3. **Subprocess invoke ``datamodel-codegen``** with the verified flag combo
+3. **Overlay.yaml merge** (engine-knowledge only; llem-orchestration
+   fields live in ``HarnessConfig`` at ``src/llenergymeasure/config/
+   harness.py``, NOT in overlay). Two operations:
+       a. **Narrowings**: tighten mined fields (e.g. minimum, narrower
+          enum, type-correction for docstring inaccuracies).
+       b. **Completions**: add engine-exposed fields mining missed
+          entirely (e.g. nested CompileConfig dataclass not walked yet).
+4. **Subprocess invoke ``datamodel-codegen``** with the verified flag combo
    from .product/research/datamodel-codegen-spike-2026-05-23.md.
-4. **Write** the result to ``src/llenergymeasure/engines/<engine>/config.py``
+5. **Write** the result to ``src/llenergymeasure/engines/<engine>/config.py``
    (``--write`` mode) or compare bytes for drift (``--check`` mode).
 
 Sister script: ``regen_engine_corpus.py`` (data shadow). Same modes,
@@ -86,6 +93,8 @@ _DMCG_FLAGS: tuple[str, ...] = (
     "--field-extra-keys",
     "x-source",
     "x-source-ref",
+    "x-narrowing-applied",
+    "x-completion-applied",
     "--disable-timestamp",
 )
 
@@ -123,6 +132,84 @@ def _load_curated(engine_outputs: Path) -> dict[str, list[str]]:
     }
 
 
+def _load_overlay(engine_outputs: Path) -> dict[str, Any]:
+    """Read overlay.yaml; return narrowings + completions sub-dicts.
+
+    Missing overlay.yaml is tolerated and treated as "no overlay" (pure
+    mined-schema class). Returns a dict with shape::
+
+        {
+          "narrowings": {"engine_params": {<name>: <constraint-keys>}, ...},
+          "completions": {"engine_params": {<name>: <full-schema-shape>}, ...}
+        }
+
+    Missing sections become empty dicts. See
+    ``.product/designs/engine-knowledge-as-data.md`` section on overlay.
+    """
+    empty: dict[str, Any] = {
+        "narrowings": {section: {} for section in SECTIONS},
+        "completions": {section: {} for section in SECTIONS},
+    }
+    path = engine_outputs / "overlay.yaml"
+    if not path.is_file():
+        return empty
+    raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    for top_key in ("narrowings", "completions"):
+        block = raw.get(top_key)
+        if block is None:
+            continue
+        if not isinstance(block, dict):
+            raise ValueError(
+                f"{path}: '{top_key}' must be a mapping, got {type(block).__name__}"
+            )
+        for section in SECTIONS:
+            section_block = block.get(section)
+            if section_block is None:
+                continue
+            if not isinstance(section_block, dict):
+                raise ValueError(
+                    f"{path}: '{top_key}.{section}' must be a mapping, "
+                    f"got {type(section_block).__name__}"
+                )
+            empty[top_key][section] = section_block
+    return empty
+
+
+_PASSTHROUGH_KEYS: tuple[str, ...] = (
+    "type",
+    "default",
+    "description",
+    "enum",
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "x-source",
+    "x-source-ref",
+)
+
+# Keys an overlay narrowing is allowed to TIGHTEN on a mined field.
+# x-narrowing-reason is metadata; it lands as x-source-ref-narrowing.
+_NARROWING_KEYS: tuple[str, ...] = (
+    "type",
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "enum",
+    "description",
+)
+
+# Keys allowed in an overlay completion (the full JSON Schema shape for
+# a brand-new field). 'properties' supports nested objects (e.g.
+# compile_config); pass-through unmodified.
+_COMPLETION_KEYS: tuple[str, ...] = (
+    *_PASSTHROUGH_KEYS,
+    "properties",
+    "nullable",
+)
+
+
 def _field_shape_to_property(shape: dict[str, Any]) -> dict[str, Any]:
     """Translate one schema.discovered.json field shape -> JSON Schema property.
 
@@ -143,53 +230,110 @@ def _field_shape_to_property(shape: dict[str, Any]) -> dict[str, Any]:
     """
     out: dict[str, Any] = {}
     for k, v in shape.items():
-        if k in ("type", "default", "description", "enum", "minimum", "maximum",
-                 "exclusiveMinimum", "exclusiveMaximum", "x-source", "x-source-ref"):
+        if k in _PASSTHROUGH_KEYS:
             out[k] = v
     return out
 
 
-def _compose_synthetic_schema(
-    discovered: dict[str, Any], curated: dict[str, list[str]]
+def _apply_narrowing(
+    mined_property: dict[str, Any], narrowing: dict[str, Any]
 ) -> dict[str, Any]:
-    """Compose a JSON Schema 2020-12 doc from envelope + curation.
+    """Merge an overlay narrowing onto a mined field's property dict.
+
+    Narrowing keys override mined keys; everything else (default,
+    x-source/x-source-ref provenance) is preserved. The narrowing's
+    `x-narrowing-reason` lands as a separate `x-narrowing-applied`
+    string on the field so reviewers can trace why the type changed.
+
+    Narrowing is an EXPLICIT correction channel - it can replace
+    ``type`` (the tp_size docstring-vs-runtime case). Codegen does not
+    enforce subset-relations between mined and narrowing types;
+    reviewer guards that via the x-narrowing-reason.
+    """
+    out = dict(mined_property)
+    for key in _NARROWING_KEYS:
+        if key in narrowing:
+            out[key] = narrowing[key]
+    reason = narrowing.get("x-narrowing-reason")
+    if reason is not None:
+        out["x-narrowing-applied"] = str(reason).strip()
+    return out
+
+
+def _completion_to_property(completion: dict[str, Any]) -> dict[str, Any]:
+    """Translate an overlay completion entry into a JSON Schema property.
+
+    Pass-through for the standard JSON Schema keys plus ``properties``
+    (nested objects like ``compile_config``) and ``nullable``. The
+    ``x-completion-reason`` metadata lands as
+    ``x-completion-applied`` on the emitted field; ``x-source``
+    defaults to ``engine_overlay`` if absent.
+    """
+    out: dict[str, Any] = {}
+    for k, v in completion.items():
+        if k in _COMPLETION_KEYS:
+            out[k] = v
+    out.setdefault("x-source", "engine_overlay")
+    reason = completion.get("x-completion-reason")
+    if reason is not None:
+        out["x-completion-applied"] = str(reason).strip()
+    return out
+
+
+def _compose_synthetic_schema(
+    discovered: dict[str, Any],
+    curated: dict[str, list[str]],
+    overlay: dict[str, Any],
+) -> dict[str, Any]:
+    """Compose a JSON Schema 2020-12 doc from envelope + curation + overlay.
+
+    Order of operations per section:
+    1. Filter mined fields through curated allowlist (mined_property dict).
+    2. Apply overlay narrowings: tighten/correct mined fields in-place.
+    3. Apply overlay completions: ADD fields not present in mining.
+
+    Curated.exposed_fields is the user-visible field-name allowlist; an
+    overlay completion is treated as IMPLICITLY curated (the maintainer
+    explicitly added it). Overlay narrowings only apply to fields the
+    curated allowlist already exposed (no point narrowing an unexposed
+    field).
 
     Uses ``$defs`` + ``$ref`` so datamodel-codegen ALWAYS generates a named
-    class per section, even when the curated allowlist is empty for that
-    section (forward-uniform public API: ``EngineParams`` and
-    ``SamplingParams`` are always importable from
-    ``llenergymeasure.engines.<e>``).
-
-    Output shape::
-
-        {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "title": "Config",
-          "type": "object",
-          "additionalProperties": true,
-          "properties": {
-            "engine_params": {"$ref": "#/$defs/EngineParams"},
-            "sampling_params": {"$ref": "#/$defs/SamplingParams"}
-          },
-          "$defs": {
-            "EngineParams": {"type": "object", "additionalProperties": true,
-                             "properties": {...filtered + translated...}},
-            "SamplingParams": {...}
-          }
-        }
+    class per section.
     """
+    narrowings = overlay.get("narrowings", {})
+    completions = overlay.get("completions", {})
+
     defs: dict[str, Any] = {}
     properties: dict[str, Any] = {}
     for section in SECTIONS:
         section_fields = discovered.get(section, {}) or {}
         allowlist = curated.get(section, [])
-        # Curated is a strict allowlist; ordering follows the allowlist for
-        # deterministic codegen.
-        section_props = {
-            name: _field_shape_to_property(section_fields[name])
-            for name in allowlist
-            if name in section_fields
-        }
+        section_narrowings = narrowings.get(section, {}) or {}
+        section_completions = completions.get(section, {}) or {}
+
+        section_props: dict[str, Any] = {}
+        # 1 + 2: mined + narrowings, curated-allowlist-ordered.
+        for name in allowlist:
+            if name not in section_fields:
+                continue
+            mined = _field_shape_to_property(section_fields[name])
+            if name in section_narrowings:
+                mined = _apply_narrowing(mined, section_narrowings[name])
+            section_props[name] = mined
+        # 3: completions, appended in overlay-declaration order.
+        for name, completion in section_completions.items():
+            if name in section_props:
+                # Completion would shadow a mined field; that's an
+                # overlay author error. Mining surfaces the field;
+                # use a narrowing instead.
+                raise ValueError(
+                    f"overlay.completions.{section}.{name}: field is "
+                    "already in the mined schema (via curated.yaml); "
+                    "use overlay.narrowings to modify it instead."
+                )
+            section_props[name] = _completion_to_property(completion)
+
         section_title = "".join(p.capitalize() for p in section.split("_"))
         defs[section_title] = {
             "type": "object",
@@ -229,7 +373,8 @@ def _generate_config(
         (outputs_dir / "schema.discovered.json").read_text(encoding="utf-8")
     )
     curated = _load_curated(outputs_dir)
-    synthetic = _compose_synthetic_schema(discovered, curated)
+    overlay = _load_overlay(outputs_dir)
+    synthetic = _compose_synthetic_schema(discovered, curated, overlay)
 
     engine_version = str(discovered.get("engine_version", "unknown"))
 

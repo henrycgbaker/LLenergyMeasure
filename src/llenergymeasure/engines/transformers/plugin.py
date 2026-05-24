@@ -85,26 +85,46 @@ class TransformersEngine:
         if on_substep is not None:
             on_substep("model weights loaded", _time.perf_counter() - t0)
 
-        # Apply allow_tf32 (Ampere+ TF32 toggle)
-        if config.transformers is not None and config.transformers.allow_tf32 is not None:
+        # Apply allow_tf32 (Ampere+ TF32 toggle): PyTorch backend global,
+        # not exposed by HF; lives on the llem-side HarnessConfig residual.
+        hp = config.harness.transformers if (config.harness is not None) else None
+        if hp is not None and hp.allow_tf32 is not None:
             import torch as _torch
 
-            _torch.backends.cuda.matmul.allow_tf32 = config.transformers.allow_tf32
+            _torch.backends.cuda.matmul.allow_tf32 = hp.allow_tf32
 
-        # Apply torch.compile post-load (must be AFTER from_pretrained + eval)
-        if config.transformers is not None and config.transformers.torch_compile:
-            import torch as _torch
+        # Apply HF's native compile_config (engine-owned path). llem assigns
+        # the dict to model.generation_config.compile_config; HF compiles
+        # inside generate() per its CompileConfig dataclass. Field lives in
+        # cfg.transformers.sampling_params.compile_config (overlay completion;
+        # see engine_versions/transformers/v4_57_3/outputs/overlay.yaml).
+        sp = config.transformers.sampling_params if config.transformers else None
+        compile_cfg = getattr(sp, "compile_config", None) if sp is not None else None
+        if compile_cfg is not None:
+            from transformers.generation.configuration_utils import CompileConfig
 
-            mode = config.transformers.torch_compile_mode or "default"
-            backend = config.transformers.torch_compile_backend or "inductor"
             try:
                 t0 = _time.perf_counter()
-                model = _torch.compile(model, mode=mode, backend=backend)  # type: ignore[assignment]
-                logger.debug("torch.compile applied (mode=%s, backend=%s)", mode, backend)
+                # CompileConfig is a dataclass; accept dict-like input by
+                # filtering None values (which would override the dataclass
+                # defaults of fullgraph=False/backend='inductor'/etc.).
+                if hasattr(compile_cfg, "model_dump"):
+                    cc_dict = compile_cfg.model_dump(exclude_none=True)
+                else:
+                    cc_dict = {k: v for k, v in dict(compile_cfg).items() if v is not None}
+                model.generation_config.compile_config = CompileConfig(**cc_dict)
+                logger.debug(
+                    "compile_config attached to generation_config: %s", cc_dict
+                )
                 if on_substep is not None:
-                    on_substep(f"torch.compile ({mode})", _time.perf_counter() - t0)
+                    on_substep(
+                        f"compile_config({cc_dict.get('mode', 'default')})",
+                        _time.perf_counter() - t0,
+                    )
             except Exception as e:
-                logger.warning("torch.compile failed (non-fatal, continuing without): %s", e)
+                logger.warning(
+                    "compile_config setup failed (non-fatal, continuing without): %s", e
+                )
 
         logger.debug("Model loaded successfully")
         return model, tokenizer
@@ -160,10 +180,11 @@ class TransformersEngine:
         hf_model, tokenizer = model
 
         batch_size = 1
-        if config.transformers is not None and config.transformers.batch_size is not None:
-            batch_size = config.transformers.batch_size
+        hp = config.harness.transformers if (config.harness is not None) else None
+        if hp is not None and hp.batch_size is not None:
+            batch_size = hp.batch_size
         else:
-            logger.debug("Transformers batch_size not set, defaulting to 1")
+            logger.debug("Transformers batch_size not set on HarnessConfig; defaulting to 1")
 
         # Reset peak stats BEFORE the measurement loop so max_memory_allocated()
         # captures inference-window-only peak (KV cache + activations + batch buffers),
@@ -283,8 +304,14 @@ class TransformersEngine:
             logger.debug("transformers GenerationConfig capture failed: %s", exc)
 
         engine_params: dict[str, Any] = {}
-        pt = config.transformers
-        if pt is not None and (pt.load_in_4bit or pt.load_in_8bit):
+        ep = (
+            config.transformers.engine_params
+            if config.transformers is not None
+            else None
+        )
+        if ep is not None and (
+            getattr(ep, "load_in_4bit", None) or getattr(ep, "load_in_8bit", None)
+        ):
             try:
                 bnb = getattr(hf_model, "quantization_config", None)
                 if bnb is not None:
@@ -345,14 +372,19 @@ class TransformersEngine:
     def _model_load_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
         """Build the full kwargs dict for AutoModelForCausalLM.from_pretrained().
 
-        Args:
-            config: Experiment configuration.
-
-        Returns:
-            Dict of kwargs ready for from_pretrained().
+        Reads engine fields from the generated
+        ``cfg.transformers.engine_params`` (mined schema + overlay
+        completions/narrowings). ``low_cpu_mem_usage`` deliberately omitted:
+        HF 4.57.3 discards the kwarg (``_ = kwargs.pop("low_cpu_mem_usage", None)``
+        in PreTrainedModel.from_pretrained); see
+        ``_spike/findings/walker_validation_set.md``.
         """
-        pt = config.transformers
-        dtype = pt.dtype if pt is not None else None
+        ep = (
+            config.transformers.engine_params
+            if config.transformers is not None
+            else None
+        )
+        dtype = getattr(ep, "dtype", None) if ep is not None else None
         kwargs: dict[str, Any] = {
             "torch_dtype": self._resolve_torch_dtype(dtype or "bfloat16"),
         }
@@ -361,14 +393,16 @@ class TransformersEngine:
         from llenergymeasure.utils.security import trust_remote_code_enabled
 
         # Device placement / tensor parallelism - mutually exclusive
-        if pt is not None and pt.tp_plan is not None:
-            # Tensor parallelism: tp_plan replaces device_map entirely
-            kwargs["tp_plan"] = pt.tp_plan
-            if pt.tp_size is not None:
-                kwargs["tp_size"] = pt.tp_size
+        tp_plan = getattr(ep, "tp_plan", None) if ep is not None else None
+        device_map_cfg = getattr(ep, "device_map", None) if ep is not None else None
+        if tp_plan is not None:
+            kwargs["tp_plan"] = tp_plan
+            tp_size = getattr(ep, "tp_size", None) if ep is not None else None
+            if tp_size is not None:
+                kwargs["tp_size"] = tp_size
             # Do NOT set device_map - TP handles device placement
-        elif pt is not None and pt.device_map is not None:
-            kwargs["device_map"] = pt.device_map
+        elif device_map_cfg is not None:
+            kwargs["device_map"] = device_map_cfg
         else:
             dm = default_device_map()
             if dm is not None:
@@ -376,21 +410,21 @@ class TransformersEngine:
 
         kwargs["trust_remote_code"] = trust_remote_code_enabled()
 
-        # Apply Transformers-specific config options
-        if pt is not None:
-            if pt.attn_implementation is not None:
-                kwargs["attn_implementation"] = self._resolve_attn_implementation(
-                    pt.attn_implementation
-                )
+        if ep is not None:
+            attn = getattr(ep, "attn_implementation", None)
+            if attn is not None:
+                kwargs["attn_implementation"] = self._resolve_attn_implementation(attn)
 
-            # BitsAndBytes quantization - use BitsAndBytesConfig, not raw kwargs
-            if pt.load_in_4bit or pt.load_in_8bit:
+            load_in_4bit = getattr(ep, "load_in_4bit", None)
+            load_in_8bit = getattr(ep, "load_in_8bit", None)
+            if load_in_4bit or load_in_8bit:
                 from transformers import BitsAndBytesConfig
 
                 bnb_kwargs: dict[str, Any] = {}
-                if pt.load_in_4bit:
+                if load_in_4bit:
                     bnb_kwargs["load_in_4bit"] = True
-                    if pt.bnb_4bit_compute_dtype is not None:
+                    bnb_dt = getattr(ep, "bnb_4bit_compute_dtype", None)
+                    if bnb_dt is not None and isinstance(bnb_dt, str):
                         import torch as _torch
 
                         _dtype_map = {
@@ -398,25 +432,27 @@ class TransformersEngine:
                             "bfloat16": _torch.bfloat16,
                             "float32": _torch.float32,
                         }
-                        bnb_kwargs["bnb_4bit_compute_dtype"] = _dtype_map[pt.bnb_4bit_compute_dtype]
-                    if pt.bnb_4bit_quant_type is not None:
-                        bnb_kwargs["bnb_4bit_quant_type"] = pt.bnb_4bit_quant_type
-                    if pt.bnb_4bit_use_double_quant is not None:
-                        bnb_kwargs["bnb_4bit_use_double_quant"] = pt.bnb_4bit_use_double_quant
-                if pt.load_in_8bit:
+                        if bnb_dt in _dtype_map:
+                            bnb_kwargs["bnb_4bit_compute_dtype"] = _dtype_map[bnb_dt]
+                    qt = getattr(ep, "bnb_4bit_quant_type", None)
+                    if qt is not None:
+                        bnb_kwargs["bnb_4bit_quant_type"] = qt
+                    dq = getattr(ep, "bnb_4bit_use_double_quant", None)
+                    if dq is not None:
+                        bnb_kwargs["bnb_4bit_use_double_quant"] = dq
+                if load_in_8bit:
                     bnb_kwargs["load_in_8bit"] = True
                 kwargs["quantization_config"] = BitsAndBytesConfig(**bnb_kwargs)
 
-            # Additional from_pretrained() fields
-            # revision dropped as typed field (D1); flows through model_extra if set
-            if pt.max_memory is not None:
-                kwargs["max_memory"] = pt.max_memory
-            if pt.low_cpu_mem_usage is not None:
-                kwargs["low_cpu_mem_usage"] = pt.low_cpu_mem_usage
+            max_mem = getattr(ep, "max_memory", None)
+            if max_mem is not None:
+                kwargs["max_memory"] = max_mem
 
-        # Transformers extra="allow" passthrough: forward unknown fields to from_pretrained()
-        if pt is not None and pt.model_extra:
-            kwargs.update(pt.model_extra)
+            # extra='allow' passthrough on EngineParams: forward unknown fields
+            # to from_pretrained()
+            extras = ep.model_extra or {}
+            if extras:
+                kwargs.update(extras)
 
         # passthrough_kwargs merged LAST so researcher can override any default
         if config.passthrough_kwargs:
@@ -520,14 +556,20 @@ class TransformersEngine:
         inputs = {k: v.to(model.device) for k, v in inputs.items()}
         input_token_count = int(inputs["attention_mask"].sum().item())
 
-        # Determine autocast settings
+        # Determine autocast settings. autocast_* lives on HarnessConfig
+        # (llem-side: torch.autocast is a PyTorch context manager, not an
+        # HF API).
         from contextlib import nullcontext
 
-        _pt = config.transformers
-        if _pt is not None and _pt.autocast_enabled is True and torch.cuda.is_available():
+        _hp = config.harness.transformers if (config.harness is not None) else None
+        if (
+            _hp is not None
+            and _hp.autocast_enabled is True
+            and torch.cuda.is_available()
+        ):
             _dtype_map = {"float16": torch.float16, "bfloat16": torch.bfloat16}
             _amp_ctx = torch.autocast(
-                device_type="cuda", dtype=_dtype_map[_pt.autocast_dtype or "bfloat16"]
+                device_type="cuda", dtype=_dtype_map[_hp.autocast_dtype or "bfloat16"]
             )
         else:
             _amp_ctx = nullcontext()  # type: ignore[assignment]
@@ -548,38 +590,51 @@ class TransformersEngine:
         return input_token_count, output_token_count, elapsed
 
     def _build_generate_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
-        """Build generation kwargs from TransformersSamplingConfig and TransformersConfig.
+        """Build generation kwargs from the engine's sampling_params.
 
-        None values mean "use HF's default"; only explicit fields are forwarded.
-        Greedy decoding (temperature=0 or do_sample=False) strips sampling params
-        and forces do_sample=False, matching HF's own greedy semantics.
+        Post-Phase-2-T shape: all sampling-related fields (temperature,
+        top_k, num_beams, cache_implementation, use_cache, ...) live on
+        ``cfg.transformers.sampling_params`` (the generated SamplingParams
+        class projected from GenerationConfig + overlay completions like
+        compile_config). The hand-written split between TransformersConfig
+        top-level fields and a nested TransformersSamplingConfig is gone.
+
+        Notes:
+        - ``compile_config`` is omitted from generate_kwargs - llem assigns
+          it to ``model.generation_config.compile_config`` at load time
+          (HF compiles inside generate()), not via the generate() kwarg
+          surface.
+        - Greedy decoding (temperature=0 or do_sample=False) strips
+          sampling-only params and forces do_sample=False.
         """
-        pt = config.transformers
-        sampling = pt.sampling if pt is not None else None
+        sp = config.transformers.sampling_params if config.transformers else None
+        if sp is None:
+            return {}
+        # Only forward fields the user explicitly set (mined defaults mirror
+        # HF's own GenerationConfig defaults, so forwarding them is
+        # redundant and triggers HF's "user changed the default" warnings
+        # when none was intended). __pydantic_fields_set__ carries only
+        # the field names supplied at construction.
+        explicit = sp.__pydantic_fields_set__
+        kwargs: dict[str, Any] = {
+            name: getattr(sp, name)
+            for name in explicit
+            if getattr(sp, name) is not None
+        }
+        # compile_config is attached to model.generation_config at load
+        # time (HF compiles inside generate()), not passed to .generate().
+        kwargs.pop("compile_config", None)
 
-        kwargs: dict[str, Any] = (
-            sampling.model_dump(exclude_none=True) if sampling is not None else {}
-        )
-
-        if pt is not None:
-            if pt.use_cache is not None:
-                kwargs["use_cache"] = pt.use_cache
-            if pt.cache_implementation is not None:
-                kwargs["cache_implementation"] = pt.cache_implementation
-            if pt.num_beams is not None:
-                kwargs["num_beams"] = pt.num_beams
-            if pt.early_stopping is not None:
-                kwargs["early_stopping"] = pt.early_stopping
-            if pt.length_penalty is not None:
-                kwargs["length_penalty"] = pt.length_penalty
-            if pt.no_repeat_ngram_size is not None:
-                kwargs["no_repeat_ngram_size"] = pt.no_repeat_ngram_size
-            if pt.prompt_lookup_num_tokens is not None:
-                kwargs["prompt_lookup_num_tokens"] = pt.prompt_lookup_num_tokens
-
-        if kwargs.get("temperature") == 0.0 or kwargs.get("do_sample") is False:
+        # Explicit temperature=0.0 signals greedy; strip sampling-only
+        # fields to keep the kwargs dict clean (HF runs greedy regardless,
+        # but stripping makes observed_config_hash cleaner).
+        if kwargs.get("temperature") == 0.0:
             kwargs["do_sample"] = False
             for key in ("temperature", "top_k", "top_p", "min_p"):
                 kwargs.pop(key, None)
+
+        # Forward extras (extra='allow' on SamplingParams).
+        if sp.model_extra:
+            kwargs.update(sp.model_extra)
 
         return kwargs
