@@ -3,9 +3,9 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class EngineParams(BaseModel):
@@ -56,7 +56,5 @@ class Config(BaseModel):
         extra='allow',
         use_attribute_docstrings=True,
     )
-    engine_params: Annotated[EngineParams | None, Field(title='EngineParams')] = None
-    sampling_params: Annotated[SamplingParams | None, Field(title='SamplingParams')] = (
-        None
-    )
+    engine_params: EngineParams | None = None
+    sampling_params: SamplingParams | None = None

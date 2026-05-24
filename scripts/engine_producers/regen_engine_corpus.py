@@ -60,6 +60,12 @@ CORPUS_FILES: tuple[str, ...] = (
     "invariants.proposed.yaml",
     "invariants.validated.yaml",
     "schema.discovered.json",
+    # curated.yaml is the Move-2 per-version curation: which mined fields
+    # llem exposes via the generated Config class. Mirrors archive -> shadow
+    # alongside the other 3 corpus artefacts so the loader sees a consistent
+    # snapshot of {what's mined, what's validated, what's discovered, what's
+    # exposed} for the active pin.
+    "curated.yaml",
 )
 
 

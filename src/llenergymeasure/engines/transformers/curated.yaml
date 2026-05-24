@@ -1,0 +1,41 @@
+# Per-version curation: which schema-discovered fields llem exposes as
+# a typed Pydantic config (Phase 2-T pilot scope).
+#
+# Source of truth for codegen: regen_engine_configs.py reads
+# schema.discovered.json (field shape) AND this file (the allowlist)
+# together; only fields named here AND present in the schema survive
+# into the generated config.py.
+#
+# Curation rules:
+# - Fields llem already exposes today (hand-written TransformersConfig +
+#   TransformersSamplingConfig) AND that the introspector already mines
+#   from upstream.
+# - 20 hand-written fields are NOT yet mined (load_in_4bit, dtype,
+#   batch_size, torch_compile*, tp_*, attn_implementation, etc.); they
+#   stay in the hand-written class until Move 1 deepens the walker.
+#   Tracked in _spike/findings/move1_mining_gaps.md.
+#
+# Renovate-driven bump flow: on each upstream version bump (engine_versions
+# /transformers/current.toml changes), maintainer reviews the diff between
+# the old schema.discovered.json and the freshly-mined one; adds new
+# fields to this file as appropriate; codegen propagates the change.
+schema_version: 1.0.0
+engine: transformers
+engine_version: 4.57.3
+exposed_fields:
+  engine_params: []
+  sampling_params:
+    - cache_implementation
+    - do_sample
+    - early_stopping
+    - length_penalty
+    - min_new_tokens
+    - min_p
+    - no_repeat_ngram_size
+    - num_beams
+    - prompt_lookup_num_tokens
+    - repetition_penalty
+    - temperature
+    - top_k
+    - top_p
+    - use_cache

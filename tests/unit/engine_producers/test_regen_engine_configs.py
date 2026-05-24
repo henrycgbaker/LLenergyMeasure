@@ -78,10 +78,16 @@ class TestComposeSyntheticSchema:
         assert out["$schema"] == "https://json-schema.org/draft/2020-12/schema"
         assert out["type"] == "object"
         assert out["additionalProperties"] is True
-        assert set(out["properties"].keys()) == {"engine_params", "sampling_params"}
-        # Section sub-objects carry titles for dmcg class naming.
-        assert out["properties"]["engine_params"]["title"] == "EngineParams"
-        assert out["properties"]["sampling_params"]["title"] == "SamplingParams"
+        # Sections are $refs into $defs (uniform class generation - empty
+        # sections still emit a named class).
+        assert out["properties"]["engine_params"] == {
+            "$ref": "#/$defs/EngineParams"
+        }
+        assert out["properties"]["sampling_params"] == {
+            "$ref": "#/$defs/SamplingParams"
+        }
+        assert "EngineParams" in out["$defs"]
+        assert "SamplingParams" in out["$defs"]
 
     def test_curated_filters_out_non_listed_fields(self) -> None:
         discovered = {
@@ -93,7 +99,7 @@ class TestComposeSyntheticSchema:
         }
         curated = {"engine_params": [], "sampling_params": ["exposed"]}
         out = regen_engine_configs._compose_synthetic_schema(discovered, curated)
-        props = out["properties"]["sampling_params"]["properties"]
+        props = out["$defs"]["SamplingParams"]["properties"]
         assert "exposed" in props
         assert "hidden" not in props
 
@@ -112,8 +118,19 @@ class TestComposeSyntheticSchema:
             "sampling_params": ["only_real", "ghost_field"],
         }
         out = regen_engine_configs._compose_synthetic_schema(discovered, curated)
-        props = out["properties"]["sampling_params"]["properties"]
+        props = out["$defs"]["SamplingParams"]["properties"]
         assert set(props.keys()) == {"only_real"}
+
+    def test_empty_section_still_emits_named_class(self) -> None:
+        # Forward-uniform API: EngineParams class must exist even if no
+        # fields are curated for it. Achieved via $defs/$ref - dmcg can't
+        # collapse the section into an inline dict.
+        discovered = {"sampling_params": {}, "engine_params": {}}
+        curated = {"engine_params": [], "sampling_params": []}
+        out = regen_engine_configs._compose_synthetic_schema(discovered, curated)
+        assert out["$defs"]["EngineParams"]["properties"] == {}
+        assert out["$defs"]["EngineParams"]["additionalProperties"] is True
+        assert out["$defs"]["SamplingParams"]["properties"] == {}
 
 
 class TestLoadCurated:

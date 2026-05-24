@@ -75,6 +75,14 @@ _DMCG_FLAGS: tuple[str, ...] = (
     "--use-union-operator",
     "--use-attribute-docstrings",
     "--use-field-description",
+    # Preserve x-source / x-source-ref provenance keys as
+    # json_schema_extra on Field(). The bare --field-extra-keys form
+    # (passing the literal schema key names, including the "x-" prefix)
+    # is what actually works in datamodel-codegen 0.57.0; the
+    # --field-extra-keys-without-x-prefix variant fails empirically
+    # despite being recommended in
+    # `.product/research/datamodel-codegen-spike-2026-05-23.md`. Note
+    # filed there during 2026-05-24 audit.
     "--field-extra-keys",
     "x-source",
     "x-source-ref",
@@ -146,6 +154,12 @@ def _compose_synthetic_schema(
 ) -> dict[str, Any]:
     """Compose a JSON Schema 2020-12 doc from envelope + curation.
 
+    Uses ``$defs`` + ``$ref`` so datamodel-codegen ALWAYS generates a named
+    class per section, even when the curated allowlist is empty for that
+    section (forward-uniform public API: ``EngineParams`` and
+    ``SamplingParams`` are always importable from
+    ``llenergymeasure.engines.<e>``).
+
     Output shape::
 
         {
@@ -154,20 +168,17 @@ def _compose_synthetic_schema(
           "type": "object",
           "additionalProperties": true,
           "properties": {
-            "engine_params": {
-              "type": "object",
-              "title": "EngineParams",
-              "additionalProperties": true,
-              "properties": { ... filtered + translated ... }
-            },
-            "sampling_params": { ... same ... }
+            "engine_params": {"$ref": "#/$defs/EngineParams"},
+            "sampling_params": {"$ref": "#/$defs/SamplingParams"}
+          },
+          "$defs": {
+            "EngineParams": {"type": "object", "additionalProperties": true,
+                             "properties": {...filtered + translated...}},
+            "SamplingParams": {...}
           }
         }
-
-    The two nested sections preserve llem's existing
-    engine_params/sampling_params split. The class names datamodel-codegen
-    picks up come from ``title``.
     """
+    defs: dict[str, Any] = {}
     properties: dict[str, Any] = {}
     for section in SECTIONS:
         section_fields = discovered.get(section, {}) or {}
@@ -180,18 +191,19 @@ def _compose_synthetic_schema(
             if name in section_fields
         }
         section_title = "".join(p.capitalize() for p in section.split("_"))
-        properties[section] = {
+        defs[section_title] = {
             "type": "object",
-            "title": section_title,
             "additionalProperties": True,
             "properties": section_props,
         }
+        properties[section] = {"$ref": f"#/$defs/{section_title}"}
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "Config",
         "type": "object",
         "additionalProperties": True,
         "properties": properties,
+        "$defs": defs,
     }
 
 
