@@ -491,6 +491,7 @@ jobs:
           # - but merge-multiple flattens it; we infer cells from the file
           # paths themselves.
           CONTRIBUTORS=()
+          ENGINES_TOUCHED=()
           for ENGINE in transformers vllm tensorrt; do
             INV_FILES=(
               "/tmp/writeback-staging/src/llenergymeasure/engines/${ENGINE}/invariants.proposed.yaml"
@@ -504,6 +505,9 @@ jobs:
             for f in "${SCH_FILES[@]}"; do [[ -f "$f" ]] && SCH_PRESENT=true; done
             $INV_PRESENT && CONTRIBUTORS+=("invariants:${ENGINE}")
             $SCH_PRESENT && CONTRIBUTORS+=("schemas:${ENGINE}")
+            if $INV_PRESENT || $SCH_PRESENT; then
+              ENGINES_TOUCHED+=("--engine" "${ENGINE}")
+            fi
           done
 
           # Apply staging onto the working tree, preserving relative paths.
@@ -514,7 +518,11 @@ jobs:
           # Belt-and-braces: per-cell Mirror steps already write both copies,
           # but this guarantees the commit is internally consistent even if a
           # cell's mirror gate (engine vendored at this version) skipped.
-          uv run python scripts/engine_producers/regen_engine_corpus.py --write
+          # F#10: filter to engines whose cells actually uploaded artefacts
+          # so stale SSOT for unrelated engines doesn't propagate.
+          if [[ ${#ENGINES_TOUCHED[@]} -gt 0 ]]; then
+            uv run python scripts/engine_producers/regen_engine_corpus.py --write "${ENGINES_TOUCHED[@]}"
+          fi
 
           git config user.name  "llem-ci-bot[bot]"
           git config user.email "${APP_ID}+llem-ci-bot[bot]@users.noreply.github.com"

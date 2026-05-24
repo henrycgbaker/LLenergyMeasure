@@ -140,15 +140,18 @@ class TestCheckMode:
 
 
 class TestWriteMode:
-    def test_default_mode_is_write(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        # No flag -> writes. Shadow starts empty; after main() it has all three.
+    def test_default_mode_is_check_not_write(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # F#9: bare invocation must NOT mutate; it must exit 1 when drift
+        # exists (here: empty shadow vs populated SSOT). Unix
+        # formatter/linter convention - explicit --write to mutate.
         _install_engine(tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=False)
         rc = regen_engine_corpus.main([])
-        assert rc == 0
+        assert rc == 1
         shadow = tmp_path / "src" / "llenergymeasure" / "engines" / "vllm"
-        assert (shadow / "invariants.proposed.yaml").is_file()
-        assert (shadow / "invariants.validated.yaml").is_file()
-        assert (shadow / "schema.discovered.json").is_file()
+        # Crucially: no files written - bare invocation is dry-run.
+        assert not (shadow / "invariants.proposed.yaml").exists()
 
     def test_explicit_write_flag_works(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -274,31 +277,103 @@ class TestPerEngineIteration:
 
 
 class TestMissingSource:
-    def test_missing_source_file_raises_with_clear_message(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_missing_source_file_skips_with_clear_message(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
+        # F#5/F#8: a missing source file is tolerated, not fatal. The
+        # Renovate-pre-vendor window (current.toml bumped, cells haven't
+        # produced this version's outputs/ yet) is legitimate.
         outputs, _shadow = _install_engine(
-            tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=False
+            tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=True
         )
-        # Delete one SSOT artefact to simulate a freshly-renovated current.toml
-        # whose cells workflow hasn't populated outputs/ yet.
         (outputs["vllm"] / "schema.discovered.json").unlink()
-        with pytest.raises(FileNotFoundError) as exc_info:
-            regen_engine_corpus.main(["--check"])
-        message = str(exc_info.value)
-        assert "vllm" in message
-        assert "schema.discovered.json" in message
-        assert "current.toml" in message  # Resolution hint mentions cause.
+        rc = regen_engine_corpus.main(["--check"])
+        # The two remaining files match; the missing one is informational.
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "skipped" in err
+        assert "vllm/schema.discovered.json" in err
 
-    def test_missing_source_in_write_mode_also_raises(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_missing_outputs_dir_skips_in_write_mode(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
+        # When the entire v<safe>/outputs/ directory is missing (freshly
+        # bumped current.toml whose vendor PR hasn't landed), --write
+        # skips with a note instead of crashing.
         outputs, _shadow = _install_engine(
             tmp_path=tmp_path, monkeypatch=monkeypatch, populate_shadow=False
         )
-        (outputs["vllm"] / "invariants.proposed.yaml").unlink()
-        with pytest.raises(FileNotFoundError):
-            regen_engine_corpus.main(["--write"])
+        import shutil as _sh
+
+        _sh.rmtree(outputs["vllm"])
+        rc = regen_engine_corpus.main(["--write"])
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "outputs directory not present" in err
+
+
+# ---------------------------------------------------------------------------
+# --engine filter (F#10)
+# ---------------------------------------------------------------------------
+
+
+class TestEngineFilter:
+    def test_engine_filter_restricts_run_to_named_engine(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # All three engines populated; --engine transformers must only
+        # write the transformers shadow.
+        _install_engine(
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+            engines=("vllm", "tensorrt", "transformers"),
+            populate_shadow=False,
+        )
+        rc = regen_engine_corpus.main(["--engine", "transformers", "--write"])
+        assert rc == 0
+        transformers_shadow = (
+            tmp_path / "src" / "llenergymeasure" / "engines" / "transformers"
+        )
+        vllm_shadow = tmp_path / "src" / "llenergymeasure" / "engines" / "vllm"
+        assert (transformers_shadow / "invariants.proposed.yaml").is_file()
+        assert not (vllm_shadow / "invariants.proposed.yaml").exists()
+
+    def test_engine_filter_repeatable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Two of three engines; tensorrt left out.
+        _install_engine(
+            tmp_path=tmp_path,
+            monkeypatch=monkeypatch,
+            engines=("vllm", "tensorrt", "transformers"),
+            populate_shadow=False,
+        )
+        rc = regen_engine_corpus.main(
+            ["--engine", "vllm", "--engine", "transformers", "--write"]
+        )
+        assert rc == 0
+        for name in ("vllm", "transformers"):
+            assert (
+                tmp_path / "src" / "llenergymeasure" / "engines" / name / "invariants.proposed.yaml"
+            ).is_file()
+        assert not (
+            tmp_path / "src" / "llenergymeasure" / "engines" / "tensorrt" / "invariants.proposed.yaml"
+        ).exists()
+
+    def test_engine_filter_rejects_unknown_engine(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # argparse rejects unknown engines with exit code 2.
+        _install_engine(tmp_path=tmp_path, monkeypatch=monkeypatch)
+        with pytest.raises(SystemExit) as exc_info:
+            regen_engine_corpus.main(["--engine", "bogus"])
+        assert exc_info.value.code == 2
 
 
 # ---------------------------------------------------------------------------

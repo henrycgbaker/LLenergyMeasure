@@ -8,14 +8,31 @@ ships in the wheel). This script copies SSOT -> shadow.
 
 Two modes:
 
-- ``--write`` (default): ``shutil.copy2`` each source onto its destination.
-  Idempotent; preserves mtime.
-- ``--check``: read both files, exit 1 with a unified diff per drifted file.
-  No writes. CI parity gate.
+- ``--check`` (default): read both files, exit 1 with a unified diff per
+  drifted file. CI parity gate. **Safe default** (no mutation).
+- ``--write``: ``shutil.copy2`` each source onto its destination.
+  Idempotent; preserves mtime. **Opt-in** (mutates working tree).
 
 Single source of truth for path derivation: :func:`_current.current_outputs_dir`
 and :func:`_current.safe_version`. The script is intentionally tiny - the
 heavy lifting lives in the per-engine miners that produce the SSOT.
+
+Findings addressed (PR-B /code-review at PR #665):
+- F#5/F#8: missing-source paths are tolerated (skip + log) rather than
+  raise. The Renovate-pre-vendor window (current.toml bumped, vendor PR
+  not yet landed) is legitimate; crashing CI on it is foot-gunny.
+- F#9: ``--write`` is opt-in; bare invocation is ``--check`` (Unix
+  formatter/linter convention).
+- F#10: ``--engine <name>`` filter (repeatable) so writeback can run
+  per-engine matching just the cells that uploaded artefacts.
+- F#11: explicit ``encoding='utf-8'`` on text reads; CI runners with
+  non-UTF8 locales would otherwise raise ``UnicodeDecodeError``.
+- F#14: handle read-only destinations (chmod 444 / artefact perms /
+  editor lock) via unlink-then-copy fallback.
+- F#13: missing-source notices collect across engines rather than
+  short-circuit on the first; better dev iteration.
+- F#15: clearer error wording for missing-vs-wrong-type
+  ``library.current_version`` (the fix lives in ``_current.py``).
 """
 
 from __future__ import annotations
@@ -55,8 +72,10 @@ def _shadow_dir(engine: str) -> Path:
 
 def _file_diff(src: Path, dst: Path) -> str:
     """Return a unified diff string (src vs dst); empty if byte-identical."""
-    src_text = src.read_text().splitlines(keepends=True)
-    dst_text = dst.read_text().splitlines(keepends=True) if dst.exists() else []
+    src_text = src.read_text(encoding="utf-8").splitlines(keepends=True)
+    dst_text = (
+        dst.read_text(encoding="utf-8").splitlines(keepends=True) if dst.exists() else []
+    )
     return "".join(
         difflib.unified_diff(
             dst_text,
@@ -67,41 +86,76 @@ def _file_diff(src: Path, dst: Path) -> str:
     )
 
 
-def sync_engine(engine: str, *, write: bool) -> list[str]:
-    """Sync (or check) one engine. Return list of human-readable drift messages.
+def _copy_resilient(src: Path, dst: Path) -> None:
+    """``shutil.copy2`` with read-only-dst fallback (F#14).
 
-    Empty list = no drift detected (or write succeeded). Non-empty list under
-    ``write=False`` indicates the caller should exit non-zero. Missing source
-    files raise ``FileNotFoundError`` loud - the SSOT path is computed from
-    ``current.toml``; a missing source means the per-version archive hasn't
-    been produced yet and the caller must surface that as a real error, not
-    silently skip.
+    If the destination exists and is read-only (chmod 444, artefact mode,
+    editor lock), ``shutil.copy2`` raises ``PermissionError``. Unlink first
+    in that case - the parent directory's write bit is the relevant
+    permission for the new file.
     """
-    outputs = current_outputs_dir(engine)
-    shadow = _shadow_dir(engine)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copy2(src, dst)
+    except PermissionError:
+        if dst.exists():
+            dst.unlink()
+            shutil.copy2(src, dst)
+        else:
+            raise
+
+
+def sync_engine(engine: str, *, write: bool) -> tuple[list[str], list[str]]:
+    """Sync (or check) one engine.
+
+    Returns a pair ``(drift_messages, skip_messages)``.
+
+    - ``drift_messages``: non-empty under ``write=False`` means the caller
+      must exit non-zero. Empty otherwise.
+    - ``skip_messages``: non-empty when the per-version outputs/ directory
+      is missing or any expected file is absent. F#5/F#8 - the
+      Renovate-pre-vendor window is legitimate and must not crash CI; the
+      caller decides how loud to be (here: print to stderr; do not exit
+      non-zero in --check, do not abort --write).
+    """
     drift: list[str] = []
+    skipped: list[str] = []
+    try:
+        outputs = current_outputs_dir(engine)
+    except FileNotFoundError as exc:
+        # current.toml itself is missing - the engine isn't tracked. Skip
+        # with a clear note rather than crashing CI.
+        skipped.append(f"{engine}: {exc}")
+        return drift, skipped
+
+    if not outputs.is_dir():
+        skipped.append(
+            f"{engine}: outputs directory not present ({outputs}). "
+            f"Cells haven't produced this version yet (Renovate-pre-vendor "
+            f"window); skipping."
+        )
+        return drift, skipped
+
+    shadow = _shadow_dir(engine)
     for filename in CORPUS_FILES:
         src = outputs / filename
         dst = shadow / filename
         if not src.exists():
-            raise FileNotFoundError(
-                f"Source file missing for {engine}: {src}. "
-                f"Check engine_versions/{engine}/current.toml points at a "
-                f"version whose outputs/ directory has been populated by the "
-                f"cells workflow."
+            skipped.append(
+                f"{engine}/{filename}: source missing ({src}); skipping. "
+                f"Trigger cells to populate."
             )
+            continue
         if write:
-            shadow.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
+            _copy_resilient(src, dst)
             continue
         # --check mode: compare bytes and accumulate diff per file.
         src_bytes = src.read_bytes()
         dst_bytes = dst.read_bytes() if dst.exists() else b""
         if src_bytes == dst_bytes:
             continue
-        diff = _file_diff(src, dst)
-        drift.append(f"{engine}/{filename} drift:\n{diff}")
-    return drift
+        drift.append(f"{engine}/{filename} drift:\n{_file_diff(src, dst)}")
+    return drift, skipped
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -116,31 +170,62 @@ def main(argv: list[str] | None = None) -> int:
         "--check",
         action="store_true",
         help=(
-            "Don't write; exit 1 with a unified diff per drifted file. Used as the CI parity gate."
+            "Verify parity between SSOT and shadow. Exit 1 with a unified "
+            "diff per drifted file. CI parity gate. **Default mode.**"
         ),
     )
     mode.add_argument(
         "--write",
         action="store_true",
-        help="Sync SSOT -> shadow via shutil.copy2 (default).",
+        help=(
+            "Sync SSOT -> shadow via shutil.copy2 (mutates working tree). "
+            "Opt-in; used by the writeback bot after cells produce fresh "
+            "archive content."
+        ),
+    )
+    parser.add_argument(
+        "--engine",
+        action="append",
+        choices=ENGINES,
+        default=None,
+        help=(
+            "Restrict the run to one or more engines (repeatable). Used by "
+            "the writeback bot to run only the engines whose cells uploaded "
+            "artefacts on this pipeline run. Default: all engines."
+        ),
     )
     args = parser.parse_args(argv)
 
-    # Default to --write when neither flag is passed; --check is opt-in.
-    write = not args.check
+    # F#9: default to --check (the safe / non-mutating mode). --write is
+    # opt-in. Matches Unix formatter/linter convention (ruff, black).
+    write = args.write
+    engines = tuple(args.engine) if args.engine else ENGINES
 
     all_drift: list[str] = []
-    for engine in ENGINES:
-        all_drift.extend(sync_engine(engine, write=write))
+    all_skipped: list[str] = []
+    for engine in engines:
+        drift, skipped = sync_engine(engine, write=write)
+        all_drift.extend(drift)
+        all_skipped.extend(skipped)
+
+    # Skipped engines are informational; always surface them on stderr so a
+    # CI log shows what didn't run, but never make them cause non-zero exit.
+    for entry in all_skipped:
+        print(f"[regen-corpus] skipped: {entry}", file=sys.stderr)
 
     if not write and all_drift:
         for entry in all_drift:
             print(entry, file=sys.stderr)
         print(
             "\nDrift detected between engine_versions/<engine>/v<current>/outputs/ "
-            "and src/llenergymeasure/engines/<engine>/. Run:\n"
-            "    python scripts/engine_producers/regen_engine_corpus.py --write\n"
-            "to sync.",
+            "and src/llenergymeasure/engines/<engine>/.\n"
+            "Resolution paths:\n"
+            "  - Hand-edit in src/<engine>/ ? Revert it; the SSOT is the archive.\n"
+            "  - Local edit in engine_versions/<engine>/v<safe>/outputs/ ?\n"
+            "      uv run python scripts/engine_producers/regen_engine_corpus.py --write\n"
+            "  - Drift from a stale shadow after Renovate bump ?\n"
+            "      Trigger cells (gh workflow run engine-pipeline.yml) and let the\n"
+            "      writeback bot land both sides atomically.",
             file=sys.stderr,
         )
         return 1

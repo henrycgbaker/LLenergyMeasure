@@ -74,14 +74,14 @@ def safe_version(version: str) -> str:
 def current_outputs_dir(engine: str) -> Path:
     """Return the archive outputs/ directory for the engine's pinned version.
 
-    Resolves ``engine_versions/{engine}/current.yaml``, reads
+    Resolves ``engine_versions/{engine}/current.toml``, reads
     ``library.current_version``, and returns
     ``engine_versions/{engine}/v{safe_version}/outputs/`` - the canonical
     write target for miners (the version-bundle archive is the SSOT; the
     shadow under ``src/llenergymeasure/engines/<engine>/`` is derived
     via the CI cell's archive -> shadow mirror).
 
-    Raises :class:`FileNotFoundError` if current.yaml is missing (delegated
+    Raises :class:`FileNotFoundError` if current.toml is missing (delegated
     from :func:`load_current`), :class:`ValueError` if
     ``library.current_version`` is missing or not a non-empty string.
     """
@@ -89,14 +89,22 @@ def current_outputs_dir(engine: str) -> Path:
     library = current.get("library")
     if not isinstance(library, dict):
         raise ValueError(
-            f"engine_versions/{engine}/current.yaml: 'library' must be a mapping, "
+            f"engine_versions/{engine}/current.toml: 'library' must be a mapping, "
             f"got {type(library).__name__}."
         )
-    version = library.get("current_version")
+    # F#15: split missing vs wrong-type into distinct error messages so the
+    # operator can tell the cases apart (e.g. a YAML-parsed bare float 4.73
+    # is present-but-non-string, not missing).
+    if "current_version" not in library:
+        raise ValueError(
+            f"engine_versions/{engine}/current.toml: 'library.current_version' "
+            f"key is missing."
+        )
+    version = library["current_version"]
     if not isinstance(version, str) or not version.strip():
         raise ValueError(
-            f"engine_versions/{engine}/current.yaml: 'library.current_version' must be "
-            f"a non-empty string, got {version!r}."
+            f"engine_versions/{engine}/current.toml: 'library.current_version' "
+            f"must be a non-empty string, got {version!r} (type {type(version).__name__})."
         )
     safe = safe_version(version)
     return current_path(engine).parent / safe / "outputs"
