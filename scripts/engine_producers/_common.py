@@ -16,6 +16,7 @@ under ``scripts.engine_producers``.
 
 from __future__ import annotations
 
+import ast
 import dataclasses
 import enum
 import inspect
@@ -24,6 +25,7 @@ import re
 import types
 from datetime import datetime, timezone
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Union, get_args, get_origin
 
 # Schema version 2.0.0 (bump from 1.0.0):
@@ -677,3 +679,425 @@ def make_envelope(
         "engine_params": engine_params,
         "sampling_params": sampling_params,
     }
+
+
+# ---------------------------------------------------------------------------
+# Validation-collection extractor
+# ---------------------------------------------------------------------------
+#
+# Many engine modules guard a field's accepted values against a module-level
+# constant set/tuple/dict. ``GenerationConfig.validate`` for example raises
+# when ``self.cache_implementation not in ALL_CACHE_IMPLEMENTATIONS``; vLLM's
+# ``ModelConfig`` validates ``dtype`` against keys of
+# ``_STR_DTYPE_TO_TORCH_DTYPE``. Lifting these constants into schema ``enum``
+# annotations turns implicit runtime gates into machine-readable contracts.
+#
+# ``discover_validation_collections`` walks a module's AST in two passes:
+# pass 1 collects candidate constants (literal set/frozenset/tuple/list/dict
+# at module scope, plus simple ``A + B`` concatenations of prior candidates);
+# pass 2 walks validator-method bodies for ``if v [not] in <Name>:`` and
+# returns ``{field_name: {enum: [...], x-source: ..., x-source-ref: ...}}``
+# entries only for constants that pass both passes. Pure naming heuristics
+# (e.g. an unused ``_VALID_X`` constant) are NOT lifted -- the ``in``
+# reference is the load-bearing filter against false positives.
+
+
+# Decorator names that mark a function as a validator. Pydantic v2 spellings
+# plus the historical ``@validator``; plus the dataclass-style
+# ``__post_init__``/``_verify_*``/``validate_*`` patterns recognised by name.
+_VALIDATOR_DECORATORS: frozenset[str] = frozenset(
+    {"field_validator", "model_validator", "validator", "root_validator"}
+)
+
+
+def _is_validator_function(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """True if ``node`` looks like a validator method.
+
+    Recognised: pydantic decorators (``@field_validator``, ``@model_validator``,
+    ``@validator``, ``@root_validator``); dataclass-style ``__post_init__``;
+    naming conventions ``_verify_*`` and ``validate_*`` (used by vLLM,
+    TensorRT-LLM, transformers' ``GenerationConfig.validate``).
+    """
+    name = node.name
+    if name == "__post_init__":
+        return True
+    if name.startswith("_verify_") or name.startswith("validate_") or name == "validate":
+        return True
+    for dec in node.decorator_list:
+        # ``@field_validator(...)`` or ``@field_validator.something(...)``
+        func = dec.func if isinstance(dec, ast.Call) else dec
+        # Bare name: ``@validator`` -> Name; dotted: ``@pydantic.field_validator``
+        # -> Attribute, take the last attr.
+        dec_name: str | None = None
+        if isinstance(func, ast.Name):
+            dec_name = func.id
+        elif isinstance(func, ast.Attribute):
+            dec_name = func.attr
+        if dec_name is not None and dec_name in _VALIDATOR_DECORATORS:
+            return True
+    return False
+
+
+def _extract_field_validator_targets(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[str]:
+    """Return the field names listed in ``@field_validator("a", "b")`` decorators.
+
+    Returns an empty list when the function carries no ``@field_validator``
+    decorator or when the decorator's positional args aren't string literals.
+    Multiple ``@field_validator`` decorators are merged; duplicates are
+    preserved in source order (callers dedupe if needed).
+    """
+    targets: list[str] = []
+    for dec in node.decorator_list:
+        if not isinstance(dec, ast.Call):
+            continue
+        func = dec.func
+        dec_name: str | None = None
+        if isinstance(func, ast.Name):
+            dec_name = func.id
+        elif isinstance(func, ast.Attribute):
+            dec_name = func.attr
+        if dec_name not in {"field_validator", "validator"}:
+            continue
+        for arg in dec.args:
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                targets.append(arg.value)
+    return targets
+
+
+def _ast_literal_to_python(node: ast.expr) -> Any:
+    """Best-effort conversion of an AST literal node to a Python value.
+
+    Wraps :func:`ast.literal_eval`; returns ``None`` on failure (any name
+    reference, unresolved attribute, or non-literal value yields ``None``).
+    The caller treats ``None`` as "not a literal" and discards the candidate.
+    """
+    try:
+        return ast.literal_eval(node)
+    except (ValueError, TypeError, SyntaxError):
+        return None
+
+
+def _collect_module_constants(module_ast: ast.Module) -> dict[str, list[Any]]:
+    """Pass 1: collect module-scope assignments of set/frozenset/tuple/list/dict literals.
+
+    Returns ``{name: [values...]}`` where the value list is sorted-and-deduped
+    for set/frozenset (deterministic enum output) and preserves insertion
+    order for tuple/list/dict keys. For ``dict`` literals the KEYS are kept
+    as the enum (the design's example: ``_STR_DTYPE_TO_TORCH_DTYPE``'s keys
+    are the valid dtype strings).
+
+    Also handles two derived cases:
+      - ``X = frozenset({...})`` / ``X = set(...)`` / ``X = tuple(...)`` / ``X = list(...)``
+        / ``X = dict(...)`` constructor calls with literal arguments.
+      - ``X = A + B`` where both ``A`` and ``B`` are previously collected
+        candidates (concatenation chain). Recursively flattens.
+
+    Pure dataclass / function / class decorators / imports are ignored.
+    """
+    constants: dict[str, list[Any]] = {}
+
+    def _value_from_call(call: ast.Call) -> list[Any] | None:
+        # ``frozenset({...})``, ``set([...])``, ``tuple((...))``, ``list((...))``,
+        # ``dict({...})`` -- caller must supply exactly one literal argument.
+        if not isinstance(call.func, ast.Name):
+            return None
+        ctor = call.func.id
+        if ctor not in {"frozenset", "set", "tuple", "list", "dict"}:
+            return None
+        if len(call.args) != 1:
+            return None
+        py = _ast_literal_to_python(call.args[0])
+        if py is None:
+            return None
+        if isinstance(py, dict):
+            # ``dict({...})`` -> keys (mirrors literal-dict handling)
+            return list(py)
+        if isinstance(py, (set, frozenset)):
+            # Deterministic ordering for set-like
+            try:
+                return sorted(py)
+            except TypeError:
+                return list(py)
+        if isinstance(py, (list, tuple)):
+            return list(py)
+        return None
+
+    def _resolve(name: str, value_expr: ast.expr) -> list[Any] | None:
+        # Direct literal: set / frozenset / tuple / list / dict
+        if isinstance(value_expr, (ast.Set, ast.Tuple, ast.List, ast.Dict)):
+            py = _ast_literal_to_python(value_expr)
+            if py is None:
+                return None
+            if isinstance(py, dict):
+                return list(py.keys())
+            if isinstance(py, (set, frozenset)):
+                try:
+                    return sorted(py)
+                except TypeError:
+                    return list(py)
+            return list(py)
+        # Constructor call
+        if isinstance(value_expr, ast.Call):
+            return _value_from_call(value_expr)
+        # Concatenation: ``A + B`` of two previously collected candidates
+        if isinstance(value_expr, ast.BinOp) and isinstance(value_expr.op, ast.Add):
+            left = _resolve_operand(value_expr.left)
+            right = _resolve_operand(value_expr.right)
+            if left is None or right is None:
+                return None
+            merged: list[Any] = []
+            for v in [*left, *right]:
+                if v not in merged:
+                    merged.append(v)
+            return merged
+        return None
+
+    def _resolve_operand(expr: ast.expr) -> list[Any] | None:
+        # Operands may be a Name referencing a previously collected constant,
+        # or another literal/call expression we can resolve inline.
+        if isinstance(expr, ast.Name) and expr.id in constants:
+            return list(constants[expr.id])
+        return _resolve("<inline>", expr)
+
+    for node in module_ast.body:
+        # Plain ``X = <expr>``
+        if isinstance(node, ast.Assign):
+            if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+                continue
+            name = node.targets[0].id
+            values = _resolve(name, node.value)
+            if values is not None:
+                constants[name] = values
+            continue
+        # Annotated ``X: T = <expr>``
+        if isinstance(node, ast.AnnAssign):
+            if not isinstance(node.target, ast.Name) or node.value is None:
+                continue
+            name = node.target.id
+            values = _resolve(name, node.value)
+            if values is not None:
+                constants[name] = values
+
+    return constants
+
+
+def _names_referenced_in_membership(node: ast.AST, *, candidates: set[str]) -> set[str]:
+    """Walk a function body and return the subset of ``candidates`` used in ``in`` tests.
+
+    Matches both ``X in NAME`` and ``X not in NAME`` shapes. The LHS is
+    intentionally unconstrained -- the design's "v" stands in for any value
+    being validated (``self.<field>``, a parameter, a temporary). Constants
+    on the RHS that aren't in ``candidates`` are ignored (a same-module
+    constant the introspector already lifted is the only safe ref to expand).
+    """
+    hits: set[str] = set()
+    for sub in ast.walk(node):
+        if not isinstance(sub, ast.Compare):
+            continue
+        for op, comparator in zip(sub.ops, sub.comparators, strict=False):
+            if not isinstance(op, (ast.In, ast.NotIn)):
+                continue
+            if isinstance(comparator, ast.Name) and comparator.id in candidates:
+                hits.add(comparator.id)
+    return hits
+
+
+def _field_names_from_assign_chain(
+    func: ast.FunctionDef | ast.AsyncFunctionDef, local_name: str
+) -> list[str]:
+    """Find ``self.<field>`` sources for a local name through simple aliases.
+
+    Handles direct ``local_name = self.<field>`` assignment chains. Returns
+    every field that flows into ``local_name`` (the validator might be
+    parameterised over several inputs). Anything more elaborate (subscript,
+    function call, conditional) yields no field name and the caller falls
+    back to whatever signal it can get from the decorator / condition shape.
+    """
+    out: list[str] = []
+    for stmt in ast.walk(func):
+        if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
+            continue
+        tgt = stmt.targets[0]
+        if not (isinstance(tgt, ast.Name) and tgt.id == local_name):
+            continue
+        rhs = stmt.value
+        if (
+            isinstance(rhs, ast.Attribute)
+            and isinstance(rhs.value, ast.Name)
+            and rhs.value.id == "self"
+        ):
+            out.append(rhs.attr)
+    return out
+
+
+def _fields_for_membership_check(
+    func: ast.FunctionDef | ast.AsyncFunctionDef,
+    constant_name: str,
+) -> list[str]:
+    """Best-effort: which field(s) does an ``in <constant_name>`` reference guard?
+
+    Examines every ``X [not] in <constant_name>`` Compare node in ``func`` and
+    extracts the field name from ``X`` where possible:
+
+    - ``self.<field> [not] in CONST``                       -> ``<field>``
+    - ``<local> [not] in CONST``  with ``<local> = self.<field>`` -> ``<field>``
+    - ``@field_validator("<field>", ...)`` decorator on func     -> ``<field>``
+
+    Returns a deduplicated list in first-seen order. Empty when none of the
+    above patterns match -- caller drops the entry rather than guess.
+    """
+    decorator_fields = _extract_field_validator_targets(func)
+    fields: list[str] = []
+
+    def _add(name: str) -> None:
+        if name not in fields:
+            fields.append(name)
+
+    for sub in ast.walk(func):
+        if not isinstance(sub, ast.Compare):
+            continue
+        for op, comparator in zip(sub.ops, sub.comparators, strict=False):
+            if not isinstance(op, (ast.In, ast.NotIn)):
+                continue
+            if not (isinstance(comparator, ast.Name) and comparator.id == constant_name):
+                continue
+            lhs = sub.left
+            # ``self.<field>`` directly
+            if (
+                isinstance(lhs, ast.Attribute)
+                and isinstance(lhs.value, ast.Name)
+                and lhs.value.id == "self"
+            ):
+                _add(lhs.attr)
+                continue
+            # Local name aliased from ``self.<field>``
+            if isinstance(lhs, ast.Name):
+                aliased = _field_names_from_assign_chain(func, lhs.id)
+                for fld in aliased:
+                    _add(fld)
+                # Fall through: even if the alias chain didn't resolve, the
+                # decorator-named field is still a valid association when this
+                # is a ``@field_validator(...)``.
+                continue
+            # Other LHS shapes (subscript, call, tuple) intentionally unhandled;
+            # the decorator path below may still recover a field name.
+
+    for name in decorator_fields:
+        _add(name)
+    return fields
+
+
+def discover_validation_collections(
+    module: ModuleType,
+) -> dict[str, dict[str, Any]]:
+    """Lift module-scope value-set constants into per-field ``enum`` entries.
+
+    Two-pass AST walk on ``module``'s source:
+
+    1. Collect every module-scope assignment of a ``set`` / ``frozenset`` /
+       ``tuple`` / ``list`` / ``dict`` literal (plus ``X = A + B``
+       concatenations and ``X = ctor(...)`` constructor calls).
+    2. Walk every validator-method body (``@field_validator``,
+       ``@model_validator``, ``@validator``, ``@root_validator``,
+       ``__post_init__``, ``_verify_*``, ``validate_*``, ``validate``) for
+       ``if v [not] in <Name>:`` -- where ``<Name>`` matches a pass-1
+       candidate. The membership-check requirement is the load-bearing
+       filter: a pure naming heuristic (``_VALID_X`` constant referenced
+       nowhere) is NOT lifted, avoiding false positives.
+
+    Returns ``{field_name: spec}`` where each spec has shape::
+
+        {
+            "enum": [...],
+            "x-source": "module_validation_collection",
+            "x-source-ref": "<module>.<constant_name>",
+        }
+
+    Field-name attribution rules (best-effort, in priority order):
+
+    - ``self.<field> [not] in CONST`` -> ``<field>``
+    - local ``<var>`` aliased from ``self.<field>``, then
+      ``<var> [not] in CONST`` -> ``<field>``
+    - ``@field_validator("<field>", ...)`` decorator -> ``<field>``
+
+    A constant referenced in a membership check whose field cannot be
+    attributed via any of these rules is skipped. A single constant guarding
+    multiple fields produces one entry per field, all pointing to the same
+    ``x-source-ref``.
+    """
+    try:
+        source = inspect.getsource(module)
+    except (OSError, TypeError):
+        return {}
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return {}
+
+    constants = _collect_module_constants(tree)
+    if not constants:
+        return {}
+
+    candidate_set = set(constants)
+    referenced: dict[str, list[str]] = {}  # constant_name -> [fields...]
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not _is_validator_function(node):
+            continue
+        hits = _names_referenced_in_membership(node, candidates=candidate_set)
+        for const_name in hits:
+            fields = _fields_for_membership_check(node, const_name)
+            if not fields:
+                continue
+            bucket = referenced.setdefault(const_name, [])
+            for f in fields:
+                if f not in bucket:
+                    bucket.append(f)
+
+    if not referenced:
+        return {}
+
+    module_name = getattr(module, "__name__", "<unknown>")
+    out: dict[str, dict[str, Any]] = {}
+    for const_name, fields in referenced.items():
+        values = constants[const_name]
+        # ``jsonable`` is applied so callers don't have to worry about exotic
+        # ast.literal_eval byproducts (frozenset surfaces as set; nested
+        # tuples become lists). Deterministic ordering for set-derived
+        # constants is already handled in pass 1.
+        enum_values = jsonable(values)
+        spec = {
+            "enum": enum_values,
+            "x-source": "module_validation_collection",
+            "x-source-ref": f"{module_name}.{const_name}",
+        }
+        for field_name in fields:
+            # First constant wins per field: a field referenced against two
+            # constants in the same module is rare, and the caller can post-
+            # process if a richer policy is needed.
+            out.setdefault(field_name, spec)
+    return out
+
+
+def merge_validation_collections(
+    field_specs: dict[str, dict[str, Any]],
+    collections: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Merge ``collections`` (from :func:`discover_validation_collections`) into ``field_specs``.
+
+    Returns the same ``field_specs`` dict mutated in place. For each field in
+    ``collections``: if it exists in ``field_specs`` the ``enum`` /
+    ``x-source`` / ``x-source-ref`` keys are added without disturbing the
+    existing ``type`` / ``default`` / ``description`` / etc. If the field is
+    not present in ``field_specs`` (e.g. the introspector skipped it) the
+    enum spec is recorded under its own key so the information isn't lost.
+    """
+    for field_name, enum_spec in collections.items():
+        if field_name in field_specs:
+            field_specs[field_name].update(enum_spec)
+        else:
+            field_specs[field_name] = dict(enum_spec)
+    return field_specs
