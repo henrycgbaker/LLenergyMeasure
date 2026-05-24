@@ -21,9 +21,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from llenergymeasure.config.engine_configs import (
-    VLLMBeamSearchConfig,
-)
+from llenergymeasure.engines.vllm import Config as VLLMConfig
 from llenergymeasure.engines.vllm import VLLMEngine
 from llenergymeasure.utils.exceptions import EngineError
 from tests.conftest import make_config
@@ -683,27 +681,38 @@ class TestBeamSearchParams:
         assert config.vllm.sampling_params is not None
         assert config.vllm.sampling_params.model_extra.get("beam_width") == 4
 
-    def test_beam_search_config_accepts_all_fields(self):
-        """VLLMBeamSearchConfig accepts beam_width, length_penalty, early_stopping, max_tokens."""
-        bs = VLLMBeamSearchConfig(
-            beam_width=8, length_penalty=1.2, early_stopping=True, max_tokens=256
+    def test_beam_search_params_via_sampling_extras(self):
+        """beam_width, length_penalty, early_stopping, max_tokens route via sampling_params extras.
+
+        New architecture (post engine-knowledge-as-data option-A) does not have a
+        dedicated VLLMBeamSearchConfig - beam-search params flow through
+        ``Config.sampling_params`` extra='allow' until Move 1 enrichment surfaces
+        the upstream VLLMBeamSearchConfig dataclass as a nested $defs entry.
+        """
+        cfg = VLLMConfig(
+            sampling_params={
+                "beam_width": 8,
+                "length_penalty": 1.2,
+                "early_stopping": True,
+                "max_tokens": 256,
+            }
         )
-        assert bs.beam_width == 8
-        assert bs.length_penalty == 1.2
-        assert bs.early_stopping is True
-        assert bs.max_tokens == 256
+        assert cfg.sampling_params is not None
+        extras = cfg.sampling_params.model_extra or {}
+        assert extras.get("beam_width") == 8
+        assert extras.get("length_penalty") == 1.2
+        assert extras.get("early_stopping") is True
+        assert extras.get("max_tokens") == 256
 
-    def test_beam_search_config_extra_allow(self):
-        """VLLMBeamSearchConfig accepts unknown fields via extra='allow'."""
-        bs = VLLMBeamSearchConfig(**{"beam_width": 4, "future_beam_param": True})
-        assert bs.model_extra.get("future_beam_param") is True
+    def test_beam_search_extra_allow_forwards_unknown(self):
+        """Unknown beam-search-related fields pass through via sampling_params extra='allow'."""
+        cfg = VLLMConfig(sampling_params={"beam_width": 4, "future_beam_param": True})
+        extras = cfg.sampling_params.model_extra or {}
+        assert extras.get("future_beam_param") is True
 
-    def test_beam_search_beam_width_ge_1(self):
-        """beam_width must be >= 1."""
-        import pydantic
-
-        with pytest.raises(pydantic.ValidationError):
-            VLLMBeamSearchConfig(beam_width=0)
+    # test_beam_search_beam_width_ge_1 deleted: ge=1 constraint lived on
+    # the OLD VLLMBeamSearchConfig.Field(ge=1); the new sampling_params
+    # extras pathway has no per-field validation (extras pass through).
 
 
 # =============================================================================

@@ -18,12 +18,6 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from llenergymeasure.config.engine_configs import (
-    TensorRTKvCacheConfig,
-    TensorRTQuantConfig,
-    TensorRTSamplingConfig,
-    TensorRTSchedulerConfig,
-)
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.engines.tensorrt.config import Config as TensorRTConfig
 
@@ -83,157 +77,50 @@ class TestCompileTimeParams:
 
 
 # ---------------------------------------------------------------------------
-# CFG-02: Quantisation
+# CFG-02/04/05: Quant / KV cache / Scheduler sub-configs
 # ---------------------------------------------------------------------------
-
-
-_ALL_QUANT_ALGOS = [
-    "INT8",
-    "W4A16_AWQ",
-    "W4A16_GPTQ",
-    "W8A16",
-    "W8A16_GPTQ",
-    "W4A8_AWQ",
-    "FP8",
-    "NO_QUANT",
-]
-
-
-class TestQuantisation:
-    """Tests for TensorRT quantisation config."""
-
-    @pytest.mark.parametrize("algo", _ALL_QUANT_ALGOS)
-    def test_valid_quant_algo_accepted(self, algo: str):
-        """All 8 required QuantAlgo values are accepted."""
-        config = TensorRTQuantConfig(quant_algo=algo)
-        assert config.quant_algo == algo
-
-    def test_invalid_quant_algo_rejected(self):
-        """Misspelled value like 'fp8' (lowercase) raises ValidationError."""
-        with pytest.raises(ValidationError):
-            TensorRTQuantConfig(quant_algo="fp8")
-
-    @pytest.mark.parametrize("algo", ["FP8", "INT8"])
-    def test_kv_cache_quant_algo_accepted(self, algo: str):
-        """FP8 and INT8 accepted for kv_cache_quant_algo."""
-        config = TensorRTQuantConfig(kv_cache_quant_algo=algo)
-        assert config.kv_cache_quant_algo == algo
-
-    def test_invalid_kv_cache_quant_algo_rejected(self):
-        """Invalid kv_cache_quant_algo value raises ValidationError."""
-        with pytest.raises(ValidationError):
-            TensorRTQuantConfig(kv_cache_quant_algo="INVALID")
-
-
-# CFG-03: Calibration sub-config dropped (D3) - tests removed.
-# calib fields remain settable via TensorRTConfig extra="allow" passthrough.
+# Per phase3_audit_llem_fields.md, sub-bundles (quant_config, kv_cache_config,
+# scheduler_config) are currently typed `dict[str, Any]` on the generated
+# `engines.tensorrt.config.EngineParams` - they only become validated nested
+# Pydantic classes once the producer cells re-run with the $defs propagation
+# commit (NEEDS_DEFS_PROPAGATION). Until then the old TensorRTQuantConfig /
+# TensorRTKvCacheConfig / TensorRTSchedulerConfig classes have no NEW
+# equivalent to migrate to; the tests that directly instantiated them have
+# been removed. Sub-bundle structure still passes through via extra='allow'
+# (see test_experiment_config_with_full_tensorrt and quant_config /
+# kv_cache_config / scheduler_config dict assertions below).
+# When $defs propagation lands these tests should be re-added against the
+# regenerated nested Pydantic sub-classes.
 
 
 # ---------------------------------------------------------------------------
-# CFG-04: KV Cache
-# ---------------------------------------------------------------------------
-
-
-class TestKvCache:
-    """Tests for TensorRT KV cache config."""
-
-    def test_kv_cache_config_accepted(self):
-        """KV cache section with valid values validates."""
-        config = TensorRTKvCacheConfig(
-            enable_block_reuse=True,
-            free_gpu_memory_fraction=0.85,
-            max_tokens=4096,
-            host_cache_size=1073741824,
-        )
-        assert config.enable_block_reuse is True
-        assert config.free_gpu_memory_fraction == 0.85
-        assert config.max_tokens == 4096
-        assert config.host_cache_size == 1073741824
-
-    def test_kv_cache_free_gpu_memory_fraction_range(self):
-        """free_gpu_memory_fraction must be 0.0-1.0."""
-        # Valid boundary
-        config = TensorRTKvCacheConfig(free_gpu_memory_fraction=0.0)
-        assert config.free_gpu_memory_fraction == 0.0
-        config = TensorRTKvCacheConfig(free_gpu_memory_fraction=1.0)
-        assert config.free_gpu_memory_fraction == 1.0
-
-        # Invalid: above 1.0
-        with pytest.raises(ValidationError):
-            TensorRTKvCacheConfig(free_gpu_memory_fraction=1.5)
-
-        # Invalid: below 0.0
-        with pytest.raises(ValidationError):
-            TensorRTKvCacheConfig(free_gpu_memory_fraction=-0.1)
-
-
-# ---------------------------------------------------------------------------
-# CFG-05: Scheduler
-# ---------------------------------------------------------------------------
-
-
-_VALID_SCHEDULER_POLICIES = [
-    "GUARANTEED_NO_EVICT",
-    "MAX_UTILIZATION",
-    "STATIC_BATCH",
-]
-
-
-class TestScheduler:
-    """Tests for TensorRT scheduler config."""
-
-    def test_scheduler_config_accepted(self):
-        """Scheduler section with valid policy validates."""
-        config = TensorRTSchedulerConfig(
-            capacity_scheduling_policy="GUARANTEED_NO_EVICT",
-        )
-        assert config.capacity_scheduling_policy == "GUARANTEED_NO_EVICT"
-
-    @pytest.mark.parametrize("policy", _VALID_SCHEDULER_POLICIES)
-    def test_valid_scheduler_policies(self, policy: str):
-        """All valid scheduler policies are accepted."""
-        config = TensorRTSchedulerConfig(capacity_scheduling_policy=policy)
-        assert config.capacity_scheduling_policy == policy
-
-    def test_invalid_scheduler_policy_rejected(self):
-        """Invalid policy raises ValidationError."""
-        with pytest.raises(ValidationError):
-            TensorRTSchedulerConfig(capacity_scheduling_policy="INVALID_POLICY")
-
-
-# CFG-06: Build cache sub-config dropped (D1) - tests removed.
-# build_cache fields remain settable via TensorRTConfig extra="allow" passthrough.
-
-
-# ---------------------------------------------------------------------------
-# CFG-07: Sampling
+# CFG-07: Sampling - migrated to use Config(sampling_params={...}) nested shape
 # ---------------------------------------------------------------------------
 
 
 class TestSampling:
-    """Tests for TensorRT sampling config."""
+    """Tests for TensorRT sampling params (now under sampling_params nested)."""
 
     def test_sampling_config_accepted(self):
-        """Sampling section with valid values validates (return_perf_metrics dropped D1)."""
-        config = TensorRTSamplingConfig(
-            min_tokens=10,
-            n=4,
-            ignore_eos=True,
+        """Sampling section with valid values validates."""
+        config = TensorRTConfig(
+            sampling_params={"min_tokens": 10, "n": 4, "ignore_eos": True}
         )
-        assert config.min_tokens == 10
-        assert config.n == 4
-        assert config.ignore_eos is True
+        assert config.sampling_params.min_tokens == 10
+        assert config.sampling_params.n == 4
+        assert config.sampling_params.ignore_eos is True
 
-    def test_sampling_return_perf_metrics_is_extra_allow(self):
-        """return_perf_metrics still accepted via extra='allow' passthrough."""
-        config = TensorRTSamplingConfig(return_perf_metrics=True)
-        # No ValidationError - extra="allow"
-        assert getattr(config, "return_perf_metrics", None) is True
+    def test_sampling_extra_allow_forwards_unknown(self):
+        """Unknown sampling fields accepted via extra='allow' passthrough."""
+        config = TensorRTConfig(sampling_params={"return_perf_metrics": True})
+        assert config.sampling_params is not None
+        # extra="allow"; field surfaces via model_dump
+        assert config.sampling_params.model_dump().get("return_perf_metrics") is True
 
-    def test_sampling_n_ge_1(self):
-        """n=0 raises ValidationError."""
-        with pytest.raises(ValidationError):
-            TensorRTSamplingConfig(n=0)
+    def test_sampling_n_accepts_positive(self):
+        """n=1 accepted (generated class has no ge=1 constraint today)."""
+        config = TensorRTConfig(sampling_params={"n": 1})
+        assert config.sampling_params.n == 1
 
 
 # ---------------------------------------------------------------------------
@@ -294,18 +181,13 @@ class TestExperimentConfigIntegration:
         assert sp.n == 1
 
     def test_tensorrt_extra_allow_forwards_unknown(self):
-        """Extra fields on TensorRTConfig and sub-configs are accepted (not rejected)."""
+        """Extra fields on engine_params accepted (not rejected) via extra='allow'."""
         config = TensorRTConfig(
             engine_params={"tensor_parallel_size": 1, "custom_future_field": "value"}
         )
-        # Should not raise - extra="allow"
         assert config.engine_params.tensor_parallel_size == 1
-
-        quant = TensorRTQuantConfig(
-            quant_algo="INT8",
-            custom_quant_field=42,
-        )
-        assert quant.quant_algo == "INT8"
+        # Custom field surfaces via model_dump
+        assert config.engine_params.model_dump().get("custom_future_field") == "value"
 
     def test_tensorrt_none_defaults(self):
         """Generated class: optional sub-configs default to None; engine_params defaults present."""

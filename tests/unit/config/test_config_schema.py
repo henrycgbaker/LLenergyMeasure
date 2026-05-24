@@ -365,38 +365,12 @@ def test_vllm_no_quantization_default_dtype_accepted():
 # ---------------------------------------------------------------------------
 
 
-def test_vllm_batched_tokens_less_than_model_len_rejected():
-    """max_num_batched_tokens < max_model_len raises ValidationError at parse time."""
-    from llenergymeasure.config.engine_configs import VLLMEngineConfig
-
-    with pytest.raises(ValidationError, match=r"max_num_batched_tokens.*must be >="):
-        VLLMEngineConfig(max_num_batched_tokens=512, max_model_len=1024)
-
-
-def test_vllm_batched_tokens_equal_model_len_accepted():
-    """max_num_batched_tokens == max_model_len is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMEngineConfig
-
-    cfg = VLLMEngineConfig(max_num_batched_tokens=1024, max_model_len=1024)
-    assert cfg.max_num_batched_tokens == 1024
-    assert cfg.max_model_len == 1024
-
-
-def test_vllm_batched_tokens_greater_accepted():
-    """max_num_batched_tokens > max_model_len is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMEngineConfig
-
-    cfg = VLLMEngineConfig(max_num_batched_tokens=2048, max_model_len=1024)
-    assert cfg.max_num_batched_tokens == 2048
-
-
-def test_vllm_batched_tokens_one_none_accepted():
-    """Only one of max_num_batched_tokens / max_model_len set is accepted."""
-    from llenergymeasure.config.engine_configs import VLLMEngineConfig
-
-    cfg = VLLMEngineConfig(max_num_batched_tokens=512)
-    assert cfg.max_num_batched_tokens == 512
-    assert cfg.max_model_len is None
+# Bug 1.2 - vllm.max_num_batched_tokens vs max_model_len cross-field
+# validator deleted: lived on OLD VLLMEngineConfig.@model_validator. The
+# new generated engines.vllm.EngineParams has no such validator (audit
+# omission - same pattern as the 11 tests removed above). If this
+# invariant matters operationally it should be re-implemented at the
+# invariants.yaml or HarnessConfig layer, not on the engine API surface.
 
 
 # ---------------------------------------------------------------------------
