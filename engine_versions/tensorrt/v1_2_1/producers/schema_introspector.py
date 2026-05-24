@@ -28,6 +28,7 @@ from typing import Any
 
 from scripts.engine_producers._common import (
     dataclass_fields_to_specs,
+    jsonschema_property_to_canonical,
     make_envelope,
 )
 
@@ -55,31 +56,7 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     for name, spec in raw_schema.get("properties", {}).items():
         if name.startswith("_"):
             continue
-        type_repr: Any = spec.get("type")
-        if type_repr is None and "anyOf" in spec:
-            parts: list[str] = []
-            for sub in spec["anyOf"]:
-                if "type" in sub:
-                    part = "None" if sub["type"] == "null" else str(sub["type"])
-                elif "$ref" in sub:
-                    part = str(sub["$ref"]).rsplit("/", 1)[-1]
-                else:
-                    continue
-                if part not in parts:  # dedupe string | string etc.
-                    parts.append(part)
-            type_repr = " | ".join(parts) if parts else "unknown"
-        elif type_repr is None and "$ref" in spec:
-            type_repr = str(spec["$ref"]).rsplit("/", 1)[-1]
-        if isinstance(type_repr, list):
-            type_repr = " | ".join("None" if t == "null" else str(t) for t in type_repr)
-        elif type_repr == "null":
-            type_repr = "None"
-        engine_params[name] = {
-            "type": type_repr or "unknown",
-            "default": spec.get("default"),
-            "description": spec.get("description"),
-            "deprecated": spec.get("deprecated", False),
-        }
+        engine_params[name] = jsonschema_property_to_canonical(spec)
 
     limitations.append(
         {
@@ -108,7 +85,6 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         engine_commit_sha=getattr(tensorrt_llm, "__commit__", None),
         image_ref=image_ref,
         base_image_ref=None,
-        discovery_method="TrtLlmArgs.model_json_schema() + dataclasses.fields(SamplingParams)",
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,

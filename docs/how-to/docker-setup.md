@@ -533,7 +533,7 @@ llem run experiment.yaml --skip-preflight
 ## Keeping Engine Schemas Fresh
 
 When you update an engine version (by bumping the SSOT in
-`engine_versions/<engine>/current.yaml`), the discovered parameter schemas must be
+`engine_versions/<engine>/current.toml`), the discovered parameter schemas must be
 regenerated. This happens automatically via the
 [Parameter Discovery Pipeline](/contributing/schema-refresh): `engine-pipeline.yml`
 covers all three engines via per-job `if:` gating - the vllm + tensorrt

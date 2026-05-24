@@ -286,7 +286,7 @@ def read_bundled_engine_version(engine: str) -> str | None:
 
 
 def read_ssot_engine_version(engine: str) -> str | None:
-    """Read ``engine_versions/{engine}/current.yaml::library.current_version``.
+    """Read ``engine_versions/{engine}/current.toml::library.current_version``.
 
     Legacy: use :func:`read_bundled_engine_version` for the runtime handshake.
     This helper is retained for in-repo dev tooling that needs the SSOT
@@ -297,14 +297,14 @@ def read_ssot_engine_version(engine: str) -> str | None:
     :func:`llenergymeasure.infra.docker_runner._resolve_repo_root`, which
     is the single source of truth for repo-shape paths.
     """
-    import yaml
+    import tomllib
 
     from llenergymeasure.infra.docker_runner import _resolve_repo_root
 
-    ssot_path = _resolve_repo_root() / "engine_versions" / engine / "current.yaml"
+    ssot_path = _resolve_repo_root() / "engine_versions" / engine / "current.toml"
     try:
-        with open(ssot_path) as f:
-            data = yaml.safe_load(f) or {}
+        with open(ssot_path, "rb") as f:
+            data = tomllib.load(f)
     except (FileNotFoundError, OSError) as exc:
         logger.debug("SSOT read failed for %s at %s: %s", engine, ssot_path, exc)
         return None

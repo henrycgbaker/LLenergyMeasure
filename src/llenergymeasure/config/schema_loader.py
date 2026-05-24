@@ -23,7 +23,12 @@ from typing import Any
 
 from llenergymeasure.config.ssot import Engine
 
-SUPPORTED_MAJOR_VERSION = 1
+# Set of envelope major versions this loader can read. 2.0.0 introduced
+# canonical JSON Schema 2020-12 per-field shapes and dropped the
+# ``discovery_method`` envelope key; major 1 is retained for read-compat
+# with older committed schemas (downstream parsing is shape-tolerant).
+# Cells write the current major only.
+SUPPORTED_MAJOR_VERSIONS: frozenset[int] = frozenset({1, 2})
 
 # Engines known to ship a discovered schema. Test-patchable module attribute
 # (tests monkeypatch this to inject fake engines); derived from Engine SSOT.
@@ -60,6 +65,12 @@ class DiscoveredSchema:
     carry ``description`` and ``deprecated`` from its Pydantic schema, while
     vLLM and Transformers fields only have ``type`` and ``default``. Consumers
     that need uniform shape should adapt at read time.
+
+    For schemas at major version 2 the per-field ``type`` is a canonical
+    JSON Schema 2020-12 value (primitive name, type-array including
+    ``"null"``, or ``anyOf`` branch). Major-1 schemas (read-compat only)
+    carry the legacy Python-string compact form; consumers that classify
+    types should detect either shape.
     """
 
     schema_version: str
@@ -69,7 +80,6 @@ class DiscoveredSchema:
     image_ref: str
     base_image_ref: str
     discovered_at: datetime
-    discovery_method: str
     discovery_limitations: list[DiscoveryLimitation] = field(default_factory=list)
     engine_params: dict[str, dict[str, Any]] = field(default_factory=dict)
     sampling_params: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -93,7 +103,7 @@ class SchemaLoader:
             ValueError: ``engine`` is not a known engine name.
             FileNotFoundError: No discovered JSON exists for ``engine``.
             UnsupportedSchemaVersionError: Discovered schema major version
-                doesn't match ``SUPPORTED_MAJOR_VERSION``.
+                is not in ``SUPPORTED_MAJOR_VERSIONS``.
             json.JSONDecodeError: Discovered file is not valid JSON.
         """
         if engine not in _KNOWN_ENGINES:
@@ -139,12 +149,12 @@ def _parse_envelope(*, engine: str, raw_text: str) -> DiscoveredSchema:
 
     schema_version = data["schema_version"]
     major = _major_version(schema_version)
-    if major != SUPPORTED_MAJOR_VERSION:
+    if major not in SUPPORTED_MAJOR_VERSIONS:
+        supported = ", ".join(str(v) for v in sorted(SUPPORTED_MAJOR_VERSIONS))
         raise UnsupportedSchemaVersionError(
             f"Discovered schema for {engine!r} has schema_version={schema_version!r} "
-            f"(major={major}); this SchemaLoader only supports major "
-            f"{SUPPORTED_MAJOR_VERSION}. Regenerate with a matching discovery script, "
-            f"or upgrade the loader."
+            f"(major={major}); this SchemaLoader supports majors {{{supported}}}. "
+            f"Regenerate with a matching discovery script, or upgrade the loader."
         )
 
     limitations_raw = data.get("discovery_limitations", [])
@@ -173,7 +183,6 @@ def _parse_envelope(*, engine: str, raw_text: str) -> DiscoveredSchema:
             data["base_image_ref"] if data.get("base_image_ref") is not None else data["image_ref"]
         ),
         discovered_at=_parse_iso(data["discovered_at"]),
-        discovery_method=data.get("discovery_method", ""),
         discovery_limitations=limitations,
         engine_params=data.get("engine_params", {}),
         sampling_params=data.get("sampling_params", {}),

@@ -11,9 +11,9 @@
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["^engine_versions/(?:transformers|vllm|tensorrt)/current\\.yaml$"],
+      "fileMatch": ["^engine_versions/(?:transformers|vllm|tensorrt)/current\\.toml$"],
       "matchStrings": [
-        "pep503_name: (?<depName>[\\w-]+)\\s*\\n\\s*current_version: \"(?<currentValue>[^\"]+)\""
+        "pep503_name\\s*=\\s*\"(?<depName>[\\w-]+)\"\\s*\\n\\s*current_version\\s*=\\s*\"(?<currentValue>[^\"]+)\""
       ],
       "datasourceTemplate": "pypi"
     }

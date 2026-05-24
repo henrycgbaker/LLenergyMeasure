@@ -34,7 +34,7 @@ Before writing any code, answer these questions:
 
 Each producer (static invariant miner, dynamic invariant miner, schema introspector) lives at two levels:
 
-- **Per-version vendored module** at `engine_versions/<engine>/v<safe>/producers/{static_invariant_miner,dynamic_invariant_miner,schema_introspector}.py`. This is the real implementation. It pins its `LANDMARKS` tuple (the live class / method paths it expects) to the library version named in `engine_versions/<engine>/current.yaml:library.current_version`.
+- **Per-version vendored module** at `engine_versions/<engine>/v<safe>/producers/{static_invariant_miner,dynamic_invariant_miner,schema_introspector}.py`. This is the real implementation. It pins its `LANDMARKS` tuple (the live class / method paths it expects) to the library version named in `engine_versions/<engine>/current.toml:library.current_version`.
 
 - **Dispatcher shim** at `scripts/engine_producers/<engine>_{static_invariant_miner,dynamic_invariant_miner,schema_introspector}.py`. ~14 lines via `scripts/engine_producers/_stub_factory.py`. Module-level `__getattr__` (PEP 562) resolves to `engine_versions.<engine>.<safe_version>.producers.<producer>` at attribute-access time. The orchestrator (`build_corpus.py`) imports the shim; the shim defers to the dispatcher.
 
@@ -408,7 +408,7 @@ def test_landmark_checks_raise_on_missing():
 3. The validate step runs inside the engine's container in the same job as the miner - no separate validation workflow to update.
 
 4. Add a Renovate `packageRule` so library bumps trigger the appropriate
-   workflow via the `engine_versions/{engine}/current.yaml` path filter (or, for
+   workflow via the `engine_versions/{engine}/current.toml` path filter (or, for
    the first-party-image pattern, via `engine-pipeline.yml`'s filter -
    downstream `publish-engine-image.yml` and the workflow_run-gated cells fire
    automatically on its success).

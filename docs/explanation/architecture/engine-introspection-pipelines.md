@@ -456,7 +456,7 @@ scientific-computing trace patterns not seen in engine config classes.
 ## Renovate-driven refresh loop (parallel re-fire) {#renovate-driven-refresh-loop}
 
 Library version bumps trigger both pipelines automatically. Renovate
-watches the engine SSOT (`engine_versions/<engine>/current.yaml`) plus the
+watches the engine SSOT (`engine_versions/<engine>/current.toml`) plus the
 `docker/Dockerfile.*` files and opens a PR bumping the relevant version
 fields. The PR fans out to both cells in parallel; each cell probes,
 then runs its producer, then writes its artefact. The bot commits the
@@ -472,7 +472,7 @@ sequenceDiagram
     participant Bot as llem-ci-bot
     participant Reviewer
 
-    Renovate->>CI: bump SSOT (engine_versions/<engine>/current.yaml)
+    Renovate->>CI: bump SSOT (engine_versions/<engine>/current.toml)
     activate CI
     CI->>Schema: fan-out (paths-filter)
     CI->>Inv: fan-out (paths-filter)
@@ -494,7 +494,7 @@ sequenceDiagram
 Cross-pipeline state lives on PR labels. The last cell to finish
 performs an atomic writeback covering both pipelines' artefacts plus
 the regenerated docs digests, in a single push. There is no separate
-summariser workflow. The SSOT (`engine_versions/<engine>/current.yaml`)
+summariser workflow. The SSOT (`engine_versions/<engine>/current.toml`)
 is Renovate-writable input only and is never part of the bot writeback
 bundle.
 

@@ -92,7 +92,7 @@ def _get_landmarks() -> tuple[str, ...]:
     library = ssot.get("library")
     if not isinstance(library, dict) or "current_version" not in library:
         raise ValueError(
-            "engine_versions/transformers.yaml is missing library.current_version; "
+            "engine_versions/transformers/current.toml is missing library.current_version; "
             "cannot resolve archived LANDMARKS."
         )
     landmarks = load_producer(

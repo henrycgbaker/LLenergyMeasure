@@ -43,7 +43,7 @@ scripts/engine_producers/
 ├── build_corpus.py                   Orchestration: merge + dedup + validate
 └── validate_invariants.py            Replays each rule against the live library
 
-engine_versions/{engine}/current.yaml          SSOT for library version (Renovate-writable input only)
+engine_versions/{engine}/current.toml          SSOT for library version (Renovate-writable input only)
 engine_versions/{engine}/v<safe>/producers/    Per-version vendored producer modules
 ├── static_invariant_miner.py
 ├── dynamic_invariant_miner.py        (when applicable)

@@ -27,7 +27,9 @@ def test_load_schema_returns_discovered_schema(engine: str) -> None:
 
     assert isinstance(schema, DiscoveredSchema)
     assert schema.engine == engine
-    assert schema.schema_version.startswith("1.")
+    # Repo currently ships schema_version 2.x (canonical JSON Schema per
+    # field). The loader's read-compat allowlist also accepts 1.x.
+    assert schema.schema_version.startswith("2.")
     assert schema.engine_version
     assert schema.image_ref
     assert schema.base_image_ref
@@ -82,8 +84,8 @@ def test_load_schema_missing_file_raises_with_hint(tmp_path: Path) -> None:
 
 
 def test_major_version_mismatch_raises() -> None:
-    envelope = _minimal_envelope(schema_version="2.0.0")
-    with pytest.raises(UnsupportedSchemaVersionError, match="major=2"):
+    envelope = _minimal_envelope(schema_version="9.0.0")
+    with pytest.raises(UnsupportedSchemaVersionError, match="major=9"):
         _parse_envelope(engine="vllm", raw_text=json.dumps(envelope))
 
 
@@ -94,9 +96,22 @@ def test_unparseable_version_raises() -> None:
 
 
 def test_minor_version_accepted() -> None:
-    envelope = _minimal_envelope(schema_version="1.7.3")
+    envelope = _minimal_envelope(schema_version="2.7.3")
     parsed = _parse_envelope(engine="vllm", raw_text=json.dumps(envelope))
-    assert parsed.schema_version == "1.7.3"
+    assert parsed.schema_version == "2.7.3"
+
+
+def test_legacy_major_one_still_readable() -> None:
+    """Schemas at v1 are still parseable for backward-read compatibility.
+
+    Older committed schemas (carrying ``discovery_method`` + Python-string
+    type values) should not break the loader; consumers that classify
+    types must tolerate both shapes.
+    """
+    envelope = _minimal_envelope(schema_version="1.0.0")
+    envelope["discovery_method"] = "legacy v1 fixture"  # extra key tolerated
+    parsed = _parse_envelope(engine="vllm", raw_text=json.dumps(envelope))
+    assert parsed.schema_version == "1.0.0"
 
 
 def test_iso_z_termination_accepted() -> None:
@@ -144,13 +159,20 @@ def test_load_all_schemas_returns_all_known() -> None:
 @pytest.mark.parametrize("engine", KNOWN_ENGINES)
 def test_discovered_schema_has_expected_shape(engine: str) -> None:
     schema = SchemaLoader().load_schema(engine)
-    # Every param entry must be a dict with a 'type' key (common contract)
+    # Every param entry must be a dict; canonical v2 specs surface either
+    # a ``type`` key (primitive or array including null), an ``anyOf``
+    # branch list (for multi-type / class-typed unions), or neither when
+    # the upstream had no annotation (description-only opaque shape).
     for name, spec in schema.engine_params.items():
         assert isinstance(spec, dict), f"{engine}.engine_params[{name}] is not a dict"
-        assert "type" in spec, f"{engine}.engine_params[{name}] has no 'type' key"
+        assert "type" in spec or "anyOf" in spec or "description" in spec, (
+            f"{engine}.engine_params[{name}] has no 'type', 'anyOf', or 'description' key"
+        )
     for name, spec in schema.sampling_params.items():
         assert isinstance(spec, dict), f"{engine}.sampling_params[{name}] is not a dict"
-        assert "type" in spec, f"{engine}.sampling_params[{name}] has no 'type' key"
+        assert "type" in spec or "anyOf" in spec or "description" in spec, (
+            f"{engine}.sampling_params[{name}] has no 'type', 'anyOf', or 'description' key"
+        )
 
 
 def test_vllm_has_expected_field_floor() -> None:
@@ -183,19 +205,18 @@ def test_transformers_records_kwargs_as_limitations() -> None:
 
 
 def _minimal_envelope(**overrides: object) -> dict[str, object]:
-    """Produce a minimal but valid envelope for parser-targeted tests."""
+    """Produce a minimal but valid v2.0.0 envelope for parser-targeted tests."""
     envelope: dict[str, object] = {
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "engine": "vllm",
         "engine_version": "0.7.3",
         "engine_commit_sha": None,
         "image_ref": "vllm/vllm-openai:v0.7.3",
         "base_image_ref": "vllm/vllm-openai:v0.7.3",
         "discovered_at": "2026-04-13T22:00:00+00:00",
-        "discovery_method": "unit test fixture",
         "discovery_limitations": [],
-        "engine_params": {"dummy": {"type": "str", "default": None}},
-        "sampling_params": {"dummy": {"type": "str", "default": None}},
+        "engine_params": {"dummy": {"type": "string", "default": None}},
+        "sampling_params": {"dummy": {"type": "string", "default": None}},
     }
     envelope.update(overrides)
     return envelope

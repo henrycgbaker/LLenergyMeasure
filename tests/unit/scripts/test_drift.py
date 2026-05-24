@@ -6,7 +6,7 @@ producer's ``LANDMARKS`` tuple resolve under the live library? Emits a
 ``landmarks_missing`` is non-empty.
 
 These tests verify pass/fail verdict derivation, fingerprint stability +
-drift, current.yaml envelope checks, and round-tripping through the cache
+drift, current.toml envelope checks, and round-tripping through the cache
 file.
 
 LANDMARKS are stdlib symbols (``json.JSONDecodeError`` etc.) rather than
@@ -62,24 +62,24 @@ def _install_synthetic_producer(
 def _redirect_compat_dir(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, engine: str = "transformers"
 ) -> Path:
-    """Point both current.yaml path and compat cache writes at ``tmp_path``.
+    """Point both current.toml path and compat cache writes at ``tmp_path``.
 
-    Copies the real engine current.yaml into a per-engine subdirectory
+    Copies the real engine current.toml into a per-engine subdirectory
     under ``tmp_path`` so envelope checks can still read it; redirects
     ``current_path`` to the temporary copy.
 
     The compat.json cache ends up at ``tmp_path/{engine}.compat.json``
-    because ``_compat_path`` walks two parents up from the fake current.yaml
-    (``tmp_path/{engine}/current.yaml`` -> ``.parent.parent`` = ``tmp_path``).
+    because ``_compat_path`` walks two parents up from the fake current.toml
+    (``tmp_path/{engine}/current.toml`` -> ``.parent.parent`` = ``tmp_path``).
     """
-    real_current = _PROJECT_ROOT / "engine_versions" / engine / "current.yaml"
+    real_current = _PROJECT_ROOT / "engine_versions" / engine / "current.toml"
     fake_engine_dir = tmp_path / engine
     fake_engine_dir.mkdir(parents=True, exist_ok=True)
-    fake_current = fake_engine_dir / "current.yaml"
+    fake_current = fake_engine_dir / "current.toml"
     fake_current.write_text(real_current.read_text())
 
     def _fake_path(name: str) -> Path:
-        return tmp_path / name / "current.yaml"
+        return tmp_path / name / "current.toml"
 
     monkeypatch.setattr(_drift, "current_path", _fake_path)
     return fake_current
@@ -304,8 +304,8 @@ def test_drift_atomic_output_rename_failure_leaves_destination_intact(
 def test_drift_ssot_missing_returns_infra_error(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """No current.yaml for the engine -> CLI exits 2 with a stderr error envelope."""
-    monkeypatch.setattr(_drift, "current_path", lambda name: tmp_path / f"{name}.yaml")
+    """No current.toml for the engine -> CLI exits 2 with a stderr error envelope."""
+    monkeypatch.setattr(_drift, "current_path", lambda name: tmp_path / f"{name}.toml")
     _install_synthetic_producer(
         monkeypatch,
         engine="ghost_engine",

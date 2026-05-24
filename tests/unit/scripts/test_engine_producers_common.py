@@ -8,9 +8,12 @@ package.
 
 from __future__ import annotations
 
+import dataclasses
+import enum
+import inspect
 import sys
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 import pytest
 
@@ -176,10 +179,9 @@ def test_make_envelope_fills_required_keys() -> None:
         engine_commit_sha=None,
         image_ref="foo:1",
         base_image_ref="foo:1",
-        discovery_method="unit test",
         discovery_limitations=[],
-        engine_params={"a": {"type": "int", "default": 0}},
-        sampling_params={"b": {"type": "str", "default": ""}},
+        engine_params={"a": {"type": "integer", "default": 0}},
+        sampling_params={"b": {"type": "string", "default": ""}},
     )
     assert env["schema_version"] == _common.SCHEMA_VERSION
     assert env["engine"] == "vllm"
@@ -187,9 +189,280 @@ def test_make_envelope_fills_required_keys() -> None:
     assert "engine_params" in env and "sampling_params" in env
 
 
-def test_schema_version_is_semver_with_major_one() -> None:
+def test_envelope_omits_discovery_method() -> None:
+    """``discovery_method`` was dropped in schema_version 2.0.0."""
+    env = _common.make_envelope(
+        engine="vllm",
+        engine_version="0.7.3",
+        engine_commit_sha=None,
+        image_ref="foo:1",
+        base_image_ref="foo:1",
+        discovery_limitations=[],
+        engine_params={},
+        sampling_params={},
+    )
+    assert "discovery_method" not in env
+
+
+def test_schema_version_is_semver_with_major_two() -> None:
+    """v2.0.0 introduces canonical JSON Schema per-field shapes."""
     major = int(_common.SCHEMA_VERSION.split(".")[0])
-    assert major == 1, "ships schema_version 1.x; bumping major requires loader update"
+    assert major == 2, "ships schema_version 2.x; bumping major requires loader update"
+
+
+# ---------------------------------------------------------------------------
+# annotation_to_json_schema (canonical JSON Schema 2020-12 emitters)
+# ---------------------------------------------------------------------------
+
+
+class TestAnnotationToJsonSchema:
+    def test_primitive_int(self) -> None:
+        assert _common.annotation_to_json_schema(int) == {"type": "integer"}
+
+    def test_primitive_str(self) -> None:
+        assert _common.annotation_to_json_schema(str) == {"type": "string"}
+
+    def test_primitive_float(self) -> None:
+        assert _common.annotation_to_json_schema(float) == {"type": "number"}
+
+    def test_primitive_bool(self) -> None:
+        assert _common.annotation_to_json_schema(bool) == {"type": "boolean"}
+
+    def test_none_type(self) -> None:
+        assert _common.annotation_to_json_schema(type(None)) == {"type": "null"}
+
+    def test_optional_collapses_to_type_array(self) -> None:
+        """X | None -> {"type": ["X", "null"]} (canonical JSON Schema 2020-12)."""
+        assert _common.annotation_to_json_schema(int | None) == {"type": ["integer", "null"]}
+        assert _common.annotation_to_json_schema(str | None) == {"type": ["string", "null"]}
+
+    def test_typing_optional_collapses_to_type_array(self) -> None:
+        assert _common.annotation_to_json_schema(Optional[int]) == {  # noqa: UP045
+            "type": ["integer", "null"]
+        }
+
+    def test_multi_branch_union_anyof(self) -> None:
+        """X | Y (no None) -> {"anyOf": [{"type": "X"}, {"type": "Y"}]}."""
+        result = _common.annotation_to_json_schema(int | str)
+        assert result == {"anyOf": [{"type": "integer"}, {"type": "string"}]}
+
+    def test_multi_branch_optional_union(self) -> None:
+        """X | Y | None -> anyOf with null branch."""
+        result = _common.annotation_to_json_schema(int | str | None)
+        assert result == {"anyOf": [{"type": "integer"}, {"type": "string"}, {"type": "null"}]}
+
+    def test_literal_emits_enum(self) -> None:
+        result = _common.annotation_to_json_schema(Literal["a", "b"])
+        assert result == {"type": "string", "enum": ["a", "b"]}
+
+    def test_literal_int(self) -> None:
+        result = _common.annotation_to_json_schema(Literal[1, 2, 3])
+        assert result == {"type": "integer", "enum": [1, 2, 3]}
+
+    def test_enum_subclass(self) -> None:
+        class Color(enum.Enum):
+            RED = "red"
+            BLUE = "blue"
+
+        result = _common.annotation_to_json_schema(Color)
+        assert result == {"type": "string", "enum": ["red", "blue"]}
+
+    def test_list_of_str(self) -> None:
+        result = _common.annotation_to_json_schema(list[str])
+        assert result == {"type": "array", "items": {"type": "string"}}
+
+    def test_dict_str_int(self) -> None:
+        result = _common.annotation_to_json_schema(dict[str, int])
+        assert result == {"type": "object", "additionalProperties": {"type": "integer"}}
+
+    def test_class_becomes_object_with_description(self) -> None:
+        class MyConfig:
+            pass
+
+        result = _common.annotation_to_json_schema(MyConfig)
+        assert result == {"type": "object", "description": "MyConfig"}
+
+    def test_class_union_with_string_and_none(self) -> None:
+        """The motivating real case: ``PretrainedConfig | str | PathLike | None``."""
+
+        class PretrainedConfig:
+            pass
+
+        result = _common.annotation_to_json_schema(PretrainedConfig | str | None)
+        assert result == {
+            "anyOf": [
+                {"type": "object", "description": "PretrainedConfig"},
+                {"type": "string"},
+                {"type": "null"},
+            ]
+        }
+
+    def test_parameter_empty_emits_empty_with_description(self) -> None:
+        result = _common.annotation_to_json_schema(inspect.Parameter.empty)
+        # No 'type' key (any-shape) and a description noting opacity.
+        assert "type" not in result
+        assert "no annotation" in result["description"]
+
+
+# ---------------------------------------------------------------------------
+# dataclass_fields_to_specs (canonical output)
+# ---------------------------------------------------------------------------
+
+
+class TestDataclassFieldsToSpecs:
+    def test_canonical_types_emitted(self) -> None:
+        @dataclasses.dataclass
+        class M:
+            x: int = 0
+            y: str | None = None
+            z: bool = True
+
+        specs = _common.dataclass_fields_to_specs(M)
+        assert specs["x"] == {"type": "integer", "default": 0}
+        assert specs["y"] == {"type": ["string", "null"], "default": None}
+        assert specs["z"] == {"type": "boolean", "default": True}
+
+    def test_literal_field_lifts_enum(self) -> None:
+        @dataclasses.dataclass
+        class M:
+            color: Literal["red", "blue"] = "red"
+
+        specs = _common.dataclass_fields_to_specs(M)
+        assert specs["color"] == {
+            "type": "string",
+            "enum": ["red", "blue"],
+            "default": "red",
+        }
+
+    def test_default_factory_is_evaluated(self) -> None:
+        @dataclasses.dataclass
+        class M:
+            tags: list[str] = dataclasses.field(default_factory=list)
+
+        specs = _common.dataclass_fields_to_specs(M)
+        assert specs["tags"] == {
+            "type": "array",
+            "items": {"type": "string"},
+            "default": [],
+        }
+
+    def test_skip_private(self) -> None:
+        @dataclasses.dataclass
+        class M:
+            public: int = 0
+            _private: int = 0
+
+        skipped = _common.dataclass_fields_to_specs(M, skip_private=True)
+        kept = _common.dataclass_fields_to_specs(M, skip_private=False)
+        assert "_private" not in skipped
+        assert "_private" in kept
+
+
+# ---------------------------------------------------------------------------
+# signature_param_to_spec
+# ---------------------------------------------------------------------------
+
+
+class TestSignatureParamToSpec:
+    def test_typed_param(self) -> None:
+        def f(x: int = 5) -> None: ...
+
+        param = inspect.signature(f).parameters["x"]
+        assert _common.signature_param_to_spec(param) == {"type": "integer", "default": 5}
+
+    def test_optional_param(self) -> None:
+        def f(x: str | None = None) -> None: ...
+
+        param = inspect.signature(f).parameters["x"]
+        assert _common.signature_param_to_spec(param) == {
+            "type": ["string", "null"],
+            "default": None,
+        }
+
+    def test_untyped_param(self) -> None:
+        def f(x=42) -> None: ...
+
+        param = inspect.signature(f).parameters["x"]
+        spec = _common.signature_param_to_spec(param)
+        # No annotation -> no 'type'; default still surfaces.
+        assert "type" not in spec
+        assert spec["default"] == 42
+
+    def test_no_default(self) -> None:
+        def f(x: int) -> None: ...
+
+        param = inspect.signature(f).parameters["x"]
+        assert _common.signature_param_to_spec(param) == {"type": "integer", "default": None}
+
+
+# ---------------------------------------------------------------------------
+# runtime_value_to_spec (used by transformers GenerationConfig walker)
+# ---------------------------------------------------------------------------
+
+
+class TestRuntimeValueToSpec:
+    def test_int_value(self) -> None:
+        assert _common.runtime_value_to_spec(5) == {"type": "integer", "default": 5}
+
+    def test_str_value(self) -> None:
+        assert _common.runtime_value_to_spec("hi") == {"type": "string", "default": "hi"}
+
+    def test_bool_value(self) -> None:
+        assert _common.runtime_value_to_spec(True) == {"type": "boolean", "default": True}
+
+    def test_list_value(self) -> None:
+        assert _common.runtime_value_to_spec([1, 2]) == {
+            "type": "array",
+            "default": [1, 2],
+        }
+
+    def test_dict_value(self) -> None:
+        assert _common.runtime_value_to_spec({"a": 1}) == {
+            "type": "object",
+            "default": {"a": 1},
+        }
+
+    def test_none_value_has_no_type(self) -> None:
+        """None default with no annotation -> no 'type' (untyped)."""
+        spec = _common.runtime_value_to_spec(None)
+        assert "type" not in spec
+        assert spec["default"] is None
+        assert "no type annotation" in spec["description"]
+
+
+# ---------------------------------------------------------------------------
+# jsonschema_property_to_canonical (msgspec / Pydantic JSON Schema cleanup)
+# ---------------------------------------------------------------------------
+
+
+class TestJsonschemaPropertyToCanonical:
+    def test_primitive_passthrough(self) -> None:
+        result = _common.jsonschema_property_to_canonical({"type": "integer", "default": 0})
+        assert result == {"type": "integer", "default": 0}
+
+    def test_title_dropped(self) -> None:
+        result = _common.jsonschema_property_to_canonical({"type": "integer", "title": "My Field"})
+        assert result == {"type": "integer"}
+
+    def test_anyof_with_null_collapses_to_type_array(self) -> None:
+        result = _common.jsonschema_property_to_canonical(
+            {"anyOf": [{"type": "string"}, {"type": "null"}], "default": None}
+        )
+        assert result == {"type": ["string", "null"], "default": None}
+
+    def test_anyof_multi_branch_preserved(self) -> None:
+        spec = {"anyOf": [{"type": "string"}, {"type": "integer"}]}
+        assert _common.jsonschema_property_to_canonical(spec) == spec
+
+    def test_anyof_with_ref_not_collapsed(self) -> None:
+        """anyOf with $ref branch keeps the anyOf shape (not a simple primitive)."""
+        spec = {"anyOf": [{"$ref": "#/$defs/Foo"}, {"type": "null"}]}
+        assert _common.jsonschema_property_to_canonical(spec) == spec
+
+    def test_x_source_passes_through(self) -> None:
+        """PR-0.5 extension keys (x-source, x-source-ref, enum) survive intact."""
+        spec = {"type": "string", "enum": ["a", "b"], "x-source": "validation_collection"}
+        assert _common.jsonschema_property_to_canonical(spec) == spec
 
 
 # ---------------------------------------------------------------------------
@@ -209,9 +482,9 @@ def test_transformers_introspector_landmarks_resolve() -> None:
     pytest.importorskip("transformers")
     import importlib
 
-    from scripts.engine_producers import transformers_introspector
+    from scripts.engine_producers import transformers_schema_introspector
 
-    landmarks = transformers_introspector.LANDMARKS
+    landmarks = transformers_schema_introspector.LANDMARKS
     assert isinstance(landmarks, tuple) and landmarks, "LANDMARKS must be a non-empty tuple"
 
     missing: list[str] = []

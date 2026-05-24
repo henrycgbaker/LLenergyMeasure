@@ -19,10 +19,10 @@ from typing import Any
 
 from scripts.engine_producers._common import (
     TRANSFORMERS_DOCKERFILE,
-    annotation_to_type_str,
-    jsonable,
     make_envelope,
     read_dockerfile_from,
+    runtime_value_to_spec,
+    signature_param_to_spec,
 )
 
 # Schema-introspector LANDMARKS for Transformers 5.6.2.
@@ -49,7 +49,8 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     engine_params:   best-effort inspect.signature(from_pretrained) scrape;
                      **kwargs are opaque and recorded as a limitation
     sampling_params: GenerationConfig().to_dict() (~69 fields); None defaults
-                     get type='unknown' and are listed in discovery_limitations
+                     yield empty schemas (no ``type`` key) and are listed in
+                     discovery_limitations
     """
     import transformers  # type: ignore[import-not-found]
     from transformers import (  # type: ignore[import-not-found]
@@ -86,11 +87,7 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
                 continue
             if name in engine_params:
                 continue  # prefer AutoModelForCausalLM over PreTrainedModel
-            default = None if param.default is inspect.Parameter.empty else param.default
-            engine_params[name] = {
-                "type": annotation_to_type_str(param.annotation),
-                "default": jsonable(default),
-            }
+            engine_params[name] = signature_param_to_spec(param)
 
     if kwargs_points:
         limitations.append(
@@ -106,25 +103,19 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     none_default_fields: list[str] = []
     gc = GenerationConfig()
     for name, value in gc.to_dict().items():
+        sampling_params[name] = runtime_value_to_spec(value)
         if value is None:
-            sampling_params[name] = {"type": "unknown", "default": None}
             none_default_fields.append(name)
-        elif isinstance(value, (list, tuple)):
-            sampling_params[name] = {"type": type(value).__name__, "default": jsonable(value)}
-        elif isinstance(value, dict):
-            sampling_params[name] = {"type": "dict", "default": jsonable(value)}
-        else:
-            sampling_params[name] = {
-                "type": type(value).__name__,
-                "default": jsonable(value),
-            }
 
     if none_default_fields:
         limitations.append(
             {
                 "section": "sampling_params",
                 "fields": none_default_fields,
-                "reason": "GenerationConfig has no type annotations; None defaults yield type='unknown'",
+                "reason": (
+                    "GenerationConfig has no type annotations; None defaults "
+                    "yield empty schemas (no 'type' key)"
+                ),
             }
         )
 
@@ -135,7 +126,6 @@ def discover(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         engine_commit_sha=getattr(transformers, "__commit__", None),
         image_ref=image_ref or base_image_ref,
         base_image_ref=base_image_ref,
-        discovery_method="inspect.signature(from_pretrained) + GenerationConfig().to_dict()",
         discovery_limitations=limitations,
         engine_params=engine_params,
         sampling_params=sampling_params,

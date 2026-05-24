@@ -40,7 +40,7 @@ Usage::
 Emits a JSON ``DriftReport`` to stdout (or to ``--output PATH``). Exit 0 on
 either verdict - the binary verdict travels in the JSON's verdict field, and
 downstream workflow steps gate on it. Exit 2 only on infrastructure failure
-(current.yaml missing, producer module unimportable, current.yaml malformed).
+(current.toml missing, producer module unimportable, current.toml malformed).
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Literal
 
-import yaml
+import tomllib
 
 # Make the top-level ``scripts`` package importable when invoked as a
 # plain script (``python scripts/_drift.py``) as well as via
@@ -202,12 +202,12 @@ def _fingerprint(resolved: list[_ResolvedLandmark]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# current.yaml helpers
+# current.toml helpers
 # ---------------------------------------------------------------------------
 
 
 def _load_current(engine: str) -> dict[str, object]:
-    """Read + parse ``engine_versions/{engine}/current.yaml``.
+    """Read + parse ``engine_versions/{engine}/current.toml``.
 
     Indirects through ``current_path`` from this module's namespace so tests
     can monkeypatch ``_drift.current_path`` for hermetic fixtures.
@@ -215,10 +215,10 @@ def _load_current(engine: str) -> dict[str, object]:
     but kept private here for the test-surface reason above.
     """
     path = current_path(engine)
-    text = path.read_text()  # FileNotFoundError surfaces here
-    data = yaml.safe_load(text)
+    with open(path, "rb") as f:  # FileNotFoundError surfaces here
+        data = tomllib.load(f)
     if not isinstance(data, dict):
-        raise ValueError(f"current.yaml at {path} did not parse to a mapping.")
+        raise ValueError(f"current.toml at {path} did not parse to a mapping.")
     return data
 
 
@@ -229,7 +229,7 @@ def _compat_path(engine: str) -> Path:
     sibling of the per-engine sub-directory (not inside it). Resolved via
     ``current_path`` parent so tests can monkeypatch the location.
     """
-    # current_path(engine) -> engine_versions/{engine}/current.yaml
+    # current_path(engine) -> engine_versions/{engine}/current.toml
     # .parent          -> engine_versions/{engine}/
     # .parent          -> engine_versions/
     return current_path(engine).parent.parent / f"{engine}.compat.json"
@@ -343,7 +343,7 @@ def run(*, engine: str, producer: ProducerKind) -> DriftReport:
     current = _load_current(engine)  # FileNotFoundError -> caller handles as infra error
     library = current.get("library")
     if not isinstance(library, dict) or "current_version" not in library:
-        raise ValueError(f"current.yaml for {engine} missing library.current_version.")
+        raise ValueError(f"current.toml for {engine} missing library.current_version.")
     current_version = str(library["current_version"])
 
     producer_module = _import_producer(engine, producer)
@@ -456,7 +456,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         report = run(engine=args.engine, producer=args.producer)
     except (FileNotFoundError, KeyError, ImportError, AttributeError, TypeError, ValueError) as exc:
-        # Infrastructure failure: current.yaml missing / malformed / producer
+        # Infrastructure failure: current.toml missing / malformed / producer
         # module unimportable / LANDMARKS missing or malformed. Distinct
         # from a fail-verdict probe (which writes JSON to stdout/file).
         print(json.dumps({"error": type(exc).__name__, "message": str(exc)}), file=sys.stderr)

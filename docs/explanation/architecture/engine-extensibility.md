@@ -67,7 +67,7 @@ transformers engine shows the pattern:
 Key requirements:
 - Multi-stage build with a `runtime` target (used by CI for caching).
 - Pin the engine library version via an `ARG`; the version is sourced from
-  `engine_versions/<engine>/current.yaml` at build time and by Renovate for automated
+  `engine_versions/<engine>/current.toml` at build time and by Renovate for automated
   bumps.
 - Install `llenergymeasure` with the relevant extras (`[vllm]`, `[tensorrt]`,
   etc.) so the plugin and sampler dependencies are present.
@@ -181,7 +181,7 @@ delivery checklist is:
    `run_warmup_prompt` to use kernel-only warmup.
 2. `docker/Dockerfile.sglang` - base image from SGLang's official release
    container; version pinned via `ARG SGLANG_VERSION`; sources version from
-   `engine_versions/sglang/current.yaml`.
+   `engine_versions/sglang/current.toml`.
 3. `Engine.SGLANG = "sglang"` in `ssot.py` and a `SGLangConfig` Pydantic
    model in `engine_configs.py`.
 

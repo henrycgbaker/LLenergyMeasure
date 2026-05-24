@@ -133,11 +133,11 @@ jobs:
           # changes self-test all engines (issue #515 / #565).
           filters: |
             transformers_build:
-              - 'engine_versions/transformers/current.yaml'
+              - 'engine_versions/transformers/current.toml'
               - 'docker/Dockerfile.transformers'
               - '.github/workflows/engine-pipeline.yml'
             invariants_transformers:
-              - 'engine_versions/transformers/current.yaml'
+              - 'engine_versions/transformers/current.toml'
               - 'docker/Dockerfile.transformers'
               - 'scripts/engine_producers/transformers_*.py'
               - 'scripts/engine_producers/_*.py'
@@ -151,7 +151,7 @@ jobs:
               - '.github/actions/**'
               - 'scripts/ci/upsert_pr_comment.sh'
             invariants_vllm:
-              - 'engine_versions/vllm/current.yaml'
+              - 'engine_versions/vllm/current.toml'
               - 'scripts/engine_producers/vllm_*.py'
               - 'scripts/engine_producers/_*.py'
               - 'scripts/engine_producers/build_corpus.py'
@@ -164,7 +164,7 @@ jobs:
               - '.github/actions/**'
               - 'scripts/ci/upsert_pr_comment.sh'
             invariants_tensorrt:
-              - 'engine_versions/tensorrt/current.yaml'
+              - 'engine_versions/tensorrt/current.toml'
               - 'scripts/engine_producers/tensorrt_*.py'
               - 'scripts/engine_producers/_*.py'
               - 'scripts/engine_producers/build_corpus.py'
@@ -177,7 +177,7 @@ jobs:
               - '.github/actions/**'
               - 'scripts/ci/upsert_pr_comment.sh'
             schemas_transformers:
-              - 'engine_versions/transformers/current.yaml'
+              - 'engine_versions/transformers/current.toml'
               - 'docker/Dockerfile.transformers'
               - 'scripts/engine_producers/transformers_*.py'
               - 'scripts/engine_producers/_*.py'
@@ -187,7 +187,7 @@ jobs:
               - '.github/actions/**'
               - 'scripts/ci/upsert_pr_comment.sh'
             schemas_vllm:
-              - 'engine_versions/vllm/current.yaml'
+              - 'engine_versions/vllm/current.toml'
               - 'scripts/engine_producers/vllm_*.py'
               - 'scripts/engine_producers/_*.py'
               - 'src/llenergymeasure/engines/vllm/schema.discovered.json'
@@ -196,7 +196,7 @@ jobs:
               - '.github/actions/**'
               - 'scripts/ci/upsert_pr_comment.sh'
             schemas_tensorrt:
-              - 'engine_versions/tensorrt/current.yaml'
+              - 'engine_versions/tensorrt/current.toml'
               - 'scripts/engine_producers/tensorrt_*.py'
               - 'scripts/engine_producers/_*.py'
               - 'src/llenergymeasure/engines/tensorrt/schema.discovered.json'
@@ -206,7 +206,7 @@ jobs:
               - 'scripts/ci/upsert_pr_comment.sh'
 
       # Computes per-cell flags + JSON arrays for the matrix fan-out
-      # (rationale: #564 dynamic engine matrix from current.yaml).
+      # (rationale: #564 dynamic engine matrix from current.toml).
       - name: Compute matrix outputs
         id: compute
         env:
@@ -248,7 +248,7 @@ jobs:
 
           # Build cell objects for the "others" (vllm + tensorrt) matrix
           # via #564's discover-engines-from-current pattern. Adding M5 SGLang
-          # = adding 'sglang' to the current.yaml + this list.
+          # = adding 'sglang' to the current.toml + this list.
           INV_OTHERS='[]'
           [[ "$I_V" == "true" ]] && INV_OTHERS=$(jq -c '. + [{"engine":"vllm","runner":"self-hosted","image-source":"dockerhub"}]' <<<"$INV_OTHERS")
           [[ "$I_R" == "true" ]] && INV_OTHERS=$(jq -c '. + [{"engine":"tensorrt","runner":"self-hosted","image-source":"ngc"}]' <<<"$INV_OTHERS")
@@ -269,7 +269,7 @@ jobs:
     # Builds transformers runtime image and pushes it to transformers-cache
     # for downstream cells to pull. Fires on (PR with build paths matched)
     # OR (workflow_dispatch with engine=transformers/all) OR schedule
-    # (drift detection). The filter job is the current.yaml for the
+    # (drift detection). The filter job is the current.toml for the
     # transformers_build flag in PR + dispatch cases; schedule bypasses
     # filter (filter is skipped on schedule).
     needs: filter
@@ -285,12 +285,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Resolve transformers version from current.yaml
+      - name: Resolve transformers version from current.toml
         id: version
         run: |
-          VER=$(yq '.library.current_version' engine_versions/transformers/current.yaml)
-          if [[ -z "$VER" || "$VER" == "null" ]]; then
-            echo "Could not resolve transformers version from engine_versions/transformers/current.yaml" >&2
+          VER=$(python3 scripts/ci/read_toml_value.py \
+            engine_versions/transformers/current.toml \
+            library.current_version)
+          if [[ -z "$VER" ]]; then
+            echo "Could not resolve transformers version from engine_versions/transformers/current.toml" >&2
             exit 1
           fi
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
@@ -502,7 +504,7 @@ jobs:
             'src/llenergymeasure/engines/*/invariants.proposed.yaml' \
             'src/llenergymeasure/engines/*/invariants.validated.yaml' \
             'src/llenergymeasure/engines/*/schema.discovered.json' \
-            'engine_versions/*/current.yaml' \
+            'engine_versions/*/current.toml' \
             'docs/reference/engines/invariants-*.md' \
             'docs/reference/engines/curation-*.md' \
             'docs/reference/engines/schema-*.md' \

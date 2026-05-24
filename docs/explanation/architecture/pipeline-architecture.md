@@ -34,7 +34,7 @@ flowchart TD
     gate -->|red| pr
 ```
 
-1. **PR trigger.** `engine-pipeline.yml` fires when a PR touches any of the path-filter inputs: `engine_versions/transformers/current.yaml`, `docker/Dockerfile.transformers`, or `.github/workflows/engine-pipeline.yml`.
+1. **PR trigger.** `engine-pipeline.yml` fires when a PR touches any of the path-filter inputs: `engine_versions/transformers/current.toml`, `docker/Dockerfile.transformers`, or `.github/workflows/engine-pipeline.yml`.
 2. **build-transformers.** Builds the transformers runtime image. Cache hits land in ~10-15 min; cold FA3 builds ~60-90 min. Pushes to `ghcr.io/<repo>/transformers-cache:transformers-<VER>`.
 3. **invariants-transformers + schemas-transformers cells.** Orchestrator's `needs:` graph fires these on build success. Each cell pulls the transformers-cache image, runs probe -> mine/introspect -> validate, and uploads a writeback artefact.
 4. **Probe + CI verdict.** A probe failure turns CI red. The `accept-probe-fail` PR label bypasses the gate for known-drift cases (admin escalation; see [#547](https://github.com/henrycgbaker/llenergymeasure/issues/547)).
@@ -53,7 +53,7 @@ The diagram captures the high-level flow; per-step detail follows below.
 ```mermaid
 flowchart TD
     renovate[Renovate scans upstream releases<br/>on configured schedule]
-    bump[Custom regex manager bumps SSOT<br/>engine_versions/&lt;engine&gt;/current.yaml + Dockerfile ARG]
+    bump[Custom regex manager bumps SSOT<br/>engine_versions/&lt;engine&gt;/current.toml + Dockerfile ARG]
     pr[Renovate PR opens<br/>fix&#40;deps&#41;: bump vllm to 0.10.2]
 
     renovate --> bump --> pr
@@ -77,7 +77,7 @@ flowchart TD
 
 #### Trigger contract
 
-- **Renovate.** Scans upstream library releases on the configured schedule. Custom regex manager bumps two file targets together: `engine_versions/{engine}/current.yaml:library.current_version` (the SSOT, canonical) and `docker/Dockerfile.{engine}` ARG (derived, auto-templated from SSOT).
+- **Renovate.** Scans upstream library releases on the configured schedule. Custom regex manager bumps two file targets together: `engine_versions/{engine}/current.toml:library.current_version` (the SSOT, canonical) and `docker/Dockerfile.{engine}` ARG (derived, auto-templated from SSOT).
 - **Path-filtered fan-out.** When Renovate's PR opens, paths-filter routes the change to two workflows in parallel: the engine-invariants pipeline and the engine-schemas pipeline.
 
 #### engine-invariants cell (per-engine matrix)
@@ -126,7 +126,7 @@ git add src/llenergymeasure/engines/{engine}/invariants.proposed.yaml
 git commit && git push --force-with-lease
 ```
 
-`engine_versions/{engine}/current.yaml` is Renovate-writable input only and is **never** part of the bot writeback bundle.
+`engine_versions/{engine}/current.toml` is Renovate-writable input only and is **never** part of the bot writeback bundle.
 
 The same workflow then applies the cross-pipeline rollup label (`safe-bump` or `probe-blocked`).
 

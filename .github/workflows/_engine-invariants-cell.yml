@@ -70,14 +70,16 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
-      - name: Resolve engine version from current.yaml
+      - name: Resolve engine version from current.toml
         id: version
         env:
           ENGINE: ${{ inputs.engine }}
         run: |
-          VER=$(yq '.library.current_version' "engine_versions/${ENGINE}/current.yaml")
-          if [[ -z "$VER" || "$VER" == "null" ]]; then
-            echo "Could not resolve ${ENGINE} version from engine_versions/${ENGINE}/current.yaml" >&2
+          VER=$(python3 scripts/ci/read_toml_value.py \
+            "engine_versions/${ENGINE}/current.toml" \
+            library.current_version)
+          if [[ -z "$VER" ]]; then
+            echo "Could not resolve ${ENGINE} version from engine_versions/${ENGINE}/current.toml" >&2
             exit 1
           fi
           # Python-identifier-safe form (dots and hyphens -> underscores) used as the
@@ -157,9 +159,11 @@ jobs:
             echo "Source tree already present at ${DEST}; skipping fetch."
             exit 0
           fi
-          URL_TEMPLATE=$(yq '.source_tarball.url_template' engine_versions/tensorrt/current.yaml)
-          if [[ -z "$URL_TEMPLATE" || "$URL_TEMPLATE" == "null" ]]; then
-            echo "Could not resolve source_tarball.url_template from engine_versions/tensorrt/current.yaml" >&2
+          URL_TEMPLATE=$(python3 scripts/ci/read_toml_value.py \
+            engine_versions/tensorrt/current.toml \
+            source_tarball.url_template)
+          if [[ -z "$URL_TEMPLATE" ]]; then
+            echo "Could not resolve source_tarball.url_template from engine_versions/tensorrt/current.toml" >&2
             exit 1
           fi
           URL="${URL_TEMPLATE//\{version\}/${VER}}"
@@ -174,7 +178,7 @@ jobs:
           ENGINE: ${{ inputs.engine }}
         run: |
           BASE_PATHS=(
-            "engine_versions/${ENGINE}/current.yaml"
+            "engine_versions/${ENGINE}/current.toml"
             "scripts/engine_producers/build_corpus.py"
             "scripts/engine_producers/_base.py"
             "scripts/engine_producers/_pydantic_lift.py"
@@ -216,7 +220,7 @@ jobs:
           # mining produces a different mined_at timestamp, the diff
           # classifier fires, writeback fires, loop. Filtering bot commits
           # anchors mining to the latest substantive change instead.
-          # current.yaml is excluded from the writeback bundle (Renovate is
+          # current.toml is excluded from the writeback bundle (Renovate is
           # its only writer) so it never trips this loop.
           SHA=$(git log -1 --format=%H \
             --invert-grep --grep='^chore(bot): writeback' \
@@ -522,7 +526,7 @@ jobs:
           # mirror is gated on the engine being vendored at this version.
           # Until the engine's vendor PR lands, the archive paths under
           # engine_versions/<engine>/<safe>/outputs/ are absent - the upload should
-          # bundle whatever exists rather than fail. current.yaml is NOT in the
+          # bundle whatever exists rather than fail. current.toml is NOT in the
           # writeback bundle: it is Renovate-writable input only, and the
           # dispatcher + probe pair never need to mutate it.
           if-no-files-found: warn

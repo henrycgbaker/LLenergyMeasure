@@ -34,17 +34,16 @@ installed wheels. Repeated loads are cached per engine.
 
 ```json
 {
-  "schema_version": "1.0.0",
+  "schema_version": "2.0.0",
   "engine": "transformers",
   "engine_version": "4.57.3",
   "engine_commit_sha": null,
   "image_ref": "llenergymeasure:transformers-4.57.3",
   "base_image_ref": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
   "discovered_at": "2026-05-08T02:36:55Z",
-  "discovery_method": "inspect.signature(from_pretrained) + GenerationConfig().to_dict()",
   "discovery_limitations": [ /* see below */ ],
-  "engine_params":   { /* {field_name: {type, default, ...}} */ },
-  "sampling_params": { /* {field_name: {type, default, ...}} */ }
+  "engine_params":   { /* {field_name: <canonical JSON Schema 2020-12 spec>} */ },
+  "sampling_params": { /* {field_name: <canonical JSON Schema 2020-12 spec>} */ }
 }
 ```
 
@@ -57,11 +56,14 @@ above so JSON diffs stay readable.
 
 ### `schema_version`
 
-Envelope schema version. Major version must equal
-`SUPPORTED_MAJOR_VERSION` in
+Envelope schema version. Major must appear in
+`SUPPORTED_MAJOR_VERSIONS` in
 `src/llenergymeasure/config/schema_loader.py`. Major bumps are breaking
-and `SchemaLoader` raises `UnsupportedSchemaVersionError`. Minor bumps
-add envelope keys; downstream loaders are forward-compatible.
+and `SchemaLoader` raises `UnsupportedSchemaVersionError` for unsupported
+majors. Minor bumps add envelope keys; downstream loaders are
+forward-compatible. The current loader accepts `{1, 2}` (write target
+is `2.x`; `1.x` is retained for read-compat with older committed
+schemas).
 
 ### `engine`
 
@@ -73,7 +75,7 @@ when multiple schemas are loaded.
 ### `engine_version`
 
 Library version the schema was discovered against. Sourced from the
-SSOT (`engine_versions/{engine}/current.yaml`) at discovery time. Renovate-driven
+SSOT (`engine_versions/{engine}/current.toml`) at discovery time. Renovate-driven
 bumps re-fire discovery so this field tracks the pinned upstream version
 on `main`.
 
@@ -109,19 +111,6 @@ do not produce a fresh wallclock timestamp on every invocation. Without
 the freeze, every CI run would emit a 2-line diff and re-fire the path
 filter.
 
-### `discovery_method`
-
-Short human-readable description of how the schema was extracted.
-Examples seen in the current corpus:
-
-| Engine | `discovery_method` |
-|---|---|
-| transformers | `inspect.signature(from_pretrained) + GenerationConfig().to_dict()` |
-| vllm | `dataclasses.fields(EngineArgs) + msgspec.json.schema(SamplingParams)` |
-| tensorrt | `TrtLlmArgs.model_json_schema() + dataclasses.fields(SamplingParams)` |
-
-The string is informational; consumers do not parse it.
-
 ### `discovery_limitations`
 
 A list of records documenting fields that discovery could not recover.
@@ -141,7 +130,7 @@ where the introspector's reach ends.
   {
     "section": "sampling_params",
     "fields": ["max_new_tokens", "min_new_tokens"],
-    "reason": "GenerationConfig has no type annotations; None defaults yield type='unknown'"
+    "reason": "GenerationConfig has no type annotations; None defaults yield empty schemas (no 'type' key)"
   }
 ]
 ```
@@ -154,33 +143,44 @@ where the introspector's reach ends.
 
 ### `engine_params`
 
-Object keyed by engine-parameter name. Values are descriptor objects
-with at minimum `type` and `default`; some engines additionally surface
-`description` and `deprecated` (notably TRT-LLM, which exposes a
-Pydantic schema with these fields).
+Object keyed by engine-parameter name. Each value is a canonical
+JSON Schema 2020-12 property: at minimum a `type` (or `anyOf`) plus
+`default`; some engines additionally surface `description`, `enum`,
+`deprecated`, `items`, and `additionalProperties`.
 
 ```json
 "engine_params": {
   "model": {
-    "type": "string",
+    "type": ["string", "null"],
     "default": null,
-    "description": "The path to the model checkpoint or the model name from the Hugging Face Hub.",
-    "deprecated": false
+    "description": "The path to the model checkpoint or the model name from the Hugging Face Hub."
   },
   "tokenizer_mode": {
-    "type": "Literal['auto', 'slow']",
+    "type": "string",
+    "enum": ["auto", "slow"],
     "default": "auto",
-    "description": "The mode to initialize the tokenizer.",
-    "deprecated": false
+    "description": "The mode to initialize the tokenizer."
+  },
+  "config": {
+    "anyOf": [
+      {"type": "object", "description": "PretrainedConfig"},
+      {"type": "string"},
+      {"type": "null"}
+    ],
+    "default": null
   }
 }
 ```
 
 | Sub-field | Type | Notes |
 |---|---|---|
-| `type` | string | Compact string rendering of the type annotation. Handles `None`, `Optional[X]`, `X \| None`, `Union`, `Literal[...]`, generics, and forward refs. Falls back to `str(annotation)` when the annotation is unrecognised; falls back to `"unknown"` when the annotation is missing entirely (the transformers `GenerationConfig` case for fields whose default is `None`). |
-| `default` | JSON value | Default value, JSON-coerced. Enums render as their `.name`; types render as `__name__`; sets render as sorted lists. Anything else falls back to `str(value)` so the output stays deterministic. |
-| `description` | string (optional) | Per-field description, when discovery can recover one (TRT-LLM Pydantic schema). Absent for engines whose introspection target carries only a class docstring (vLLM, transformers). |
+| `type` | string \| string[] | Canonical JSON Schema primitive (`"string"`, `"integer"`, `"number"`, `"boolean"`, `"array"`, `"object"`, `"null"`) or an array including `"null"` for `X \| None` optionals. Absent when the field is an `anyOf` union or had no upstream annotation. |
+| `anyOf` | object[] | Used for non-trivial unions (multiple non-None types, or unions containing a `$ref` / class-typed branch). Each branch is itself a canonical sub-spec. |
+| `enum` | array | Lifted from `Literal[...]` annotations, `enum.Enum` subclasses, and (with PR-0.5) module-level validation collections. Sibling to `type`. |
+| `default` | JSON value | Default value, JSON-coerced. Enums render as their `.value`; types render as `__name__`; sets render as sorted lists. Anything else falls back to `str(value)` so the output stays deterministic. |
+| `items` | object | For `type: "array"` fields: a canonical sub-spec for element type. |
+| `additionalProperties` | object | For `type: "object"` fields: a canonical sub-spec for value type when the upstream annotation is `dict[K, V]`. |
+| `description` | string (optional) | Per-field description, when discovery can recover one (TRT-LLM Pydantic schema). Also used by the introspector to surface a class name when the annotation is a custom class (`{"type": "object", "description": "<ClassName>"}`). |
 | `deprecated` | boolean (optional) | Deprecation flag, when discovery can recover one. |
 
 ### `sampling_params`
@@ -248,7 +248,8 @@ For the full runtime data flow, see [parameter discovery](/explanation/architect
 
 | Version | Changes |
 |---|---|
-| `1.0.0` | Initial release. Top-level envelope: `schema_version`, `engine`, `engine_version`, `engine_commit_sha`, `image_ref`, `base_image_ref`, `discovered_at`, `discovery_method`, `discovery_limitations`, `engine_params`, `sampling_params`. `SUPPORTED_MAJOR_VERSION = 1` in the loader. |
+| `1.0.0` | Initial release. Top-level envelope: `schema_version`, `engine`, `engine_version`, `engine_commit_sha`, `image_ref`, `base_image_ref`, `discovered_at`, `discovery_method`, `discovery_limitations`, `engine_params`, `sampling_params`. Per-field `type` is a compact Python-string (`"int"`, `"str \| None"`, `"PretrainedConfig \| str \| PathLike \| None"`). `SUPPORTED_MAJOR_VERSION = 1` in the loader. |
+| `2.0.0` | **Envelope canonicalisation.** Per-field `type` is canonical JSON Schema 2020-12 (`"string"`, `"integer"`, `["string", "null"]`, `anyOf` for complex unions). `Literal[...]` / `enum.Enum` annotations lift to `{"type": <inferred>, "enum": [...]}`. Generic containers surface `items` / `additionalProperties`. Class-typed fields render as `{"type": "object", "description": "<ClassName>"}`. The `discovery_method` envelope key is dropped (engine + version + producer file path together carry equivalent information). `SUPPORTED_MAJOR_VERSIONS = {1, 2}` in the loader (read-compat with v1; cells write v2 only). |
 
 ---
 

@@ -40,7 +40,7 @@ flowchart LR
 
 The loop has four stages:
 
-**1. Renovate PR** - Renovate watches `engine_versions/<engine>/current.yaml` for
+**1. Renovate PR** - Renovate watches `engine_versions/<engine>/current.toml` for
 version string changes (via a `custom.regex` manager) and the `docker/Dockerfile.*`
 files for base image changes. When an upstream release is detected, Renovate
 opens a PR bumping the relevant `current_version` field and/or the `FROM` line.

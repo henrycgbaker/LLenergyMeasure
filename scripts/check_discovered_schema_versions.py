@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Check that engine current.yaml versions match discovered schema engine_versions.
+"""Check that engine current.toml versions match discovered schema engine_versions.
 
 Each engine has a canonical version pinned in
-``engine_versions/<engine>/current.yaml`` under ``library.current_version``. The
+``engine_versions/<engine>/current.toml`` under ``library.current_version``. The
 discovered schema at ``src/llenergymeasure/engines/<engine>/schema.discovered.json``
 must agree.
 
@@ -31,7 +31,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import yaml
+import tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -47,9 +47,10 @@ def _normalize_version(version: str) -> str:
     return version.lstrip("v")
 
 
-def _current_version(current_yaml: Path) -> str | None:
-    """Return ``library.current_version`` from an engine current.yaml."""
-    data = yaml.safe_load(current_yaml.read_text()) or {}
+def _current_version(current_toml: Path) -> str | None:
+    """Return ``library.current_version`` from an engine current.toml."""
+    with open(current_toml, "rb") as f:
+        data = tomllib.load(f)
     library = data.get("library") or {}
     value = library.get("current_version")
     return None if value is None else str(value)
@@ -70,11 +71,11 @@ def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) 
     mismatches: list[str] = []
 
     for engine in engines or _ENGINES:
-        current_yaml = engine_versions_dir / engine / "current.yaml"
+        current_toml = engine_versions_dir / engine / "current.toml"
         try:
-            pinned_version = _current_version(current_yaml)
+            pinned_version = _current_version(current_toml)
         except FileNotFoundError:
-            errors.append(f"{engine}: current.yaml not found: {current_yaml}")
+            errors.append(f"{engine}: current.toml not found: {current_toml}")
             continue
 
         schema_path = engines_dir / engine / DEFAULT_SCHEMA_FILENAME
@@ -85,7 +86,7 @@ def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) 
             continue
 
         if pinned_version is None:
-            errors.append(f"{engine}: library.current_version not found in {current_yaml.name}")
+            errors.append(f"{engine}: library.current_version not found in {current_toml.name}")
             continue
 
         if schema_version is None:
@@ -94,7 +95,7 @@ def main(repo_root: Path | None = None, engines: tuple[str, ...] | None = None) 
 
         if _normalize_version(pinned_version) != _normalize_version(str(schema_version)):
             mismatches.append(
-                f"MISMATCH: {current_yaml.name} pins library.current_version={pinned_version} "
+                f"MISMATCH: {current_toml.name} pins library.current_version={pinned_version} "
                 f"but schema was discovered against {schema_version}\n"
                 f"  Run: ./scripts/refresh_discovered_schemas.sh {engine}"
             )

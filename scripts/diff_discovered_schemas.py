@@ -45,20 +45,74 @@ class DiffResult:
     summary: str = ""
 
 
-def _is_type_narrowed(old_type: str, new_type: str) -> bool:
-    """Return True if new_type is strictly narrower than old_type."""
-    old_parts = {t.strip() for t in old_type.split("|")}
-    new_parts = {t.strip() for t in new_type.split("|")}
-    # Narrowed if new is a strict subset of old.
-    return new_parts < old_parts
+def _type_atoms(type_repr: object) -> set[str]:
+    """Extract the set of primitive type atoms from any canonical or legacy ``type`` repr.
+
+    Handles four shapes:
+    - Legacy v1 compact string: ``"int | None"`` (split on ``|``).
+    - Canonical v2 primitive: ``"string"`` (single atom).
+    - Canonical v2 type-array: ``["string", "null"]``.
+    - Canonical v2 anyOf branches: handled separately via :func:`_anyof_atoms`.
+    """
+    if isinstance(type_repr, str):
+        return {t.strip() for t in type_repr.split("|") if t.strip()}
+    if isinstance(type_repr, list):
+        return {str(t) for t in type_repr}
+    return set()
 
 
-def _is_type_widened(old_type: str, new_type: str) -> bool:
-    """Return True if new_type is strictly wider than old_type."""
-    old_parts = {t.strip() for t in old_type.split("|")}
-    new_parts = {t.strip() for t in new_type.split("|")}
-    # Widened if old is a strict subset of new.
-    return old_parts < new_parts
+def _anyof_atoms(spec: dict) -> set[str]:
+    """Extract the set of type atoms from a canonical ``anyOf`` branch list."""
+    branches = spec.get("anyOf") if isinstance(spec, dict) else None
+    if not isinstance(branches, list):
+        return set()
+    atoms: set[str] = set()
+    for branch in branches:
+        if not isinstance(branch, dict):
+            continue
+        t = branch.get("type")
+        if isinstance(t, str):
+            atoms.add(t)
+        elif isinstance(t, list):
+            atoms.update(str(x) for x in t)
+    return atoms
+
+
+def _spec_atoms(spec: dict) -> set[str]:
+    """Return the canonical type-atom set for a field spec across legacy + v2 shapes."""
+    if not isinstance(spec, dict):
+        return set()
+    type_atoms = _type_atoms(spec.get("type"))
+    if type_atoms:
+        return type_atoms
+    return _anyof_atoms(spec)
+
+
+def _is_type_narrowed(old_spec: dict, new_spec: dict) -> bool:
+    """Return True if new spec's atom set is a strict subset of old."""
+    old_atoms = _spec_atoms(old_spec)
+    new_atoms = _spec_atoms(new_spec)
+    return bool(old_atoms) and bool(new_atoms) and new_atoms < old_atoms
+
+
+def _is_type_widened(old_spec: dict, new_spec: dict) -> bool:
+    """Return True if new spec's atom set is a strict superset of old."""
+    old_atoms = _spec_atoms(old_spec)
+    new_atoms = _spec_atoms(new_spec)
+    return bool(old_atoms) and bool(new_atoms) and old_atoms < new_atoms
+
+
+def _format_type_repr(spec: dict) -> str:
+    """Render a field-spec ``type`` for human-readable diff output."""
+    if not isinstance(spec, dict):
+        return ""
+    if "anyOf" in spec:
+        atoms = _anyof_atoms(spec)
+        return " | ".join(sorted(atoms)) if atoms else "anyOf"
+    t = spec.get("type")
+    if isinstance(t, list):
+        return " | ".join(str(x) for x in t)
+    return str(t) if t is not None else ""
 
 
 def diff_schemas(old: dict, new: dict) -> DiffResult:
@@ -95,35 +149,44 @@ def diff_schemas(old: dict, new: dict) -> DiffResult:
             old_field = old_params[key]
             new_field = new_params[key]
 
-            old_type = old_field.get("type", "")
-            new_type = new_field.get("type", "")
+            # Compare on type-atom sets so the differ stays correct across
+            # the v1 compact-string shape and the v2 canonical JSON Schema
+            # shape (type-array or anyOf branches). The textual ``type``
+            # field can change shape without semantic change (e.g. v1
+            # ``"int | None"`` -> v2 ``["integer", "null"]``); those are
+            # caught by the equality fallback below.
+            old_type_repr = _format_type_repr(old_field)
+            new_type_repr = _format_type_repr(new_field)
+            shape_changed = old_field.get("type") != new_field.get("type") or old_field.get(
+                "anyOf"
+            ) != new_field.get("anyOf")
 
-            if old_type != new_type:
-                if _is_type_narrowed(old_type, new_type):
+            if shape_changed:
+                if _is_type_narrowed(old_field, new_field):
                     change = Change(
                         section=section,
                         field=key,
                         kind="type_narrowed",
                         severity="breaking",
-                        detail=f"{old_type} -> {new_type}",
+                        detail=f"{old_type_repr} -> {new_type_repr}",
                     )
                     result.breaking.append(change)
-                elif _is_type_widened(old_type, new_type):
+                elif _is_type_widened(old_field, new_field):
                     change = Change(
                         section=section,
                         field=key,
                         kind="type_widened",
                         severity="safe",
-                        detail=f"{old_type} -> {new_type}",
+                        detail=f"{old_type_repr} -> {new_type_repr}",
                     )
                     result.safe.append(change)
-                else:
+                elif _spec_atoms(old_field) != _spec_atoms(new_field):
                     change = Change(
                         section=section,
                         field=key,
                         kind="type_changed",
                         severity="breaking",
-                        detail=f"{old_type} -> {new_type}",
+                        detail=f"{old_type_repr} -> {new_type_repr}",
                     )
                     result.breaking.append(change)
 

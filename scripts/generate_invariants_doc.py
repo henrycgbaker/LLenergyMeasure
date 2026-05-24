@@ -21,6 +21,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+import tomllib
 import yaml
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -63,6 +64,15 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _load_toml(path: Path) -> dict[str, Any]:
+    """Read + parse a TOML file; return ``{}`` if missing or empty."""
+    if not path.exists():
+        return {}
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    return data if isinstance(data, dict) else {}
+
+
 def _invariant_summary(invariant: dict[str, Any]) -> str:
     """One-line summary of a single invariant for the digest list."""
     invariant_id = invariant.get("id", "<unknown>")
@@ -88,7 +98,7 @@ def _render(engine: str) -> str:
     engine_dir = _PROJECT_ROOT / "src" / "llenergymeasure" / "engines" / engine
     proposed = _load_yaml(engine_dir / "invariants.proposed.yaml")
     validated = _load_yaml(engine_dir / "invariants.validated.yaml")
-    ssot = _load_yaml(_PROJECT_ROOT / "engine_versions" / engine / "current.yaml")
+    ssot = _load_toml(_PROJECT_ROOT / "engine_versions" / engine / "current.toml")
 
     library = ssot.get("library") if isinstance(ssot.get("library"), dict) else {}
     library_version = str(library.get("current_version", "<unknown>"))

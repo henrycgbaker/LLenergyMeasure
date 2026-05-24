@@ -40,7 +40,7 @@ def _resolve_producer_cached(engine: str, producer: str) -> ModuleType:
     library = current.get("library")
     if not isinstance(library, dict) or "current_version" not in library:
         raise ValueError(
-            f"engine_versions/{engine}/current.yaml is missing "
+            f"engine_versions/{engine}/current.toml is missing "
             "library.current_version; cannot resolve archived "
             f"{engine} {producer} machinery."
         )

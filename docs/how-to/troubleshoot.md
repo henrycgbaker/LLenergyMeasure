@@ -37,7 +37,8 @@ canonical pattern is in [development.md](/contributing/development); the short f
 is:
 
 ```bash
-VER=$(yq '.library.current_version' engine_versions/transformers/current.yaml)
+VER=$(python3 scripts/ci/read_toml_value.py \
+  engine_versions/transformers/current.toml library.current_version)
 docker build -f docker/Dockerfile.transformers \
   --build-arg TRANSFORMERS_VERSION="$VER" \
   -t llenergymeasure:transformers-${VER} .
@@ -319,7 +320,7 @@ of likelihood:
 (b) You are on a fresh buildx builder with no local cache (this is normal
     on the very first build - first-pull cost is paid once).
 (c) You are offline or GHCR is unreachable.
-(d) Your `TRANSFORMERS_VERSION` (from `engine_versions/transformers/current.yaml`)
+(d) Your `TRANSFORMERS_VERSION` (from `engine_versions/transformers/current.toml`)
     does not match any published cache tag (`cache_from` resolves to
     `:transformers-<VERSION>` and falls through to `:latest` - if neither has
     usable layers, BuildKit silently cold-builds).

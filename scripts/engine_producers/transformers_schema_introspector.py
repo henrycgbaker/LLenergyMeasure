@@ -2,7 +2,7 @@
 
 Forwards module-level attribute access to the per-version archive at
 ``engine_versions/transformers/v<safe>/producers/schema_introspector.py``,
-resolved from ``library.current_version`` in ``engine_versions/transformers/current.yaml``.
+resolved from ``library.current_version`` in ``engine_versions/transformers/current.toml``.
 See ``_stub_factory`` for the shared factory.
 """
 
