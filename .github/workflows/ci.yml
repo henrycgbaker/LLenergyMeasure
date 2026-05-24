@@ -102,6 +102,13 @@ jobs:
             echo "::error::docker/Dockerfile.tensorrt is gone for a reason - see version_handshake.py + scripts/container_entrypoint.sh"
             exit 1
           fi
+      - name: Engine corpus shadow parity check
+        # The loader reads from src/llenergymeasure/engines/<engine>/ (the
+        # data shadow), but the SSOT lives at
+        # engine_versions/<engine>/v<safe>/outputs/. Cells writeback both
+        # locations atomically; this gate fails CI if a human edits one
+        # without re-syncing the other.
+        run: uv run python scripts/engine_producers/regen_engine_corpus.py --check
 
   type-check:
     needs: filter
