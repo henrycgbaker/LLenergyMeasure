@@ -54,6 +54,7 @@ from scripts.engine_producers._base import (
     find_method,
     first_string_arg,
 )
+from scripts.engine_producers._current import current_outputs_dir
 
 # ---------------------------------------------------------------------------
 # Version-pinned configuration (0.21.0)
@@ -1335,10 +1336,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path("src/llenergymeasure/engines/tensorrt/_staging/tensorrt_static_miner.yaml"),
+        default=current_outputs_dir("tensorrt")
+        / "_staging"
+        / "tensorrt_static_invariant_miner.yaml",
         help=(
-            "Where to write the staging YAML (default: "
-            "src/llenergymeasure/engines/tensorrt/_staging/tensorrt_static_miner.yaml)"
+            "Where to write the staging YAML "
+            "(default: archive outputs/_staging/tensorrt_static_invariant_miner.yaml)"
         ),
     )
     parser.add_argument(

@@ -6,6 +6,8 @@ This module exposes the lookup helpers that read it:
 - :func:`current_path` - absolute path to the engine's current.yaml.
 - :func:`load_current` - parse the YAML to a dict.
 - :func:`safe_version` - identifier-safe mangling of a PEP 440 version.
+- :func:`current_outputs_dir` - resolved archive outputs/ directory for the
+  engine's currently-pinned version (the canonical write target for miners).
 
 The current-state path is resolved by walking up from this file until a
 ``pyproject.toml`` marker is found - the canonical project-root marker
@@ -67,3 +69,34 @@ def safe_version(version: str) -> str:
             f"resulting candidate {safe!r} contains non-alphanumeric chars."
         )
     return safe
+
+
+def current_outputs_dir(engine: str) -> Path:
+    """Return the archive outputs/ directory for the engine's pinned version.
+
+    Resolves ``engine_versions/{engine}/current.yaml``, reads
+    ``library.current_version``, and returns
+    ``engine_versions/{engine}/v{safe_version}/outputs/`` - the canonical
+    write target for miners (the version-bundle archive is the SSOT; the
+    shadow under ``src/llenergymeasure/engines/<engine>/`` is derived
+    via the CI cell's archive -> shadow mirror).
+
+    Raises :class:`FileNotFoundError` if current.yaml is missing (delegated
+    from :func:`load_current`), :class:`ValueError` if
+    ``library.current_version`` is missing or not a non-empty string.
+    """
+    current = load_current(engine)
+    library = current.get("library")
+    if not isinstance(library, dict):
+        raise ValueError(
+            f"engine_versions/{engine}/current.yaml: 'library' must be a mapping, "
+            f"got {type(library).__name__}."
+        )
+    version = library.get("current_version")
+    if not isinstance(version, str) or not version.strip():
+        raise ValueError(
+            f"engine_versions/{engine}/current.yaml: 'library.current_version' must be "
+            f"a non-empty string, got {version!r}."
+        )
+    safe = safe_version(version)
+    return current_path(engine).parent / safe / "outputs"

@@ -125,6 +125,7 @@ if str(_WALKERS_DIR) in sys.path:
     sys.path.remove(str(_WALKERS_DIR))
 
 from scripts.engine_producers._base import InvariantCandidate, MinerSource  # noqa: E402
+from scripts.engine_producers._current import current_outputs_dir  # noqa: E402
 from scripts.engine_producers._dataclass_lift import lift as _dataclass_lift  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -1821,12 +1822,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path(
-            "src/llenergymeasure/engines/transformers/_staging/transformers_dynamic_invariant_miner.yaml"
-        ),
+        default=current_outputs_dir("transformers")
+        / "_staging"
+        / "transformers_dynamic_invariant_miner.yaml",
         help=(
             "Where to write the staging YAML "
-            "(default: src/llenergymeasure/engines/transformers/_staging/transformers_dynamic_invariant_miner.yaml)"
+            "(default: archive outputs/_staging/transformers_dynamic_invariant_miner.yaml)"
         ),
     )
     args = parser.parse_args(argv)

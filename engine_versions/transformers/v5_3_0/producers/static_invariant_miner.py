@@ -77,6 +77,7 @@ from scripts.engine_producers._base import (  # noqa: E402  (late import after s
     format_call_template,
     render_binop_concat_template,
 )
+from scripts.engine_producers._current import current_outputs_dir  # noqa: E402
 
 # Why we DON'T import _base's detector classes (ConditionalRaiseDetector,
 # ConditionalSelfAssignDetector, etc.) and instead define parallel
@@ -1573,12 +1574,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path(
-            "src/llenergymeasure/engines/transformers/_staging/transformers_static_miner.yaml"
-        ),
+        default=current_outputs_dir("transformers")
+        / "_staging"
+        / "transformers_static_invariant_miner.yaml",
         help=(
             "Where to write the staging YAML "
-            "(default: src/llenergymeasure/engines/transformers/_staging/transformers_static_miner.yaml)"
+            "(default: archive outputs/_staging/transformers_static_invariant_miner.yaml)"
         ),
     )
     args = parser.parse_args(argv)

@@ -2,10 +2,14 @@
 
 The validation-invariants pipeline is split into independent miners (dynamic miner,
 static miner, future runtime-warning miner) that each write to a staging file
-under ``src/llenergymeasure/engines/{engine}/_staging/{engine}_{name}.yaml``. This
+under ``engine_versions/{engine}/v{safe}/outputs/_staging/{engine}_{name}.yaml``. This
 module is the single canonical entry point that runs them, merges their outputs
 into one :class:`~llenergymeasure.config.engine_invariants.loader.EngineInvariants`-shaped
-document, and writes ``src/llenergymeasure/engines/{engine}/invariants.proposed.yaml``.
+document, and writes
+``engine_versions/{engine}/v{safe}/outputs/invariants.proposed.yaml`` - the
+version-bundle archive is the SSOT (engine-knowledge-as-data design); the
+CI cell mirrors archive -> shadow under ``src/llenergymeasure/engines/{engine}/``
+afterwards so the runtime loader continues to read the shadow.
 
 Pipeline: miners → staging → merge → **validation-gate** → write canonical corpus.
 
@@ -140,6 +144,7 @@ if sys.path and sys.path[0] == _SCRIPT_DIR:
 # canonical_serialise lives in domain (Layer 0); safe to depend on from a
 # tooling script without breaking import-linter contracts.
 from llenergymeasure.domain.hashing import canonical_serialise  # noqa: E402
+from scripts.engine_producers._current import current_outputs_dir  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Engine extractor registry
@@ -154,9 +159,10 @@ class _Extractor:
     each subagent's extractor must accept a single ``--out`` argument.
 
     ``staging_basename`` is the filename written under
-    ``src/llenergymeasure/engines/{engine}/_staging/``. Convention:
-    ``{engine}_{source_name}.yaml`` so the merger's glob pattern stays
-    predictable.
+    ``engine_versions/{engine}/v{safe}/outputs/_staging/`` (resolved via
+    :func:`scripts.engine_producers._current.current_outputs_dir`).
+    Convention: ``{engine}_{source_name}.yaml`` so the merger's glob
+    pattern stays predictable.
     """
 
     module: str
@@ -199,12 +205,28 @@ _ENGINE_EXTRACTORS: dict[str, tuple[_Extractor, ...]] = {
 }
 
 
-def _staging_dir(corpus_root: Path, engine: str) -> Path:
-    return corpus_root / engine / "_staging"
+def _engine_dir(corpus_root: Path | None, engine: str) -> Path:
+    """Engine-scoped canonical directory.
+
+    When ``corpus_root`` is ``None``, resolves to the version-bundle
+    archive's ``outputs/`` directory (the SSOT write target) via
+    :func:`current_outputs_dir`. When supplied, treats ``corpus_root``
+    as the engines-root and appends ``<engine>/`` (the legacy shadow
+    convention, retained for the test API: test fixtures pass
+    ``tmp_path`` as ``corpus_root`` and rely on the per-engine subdir
+    layout).
+    """
+    if corpus_root is None:
+        return current_outputs_dir(engine)
+    return corpus_root / engine
 
 
-def _canonical_path(corpus_root: Path, engine: str) -> Path:
-    return corpus_root / engine / "invariants.proposed.yaml"
+def _staging_dir(corpus_root: Path | None, engine: str) -> Path:
+    return _engine_dir(corpus_root, engine) / "_staging"
+
+
+def _canonical_path(corpus_root: Path | None, engine: str) -> Path:
+    return _engine_dir(corpus_root, engine) / "invariants.proposed.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +324,7 @@ def fingerprint_invariant(invariant: dict[str, Any]) -> bytes:
 # ---------------------------------------------------------------------------
 
 
-def run_extractors(engine: str, corpus_root: Path) -> None:
+def run_extractors(engine: str, corpus_root: Path | None) -> None:
     """Invoke each registered extractor for ``engine`` to produce its staging file.
 
     Each extractor must accept ``--out <path>`` and write a corpus-shaped
@@ -330,7 +352,7 @@ def run_extractors(engine: str, corpus_root: Path) -> None:
         subprocess.run(cmd, check=True, env=env, cwd=str(_PROJECT_ROOT))
 
 
-def discover_staging_files(engine: str, corpus_root: Path) -> list[Path]:
+def discover_staging_files(engine: str, corpus_root: Path | None) -> list[Path]:
     """Return all staging YAMLs for ``engine``, sorted alphabetically.
 
     The sort makes merger output deterministic when two staging files have
@@ -679,7 +701,7 @@ Schema::
 
 
 def _write_merged_candidates(
-    corpus_root: Path,
+    corpus_root: Path | None,
     engine: str,
     invariants: list[dict[str, Any]],
     envelope: dict[str, Any],
@@ -701,7 +723,7 @@ def _write_merged_candidates(
 def _validate_candidates(
     candidates: list[dict[str, Any]],
     engine: str,
-    corpus_root: Path,
+    corpus_root: Path | None,
     envelope: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Re-run each candidate through the real engine library; filter divergent invariants.
@@ -716,10 +738,11 @@ def _validate_candidates(
     as a side effect - that file is the input to :func:`validate_engine`. The
     YAML envelope ``validate_engine`` writes goes to a sibling temp path
     (``_staging/_validation_envelope_{engine}.yaml``) so the canonical
-    ``src/llenergymeasure/engines/{engine}/invariants.validated.yaml`` (the
-    runtime-loaded sidecar) is never overwritten by this build step. The
-    leading-underscore prefix keeps the temp file out of the
-    ``{engine}_*.yaml`` glob that ``discover_staging_files`` walks.
+    ``engine_versions/{engine}/v{safe}/outputs/invariants.validated.yaml``
+    (the runtime-loaded sidecar, mirrored to the shadow by the CI cell)
+    is never overwritten by this build step. The leading-underscore prefix
+    keeps the temp file out of the ``{engine}_*.yaml`` glob that
+    ``discover_staging_files`` walks.
     """
     # Local import keeps the merger importable in environments that don't have
     # the engine library installed (e.g. CI lint job): only --skip-validation
@@ -769,7 +792,7 @@ def _validate_candidates(
 
 
 def _emit_failed_validation_yaml(
-    corpus_root: Path,
+    corpus_root: Path | None,
     engine: str,
     divergent: list[dict[str, Any]],
     envelope: dict[str, Any],
@@ -879,7 +902,7 @@ class _BuildResult:
 
 def build_corpus_text_and_outcome(
     engine: str,
-    corpus_root: Path,
+    corpus_root: Path | None = None,
     *,
     skip_validation: bool = False,
 ) -> _BuildResult:
@@ -889,6 +912,12 @@ def build_corpus_text_and_outcome(
     pre-populating the staging directory. When ``skip_validation`` is true,
     all merged candidates land in the canonical YAML regardless of validation
     outcomes - useful for fast local iteration but never appropriate in CI.
+
+    ``corpus_root`` defaults to ``None`` which routes the canonical write
+    to the version-bundle archive's ``outputs/`` directory (the SSOT).
+    Test fixtures pass an explicit ``corpus_root`` (typically ``tmp_path``)
+    to anchor writes under a per-test sandbox with the legacy
+    ``<root>/<engine>/...`` layout.
     """
     paths = discover_staging_files(engine, corpus_root)
     if not paths:
@@ -945,7 +974,7 @@ def build_corpus_text_and_outcome(
 
 def build_corpus_text(
     engine: str,
-    corpus_root: Path,
+    corpus_root: Path | None = None,
     *,
     skip_validation: bool = False,
 ) -> str:
@@ -957,7 +986,7 @@ def build_corpus_text(
 
 def write_corpus(
     engine: str,
-    corpus_root: Path,
+    corpus_root: Path | None = None,
     *,
     skip_validation: bool = False,
 ) -> _BuildResult:
@@ -974,7 +1003,7 @@ def write_corpus(
 
 def check_drift(
     engine: str,
-    corpus_root: Path,
+    corpus_root: Path | None = None,
     *,
     skip_validation: bool = False,
 ) -> tuple[int, str]:
@@ -1028,12 +1057,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Engine to build the corpus for (default: transformers).",
     )
     parser.add_argument(
-        "--corpus-root",
-        type=Path,
-        default=Path(_PROJECT_ROOT) / "src" / "llenergymeasure" / "engines",
-        help="Engines root; each engine's corpus + _staging/ live under <engines>/<engine>/.",
-    )
-    parser.add_argument(
         "--skip-extract",
         action="store_true",
         help="Skip running the extractors; assume staging files already exist.",
@@ -1058,7 +1081,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    corpus_root: Path = args.corpus_root
+    # corpus_root=None routes writes to the version-bundle archive's
+    # outputs/ directory (the SSOT for engine knowledge). The legacy
+    # ``--corpus-root`` override was removed: it only ever surfaced for
+    # internal test fixtures, which pass corpus_root directly to the
+    # programmatic API instead of going through the CLI.
+    corpus_root: Path | None = None
 
     if not args.skip_extract:
         try:

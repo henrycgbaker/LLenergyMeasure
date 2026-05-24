@@ -33,6 +33,7 @@ from scripts.engine_producers._base import (
     find_method,
     first_string_arg,
 )
+from scripts.engine_producers._current import current_outputs_dir
 
 # ---------------------------------------------------------------------------
 # Engine + namespace conventions
@@ -1018,8 +1019,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path("src/llenergymeasure/engines/vllm/_staging/vllm_static_miner.yaml"),
-        help="Where to write the staging YAML.",
+        default=current_outputs_dir("vllm") / "_staging" / "vllm_static_invariant_miner.yaml",
+        help="Where to write the staging YAML (default: archive outputs/_staging/).",
     )
     args = parser.parse_args(argv)
 
