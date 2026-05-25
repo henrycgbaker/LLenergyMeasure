@@ -1,0 +1,6 @@
+{
+  "ok": false,
+  "error": "no final YAML (finalise never called)",
+  "recall": 0.0,
+  "precision": 0.0
+}
