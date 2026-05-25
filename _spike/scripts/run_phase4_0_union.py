@@ -30,7 +30,7 @@ import argparse
 import json
 import sys
 from collections import defaultdict
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -41,13 +41,11 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 # Imports after sys.path insertion.
 from _spike.scripts.trial_scoring import (  # noqa: E402
-    FailureMode,
     ScoringConfig,
     build_validated_union,
     score_invariants,
     score_schema,
 )
-
 
 # Per Phase 1 lock: the active cell per engine maps to the canonical
 # container image. Off-active cells fall back to the active cell's
@@ -210,11 +208,7 @@ def _union_path(engine: str) -> Path:
     """Return the validated-union YAML path for the engine's active cell."""
     active_slug = ACTIVE_SLUG_BY_ENGINE[engine]
     return (
-        _PROJECT_ROOT
-        / "_spike"
-        / "findings"
-        / "validated_union"
-        / f"{engine}__{active_slug}.yaml"
+        _PROJECT_ROOT / "_spike" / "findings" / "validated_union" / f"{engine}__{active_slug}.yaml"
     )
 
 
@@ -333,9 +327,7 @@ def rescore_all_cells(summaries: dict[tuple[str, str], UnionSummary]) -> list[di
             _imiss,
             _ispur,
             _idiff,
-        ) = score_invariants(
-            reference_invariants=union_invs, cell_invariants=cell_invs, config=cfg
-        )
+        ) = score_invariants(reference_invariants=union_invs, cell_invariants=cell_invs, config=cfg)
 
         # Build vu-scored record, preserving identity + cost from original.
         vu_score = dict(original)
@@ -377,10 +369,7 @@ def rescore_all_cells(summaries: dict[tuple[str, str], UnionSummary]) -> list[di
         )
         vu_score["observations"] = observations
 
-        out_path = (
-            scores_dir
-            / f"{strategy}__{engine}__{version_slug}__vu.json"
-        )
+        out_path = scores_dir / f"{strategy}__{engine}__{version_slug}__vu.json"
         out_path.write_text(json.dumps(vu_score, indent=2, sort_keys=True))
         new_scores.append(vu_score)
         print(
@@ -434,8 +423,7 @@ def emit_vu_matrix(vu_scores: list[dict[str, Any]]) -> None:
     lines.append("# Empirical trial matrix - validated-union scoring")
     lines.append("")
     lines.append(
-        f"_generated at {datetime.now(timezone.utc).isoformat()}; "
-        f"score files: {len(vu_scores)}_"
+        f"_generated at {datetime.now(timezone.utc).isoformat()}; score files: {len(vu_scores)}_"
     )
     lines.append("")
     lines.append(
@@ -541,9 +529,7 @@ def emit_summary(
     - failure-mode breakdown for validation infra
     - cells where the union shifted the picture
     """
-    summary_path = (
-        _PROJECT_ROOT / "_spike" / "findings" / "phase4_0_validated_union_summary.md"
-    )
+    summary_path = _PROJECT_ROOT / "_spike" / "findings" / "phase4_0_validated_union_summary.md"
 
     # Load the original (a-as-reference) scores so we can compute deltas.
     scores_dir = _PROJECT_ROOT / "_spike" / "findings" / "trial_scores"
@@ -560,17 +546,14 @@ def emit_summary(
         vals = [
             float(s.get(field_name, 0.0))
             for s in scores
-            if s.get("strategy") == strategy
-            and "crash" not in (s.get("failure_modes") or [])
+            if s.get("strategy") == strategy and "crash" not in (s.get("failure_modes") or [])
         ]
         return sum(vals) / len(vals) if vals else 0.0
 
     lines: list[str] = []
     lines.append("# Phase 4.0 - validated-union ground truth summary")
     lines.append("")
-    lines.append(
-        f"_generated at {datetime.now(timezone.utc).isoformat()}_"
-    )
+    lines.append(f"_generated at {datetime.now(timezone.utc).isoformat()}_")
     lines.append("")
     lines.append(
         "Per the DECISIONS_LOG entry framing: the corrected ground truth "
@@ -764,8 +747,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     print(
-        f"[phase4_0] start at {datetime.now(timezone.utc).isoformat()}; "
-        "active cells:",
+        f"[phase4_0] start at {datetime.now(timezone.utc).isoformat()}; active cells:",
         ACTIVE_CELLS,
         flush=True,
     )
@@ -801,13 +783,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.skip_rescore:
         # Load existing vu scores from disk for the summary step
+        import contextlib
+
         scores_dir = _PROJECT_ROOT / "_spike" / "findings" / "trial_scores"
         vu_scores = []
         for p in sorted(scores_dir.glob("*__vu.json")):
-            try:
+            with contextlib.suppress(json.JSONDecodeError):
                 vu_scores.append(_load_json(p))
-            except json.JSONDecodeError:
-                pass
     else:
         vu_scores = rescore_all_cells(summaries)
 

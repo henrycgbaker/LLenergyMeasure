@@ -923,7 +923,7 @@ def score_cell(
         inv_mode = FailureMode.CRASH
 
     # Aggregate failure_modes (deduped)
-    all_modes = failure_modes + [schema_mode.value, inv_mode.value]
+    all_modes = [*failure_modes, schema_mode.value, inv_mode.value]
     seen: set[str] = set()
     deduped: list[str] = []
     for m in all_modes:
@@ -1354,9 +1354,7 @@ def _dispatch_transformers_inprocess(invariants_yaml: Path) -> list[RuntimeValid
             for inv in inv_data.get("invariants") or []
         ]
 
-    with tempfile.NamedTemporaryFile(
-        suffix=".validated.yaml", delete=False, mode="w"
-    ) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".validated.yaml", delete=False, mode="w") as tmp:
         out_path = Path(tmp.name)
 
     try:
@@ -1502,10 +1500,10 @@ def _dispatch_via_container(
         # so an operator can inspect what the container produced. The
         # container runs as root so we may need a sudo-less workaround
         # for files it wrote - shutil.rmtree handles file mode well.
-        try:
+        import contextlib
+
+        with contextlib.suppress(OSError):
             shutil.rmtree(workspace, ignore_errors=True)
-        except OSError:
-            pass
 
 
 # ---------------------------------------------------------------------------
@@ -1587,7 +1585,7 @@ def _collect_strategy_invariants(
             ident = invariant_identity(inv)
             if ident in union:
                 # Append the contributing strategy to the existing record.
-                existing_inv, contribs = union[ident]
+                _existing_inv, contribs = union[ident]
                 if strategy not in contribs:
                     contribs.append(strategy)
             else:
@@ -1645,9 +1643,7 @@ def build_validated_union(
     # Stage the merged proposed corpus for the dispatcher.
     import tempfile
 
-    with tempfile.NamedTemporaryFile(
-        suffix=".proposed.yaml", delete=False, mode="w"
-    ) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".proposed.yaml", delete=False, mode="w") as tmp:
         staged_path = Path(tmp.name)
     try:
         merged_invariants = [inv for inv, _contribs in union_map.values()]

@@ -588,7 +588,9 @@ def test_engine_version_image_returns_known_pinned_images() -> None:
 
     assert _engine_version_image("transformers", "v4_57_3") == "llenergymeasure:transformers-4.57.3"
     assert _engine_version_image("vllm", "v0_7_3") == "llenergymeasure:vllm-v0.7.3"
-    assert _engine_version_image("tensorrt", "v1_2_1") == "nvcr.io/nvidia/tensorrt-llm/release:1.2.1"
+    assert (
+        _engine_version_image("tensorrt", "v1_2_1") == "nvcr.io/nvidia/tensorrt-llm/release:1.2.1"
+    )
     # Off-active versions return None so the dispatcher can surface
     # "no container image registered" rather than misclassify.
     assert _engine_version_image("transformers", "v5_9_0") is None
@@ -636,9 +638,7 @@ def test_validated_union_builder_handles_missing_strategy_outputs(tmp_path: Path
 
     out_path = tmp_path / "validated_union_empty.yaml"
     # Engine 'nonsense' has no source templates that resolve.
-    result_path = build_validated_union(
-        engine="nonsense", version_slug="vX", out_path=out_path
-    )
+    result_path = build_validated_union(engine="nonsense", version_slug="vX", out_path=out_path)
     assert result_path == out_path
     assert out_path.exists()
     envelope = yaml.safe_load(out_path.read_text())
@@ -660,7 +660,7 @@ def test_collect_strategy_invariants_finds_canonical_active_cell() -> None:
     # Every entry's contributor list should be non-empty and contain only
     # known strategy names.
     known_strategies = {"a", "b", "d-ab", "h2", "h3", "h6", "e6", "e9"}
-    for ident, (inv, contribs) in union.items():
+    for ident, (_inv, contribs) in union.items():
         assert contribs, f"empty contributor list for {ident}"
         assert all(c in known_strategies for c in contribs), (
             f"unexpected contributor in {contribs} for {ident}"
@@ -669,8 +669,12 @@ def test_collect_strategy_invariants_finds_canonical_active_cell() -> None:
 
 @pytest.mark.skipif(
     not (
-        _PROJECT_ROOT / "engine_versions" / "transformers" / "v4_57_3" / "outputs" /
-        "invariants.proposed.yaml"
+        _PROJECT_ROOT
+        / "engine_versions"
+        / "transformers"
+        / "v4_57_3"
+        / "outputs"
+        / "invariants.proposed.yaml"
     ).exists(),
     reason="canonical transformers v4_57_3 invariants.proposed.yaml missing",
 )
@@ -684,6 +688,7 @@ def test_runtime_validate_dispatch_transformers_active_matches_existing_validate
     plan. Tagged as slow (300s timeout; requires container fallback or
     transformers installed in venv)."""
     import subprocess
+
     from _spike.scripts.trial_scoring import (
         runtime_validate_invariants_dispatch,
     )
@@ -708,9 +713,7 @@ def test_runtime_validate_dispatch_transformers_active_matches_existing_validate
     )
     # Expected: every case both-confirmed (matches the committed
     # invariants.validated.yaml's case body).
-    both_confirmed = sum(
-        1 for v in vals if v.positive_confirmed and v.negative_confirmed
-    )
+    both_confirmed = sum(1 for v in vals if v.positive_confirmed and v.negative_confirmed)
     # The canonical reference has 41 invariants; allow some tolerance
     # because dormant-once cache may flake one or two.
     assert len(vals) > 30, f"expected >30 cases, got {len(vals)}"
