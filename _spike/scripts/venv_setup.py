@@ -226,6 +226,24 @@ def _pip_download_and_unpack(
                 str(tmp),
                 f"{pip_name}=={pip_version}",
             ]
+        # tensorrt_llm: stub sdist sits on PyPI; the real cp312 wheel is on
+        # the NVIDIA index. Force cp312 binary download from there.
+        if engine == "tensorrt":
+            cmd.extend(
+                [
+                    "--extra-index-url",
+                    "https://pypi.nvidia.com",
+                    "--only-binary=:all:",
+                    "--python-version",
+                    "3.12",
+                    "--platform",
+                    "linux_x86_64",
+                    "--abi",
+                    "cp312",
+                    "--implementation",
+                    "cp",
+                ]
+            )
         subprocess.run(cmd, check=True)
         wheels = list(tmp.glob("*.whl"))
         if not wheels:

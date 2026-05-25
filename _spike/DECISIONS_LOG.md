@@ -3045,3 +3045,44 @@ The lesson for Phase 3b: chunkers should be FILE-LAYOUT-AGNOSTIC. AST-discover t
 - 35 cells in `trial_matrix.md` (was 23 before this session): 11 active + 12 transformers-bumped + 12 vllm-bumped.
 - Branch `trial/mining-substrate-bakeoff` ready for tensorrt bumped (Phase 3a.2.tensorrt) - infrastructure complete.
 - Phase 3b hybrid catalogue not started (Tier 1 H4 is the highest-priority next item per `phase3b_hybrid_catalogue.md`).
+
+## 2026-05-25 user direction: post-Phase-3a worktree + spike design Q
+
+User directive: at the next stopping point (after Phase 3a.2 tensorrt agent a921af9cc97fd8421 closes), do TWO things before Phase 3b launches.
+
+### 1. Move trial into its own worktree
+
+Reason: cleanly separate trial work from spike branch work so the spike can continue independently.
+
+Steps:
+1. Confirm Phase 3a fully closed (12 tensorrt cells done, commits pushed).
+2. Confirm clean working tree on trial branch.
+3. `cd ~/workspace/llenergymeasure && git worktree add ../llenergymeasure-trial trial/mining-substrate-bakeoff`
+4. Verify trial artefacts visible in worktree (`ls ../llenergymeasure-trial/_spike/`).
+5. Switch main workspace to spike: `git checkout spike/engine-knowledge-as-data`
+6. Confirm container `trial-ollama` (port 11435) still reachable from worktree path.
+7. Phase 3b agents launch from worktree path going forward; document this in the resume prompt.
+
+### 2. Spike-branch design doc: open question on artefact storage strategy
+
+Reason: rather than storing all mining-substrate artefacts (~95k LoC, growing) in git, consider GH-artefacts pinned against upstream container images. Design question worth proper consideration AFTER the trial's implications get implemented on spike.
+
+Steps:
+1. After worktree migration, on spike branch in main workspace.
+2. Edit `.product/designs/engine-knowledge-as-data.md`.
+3. Add open question (next OQ number; OQ12 or higher) titled "Storage strategy for mining-substrate artefacts: git-tracked vs GH-artefacts pinned against upstream images".
+4. Body should sketch:
+   - Current state: `engine_versions/<e>/v*/outputs/` lives in git; growing footprint.
+   - Alternative: GH Actions artefacts (90-day default retention; can be extended), keyed against upstream container image SHA / version tag. Tooling fetches on demand.
+   - Trade-offs: durability, audit-trail, repo size, fetch speed, offline access.
+   - Operational implications: CI workflow changes; consumer code (mining producers, runtime validation) needs artefact-fetch path.
+   - DEFERRED status: tackle AFTER post-trial gap closure + Phase 5 curation pipeline lands on spike. The current git-tracked artefact pattern continues during the trial.
+5. Commit on spike branch with `docs: open question on mining artefact storage strategy`.
+6. Push (or hold pending user review).
+
+### Timing
+
+Both tasks queue for "next stopping point" = when Phase 3a.2 tensorrt agent (a921af9cc97fd8421) reports completion. NOT now (tensorrt agent mid-flight; touching worktrees while it's modifying files would race).
+
+After both tasks land: launch Phase 3b H4 first (LLM-modifies-miner; user-prioritised dual-purpose pattern).
+
