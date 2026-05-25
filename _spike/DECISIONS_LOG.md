@@ -2997,3 +2997,21 @@ Plan: after current Phase 3a.2 transformers agent completes, launch a Phase 2.6 
 
 - Pass2/pass3 chunk-local parse failures silently absorbed by multipass (b) policy + by (a)-baseline fallback on (d-ab). The d-ab/vllm cell scored 100% recall WITH a parse-failed extension. Audit trail in observations array, NOT in failure_modes. Phase 3a.2 reporting must inspect both.
 - (b_8b) data point: ~14.6x energy and ~4x wall savings for ~3 pp schema and ~21 pp invariant recall drop vs full 70B. Confirms 8B viable for schema substitute, not full (b). v-bump probe of 8B is an open question worth one cell in Phase 3a.2.
+
+## 2026-05-25 post-trial gap closure committed (user direction)
+
+User direction: regardless of which substrate Phase 4 picks, the known (a) gaps deliberately preserved during the trial MUST be closed before that substrate becomes production state.
+
+Authoritative inventory: `_spike/findings/post_trial_a_gap_closure.md`. Catalogues 7 distinct gaps across vllm + tensorrt + transformers with patch paths, effort estimates, acceptance criteria.
+
+Two natural closure mechanisms:
+- **H4 LLM-modifies-miner** outputs proposed patches per engine; if H4 succeeds, most gaps close via patch review.
+- **Spike-branch refactor**: residual gaps map to spike's existing ~1800 LoC refactor backlog (Bake-off A target). Each gap is a single PR-scope task.
+
+Trial epistemic discipline preserved as research data; production discipline closes the gaps after Phase 4.
+
+When Phase 4 + 5 conclude, doc converts into:
+- A backlog of GH issues (one per gap), OR
+- Subset of the trial's PR-extraction if H4's patches make gaps trivially closable.
+
+In neither case do gaps become "accepted forever".
