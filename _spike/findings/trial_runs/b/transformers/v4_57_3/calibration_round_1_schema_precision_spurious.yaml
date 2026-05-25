@@ -1,0 +1,37 @@
+scoring_format_version: 1.0.0
+precision_spurious:
+- identity:
+  - engine_params
+  - bias
+  kind: precision_spurious
+  reference_value: null
+  cell_value: number
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - context_width
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - greenlist_ratio
+  kind: precision_spurious
+  reference_value: null
+  cell_value: number
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - hashing_key
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - seeding_scheme
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference

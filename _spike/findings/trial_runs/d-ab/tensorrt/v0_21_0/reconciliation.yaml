@@ -1,0 +1,78 @@
+schema_version: 1.0.0
+engine: tensorrt
+engine_version: 0.21.0
+reconciled_at: '2026-05-25T05:04:08.015930+00:00'
+added_by_llm_verifier:
+- id: tensorrt__calibconfig_device_not_in
+  field: tensorrt.device
+  predicate_kind: not_in
+  values:
+  - cuda
+  - cpu
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: tensorrt_lookaheaddecodingconfig_max_window_size_le_0
+  field: tensorrt.max_window_size
+  predicate_kind: le
+  value: 0
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: tensorrt_lookaheaddecodingconfig_max_ngram_size_le_0
+  field: tensorrt.max_ngram_size
+  predicate_kind: le
+  value: 0
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: tensorrt_lookaheaddecodingconfig_max_verification_set_size_le_0
+  field: tensorrt.max_verification_set_size
+  predicate_kind: le
+  value: 0
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: tensorrt_batchingtype_not_in
+  field: tensorrt.batching_type
+  predicate_kind: not_in
+  values:
+  - STATIC
+  - INFLIGHT
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: tensorrt_capacityschedulerpolicy_not_in
+  field: tensorrt.capacity_scheduler_policy
+  predicate_kind: not_in
+  values:
+  - MAX_UTILIZATION
+  - GUARANTEED_NO_EVICT
+  - STATIC_BATCH
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: tensorrt_contextchunkingpolicy_not_in
+  field: tensorrt.context_chunking_policy
+  predicate_kind: not_in
+  values:
+  - FIRST_COME_FIRST_SERVED
+  - EQUAL_PROGRESS
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: tensorrt_buildcacheconfig_max_records_lt_1
+  field: tensorrt.max_records
+  predicate_kind: lt
+  value: 1
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+flagged_spurious_in_deterministic:
+- id: tensorrt__autodeployllmargs_mla_backend_in_1_values
+  reason: mla_backend is not a field in the provided source code.
+missed_diagnoses:
+- id: tensorrt_lookaheaddecodingconfig_max_window_size_le_0
+  why_missed: The invariant was missed because it was defined inside a @field_validator
+    decorator applied to multiple fields, which is not explicitly handled by the deterministic
+    miner.

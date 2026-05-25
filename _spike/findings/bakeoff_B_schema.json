@@ -1,0 +1,377 @@
+{
+  "engine": "transformers",
+  "engine_version": "4.57.3",
+  "engine_params": {
+    "config": {
+      "default": null
+    },
+    "trust_remote_code": {
+      "type": "boolean",
+      "default": null,
+      "description": "Whether to trust remote code or not."
+    },
+    "_from_auto": {
+      "default": true
+    },
+    "cache_dir": {
+      "type": "string"
+    },
+    "force_download": {
+      "type": "boolean"
+    },
+    "local_files_only": {
+      "type": "boolean"
+    },
+    "proxies": {
+      "type": "object"
+    },
+    "resume_download": {
+      "type": "boolean"
+    },
+    "revision": {
+      "type": "string"
+    },
+    "subfolder": {
+      "type": "string"
+    },
+    "use_auth_token": {
+      "type": "boolean",
+      "description": "Deprecated, use `token` instead."
+    },
+    "token": {
+      "type": "string"
+    },
+    "code_revision": {
+      "default": null
+    },
+    "_commit_hash": {
+      "default": null
+    },
+    "adapter_kwargs": {
+      "default": null
+    }
+  },
+  "sampling_params": {
+    "max_length": {
+      "type": "integer",
+      "default": 20,
+      "description": "The maximum length of the generated tokens."
+    },
+    "max_new_tokens": {
+      "type": "integer"
+    },
+    "min_length": {
+      "type": "integer",
+      "default": 0
+    },
+    "min_new_tokens": {
+      "type": "integer"
+    },
+    "early_stopping": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether to stop the generation when at least num_beams outputs are finished."
+    },
+    "max_time": {
+      "type": "number"
+    },
+    "stop_strings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "do_sample": {
+      "type": "boolean",
+      "default": false
+    },
+    "num_beams": {
+      "type": "integer",
+      "default": 1,
+      "description": "Number of beams for beam search."
+    },
+    "use_cache": {
+      "type": "boolean",
+      "default": true
+    },
+    "cache_implementation": {
+      "type": "string"
+    },
+    "cache_config": {
+      "type": "object"
+    },
+    "return_legacy_cache": {
+      "type": "boolean"
+    },
+    "prefill_chunk_size": {
+      "type": "integer"
+    },
+    "temperature": {
+      "type": "number",
+      "default": 1.0
+    },
+    "top_k": {
+      "type": "integer",
+      "default": 50
+    },
+    "top_p": {
+      "type": "number",
+      "default": 1.0,
+      "description": "If set to float < 1, only the most probable tokens with probabilities that add up to top_p or higher are kept for generation."
+    },
+    "min_p": {
+      "type": "number"
+    },
+    "typical_p": {
+      "type": "number",
+      "default": 1.0
+    },
+    "epsilon_cutoff": {
+      "type": "number",
+      "default": 0.0
+    },
+    "eta_cutoff": {
+      "type": "number",
+      "default": 0.0
+    },
+    "repetition_penalty": {
+      "type": "number",
+      "default": 1.0,
+      "description": "The parameter for repetition penalty."
+    },
+    "encoder_repetition_penalty": {
+      "type": "number",
+      "default": 1.0
+    },
+    "length_penalty": {
+      "type": "number",
+      "default": 1.0,
+      "description": "Exponential penalty to the length."
+    },
+    "no_repeat_ngram_size": {
+      "type": "integer",
+      "default": 0,
+      "description": "If set to int > 0, all ngrams of size no_repeat_ngram_size can only occur once."
+    },
+    "bad_words_ids": {
+      "type": "array"
+    },
+    "renormalize_logits": {
+      "type": "boolean",
+      "default": false
+    },
+    "forced_bos_token_id": {
+      "type": "integer"
+    },
+    "forced_eos_token_id": {
+      "type": "integer"
+    },
+    "remove_invalid_values": {
+      "type": "boolean",
+      "default": false,
+      "description": "Remove possible nan and inf outputs of the model to prevent warning."
+    },
+    "exponential_decay_length_penalty": {
+      "type": "number"
+    },
+    "suppress_tokens": {
+      "type": "array"
+    },
+    "begin_suppress_tokens": {
+      "type": "array"
+    },
+    "sequence_bias": {
+      "type": "object"
+    },
+    "token_healing": {
+      "type": "boolean",
+      "default": false
+    },
+    "guidance_scale": {
+      "type": "number"
+    },
+    "num_return_sequences": {
+      "type": "integer",
+      "default": 1,
+      "description": "The number of sequences to return."
+    },
+    "output_attentions": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether or not to return the attentions tensors."
+    },
+    "output_hidden_states": {
+      "type": "boolean",
+      "default": false
+    },
+    "output_scores": {
+      "type": "boolean",
+      "default": false
+    },
+    "return_dict_in_generate": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether or not to return a ModelOutput instead of a plain tuple."
+    },
+    "pad_token_id": {
+      "type": "integer"
+    },
+    "bos_token_id": {
+      "type": "integer"
+    },
+    "eos_token_id": {
+      "type": "integer"
+    },
+    "encoder_no_repeat_ngram_size": {
+      "type": "integer",
+      "default": 0
+    },
+    "decoder_start_token_id": {
+      "type": "integer"
+    }
+  },
+  "$defs": {
+    "CompileConfig": {
+      "type": "object",
+      "properties": {
+        "fullgraph": {
+          "type": "boolean",
+          "default": false,
+          "description": "If False (default), attempts to discover compileable regions that will be optimized. If True, then require that the entire function be capturable into a single graph."
+        },
+        "dynamic": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "backend": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "inductor"
+              ]
+            },
+            {
+              "type": "object"
+            }
+          ],
+          "default": "inductor"
+        },
+        "mode": {
+          "type": "string",
+          "default": "reduce-overhead"
+        },
+        "options": {
+          "type": "object"
+        }
+      }
+    },
+    "WatermarkingConfig": {
+      "type": "object",
+      "properties": {
+        "greenlist_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.25
+        },
+        "bias": {
+          "type": "number",
+          "default": 2.0
+        },
+        "hashing_key": {
+          "type": "integer",
+          "default": 15485863
+        },
+        "seeding_scheme": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "lefthash"
+              ]
+            },
+            {
+              "type": "string",
+              "enum": [
+                "selfhash"
+              ]
+            }
+          ],
+          "default": "lefthash"
+        },
+        "context_width": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "BitsAndBytesConfig": {
+      "type": "object",
+      "properties": {
+        "load_in_8bit": {
+          "type": "boolean",
+          "default": false
+        },
+        "load_in_4bit": {
+          "type": "boolean",
+          "default": false
+        },
+        "llm_int8_threshold": {
+          "type": "number"
+        },
+        "llm_int8_skip_modules": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array"
+            }
+          ]
+        },
+        "llm_int8_enable_fp32_cpu_offload": {
+          "type": "boolean",
+          "default": false
+        },
+        "llm_int8_has_fp16_weight": {
+          "type": "boolean",
+          "default": false
+        },
+        "bnb_4bit_compute_dtype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            }
+          ]
+        },
+        "bnb_4bit_quant_type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "fp4"
+              ]
+            },
+            {
+              "type": "string",
+              "enum": [
+                "nf4"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

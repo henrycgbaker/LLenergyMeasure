@@ -1,0 +1,41 @@
+{
+  "brittleness_detectable_fail_count": null,
+  "brittleness_pass_through_rate": null,
+  "brittleness_patch_cost_loc": null,
+  "brittleness_silent_fail_count": null,
+  "bump_distance": "active",
+  "cell_invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/_spike/findings/trial_runs/b/transformers/v4_57_3/invariants.proposed.yaml",
+  "cell_schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/_spike/findings/trial_runs/b/transformers/v4_57_3/schema.json",
+  "energy_wh": 81.31380030649377,
+  "engine": "transformers",
+  "failure_modes": [
+    "none"
+  ],
+  "invariant_cell_count": 51,
+  "invariant_failure_mode": "none",
+  "invariant_intersection_count": 22,
+  "invariant_precision": 0.43137254901960786,
+  "invariant_recall": 0.5641025641025641,
+  "invariant_reference_count": 39,
+  "invariant_severity_accuracy": 0.7727272727272727,
+  "observations": [
+    "chunk 'bitsandbytes_config_invariants' pass2 flag (non-applied): id='transformers_bnb_4bit_compute_dtype_not_string_or_torch_dtype' reason='Source allows bnb_4bit_compute_dtype to be a string or torch.dtype, but invariant only checks for not being a string.' fix='correct_predicate:type_is_not_str_or_torch_dtype'",
+    "chunk 'validate_section_01_1.1._Decoding_attributes' pass2 flag (non-applied): id='transformers_pad_token_id_lt_zero' reason='Source raises minor issue for pad_token_id < 0, but invariant severity is warning.' fix='correct_severity:error'",
+    "invariants chunk 'validate_section_01_1.1._Decoding_attributes' pass3_extend: extraction failed; modes=['parse_failure_after_retries']",
+    "multipass summary: pass2_dropped=0, pass3_added=23, total_invariants=51",
+    "strategy_b: schema_chunks=5, invariants_chunks=14, schema_wall=517.3s, invariants_wall=1125.5s"
+  ],
+  "reference_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/engine_versions/transformers/v4_57_3/outputs/schema.discovered.json",
+  "schema_cell_count": 99,
+  "schema_failure_mode": "none",
+  "schema_intersection_count": 93,
+  "schema_precision": 0.9393939393939394,
+  "schema_recall": 0.8303571428571429,
+  "schema_reference_count": 112,
+  "schema_type_accuracy": 0.5591397849462365,
+  "scored_at": "2026-05-25T03:02:22.847310+00:00",
+  "scoring_format_version": "1.0.0",
+  "strategy": "b",
+  "version_slug": "v4_57_3",
+  "wall_clock_sec": 1649.152866128832
+}

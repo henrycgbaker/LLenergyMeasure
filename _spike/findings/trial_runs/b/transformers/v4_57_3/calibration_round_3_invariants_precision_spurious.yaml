@@ -1,0 +1,92 @@
+scoring_format_version: 1.0.0
+precision_spurious:
+- identity:
+  - transformers
+  - bnb_4bit_compute_dtype
+  - type_is_not
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_bnb_4bit_compute_dtype_not_string_or_torch_dtype
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers
+  - bnb_4bit_quant_storage
+  - not_in
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_bnb_4bit_quant_storage_invalid_string
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers
+  - bnb_4bit_quant_storage
+  - type_is_not
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_bnb_4bit_quant_storage_not_string_or_torch_dtype
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers
+  - load_in_4bit
+  - exact
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_load_in_4bit_and_load_in_8bit_both_true
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - logits_processor
+  - present
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_generate_arguments_not_in_config
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - num_beams
+  - not_equal
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_early_stopping_set_when_num_beams_one
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - num_return_sequences
+  - gt
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_num_return_sequences_gt_num_beams
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - num_return_sequences
+  - not_equal
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_num_return_sequences_neq_1_with_greedy
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - watermarking_config
+  - present
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_watermarking_config_not_none
+    severity: error
+  note: cell invariant absent in reference

@@ -1,0 +1,429 @@
+{
+  "$defs": {
+    "CompileConfig": {
+      "properties": {
+        "backend": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "description": "Callable",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "inductor"
+        },
+        "dynamic": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "fullgraph": {
+          "default": false,
+          "type": "boolean"
+        },
+        "mode": {
+          "default": "reduce-overhead",
+          "type": "string"
+        },
+        "options": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "type": "object"
+    }
+  },
+  "discovered_at": "2026-05-25T00:46:07.169598+00:00",
+  "discovery_method": "strategy_b_oss_llm",
+  "engine": "transformers",
+  "engine_params": {
+    "bias": {
+      "default": 2.0,
+      "type": "number"
+    },
+    "bnb_4bit_compute_dtype": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "torch.dtype",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "bnb_4bit_quant_storage": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "torch.dtype",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "bnb_4bit_quant_type": {
+      "default": "fp4",
+      "enum": [
+        "fp4",
+        "nf4"
+      ],
+      "type": "string"
+    },
+    "bnb_4bit_use_double_quant": {
+      "default": false,
+      "type": "boolean"
+    },
+    "cache_dir": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "PathLike",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Directory to cache downloaded models"
+    },
+    "config": {
+      "anyOf": [
+        {
+          "description": "PretrainedConfig instance",
+          "type": "object"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "description": "PathLike",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Configuration for the model"
+    },
+    "context_width": {
+      "default": 1,
+      "type": "integer"
+    },
+    "force_download": {
+      "default": false,
+      "description": "Whether to force download of model weights and configuration",
+      "type": "boolean"
+    },
+    "greenlist_ratio": {
+      "default": 0.25,
+      "type": "number"
+    },
+    "hashing_key": {
+      "default": 15485863,
+      "type": "integer"
+    },
+    "ignore_mismatched_sizes": {
+      "default": false,
+      "description": "Whether to ignore mismatched weights sizes",
+      "type": "boolean"
+    },
+    "llm_int8_enable_fp32_cpu_offload": {
+      "default": false,
+      "type": "boolean"
+    },
+    "llm_int8_has_fp16_weight": {
+      "default": false,
+      "type": "boolean"
+    },
+    "llm_int8_skip_modules": {
+      "anyOf": [
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "llm_int8_threshold": {
+      "default": 6.0,
+      "type": "number"
+    },
+    "load_in_4bit": {
+      "default": false,
+      "type": "boolean"
+    },
+    "load_in_8bit": {
+      "default": false,
+      "type": "boolean"
+    },
+    "local_files_only": {
+      "default": false,
+      "description": "Whether to only look at local files",
+      "type": "boolean"
+    },
+    "pretrained_model_name_or_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "PathLike",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Model id or path to a directory containing model weights"
+    },
+    "revision": {
+      "default": "main",
+      "description": "Model version to use",
+      "type": "string"
+    },
+    "seeding_scheme": {
+      "default": "lefthash",
+      "enum": [
+        "lefthash",
+        "selfhash"
+      ],
+      "type": "string"
+    },
+    "token": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Token for HTTP bearer authorization"
+    }
+  },
+  "engine_version": "4.57.3",
+  "sampling_params": {
+    "bad_words_ids": {
+      "default": null,
+      "description": "",
+      "type": "array"
+    },
+    "begin_suppress_tokens": {
+      "default": null,
+      "description": "",
+      "type": "array"
+    },
+    "cache_config": {
+      "default": null,
+      "description": "Arguments used in the key-value cache class can be passed in `cache_config`.",
+      "type": "object"
+    },
+    "cache_implementation": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Name of the cache class that will be instantiated in `generate`, for faster decoding."
+    },
+    "do_sample": {
+      "default": false,
+      "description": "Whether or not to use sampling ; use greedy decoding otherwise.",
+      "type": "boolean"
+    },
+    "early_stopping": {
+      "default": false,
+      "description": "Controls the stopping condition for beam-based methods, like beam-search.",
+      "type": "boolean"
+    },
+    "encoder_repetition_penalty": {
+      "default": 1.0,
+      "description": "The parameter for encoder_repetition_penalty.",
+      "type": "number"
+    },
+    "epsilon_cutoff": {
+      "default": 0.0,
+      "description": "If set to float strictly between 0 and 1, only tokens with a conditional probability greater than `epsilon_cutoff` will be sampled.",
+      "type": "number"
+    },
+    "eta_cutoff": {
+      "default": 0.0,
+      "description": "Eta sampling is a hybrid of locally typical sampling and epsilon sampling.",
+      "type": "number"
+    },
+    "exponential_decay_length_penalty": {
+      "default": null,
+      "description": "",
+      "type": "number"
+    },
+    "forced_bos_token_id": {
+      "default": null,
+      "description": "",
+      "type": "integer"
+    },
+    "forced_eos_token_id": {
+      "default": null,
+      "description": "",
+      "type": "integer"
+    },
+    "guidance_scale": {
+      "default": null,
+      "description": "",
+      "type": "number"
+    },
+    "length_penalty": {
+      "default": 1.0,
+      "description": "Exponential penalty to the length that is used",
+      "type": "number"
+    },
+    "max_length": {
+      "default": 20,
+      "description": "The maximum length the generated tokens can have.",
+      "type": "integer"
+    },
+    "max_new_tokens": {
+      "default": null,
+      "description": "The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.",
+      "type": "integer"
+    },
+    "max_time": {
+      "default": null,
+      "description": "The maximum amount of time you allow the computation to run for in seconds.",
+      "type": "number"
+    },
+    "min_length": {
+      "default": 0,
+      "description": "The minimum length of the sequence to be generated.",
+      "type": "integer"
+    },
+    "min_new_tokens": {
+      "default": null,
+      "description": "The minimum numbers of tokens to generate, ignoring the number of tokens in the prompt.",
+      "type": "integer"
+    },
+    "min_p": {
+      "default": null,
+      "description": "Minimum token probability, which will be scaled by the probability of the most likely token.",
+      "type": "number"
+    },
+    "no_repeat_ngram_size": {
+      "default": 0,
+      "description": "",
+      "type": "integer"
+    },
+    "num_beams": {
+      "default": 1,
+      "description": "Number of beams for beam search. 1 means no beam search.",
+      "type": "integer"
+    },
+    "remove_invalid_values": {
+      "default": false,
+      "description": "",
+      "type": "boolean"
+    },
+    "renormalize_logits": {
+      "default": false,
+      "description": "",
+      "type": "boolean"
+    },
+    "repetition_penalty": {
+      "default": 1.0,
+      "description": "The parameter for repetition penalty.",
+      "type": "number"
+    },
+    "return_legacy_cache": {
+      "default": true,
+      "description": "Whether to return the legacy or new format of the cache when `DynamicCache` is used by default.",
+      "type": "boolean"
+    },
+    "sequence_bias": {
+      "default": null,
+      "description": "",
+      "type": "number"
+    },
+    "stop_strings": {
+      "default": null,
+      "description": "A string or a list of strings that should terminate generation if the model outputs them.",
+      "type": "string"
+    },
+    "suppress_tokens": {
+      "default": null,
+      "description": "",
+      "type": "array"
+    },
+    "temperature": {
+      "default": 1.0,
+      "description": "The value used to module the next token probabilities.",
+      "type": "number"
+    },
+    "token_healing": {
+      "default": false,
+      "description": "",
+      "type": "boolean"
+    },
+    "top_k": {
+      "default": 50,
+      "description": "The number of highest probability vocabulary tokens to keep for top-k-filtering.",
+      "type": "integer"
+    },
+    "top_p": {
+      "default": 1.0,
+      "description": "If set to float < 1, only the smallest set of most probable tokens with probabilities that add up to `top_p` or higher are kept for generation.",
+      "type": "number"
+    },
+    "typical_p": {
+      "default": 1.0,
+      "description": "Local typicality measures how similar the conditional probability of predicting a target token next is to the expected conditional probability of predicting a random token next, given the partial text already generated.",
+      "type": "number"
+    },
+    "use_cache": {
+      "default": true,
+      "description": "Whether or not the model should use the past last key/values attentions (if applicable to the model) to speed up decoding.",
+      "type": "boolean"
+    }
+  },
+  "schema_version": "2.0.0"
+}

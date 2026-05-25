@@ -1,0 +1,37 @@
+{
+  "brittleness_detectable_fail_count": null,
+  "brittleness_pass_through_rate": null,
+  "brittleness_patch_cost_loc": null,
+  "brittleness_silent_fail_count": null,
+  "bump_distance": "active",
+  "cell_invariants_path": "",
+  "cell_schema_path": "",
+  "energy_wh": 0.0,
+  "engine": "transformers",
+  "failure_modes": [
+    "key_absent"
+  ],
+  "invariant_cell_count": 0,
+  "invariant_failure_mode": "key_absent",
+  "invariant_intersection_count": 0,
+  "invariant_precision": 0.0,
+  "invariant_recall": 0.0,
+  "invariant_reference_count": 0,
+  "invariant_severity_accuracy": 0.0,
+  "observations": [
+    "cell crashed: KeyAbsentError: ANTHROPIC_API_KEY not set; strategy (c) cells are skipped."
+  ],
+  "reference_path": "",
+  "schema_cell_count": 0,
+  "schema_failure_mode": "key_absent",
+  "schema_intersection_count": 0,
+  "schema_precision": 0.0,
+  "schema_recall": 0.0,
+  "schema_reference_count": 0,
+  "schema_type_accuracy": 0.0,
+  "scored_at": "2026-05-25T00:53:16.211365+00:00",
+  "scoring_format_version": "1.0.0",
+  "strategy": "c",
+  "version_slug": "v4_57_3",
+  "wall_clock_sec": 0.0
+}

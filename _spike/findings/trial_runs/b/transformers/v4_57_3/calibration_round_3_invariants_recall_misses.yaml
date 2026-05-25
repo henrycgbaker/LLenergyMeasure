@@ -1,0 +1,112 @@
+scoring_format_version: 1.0.0
+recall_misses:
+- identity:
+  - transformers.sampling
+  - compile_config
+  - gt
+  kind: recall_miss
+  reference_value:
+    id: transformers_compile_config_type_compile_config_exceeds_zero
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - early_stopping
+  - gt
+  kind: recall_miss
+  reference_value:
+    id: transformers_early_stopping_type_early_stopping_exceeds_zero
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - early_stopping
+  - type_is_not
+  kind: recall_miss
+  reference_value:
+    id: transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - epsilon_cutoff
+  - present
+  kind: recall_miss
+  reference_value:
+    id: transformers_dormant_epsilon_cutoff_ne_0_0
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - eta_cutoff
+  - present
+  kind: recall_miss
+  reference_value:
+    id: transformers_dormant_eta_cutoff_ne_0_0
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - max_new_tokens
+  - not_in
+  kind: recall_miss
+  reference_value:
+    id: transformers_output_token_ids_max_new_tokens_not_in_allowlist
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - num_beams
+  - exact
+  kind: recall_miss
+  reference_value:
+    id: transformers_single_beam_strips_length_penalty
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - num_beams
+  - lt
+  kind: recall_miss
+  reference_value:
+    id: transformers_num_return_vs_beams_num_beams_lt_num_return_sequences
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - num_beams
+  - unknown
+  kind: recall_miss
+  reference_value:
+    id: transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - num_return_sequences
+  - unknown
+  kind: recall_miss
+  reference_value:
+    id: transformers_raises_num_beams_eq_1
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - pad_token_id
+  - not_in
+  kind: recall_miss
+  reference_value:
+    id: transformers_output_token_ids_pad_token_id_not_in_allowlist
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output

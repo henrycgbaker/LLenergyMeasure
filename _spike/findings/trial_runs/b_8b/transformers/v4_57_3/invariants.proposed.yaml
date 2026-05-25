@@ -1,0 +1,1732 @@
+schema_version: 1.0.0
+engine: transformers
+engine_version: 4.57.3
+mined_at: '2026-05-25T01:34:39.955767+00:00'
+miner: strategy_b_oss_llm
+invariants:
+- id: transformers_max_length_gt_min_length
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `max_length` > `min_length`
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1234
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.max_length:
+        '>': 20
+      transformers.sampling.min_length:
+        present: true
+        <: 0
+  kwargs_positive:
+    max_length: 25
+    min_length: 1
+  kwargs_negative:
+    max_length: 10
+    min_length: 5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`max_length` ({self.max_length}) has to be greater than `min_length`
+    ({self.min_length}).'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_max_new_tokens_gt_min_new_tokens
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `max_new_tokens` > `min_new_tokens`
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1235
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.max_new_tokens:
+        '>': None
+      transformers.sampling.min_new_tokens:
+        present: true
+        <: None
+  kwargs_positive:
+    max_new_tokens: 10
+    min_new_tokens: 1
+  kwargs_negative:
+    max_new_tokens: 5
+    min_new_tokens: 10
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`max_new_tokens` ({self.max_new_tokens}) has to be greater than
+    `min_new_tokens` ({self.min_new_tokens}).'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_temperature_not_equal_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `temperature` != 1.0
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1236
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.temperature:
+        present: true
+        not_equal: 1.0
+  kwargs_positive:
+    temperature: 2.0
+  kwargs_negative:
+    temperature: 1.0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`temperature` ({self.temperature}) has to be different from `1.0`.
+    It is set to `{self.temperature}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_top_k_gt_50
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `top_k` > 50
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1237
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.top_k:
+        '>': 50
+  kwargs_positive:
+    top_k: 60
+  kwargs_negative:
+    top_k: 40
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`top_k` ({self.top_k}) has to be greater than `50`. It is set
+    to `{self.top_k}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_top_p_gt_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `top_p` > 1.0
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1238
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.top_p:
+        '>': 1.0
+  kwargs_positive:
+    top_p: 2.0
+  kwargs_negative:
+    top_p: 0.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`top_p` ({self.top_p}) has to be greater than `1.0`. It is set
+    to `{self.top_p}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_min_p_gt_0
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `min_p` > 0.0
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1239
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.min_p:
+        '>': 0.0
+  kwargs_positive:
+    min_p: 1.0
+  kwargs_negative:
+    min_p: -1.0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`min_p` ({self.min_p}) has to be greater than `0.0`. It is set
+    to `{self.min_p}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_typical_p_gt_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `typical_p` > 1.0
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1240
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.typical_p:
+        '>': 1.0
+  kwargs_positive:
+    typical_p: 2.0
+  kwargs_negative:
+    typical_p: 0.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`typical_p` ({self.typical_p}) has to be greater than `1.0`.
+    It is set to `{self.typical_p}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_epsilon_cutoff_gt_0
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `epsilon_cutoff` > 0.0
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1241
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.epsilon_cutoff:
+        '>': 0.0
+  kwargs_positive:
+    epsilon_cutoff: 1.0
+  kwargs_negative:
+    epsilon_cutoff: -1.0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`epsilon_cutoff` ({self.epsilon_cutoff}) has to be greater than
+    `0.0`. It is set to `{self.epsilon_cutoff}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_eta_cutoff_gt_0
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `eta_cutoff` > 0.0
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1242
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.eta_cutoff:
+        '>': 0.0
+  kwargs_positive:
+    eta_cutoff: 1.0
+  kwargs_negative:
+    eta_cutoff: -1.0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`eta_cutoff` ({self.eta_cutoff}) has to be greater than `0.0`.
+    It is set to `{self.eta_cutoff}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_repetition_penalty_gt_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `repetition_penalty` > 1.0
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1243
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.repetition_penalty:
+        '>': 1.0
+  kwargs_positive:
+    repetition_penalty: 2.0
+  kwargs_negative:
+    repetition_penalty: 0.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`repetition_penalty` ({self.repetition_penalty}) has to be greater
+    than `1.0`. It is set to `{self.repetition_penalty}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_encoder_repetition_penalty_gt_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `encoder_repetition_penalty`
+    > 1.0
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1244
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.encoder_repetition_penalty:
+        '>': 1.0
+  kwargs_positive:
+    encoder_repetition_penalty: 2.0
+  kwargs_negative:
+    encoder_repetition_penalty: 0.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`encoder_repetition_penalty` ({self.encoder_repetition_penalty})
+    has to be greater than `1.0`. It is set to `{self.encoder_repetition_penalty}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_length_penalty_gt_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `length_penalty` > 1.0
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1245
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.length_penalty:
+        '>': 1.0
+  kwargs_positive:
+    length_penalty: 2.0
+  kwargs_negative:
+    length_penalty: 0.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`length_penalty` ({self.length_penalty}) has to be greater than
+    `1.0`. It is set to `{self.length_penalty}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_no_repeat_ngram_size_gt_0
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `no_repeat_ngram_size` > 0
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1246
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.no_repeat_ngram_size:
+        '>': 0
+  kwargs_positive:
+    no_repeat_ngram_size: 1
+  kwargs_negative:
+    no_repeat_ngram_size: -1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`no_repeat_ngram_size` ({self.no_repeat_ngram_size}) has to be
+    greater than `0`. It is set to `{self.no_repeat_ngram_size}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_bad_words_ids_not_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `bad_words_ids` != None
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1247
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.bad_words_ids:
+        present: true
+        not_equal: None
+  kwargs_positive:
+    bad_words_ids:
+    - 1
+    - 2
+  kwargs_negative:
+    bad_words_ids: None
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`bad_words_ids` ({self.bad_words_ids}) has to be different from
+    `None`. It is set to `{self.bad_words_ids}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_renormalize_logits_not_false
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `renormalize_logits` != False
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1248
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.renormalize_logits:
+        present: true
+        not_equal: false
+  kwargs_positive:
+    renormalize_logits: true
+  kwargs_negative:
+    renormalize_logits: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`renormalize_logits` ({self.renormalize_logits}) has to be different
+    from `False`. It is set to `{self.renormalize_logits}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_forced_bos_token_id_not_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `forced_bos_token_id` != None
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1249
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.forced_bos_token_id:
+        present: true
+        not_equal: None
+  kwargs_positive:
+    forced_bos_token_id: 1
+  kwargs_negative:
+    forced_bos_token_id: None
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`forced_bos_token_id` ({self.forced_bos_token_id}) has to be
+    different from `None`. It is set to `{self.forced_bos_token_id}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_forced_eos_token_id_not_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `forced_eos_token_id` != None
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1250
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.forced_eos_token_id:
+        present: true
+        not_equal: None
+  kwargs_positive:
+    forced_eos_token_id: 1
+  kwargs_negative:
+    forced_eos_token_id: None
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`forced_eos_token_id` ({self.forced_eos_token_id}) has to be
+    different from `None`. It is set to `{self.forced_eos_token_id}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_remove_invalid_values_not_false
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `remove_invalid_values` !=
+    False
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1251
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.remove_invalid_values:
+        present: true
+        not_equal: false
+  kwargs_positive:
+    remove_invalid_values: true
+  kwargs_negative:
+    remove_invalid_values: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`remove_invalid_values` ({self.remove_invalid_values}) has to
+    be different from `False`. It is set to `{self.remove_invalid_values}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_exponential_decay_length_penalty_not_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `exponential_decay_length_penalty`
+    != None
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1252
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.exponential_decay_length_penalty:
+        present: true
+        not_equal: None
+  kwargs_positive:
+    exponential_decay_length_penalty: 1.0
+  kwargs_negative:
+    exponential_decay_length_penalty: None
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`exponential_decay_length_penalty` ({self.exponential_decay_length_penalty})
+    has to be different from `None`. It is set to `{self.exponential_decay_length_penalty}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_suppress_tokens_not_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `suppress_tokens` != None
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1253
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.suppress_tokens:
+        present: true
+        not_equal: None
+  kwargs_positive:
+    suppress_tokens:
+    - 1
+    - 2
+  kwargs_negative:
+    suppress_tokens: None
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`suppress_tokens` ({self.suppress_tokens}) has to be different
+    from `None`. It is set to `{self.suppress_tokens}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_begin_suppress_tokens_not_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `begin_suppress_tokens` !=
+    None
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1254
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.begin_suppress_tokens:
+        present: true
+        not_equal: None
+  kwargs_positive:
+    begin_suppress_tokens:
+    - 1
+    - 2
+  kwargs_negative:
+    begin_suppress_tokens: None
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`begin_suppress_tokens` ({self.begin_suppress_tokens}) has to
+    be different from `None`. It is set to `{self.begin_suppress_tokens}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_sequence_bias_not_none
+  engine: transformers
+  library: transformers
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_load_in_8bit_not_bool
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.validate flags `load_in_8bit` not a boolean
+  severity: error
+  native_type: BitsAndBytesConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __init__
+    line_at_scan: 108
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_8bit:
+        present: true
+        type_is_not:
+        - bool
+  kwargs_positive:
+    load_in_8bit: invalid
+  kwargs_negative:
+    load_in_8bit: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`load_in_8bit` must be a boolean, but is {self.load_in_8bit}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_load_in_4bit_not_bool
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.validate flags `load_in_4bit` not a boolean
+  severity: error
+  native_type: BitsAndBytesConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __init__
+    line_at_scan: 109
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_4bit:
+        present: true
+        type_is_not:
+        - bool
+  kwargs_positive:
+    load_in_4bit: invalid
+  kwargs_negative:
+    load_in_4bit: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`load_in_4bit` must be a boolean, but is {self.load_in_4bit}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_llm_int8_threshold_not_float
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.validate flags `llm_int8_threshold` not
+    a float
+  severity: error
+  native_type: BitsAndBytesConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __init__
+    line_at_scan: 111
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_threshold:
+        present: true
+        type_is_not:
+        - float
+  kwargs_positive:
+    llm_int8_threshold: invalid
+  kwargs_negative:
+    llm_int8_threshold: 6.0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`llm_int8_threshold` must be a float, but is {self.llm_int8_threshold}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_llm_int8_skip_modules_not_list
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.validate flags `llm_int8_skip_modules`
+    not a list
+  severity: error
+  native_type: BitsAndBytesConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __init__
+    line_at_scan: 113
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_skip_modules:
+        present: true
+        type_is_not:
+        - list
+  kwargs_positive:
+    llm_int8_skip_modules: invalid
+  kwargs_negative:
+    llm_int8_skip_modules: []
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`llm_int8_skip_modules` must be a list, but is {self.llm_int8_skip_modules}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_llm_int8_enable_fp32_cpu_offload_not_bool
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.validate flags `llm_int8_enable_fp32_cpu_offload`
+    not a boolean
+  severity: error
+  native_type: BitsAndBytesConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __init__
+    line_at_scan: 115
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_enable_fp32_cpu_offload:
+        present: true
+        type_is_not:
+        - bool
+  kwargs_positive:
+    llm_int8_enable_fp32_cpu_offload: invalid
+  kwargs_negative:
+    llm_int8_enable_fp32_cpu_offload: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`llm_int8_enable_fp32_cpu_offload` must be a boolean, but is
+    {self.llm_int8_enable_fp32_cpu_offload}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_llm_int8_has_fp16_weight_not_bool
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.validate flags `llm_int8_has_fp16_weight`
+    not a boolean
+  severity: error
+  native_type: BitsAndBytesConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __init__
+    line_at_scan: 117
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_has_fp16_weight:
+        present: true
+        type_is_not:
+        - bool
+  kwargs_positive:
+    llm_int8_has_fp16_weight: invalid
+  kwargs_negative:
+    llm_int8_has_fp16_weight: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`llm_int8_has_fp16_weight` must be a boolean, but is {self.llm_int8_has_fp16_weight}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_bnb_4bit_compute_dtype_not_torch_dtype
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.validate flags `bnb_4bit_compute_dtype`
+    not a torch.dtype
+  severity: error
+  native_type: BitsAndBytesConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __init__
+    line_at_scan: 121
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_compute_dtype:
+        present: true
+        type_is_not:
+        - torch.dtype
+  kwargs_positive:
+    bnb_4bit_compute_dtype: invalid
+  kwargs_negative:
+    bnb_4bit_compute_dtype: torch.float32
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`bnb_4bit_compute_dtype` must be a torch.dtype, but is {self.bnb_4bit_compute_dtype}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_bnb_4bit_quant_storage_not_torch_dtype
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.validate flags `bnb_4bit_quant_storage`
+    not a torch.dtype
+  severity: error
+  native_type: BitsAndBytesConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __init__
+    line_at_scan: 125
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_quant_storage:
+        present: true
+        type_is_not:
+        - torch.dtype
+  kwargs_positive:
+    bnb_4bit_quant_storage: invalid
+  kwargs_negative:
+    bnb_4bit_quant_storage: torch.uint8
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`bnb_4bit_quant_storage` must be a torch.dtype, but is {self.bnb_4bit_quant_storage}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_load_in_8bit_and_load_in_4bit_both_true
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.validate flags `load_in_8bit` and `load_in_4bit`
+    both True
+  severity: error
+  native_type: BitsAndBytesConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __init__
+    line_at_scan: 109
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_8bit:
+        present: true
+        not_equal: true
+      transformers.load_in_4bit:
+        present: true
+        not_equal: true
+  kwargs_positive:
+    load_in_8bit: true
+    load_in_4bit: true
+  kwargs_negative:
+    load_in_8bit: false
+    load_in_4bit: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`load_in_4bit` and `load_in_8bit` cannot both be True.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_sampling_temperature_not_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `temperature` not None
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1234
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.temperature:
+        present: true
+  kwargs_positive:
+    temperature: None
+  kwargs_negative:
+    temperature: 0.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`temperature` must be a float, but is {self.temperature}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_sampling_repetition_penalty_not_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `repetition_penalty` not None
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1236
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.repetition_penalty:
+        present: true
+  kwargs_positive:
+    repetition_penalty: None
+  kwargs_negative:
+    repetition_penalty: 1.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`repetition_penalty` must be a float, but is {self.repetition_penalty}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_sampling_repetition_penalty_not_equal_one
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `repetition_penalty` not equal
+    to 1.0
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1237
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.repetition_penalty:
+        present: true
+        not_equal: 1.0
+  kwargs_positive:
+    repetition_penalty: 1.0
+  kwargs_negative:
+    repetition_penalty: 1.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`repetition_penalty` must be a float and not equal to 1.0, but
+    is {self.repetition_penalty}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_sampling_min_length_gt_zero
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `min_length` greater than
+    zero
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1239
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.min_length:
+        '>': 0
+  kwargs_positive:
+    min_length: -1
+  kwargs_negative:
+    min_length: 10
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`min_length` must be greater than zero, but is {self.min_length}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_sampling_max_length_le_max_new_tokens
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `max_length` less or equal
+    to `max_new_tokens`
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1241
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.max_length:
+        <=: max_new_tokens
+  kwargs_positive:
+    max_length: 10
+    max_new_tokens: 5
+  kwargs_negative:
+    max_length: 15
+    max_new_tokens: 20
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`max_length` ({self.max_length}) has to be smaller or equal to
+    `max_new_tokens` ({self.max_new_tokens}).'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_sampling_min_length_le_max_new_tokens
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `min_length` less or equal
+    to `max_new_tokens`
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1242
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.min_length:
+        <=: max_new_tokens
+  kwargs_positive:
+    min_length: 10
+    max_new_tokens: 5
+  kwargs_negative:
+    min_length: 15
+    max_new_tokens: 20
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`min_length` ({self.min_length}) has to be smaller or equal to
+    `max_new_tokens` ({self.max_new_tokens}).'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_sampling_num_return_sequences_gt_zero
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_return_sequences` greater
+    than zero
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1243
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        '>': 0
+  kwargs_positive:
+    num_return_sequences: -1
+  kwargs_negative:
+    num_return_sequences: 10
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`num_return_sequences` must be greater than zero, but is {self.num_return_sequences}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_sampling_num_beams_gt_zero
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_beams` greater than zero
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1244
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams:
+        '>': 0
+  kwargs_positive:
+    num_beams: -1
+  kwargs_negative:
+    num_beams: 10
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`num_beams` must be greater than zero, but is {self.num_beams}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_sampling_num_return_sequences_le_num_beams
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_return_sequences` less
+    or equal to `num_beams`
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1245
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        <=: num_beams
+  kwargs_positive:
+    num_return_sequences: 10
+    num_beams: 5
+  kwargs_negative:
+    num_return_sequences: 15
+    num_beams: 20
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`num_return_sequences` ({self.num_return_sequences}) has to be
+    smaller or equal to `num_beams` ({self.num_beams}).'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_sampling_num_beams_le_max_length
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_beams` less or equal
+    to `max_length`
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1246
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams:
+        <=: max_length
+  kwargs_positive:
+    num_beams: 10
+    max_length: 5
+  kwargs_negative:
+    num_beams: 15
+    max_length: 20
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`num_beams` ({self.num_beams}) has to be smaller or equal to
+    `max_length` ({self.max_length}).'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_sampling_num_beams_gt_max_length
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_beams` greater than `max_length`
+  severity: error
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_early_stopping_not_in_allowlist
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `early_stopping` not in allowlist
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.early_stopping:
+        present: true
+        not_in:
+        - true
+        - false
+        - never
+  kwargs_positive:
+    early_stopping: invalid
+  kwargs_negative:
+    early_stopping: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`early_stopping` must be a boolean or ''never'', but is {self.early_stopping}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_pad_token_id_not_positive
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `pad_token_id` not positive
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 3
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.pad_token_id:
+        '>': 0
+  kwargs_positive:
+    pad_token_id: -1
+  kwargs_negative:
+    pad_token_id: 5
+  expected_outcome:
+    outcome: warning
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`pad_token_id` should be positive but got {self.pad_token_id}.
+    This will cause errors when batch generating, if there is padding. Please set
+    `pad_token_id` explicitly as `model.generation_config.pad_token_id=PAD_TOKEN_ID`
+    to avoid errors in generation'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_cache_implementation_not_in_allowlist
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `cache_implementation` not
+    in allowlist
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1234
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.cache_implementation:
+        present: true
+        not_in:
+        - ALL_CACHE_IMPLEMENTATIONS
+  kwargs_positive:
+    cache_implementation: invalid
+  kwargs_negative:
+    cache_implementation: ALL_CACHE_IMPLEMENTATIONS[0]
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'Invalid `cache_implementation` ({self.cache_implementation}).
+    Choose one of: {ALL_CACHE_IMPLEMENTATIONS}'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_watermarking_config_not_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `watermarking_config` not
+    None
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1.4
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.watermarking_config:
+        present: true
+  kwargs_positive:
+    watermarking_config: {}
+  kwargs_negative:
+    watermarking_config: None
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: The `watermarking_config` attribute is not set.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_num_beam_groups_gt_num_beams
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags num_beam_groups > num_beams
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1047
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beam_groups:
+        '>': 1
+  kwargs_positive:
+    num_beams: 2
+    num_beam_groups: 3
+  kwargs_negative:
+    num_beams: 5
+    num_beam_groups: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`num_beam_groups` ({self.num_beam_groups}) has to be smaller
+    or equal to `num_beams` ({self.num_beams}).'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_num_beams_eq_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags num_beams == 1
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1051
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams:
+        present: true
+        '=': 1
+  kwargs_positive:
+    num_beams: 1
+  kwargs_negative:
+    num_beams: 2
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`num_beams` is set to `1`. However, this flag is only used in
+    sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_num_beam_groups_eq_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags num_beam_groups == 1
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1053
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beam_groups:
+        present: true
+        '=': 1
+  kwargs_positive:
+    num_beam_groups: 1
+  kwargs_negative:
+    num_beam_groups: 2
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`num_beam_groups` is set to `1`. However, this flag is only used
+    in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_num_return_sequences_eq_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags num_return_sequences == 1
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1055
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        present: true
+        '=': 1
+  kwargs_positive:
+    num_return_sequences: 1
+  kwargs_negative:
+    num_return_sequences: 2
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`num_return_sequences` is set to `1`. However, this flag is only
+    used in sample-based generation modes. You should set `do_sample=True` or unset
+    `{flag_name}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_num_beams_not_in_allowlist
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags num_beams not in allowlist
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1057
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams:
+        present: true
+        not_in:
+        - 1
+  kwargs_positive:
+    num_beams: invalid
+  kwargs_negative:
+    num_beams: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`num_beams` must be a positive integer, but is `{self.num_beams}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_num_beam_groups_not_in_allowlist
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags num_beam_groups not in allowlist
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1059
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beam_groups:
+        present: true
+        not_in:
+        - 1
+  kwargs_positive:
+    num_beam_groups: invalid
+  kwargs_negative:
+    num_beam_groups: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`num_beam_groups` must be a positive integer, but is `{self.num_beam_groups}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_num_return_sequences_not_in_allowlist
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags num_return_sequences not in
+    allowlist
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1061
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        present: true
+        not_in:
+        - 1
+  kwargs_positive:
+    num_return_sequences: invalid
+  kwargs_negative:
+    num_return_sequences: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`num_return_sequences` must be a positive integer, but is `{self.num_return_sequences}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_num_beams_not_equal_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags num_beams != 1
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1075
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams:
+        present: true
+        not_equal: 1
+  kwargs_positive:
+    num_beams: 2
+  kwargs_negative:
+    num_beams: 1
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`num_beams` is set to `{self.num_beams}`. However, this flag
+    is only used in sample-based generation modes. You should set `do_sample=True`
+    or unset `{flag_name}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_num_beam_groups_not_equal_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags num_beam_groups != 1
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1077
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beam_groups:
+        present: true
+        not_equal: 1
+  kwargs_positive:
+    num_beam_groups: 2
+  kwargs_negative:
+    num_beam_groups: 1
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`num_beam_groups` is set to `{self.num_beam_groups}`. However,
+    this flag is only used in sample-based generation modes. You should set `do_sample=True`
+    or unset `{flag_name}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_num_return_sequences_not_equal_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags num_return_sequences != 1
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1079
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        present: true
+        not_equal: 1
+  kwargs_positive:
+    num_return_sequences: 2
+  kwargs_negative:
+    num_return_sequences: 1
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`num_return_sequences` is set to `{self.num_return_sequences}`.
+    However, this flag is only used in sample-based generation modes. You should set
+    `do_sample=True` or unset `{flag_name}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_num_beams_eq_num_beam_groups
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags num_beams == num_beam_groups
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_temperature_set_when_do_sample_false
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `temperature` set when do_sample=False
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1234
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: false
+  kwargs_positive:
+    do_sample: false
+    temperature: 0.5
+  kwargs_negative:
+    do_sample: true
+    temperature: 0.5
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`do_sample` is set to `False`. However, `{flag_name}` is set
+    to `{flag_value}` -- this flag is only used in sample-based generation modes.
+    You should set `do_sample=True` or unset `{flag_name}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_single_beam_early_stopping_not_false
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `early_stopping` not False
+    when num_beams == 1
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1234
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 1
+      transformers.sampling.early_stopping:
+        present: true
+        not_equal: false
+  kwargs_positive:
+    num_beams: 1
+    early_stopping: true
+  kwargs_negative:
+    num_beams: 2
+    early_stopping: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`num_beams` is set to 1. However, `{flag_name}` is set to `{flag_value}`
+    -- this flag is only used in beam-based generation modes. You should set `num_beams>1`
+    or unset `{flag_name}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_return_legacy_cache_not_in_allowlist
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `return_legacy_cache` not
+    in allowlist
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 13
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.return_legacy_cache:
+        present: true
+        not_in:
+        - invalid
+  kwargs_positive:
+    return_legacy_cache: invalid
+  kwargs_negative:
+    return_legacy_cache: None
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: You have set `use_cache` to `False`, but {cache_arg} is set to
+    {cache_arg_value}. {cache_arg} will have no effect.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_return_dict_in_generate_not_set
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags return_dict_in_generate not
+    set when extra_output_flags are present
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1234
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.return_dict_in_generate:
+        present: true
+      transformers.sampling.extra_output_flags:
+        present: true
+        not_equal:
+        - return_loss
+        - return_input
+  kwargs_positive:
+    return_dict_in_generate: false
+    extra_output_flags:
+    - return_loss
+  kwargs_negative:
+    return_dict_in_generate: true
+    extra_output_flags: []
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `{extra_output_flag}`
+    is. When `return_dict_in_generate` is not `True`, `{extra_output_flag}` is ignored.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: transformers_generate_arguments_not_valid
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `generate` arguments not valid
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 12
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.generate_arguments:
+        present: true
+        not_in:
+        - logits_processor
+        - stopping_criteria
+        - prefix_allowed_tokens_fn
+        - synced_gpus
+        - assistant_model
+        - streamer
+        - negative_prompt_ids
+        - negative_prompt_attention_mask
+        - use_model_defaults
+  kwargs_positive:
+    logits_processor: invalid
+  kwargs_negative:
+    logits_processor: None
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Argument `{arg}` is not a valid argument of `GenerationConfig`.
+    It should be passed to `generate()` (or a pipeline) directly.
+  added_by: llm_miner
+  added_at: '2026-05-25'

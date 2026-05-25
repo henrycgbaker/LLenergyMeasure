@@ -1,0 +1,200 @@
+scoring_format_version: 1.0.0
+recall_misses:
+- identity:
+  - transformers
+  - bnb_4bit_quant_type
+  - type_is_not
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: transformers_raises_bnb_4bit_quant_type_not_type_str
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - compile_config
+  - gt
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: transformers_compile_config_type_compile_config_exceeds_zero
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - early_stopping
+  - gt
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: transformers_early_stopping_type_early_stopping_exceeds_zero
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - early_stopping
+  - type_is_not
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - epsilon_cutoff
+  - present
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: transformers_dormant_epsilon_cutoff_ne_0_0
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - eta_cutoff
+  - present
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: transformers_dormant_eta_cutoff_ne_0_0
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - max_new_tokens
+  - not_in
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: transformers_output_token_ids_max_new_tokens_not_in_allowlist
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - num_beams
+  - exact
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: transformers_beam_search_num_beams_eq_1
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - num_beams
+  - exact
+  - early_stopping
+  kind: recall_miss
+  reference_value:
+    id: transformers_single_beam_strips_early_stopping
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - num_beams
+  - exact
+  - length_penalty
+  kind: recall_miss
+  reference_value:
+    id: transformers_single_beam_strips_length_penalty
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - num_beams
+  - exact
+  - num_return_sequences
+  kind: recall_miss
+  reference_value:
+    id: transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - num_beams
+  - lt
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: transformers_num_return_vs_beams_num_beams_lt_num_return_sequences
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - num_beams
+  - unknown
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - num_return_sequences
+  - unknown
+  - num_beams
+  kind: recall_miss
+  reference_value:
+    id: transformers_raises_num_beams_eq_1
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - pad_token_id
+  - not_in
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: transformers_output_token_ids_pad_token_id_not_in_allowlist
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - return_dict_in_generate
+  - exact
+  - output_attentions
+  kind: recall_miss
+  reference_value:
+    id: transformers_no_return_dict_strips_output_attentions
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - return_dict_in_generate
+  - exact
+  - output_hidden_states
+  kind: recall_miss
+  reference_value:
+    id: transformers_no_return_dict_strips_output_hidden_states
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - transformers.sampling
+  - return_dict_in_generate
+  - exact
+  - output_scores
+  kind: recall_miss
+  reference_value:
+    id: transformers_no_return_dict_strips_output_scores
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output

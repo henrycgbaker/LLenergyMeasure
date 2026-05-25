@@ -1,0 +1,1881 @@
+schema_version: 1.0.0
+engine: vllm
+engine_version: 0.7.3
+mined_at: '2026-05-25T03:28:59.993999+00:00'
+miner: strategy_b_oss_llm_multipass
+invariants:
+- id: vllm_n_must_be_int
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags n not an int
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        present: true
+        type_is_not:
+        - int
+  kwargs_positive:
+    n: a
+  kwargs_negative:
+    n: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: n must be an int, but is of type {type(self.n)}
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_n_must_be_at_least_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags n < 1
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 12
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        <: 1
+  kwargs_positive:
+    n: 0
+  kwargs_negative:
+    n: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: n must be at least 1, got {self.n}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_presence_penalty_must_be_in_range
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags presence_penalty out of
+    range
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 14
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.presence_penalty:
+        <: -2.0
+        '>': 2.0
+  kwargs_positive:
+    presence_penalty: 3.0
+  kwargs_negative:
+    presence_penalty: 1.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: presence_penalty must be in [-2, 2], got {self.presence_penalty}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_frequency_penalty_must_be_in_range
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags frequency_penalty out of
+    range
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 16
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.frequency_penalty:
+        <: -2.0
+        '>': 2.0
+  kwargs_positive:
+    frequency_penalty: 3.0
+  kwargs_negative:
+    frequency_penalty: 1.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: frequency_penalty must be in [-2, 2], got {self.frequency_penalty}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_repetition_penalty_must_be_in_range
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags repetition_penalty out of
+    range
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 18
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.repetition_penalty:
+        <: 0.0
+        '>': 2.0
+  kwargs_positive:
+    repetition_penalty: -1.0
+  kwargs_negative:
+    repetition_penalty: 1.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: repetition_penalty must be in (0, 2], got {self.repetition_penalty}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_temperature_must_be_non_negative
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags temperature < 0.0
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.temperature:
+        <: 0.0
+  kwargs_positive:
+    temperature: -1.0
+  kwargs_negative:
+    temperature: 1.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: temperature must be non-negative, got {self.temperature}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_top_p_must_be_in_range
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags top_p out of range
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 22
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_p:
+        <: 0.0
+        '>': 1.0
+  kwargs_positive:
+    top_p: -1.0
+  kwargs_negative:
+    top_p: 0.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: top_p must be in (0, 1], got {self.top_p}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_top_k_must_be_valid
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags top_k invalid
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 24
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_k:
+        <: -1
+        ==: 0
+  kwargs_positive:
+    top_k: 0
+  kwargs_negative:
+    top_k: 10
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: top_k must be -1 (disable), or at least 1, got {self.top_k}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_top_k_must_be_int
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags top_k not an int
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 26
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_k:
+        present: true
+        type_is_not:
+        - int
+  kwargs_positive:
+    top_k: a
+  kwargs_negative:
+    top_k: 10
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: top_k must be an integer, got {type(self.top_k).__name__}
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_min_p_must_be_in_range
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags min_p out of range
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 28
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_p:
+        <: 0.0
+        '>': 1.0
+  kwargs_positive:
+    min_p: -1.0
+  kwargs_negative:
+    min_p: 0.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: min_p must be in [0, 1], got {self.min_p}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_max_tokens_must_be_at_least_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags max_tokens < 1
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 30
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.max_tokens:
+        <: 1
+  kwargs_positive:
+    max_tokens: 0
+  kwargs_negative:
+    max_tokens: 10
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_tokens must be at least 1, got {self.max_tokens}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_min_tokens_must_be_non_negative
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags min_tokens < 0
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 32
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_tokens:
+        <: 0
+  kwargs_positive:
+    min_tokens: -1
+  kwargs_negative:
+    min_tokens: 10
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: min_tokens must be greater than or equal to 0, got {self.min_tokens}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_min_tokens_must_be_less_than_or_equal_to_max_tokens
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags min_tokens > max_tokens
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 34
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_tokens:
+        '>': 10
+  kwargs_positive:
+    max_tokens: 10
+    min_tokens: 11
+  kwargs_negative:
+    max_tokens: 20
+    min_tokens: 10
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: min_tokens must be less than or equal to max_tokens={self.max_tokens},
+    got {self.min_tokens}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_logprobs_must_be_non_negative
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags logprobs < 0
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 36
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.logprobs:
+        <: 0
+  kwargs_positive:
+    logprobs: -1
+  kwargs_negative:
+    logprobs: 10
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: logprobs must be non-negative, got {self.logprobs}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_prompt_logprobs_must_be_non_negative
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags prompt_logprobs < 0
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 38
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.prompt_logprobs:
+        <: 0
+  kwargs_positive:
+    prompt_logprobs: -1
+  kwargs_negative:
+    prompt_logprobs: 10
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: prompt_logprobs must be non-negative, got {self.prompt_logprobs}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_truncate_prompt_tokens_must_be_greater_than_or_equal_to_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags truncate_prompt_tokens <
+    1
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 40
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.truncate_prompt_tokens:
+        <: 1
+  kwargs_positive:
+    truncate_prompt_tokens: 0
+  kwargs_negative:
+    truncate_prompt_tokens: 10
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: truncate_prompt_tokens must be >= 1, got {self.truncate_prompt_tokens}
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_stop_cannot_contain_empty_string
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags stop containing empty string
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 42
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop:
+        present: true
+  kwargs_positive:
+    stop:
+    - ''
+    - a
+  kwargs_negative:
+    stop:
+    - a
+    - b
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: stop cannot contain an empty string.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_stop_strings_require_detokenize_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags stop strings without detokenize=True
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 44
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop:
+        present: true
+      vllm.sampling.detokenize: false
+  kwargs_positive:
+    stop:
+    - a
+    detokenize: false
+  kwargs_negative:
+    stop:
+    - a
+    detokenize: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: stop strings are only supported when detokenize is True. Set detokenize=True
+    to use stop.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_best_of_must_equal_n_for_delta_output_kind
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_args flags best_of != n for output_kind=DELTA
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_args
+    line_at_scan: 46
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.best_of:
+        present: true
+        not_equal: 10
+      vllm.sampling.output_kind: DELTA
+  kwargs_positive:
+    best_of: 5
+    output_kind: DELTA
+  kwargs_negative:
+    best_of: 10
+    output_kind: DELTA
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: best_of must equal n to use output_kind=DELTA.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_n_must_be_1_for_greedy_sampling
+  engine: vllm
+  library: vllm
+  invariant_under_test: SamplingParams._verify_greedy_sampling flags n > 1 for greedy
+    sampling
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling.py
+    method: _verify_gre
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_best_of_must_be_greater_than_or_equal_to_n
+  severity: error
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.best_of:
+        <: vllm.sampling.n
+  invariant_under_test: SamplingParams._verify_args flags best_of < n
+  added_by: llm_miner_pass3
+  engine: vllm
+  library: vllm
+  added_at: '2026-05-25'
+- id: vllm_stop_token_ids_must_not_contain_empty_string
+  severity: error
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.stop_token_ids:
+        present: true
+        not_in:
+        - ''
+  invariant_under_test: SamplingParams._verify_args flags stop containing empty string
+  added_by: llm_miner_pass3
+  engine: vllm
+  library: vllm
+  added_at: '2026-05-25'
+- id: vllm_bad_words_must_not_contain_empty_string
+  severity: error
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.bad_words:
+        present: true
+        not_in:
+        - ''
+  invariant_under_test: SamplingParams._verify_args flags bad_words containing empty
+    string
+  added_by: llm_miner_pass3
+  engine: vllm
+  library: vllm
+  added_at: '2026-05-25'
+- id: vllm_guided_decoding_mutual_exclusion
+  engine: vllm
+  library: vllm
+  invariant_under_test: GuidedDecodingParams enforces mutual exclusion of guide fields
+  severity: error
+  native_type: vllm.GuidedDecodingParams
+  miner_source:
+    path: guided_decoding_params.py
+    method: __post_init__
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.json:
+        present: true
+      vllm.sampling.regex:
+        present: true
+      vllm.sampling.choice:
+        present: true
+      vllm.sampling.grammar:
+        present: true
+      vllm.sampling.json_object:
+        present: true
+  kwargs_positive:
+    json: json_value
+    regex: regex_value
+  kwargs_negative:
+    json: json_value
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'You can only use one kind of guided decoding but multiple are
+    specified: {self.__dict__}'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_tokenizer_mode_not_in_allowlist
+  engine: vllm
+  library: vllm
+  invariant_under_test: ModelConfig._verify_tokenizer_mode flags tokenizer_mode not
+    in allowlist
+  severity: error
+  native_type: vllm.ModelConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: _verify_tokenizer_mode
+    line_at_scan: 1
+  match:
+    engine: vllm
+    fields:
+      vllm.tokenizer_mode:
+        present: true
+        not_in:
+        - auto
+        - slow
+        - mistral
+        - custom
+  kwargs_positive:
+    tokenizer_mode: invalid
+  kwargs_negative:
+    tokenizer_mode: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'Unknown tokenizer mode: {self.tokenizer_mode}. Must be either
+    ''auto'', ''slow'', ''mistral'' or ''custom''.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_tokenizer_mode_case_insensitive
+  engine: vllm
+  library: vllm
+  invariant_under_test: ModelConfig._verify_tokenizer_mode flags tokenizer_mode case
+    sensitivity
+  severity: dormant
+  native_type: vllm.ModelConfig
+  miner_source:
+    path: model_config.py
+    method: _verify_tokenizer_mode
+    line_at_scan: 123
+  match:
+    engine: vllm
+    fields:
+      vllm.tokenizer_mode:
+        present: true
+  kwargs_positive:
+    tokenizer_mode: Auto
+  kwargs_negative:
+    tokenizer_mode: auto
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: 'Unknown tokenizer mode: {self.tokenizer_mode}. Must be either
+    ''auto'', ''slow'', ''mistral'' or ''custom''.'
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_tokenizer_mode_type_check
+  engine: vllm
+  library: vllm
+  invariant_under_test: ModelConfig._verify_tokenizer_mode flags tokenizer_mode type
+    check
+  severity: dormant
+  native_type: vllm.ModelConfig
+  miner_source:
+    path: model_config.py
+    method: _verify_tokenizer_mode
+    line_at_scan: 123
+  match:
+    engine: vllm
+    fields:
+      vllm.tokenizer_mode:
+        present: true
+        type_is_not:
+        - str
+  kwargs_positive:
+    tokenizer_mode: 42
+  kwargs_negative:
+    tokenizer_mode: auto
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: 'Unknown tokenizer mode: {self.tokenizer_mode}. Must be either
+    ''auto'', ''slow'', ''mistral'' or ''custom''.'
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_quantization_method_mismatch
+  engine: vllm
+  library: vllm
+  invariant_under_test: ModelConfig._verify_quantization flags quantization method
+    mismatch
+  severity: error
+  native_type: vllm.ModelConfig
+  miner_source:
+    path: model_config.py
+    method: _verify_quantization
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.quantization:
+        present: true
+        not_equal: quant_method
+  kwargs_positive:
+    quantization: fp16
+    quant_cfg:
+      quant_method: int8
+  kwargs_negative:
+    quantization: int8
+    quant_cfg:
+      quant_method: int8
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Quantization method specified in the model config ({quant_method})
+    does not match the quantization method specified in the `quantization` argument
+    ({self.quantization}).
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_quantization_not_in_allowlist
+  engine: vllm
+  library: vllm
+  invariant_under_test: ModelConfig._verify_quantization flags quantization not in
+    allowlist
+  severity: error
+  native_type: vllm.ModelConfig
+  miner_source:
+    path: model_config.py
+    method: _verify_quantization
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.quantization:
+        present: true
+        not_in: supported_quantization
+  kwargs_positive:
+    quantization: unknown
+  kwargs_negative:
+    quantization: fp16
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'Unknown quantization method: {self.quantization}. Must be one
+    of {supported_quantization}.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_model_not_support_cuda_graph
+  engine: vllm
+  library: vllm
+  invariant_under_test: ModelConfig._verify_cuda_graph flags model not supporting
+    CUDA graph
+  severity: warning
+  native_type: vllm.ModelConfig
+  miner_source:
+    path: configuration_utils.py
+    method: _verify_cuda_graph
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.hf_config.model_type:
+        present: true
+        not_in:
+        - mllama
+  kwargs_positive:
+    hf_config:
+      model_type: mllama
+  kwargs_negative:
+    hf_config:
+      model_type: other_model
+  expected_outcome:
+    outcome: warning
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: CUDA graph is not supported for {self.hf_config.model_type} yet,
+    fallback to the eager mode.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_enforce_eager_set_when_model_not_support_cuda_graph
+  engine: vllm
+  library: vllm
+  invariant_under_test: ModelConfig._verify_cuda_graph sets enforce_eager when model
+    does not support CUDA graph
+  severity: warning
+  native_type: vllm.ModelConfig
+  miner_source:
+    path: ModelConfig.py
+    method: _verify_cuda_graph
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.hf_config.model_type:
+        present: true
+        not_in:
+        - mllama
+      vllm.enforce_eager:
+        exact: false
+  kwargs_positive:
+    hf_config.model_type: mllama
+    enforce_eager: false
+  kwargs_negative:
+    hf_config.model_type: other_model
+    enforce_eager: true
+  expected_outcome:
+    outcome: warning
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: CUDA graph is not supported for %s yet, fallback to the eager
+    mode.
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_cuda_graph_not_supported_on_bitsandbytes_8bit
+  engine: vllm
+  library: vllm
+  invariant_under_test: ModelConfig._verify_bnb_config flags CUDA graph not supported
+    on BitAndBytes 8-bit
+  severity: warning
+  native_type: vllm.ModelConfig
+  miner_source:
+    path: modeling/modeling_utils.py
+    method: _verify_bnb_config
+    line_at_scan: 1234
+  match:
+    engine: vllm
+    fields:
+      vllm.quantization: bitsandbytes
+      vllm.hf_config.quantization_config.load_in_8bit: true
+      vllm.enforce_eager: false
+  kwargs_positive:
+    quantization: bitsandbytes
+    hf_config:
+      quantization_config:
+        load_in_8bit: true
+    enforce_eager: false
+  kwargs_negative:
+    quantization: other_quantization
+    hf_config:
+      quantization_config:
+        load_in_8bit: false
+    enforce_eager: true
+  expected_outcome:
+    outcome: warning
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: CUDA graph is not supported on BitAndBytes 8bit yet, fallback
+    to the eager mode.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_gpu_memory_utilization_gt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: CacheConfig._verify_args flags gpu_memory_utilization > 1.0
+  severity: error
+  native_type: vllm.CacheConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: _verify_args
+    line_at_scan: 5
+  match:
+    engine: vllm
+    fields:
+      vllm.gpu_memory_utilization:
+        '>': 1.0
+  kwargs_positive:
+    gpu_memory_utilization: 2.0
+  kwargs_negative:
+    gpu_memory_utilization: 0.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: GPU memory utilization must be less than 1.0. Got {self.gpu_memory_utilization}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_cache_dtype_not_in_allowlist
+  engine: vllm
+  library: vllm
+  invariant_under_test: CacheConfig._verify_cache_dtype flags cache_dtype not in allowlist
+  severity: error
+  native_type: vllm.CacheConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: _verify_cache_dtype
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.cache_dtype:
+        present: true
+        not_in:
+        - fp8
+        - fp8_e4m3
+        - fp8_e5m2
+  kwargs_positive:
+    cache_dtype: invalid
+  kwargs_negative:
+    cache_dtype: fp8
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'Unknown kv cache dtype: {self.cache_dtype}'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_prefix_caching_with_sliding_window
+  engine: vllm
+  library: vllm
+  invariant_under_test: CacheConfig._verify_prefix_caching flags prefix caching with
+    sliding window
+  severity: error
+  native_type: vllm.CacheConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: _verify_prefix_caching
+    line_at_scan: 15
+  match:
+    engine: vllm
+    fields:
+      vllm.enable_prefix_caching: true
+      vllm.sliding_window:
+        present: true
+  kwargs_positive:
+    enable_prefix_caching: true
+    sliding_window: window
+  kwargs_negative:
+    enable_prefix_caching: false
+    sliding_window: window
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Prefix caching is not supported with sliding window. Run with
+    --disable-sliding-window to use prefix caching.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_cache_dtype_is_auto
+  engine: vllm
+  library: vllm
+  invariant_under_test: CacheConfig._verify_cache_dtype flags cache_dtype is auto
+  severity: dormant
+  native_type: vllm.CacheConfig
+  miner_source:
+    path: <file_path>
+    method: _verify_cache_dtype
+    line_at_scan: <approximate_line_number>
+  match:
+    engine: vllm
+    fields:
+      vllm.cache_dtype: auto
+  kwargs_positive:
+    cache_dtype: auto
+  kwargs_negative:
+    cache_dtype: fp8
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_info
+    normalised_fields: []
+  message_template: Using fp8 data type to store kv cache. It reduces the GPU memory
+    footprint and boosts the performance. Meanwhile, it may cause accuracy drop without
+    a proper scaling factor
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_max_num_batched_tokens_lt_max_model_len
+  engine: vllm
+  library: vllm
+  invariant_under_test: SchedulerConfig._verify_args flags max_num_batched_tokens
+    < max_model_len when not chunked_prefill_enabled
+  severity: error
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: transformers/generation/scheduler_config.py
+    method: _verify_args
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.max_num_batched_tokens:
+        <: 1
+      vllm.chunked_prefill_enabled: false
+  kwargs_positive:
+    max_model_len: 2048
+    max_num_batched_tokens: 1024
+    chunked_prefill_enabled: false
+  kwargs_negative:
+    max_model_len: 1024
+    max_num_batched_tokens: 2048
+    chunked_prefill_enabled: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_num_batched_tokens ({self.max_num_batched_tokens}) is smaller
+    than max_model_len ({self.max_model_len}). This effectively limits the maximum
+    sequence length to max_num_batched_tokens and makes vLLM reject longer sequences.
+    Please increase max_num_batched_tokens or decrease max_model_len.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_max_num_batched_tokens_lt_max_num_seqs
+  engine: vllm
+  library: vllm
+  invariant_under_test: SchedulerConfig._verify_args flags max_num_batched_tokens
+    < max_num_seqs
+  severity: error
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: transformers/generation/scheduler_config.py
+    method: _verify_args
+    line_at_scan: 15
+  match:
+    engine: vllm
+    fields:
+      vllm.max_num_batched_tokens:
+        <: 1
+  kwargs_positive:
+    max_num_seqs: 2048
+    max_num_batched_tokens: 1024
+  kwargs_negative:
+    max_num_seqs: 1024
+    max_num_batched_tokens: 2048
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_num_batched_tokens ({self.max_num_batched_tokens}) must be
+    greater than or equal to max_num_seqs ({self.max_num_seqs}).
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_num_lookahead_slots_lt_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: SchedulerConfig._verify_args flags num_lookahead_slots < 0
+  severity: error
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: transformers/generation/scheduler_config.py
+    method: _verify_args
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.num_lookahead_slots:
+        <: 0
+  kwargs_positive:
+    num_lookahead_slots: -1
+  kwargs_negative:
+    num_lookahead_slots: 0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: num_lookahead_slots ({self.num_lookahead_slots}) must be greater
+    than or equal to 0.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_num_scheduler_steps_lt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: SchedulerConfig._verify_args flags num_scheduler_steps < 1
+  severity: error
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: transformers/generation/scheduler_config.py
+    method: _verify_args
+    line_at_scan: 25
+  match:
+    engine: vllm
+    fields:
+      vllm.num_scheduler_steps:
+        <: 1
+  kwargs_positive:
+    num_scheduler_steps: 0
+  kwargs_negative:
+    num_scheduler_steps: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: num_scheduler_steps ({self.num_scheduler_steps}) must be greater
+    than or equal to 1.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_max_num_partial_prefills_lt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: SchedulerConfig._verify_args flags max_num_partial_prefills
+    < 1
+  severity: error
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: transformers/generation/scheduler_config.py
+    method: _verify_args
+    line_at_scan: 30
+  match:
+    engine: vllm
+    fields:
+      vllm.max_num_partial_prefills:
+        <: 1
+  kwargs_positive:
+    max_num_partial_prefills: 0
+  kwargs_negative:
+    max_num_partial_prefills: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_num_partial_prefills ({self.max_num_partial_prefills}) must
+    be greater than or equal to 1.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_max_long_partial_prefills_lt_1_or_gt_max_num_partial_prefills
+  engine: vllm
+  library: vllm
+  invariant_under_test: SchedulerConfig._verify_args flags max_long_partial_prefills
+    < 1 or > max_num_partial_prefills
+  severity: error
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: transformers/generation/scheduler_config.py
+    method: _verify_args
+    line_at_scan: 40
+  match:
+    engine: vllm
+    fields:
+      vllm.max_long_partial_prefills:
+        <: 1
+      vllm.max_num_partial_prefills:
+        '>=': 1
+  kwargs_positive:
+    max_long_partial_prefills: 0
+    max_num_partial_prefills: 2
+  kwargs_negative:
+    max_long_partial_prefills: 1
+    max_num_partial_prefills: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_long_partial_prefills ({self.max_long_partial_prefills}) must
+    be greater than or equal to 1 and less than or equal to max_num_partial_prefills
+    ({self.max_num_partial_prefills}).
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_max_num_partial_prefills_gt_1_without_chunked_prefill_enabled
+  engine: vllm
+  library: vllm
+  invariant_under_test: SchedulerConfig._verify_args flags max_num_partial_prefills
+    > 1 without chunked_prefill_enabled
+  severity: error
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: transformers/generation/scheduler_config.py
+    method: _verify_args
+    line_at_scan: 35
+  match:
+    engine: vllm
+    fields:
+      vllm.max_num_partial_prefills:
+        '>': 1
+      vllm.chunked_prefill_enabled: false
+  kwargs_positive:
+    max_num_partial_prefills: 2
+    chunked_prefill_enabled: false
+  kwargs_negative:
+    max_num_partial_prefills: 1
+    chunked_prefill_enabled: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Chunked prefill must be enabled to set max_num_partial_prefills
+    > 1.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_long_prefill_token_threshold_gt_max_model_len
+  engine: vllm
+  library: vllm
+  invariant_under_test: SchedulerConfig._verify_args flags long_prefill_token_threshold
+    > max_model_len
+  severity: error
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: transformers/generation/scheduler_config.py
+    method: _verify_args
+    line_at_scan: 45
+  match:
+    engine: vllm
+    fields:
+      vllm.long_prefill_token_threshold:
+        '>': 1
+  kwargs_positive:
+    long_prefill_token_threshold: 2049
+    max_model_len: 2048
+  kwargs_negative:
+    long_prefill_token_threshold: 2047
+    max_model_len: 2048
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: long_prefill_token_threshold ({self.long_prefill_token_threshold})
+    cannot be greater than the max_model_len ({self.max_model_len}).
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_max_num_batched_tokens_set_to_max_model_len_when_chunked_prefill_enabled_and_num_scheduler_steps_gt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: SchedulerConfig sets max_num_batched_tokens to max_model_len
+    when chunked prefill is enabled and num_scheduler_steps > 1
+  severity: dormant
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: SchedulerConfig.py
+    method: __post_init__
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.enable_chunked_prefill: true
+      vllm.num_scheduler_steps:
+        '>': 1
+  kwargs_positive:
+    enable_chunked_prefill: true
+    num_scheduler_steps: 2
+  kwargs_negative:
+    enable_chunked_prefill: false
+    num_scheduler_steps: 1
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_info
+    normalised_fields: []
+  message_template: Chunked prefill is enabled with max_num_batched_tokens=%d.
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_max_num_batched_tokens_set_to_2048_when_enable_chunked_prefill_false_and_max_model_len_lt_2048
+  engine: vllm
+  library: vllm
+  invariant_under_test: SchedulerConfig sets max_num_batched_tokens to 2048 when chunked
+    prefill is disabled and max_model_len < 2048
+  severity: dormant
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: SchedulerConfig.py
+    method: __post_init__
+    line_at_scan: 15
+  match:
+    engine: vllm
+    fields:
+      vllm.enable_chunked_prefill: false
+      vllm.max_model_len:
+        <: 2048
+  kwargs_positive:
+    enable_chunked_prefill: false
+    max_model_len: 1024
+  kwargs_negative:
+    enable_chunked_prefill: true
+    max_model_len: 4096
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: none
+    normalised_fields: []
+  message_template: ''
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_max_num_batched_tokens_set_toPooling_model_max_num_batched_tokens_when_runner_type_pooling
+  engine: vllm
+  library: vllm
+  invariant_under_test: SchedulerConfig sets max_num_batched_tokens to _POOLING_MODEL_MAX_NUM_BATCHED_TOKENS
+    when runner_type is 'pooling'
+  severity: dormant
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: SchedulerConfig.py
+    method: __post_init__
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.runner_type: pooling
+  kwargs_positive:
+    runner_type: pooling
+  kwargs_negative:
+    runner_type: other
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: none
+    normalised_fields: []
+  message_template: ''
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_max_num_batched_tokens_set_to_multimodal_model_max_num_batched_tokens_when_is_multimodal_model_true
+  engine: vllm
+  library: vllm
+  invariant_under_test: SchedulerConfig sets max_num_batched_tokens to _MULTIMODAL_MODEL_MAX_NUM_BATCHED_TOKENS
+    when is_multimodal_model is True
+  severity: dormant
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: SchedulerConfig.py
+    method: __post_init__
+    line_at_scan: 25
+  match:
+    engine: vllm
+    fields:
+      vllm.is_multimodal_model: true
+  kwargs_positive:
+    is_multimodal_model: true
+  kwargs_negative:
+    is_multimodal_model: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: none
+    normalised_fields: []
+  message_template: ''
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_long_prefill_token_threshold_set_to_max_model_len_times_0_04_when_long_prefill_token_threshold_eq_0_and_max_num_partial_prefills_gt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: SchedulerConfig sets long_prefill_token_threshold to max_model_len
+    * 0.04 when long_prefill_token_threshold is 0 and max_num_partial_prefills > 1
+  severity: dormant
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: SchedulerConfig.py
+    method: __post_init__
+    line_at_scan: 30
+  match:
+    engine: vllm
+    fields:
+      vllm.long_prefill_token_threshold: 0
+      vllm.max_num_partial_prefills:
+        '>': 1
+  kwargs_positive:
+    long_prefill_token_threshold: 0
+    max_num_partial_prefills: 2
+  kwargs_negative:
+    long_prefill_token_threshold: 10
+    max_num_partial_prefills: 1
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_info
+    normalised_fields: []
+  message_template: Concurrent partial prefills enabled with max_num_partial_prefills=%d,
+    max_long_partial_prefills=%d, long_prefill_token_threshold=%d
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_distributed_executor_backend_not_in_allowlist
+  engine: vllm
+  library: vllm
+  invariant_under_test: ParallelConfig._verify_args flags distributed_executor_backend
+    not in allowlist
+  severity: error
+  native_type: vllm.ParallelConfig
+  miner_source:
+    path: configuration_utils.py
+    method: _verify_args
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.parallel.distributed_executor_backend:
+        present: true
+        not_in:
+        - ray
+        - mp
+        - uni
+        - external_launcher
+  kwargs_positive:
+    distributed_executor_backend: invalid
+  kwargs_negative:
+    distributed_executor_backend: ray
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Unrecognized distributed executor backend {self.distributed_executor_backend}.
+    Supported values are 'ray', 'mp' 'uni', 'external_launcher' or custom ExecutorBase
+    subclass.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_ray_workers_use_nsight_without_ray
+  engine: vllm
+  library: vllm
+  invariant_under_test: ParallelConfig._verify_args flags ray_workers_use_nsight without
+    use_ray
+  severity: error
+  native_type: vllm.ParallelConfig
+  miner_source:
+    path: configuration_utils.py
+    method: _verify_args
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.parallel.ray_workers_use_nsight:
+        present: true
+      vllm.parallel.use_ray: false
+  kwargs_positive:
+    ray_workers_use_nsight: true
+    use_ray: false
+  kwargs_negative:
+    ray_workers_use_nsight: true
+    use_ray: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Unable to use nsight profiling unless workers run with Ray.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_tpu_backend_not_ray_for_distributed_inference
+  engine: vllm
+  library: vllm
+  invariant_under_test: ParallelConfig.__post_init__ flags tpu backend not ray for
+    distributed inference
+  severity: error
+  native_type: vllm.ParallelConfig
+  miner_source:
+    path: configuration_utils.py
+    method: __post_init__
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.parallel.world_size:
+        '>': 1
+      vllm.platforms.current_platform.device_type:
+        present: true
+        not_in:
+        - tpu
+      vllm.parallel.distributed_executor_backend:
+        present: true
+        not_equal: ray
+  kwargs_positive:
+    world_size: 2
+    distributed_executor_backend: mp
+  kwargs_negative:
+    world_size: 1
+    distributed_executor_backend: ray
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '{current_platform.device_type.upper()} backend only supports
+    Ray for distributed inference.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_ray_workers_use_nsight_without_placement_group
+  engine: vllm
+  library: vllm
+  invariant_under_test: ParallelConfig._verify_args flags ray_workers_use_nsight without
+    placement group
+  severity: error
+  native_type: vllm.ParallelConfig
+  miner_source:
+    path: ParallelConfig.py
+    method: _verify_args
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.ray_workers_use_nsight:
+        present: true
+      vllm.placement_group:
+        not_equal: true
+  kwargs_positive:
+    ray_workers_use_nsight: true
+    placement_group: false
+  kwargs_negative:
+    ray_workers_use_nsight: false
+    placement_group: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Unable to use nsight profiling unless workers run with Ray.
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_use_ray_without_ray_available
+  engine: vllm
+  library: vllm
+  invariant_under_test: ParallelConfig._verify_args flags use_ray without ray available
+  severity: error
+  native_type: vllm.ParallelConfig
+  miner_source:
+    path: ParallelConfig.py
+    method: _verify_args
+    line_at_scan: 15
+  match:
+    engine: vllm
+    fields:
+      vllm.use_ray:
+        present: true
+      vllm.ray_available:
+        not_equal: true
+  kwargs_positive:
+    use_ray: true
+    ray_available: false
+  kwargs_negative:
+    use_ray: false
+    ray_available: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Unable to load Ray which is required for multi-node inference,
+    please install Ray with `pip install ray`.
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_distributed_executor_backend_not_supported_on_rocm
+  engine: vllm
+  library: vllm
+  invariant_under_test: ParallelConfig._verify_args flags distributed_executor_backend
+    not supported on ROCm
+  severity: error
+  native_type: vllm.ParallelConfig
+  miner_source:
+    path: ParallelConfig.py
+    method: _verify_args
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.distributed_executor_backend:
+        present: true
+      vllm.current_platform.device_type:
+        equal: rocm
+  kwargs_positive:
+    distributed_executor_backend: ray
+    current_platform.device_type: rocm
+  kwargs_negative:
+    distributed_executor_backend: mp
+    current_platform.device_type: cuda
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Disabled the custom all-reduce kernel because it is not supported
+    on AMD GPUs.
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_max_lora_rank_not_in_allowlist
+  engine: vllm
+  library: vllm
+  invariant_under_test: LoRAConfig.__post_init__ flags max_lora_rank not in allowlist
+  severity: error
+  native_type: vllm.LoRAConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __post_init__
+    line_at_scan: 5
+  match:
+    engine: vllm
+    fields:
+      vllm.max_lora_rank:
+        present: true
+        not_in:
+        - 8
+        - 16
+        - 32
+        - 64
+        - 128
+        - 256
+  kwargs_positive:
+    max_lora_rank: 512
+  kwargs_negative:
+    max_lora_rank: 128
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_lora_rank ({self.max_lora_rank}) must be one of {possible_max_ranks}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_lora_extra_vocab_size_not_in_allowlist
+  engine: vllm
+  library: vllm
+  invariant_under_test: LoRAConfig.__post_init__ flags lora_extra_vocab_size not in
+    allowlist
+  severity: error
+  native_type: vllm.LoRAConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __post_init__
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.lora_extra_vocab_size:
+        present: true
+        not_in:
+        - 0
+        - 256
+        - 512
+  kwargs_positive:
+    lora_extra_vocab_size: 1024
+  kwargs_negative:
+    lora_extra_vocab_size: 256
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: lora_extra_vocab_size ({self.lora_extra_vocab_size}) must be one
+    of {possible_lora_extra_vocab_size}.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_max_loras_lt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: LoRAConfig.__post_init__ flags max_loras < 1
+  severity: error
+  native_type: vllm.LoRAConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __post_init__
+    line_at_scan: 15
+  match:
+    engine: vllm
+    fields:
+      vllm.max_loras:
+        <: 1
+  kwargs_positive:
+    max_loras: 0
+  kwargs_negative:
+    max_loras: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_loras ({self.max_loras}) must be >= 1.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_max_cpu_loras_lt_max_loras
+  engine: vllm
+  library: vllm
+  invariant_under_test: LoRAConfig.__post_init__ flags max_cpu_loras < max_loras
+  severity: error
+  native_type: vllm.LoRAConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __post_init__
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.max_cpu_loras:
+        <: vllm.max_loras
+  kwargs_positive:
+    max_loras: 2
+    max_cpu_loras: 1
+  kwargs_negative:
+    max_loras: 2
+    max_cpu_loras: 3
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_cpu_loras ({self.max_cpu_loras}) must be >= max_loras ({self.max_loras}).
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_max_prompt_adapters_lt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: PromptAdapterConfig.__post_init__ flags max_prompt_adapters
+    < 1
+  severity: error
+  native_type: vllm.PromptAdapterConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __post_init__
+    line_at_scan: 5
+  match:
+    engine: vllm
+    fields:
+      vllm.max_prompt_adapters:
+        <: 1
+  kwargs_positive:
+    max_prompt_adapters: 0
+  kwargs_negative:
+    max_prompt_adapters: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_prompt_adapters ({self.max_prompt_adapters}) must be >= 1.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_max_prompt_adapter_token_eq_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: PromptAdapterConfig.__post_init__ flags max_prompt_adapter_token
+    == 0
+  severity: error
+  native_type: vllm.PromptAdapterConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __post_init__
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.max_prompt_adapter_token:
+        ==: 0
+  kwargs_positive:
+    max_prompt_adapter_token: 0
+  kwargs_negative:
+    max_prompt_adapter_token: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_prompt_adapter_token must be set.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_pool_type_not_in_allowlist
+  engine: vllm
+  library: vllm
+  invariant_under_test: TokenizerPoolConfig.__post_init__ flags pool_type not in allowlist
+  severity: error
+  native_type: vllm.TokenizerPoolConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __post_init__
+    line_at_scan: 5
+  match:
+    engine: vllm
+    fields:
+      vllm.pool_type:
+        present: true
+        not_in:
+        - ray
+  kwargs_positive:
+    pool_type: invalid
+  kwargs_negative:
+    pool_type: ray
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'Unknown pool type: {self.pool_type}'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_extra_config_not_dict
+  engine: vllm
+  library: vllm
+  invariant_under_test: TokenizerPoolConfig.__post_init__ flags extra_config not a
+    dict
+  severity: error
+  native_type: vllm.TokenizerPoolConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: __post_init__
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.extra_config:
+        present: true
+        type_is_not:
+        - dict
+  kwargs_positive:
+    extra_config: invalid
+  kwargs_negative:
+    extra_config: {}
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: extra_config must be a dictionary.
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_max_cpu_loras_not_set_when_none
+  engine: vllm
+  library: vllm
+  invariant_under_test: LoRAConfig.__post_init__ sets max_cpu_loras when None
+  severity: dormant
+  native_type: vllm.LoRAConfig
+  miner_source:
+    path: LoRAConfig.py
+    method: __post_init__
+    line_at_scan: 15
+  match:
+    engine: vllm
+    fields:
+      vllm.max_cpu_loras:
+        ==: null
+  kwargs_positive:
+    max_cpu_loras: null
+  kwargs_negative:
+    max_cpu_loras: 1
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: none
+    normalised_fields: []
+  message_template: ''
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_max_cpu_prompt_adapters_not_set_when_none
+  engine: vllm
+  library: vllm
+  invariant_under_test: PromptAdapterConfig.__post_init__ sets max_cpu_prompt_adapters
+    when None
+  severity: dormant
+  native_type: vllm.PromptAdapterConfig
+  miner_source:
+    path: PromptAdapterConfig.py
+    method: __post_init__
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.max_cpu_prompt_adapters:
+        ==: null
+  kwargs_positive:
+    max_cpu_prompt_adapters: null
+  kwargs_negative:
+    max_cpu_prompt_adapters: 1
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: none
+    normalised_fields: []
+  message_template: ''
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_pool_type_isinstance_check
+  engine: vllm
+  library: vllm
+  invariant_under_test: TokenizerPoolConfig.__post_init__ checks pool_type isinstance
+  severity: error
+  native_type: vllm.TokenizerPoolConfig
+  miner_source:
+    path: TokenizerPoolConfig.py
+    method: __post_init__
+    line_at_scan: 5
+  match:
+    engine: vllm
+    fields:
+      vllm.pool_type:
+        present: true
+        type_is_not:
+        - str
+  kwargs_positive:
+    pool_type: 123
+  kwargs_negative:
+    pool_type: ray
+  expected_outcome:
+    outcome: error
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: 'Unknown pool type: {}'
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'

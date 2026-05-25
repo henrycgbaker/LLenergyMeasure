@@ -1,0 +1,668 @@
+scoring_format_version: 1.0.0
+type_mismatches:
+- identity:
+  - engine_params
+  - allowed_local_media_path
+  kind: type_mismatch
+  reference_value: string
+  cell_value: boolean
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - block_size
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - calculate_kv_scales
+  kind: type_mismatch
+  reference_value:
+  - boolean
+  - 'null'
+  cell_value:
+  - anyOf
+  - - boolean
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - code_revision
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - collect_detailed_traces
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - config_format
+  kind: type_mismatch
+  reference_value: object
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - disable_logprobs_during_spec_decoding
+  kind: type_mismatch
+  reference_value:
+  - boolean
+  - 'null'
+  cell_value: boolean
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - download_dir
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - dtype
+  kind: type_mismatch
+  reference_value: string
+  cell_value:
+  - anyOf
+  - - 'null'
+    - string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - enable_chunked_prefill
+  kind: type_mismatch
+  reference_value:
+  - boolean
+  - 'null'
+  cell_value: boolean
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - enable_prefix_caching
+  kind: type_mismatch
+  reference_value:
+  - boolean
+  - 'null'
+  cell_value: boolean
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - enforce_eager
+  kind: type_mismatch
+  reference_value:
+  - boolean
+  - 'null'
+  cell_value:
+  - anyOf
+  - - boolean
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - generation_config
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - hf_overrides
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+    - object
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - limit_mm_per_prompt
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - logits_processor_pattern
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value:
+  - anyOf
+  - - 'null'
+    - string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - long_prefill_token_threshold
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_cpu_loras
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_logprobs
+  kind: type_mismatch
+  reference_value: integer
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_long_partial_prefills
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_model_len
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_num_batched_tokens
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_num_partial_prefills
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_num_seqs
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_parallel_loading_workers
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_seq_len_to_capture
+  kind: type_mismatch
+  reference_value: integer
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - mm_processor_kwargs
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - model
+  kind: type_mismatch
+  reference_value: string
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - model_impl
+  kind: type_mismatch
+  reference_value: string
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - model_loader_extra_config
+  kind: type_mismatch
+  reference_value:
+  - object
+  - 'null'
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - ngram_prompt_lookup_max
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - ngram_prompt_lookup_min
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - num_gpu_blocks_override
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - num_speculative_tokens
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - otlp_traces_endpoint
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - override_generation_config
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - override_neuron_config
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - override_pooler_config
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - preemption_mode
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value:
+  - anyOf
+  - - 'null'
+    - string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - qlora_adapter_name_or_path
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - quantization
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value:
+  - anyOf
+  - - 'null'
+    - string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - revision
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value:
+  - anyOf
+  - - 'null'
+    - string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - rope_theta
+  kind: type_mismatch
+  reference_value:
+  - number
+  - 'null'
+  cell_value: number
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - scheduling_policy
+  kind: type_mismatch
+  reference_value: string
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - seed
+  kind: type_mismatch
+  reference_value: integer
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - served_model_name
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - array
+    - 'null'
+    - string
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - speculative_disable_by_batch_size
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - speculative_disable_mqa_scorer
+  kind: type_mismatch
+  reference_value:
+  - boolean
+  - 'null'
+  cell_value: boolean
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - speculative_draft_tensor_parallel_size
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - speculative_max_model_len
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - speculative_model
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - speculative_model_quantization
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - task
+  kind: type_mismatch
+  reference_value: string
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - tokenizer
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - tokenizer_mode
+  kind: type_mismatch
+  reference_value: string
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - tokenizer_revision
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value:
+  - anyOf
+  - - 'null'
+    - string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - typical_acceptance_sampler_posterior_alpha
+  kind: type_mismatch
+  reference_value:
+  - number
+  - 'null'
+  cell_value: number
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - typical_acceptance_sampler_posterior_threshold
+  kind: type_mismatch
+  reference_value:
+  - number
+  - 'null'
+  cell_value: number
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - allowed_token_ids
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - array
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - bad_words
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - array
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - best_of
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - logit_bias
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - logits_processors
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - array
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - logprobs
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - max_tokens
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - prompt_logprobs
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - seed
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - stop
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - array
+    - 'null'
+    - string
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - stop_token_ids
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - array
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - truncate_prompt_tokens
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: schema type spec divergence

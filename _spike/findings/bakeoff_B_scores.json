@@ -1,0 +1,210 @@
+{
+  "schema": {
+    "gt_field_count": 107,
+    "llm_field_count": 61,
+    "intersection": 56,
+    "union": 112,
+    "jaccard": 0.5,
+    "recall": 0.5233644859813084,
+    "precision": 0.9180327868852459,
+    "type_accuracy": 0.5714285714285714,
+    "type_match_count": 32,
+    "type_total_overlapping": 56,
+    "spurious_count": 5,
+    "spurious_rate": 0.08196721311475409,
+    "missed_fields": [
+      "engine_params.attn_implementation",
+      "engine_params.bnb_4bit_compute_dtype",
+      "engine_params.bnb_4bit_quant_storage",
+      "engine_params.bnb_4bit_quant_type",
+      "engine_params.bnb_4bit_use_double_quant",
+      "engine_params.device_map",
+      "engine_params.device_mesh",
+      "engine_params.dtype",
+      "engine_params.from_flax",
+      "engine_params.from_tf",
+      "engine_params.ignore_mismatched_sizes",
+      "engine_params.llm_int8_enable_fp32_cpu_offload",
+      "engine_params.llm_int8_has_fp16_weight",
+      "engine_params.llm_int8_skip_modules",
+      "engine_params.llm_int8_threshold",
+      "engine_params.load_in_4bit",
+      "engine_params.load_in_8bit",
+      "engine_params.max_memory",
+      "engine_params.offload_buffers",
+      "engine_params.offload_folder",
+      "engine_params.output_loading_info",
+      "engine_params.pretrained_model_name_or_path",
+      "engine_params.quantization_config",
+      "engine_params.state_dict",
+      "engine_params.tp_plan",
+      "engine_params.tp_size",
+      "engine_params.use_safetensors",
+      "engine_params.variant",
+      "engine_params.weights_only",
+      "sampling_params._from_model_config",
+      "sampling_params.assistant_confidence_threshold",
+      "sampling_params.assistant_early_exit",
+      "sampling_params.assistant_lookbehind",
+      "sampling_params.compile_config",
+      "sampling_params.constraints",
+      "sampling_params.disable_compile",
+      "sampling_params.diversity_penalty",
+      "sampling_params.dola_layers",
+      "sampling_params.force_words_ids",
+      "sampling_params.is_assistant",
+      "sampling_params.low_memory",
+      "sampling_params.max_matching_ngram_size",
+      "sampling_params.num_assistant_tokens",
+      "sampling_params.num_assistant_tokens_schedule",
+      "sampling_params.num_beam_groups",
+      "sampling_params.output_logits",
+      "sampling_params.penalty_alpha",
+      "sampling_params.prompt_lookup_num_tokens",
+      "sampling_params.target_lookbehind",
+      "sampling_params.transformers_version",
+      "sampling_params.watermarking_config"
+    ],
+    "spurious_fields": [
+      "engine_params._commit_hash",
+      "engine_params._from_auto",
+      "engine_params.adapter_kwargs",
+      "engine_params.resume_download",
+      "engine_params.use_auth_token"
+    ]
+  },
+  "invariants": {
+    "gt_count": 41,
+    "llm_count": 0,
+    "key_intersection": 0,
+    "key_union": 21,
+    "jaccard": 0.0,
+    "recall": 0.0,
+    "precision": 0.0,
+    "id_overlap": 0,
+    "missed_keys": [
+      [
+        "dormant",
+        "do_sample",
+        "exact"
+      ],
+      [
+        "dormant",
+        "epsilon_cutoff",
+        "present"
+      ],
+      [
+        "dormant",
+        "eta_cutoff",
+        "present"
+      ],
+      [
+        "dormant",
+        "num_beams",
+        "exact"
+      ],
+      [
+        "dormant",
+        "pad_token_id",
+        "lt"
+      ],
+      [
+        "dormant",
+        "pad_token_id",
+        "not_in"
+      ],
+      [
+        "dormant",
+        "return_dict_in_generate",
+        "exact"
+      ],
+      [
+        "dormant",
+        "use_cache",
+        "exact"
+      ],
+      [
+        "error",
+        "",
+        "type_is_not"
+      ],
+      [
+        "error",
+        "cache_implementation",
+        "not_in"
+      ],
+      [
+        "error",
+        "compile_config",
+        "gt"
+      ],
+      [
+        "error",
+        "compile_config",
+        "type_is_not"
+      ],
+      [
+        "error",
+        "early_stopping",
+        "gt"
+      ],
+      [
+        "error",
+        "early_stopping",
+        "not_in"
+      ],
+      [
+        "error",
+        "early_stopping",
+        "type_is_not"
+      ],
+      [
+        "error",
+        "max_new_tokens",
+        "exact"
+      ],
+      [
+        "error",
+        "max_new_tokens",
+        "not_in"
+      ],
+      [
+        "error",
+        "num_beams",
+        "exact"
+      ],
+      [
+        "error",
+        "num_beams",
+        "lt"
+      ],
+      [
+        "error",
+        "num_return_sequences",
+        "exact"
+      ],
+      [
+        "error",
+        "watermarking_config",
+        "type_is_not"
+      ]
+    ],
+    "spurious_keys": [],
+    "severity_breakdown_gt": {
+      "error": 22,
+      "dormant": 19,
+      "warning": 0,
+      "other": 0
+    },
+    "severity_breakdown_llm": {
+      "error": 0,
+      "dormant": 0,
+      "warning": 0,
+      "other": 0
+    }
+  },
+  "timing": {
+    "schema_elapsed": 637.0062799453735,
+    "inv_elapsed": 1447.7914500236511
+  }
+}

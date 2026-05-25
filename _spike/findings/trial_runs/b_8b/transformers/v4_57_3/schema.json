@@ -1,0 +1,617 @@
+{
+  "$defs": {
+    "CompileConfig": {
+      "properties": {
+        "backend": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            }
+          ],
+          "default": "inductor"
+        },
+        "dynamic": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fullgraph": {
+          "default": false,
+          "type": "boolean"
+        },
+        "mode": {
+          "default": "reduce-overhead",
+          "type": "string"
+        },
+        "options": {
+          "default": null,
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "WatermarkingConfig": {
+      "properties": {
+        "bias": {
+          "default": 2.0,
+          "type": "number"
+        },
+        "context_width": {
+          "default": 1,
+          "type": "integer"
+        },
+        "greenlist_ratio": {
+          "default": 0.25,
+          "type": "number"
+        },
+        "hashing_key": {
+          "default": 15485863,
+          "type": "integer"
+        },
+        "seeding_scheme": {
+          "default": "lefthash",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "discovered_at": "2026-05-25T01:31:41.450784+00:00",
+  "discovery_method": "strategy_b_oss_llm",
+  "engine": "transformers",
+  "engine_params": {
+    "bnb_4bit_compute_dtype": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object"
+        }
+      ],
+      "default": null
+    },
+    "bnb_4bit_quant_storage": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "bnb_4bit_quant_type": {
+      "default": "fp4",
+      "type": "string"
+    },
+    "bnb_4bit_use_double_quant": {
+      "default": false,
+      "type": "boolean"
+    },
+    "cache_dir": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object"
+        }
+      ],
+      "default": null,
+      "description": "Path to a directory in which a downloaded pretrained model configuration should be cached if the standard cache should not be used"
+    },
+    "config": {
+      "anyOf": [
+        {
+          "type": "PretrainedConfig"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "object"
+        }
+      ],
+      "default": null,
+      "description": "Can be either an instance of a class derived from `PretrainedConfig`, or a string or path valid as input to `~PretrainedConfig.from_pretrained`"
+    },
+    "device_map": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "dict[str, Union[int, str, torch.device]] or int or torch.device",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "device_mesh": {
+      "default": null,
+      "description": "A torch device mesh.",
+      "type": "object"
+    },
+    "dtype": {
+      "default": null,
+      "description": "torch.dtype to load the model in (e.g. torch.float16, torch.bfloat16, torch.float)",
+      "type": "string"
+    },
+    "force_download": {
+      "default": false,
+      "description": "Whether or not to force the (re-)download of the model weights and configuration files, overriding the cached versions if they exist",
+      "type": "boolean"
+    },
+    "from_flax": {
+      "default": false,
+      "description": "Load the model weights from a Flax checkpoint save file (see docstring of `pretrained_model_name_or_path` argument)",
+      "type": "boolean"
+    },
+    "from_tf": {
+      "default": false,
+      "description": "Load the model weights from a TensorFlow checkpoint save file (see docstring of `pretrained_model_name_or_path` argument)",
+      "type": "boolean"
+    },
+    "ignore_mismatched_sizes": {
+      "default": false,
+      "description": "Whether or not to raise an error if some of the weights from the checkpoint do not have the same size as the weights of the model",
+      "type": "boolean"
+    },
+    "key_mapping": {
+      "default": null,
+      "description": "A potential mapping of the weight names.",
+      "type": "object"
+    },
+    "llm_int8_enable_fp32_cpu_offload": {
+      "default": false,
+      "type": "boolean"
+    },
+    "llm_int8_has_fp16_weight": {
+      "default": false,
+      "type": "boolean"
+    },
+    "llm_int8_skip_modules": {
+      "type": "array"
+    },
+    "llm_int8_threshold": {
+      "default": 6.0,
+      "type": "number"
+    },
+    "load_in_4bit": {
+      "default": false,
+      "type": "boolean"
+    },
+    "load_in_8bit": {
+      "default": false,
+      "type": "boolean"
+    },
+    "max_memory": {
+      "default": null,
+      "description": "A dictionary device identifier to maximum memory if using `device_map`.",
+      "type": "object"
+    },
+    "model_args": {
+      "default": null,
+      "description": "All remaining positional arguments will be passed to the underlying model's __init__ method"
+    },
+    "offload_buffers": {
+      "default": null,
+      "type": "boolean"
+    },
+    "offload_folder": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "os.PathLike",
+          "type": "object"
+        }
+      ],
+      "default": null
+    },
+    "output_loading_info": {
+      "default": false,
+      "description": "Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages",
+      "type": "boolean"
+    },
+    "pretrained_model_name_or_path": {
+      "default": null,
+      "description": "Can be either a string, the model id of a pretrained model hosted inside a model repo on huggingface.co, or a path to a directory containing model weights saved using `~PreTrainedModel.save_pretrained`",
+      "type": "string | object"
+    },
+    "proxies": {
+      "anyOf": [
+        {
+          "type": "dict[str, str]"
+        }
+      ],
+      "default": null,
+      "description": "A dictionary of proxy servers to use by protocol or endpoint"
+    },
+    "quantization_config": {
+      "anyOf": [
+        {
+          "description": "QuantizationConfigMixin",
+          "type": "object"
+        },
+        {
+          "description": "Dict",
+          "type": "object"
+        }
+      ],
+      "default": null
+    },
+    "subfolder": {
+      "default": "\"\"",
+      "type": "string"
+    },
+    "tp_plan": {
+      "default": null,
+      "description": "torch tensor parallel plan (e.g. tp_plan=\"auto\")",
+      "type": "string"
+    },
+    "tp_size": {
+      "default": null,
+      "description": "torch tensor parallel degree (e.g. tp_size=\"world_size\")",
+      "type": "string"
+    },
+    "use_safetensors": {
+      "default": "None",
+      "type": "boolean"
+    },
+    "variant": {
+      "default": null,
+      "description": "load weights from variant filename (e.g. pytorch_model.<variant>.bin)",
+      "type": "string"
+    },
+    "weights_only": {
+      "default": "True",
+      "type": "boolean"
+    }
+  },
+  "engine_version": "4.57.3",
+  "sampling_params": {
+    "assistant_confidence_threshold": {
+      "default": 0.4,
+      "type": "number"
+    },
+    "assistant_early_exit": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "assistant_lookbehind": {
+      "default": 10,
+      "type": "integer"
+    },
+    "bad_words_ids": {
+      "default": null,
+      "description": "List of list of token ids that are not allowed to be generated",
+      "type": "array"
+    },
+    "begin_suppress_tokens": {
+      "default": null,
+      "description": "A list of tokens that will be suppressed at the beginning of the generation. The `SuppressBeginTokens` logit processor will set their log probs to `-inf` so that they are not sampled",
+      "type": "array"
+    },
+    "bos_token_id": {
+      "default": null,
+      "description": "The id of the *beginning-of-sequence* token",
+      "type": "integer"
+    },
+    "cache_config": {
+      "default": null,
+      "description": "Arguments used in the key-value cache class can be passed in `cache_config`",
+      "type": "object"
+    },
+    "cache_implementation": {
+      "default": null,
+      "description": "Name of the cache class that will be instantiated in `generate`, for faster decoding",
+      "type": "string"
+    },
+    "compile_config": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "decoder_start_token_id": {
+      "default": null,
+      "description": "If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token or a list of length `batch_size`. Indicating a list enables different start ids for each element in the batch (e.g. multilingual models with different target languages in one batch)",
+      "type": "array"
+    },
+    "disable_compile": {
+      "default": false,
+      "type": "boolean"
+    },
+    "do_sample": {
+      "default": false,
+      "description": "Whether or not to use sampling ; use greedy decoding otherwise",
+      "type": "boolean"
+    },
+    "early_stopping": {
+      "default": false,
+      "description": "Controls the stopping condition for beam-based methods, like beam-search",
+      "type": "boolean"
+    },
+    "encoder_no_repeat_ngram_size": {
+      "default": 0,
+      "description": "If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the `decoder_input_ids`",
+      "type": "integer"
+    },
+    "encoder_repetition_penalty": {
+      "default": 1.0,
+      "description": "The parameter for encoder_repetition_penalty",
+      "type": "number"
+    },
+    "eos_token_id": {
+      "default": null,
+      "description": "The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens",
+      "type": "array"
+    },
+    "epsilon_cutoff": {
+      "default": 0.0,
+      "description": "If set to float strictly between 0 and 1, only tokens with a conditional probability greater than `epsilon_cutoff` will be sampled",
+      "type": "number"
+    },
+    "eta_cutoff": {
+      "default": 0.0,
+      "description": "Eta sampling is a hybrid of locally typical sampling and epsilon sampling. If set to float strictly between 0 and 1, a token is only considered if it is greater than either `eta_cutoff` or `sqrt(eta_cutoff) * exp(-entropy(softmax(next_token_logits)))`",
+      "type": "number"
+    },
+    "exponential_decay_length_penalty": {
+      "default": null,
+      "description": "This Tuple adds an exponentially increasing length penalty, after a certain amount of tokens have been generated",
+      "type": "object"
+    },
+    "forced_bos_token_id": {
+      "default": null,
+      "description": "The id of the token to force as the first generated token after the `decoder_start_token_id`",
+      "type": "integer"
+    },
+    "forced_eos_token_id": {
+      "default": null,
+      "description": "The id of the token to force as the last generated token when `max_length` is reached. Optionally, use a list to set multiple *end-of-sequence* tokens",
+      "type": "array"
+    },
+    "guidance_scale": {
+      "default": null,
+      "description": "The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`",
+      "type": "number"
+    },
+    "is_assistant": {
+      "default": false,
+      "description": "Whether the model is an assistant (draft) model",
+      "type": "boolean"
+    },
+    "length_penalty": {
+      "default": 1.0,
+      "description": "Exponential penalty to the length that is used with beam-based generation",
+      "type": "number"
+    },
+    "max_length": {
+      "default": null,
+      "description": "The maximum length the generated tokens can have",
+      "type": "integer"
+    },
+    "max_matching_ngram_size": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "max_new_tokens": {
+      "default": null,
+      "description": "The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt",
+      "type": "integer"
+    },
+    "max_time": {
+      "default": null,
+      "description": "The maximum amount of time you allow the computation to run for in seconds",
+      "type": "number"
+    },
+    "min_length": {
+      "default": 0,
+      "description": "The minimum length of the sequence to be generated",
+      "type": "integer"
+    },
+    "min_new_tokens": {
+      "default": null,
+      "description": "The minimum numbers of tokens to generate, ignoring the number of tokens in the prompt",
+      "type": "integer"
+    },
+    "min_p": {
+      "default": null,
+      "description": "Minimum token probability, which will be scaled by the probability of the most likely token",
+      "type": "number"
+    },
+    "no_repeat_ngram_size": {
+      "default": 0,
+      "description": "If set to int > 0, all ngrams of that size can only occur once",
+      "type": "integer"
+    },
+    "num_assistant_tokens": {
+      "default": 20,
+      "description": "Defines the number of _speculative tokens_ that shall be generated by the assistant model before being checked by the target model at each iteration",
+      "type": "integer"
+    },
+    "num_assistant_tokens_schedule": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "num_beams": {
+      "default": 1,
+      "description": "Number of beams for beam search. 1 means no beam search",
+      "type": "integer"
+    },
+    "num_return_sequences": {
+      "default": 1,
+      "description": "The number of independently computed returned sequences for each element in the batch",
+      "type": "integer"
+    },
+    "output_attentions": {
+      "default": false,
+      "description": "Whether or not to return the attentions tensors of all attention layers",
+      "type": "boolean"
+    },
+    "output_hidden_states": {
+      "default": false,
+      "description": "Whether or not to return the hidden states of all layers",
+      "type": "boolean"
+    },
+    "output_logits": {
+      "default": null,
+      "description": "Whether or not to return the unprocessed prediction logit scores",
+      "type": "boolean"
+    },
+    "output_scores": {
+      "default": false,
+      "description": "Whether or not to return the prediction scores",
+      "type": "boolean"
+    },
+    "pad_token_id": {
+      "default": null,
+      "description": "The id of the *padding* token",
+      "type": "integer"
+    },
+    "prefill_chunk_size": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "prompt_lookup_num_tokens": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "remove_invalid_values": {
+      "default": false,
+      "description": "Whether to remove possible *nan* and *inf* outputs of the model to prevent the generation method to crash",
+      "type": "boolean"
+    },
+    "renormalize_logits": {
+      "default": false,
+      "description": "Whether to renormalize the logits after applying all the logits processors (including the custom ones)",
+      "type": "boolean"
+    },
+    "repetition_penalty": {
+      "default": 1.0,
+      "description": "The parameter for repetition penalty",
+      "type": "number"
+    },
+    "return_dict_in_generate": {
+      "default": false,
+      "description": "Whether or not to return a [`~utils.ModelOutput`], as opposed to returning exclusively the generated sequence",
+      "type": "boolean"
+    },
+    "return_legacy_cache": {
+      "default": true,
+      "description": "Whether to return the legacy or new format of the cache when `DynamicCache` is used by default",
+      "type": "boolean"
+    },
+    "sequence_bias": {
+      "default": null,
+      "description": "Dictionary that maps a sequence of tokens to its bias term",
+      "type": "object"
+    },
+    "stop_strings": {
+      "default": null,
+      "description": "A string or a list of strings that should terminate generation if the model outputs them",
+      "type": "array"
+    },
+    "suppress_tokens": {
+      "default": null,
+      "description": "A list of tokens that will be suppressed at generation. The `SuppressTokens` logit processor will set their log probs to `-inf` so that they are not sampled",
+      "type": "array"
+    },
+    "target_lookbehind": {
+      "default": 10,
+      "type": "integer"
+    },
+    "temperature": {
+      "default": 1.0,
+      "description": "The value used to module the next token probabilities",
+      "type": "number"
+    },
+    "token_healing": {
+      "default": false,
+      "description": "Heal tail tokens of prompts by replacing them with their appropriate extensions. This enhances the quality of completions for prompts affected by greedy tokenization bias",
+      "type": "boolean"
+    },
+    "top_k": {
+      "default": 50,
+      "description": "The number of highest probability vocabulary tokens to keep for top-k-filtering",
+      "type": "integer"
+    },
+    "top_p": {
+      "default": 1.0,
+      "description": "If set to float < 1, only the smallest set of most probable tokens with probabilities that add up to `top_p` or higher are kept for generation",
+      "type": "number"
+    },
+    "typical_p": {
+      "default": 1.0,
+      "description": "Local typicality measures how similar the conditional probability of predicting a target token next is to the expected conditional probability of predicting a random token next, given the partial text already generated",
+      "type": "number"
+    },
+    "use_cache": {
+      "default": true,
+      "description": "Whether or not the model should use the past last key/values attentions (if applicable to the model) to speed up decoding",
+      "type": "boolean"
+    },
+    "watermarking_config": {
+      "default": null,
+      "description": "Arguments used to watermark the model outputs by adding a small bias to randomly selected set of \"green\" tokens",
+      "type": "object"
+    }
+  },
+  "schema_version": "2.0.0"
+}

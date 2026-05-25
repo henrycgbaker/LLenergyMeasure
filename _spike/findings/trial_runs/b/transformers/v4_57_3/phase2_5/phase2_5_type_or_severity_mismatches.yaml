@@ -1,0 +1,393 @@
+scoring_format_version: 1.0.0
+type_or_severity_mismatches:
+- identity:
+  - $defs.CompileConfig
+  - backend
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - object
+    - string
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+    - string
+  note: schema type spec divergence
+- identity:
+  - $defs.CompileConfig
+  - dynamic
+  kind: type_mismatch
+  reference_value:
+  - boolean
+  - 'null'
+  cell_value:
+  - anyOf
+  - - boolean
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - $defs.CompileConfig
+  - options
+  kind: type_mismatch
+  reference_value:
+  - object
+  - 'null'
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - bnb_4bit_compute_dtype
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+    - string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - bnb_4bit_quant_storage
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+    - string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - device_map
+  kind: type_mismatch
+  reference_value: string
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+    - object
+    - string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - device_mesh
+  kind: type_mismatch
+  reference_value: null
+  cell_value: object
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - dtype
+  kind: type_mismatch
+  reference_value: string
+  cell_value:
+  - anyOf
+  - - 'null'
+    - string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - llm_int8_skip_modules
+  kind: type_mismatch
+  reference_value: array
+  cell_value:
+  - anyOf
+  - - array
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - offload_folder
+  kind: type_mismatch
+  reference_value: string
+  cell_value:
+  - anyOf
+  - - object
+    - string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - pretrained_model_name_or_path
+  kind: type_mismatch
+  reference_value: string
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+    - string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - quantization_config
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - object
+    - object
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - use_safetensors
+  kind: type_mismatch
+  reference_value:
+  - boolean
+  - 'null'
+  cell_value: boolean
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - assistant_early_exit
+  kind: type_mismatch
+  reference_value: null
+  cell_value: boolean
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - bad_words_ids
+  kind: type_mismatch
+  reference_value: null
+  cell_value: array
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - begin_suppress_tokens
+  kind: type_mismatch
+  reference_value: null
+  cell_value: array
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - bos_token_id
+  kind: type_mismatch
+  reference_value: null
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - cache_config
+  kind: type_mismatch
+  reference_value: null
+  cell_value: object
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - cache_implementation
+  kind: type_mismatch
+  reference_value: null
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - decoder_start_token_id
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - array
+    - integer
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - early_stopping
+  kind: type_mismatch
+  reference_value: boolean
+  cell_value:
+  - anyOf
+  - - boolean
+    - string
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - eos_token_id
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - array
+    - integer
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - exponential_decay_length_penalty
+  kind: type_mismatch
+  reference_value: null
+  cell_value: array
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - forced_bos_token_id
+  kind: type_mismatch
+  reference_value: null
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - forced_eos_token_id
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - array
+    - integer
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - guidance_scale
+  kind: type_mismatch
+  reference_value: null
+  cell_value: number
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - max_matching_ngram_size
+  kind: type_mismatch
+  reference_value: null
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - max_new_tokens
+  kind: type_mismatch
+  reference_value: null
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - max_time
+  kind: type_mismatch
+  reference_value: null
+  cell_value: number
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - min_new_tokens
+  kind: type_mismatch
+  reference_value: null
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - min_p
+  kind: type_mismatch
+  reference_value: null
+  cell_value: number
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - output_logits
+  kind: type_mismatch
+  reference_value: null
+  cell_value: boolean
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - pad_token_id
+  kind: type_mismatch
+  reference_value: null
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - prefill_chunk_size
+  kind: type_mismatch
+  reference_value: null
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - prompt_lookup_num_tokens
+  kind: type_mismatch
+  reference_value: null
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - return_legacy_cache
+  kind: type_mismatch
+  reference_value: null
+  cell_value: boolean
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - sequence_bias
+  kind: type_mismatch
+  reference_value: null
+  cell_value: object
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - stop_strings
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - array
+    - string
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - suppress_tokens
+  kind: type_mismatch
+  reference_value: null
+  cell_value: array
+  note: schema type spec divergence
+- identity:
+  - sampling_params
+  - watermarking_config
+  kind: type_mismatch
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - dict
+    - object
+  note: schema type spec divergence
+- identity:
+  - transformers.sampling
+  - do_sample
+  - exact
+  - temperature
+  kind: severity_mismatch
+  reference_value: dormant
+  cell_value: error
+  note: severity divergence
+- identity:
+  - transformers.sampling
+  - do_sample
+  - exact
+  - top_k
+  kind: severity_mismatch
+  reference_value: dormant
+  cell_value: error
+  note: severity divergence
+- identity:
+  - transformers.sampling
+  - do_sample
+  - exact
+  - top_p
+  kind: severity_mismatch
+  reference_value: dormant
+  cell_value: error
+  note: severity divergence
+- identity:
+  - transformers.sampling
+  - pad_token_id
+  - lt
+  - ''
+  kind: severity_mismatch
+  reference_value: dormant
+  cell_value: warning
+  note: severity divergence
+- identity:
+  - transformers.sampling
+  - use_cache
+  - exact
+  - ''
+  kind: severity_mismatch
+  reference_value: dormant
+  cell_value: warning
+  note: severity divergence
