@@ -1,0 +1,31 @@
+schema_version: 1.0.0
+engine: transformers
+engine_version: 4.55.4
+reconciled_at: '2026-05-25T05:45:15.508380+00:00'
+added_by_llm_verifier:
+- id: transformers_compile_config_type_compile_config_exceeds_zero
+  field: transformers.sampling.compile_config
+  predicate_kind: exceeds_zero
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: transformers_watermarking_config_type_watermarking_config_not_in_WatermarkingConfig
+  field: transformers.sampling.watermarking_config
+  predicate_kind: not_in
+  added_by: llm_verifier
+  flagged_for_review: true
+flagged_spurious_in_deterministic:
+- id: transformers_cache_choice_use_cache_eq_false
+  reason: use_cache is a boolean flag, and it's unclear why it would be set to False
+    in this context.
+- id: transformers_greedy_strips_do_sample
+  reason: do_sample is a boolean flag that controls whether sampling is used or not;
+    it's unclear why greedy mode would strip it.
+missed_diagnoses:
+- id: transformers_compile_config_type_compile_config_not_in_CompileConfig
+  why_missed: The deterministic miner missed this invariant because the CompileConfig
+    class has a complex validation logic in its __init__ method, which was not fully
+    captured by the miner.
+- id: transformers_watermarking_config_type_watermarking_config_type_not_in_WatermarkingConfig
+  why_missed: The deterministic miner missed this invariant because the WatermarkingConfig
+    class is instantiated from a dictionary using the from_dict method, and its validation
+    logic is not as straightforward as other classes.

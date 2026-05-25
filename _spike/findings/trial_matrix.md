@@ -1,15 +1,19 @@
 # Empirical trial matrix
 
-_generated at 2026-05-25T05:15:51.227561+00:00_
+_generated at 2026-05-25T06:04:54.323871+00:00_
 
-_score files aggregated: 11_
+_score files aggregated: 19_
 
 ## Per-cell matrix
 
 | strategy | engine | version | bump | schema_recall | schema_prec | inv_recall | inv_prec | sev_acc | wall_s | energy_wh | failure_modes |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | a | tensorrt | v0_21_0 | active | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 0.0 | 0.00 | none |
+| a | transformers | v4_55_4 | v-2 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 6.7 | 0.08 | detectable |
+| a | transformers | v4_56_2 | v-1 | 100.0% | 100.0% | 48.7% | 54.3% | 94.7% | 7.0 | 0.08 | none |
 | a | transformers | v4_57_3 | active | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 0.0 | 0.00 | none |
+| a | transformers | v4_57_6 | v+1 | 100.0% | 100.0% | 43.6% | 60.7% | 100.0% | 2.9 | 0.03 | none |
+| a | transformers | v5_9_0 | v+major | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.8 | 0.01 | detectable |
 | a | vllm | v0_7_3 | active | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 0.0 | 0.00 | none |
 | b | tensorrt | v0_21_0 | active | 56.1% | 46.5% | 0.0% | 0.0% | 0.0% | 1372.2 | 66.44 | none;silent |
 | b | transformers | v4_57_3 | active | 83.0% | 93.9% | 56.4% | 43.1% | 77.3% | 1649.2 | 81.31 | none |
@@ -17,39 +21,84 @@ _score files aggregated: 11_
 | b_8b | transformers | v4_57_3 | active | 85.7% | 93.2% | 35.7% | 16.1% | 100.0% | 412.6 | 4.93 | none |
 | c | transformers | v4_57_3 | active | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0 | 0.00 | key_absent |
 | d-ab | tensorrt | v0_21_0 | active | 100.0% | 100.0% | 100.0% | 79.5% | 100.0% | 207.5 | 10.94 | none |
+| d-ab | transformers | v4_55_4 | v-2 | 100.0% | 100.0% | 100.0% | 95.1% | 100.0% | 455.9 | 21.24 | none |
+| d-ab | transformers | v4_56_2 | v-1 | 100.0% | 100.0% | 100.0% | 95.1% | 100.0% | 473.7 | 22.25 | none |
 | d-ab | transformers | v4_57_3 | active | 100.0% | 100.0% | 100.0% | 93.3% | 100.0% | 20.1 | 0.84 | none |
+| d-ab | transformers | v4_57_6 | v+1 | 100.0% | 100.0% | 100.0% | 95.1% | 100.0% | 490.5 | 23.32 | none |
+| d-ab | transformers | v5_9_0 | v+major | 100.0% | 100.0% | 100.0% | 95.1% | 100.0% | 507.7 | 24.29 | none |
 | d-ab | vllm | v0_7_3 | active | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 433.6 | 19.38 | none |
 
 ## Per-strategy aggregates
 
 | strategy | cells | schema_recall_mean | schema_recall_median | inv_recall_mean | inv_recall_median | wall_mean_s | energy_mean_wh | crashes |
 |---|---|---|---|---|---|---|---|---|
-| a | 3 | 100.0% | 100.0% | 100.0% | 100.0% | 0.0 | 0.00 | 0 |
+| a | 7 | 71.4% | 100.0% | 56.0% | 48.7% | 2.5 | 0.03 | 0 |
 | b | 3 | 78.7% | 83.0% | 31.6% | 38.5% | 1478.5 | 71.89 | 0 |
 | b_8b | 1 | 85.7% | 85.7% | 35.7% | 35.7% | 412.6 | 4.93 | 0 |
 | c | 1 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0 | 0.00 | 0 |
-| d-ab | 3 | 100.0% | 100.0% | 100.0% | 100.0% | 220.4 | 10.39 | 0 |
+| d-ab | 7 | 100.0% | 100.0% | 100.0% | 100.0% | 369.9 | 17.47 | 0 |
 
 ## Per-engine aggregates
 
 | engine | cells | schema_recall_mean | inv_recall_mean | wall_mean_s |
 |---|---|---|---|---|
 | tensorrt | 3 | 85.4% | 66.7% | 526.6 |
-| transformers | 5 | 73.8% | 58.4% | 416.4 |
+| transformers | 13 | 74.5% | 60.3% | 309.8 |
 | vllm | 3 | 99.0% | 79.5% | 616.0 |
 
 ## Per-bump-distance aggregates
 
 | bump | cells | schema_recall_mean | inv_recall_mean | pass_through_mean |
 |---|---|---|---|---|
+| v-2 | 2 | 50.0% | 50.0% | - |
+| v-1 | 2 | 100.0% | 74.4% | - |
 | active | 11 | 83.8% | 66.4% | - |
+| v+1 | 2 | 100.0% | 71.8% | - |
+| v+major | 2 | 50.0% | 50.0% | - |
 
 ## Adjacent observations (deduped per strategy)
 
 ### strategy a
 
 - strategy_a: reusing canonical engine_versions outputs for a/tensorrt/v0_21_0
+- strategy_a bumped: miner subprocess returncode=1; stderr_tail=Traceback (most recent call last):
+  File "<string>", line 7, in <module>
+  File "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/engine_versions/transformers/v4_57_3/producers/static_invariant_miner.py", line 1462, in walk_transformers
+    import transformers.generation.configuration_utils as gen_mod  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/trial_transformers_v4_55_4_venv/src/transformers/__init__.py", line 27, in <module>
+    from . import dependency_versions_check
+  File "/tmp/trial_transformers_v4_55_4_venv/src/transformers/dependency_versions_check.py", line 57, in <module>
+    require_version_core(deps[pkg])
+  File "/tmp/trial_transformers_v4_55_4_venv/src/transformers/utils/versions.py", line 117, in require_version_core
+    return require_version(requirement, hint)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/trial_transformers_v4_55_4_venv/src/transformers/utils/versions.py", line 111, in require_version
+    _compare_versions(op, got_ver, want_ver, requirement, pkg, hint)
+  File "/tmp/trial_transformers_v4_55_4_venv/src/transformers/utils/versions.py", line 44, in _compare_versions
+    raise ImportError(
+ImportError: tokenizers>=0.21,<0.22 is required for a normal functioning of this module, but found tokenizers==0.22.2.
+Try: `pip install transformers -U` or `pip install -e '.[dev]'` if you're working with git main
+
+- strategy_a bumped: failure_mode=miner_runtime_error
+- strategy_a bumped: subprocess stdout=wrote 38 candidates to /home/h.baker@hertie-school.lan/workspace/llenergymeasure/_spike/findings/trial_runs/a/transformers/v4_56_2/invariants.proposed.yaml
 - strategy_a: reusing canonical engine_versions outputs for a/transformers/v4_57_3
+- strategy_a bumped: subprocess stdout=wrote 28 candidates to /home/h.baker@hertie-school.lan/workspace/llenergymeasure/_spike/findings/trial_runs/a/transformers/v4_57_6/invariants.proposed.yaml
+- strategy_a bumped: miner subprocess returncode=1; stderr_tail=Traceback (most recent call last):
+  File "<string>", line 7, in <module>
+  File "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/engine_versions/transformers/v4_57_3/producers/static_invariant_miner.py", line 1462, in walk_transformers
+    import transformers.generation.configuration_utils as gen_mod  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/trial_transformers_v5_9_0_venv/src/transformers/__init__.py", line 30, in <module>
+    from . import dependency_versions_check
+  File "/tmp/trial_transformers_v5_9_0_venv/src/transformers/dependency_versions_check.py", line 16, in <module>
+    from .utils.versions import require_version, require_version_core
+  File "/tmp/trial_transformers_v5_9_0_venv/src/transformers/utils/__init__.py", line 76, in <module>
+    from .hub import (
+  File "/tmp/trial_transformers_v5_9_0_venv/src/transformers/utils/hub.py", line 29, in <module>
+    from huggingface_hub import (
+ImportError: cannot import name 'is_offline_mode' from 'huggingface_hub' (/home/h.baker@hertie-school.lan/miniforge3/lib/python3.12/site-packages/huggingface_hub/__init__.py)
+
 - strategy_a: reusing canonical engine_versions outputs for a/vllm/v0_7_3
 
 ### strategy b
@@ -87,6 +136,10 @@ _score files aggregated: 11_
 ### strategy d-ab
 
 - strategy_d_ab on tensorrt: extension=8, flagged_spurious=1, merged_total=43, elapsed=207.1s
+- strategy_d_ab: extension=2, flagged_spurious=2, merged_total=43, elapsed=455.4s
+- strategy_d_ab: extension=2, flagged_spurious=2, merged_total=43, elapsed=473.2s
 - strategy_d_ab: extension=2, flagged_spurious=2, merged_total=43, elapsed=13.9s
+- strategy_d_ab: extension=2, flagged_spurious=2, merged_total=43, elapsed=490.0s
+- strategy_d_ab: extension=2, flagged_spurious=2, merged_total=43, elapsed=507.2s
 - hybrid (d-ab) for vllm: extraction failed; modes=['parse_failure_after_retries']
 - strategy_d_ab on vllm: extension=0, flagged_spurious=0, merged_total=26, elapsed=433.2s

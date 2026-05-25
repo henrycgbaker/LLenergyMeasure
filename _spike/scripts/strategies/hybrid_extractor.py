@@ -47,7 +47,10 @@ from _spike.scripts.strategies.llm_extractor import (  # noqa: E402
     extract_with_retry,
 )
 from _spike.scripts.strategies.prompts import HYBRID_EXTENSION_PROMPT_TEMPLATE  # noqa: E402
-from _spike.scripts.strategies.transformers_chunker import get_active_sources  # noqa: E402
+from _spike.scripts.strategies.transformers_chunker import (  # noqa: E402
+    get_active_sources,
+    get_sources_from_path,
+)
 
 
 @dataclass
@@ -78,16 +81,26 @@ def run_d_ab_on_transformers_active(
     engine_version: str = "4.57.3",
     backend: LLMBackend | None = None,
     max_retries: int = 2,
+    source_root: Path | None = None,
 ) -> HybridOutputs:
-    """Run hybrid (d-ab) on transformers active version.
+    """Run hybrid (d-ab) on transformers (active OR bumped version).
 
     Reads (a)'s output from
     ``engine_versions/transformers/v4_57_3/outputs/`` (the canonical
-    deterministic-miner output) AND the transformers source via
-    inspect. Prompts the LLM with both and asks for:
+    deterministic-miner output for the ACTIVE version - always used as
+    the deterministic seed) AND the transformers source via inspect
+    (active) or AST file-parse (bumped). Prompts the LLM with both and
+    asks for:
     1. Extension invariants (a) missed.
     2. Flagged-spurious entries in (a)'s output.
     3. Brief diagnoses.
+
+    Bumped-version semantics (Phase 3a.2): (a)'s seed is the active
+    reference (we don't have bumped static-miner output). The source
+    block is read from the bumped wheel. The intended signal: how much
+    extension the LLM proposes when shown bumped source - this captures
+    whether the bumped engine's validate() body differs enough from
+    active to surface new invariants OR loses existing ones.
 
     NOTE: Phase 2 sends the FULL (a) output + the FULL source-summary
     in one prompt. Phase 3 may revisit chunked hybrid prompts if the
@@ -100,7 +113,8 @@ def run_d_ab_on_transformers_active(
     if backend is None:
         backend = OllamaBackend()  # default: container Ollama llama3.1:70b
 
-    # 1. Load (a)'s output
+    # 1. Load (a)'s output - always active reference (Phase 3a.2 doesn't
+    # have bumped (a) outputs without per-version miner runs).
     a_invariants_path = (
         _PROJECT_ROOT / "engine_versions/transformers/v4_57_3/outputs/invariants.proposed.yaml"
     )
@@ -120,7 +134,9 @@ def run_d_ab_on_transformers_active(
     # surface for missed invariants per Bake-off D (8 silent misses
     # there). Send validate() in full + GenerationConfig.__init__ in
     # full + a one-line note on the other classes.
-    sources = get_active_sources()
+    sources = (
+        get_active_sources() if source_root is None else get_sources_from_path(source_root)
+    )
     source_summary = (
         "=== SOURCE: GenerationConfig.validate() ===\n"
         + sources.get("GenerationConfig.validate", "")

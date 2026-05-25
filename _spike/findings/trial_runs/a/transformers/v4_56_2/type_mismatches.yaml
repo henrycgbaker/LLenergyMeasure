@@ -1,0 +1,11 @@
+scoring_format_version: 1.0.0
+type_mismatches:
+- identity:
+  - transformers.sampling
+  - watermarking_config
+  - type_is_not
+  - ''
+  kind: severity_mismatch
+  reference_value: error
+  cell_value: dormant
+  note: severity divergence

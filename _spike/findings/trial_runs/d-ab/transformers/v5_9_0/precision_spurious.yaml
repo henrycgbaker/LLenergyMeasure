@@ -1,0 +1,24 @@
+scoring_format_version: 1.0.0
+precision_spurious:
+- identity:
+  - ''
+  - transformers_compile_config_type_compile_config_exceeds_zero
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_compile_config_type_compile_config_exceeds_zero
+    severity: null
+  note: cell invariant absent in reference
+- identity:
+  - ''
+  - transformers_watermarking_config_validate_called
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_watermarking_config_validate_called
+    severity: null
+  note: cell invariant absent in reference

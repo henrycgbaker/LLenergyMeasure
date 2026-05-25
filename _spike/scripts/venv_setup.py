@@ -60,17 +60,24 @@ VENV_ROOT_TEMPLATE = "/tmp/trial_{engine}_{version_slug}_venv"
 
 # Map from engine + version_slug to (pip name, pip version)
 ENGINE_PIP_SPEC: dict[tuple[str, str], tuple[str, str]] = {
-    # transformers
+    # transformers (Phase 1 locked picks)
+    ("transformers", "v4_55_4"): ("transformers", "4.55.4"),
+    ("transformers", "v4_56_2"): ("transformers", "4.56.2"),
     ("transformers", "v4_57_3"): ("transformers", "4.57.3"),
-    ("transformers", "v4_56_0"): ("transformers", "4.56.0"),
-    # vllm
+    ("transformers", "v4_57_6"): ("transformers", "4.57.6"),
+    ("transformers", "v5_9_0"): ("transformers", "5.9.0"),
+    # vllm (Phase 1 locked picks)
+    ("vllm", "v0_6_0"): ("vllm", "0.6.0"),
+    ("vllm", "v0_6_6_post1"): ("vllm", "0.6.6.post1"),
     ("vllm", "v0_7_3"): ("vllm", "0.7.3"),
-    ("vllm", "v0_7_0"): ("vllm", "0.7.0"),
-    ("vllm", "v0_8_0"): ("vllm", "0.8.0"),
-    # tensorrt
-    ("tensorrt", "v0_21_0"): ("tensorrt-llm", "0.21.0"),
+    ("vllm", "v0_9_2"): ("vllm", "0.9.2"),
+    ("vllm", "v0_19_1"): ("vllm", "0.19.1"),
+    # tensorrt (Phase 1 locked picks)
+    ("tensorrt", "v0_19_0"): ("tensorrt-llm", "0.19.0"),
     ("tensorrt", "v0_20_0"): ("tensorrt-llm", "0.20.0"),
-    ("tensorrt", "v0_22_0"): ("tensorrt-llm", "0.22.0"),
+    ("tensorrt", "v0_21_0"): ("tensorrt-llm", "0.21.0"),
+    ("tensorrt", "v1_0_0"): ("tensorrt-llm", "1.0.0"),
+    ("tensorrt", "v1_2_1"): ("tensorrt-llm", "1.2.1"),
 }
 
 
@@ -195,17 +202,30 @@ def _pip_download_and_unpack(
     """
     with tempfile.TemporaryDirectory() as tmp_str:
         tmp = Path(tmp_str)
-        # Download wheel + sdist into tmp
-        cmd = [
-            sys.executable,
-            "-m",
-            "pip",
-            "download",
-            "--no-deps",
-            "--dest",
-            str(tmp),
-            f"{pip_name}=={pip_version}",
-        ]
+        # Download wheel + sdist into tmp.
+        # Try `pip` on PATH first; fall back to `python -m pip` (project
+        # venv may or may not bundle pip).
+        pip_exe = shutil.which("pip")
+        if pip_exe is not None:
+            cmd = [
+                pip_exe,
+                "download",
+                "--no-deps",
+                "--dest",
+                str(tmp),
+                f"{pip_name}=={pip_version}",
+            ]
+        else:
+            cmd = [
+                sys.executable,
+                "-m",
+                "pip",
+                "download",
+                "--no-deps",
+                "--dest",
+                str(tmp),
+                f"{pip_name}=={pip_version}",
+            ]
         subprocess.run(cmd, check=True)
         wheels = list(tmp.glob("*.whl"))
         if not wheels:

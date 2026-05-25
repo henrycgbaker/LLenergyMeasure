@@ -1,0 +1,25 @@
+schema_version: 1.0.0
+engine: transformers
+engine_version: 5.9.0
+reconciled_at: '2026-05-25T05:46:07.351872+00:00'
+added_by_llm_verifier:
+- id: transformers_compile_config_type_compile_config_exceeds_zero
+  field: transformers.sampling.compile_config
+  predicate_kind: exceeds_zero
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: transformers_watermarking_config_validate_called
+  field: transformers.sampling.watermarking_config
+  predicate_kind: validate_called
+  added_by: llm_verifier
+  flagged_for_review: true
+flagged_spurious_in_deterministic:
+- id: transformers_greedy_strips_epsilon_cutoff
+  reason: epsilon_cutoff is not necessarily stripped by greedy sampling
+- id: transformers_single_beam_strips_early_stopping
+  reason: early_stopping can be used with single beam search
+missed_diagnoses:
+- id: transformers_compile_config_validate_called
+  why_missed: AST limitation, validate() method call not detected
+- id: transformers_watermarking_config_type_not_in_WatermarkingConfig
+  why_missed: kwargs.pop pattern, WatermarkingConfig type check not detected

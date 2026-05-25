@@ -1,0 +1,1211 @@
+schema_version: 1.0.0
+engine: transformers
+engine_version: 4.56.2
+miner: transformers_static_miner
+mined_at: '2026-04-25'
+invariants:
+- id: transformers_raises_bnb_4bit_compute_dtype_not_type_dtype
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when bnb_4bit_compute_dtype present
+    True AND bnb_4bit_compute_dtype type_is_not dtype'
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 560
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_compute_dtype:
+        type_is_not: dtype
+        present: true
+  kwargs_positive:
+    bnb_4bit_compute_dtype: true
+  kwargs_negative:
+    bnb_4bit_compute_dtype: null
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: bnb_4bit_compute_dtype must be torch.dtype
+  references:
+  - quantization_config.py:560 (transformers.BitsAndBytesConfig.post_init)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_raises_bnb_4bit_quant_type_not_type_str
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when bnb_4bit_quant_type type_is_not
+    str'
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 563
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_quant_type:
+        type_is_not: str
+  kwargs_positive:
+    bnb_4bit_quant_type: 1
+  kwargs_negative:
+    bnb_4bit_quant_type: x
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: bnb_4bit_quant_type must be a string
+  references:
+  - quantization_config.py:563 (transformers.BitsAndBytesConfig.post_init)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_raises_bnb_4bit_use_double_quant_not_type_bool
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when bnb_4bit_use_double_quant type_is_not
+    bool'
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 566
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_use_double_quant:
+        type_is_not: bool
+  kwargs_positive:
+    bnb_4bit_use_double_quant: 1
+  kwargs_negative:
+    bnb_4bit_use_double_quant: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: bnb_4bit_use_double_quant must be a boolean
+  references:
+  - quantization_config.py:566 (transformers.BitsAndBytesConfig.post_init)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_raises_llm_int8_enable_fp32_cpu_offload_not_type_bool
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when llm_int8_enable_fp32_cpu_offload
+    type_is_not bool'
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 554
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_enable_fp32_cpu_offload:
+        type_is_not: bool
+  kwargs_positive:
+    llm_int8_enable_fp32_cpu_offload: 1
+  kwargs_negative:
+    llm_int8_enable_fp32_cpu_offload: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: llm_int8_enable_fp32_cpu_offload must be a boolean
+  references:
+  - quantization_config.py:554 (transformers.BitsAndBytesConfig.post_init)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_raises_llm_int8_has_fp16_weight_not_type_bool
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when llm_int8_has_fp16_weight type_is_not
+    bool'
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 557
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_has_fp16_weight:
+        type_is_not: bool
+  kwargs_positive:
+    llm_int8_has_fp16_weight: 1
+  kwargs_negative:
+    llm_int8_has_fp16_weight: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: llm_int8_has_fp16_weight must be a boolean
+  references:
+  - quantization_config.py:557 (transformers.BitsAndBytesConfig.post_init)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_raises_llm_int8_skip_modules_not_type_list
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when llm_int8_skip_modules present
+    True AND llm_int8_skip_modules type_is_not list'
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 552
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_skip_modules:
+        type_is_not: list
+        present: true
+  kwargs_positive:
+    llm_int8_skip_modules: true
+  kwargs_negative:
+    llm_int8_skip_modules: []
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: llm_int8_skip_modules must be a list of strings
+  references:
+  - quantization_config.py:552 (transformers.BitsAndBytesConfig.post_init)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_raises_llm_int8_threshold_not_type_float
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when llm_int8_threshold type_is_not
+    float'
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 549
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_threshold:
+        type_is_not: float
+  kwargs_positive:
+    llm_int8_threshold: x
+  kwargs_negative:
+    llm_int8_threshold: 1.0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: llm_int8_threshold must be a float
+  references:
+  - quantization_config.py:549 (transformers.BitsAndBytesConfig.post_init)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_raises_load_in_4bit_not_type_bool
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when load_in_4bit type_is_not bool'
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 543
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_4bit:
+        type_is_not: bool
+  kwargs_positive:
+    load_in_4bit: 1
+  kwargs_negative:
+    load_in_4bit: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: load_in_4bit must be a boolean
+  references:
+  - quantization_config.py:543 (transformers.BitsAndBytesConfig.post_init)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_raises_load_in_4bit_set_true
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig.raise_ValueError: raises when load_in_4bit present True (dropped:
+    not version.parse(importlib.metadata.version(''bitsandbytes'')) >= version.parse(''0.39.0'') | version.parse(importlib.metadata.version(''bitsandbytes''))
+    >= version.parse(''0.39.0''))'
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 571
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_4bit:
+        present: true
+  kwargs_positive:
+    load_in_4bit: true
+  kwargs_negative:
+    load_in_4bit: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 4 bit quantization requires bitsandbytes>=0.39.0 - please upgrade your bitsandbytes
+    version
+  references:
+  - quantization_config.py:571 (transformers.BitsAndBytesConfig.post_init)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: not version.parse(importlib.metadata.version(''bitsandbytes'')) >= version.parse(''0.39.0'')
+    | version.parse(importlib.metadata.version(''bitsandbytes'')) >= version.parse(''0.39.0'')'
+- id: transformers_raises_load_in_8bit_not_type_bool
+  engine: transformers
+  library: bitsandbytes
+  invariant_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when load_in_8bit type_is_not bool'
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 546
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_8bit:
+        type_is_not: bool
+  kwargs_positive:
+    load_in_8bit: 1
+  kwargs_negative:
+    load_in_8bit: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: load_in_8bit must be a boolean
+  references:
+  - quantization_config.py:546 (transformers.BitsAndBytesConfig.post_init)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_dormant_constraints_set_true
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when num_beams == 1 AND
+    constraints present True'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 644
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 1
+      transformers.sampling.constraints:
+        present: true
+  kwargs_positive:
+    num_beams: 1
+    constraints: true
+  kwargs_negative:
+    num_beams: 1
+    constraints: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:644 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_dormant_diversity_penalty_ne_0_0
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when num_beams == 1 AND
+    diversity_penalty present True AND diversity_penalty != 0.0'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 636
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 1
+      transformers.sampling.diversity_penalty:
+        '!=': 0.0
+        present: true
+  kwargs_positive:
+    num_beams: 1
+    diversity_penalty: true
+  kwargs_negative:
+    num_beams: 1
+    diversity_penalty: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:636 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_dormant_early_stopping_set_true
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when num_beams == 1 AND
+    early_stopping present True (dropped: self.early_stopping is not False)'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 628
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 1
+      transformers.sampling.early_stopping:
+        present: true
+  kwargs_positive:
+    num_beams: 1
+    early_stopping: true
+  kwargs_negative:
+    num_beams: 1
+    early_stopping: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:628 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: self.early_stopping is not False'
+- id: transformers_dormant_epsilon_cutoff_ne_0_0
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when epsilon_cutoff present
+    True AND epsilon_cutoff != 0.0 (dropped: self.do_sample is False)'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 613
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.epsilon_cutoff:
+        '!=': 0.0
+        present: true
+  kwargs_positive:
+    epsilon_cutoff: true
+  kwargs_negative:
+    epsilon_cutoff: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:613 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: self.do_sample is False'
+- id: transformers_dormant_eta_cutoff_ne_0_0
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when eta_cutoff present
+    True AND eta_cutoff != 0.0 (dropped: self.do_sample is False)'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 617
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.eta_cutoff:
+        '!=': 0.0
+        present: true
+  kwargs_positive:
+    eta_cutoff: true
+  kwargs_negative:
+    eta_cutoff: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:617 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: self.do_sample is False'
+- id: transformers_dormant_length_penalty_ne_1_0
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when num_beams == 1 AND
+    length_penalty present True AND length_penalty != 1.0'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 640
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 1
+      transformers.sampling.length_penalty:
+        '!=': 1.0
+        present: true
+  kwargs_positive:
+    num_beams: 1
+    length_penalty: true
+  kwargs_negative:
+    num_beams: 1
+    length_penalty: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:640 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_dormant_min_p_set_true
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when min_p present True
+    (dropped: self.do_sample is False)'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 605
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.min_p:
+        present: true
+  kwargs_positive:
+    min_p: true
+  kwargs_negative:
+    min_p: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:605 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: self.do_sample is False'
+- id: transformers_dormant_num_beam_groups_ne_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when num_beams == 1 AND
+    num_beam_groups present True AND num_beam_groups != 1'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 632
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 1
+      transformers.sampling.num_beam_groups:
+        '!=': 1
+        present: true
+  kwargs_positive:
+    num_beams: 1
+    num_beam_groups: true
+  kwargs_negative:
+    num_beams: 1
+    num_beam_groups: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:632 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_dormant_pad_token_id_lt_0
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when pad_token_id present
+    True AND pad_token_id < 0'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 564
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.pad_token_id:
+        <: 0
+        present: true
+  kwargs_positive:
+    pad_token_id: true
+  kwargs_negative:
+    pad_token_id: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:564 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_dormant_temperature_ne_1_0
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when temperature present
+    True AND temperature != 1.0 (dropped: self.do_sample is False)'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 599
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.temperature:
+        '!=': 1.0
+        present: true
+  kwargs_positive:
+    temperature: true
+  kwargs_negative:
+    temperature: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:599 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: self.do_sample is False'
+- id: transformers_dormant_top_k_ne_50
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when top_k present True
+    AND top_k != 50 (dropped: self.do_sample is False)'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 611
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.top_k:
+        '!=': 50
+        present: true
+  kwargs_positive:
+    top_k: true
+  kwargs_negative:
+    top_k: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:611 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: self.do_sample is False'
+- id: transformers_dormant_top_p_ne_1_0
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when top_p present True
+    AND top_p != 1.0 (dropped: self.do_sample is False)'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 603
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.top_p:
+        '!=': 1.0
+        present: true
+  kwargs_positive:
+    top_p: true
+  kwargs_negative:
+    top_p: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:603 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: self.do_sample is False'
+- id: transformers_dormant_typical_p_ne_1_0
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when typical_p present
+    True AND typical_p != 1.0 (dropped: self.do_sample is False)'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 607
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.typical_p:
+        '!=': 1.0
+        present: true
+  kwargs_positive:
+    typical_p: true
+  kwargs_negative:
+    typical_p: false
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:607 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: self.do_sample is False'
+- id: transformers_num_beam_groups_diversity_penalty_zero
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when num_beams != 1 AND diversity_penalty
+    == 0.0 (dropped: prior branch unnegatable: self.constraints is not None or self.force_words_ids is
+    not None | self.diversity_penalty != 0.0 or self.num_beam_groups != 1)'
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 678
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams:
+        '!=': 1
+      transformers.sampling.diversity_penalty: 0.0
+  kwargs_positive:
+    num_beams: 2
+    diversity_penalty: 0.0
+  kwargs_negative:
+    num_beams: 2
+    diversity_penalty: 1.0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:678 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: prior branch unnegatable: self.constraints is not None or self.force_words_ids
+    is not None | self.diversity_penalty != 0.0 or self.num_beam_groups != 1'
+- id: transformers_num_beams_not_divisible_by_groups
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when num_beams != 1 AND num_beams not_divisible_by
+    @num_beam_groups (dropped: prior branch unnegatable: self.constraints is not None or self.force_words_ids
+    is not None | self.diversity_penalty != 0.0 or self.num_beam_groups != 1)'
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 676
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams:
+        '!=': 1
+        not_divisible_by: '@num_beam_groups'
+  kwargs_positive:
+    num_beams: 2
+    num_beam_groups: 2
+  kwargs_negative:
+    num_beams: 3
+    num_beam_groups: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:676 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: prior branch unnegatable: self.constraints is not None or self.force_words_ids
+    is not None | self.diversity_penalty != 0.0 or self.num_beam_groups != 1'
+- id: transformers_num_return_sequences_exceeds_num_beams
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when num_return_sequences != 1 AND
+    num_beams != 1 AND num_return_sequences > @num_beams'
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 692
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        '!=': 1
+        '>': '@num_beams'
+      transformers.sampling.num_beams:
+        '!=': 1
+  kwargs_positive:
+    num_return_sequences: 2
+    num_beams: 2
+  kwargs_negative:
+    num_return_sequences: 3
+    num_beams: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`num_return_sequences` ({num_return_sequences}) has to be smaller or equal to `num_beams`
+    ({num_beams}).'
+  references:
+  - configuration_utils.py:692 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_raises_cache_implementation_set_true
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when cache_implementation present True
+    (dropped: self.cache_implementation not in ALL_CACHE_IMPLEMENTATIONS)'
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 571
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.cache_implementation:
+        present: true
+  kwargs_positive:
+    cache_implementation: true
+  kwargs_negative:
+    cache_implementation: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'Invalid `cache_implementation` ({cache_implementation}). Choose one of: {ALL_CACHE_IMPLEMENTATIONS}'
+  references:
+  - configuration_utils.py:571 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: self.cache_implementation not in ALL_CACHE_IMPLEMENTATIONS'
+- id: transformers_raises_compile_config_not_type_compileconfig
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when compile_config present True AND
+    compile_config type_is_not CompileConfig'
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 577
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.compile_config:
+        type_is_not: CompileConfig
+        present: true
+  kwargs_positive:
+    compile_config: true
+  kwargs_negative:
+    compile_config: null
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: You provided `compile_config` as an instance of {type(self.compile_config)}, but it
+    must be an instance of `CompileConfig`.
+  references:
+  - configuration_utils.py:577 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_raises_context_width_lt_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'WatermarkingConfig.raise_ValueError: raises when context_width < 1'
+  severity: error
+  native_type: transformers.WatermarkingConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 1388
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.watermarking_config.context_width:
+        <: 1
+  kwargs_positive:
+    context_width: 0
+  kwargs_negative:
+    context_width: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:1388 (transformers.WatermarkingConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_raises_early_stopping_not_in_set
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when early_stopping not_in [True, False,
+    ''never'']'
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 560
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.early_stopping:
+        not_in:
+        - true
+        - false
+        - never
+  kwargs_positive:
+    early_stopping: __walker_synth__
+  kwargs_negative:
+    early_stopping: true
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`early_stopping` must be a boolean or ''never'', but is {early_stopping}.'
+  references:
+  - configuration_utils.py:560 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_raises_max_new_tokens_le_0
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when max_new_tokens present True AND
+    max_new_tokens <= 0'
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 562
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.max_new_tokens:
+        <=: 0
+        present: true
+  kwargs_positive:
+    max_new_tokens: true
+  kwargs_negative:
+    max_new_tokens: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`max_new_tokens` must be greater than 0, but is {max_new_tokens}.'
+  references:
+  - configuration_utils.py:562 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_raises_num_beam_groups_ne_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when num_beams != 1 AND num_beam_groups
+    present True AND num_beam_groups != 1 (dropped: self.constraints is not None or self.force_words_ids
+    is not None)'
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 662
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams:
+        '!=': 1
+      transformers.sampling.num_beam_groups:
+        '!=': 1
+        present: true
+  kwargs_positive:
+    num_beams: 2
+    num_beam_groups: true
+  kwargs_negative:
+    num_beams: 2
+    num_beam_groups: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:662 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: self.constraints is not None or self.force_words_ids is not None'
+- id: transformers_raises_num_beams_eq_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when num_return_sequences != 1 AND
+    num_beams == 1 (dropped: self.do_sample is False)'
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 687
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        '!=': 1
+      transformers.sampling.num_beams: 1
+  kwargs_positive:
+    num_return_sequences: 2
+    num_beams: 1
+  kwargs_negative:
+    num_return_sequences: 2
+    num_beams: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Greedy methods without beam search do not support `num_return_sequences` different
+    than 1 (got {num_return_sequences}).
+  references:
+  - configuration_utils.py:687 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: self.do_sample is False'
+- id: transformers_raises_num_beams_ne_1
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when num_beams != 1 (dropped: self.constraints
+    is not None or self.force_words_ids is not None | self.do_sample is True)'
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 658
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams:
+        '!=': 1
+  kwargs_positive:
+    num_beams: 2
+  kwargs_negative:
+    num_beams: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:658 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: self.constraints is not None or self.force_words_ids is not None | self.do_sample
+    is True'
+- id: transformers_raises_num_beams_ne_1__2
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.raise_ValueError: raises when num_beams != 1 (dropped: prior
+    branch unnegatable: self.constraints is not None or self.force_words_ids is not None | self.diversity_penalty
+    != 0.0 or self.num_beam_groups != 1 | self.do_sample is True)'
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 674
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams:
+        '!=': 1
+  kwargs_positive:
+    num_beams: 2
+  kwargs_negative:
+    num_beams: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:674 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+  walker_notes:
+  - 'dropped sub-clauses: prior branch unnegatable: self.constraints is not None or self.force_words_ids
+    is not None | self.diversity_penalty != 0.0 or self.num_beam_groups != 1 | self.do_sample is True'
+- id: transformers_raises_seeding_scheme_not_in_set
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'WatermarkingConfig.raise_ValueError: raises when seeding_scheme not_in [''selfhash'',
+    ''lefthash'']'
+  severity: error
+  native_type: transformers.WatermarkingConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 1372
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.watermarking_config.seeding_scheme:
+        not_in:
+        - selfhash
+        - lefthash
+  kwargs_positive:
+    seeding_scheme: __walker_synth__
+  kwargs_negative:
+    seeding_scheme: selfhash
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:1372 (transformers.WatermarkingConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_watermarking_config_wrong_type
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when watermarking_config
+    present True AND watermarking_config type_is_not [''WatermarkingConfig'', ''SynthIDTextWatermarkingConfig'']'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 584
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.watermarking_config:
+        type_is_not: &id001
+        - WatermarkingConfig
+        - SynthIDTextWatermarkingConfig
+        present: true
+  kwargs_positive:
+    watermarking_config: true
+  kwargs_negative:
+    watermarking_config: null
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`watermarking_config` as a dict is deprecated and will be removed in v4.54.0. Please
+    construct `watermarking_config` object with `WatermarkingConfig` or `SynthIDTextWatermarkingConfig`
+    class.'
+  references:
+  - configuration_utils.py:584 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'
+- id: transformers_watermarking_config_wrong_type__2
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'GenerationConfig.self.watermarking_config_=_WatermarkingConfig.from_dict(self.watermarking_config):
+    marks dormant when watermarking_config present True AND watermarking_config type_is_not [''WatermarkingConfig'',
+    ''SynthIDTextWatermarkingConfig'']'
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 588
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.watermarking_config:
+        type_is_not: *id001
+        present: true
+  kwargs_positive:
+    watermarking_config: true
+  kwargs_negative:
+    watermarking_config: null
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - configuration_utils.py:588 (transformers.GenerationConfig.validate)
+  added_by: static_miner
+  added_at: '2026-04-25'

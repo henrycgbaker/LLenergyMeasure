@@ -1,0 +1,25 @@
+schema_version: 1.0.0
+engine: transformers
+engine_version: 4.56.2
+reconciled_at: '2026-05-25T05:45:33.325598+00:00'
+added_by_llm_verifier:
+- id: transformers_compile_config_type_compile_config_exceeds_zero
+  field: transformers.sampling.compile_config
+  predicate_kind: exceeds_zero
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: transformers_watermarking_config_type_watermarking_config_type_not_in_WatermarkingConfig
+  field: transformers.sampling.watermarking_config
+  predicate_kind: type_is_not
+  added_by: llm_verifier
+  flagged_for_review: true
+flagged_spurious_in_deterministic:
+- id: transformers_cache_choice_use_cache_eq_false
+  reason: use_cache is not always False, it depends on the context
+- id: transformers_greedy_strips_eta_cutoff
+  reason: eta_cutoff is not always stripped in greedy mode
+missed_diagnoses:
+- id: transformers_compile_config_type_compile_config_exceeds_zero
+  why_missed: AST limitation, kwargs.pop pattern
+- id: transformers_watermarking_config_type_watermarking_config_type_not_in_WatermarkingConfig
+  why_missed: Companion class notes not fully scanned

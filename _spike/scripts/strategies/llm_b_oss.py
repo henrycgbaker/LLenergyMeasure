@@ -757,9 +757,9 @@ def run_b_on_transformers_active(
     backend: LLMBackend | None = None,
     max_retries: int = 2,
     multipass: bool = False,
+    source_root: Path | None = None,
 ) -> StrategyBOutputs:
-    """Run strategy (b) for transformers active version (uses the project
-    venv's transformers via inspect).
+    """Run strategy (b) for transformers (active OR bumped version).
 
     Writes:
     - ``out_dir/schema.json``
@@ -773,6 +773,9 @@ def run_b_on_transformers_active(
         pass pipeline (extract -> verify -> extend). Schema extraction is
         unchanged (single-shot per chunk). The legacy single-pass remains
         the default for backward-compat with existing trial runs.
+    source_root : Path | None
+        If None, sources via inspect on the project venv (active cell).
+        If provided, AST-parse from the path (bumped-version Phase 3a.2).
 
     Returns ``StrategyBOutputs`` with the paths + observations.
     """
@@ -783,8 +786,8 @@ def run_b_on_transformers_active(
     if backend is None:
         backend = OllamaBackend()  # default: container Ollama 11435 + llama3.1:70b
 
-    s_chunks = schema_chunks()
-    i_chunks = invariants_chunks()
+    s_chunks = schema_chunks(source_root=source_root)
+    i_chunks = invariants_chunks(source_root=source_root)
 
     schema_envelope, schema_wall, schema_obs = extract_schema(
         backend=backend,

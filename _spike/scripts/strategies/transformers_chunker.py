@@ -18,16 +18,22 @@ Two chunk lists are produced:
   beam-only-when-greedy, cache-related, etc.) PLUS __init__ for
   type-mismatch invariants.
 
-Active version is read via ``inspect.getsource``; bumped versions need
-an isolated venv (the venv_path is the strategy's responsibility to
-activate; the chunker just gets given the source strings).
+Active version is read via ``inspect.getsource``. Bumped versions
+(Phase 3a.2) are read from a file-based ``source_root`` path - the
+caller passes the unpacked-wheel root, the chunker AST-parses
+configuration_utils.py + modeling_utils.py + quantization configs
+directly. If the AST parse fails (e.g. API rename in transformers 5.x),
+the failure surfaces as ``_extraction_error`` in the chunks list - that
+IS the brittleness signal we measure.
 """
 
 from __future__ import annotations
 
+import ast
 import inspect
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -110,6 +116,171 @@ def get_active_sources() -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
+# Source extraction (bumped versions; AST-parse from file path)
+# ---------------------------------------------------------------------------
+
+
+def _ast_get_class_source(file_src: str, class_name: str) -> str:
+    """Return the source text of a class declaration (incl. body) by AST.
+
+    Returns "" if not found. Falls back to text-based extraction if AST
+    parse fails (e.g. file uses syntax newer than the host Python).
+    """
+    try:
+        tree = ast.parse(file_src)
+    except SyntaxError:
+        return ""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            return ast.get_source_segment(file_src, node) or ""
+    return ""
+
+
+def _ast_get_method_source(file_src: str, class_name: str, method_name: str) -> str:
+    """Return the source text of a method inside a class by AST. Empty if not found."""
+    try:
+        tree = ast.parse(file_src)
+    except SyntaxError:
+        return ""
+    for cls in ast.walk(tree):
+        if not (isinstance(cls, ast.ClassDef) and cls.name == class_name):
+            continue
+        for member in cls.body:
+            if (
+                isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and member.name == method_name
+            ):
+                return ast.get_source_segment(file_src, member) or ""
+    return ""
+
+
+def _ast_get_class_docstring(file_src: str, class_name: str) -> str:
+    """Return the docstring of a class (the leading triple-string), or ""."""
+    try:
+        tree = ast.parse(file_src)
+    except SyntaxError:
+        return ""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            return ast.get_docstring(node) or ""
+    return ""
+
+
+def get_sources_from_path(source_root: Path) -> dict[str, str]:
+    """Pull source via AST file-parse from a source-only venv path.
+
+    Used for bumped-version cells in Phase 3a.2. The chunker's chunked
+    units are read from canonical file locations in the transformers
+    package layout:
+
+    - ``modeling_utils.py``: ``PreTrainedModel.from_pretrained``.
+    - ``models/auto/modeling_auto.py``: ``AutoModelForCausalLM.from_pretrained``
+      (best-effort; modelling-auto path can shift across versions).
+    - ``generation/configuration_utils.py``: ``GenerationConfig.__init__``,
+      ``GenerationConfig.validate``, ``GenerationConfig`` docstring,
+      ``CompileConfig``, ``WatermarkingConfig``, ``SynthIDTextWatermarkingConfig``.
+    - ``utils/quantization_config.py``: ``BitsAndBytesConfig``.
+
+    If any required file is missing (e.g. major-version rename) or AST
+    parse fails (e.g. syntax not supported by this Python), the relevant
+    source comes back empty. The chunker then emits a chunk with an
+    empty ``source`` - the LLM will see no content for that chunk and
+    fail extraction, which is reported as the cell's brittleness mode.
+
+    Returns a dict shaped identically to ``get_active_sources()``.
+    """
+    sources: dict[str, str] = {}
+
+    def _read(rel_path: str) -> str:
+        p = source_root / rel_path
+        if not p.exists():
+            return ""
+        try:
+            return p.read_text()
+        except Exception:
+            return ""
+
+    modeling_utils_src = _read("modeling_utils.py")
+    config_utils_src = _read("generation/configuration_utils.py")
+    quant_src = _read("utils/quantization_config.py")
+
+    # Best-effort modelling_auto location (varies across versions).
+    automod_candidates = [
+        "models/auto/modeling_auto.py",
+        "models/auto/auto_factory.py",
+    ]
+    automod_src = ""
+    for cand in automod_candidates:
+        automod_src = _read(cand)
+        if automod_src:
+            break
+
+    if not modeling_utils_src and not config_utils_src:
+        sources["_extraction_error"] = (
+            f"transformers source not found under {source_root} - "
+            f"expected modeling_utils.py and generation/configuration_utils.py"
+        )
+        return sources
+
+    # PreTrainedModel.from_pretrained
+    sources["PreTrainedModel.from_pretrained"] = _ast_get_method_source(
+        modeling_utils_src, "PreTrainedModel", "from_pretrained"
+    )
+
+    # AutoModelForCausalLM.from_pretrained - may be inherited from a base
+    # class; best-effort extraction. Empty result is acceptable (the
+    # chunker only references this for completeness).
+    if automod_src:
+        sources["AutoModelForCausalLM.from_pretrained"] = _ast_get_method_source(
+            automod_src, "AutoModelForCausalLM", "from_pretrained"
+        )
+    else:
+        sources["AutoModelForCausalLM.from_pretrained"] = ""
+
+    # BitsAndBytesConfig
+    if quant_src:
+        sources["BitsAndBytesConfig"] = _ast_get_class_source(quant_src, "BitsAndBytesConfig")
+        sources["BitsAndBytesConfig.__init__"] = _ast_get_method_source(
+            quant_src, "BitsAndBytesConfig", "__init__"
+        )
+    else:
+        sources["BitsAndBytesConfig"] = ""
+        sources["BitsAndBytesConfig.__init__"] = ""
+
+    # GenerationConfig + companions
+    sources["GenerationConfig.__init__"] = _ast_get_method_source(
+        config_utils_src, "GenerationConfig", "__init__"
+    )
+    sources["GenerationConfig.validate"] = _ast_get_method_source(
+        config_utils_src, "GenerationConfig", "validate"
+    )
+    sources["GenerationConfig.__doc__"] = _ast_get_class_docstring(
+        config_utils_src, "GenerationConfig"
+    )
+    sources["CompileConfig"] = _ast_get_class_source(config_utils_src, "CompileConfig")
+    sources["WatermarkingConfig"] = _ast_get_class_source(
+        config_utils_src, "WatermarkingConfig"
+    )
+    sources["SynthIDTextWatermarkingConfig"] = _ast_get_class_source(
+        config_utils_src, "SynthIDTextWatermarkingConfig"
+    )
+
+    # If the critical sources are empty, record an error.
+    critical = [
+        "PreTrainedModel.from_pretrained",
+        "GenerationConfig.__init__",
+        "GenerationConfig.validate",
+    ]
+    missing = [k for k in critical if not sources[k]]
+    if missing:
+        sources["_extraction_error"] = (
+            f"transformers AST extraction failed for {missing} under {source_root}"
+        )
+
+    return sources
+
+
+# ---------------------------------------------------------------------------
 # Schema chunking
 # ---------------------------------------------------------------------------
 
@@ -146,8 +317,8 @@ def _truncate_signature_source(src: str, max_chars: int = 6000) -> str:
     return result[:max_chars]
 
 
-def schema_chunks() -> list[ChunkSpec]:
-    """Return the list of schema-extraction chunks for active transformers.
+def schema_chunks(source_root: Path | None = None) -> list[ChunkSpec]:
+    """Return the list of schema-extraction chunks for transformers.
 
     Round 2+ uses 5 chunks (expanded docstring coverage per round-1
     failure analysis - many fields were documented in the docstring
@@ -162,8 +333,16 @@ def schema_chunks() -> list[ChunkSpec]:
     5. **GenerationConfig docstring (full)** -> sampling_params (the
        docstring documents all the kwargs.pop'd fields; round 1
        missed 33/68 sampling_params here).
+
+    Parameters
+    ----------
+    source_root : Path | None
+        If None, sources come from ``inspect.getsource`` on the project
+        venv's installed transformers (active-version path). If provided,
+        sources come from AST-parsing files under that root (bumped-
+        version path, Phase 3a.2).
     """
-    sources = get_active_sources()
+    sources = get_active_sources() if source_root is None else get_sources_from_path(source_root)
 
     if "_extraction_error" in sources:
         return [
@@ -316,8 +495,8 @@ def _split_validate_into_sections(validate_src: str) -> list[tuple[str, str]]:
     return sections
 
 
-def invariants_chunks() -> list[ChunkSpec]:
-    """Return the list of invariant-extraction chunks for active transformers.
+def invariants_chunks(source_root: Path | None = None) -> list[ChunkSpec]:
+    """Return the list of invariant-extraction chunks for transformers.
 
     Strategy:
     - **One chunk per logical section of validate()** (decoding,
@@ -331,8 +510,15 @@ def invariants_chunks() -> list[ChunkSpec]:
     the LLM doesn't truncate. By sending the COMPANION classes
     (CompileConfig referenced from validate) inline in the relevant
     chunks, the LLM doesn't fail to "follow imports".
+
+    Parameters
+    ----------
+    source_root : Path | None
+        If None, sources via ``inspect`` on the project's installed
+        transformers. If provided, AST-parse from this source-only-venv
+        path (Phase 3a.2 bumped versions).
     """
-    sources = get_active_sources()
+    sources = get_active_sources() if source_root is None else get_sources_from_path(source_root)
     if "_extraction_error" in sources:
         return [
             ChunkSpec(
