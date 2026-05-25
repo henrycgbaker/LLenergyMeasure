@@ -70,6 +70,8 @@ _DEFAULT_SOURCE_ROOT = Path("/tmp/trt-llm-0.21.0/tensorrt_llm")
 # Files we AST-walk.
 LLM_ARGS_REL = Path("llmapi/llm_args.py")
 BUILDER_REL = Path("builder.py")
+BUILD_CACHE_REL = Path("llmapi/build_cache.py")
+QUANT_MODE_REL = Path("quantization/mode.py")
 
 # Probe LANDMARKS: dotted attribute paths the probe resolves under
 # ``import tensorrt_llm``. Mirrors the validator surface this miner
@@ -92,6 +94,10 @@ LANDMARKS: tuple[str, ...] = (
     "tensorrt_llm.llmapi.llm_args.BatchingType",
     "tensorrt_llm.llmapi.llm_args.CapacitySchedulerPolicy",
     "tensorrt_llm.llmapi.llm_args.ContextChunkingPolicy",
+    "tensorrt_llm.llmapi.llm_args.TorchLlmArgs",
+    "tensorrt_llm.llmapi.llm_args.TorchLlmArgs.validate_cuda_graph_max_batch_size",
+    "tensorrt_llm.llmapi.llm_args.TorchLlmArgs.validate_moe_load_balancer",
+    "tensorrt_llm.llmapi.build_cache.BuildCache",
     "tensorrt_llm.builder.Builder",
     "tensorrt_llm.builder.Builder.build_engine",
 )
@@ -106,6 +112,9 @@ _CLASS_TARGETS: tuple[tuple[str, Path], ...] = (
     ("BatchingType", LLM_ARGS_REL),
     ("CapacitySchedulerPolicy", LLM_ARGS_REL),
     ("ContextChunkingPolicy", LLM_ARGS_REL),
+    ("TorchLlmArgs", LLM_ARGS_REL),
+    ("_AutoDeployLlmArgs", LLM_ARGS_REL),
+    ("BuildCache", BUILD_CACHE_REL),
 )
 
 # Method-level landmarks: ``(class_name, method_name)``. The full set the
@@ -122,19 +131,36 @@ _METHOD_LANDMARKS: tuple[tuple[str, str], ...] = (
     ("BaseLlmArgs", "validate_lora_config_consistency"),
     ("TrtLlmArgs", "validate_enable_build_cache"),
     ("LookaheadDecodingConfig", "validate_positive_values"),
+    # TorchLlmArgs validator surface (added Phase 1 Day 2 lift).
+    ("TorchLlmArgs", "validate_cuda_graph_max_batch_size"),
+    ("TorchLlmArgs", "validate_moe_load_balancer"),
+    ("TorchLlmArgs", "validate_cuda_graph_config"),
+    ("TorchLlmArgs", "convert_load_format"),
+    # _AutoDeployLlmArgs validator surface.
+    ("_AutoDeployLlmArgs", "validate_free_mem_ratio"),
 )
+
+# Methods walked from files OTHER than llm_args.py.
+# Each entry is ``(class_name, method_name, rel_path)``.
+_AUX_METHOD_LANDMARKS: tuple[tuple[str, str, Path], ...] = ()
 
 # StrEnum classes whose members are the allowlist for a particular
 # TrtLlmArgs field. Mapping is ``(enum class name, top-level field name)``.
-_STRENUM_FIELDS: tuple[tuple[str, str], ...] = (
-    ("BatchingType", "batching_type"),
-    ("CapacitySchedulerPolicy", "capacity_scheduler_policy"),
-    ("ContextChunkingPolicy", "context_chunking_policy"),
-)
+#
+# CapacitySchedulerPolicy and ContextChunkingPolicy live on
+# SchedulerConfig (NOT TrtLlmArgs); validation against TrtLlmArgs raises
+# ``extra_forbidden``. The miner only emits StrEnum allowlists whose target
+# field is on TrtLlmArgs directly so the runtime validator can probe them.
+_STRENUM_FIELDS: tuple[tuple[str, str], ...] = (("BatchingType", "batching_type"),)
 
 # Pydantic classes whose ``Literal[...]``-typed fields are lifted as
 # allowlist invariants via class-body AST.
-_LITERAL_LIFT_CLASSES: tuple[str, ...] = ("BaseLlmArgs", "TrtLlmArgs", "CalibConfig")
+_LITERAL_LIFT_CLASSES: tuple[str, ...] = (
+    "BaseLlmArgs",
+    "TrtLlmArgs",
+    "CalibConfig",
+    "_AutoDeployLlmArgs",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1122,8 +1148,10 @@ class _SourceTree:
 
     llm_args: ast.Module
     builder: ast.Module
+    build_cache: ast.Module
     llm_args_rel: str
     builder_rel: str
+    build_cache_rel: str
 
 
 def _read_module(path: Path) -> ast.Module:
@@ -1139,6 +1167,7 @@ def _load_source(source_root: Path) -> _SourceTree:
         )
     llm_args_path = source_root / LLM_ARGS_REL
     builder_path = source_root / BUILDER_REL
+    build_cache_path = source_root / BUILD_CACHE_REL
     if not llm_args_path.is_file():
         raise MinerLandmarkMissingError(
             "tensorrt_llm/llmapi/llm_args.py",
@@ -1148,12 +1177,22 @@ def _load_source(source_root: Path) -> _SourceTree:
         raise MinerLandmarkMissingError(
             "tensorrt_llm/builder.py", detail=f"missing at {builder_path}"
         )
+    if not build_cache_path.is_file():
+        raise MinerLandmarkMissingError(
+            "tensorrt_llm/llmapi/build_cache.py", detail=f"missing at {build_cache_path}"
+        )
     llm_args = _read_module(llm_args_path)
     builder = _read_module(builder_path)
+    build_cache = _read_module(build_cache_path)
 
     # Class landmarks - fail-loud if any are missing.
+    _rel_to_module = {
+        LLM_ARGS_REL: llm_args,
+        BUILDER_REL: builder,
+        BUILD_CACHE_REL: build_cache,
+    }
     for cls_name, rel in _CLASS_TARGETS:
-        module = llm_args if rel == LLM_ARGS_REL else builder
+        module = _rel_to_module.get(rel, builder)
         if find_class(module, cls_name) is None:
             raise MinerLandmarkMissingError(
                 f"{rel}::{cls_name}",
@@ -1163,8 +1202,10 @@ def _load_source(source_root: Path) -> _SourceTree:
     return _SourceTree(
         llm_args=llm_args,
         builder=builder,
+        build_cache=build_cache,
         llm_args_rel=str(LLM_ARGS_REL),
         builder_rel=str(BUILDER_REL),
+        build_cache_rel=str(BUILD_CACHE_REL),
     )
 
 
@@ -1179,6 +1220,262 @@ def _verify_method_landmarks(tree: _SourceTree) -> None:
                 f"{cls_name}.{method_name}",
                 detail="validator method missing in 0.21.0 source",
             )
+
+
+# ---------------------------------------------------------------------------
+# Manual invariants - surfaces not reachable via AST validator walk
+# ---------------------------------------------------------------------------
+
+
+def _manual_invariants(
+    *,
+    source_root: Path,
+    today: str,
+) -> list[InvariantCandidate]:
+    """Emit invariants that require context the AST walker cannot derive.
+
+    Covers three surfaces:
+    1. QuantAlgo / kv_cache_quant_algo allowlists - the valid set is a module-
+       level constant (``QUANT_ALGO_LIST`` / ``KV_CACHE_QUANT_ALGO_LIST``) in
+       ``quantization/mode.py``, not a Pydantic field annotation.
+    2. BuildCache.max_records lower bound - a plain ``if config.max_records < 1:
+       raise`` inside ``__init__`` that references a *parameter*, not ``self``,
+       so the self-predicate extractor skips it.
+    """
+    out: list[InvariantCandidate] = []
+
+    # --- QuantAlgo allowlist ---------------------------------------------------
+    # Read the values from the source to stay DRY with the actual library.
+    quant_mode_path = source_root / QUANT_MODE_REL
+    quant_algo_values: list[str] = []
+    kv_cache_quant_algo_values: list[str] = []
+    if quant_mode_path.is_file():
+        qm_tree = ast.parse(quant_mode_path.read_text())
+        # QuantAlgo members: assignments ``NAME = auto()`` in the class body.
+        for node in ast.walk(qm_tree):
+            if isinstance(node, ast.ClassDef) and node.name == "QuantAlgo":
+                for stmt in node.body:
+                    if (
+                        isinstance(stmt, ast.Assign)
+                        and len(stmt.targets) == 1
+                        and isinstance(stmt.targets[0], ast.Name)
+                        and isinstance(stmt.value, ast.Call)
+                        and isinstance(stmt.value.func, ast.Name)
+                        and stmt.value.func.id == "auto"
+                    ):
+                        quant_algo_values.append(stmt.targets[0].id)
+        # KV_CACHE_QUANT_ALGO_LIST: module-level list assignment.
+        for node in ast.walk(qm_tree):
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "KV_CACHE_QUANT_ALGO_LIST"
+                and isinstance(node.value, ast.List)
+            ):
+                for elt in node.value.elts:
+                    if (
+                        isinstance(elt, ast.Attribute)
+                        and isinstance(elt.value, ast.Name)
+                        and elt.value.id == "QuantAlgo"
+                    ):
+                        kv_cache_quant_algo_values.append(elt.attr)
+
+    quant_mode_line = 23  # line of class QuantAlgo definition
+    if quant_algo_values:
+        out.append(
+            InvariantCandidate(
+                id="tensorrt_quant_config_quant_algo_in_allowlist",
+                engine=ENGINE,
+                library=LIBRARY,
+                invariant_under_test=(
+                    "QuantConfig.quant_algo must be one of the QuantAlgo enum members "
+                    "(or None); invalid values are rejected at engine-build time"
+                ),
+                severity="error",
+                native_type=f"{LIBRARY}.QuantConfig",
+                miner_source=MinerSource(
+                    path=str(QUANT_MODE_REL),
+                    method="<QuantAlgo enum>",
+                    line_at_scan=quant_mode_line,
+                ),
+                match_fields={
+                    f"{NAMESPACE}.quant_algo": {"in": [*quant_algo_values, None]},
+                },
+                kwargs_positive={"quant_algo": "__invalid_quant_algo__"},
+                kwargs_negative={"quant_algo": None},
+                expected_outcome={
+                    "outcome": "error",
+                    "emission_channel": "none",
+                    "normalised_fields": [],
+                },
+                message_template=None,
+                references=[
+                    f"{QUANT_MODE_REL}:{quant_mode_line} (QuantAlgo enum members)",
+                ],
+                added_by="static_miner",
+                added_at=today,
+            )
+        )
+    if kv_cache_quant_algo_values:
+        out.append(
+            InvariantCandidate(
+                id="tensorrt_quant_config_kv_cache_quant_algo_in_allowlist",
+                engine=ENGINE,
+                library=LIBRARY,
+                invariant_under_test=(
+                    "QuantConfig.kv_cache_quant_algo must be one of "
+                    f"KV_CACHE_QUANT_ALGO_LIST {kv_cache_quant_algo_values!r} (or None)"
+                ),
+                severity="error",
+                native_type=f"{LIBRARY}.QuantConfig",
+                miner_source=MinerSource(
+                    path=str(QUANT_MODE_REL),
+                    method="<KV_CACHE_QUANT_ALGO_LIST>",
+                    line_at_scan=48,  # line of KV_CACHE_QUANT_ALGO_LIST in mode.py
+                ),
+                match_fields={
+                    f"{NAMESPACE}.kv_cache_quant_algo": {"in": [*kv_cache_quant_algo_values, None]},
+                },
+                kwargs_positive={"kv_cache_quant_algo": "__invalid_kv_quant__"},
+                kwargs_negative={"kv_cache_quant_algo": None},
+                expected_outcome={
+                    "outcome": "error",
+                    "emission_channel": "none",
+                    "normalised_fields": [],
+                },
+                message_template=None,
+                references=[
+                    f"{QUANT_MODE_REL}:48 (KV_CACHE_QUANT_ALGO_LIST constant)",
+                ],
+                added_by="static_miner",
+                added_at=today,
+            )
+        )
+
+    # --- BuildCache.max_records lower bound -----------------------------------
+    # ``if config.max_records < 1: raise ValueError("max_records should be
+    # greater than 0")`` in BuildCache.__init__. The AST walker skips it
+    # because the predicate is on ``config.max_records``, not ``self.*``.
+    out.append(
+        InvariantCandidate(
+            id="tensorrt_build_cache_max_records_ge_1",
+            engine=ENGINE,
+            library=LIBRARY,
+            invariant_under_test=(
+                "BuildCache.__init__ raises when max_records < 1 (via raise ValueError)"
+            ),
+            severity="error",
+            native_type=f"{LIBRARY}.llmapi.build_cache.BuildCache",
+            miner_source=MinerSource(
+                path=str(BUILD_CACHE_REL),
+                method="__init__",
+                line_at_scan=88,
+            ),
+            match_fields={f"{NAMESPACE}.max_records": {"<": 1}},
+            kwargs_positive={"max_records": 0},
+            kwargs_negative={"max_records": 1},
+            expected_outcome={
+                "outcome": "error",
+                "emission_channel": "none",
+                "normalised_fields": [],
+            },
+            message_template="max_records should be greater than 0",
+            references=[
+                f"{BUILD_CACHE_REL}:88 (BuildCache.__init__ max_records check)",
+            ],
+            added_by="static_miner",
+            added_at=today,
+        )
+    )
+
+    # NOTE: SM >= 100 INT8/INT4 guard from builder.py is a runtime hardware
+    # gate inside ``Builder.build_engine`` that fires only when the engine is
+    # actually compiled. There is no construction-time probe path for it, so
+    # it has no kwargs the static miner can synthesise. It surfaces in
+    # ``curated.yaml`` notes (D-runtime deferral) rather than as an invariant
+    # candidate.
+
+    # --- _AutoDeployLlmArgs.validate_free_mem_ratio ---------------------------
+    # ``if not 0.0 <= v <= 1.0: raise ValueError(...)``
+    # Chained comparison - the field-validator walker only handles single-op
+    # comparisons, so this emits zero invariants from the AST walk.
+    out.append(
+        InvariantCandidate(
+            id="tensorrt_autodeploy_free_mem_ratio_out_of_range",
+            engine=ENGINE,
+            library=LIBRARY,
+            invariant_under_test=(
+                "_AutoDeployLlmArgs.validate_free_mem_ratio raises when "
+                "free_mem_ratio < 0.0 or free_mem_ratio > 1.0 (via raise ValueError)"
+            ),
+            severity="error",
+            native_type=f"{LIBRARY}._AutoDeployLlmArgs",
+            miner_source=MinerSource(
+                path=str(LLM_ARGS_REL),
+                method="validate_free_mem_ratio",
+                line_at_scan=1954,
+            ),
+            match_fields={
+                f"{NAMESPACE}.free_mem_ratio": {"<": 0.0},
+            },
+            kwargs_positive={"free_mem_ratio": -0.1},
+            kwargs_negative={"free_mem_ratio": 0.8},
+            expected_outcome={
+                "outcome": "error",
+                "emission_channel": "none",
+                "normalised_fields": [],
+            },
+            message_template="free_mem_ratio must be between 0.0 and 1.0, got {v}",
+            references=[
+                f"{LLM_ARGS_REL}:1954 (_AutoDeployLlmArgs.validate_free_mem_ratio)",
+            ],
+            added_by="static_miner",
+            added_at=today,
+        )
+    )
+
+    # --- TorchLlmArgs.convert_load_format -------------------------------------
+    # ``if load_format not in LoadFormat.__members__: raise ValueError(...)``
+    # The condition is on local variable ``load_format`` (not ``v`` directly),
+    # so the field-validator walker does not extract it.
+    # Allowed values come from LoadFormat enum: AUTO, DUMMY.
+    out.append(
+        InvariantCandidate(
+            id="tensorrt_torch_llm_load_format_invalid",
+            engine=ENGINE,
+            library=LIBRARY,
+            invariant_under_test=(
+                "TorchLlmArgs.convert_load_format raises when load_format string "
+                "is not in LoadFormat enum members {AUTO, DUMMY} (via raise ValueError)"
+            ),
+            severity="error",
+            native_type=f"{LIBRARY}.TorchLlmArgs",
+            miner_source=MinerSource(
+                path=str(LLM_ARGS_REL),
+                method="convert_load_format",
+                line_at_scan=1737,
+            ),
+            match_fields={
+                f"{NAMESPACE}.load_format": {"not_in": ["AUTO", "DUMMY", "auto", "dummy"]},
+            },
+            kwargs_positive={"load_format": "__invalid_load_format__"},
+            kwargs_negative={"load_format": "auto"},
+            expected_outcome={
+                "outcome": "error",
+                "emission_channel": "none",
+                "normalised_fields": [],
+            },
+            message_template="Invalid LoadFormat: {v}",
+            references=[
+                f"{LLM_ARGS_REL}:1737 (TorchLlmArgs.convert_load_format)",
+            ],
+            added_by="static_miner",
+            added_at=today,
+        )
+    )
+
+    return out
 
 
 def walk_tensorrt(source_root: Path | None = None) -> tuple[list[InvariantCandidate], str, str]:
@@ -1198,7 +1495,7 @@ def walk_tensorrt(source_root: Path | None = None) -> tuple[list[InvariantCandid
     today = dt.date.today().isoformat()
     candidates: list[InvariantCandidate] = []
 
-    # 1) Validator-method walks.
+    # 1) Validator-method walks (llm_args.py classes).
     for cls_name, method_name in _METHOD_LANDMARKS:
         cls = find_class(tree.llm_args, cls_name)
         assert cls is not None
@@ -1241,6 +1538,9 @@ def walk_tensorrt(source_root: Path | None = None) -> tuple[list[InvariantCandid
         )
         if invariant is not None:
             candidates.append(invariant)
+
+    # 4) Manual invariants (surfaces not reachable via self-predicate walker).
+    candidates.extend(_manual_invariants(source_root=root, today=today))
 
     return candidates, version, tree.llm_args_rel
 

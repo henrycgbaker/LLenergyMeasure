@@ -117,9 +117,13 @@ class TestSourceExtraction:
         the corpus.
         """
         candidates, _version, _rel_path = trt_miner.walk_tensorrt()
-        # The miner emits 30 raw candidates; merger fingerprint-dedup
-        # collapses to ~27. We pin a generous band on raw output.
-        assert 20 <= len(candidates) <= 40, f"Unexpected raw candidate count: {len(candidates)}"
+        # Phase 1 Day 2 lift: miner emits ~38 raw candidates covering
+        # TorchLlmArgs, _AutoDeployLlmArgs, BuildCache, and QuantAlgo
+        # surfaces. (Earlier draft was 41; pruned 3 entries demonstrably
+        # mis-targeted at TrtLlmArgs - capacity_scheduler_policy and
+        # context_chunking_policy live on SchedulerConfig, and the SM>=100
+        # INT8 gate has no construction-time probe.) Band stays generous.
+        assert 30 <= len(candidates) <= 50, f"Unexpected raw candidate count: {len(candidates)}"
 
     def test_lookahead_positive_values_emits_three_field_rules(self) -> None:
         """``LookaheadDecodingConfig.validate_positive_values`` covers 3 fields."""
@@ -213,20 +217,23 @@ class TestSourceExtraction:
         assert invariant is not None, "tokenizer_mode Literal lift missing"
         assert invariant.match_fields == {"tensorrt.tokenizer_mode": {"in": ["auto", "slow"]}}
 
-    def test_strenum_lift_picks_up_capacity_scheduler_policy(self) -> None:
-        """``CapacitySchedulerPolicy`` (StrEnum, 3 members) -> one allowlist invariant."""
+    def test_strenum_lift_picks_up_batching_type(self) -> None:
+        """``BatchingType`` (StrEnum, 2 members) -> one allowlist invariant on TrtLlmArgs.
+
+        ``CapacitySchedulerPolicy`` / ``ContextChunkingPolicy`` are also StrEnums
+        but they're typed onto ``SchedulerConfig``, not ``TrtLlmArgs``; the
+        miner deliberately skips them because the validation runner can't
+        construct a bare ``SchedulerConfig`` to probe the allowlist (Pydantic
+        raises ``extra_forbidden`` if these are passed to ``TrtLlmArgs``).
+        """
         candidates, _v, _p = trt_miner.walk_tensorrt()
         invariant = next(
-            (
-                c
-                for c in candidates
-                if "capacity_scheduler_policy" in c.id and "in_3_values" in c.id
-            ),
+            (c for c in candidates if "batching_type" in c.id and "in_2_values" in c.id),
             None,
         )
         assert invariant is not None
-        spec = invariant.match_fields["tensorrt.capacity_scheduler_policy"]
-        assert spec == {"in": ["MAX_UTILIZATION", "GUARANTEED_NO_EVICT", "STATIC_BATCH"]}
+        spec = invariant.match_fields["tensorrt.batching_type"]
+        assert spec == {"in": ["STATIC", "INFLIGHT"]}
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +250,7 @@ class TestLandmarkContract:
         stub_root = tmp_path / "tensorrt_llm"
         (stub_root / "llmapi").mkdir(parents=True)
         (stub_root / "llmapi" / "llm_args.py").write_text("class NotTrtLlmArgs:\n    pass\n")
+        (stub_root / "llmapi" / "build_cache.py").write_text("class BuildCache:\n    pass\n")
         (stub_root / "builder.py").write_text("class BuildConfig:\n    pass\n")
         (stub_root / "version.py").write_text('__version__ = "0.21.0"\n')
         with pytest.raises(MinerLandmarkMissingError):
@@ -278,10 +286,15 @@ class TestLandmarkContract:
                     "    pass",
                     "class ContextChunkingPolicy:",
                     "    pass",
+                    "class TorchLlmArgs(BaseLlmArgs):",
+                    "    pass",
+                    "class _AutoDeployLlmArgs(TorchLlmArgs):",
+                    "    pass",
                 ]
             )
             + "\n"
         )
+        (stub_root / "llmapi" / "build_cache.py").write_text("class BuildCache:\n    pass\n")
         (stub_root / "builder.py").write_text("class BuildConfig:\n    pass\n")
         (stub_root / "version.py").write_text('__version__ = "0.21.0"\n')
         tree = _ARCHIVE._load_source(stub_root)

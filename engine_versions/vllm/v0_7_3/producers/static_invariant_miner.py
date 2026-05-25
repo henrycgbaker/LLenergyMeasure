@@ -50,6 +50,10 @@ LIBRARY = "vllm"
 NS_SAMPLING = "vllm.sampling"
 NS_GUIDED = "vllm.sampling.guided_decoding"
 NS_ENGINE = "vllm.engine"
+# Namespaces added in Phase-1 lift for new config surfaces.
+NS_LORA = "vllm.engine.lora"
+NS_PROMPT_ADAPTER = "vllm.engine.prompt_adapter"
+NS_TOKENIZER = "vllm.engine.tokenizer"
 
 
 # Drift-tool contract landmarks. Read by ``scripts._drift`` before the
@@ -82,6 +86,12 @@ LANDMARKS: tuple[str, ...] = (
     "vllm.config.DecodingConfig.__post_init__",
     "vllm.config.SpeculativeConfig",
     "vllm.config.SpeculativeConfig._verify_args",
+    # Phase-1 lift: additional config surfaces.
+    "vllm.config.PromptAdapterConfig",
+    "vllm.config.PromptAdapterConfig.__post_init__",
+    "vllm.config.TokenizerPoolConfig",
+    "vllm.config.TokenizerPoolConfig.__post_init__",
+    "vllm.config.ParallelConfig._verify_args",
 )
 
 
@@ -221,6 +231,23 @@ _CLASS_TARGETS: tuple[_ASTTarget, ...] = (
         method="_verify_args",
         namespace=NS_ENGINE,
         native_type="vllm.config.SpeculativeConfig",
+    ),
+    # Phase-1 lift: PromptAdapterConfig.__post_init__ has two direct raises
+    # (max_prompt_adapters < 1; max_prompt_adapter_token == 0) that the
+    # walker can translate cleanly.
+    _ASTTarget(
+        module_attr="config.PromptAdapterConfig",
+        method="__post_init__",
+        namespace=NS_PROMPT_ADAPTER,
+        native_type="vllm.config.PromptAdapterConfig",
+    ),
+    # Phase-1 lift: TokenizerPoolConfig.__post_init__ raises on unknown
+    # pool_type (not-in with a literal tuple) and on non-dict extra_config.
+    _ASTTarget(
+        module_attr="config.TokenizerPoolConfig",
+        method="__post_init__",
+        namespace=NS_TOKENIZER,
+        native_type="vllm.config.TokenizerPoolConfig",
     ),
 )
 

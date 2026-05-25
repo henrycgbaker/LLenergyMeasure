@@ -1,9 +1,276 @@
-# Pending validation-gate operationalisation — see issue #445
 schema_version: 1.0.0
 engine: vllm
 engine_version: 0.7.3
 image_ref: vllm/vllm-openai:v0.7.3
 base_image_ref: vllm/vllm-openai:v0.7.3
-validated_at: null
-validation_commit: null
-cases: []
+validated_at: '2026-05-24T23:54:10.509095+00:00'
+validation_commit: unknown
+cases:
+- id: vllm_samplingparams_dormant_seed_eq_neg1
+  outcome: dormant_silent
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations:
+    seed:
+      declared: -1
+      observed: null
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_best_of_lt_ref_n
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: best_of must be greater than or equal to n, got n=2 and best_of=1.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_logprobs_lt_0
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: logprobs must be non-negative, got -1.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_max_tokens_lt_1
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: max_tokens must be at least 1, got 0.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_min_tokens_gt_ref_max_tokens
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: min_tokens must be less than or equal to max_tokens=1, got 2.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_min_tokens_lt_0
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: min_tokens must be greater than or equal to 0, got -1.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_n_lt_1
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: n must be at least 1, got 0.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_n_not_type_int
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: n must be an int, but is of type <class 'str'>
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_prompt_logprobs_lt_0
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: prompt_logprobs must be non-negative, got -1.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_temperature_lt_0p0
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: temperature must be non-negative, got -1.0.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_top_k_not_type_int
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: TypeError
+    message: top_k must be an integer, got float
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_samplingparams_raises_truncate_prompt_tokens_lt_1
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: truncate_prompt_tokens must be >= 1, got 0
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_cacheconfig_raises_gpu_memory_utilization_gt_1p0
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: GPU memory utilization must be less than 1.0. Got 1.1.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_loraconfig_dormant_max_cpu_loras_unset
+  outcome: dormant_silent
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations:
+    max_cpu_loras:
+      declared: null
+      observed: 1
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_loraconfig_raises_max_cpu_loras_lt_ref_max_loras
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: max_cpu_loras (1) must be >= max_loras (2)
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_loraconfig_raises_max_loras_lt_1
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: max_loras (0) must be >= 1.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_parallelconfig_raises_distributed_executor_backend_not_in_ray_mp_uni_external_launcher_none
+  outcome: error
+  emission_channel: none
+  observed_messages:
+  - No plugins for group vllm.platform_plugins found.
+  - Automatically detected platform cuda.
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: Unrecognized distributed executor backend __vllm_static_synth__. Supported
+      values are 'ray', 'mp' 'uni', 'external_launcher' or custom ExecutorBase subclass.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_promptadapterconfig_dormant_max_cpu_prompt_adapters_unset
+  outcome: dormant_silent
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations:
+    max_cpu_prompt_adapters:
+      declared: null
+      observed: 1
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_promptadapterconfig_raises_max_prompt_adapter_token_eq_0
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: max_prompt_adapter_token must be set.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_promptadapterconfig_raises_max_prompt_adapters_lt_1
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: max_prompt_adapters (0) must be >= 1.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_model_len
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: max_num_batched_tokens (100) is smaller than max_model_len (200). This
+      effectively limits the maximum sequence length to max_num_batched_tokens and
+      makes vLLM reject longer sequences. Please increase max_num_batched_tokens or
+      decrease max_model_len.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_num_seqs
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: max_num_batched_tokens (1) must be greater than or equal to max_num_seqs
+      (2).
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_schedulerconfig_raises_max_num_partial_prefills_lt_1
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: max_num_partial_prefills (0) must be greater than or equal to 1.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_schedulerconfig_raises_num_lookahead_slots_lt_0
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: num_lookahead_slots (-1) must be greater than or equal to 0.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_schedulerconfig_raises_num_scheduler_steps_lt_1
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: num_scheduler_steps (0) must be greater than or equal to 1.
+  positive_confirmed: true
+  negative_confirmed: true
+- id: vllm_tokenizerpoolconfig_raises_extra_config_not_type_dict
+  outcome: error
+  emission_channel: none
+  observed_messages: []
+  observed_silent_normalisations: {}
+  observed_exception:
+    type: ValueError
+    message: extra_config must be a dictionary.
+  positive_confirmed: true
+  negative_confirmed: true
+divergences: []

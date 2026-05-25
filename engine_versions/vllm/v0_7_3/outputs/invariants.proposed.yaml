@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: vllm
 engine_version: 0.7.3
-mined_at: '2026-05-15T12:49:19+02:00'
+mined_at: '2026-05-25'
 invariants:
 - id: vllm_samplingparams_dormant_seed_eq_neg1
   engine: vllm
@@ -63,6 +63,64 @@ invariants:
   - sampling_params.py:296 (vllm.SamplingParams.__post_init__)
   added_by: static_miner
   added_at: '2026-05-13T22:55:33+02:00'
+- id: vllm_samplingparams_raises_logprobs_lt_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when logprobs present True AND logprobs < 0'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 391
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.logprobs:
+        present: true
+        <: 0
+  kwargs_positive:
+    logprobs: -1
+  kwargs_negative:
+    logprobs: 0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: logprobs must be non-negative, got {self.logprobs}.
+  references:
+  - sampling_params.py:391 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-25'
+- id: vllm_samplingparams_raises_max_tokens_lt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when max_tokens present True AND max_tokens < 1'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 381
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.max_tokens:
+        present: true
+        <: 1
+  kwargs_positive:
+    max_tokens: 0
+  kwargs_negative:
+    max_tokens: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_tokens must be at least 1, got {self.max_tokens}.
+  references:
+  - sampling_params.py:381 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-25'
 - id: vllm_samplingparams_raises_min_tokens_gt_ref_max_tokens
   engine: vllm
   library: vllm
@@ -180,6 +238,36 @@ invariants:
   - sampling_params.py:354 (vllm.SamplingParams._verify_args)
   added_by: static_miner
   added_at: '2026-04-27'
+- id: vllm_samplingparams_raises_prompt_logprobs_lt_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when prompt_logprobs present True AND
+    prompt_logprobs < 0'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 394
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.prompt_logprobs:
+        present: true
+        <: 0
+  kwargs_positive:
+    prompt_logprobs: -1
+  kwargs_negative:
+    prompt_logprobs: 0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: prompt_logprobs must be non-negative, got {self.prompt_logprobs}.
+  references:
+  - sampling_params.py:394 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-25'
 - id: vllm_samplingparams_raises_temperature_lt_0p0
   engine: vllm
   library: vllm
@@ -208,6 +296,396 @@ invariants:
   - sampling_params.py:368 (vllm.SamplingParams._verify_args)
   added_by: static_miner
   added_at: '2026-05-13T22:55:33+02:00'
+- id: vllm_samplingparams_raises_top_k_not_type_int
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when top_k type_is_not int'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 375
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_k:
+        type_is_not: int
+  kwargs_positive:
+    top_k: 1.5
+  kwargs_negative:
+    top_k: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: top_k must be an integer, got {type(self.top_k).__name__}
+  references:
+  - sampling_params.py:375 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-25'
+- id: vllm_samplingparams_raises_truncate_prompt_tokens_lt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when truncate_prompt_tokens present True
+    AND truncate_prompt_tokens < 1'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 397
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.truncate_prompt_tokens:
+        present: true
+        <: 1
+  kwargs_positive:
+    truncate_prompt_tokens: 0
+  kwargs_negative:
+    truncate_prompt_tokens: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: truncate_prompt_tokens must be >= 1, got {self.truncate_prompt_tokens}
+  references:
+  - sampling_params.py:397 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-25'
+- id: vllm_cacheconfig_raises_gpu_memory_utilization_gt_1p0
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'CacheConfig._verify_args: raises when gpu_memory_utilization > 1.0'
+  severity: error
+  native_type: vllm.config.CacheConfig
+  miner_source:
+    path: config.py
+    method: _verify_args
+    line_at_scan: 1087
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.gpu_memory_utilization:
+        '>': 1.0
+  kwargs_positive:
+    block_size: 16
+    gpu_memory_utilization: 1.1
+    swap_space: 4.0
+    cache_dtype: auto
+  kwargs_negative:
+    block_size: 16
+    gpu_memory_utilization: 0.9
+    swap_space: 4.0
+    cache_dtype: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: GPU memory utilization must be less than 1.0. Got {self.gpu_memory_utilization}.
+  references:
+  - config.py:1087 (vllm.config.CacheConfig._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-25'
+- id: vllm_loraconfig_dormant_max_cpu_loras_unset
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'LoRAConfig.__post_init__: marks dormant when max_cpu_loras absent'
+  severity: dormant
+  native_type: vllm.config.LoRAConfig
+  miner_source:
+    path: config.py
+    method: __post_init__
+    line_at_scan: 2196
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.lora.max_cpu_loras:
+        absent: true
+  kwargs_positive:
+    max_lora_rank: 8
+    max_loras: 1
+    max_cpu_loras: null
+  kwargs_negative:
+    max_lora_rank: 8
+    max_loras: 1
+    max_cpu_loras: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - max_cpu_loras
+  message_template: null
+  references:
+  - config.py:2196 (vllm.config.LoRAConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-25'
+- id: vllm_loraconfig_raises_max_cpu_loras_lt_ref_max_loras
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'LoRAConfig.__post_init__: raises when max_cpu_loras present True AND max_cpu_loras < @max_loras'
+  severity: error
+  native_type: vllm.config.LoRAConfig
+  miner_source:
+    path: config.py
+    method: __post_init__
+    line_at_scan: 2198
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.lora.max_cpu_loras:
+        present: true
+        <: '@max_loras'
+  kwargs_positive:
+    max_lora_rank: 8
+    max_loras: 2
+    max_cpu_loras: 1
+  kwargs_negative:
+    max_lora_rank: 8
+    max_loras: 1
+    max_cpu_loras: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_cpu_loras ({self.max_cpu_loras}) must be >= max_loras ({self.max_loras})
+  references:
+  - config.py:2198 (vllm.config.LoRAConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-25'
+- id: vllm_loraconfig_raises_max_loras_lt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'LoRAConfig.__post_init__: raises when max_loras < 1'
+  severity: error
+  native_type: vllm.config.LoRAConfig
+  miner_source:
+    path: config.py
+    method: __post_init__
+    line_at_scan: 2194
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.lora.max_loras:
+        <: 1
+  kwargs_positive:
+    max_lora_rank: 8
+    max_loras: 0
+  kwargs_negative:
+    max_lora_rank: 8
+    max_loras: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_loras ({self.max_loras}) must be >= 1.
+  references:
+  - config.py:2194 (vllm.config.LoRAConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-25'
+- id: vllm_parallelconfig_raises_distributed_executor_backend_not_in_ray_mp_uni_external_launcher_none
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'ParallelConfig._verify_args: raises when distributed_executor_backend not_in
+    [ray, mp, uni, external_launcher, None]'
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: config.py
+    method: _verify_args
+    line_at_scan: 1400
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.distributed_executor_backend:
+        not_in:
+        - ray
+        - mp
+        - uni
+        - external_launcher
+        - null
+  kwargs_positive:
+    pipeline_parallel_size: 1
+    tensor_parallel_size: 1
+    distributed_executor_backend: __vllm_static_synth__
+  kwargs_negative:
+    pipeline_parallel_size: 1
+    tensor_parallel_size: 1
+    distributed_executor_backend: mp
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: "Unrecognized distributed executor backend {self.distributed_executor_backend}.\
+    \ Supported values are 'ray', 'mp' 'uni', 'external_launcher' or custom ExecutorBase\
+    \ subclass."
+  references:
+  - config.py:1400 (vllm.config.ParallelConfig._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-25'
+- id: vllm_promptadapterconfig_dormant_max_cpu_prompt_adapters_unset
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'PromptAdapterConfig.__post_init__: marks dormant when max_cpu_prompt_adapters absent'
+  severity: dormant
+  native_type: vllm.config.PromptAdapterConfig
+  miner_source:
+    path: config.py
+    method: __post_init__
+    line_at_scan: 2260
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.prompt_adapter.max_cpu_prompt_adapters:
+        absent: true
+  kwargs_positive:
+    max_prompt_adapters: 1
+    max_prompt_adapter_token: 256
+    max_cpu_prompt_adapters: null
+  kwargs_negative:
+    max_prompt_adapters: 1
+    max_prompt_adapter_token: 256
+    max_cpu_prompt_adapters: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - max_cpu_prompt_adapters
+  message_template: null
+  references:
+  - config.py:2260 (vllm.config.PromptAdapterConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-25'
+- id: vllm_promptadapterconfig_raises_max_prompt_adapter_token_eq_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'PromptAdapterConfig.__post_init__: raises when max_prompt_adapter_token == 0'
+  severity: error
+  native_type: vllm.config.PromptAdapterConfig
+  miner_source:
+    path: config.py
+    method: __post_init__
+    line_at_scan: 2258
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.prompt_adapter.max_prompt_adapter_token: 0
+  kwargs_positive:
+    max_prompt_adapters: 1
+    max_prompt_adapter_token: 0
+  kwargs_negative:
+    max_prompt_adapters: 1
+    max_prompt_adapter_token: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_prompt_adapter_token must be set.
+  references:
+  - config.py:2258 (vllm.config.PromptAdapterConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-25'
+- id: vllm_promptadapterconfig_raises_max_prompt_adapters_lt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'PromptAdapterConfig.__post_init__: raises when max_prompt_adapters < 1'
+  severity: error
+  native_type: vllm.config.PromptAdapterConfig
+  miner_source:
+    path: config.py
+    method: __post_init__
+    line_at_scan: 2255
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.prompt_adapter.max_prompt_adapters:
+        <: 1
+  kwargs_positive:
+    max_prompt_adapters: 0
+    max_prompt_adapter_token: 256
+  kwargs_negative:
+    max_prompt_adapters: 1
+    max_prompt_adapter_token: 256
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_prompt_adapters ({self.max_prompt_adapters}) must be >= 1.
+  references:
+  - config.py:2255 (vllm.config.PromptAdapterConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-25'
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_model_len
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SchedulerConfig._verify_args: raises when max_num_batched_tokens < @max_model_len
+    AND enable_chunked_prefill is False'
+  severity: error
+  native_type: vllm.config.SchedulerConfig
+  miner_source:
+    path: config.py
+    method: _verify_args
+    line_at_scan: 1575
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_num_batched_tokens:
+        <: '@max_model_len'
+      vllm.engine.enable_chunked_prefill: false
+  kwargs_positive:
+    max_num_batched_tokens: 100
+    max_model_len: 200
+    max_num_seqs: 1
+    enable_chunked_prefill: false
+  kwargs_negative:
+    max_num_batched_tokens: 200
+    max_model_len: 200
+    max_num_seqs: 1
+    enable_chunked_prefill: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_num_batched_tokens ({self.max_num_batched_tokens}) is smaller than
+    max_model_len ({self.max_model_len}).
+  references:
+  - config.py:1575 (vllm.config.SchedulerConfig._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-25'
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_num_seqs
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SchedulerConfig._verify_args: raises when max_num_batched_tokens < @max_num_seqs'
+  severity: error
+  native_type: vllm.config.SchedulerConfig
+  miner_source:
+    path: config.py
+    method: _verify_args
+    line_at_scan: 1585
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_num_batched_tokens:
+        <: '@max_num_seqs'
+  kwargs_positive:
+    max_num_batched_tokens: 1
+    max_num_seqs: 2
+    max_model_len: 1
+  kwargs_negative:
+    max_num_batched_tokens: 2
+    max_num_seqs: 2
+    max_model_len: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_num_batched_tokens ({self.max_num_batched_tokens}) must be greater
+    than or equal to max_num_seqs ({self.max_num_seqs}).
+  references:
+  - config.py:1585 (vllm.config.SchedulerConfig._verify_args)
+  added_by: static_miner
+  added_at: '2026-05-25'
 - id: vllm_schedulerconfig_raises_max_num_partial_prefills_lt_1
   engine: vllm
   library: vllm
@@ -293,3 +771,35 @@ invariants:
   - config.py:1598 (vllm.config.SchedulerConfig._verify_args)
   added_by: static_miner
   added_at: '2026-05-13T22:55:33+02:00'
+- id: vllm_tokenizerpoolconfig_raises_extra_config_not_type_dict
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'TokenizerPoolConfig.__post_init__: raises when extra_config type_is_not dict'
+  severity: error
+  native_type: vllm.config.TokenizerPoolConfig
+  miner_source:
+    path: config.py
+    method: __post_init__
+    line_at_scan: 1169
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tokenizer.extra_config:
+        type_is_not: dict
+  kwargs_positive:
+    pool_size: 1
+    pool_type: ray
+    extra_config: not_a_dict
+  kwargs_negative:
+    pool_size: 1
+    pool_type: ray
+    extra_config: {}
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: extra_config must be a dictionary.
+  references:
+  - config.py:1169 (vllm.config.TokenizerPoolConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-05-25'
