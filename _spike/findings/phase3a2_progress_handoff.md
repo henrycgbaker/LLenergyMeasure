@@ -1,46 +1,50 @@
 # Phase 3a.2 - Transformers bumped-version cells (progress + handoff)
 
-**Status:** PARTIAL. 8 of 12 transformers-bumped cells landed; 4 (b) cells still running in background.
+**Status:** TRANSFORMERS COMPLETE. 12 of 12 transformers-bumped cells landed (4 (a) + 4 (b) + 4 (d-ab)). vllm + tensorrt bumped cells NOT YET STARTED.
 **Branch:** `trial/mining-substrate-bakeoff`.
-**Aggregate:** `_spike/findings/trial_matrix.md` reflects all completed records (19 cells total: 11 from Phase 3a.1 + 8 new bumped).
+**Aggregate:** `_spike/findings/trial_matrix.md` reflects 23 records total (11 from Phase 3a.1 + 12 transformers bumped).
 
-This document captures Phase 3a.2 progress on transformers-bumped cells, the infrastructure changes made, and what the next agent must do.
+This document captures Phase 3a.2 progress on transformers-bumped cells, the infrastructure changes made, and what the next agent must do for vllm + tensorrt.
 
 ---
 
-## Bumped-version cell coverage (transformers, 12 total)
+## Bumped-version cell coverage (transformers, 12 total - ALL DONE)
 
 | version | bump | (a) | (b) | (d-ab) |
 |---|---|---|---|---|
-| v4_55_4 | v-2 | DONE (`detectable` import error) | running in background | DONE (100% recall) |
-| v4_56_2 | v-1 | DONE (I r=48.7%, I p=54.3%) | running in background | DONE (100% recall) |
-| v4_57_6 | v+1 | DONE (I r=43.6%, I p=60.7%) | running in background | DONE (100% recall) |
-| v5_9_0 | v+major | DONE (`detectable` import error) | running in background | DONE (100% recall) |
+| v4_55_4 | v-2 | DONE (`detectable` import error: tokenizers version constraint) | DONE (S r=88.4%, I r=59.0%) | DONE (100% recall) |
+| v4_56_2 | v-1 | DONE (I r=48.7%, I p=54.3%) | DONE (S r=86.6%, I r=59.0%) | DONE (100% recall) |
+| v4_57_6 | v+1 | DONE (I r=43.6%, I p=60.7%) | DONE (S r=83.0%, I r=59.0%) | DONE (100% recall) |
+| v5_9_0 | v+major | DONE (`detectable` import error: huggingface_hub API rename) | DONE (S r=81.2%, I r=43.6%) | DONE (100% recall) |
 
 (d-ab) bumped cells all score 100% recall by construction: they merge active-version (a) output with LLM-extension; the seed IS the reference.
 
+### Key brittleness contrast (a vs b on bumped versions)
+
+| version | (a) I recall | (b) I recall | Delta |
+|---|---|---|---|
+| v4_55_4 (v-2) | 0.0% (import error) | 59.0% | +59.0 |
+| v4_56_2 (v-1) | 48.7% | 59.0% | +10.3 |
+| v4_57_3 (active) | 100.0% (reference) | 56.4% | -43.6 |
+| v4_57_6 (v+1) | 43.6% | 59.0% | +15.4 |
+| v5_9_0 (v+major) | 0.0% (import error) | 43.6% | +43.6 |
+
+The pure-LLM strategy (b) is MORE ROBUST than the static miner (a) on bumped versions: at v-2 and v+major it recovers 43-59% of reference invariants while (a) cannot even load the bumped library; at v-1 and v+1 (b) edges (a) by ~10-15 points. Only at the ACTIVE version does (a) outperform (b) (by construction, since (a)=reference).
+
 ---
 
-## (b) cells still running
+## (b) cells - all complete
 
-4 (b) cells launched 2026-05-25 ~05:27 UTC. PIDs and log paths:
+4 (b) cells launched 2026-05-25 ~05:27 UTC, completed ~07:16 UTC after ~108 min wall (with 4-way Ollama-queued contention).
 
-| cell | PID | log |
-|---|---|---|
-| b/transformers/v4_55_4 | 1550698 (parent), 1550713 (worker) | `/tmp/cell_b_transformers_v4_55_4.log` |
-| b/transformers/v4_56_2 | 1550699 (parent), 1550712 (worker) | `/tmp/cell_b_transformers_v4_56_2.log` |
-| b/transformers/v4_57_6 | 1550700 (parent), 1550715 (worker) | `/tmp/cell_b_transformers_v4_57_6.log` |
-| b/transformers/v5_9_0 | 1550701 (parent), 1550714 (worker) | `/tmp/cell_b_transformers_v5_9_0.log` |
+| cell | wall_s | energy_wh | I recall | I precision | obs |
+|---|---|---|---|---|---|
+| b/transformers/v4_55_4 | 6527 | 361.09 | 59.0% | 31.1% | parse_failure on 1 chunk pass3 (lossless; pass1 retained) |
+| b/transformers/v4_56_2 | 6516 | 360.71 | 59.0% | 31.5% | parse_failure on 1 chunk pass3 |
+| b/transformers/v4_57_6 | 6502 | 359.92 | 59.0% | 45.1% | clean |
+| b/transformers/v5_9_0 | 6319 | 349.00 | 43.6% | 23.9% | clean |
 
-Current progress (chunks completed; total ~47 per cell):
-- v4_55_4: 31/47
-- v4_56_2: 32/47
-- v4_57_6: 31/47
-- v5_9_0: 31/47
-
-Estimated remaining wall time at observed pace (4-way Ollama-queued contention): ~45 min per cell, 4 cells in parallel = ~45 min total until all complete.
-
-Container `trial-ollama` (PID `fb575d2e2073`) at port 11435 with llama3.1:70b. Confirmed healthy.
+Container `trial-ollama` (PID `fb575d2e2073`) at port 11435 with llama3.1:70b. Still healthy, available for next agent's work.
 
 ---
 
@@ -79,7 +83,7 @@ Container `trial-ollama` (PID `fb575d2e2073`) at port 11435 with llama3.1:70b. C
 
 ---
 
-## Brittleness signals captured so far (8 bumped cells)
+## Brittleness signals captured (12 bumped cells)
 
 ### Strategy (a) bumped
 
@@ -91,6 +95,17 @@ Container `trial-ollama` (PID `fb575d2e2073`) at port 11435 with llama3.1:70b. C
 | a/transformers/v5_9_0 | 0.8 s | `detectable` (import error: huggingface_hub API rename `is_offline_mode`) | 0 | 0.0% |
 
 Pattern: at v-2 and v+major the static miner cannot even import the bumped library, producing zero output. At v-1 and v+1 the miner runs but its identity-tuple matches with the active reference drop to ~48% and ~44% (the bumped versions' source has enough drift that 50%+ of validator predicates miss the active reference's identity).
+
+### Strategy (b) bumped (all 4 complete)
+
+| cell | wall_s | S recall | I recall | I precision | sev_acc |
+|---|---|---|---|---|---|
+| b/transformers/v4_55_4 | 6527 | 88.4% | 59.0% | 31.1% | 78.3% |
+| b/transformers/v4_56_2 | 6516 | 86.6% | 59.0% | 31.5% | 78.3% |
+| b/transformers/v4_57_6 | 6502 | 83.0% | 59.0% | 45.1% | 60.9% |
+| b/transformers/v5_9_0 | 6319 | 81.2% | 43.6% | 23.9% | 76.5% |
+
+Pattern: (b) achieves 43-59% invariant recall across ALL bumped versions, INCLUDING v-2 and v+major where (a) crashes. The wall_clock_sec inflation (~6500s vs ~1650s active) reflects Ollama queue contention (4 parallel cells competing for the same llama3.1:70b model). Per-version walls are similar regardless of bump distance, suggesting the LLM cost is dominated by chunk count + context size, not bump complexity.
 
 ### Strategy (d-ab) bumped
 
@@ -111,36 +126,29 @@ This semantic was implemented in `reference_paths_for()`; if per-version referen
 
 ---
 
-## Aggregate matrix (post Phase 3a.2 partial)
+## Aggregate matrix (post Phase 3a.2 transformers complete)
 
-`_spike/findings/trial_matrix.md` now reports 19 cells with these bump-distance aggregates:
+`_spike/findings/trial_matrix.md` now reports 23 cells with these bump-distance aggregates:
 
 | bump | cells | schema_recall_mean | inv_recall_mean |
 |---|---|---|---|
-| v-2 | 2 | 50.0% | 50.0% |
-| v-1 | 2 | 100.0% | 74.4% |
+| v-2 | 3 | 62.8% | 53.0% |
+| v-1 | 3 | 95.5% | 69.2% |
 | active | 11 | 83.8% | 66.4% |
-| v+1 | 2 | 100.0% | 71.8% |
-| v+major | 2 | 50.0% | 50.0% |
+| v+1 | 3 | 94.3% | 67.5% |
+| v+major | 3 | 60.4% | 47.9% |
 
-(v-2/v+major numbers are skewed by d-ab=100% pairing with a=0% per cell. With more cells from (b) bumped, these aggregates will shift.)
+Strategy aggregates now include 7 (b) cells (3 active + 4 bumped) and 7 (d-ab) cells:
+
+| strategy | cells | S recall mean | I recall mean | wall mean | energy mean |
+|---|---|---|---|---|---|
+| a | 7 | 71.4% | 56.0% | 2.5s | 0.03 Wh |
+| b | 7 | 82.2% | 45.1% | 4328.5s | 235.20 Wh |
+| d-ab | 7 | 100.0% | 100.0% | 369.9s | 17.47 Wh |
 
 ---
 
 ## Handoff items for next agent
-
-### Wait + capture the 4 (b) bumped cells
-
-Poll for these JSONs to appear in `_spike/findings/trial_scores/`:
-- `b__transformers__v4_55_4.json`
-- `b__transformers__v4_56_2.json`
-- `b__transformers__v4_57_6.json`
-- `b__transformers__v5_9_0.json`
-
-Estimated ETA ~45 min from 2026-05-25 06:15 UTC. After completion:
-1. Refresh aggregate: `uv run python -m _spike.scripts.trial_aggregate`.
-2. Stage + commit the 4 score JSONs + their `trial_runs/b/transformers/<slug>/` dirs.
-3. Push.
 
 ### Phase 3a.2.vllm + Phase 3a.2.tensorrt scope
 
@@ -169,5 +177,5 @@ The 8 vllm-bumped cells + 8 tensorrt-bumped cells total 16 more bumped cells (24
 
 - `3aa7257e` - Phase 3a.1 closure: b/tensorrt active-cell + aggregate.
 - `05a3b0a8` - Phase 3a.2 partial: transformers (a) + (d-ab) bumped (8 cells).
-
-The 4 remaining (b) bumped cells will land on `_spike/findings/trial_scores/` and `trial_runs/b/transformers/<slug>/` when they finish.
+- `55f88d61` - Phase 3a.2 progress handoff document.
+- (this commit) - Phase 3a.2 transformers complete: 4 (b) bumped cells landed.

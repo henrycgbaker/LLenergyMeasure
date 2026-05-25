@@ -1,0 +1,622 @@
+{
+  "$defs": {
+    "CompileConfig": {
+      "properties": {
+        "backend": {
+          "default": "inductor",
+          "enum": [
+            "inductor"
+          ]
+        },
+        "dynamic": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fullgraph": {
+          "default": false,
+          "type": "boolean"
+        },
+        "mode": {
+          "default": "reduce-overhead",
+          "enum": [
+            "reduce-overhead"
+          ]
+        },
+        "options": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "type": "object"
+    }
+  },
+  "discovered_at": "2026-05-25T05:51:02.135919+00:00",
+  "discovery_method": "strategy_b_oss_llm",
+  "engine": "transformers",
+  "engine_params": {
+    "bias": {
+      "default": 2.0,
+      "type": "number"
+    },
+    "bnb_4bit_compute_dtype": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "torch.dtype",
+          "type": "object"
+        }
+      ],
+      "default": null
+    },
+    "bnb_4bit_quant_storage": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "torch.dtype",
+          "type": "object"
+        }
+      ],
+      "default": null
+    },
+    "bnb_4bit_quant_type": {
+      "default": "fp4",
+      "enum": [
+        "fp4",
+        "nf4"
+      ]
+    },
+    "bnb_4bit_use_double_quant": {
+      "default": false,
+      "type": "boolean"
+    },
+    "cache_dir": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "PathLike",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Directory to cache downloaded models"
+    },
+    "config": {
+      "anyOf": [
+        {
+          "description": "PreTrainedConfig",
+          "type": "object"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "description": "PathLike",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Configuration for the model"
+    },
+    "context_width": {
+      "default": 1,
+      "type": "integer"
+    },
+    "device_map": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "dict[str, Union[int, str, torch.device]]",
+          "type": "object"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "A map that specifies where each submodule should go"
+    },
+    "device_mesh": {
+      "default": null,
+      "description": "A torch device mesh",
+      "type": "object"
+    },
+    "disable_mmap": {
+      "default": null,
+      "description": "Whether to disable memory mapping when loading safetensors checkpoints",
+      "type": "boolean"
+    },
+    "dtype": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "A string that is a valid torch.dtype"
+    },
+    "force_download": {
+      "default": false,
+      "description": "Whether to force download of model weights and configuration files",
+      "type": "boolean"
+    },
+    "fusion_config": {
+      "default": null,
+      "description": "Optional fusion configuration applied before model instantiation",
+      "type": "object"
+    },
+    "greenlist_ratio": {
+      "default": 0.25,
+      "type": "number"
+    },
+    "hashing_key": {
+      "default": 15485863,
+      "type": "integer"
+    },
+    "ignore_mismatched_sizes": {
+      "default": false,
+      "description": "Whether to ignore mismatched sizes between model and checkpoint",
+      "type": "boolean"
+    },
+    "key_mapping": {
+      "default": null,
+      "description": "A potential mapping of the weight names if using a model on the Hub which is compatible to a Transformers architecture, but was not converted accordingly",
+      "type": "object"
+    },
+    "llm_int8_enable_fp32_cpu_offload": {
+      "default": false,
+      "type": "boolean"
+    },
+    "llm_int8_has_fp16_weight": {
+      "default": false,
+      "type": "boolean"
+    },
+    "llm_int8_skip_modules": {
+      "anyOf": [
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "llm_int8_threshold": {
+      "default": 6.0,
+      "type": "number"
+    },
+    "load_in_4bit": {
+      "default": false,
+      "type": "boolean"
+    },
+    "load_in_8bit": {
+      "default": false,
+      "type": "boolean"
+    },
+    "local_files_only": {
+      "default": false,
+      "description": "Whether to only look at local files",
+      "type": "boolean"
+    },
+    "max_memory": {
+      "default": null,
+      "description": "A dictionary device identifier to maximum memory if using device_map",
+      "type": "object"
+    },
+    "offload_buffers": {
+      "default": null,
+      "description": "Whether or not to offload the buffers with the model parameters",
+      "type": "boolean"
+    },
+    "offload_folder": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "os.PathLike",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "If the device_map contains any value disk, the folder where we will offload weights"
+    },
+    "pretrained_model_name_or_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "PathLike",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Model id or path to a directory containing model weights"
+    },
+    "quantization_config": {
+      "anyOf": [
+        {
+          "description": "QuantizationConfigMixin",
+          "type": "object"
+        },
+        {
+          "description": "Dict",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "A dictionary of configuration parameters or a QuantizationConfigMixin object for quantization"
+    },
+    "revision": {
+      "default": "main",
+      "description": "Specific model version to use",
+      "type": "string"
+    },
+    "seeding_scheme": {
+      "default": "lefthash",
+      "enum": [
+        "lefthash",
+        "selfhash"
+      ]
+    },
+    "subfolder": {
+      "default": "",
+      "description": "In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can specify the folder name here",
+      "type": "string"
+    },
+    "token": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Token for HTTP bearer authorization"
+    },
+    "tp_plan": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "dict",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "A torch tensor parallel plan"
+    },
+    "tp_size": {
+      "default": null,
+      "description": "A torch tensor parallel degree",
+      "type": "string"
+    },
+    "use_safetensors": {
+      "default": null,
+      "description": "Whether or not to use safetensors checkpoints",
+      "type": "boolean"
+    },
+    "variant": {
+      "default": null,
+      "description": "If specified load weights from variant filename",
+      "type": "string"
+    },
+    "weights_only": {
+      "default": true,
+      "description": "Indicates whether unpickler should be restricted to loading only tensors, primitive types, dictionaries and any types added via torch.serialization.add_safe_globals()",
+      "type": "boolean"
+    }
+  },
+  "engine_version": "5.9.0",
+  "sampling_params": {
+    "assistant_confidence_threshold": {
+      "type": "number"
+    },
+    "assistant_early_exit": {
+      "default": null,
+      "type": "boolean"
+    },
+    "assistant_lookbehind": {
+      "default": null,
+      "type": "integer"
+    },
+    "bad_words_ids": {
+      "items": {
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "type": "array"
+    },
+    "begin_suppress_tokens": {
+      "items": {
+        "type": "integer"
+      },
+      "type": "array"
+    },
+    "bos_token_id": {
+      "type": "integer"
+    },
+    "cache_config": {
+      "type": "object"
+    },
+    "cache_implementation": {
+      "enum": [
+        "dynamic",
+        "static",
+        "offloaded",
+        "offloaded_static",
+        "quantized"
+      ],
+      "type": "string"
+    },
+    "decoder_start_token_id": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "do_sample": {
+      "type": "boolean"
+    },
+    "early_stopping": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "encoder_no_repeat_ngram_size": {
+      "type": "integer"
+    },
+    "encoder_repetition_penalty": {
+      "type": "number"
+    },
+    "eos_token_id": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "epsilon_cutoff": {
+      "type": "number"
+    },
+    "eta_cutoff": {
+      "type": "number"
+    },
+    "exponential_decay_length_penalty": {
+      "items": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "type": "array"
+    },
+    "forced_bos_token_id": {
+      "type": "integer"
+    },
+    "forced_eos_token_id": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "guidance_scale": {
+      "type": "number"
+    },
+    "is_assistant": {
+      "type": "boolean"
+    },
+    "length_penalty": {
+      "type": "number"
+    },
+    "max_length": {
+      "type": "integer"
+    },
+    "max_matching_ngram_size": {
+      "default": null,
+      "type": "integer"
+    },
+    "max_new_tokens": {
+      "type": "integer"
+    },
+    "max_time": {
+      "type": "number"
+    },
+    "min_length": {
+      "type": "integer"
+    },
+    "min_new_tokens": {
+      "type": "integer"
+    },
+    "min_p": {
+      "type": "number"
+    },
+    "no_repeat_ngram_size": {
+      "type": "integer"
+    },
+    "num_assistant_tokens": {
+      "type": "integer"
+    },
+    "num_assistant_tokens_schedule": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "num_beams": {
+      "type": "integer"
+    },
+    "num_return_sequences": {
+      "type": "integer"
+    },
+    "output_attentions": {
+      "type": "boolean"
+    },
+    "output_hidden_states": {
+      "type": "boolean"
+    },
+    "output_logits": {
+      "type": "boolean"
+    },
+    "output_scores": {
+      "type": "boolean"
+    },
+    "pad_token_id": {
+      "type": "integer"
+    },
+    "prompt_lookup_num_tokens": {
+      "default": null,
+      "type": "integer"
+    },
+    "remove_invalid_values": {
+      "type": "boolean"
+    },
+    "renormalize_logits": {
+      "type": "boolean"
+    },
+    "repetition_penalty": {
+      "type": "number"
+    },
+    "return_dict_in_generate": {
+      "type": "boolean"
+    },
+    "sequence_bias": {
+      "type": "object"
+    },
+    "stop_strings": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "suppress_tokens": {
+      "items": {
+        "type": "integer"
+      },
+      "type": "array"
+    },
+    "target_lookbehind": {
+      "default": null,
+      "type": "integer"
+    },
+    "temperature": {
+      "type": "number"
+    },
+    "token_healing": {
+      "type": "boolean"
+    },
+    "top_h": {
+      "type": "number"
+    },
+    "top_k": {
+      "type": "integer"
+    },
+    "top_p": {
+      "type": "number"
+    },
+    "typical_p": {
+      "type": "number"
+    },
+    "use_cache": {
+      "type": "boolean"
+    },
+    "watermarking_config": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "schema_version": "2.0.0"
+}

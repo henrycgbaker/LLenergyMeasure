@@ -1,0 +1,115 @@
+# invariants_pass2_verify extraction transcript: validate_section_11_3._Check_common_issue_passing_generate_arguments_inside_the_
+
+- chunk_description: GenerationConfig.validate section: 3._Check_common_issue_passing_generate_arguments_inside_the_
+- expected_namespaces: ['transformers.sampling']
+- attempts: 1
+- elapsed_sec: 35.35
+- failure_modes: []
+- schema_errors: []
+- parsed: yes
+
+## Attempt 1
+
+### Prompt
+
+```
+You are a code analyser doing PASS 2 (verification) of multi-pass
+invariant extraction. PASS 1 already extracted invariants from
+transformers v5.9.0 for ONE chunk of source. Your job is to
+REVIEW each emitted invariant against the source and flag any that
+look WRONG.
+
+INPUT 1 - PASS 1 EXTRACTED INVARIANTS (the candidate list):
+
+invariants:
+- id: transformers_generate_arguments_not_in_config
+  severity: error
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.logits_processor:
+        present: true
+      transformers.sampling.stopping_criteria:
+        present: true
+      transformers.sampling.prefix_allowed_tokens_fn:
+        present: true
+      transformers.sampling.synced_gpus:
+        present: true
+      transformers.sampling.assistant_model:
+        present: true
+      transformers.sampling.streamer:
+        present: true
+      transformers.sampling.negative_prompt_ids:
+        present: true
+      transformers.sampling.negative_prompt_attention_mask:
+        present: true
+  invariant_under_test: GenerationConfig.validate flags generate arguments not in
+    config
+
+
+INPUT 2 - THE SOURCE PASS 1 READ:
+
+=== CONTEXT: GenerationConfig.validate() ===
+This is one logical section. Other sections are mined separately. Focus only on validations visible in THIS section.
+
+=== SOURCE: validate() section 12 (3._Check_common_issue_passing_generate_arguments_inside_the_) ===
+# 3. Check common issue: passing `generate` arguments inside the generation config
+        generate_arguments = (
+            "logits_processor",
+            "stopping_criteria",
+            "prefix_allowed_tokens_fn",
+            "synced_gpus",
+            "assistant_model",
+            "streamer",
+            "negative_prompt_ids",
+            "negative_prompt_attention_mask",
+        )
+        for arg in generate_arguments:
+            if hasattr(self, arg):
+                raise ValueError(
+                    f"Argument `{arg}` is not a valid argument of `GenerationConfig`. It should be passed to "
+                    "`generate()` (or a pipeline) directly."
+                )
+
+
+
+OUTPUT FORMAT: a YAML document with TWO sections:
+
+confirmed:
+- <id-of-pass1-invariant>  # one ID per line, no further detail needed.
+
+flagged:
+- id: <id-of-pass1-invariant>
+  reason: <one-line: what looks wrong>
+  fix: <one of: "drop", "correct_severity:<new-severity>", "correct_predicate:<new-kind>", "correct_kwargs_positive">
+
+RULES:
+1. Every PASS 1 invariant MUST appear in EITHER `confirmed` OR `flagged`
+   (not both, not neither). If you're unsure, place in `confirmed` (the
+   bar for flagging is "obviously wrong against the source").
+2. Flag reasons must be CONCRETE - cite the source line that contradicts
+   the invariant, or note the specific shape mismatch.
+3. NO markdown code fences. NO commentary outside the YAML.
+4. First character must be `c` (from `confirmed:`).
+
+CRITERIA FOR FLAGGING:
+- Severity wrong: source has `raise ValueError` but invariant says
+  `severity: dormant`; or source has `minor_issues[...] = ...` but
+  invariant says `severity: error`.
+- Predicate wrong: source has `if X.field not in {a, b}: raise`
+  but invariant emits `predicate_kind: exact`.
+- Kwargs_positive wrong: source's predicate is "value < 0 raises" but
+  invariant's kwargs_positive shows `field: 1` (which would NOT trigger).
+- Hallucinated: invariant references a field name that does NOT appear
+  in the source.
+
+Emit the YAML now:
+
+```
+
+### Response
+
+```
+confirmed:
+- transformers_generate_arguments_not_in_config
+```

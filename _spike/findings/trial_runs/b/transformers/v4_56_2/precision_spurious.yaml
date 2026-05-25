@@ -1,0 +1,601 @@
+scoring_format_version: 1.0.0
+precision_spurious:
+- identity:
+  - engine_params
+  - bias
+  kind: precision_spurious
+  reference_value: null
+  cell_value: number
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - context_width
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - greenlist_ratio
+  kind: precision_spurious
+  reference_value: null
+  cell_value: number
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - hashing_key
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - key_mapping
+  kind: precision_spurious
+  reference_value: null
+  cell_value: object
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - offload_state_dict
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - seeding_scheme
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - transformers
+  - bnb_4bit_compute_dtype
+  - type_is_not
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_bnb_4bit_compute_dtype_not_string_or_torch_dtype
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers
+  - bnb_4bit_quant_storage
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_bnb_4bit_quant_storage_invalid_string
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers
+  - bnb_4bit_quant_storage
+  - type_is_not
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_bnb_4bit_quant_storage_not_string_or_torch_dtype
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers
+  - load_in_4bit
+  - exact
+  - load_in_8bit
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_load_in_4bit_and_load_in_8bit_both_true
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - cache_implementation
+  - type_is_not
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_cache_implementation_type_check
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - constraints
+  - present
+  - force_words_ids
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_do_sample_set_when_constrained_beam_search
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - diversity_penalty
+  - gt
+  - num_beam_groups
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_num_beams_not_divisible_by_num_beam_groups_when_group_beam_search
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - diversity_penalty
+  - le
+  - num_beam_groups
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_diversity_penalty_zero_when_group_beam_search
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - diversity_penalty
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_diversity_penalty_lt_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - diversity_penalty
+  - lt
+  - num_beam_groups
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_diversity_penalty_greater_than_zero_when_group_beam_search
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - do_sample
+  - exact
+  - max_length
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_max_length_set_when_do_sample_true
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - do_sample
+  - exact
+  - min_length
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_min_length_set_when_do_sample_true
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - do_sample
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_do_sample_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - do_sample
+  - unknown
+  - diversity_penalty
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_do_sample_set_when_group_beam_search
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - exponential_decay_bias
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_exponential_decay_bias_lt_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - exponential_decay_length_penalty
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_exponential_decay_length_penalty_lt_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - generate_arguments
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_generate_arguments_not_in_config
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - generate_arguments
+  - present
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_generate_arguments_inside_config_error
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - length_penalty
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_length_penalty_lt_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - max_length
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_max_length_lt_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - min_length
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_min_length_lt_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - no_repeat_ngram_size
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_no_repeat_ngram_size_lt_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - num_beam_groups
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_num_beam_groups_lt_1
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - num_beams
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_num_beams_gt_zero
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - num_beams
+  - not_equal
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_early_stopping_set_when_num_beams_one
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - num_beams
+  - not_equal
+  - do_sample
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_num_beams_neq_1_with_greedy_do_sample_false
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - num_beams
+  - present
+  - diversity_penalty
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_diversity_penalty_not_zero_when_num_beams_one
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - num_beams
+  - present
+  - early_stopping
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_early_stopping_not_false_when_num_beams_one
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - num_beams
+  - present
+  - length_penalty
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_length_penalty_not_one_when_num_beams_one
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - num_beams
+  - present
+  - num_beam_groups
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_num_beam_groups_not_one_when_num_beams_one
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - num_return_sequences
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_num_return_sequences_gt_num_beams
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - num_return_sequences
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_num_return_sequences_lt_1
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - num_return_sequences
+  - not_equal
+  - do_sample
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_num_return_sequences_neq_1_with_greedy
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - output_attentions
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_output_attentions_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - output_hidden_states
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_output_hidden_states_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - output_scores
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_output_scores_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - remove_invalid_values
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_remove_invalid_values_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - repetition_penalty
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_repetition_penalty_lt_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - return_dict_in_generate
+  - exact
+  - extra_output_flags
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_return_dict_in_generate_false_with_extra_output_flags
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - temperature
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_temperature_lt_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - top_k
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_top_k_lt_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - top_p
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_top_p_lt_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - typical_p
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_typical_p_lt_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - use_cache
+  - exact
+  - cache_config
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_cache_config_set_when_use_cache_false
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - use_cache
+  - exact
+  - cache_implementation
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_cache_implementation_set_when_use_cache_false
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - use_cache
+  - exact
+  - return_legacy_cache
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_return_legacy_cache_set_when_use_cache_false
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - watermarking_config
+  - present
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_watermarking_config_validate_called
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling.compile_config
+  - backend
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_generationconfig_backend_must_be_str_or_callable
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling.compile_config
+  - dynamic
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_generationconfig_dynamic_must_be_bool_or_none
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling.compile_config
+  - mode
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: transformers_generationconfig_mode_must_be_str
+    severity: error
+  note: cell invariant absent in reference
