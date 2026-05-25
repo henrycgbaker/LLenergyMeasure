@@ -1,0 +1,41 @@
+{
+  "brittleness_detectable_fail_count": null,
+  "brittleness_pass_through_rate": null,
+  "brittleness_patch_cost_loc": null,
+  "brittleness_silent_fail_count": null,
+  "bump_distance": "active",
+  "cell_invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/research/mining-substrate-trial/findings/trial_runs/b_8b/transformers/v4_57_3/invariants.proposed.yaml",
+  "cell_schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/research/mining-substrate-trial/findings/trial_runs/b_8b/transformers/v4_57_3/schema.json",
+  "energy_wh": 4.9266187774755,
+  "engine": "transformers",
+  "failure_modes": [
+    "none"
+  ],
+  "invariant_cell_count": 62,
+  "invariant_failure_mode": "none",
+  "invariant_intersection_count": 14,
+  "invariant_precision": 0.22580645161290322,
+  "invariant_recall": 0.25,
+  "invariant_reference_count": 56,
+  "invariant_severity_accuracy": 1.0,
+  "observations": [
+    "invariants chunk 'validate_section_03_1.3._Performance_attributes': extraction failed; modes=['parse_failure_after_retries']",
+    "invariants chunk 'validate_section_08_2.4._check_num_return_sequences': parsed but yielded 0 unique invariants",
+    "strategy_b: schema_chunks=5, invariants_chunks=14, schema_wall=228.3s, invariants_wall=178.3s",
+    "vu_rescore: reference=transformers union; ref_count=56, cell=62, intersect=14"
+  ],
+  "reference_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/validated_union/transformers__v4_57_3.yaml",
+  "schema_cell_count": 103,
+  "schema_failure_mode": "none",
+  "schema_intersection_count": 96,
+  "schema_precision": 0.9320388349514563,
+  "schema_recall": 0.8571428571428571,
+  "schema_reference_count": 112,
+  "schema_type_accuracy": 0.5729166666666666,
+  "scored_at": "2026-05-25T15:18:50.446142+00:00",
+  "scoring_format_version": "1.0.0",
+  "scoring_reference": "validated_union",
+  "strategy": "b_8b",
+  "version_slug": "v4_57_3",
+  "wall_clock_sec": 412.62808020971715
+}

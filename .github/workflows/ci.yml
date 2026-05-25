@@ -17,8 +17,12 @@ on:
           - docs-freshness
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'research/**'
   push:
     branches: [main]
+    paths-ignore:
+      - 'research/**'
 
 concurrency:
   group: ci-${{ github.ref }}

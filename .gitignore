@@ -61,3 +61,8 @@ configs/engine_invariants/_staging/
 # Probe primitive cache (rewritten on every probe run; tracks the
 # previous-run fingerprint per (engine, producer) for drift detection).
 engine_versions/*.compat.json
+
+# Transitional symlink: _spike -> research/mining-substrate-trial
+# Created during the 2026-05-25 migration to keep stale local checkouts
+# resolving for ~1 week. Drop the symlink after the cutover settles.
+/_spike

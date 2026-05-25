@@ -1,0 +1,39 @@
+{
+  "brittleness_detectable_fail_count": null,
+  "brittleness_pass_through_rate": null,
+  "brittleness_patch_cost_loc": null,
+  "brittleness_silent_fail_count": null,
+  "bump_distance": "v+1",
+  "cell_invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/research/mining-substrate-trial/findings/trial_runs/a/transformers/v4_57_6/invariants.proposed.yaml",
+  "cell_schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/research/mining-substrate-trial/findings/trial_runs/a/transformers/v4_57_6/schema.json",
+  "energy_wh": 0.03432787101997916,
+  "engine": "transformers",
+  "failure_modes": [
+    "none"
+  ],
+  "invariant_cell_count": 28,
+  "invariant_failure_mode": "none",
+  "invariant_intersection_count": 18,
+  "invariant_precision": 0.6428571428571429,
+  "invariant_recall": 0.32142857142857145,
+  "invariant_reference_count": 56,
+  "invariant_severity_accuracy": 1.0,
+  "observations": [
+    "strategy_a bumped: subprocess stdout=wrote 28 candidates to /home/h.baker@hertie-school.lan/workspace/llenergymeasure/research/mining-substrate-trial/findings/trial_runs/a/transformers/v4_57_6/invariants.proposed.yaml",
+    "vu_rescore: reference=transformers union; ref_count=56, cell=28, intersect=18"
+  ],
+  "reference_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/validated_union/transformers__v4_57_3.yaml",
+  "schema_cell_count": 112,
+  "schema_failure_mode": "none",
+  "schema_intersection_count": 112,
+  "schema_precision": 1.0,
+  "schema_recall": 1.0,
+  "schema_reference_count": 112,
+  "schema_type_accuracy": 1.0,
+  "scored_at": "2026-05-25T15:18:49.573769+00:00",
+  "scoring_format_version": "1.0.0",
+  "scoring_reference": "validated_union",
+  "strategy": "a",
+  "version_slug": "v4_57_6",
+  "wall_clock_sec": 2.922121664509177
+}

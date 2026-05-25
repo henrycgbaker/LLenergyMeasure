@@ -1,0 +1,37 @@
+{
+  "brittleness_detectable_fail_count": null,
+  "brittleness_pass_through_rate": null,
+  "brittleness_patch_cost_loc": null,
+  "brittleness_silent_fail_count": null,
+  "bump_distance": "v+1",
+  "cell_invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/research/mining-substrate-trial/findings/trial_runs/d-ab/tensorrt/v1_0_0/invariants.proposed.yaml",
+  "cell_schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/research/mining-substrate-trial/findings/trial_runs/d-ab/tensorrt/v1_0_0/schema.json",
+  "energy_wh": 5.640858743715154,
+  "engine": "tensorrt",
+  "failure_modes": [
+    "none"
+  ],
+  "invariant_cell_count": 39,
+  "invariant_failure_mode": "none",
+  "invariant_intersection_count": 31,
+  "invariant_precision": 0.7948717948717948,
+  "invariant_recall": 1.0,
+  "invariant_reference_count": 31,
+  "invariant_severity_accuracy": 1.0,
+  "observations": [
+    "strategy_d_ab on tensorrt: extension=8, flagged_spurious=1, merged_total=43, elapsed=97.1s"
+  ],
+  "reference_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/engine_versions/tensorrt/v0_21_0/outputs/schema.discovered.json",
+  "schema_cell_count": 107,
+  "schema_failure_mode": "none",
+  "schema_intersection_count": 107,
+  "schema_precision": 1.0,
+  "schema_recall": 1.0,
+  "schema_reference_count": 107,
+  "schema_type_accuracy": 1.0,
+  "scored_at": "2026-05-25T11:28:20.004836+00:00",
+  "scoring_format_version": "1.0.0",
+  "strategy": "d-ab",
+  "version_slug": "v1_0_0",
+  "wall_clock_sec": 97.45083662308753
+}

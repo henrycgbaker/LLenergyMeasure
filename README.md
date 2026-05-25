@@ -48,6 +48,12 @@ Contributions welcome. See the [development install](docs/how-to/install.md#inst
 
 ---
 
+## Research artefacts
+
+Long-running research artefacts (trials, methodology explorations) live under `research/` and are not part of the production codebase. Casual contributors who don't need the research corpus can opt out via `bash scripts/setup-research-optin.sh`. See [`research/README.md`](research/README.md) for the catalogue.
+
+---
+
 ## License
 
 [MIT](LICENSE)

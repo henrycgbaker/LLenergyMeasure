@@ -1,0 +1,42 @@
+{
+  "brittleness_detectable_fail_count": null,
+  "brittleness_pass_through_rate": null,
+  "brittleness_patch_cost_loc": null,
+  "brittleness_silent_fail_count": null,
+  "bump_distance": "v+1",
+  "cell_invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/research/mining-substrate-trial/findings/trial_runs/b/tensorrt/v1_0_0/invariants.proposed.yaml",
+  "cell_schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/research/mining-substrate-trial/findings/trial_runs/b/tensorrt/v1_0_0/schema.json",
+  "energy_wh": 101.84590833916273,
+  "engine": "tensorrt",
+  "failure_modes": [
+    "none"
+  ],
+  "invariant_cell_count": 38,
+  "invariant_failure_mode": "none",
+  "invariant_intersection_count": 4,
+  "invariant_precision": 0.10526315789473684,
+  "invariant_recall": 0.36363636363636365,
+  "invariant_reference_count": 11,
+  "invariant_severity_accuracy": 1.0,
+  "observations": [
+    "chunk 'base_llm_args_validators_top' pass2 flag (non-applied): id='tensorrt_llm_max_batch_size_gt_build_config_max_batch_size' reason='Source has `if self.max_batch_size > self.build_config.max_batch_size` but invariant says `> 1`' fix='correct_predicate:cross-field check'",
+    "chunk 'base_llm_args_validators_top' pass2 flag (non-applied): id='tensorrt_llm_max_num_tokens_gt_build_config_max_num_tokens' reason='Same as above, source has `if self.max_num_tokens > self.build_config.max_num_tokens` but invariant says `> 1`' fix='correct_predicate:cross-field check'",
+    "multipass summary: pass2_dropped=1, pass3_added=19, total_invariants=38",
+    "strategy_b: engine='tensorrt', schema_chunks=7, invariants_chunks=7, schema_wall=971.6s, invariants_wall=1275.8s, multipass=True",
+    "vu_rescore: reference=tensorrt union; ref_count=11, cell=38, intersect=4"
+  ],
+  "reference_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/validated_union/tensorrt__v0_21_0.yaml",
+  "schema_cell_count": 129,
+  "schema_failure_mode": "none",
+  "schema_intersection_count": 56,
+  "schema_precision": 0.43410852713178294,
+  "schema_recall": 0.5233644859813084,
+  "schema_reference_count": 107,
+  "schema_type_accuracy": 0.5178571428571429,
+  "scored_at": "2026-05-25T15:18:50.834362+00:00",
+  "scoring_format_version": "1.0.0",
+  "scoring_reference": "validated_union",
+  "strategy": "b",
+  "version_slug": "v1_0_0",
+  "wall_clock_sec": 2247.9951490201056
+}

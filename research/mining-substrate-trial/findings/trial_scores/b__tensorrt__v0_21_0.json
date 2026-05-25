@@ -1,0 +1,41 @@
+{
+  "brittleness_detectable_fail_count": null,
+  "brittleness_pass_through_rate": null,
+  "brittleness_patch_cost_loc": null,
+  "brittleness_silent_fail_count": null,
+  "bump_distance": "active",
+  "cell_invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/research/mining-substrate-trial/findings/trial_runs/b/tensorrt/v0_21_0/invariants.proposed.yaml",
+  "cell_schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/research/mining-substrate-trial/findings/trial_runs/b/tensorrt/v0_21_0/schema.json",
+  "energy_wh": 66.43797653241148,
+  "engine": "tensorrt",
+  "failure_modes": [
+    "none"
+  ],
+  "invariant_cell_count": 39,
+  "invariant_failure_mode": "none",
+  "invariant_intersection_count": 8,
+  "invariant_precision": 0.20512820512820512,
+  "invariant_recall": 0.25806451612903225,
+  "invariant_reference_count": 31,
+  "invariant_severity_accuracy": 0.75,
+  "observations": [
+    "chunk 'base_llm_args_validators_bottom' pass2 flag (non-applied): id='tensorrt_llm_enable_lora_ignored_when_lora_config_provided_for_pytorch_backend' reason=\"Source has a more specific condition `self.enable_lora and self.lora_config is not None and self.backend in ['pytorch', '_autodeploy']` which is not fully captured by the invariant.\" fix='correct_predicate:exact'",
+    "chunk 'base_llm_args_validators_bottom' pass2 flag (non-applied): id='tensorrt_llm_both_lora_dir_and_lora_target_modules_empty' reason='Source has a more specific condition `len(self.lora_config.lora_dir) == 0 and len(self.lora_config.lora_target_modules) == 0` which is not fully captured by the invariant.' fix='correct_predicate:exact'",
+    "multipass summary: pass2_dropped=0, pass3_added=18, total_invariants=39",
+    "strategy_b: engine='tensorrt', schema_chunks=7, invariants_chunks=7, schema_wall=791.1s, invariants_wall=580.5s, multipass=True",
+    "Phase 2.6 RUBRIC CORRECTION: namespace canonicalisation (tensorrt_llm.X -> tensorrt.X) applied at identity-extraction time. Re-scored against existing trial_runs output (no LLM re-extraction)."
+  ],
+  "reference_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/engine_versions/tensorrt/v0_21_0/outputs/schema.discovered.json",
+  "schema_cell_count": 129,
+  "schema_failure_mode": "none",
+  "schema_intersection_count": 60,
+  "schema_precision": 0.46511627906976744,
+  "schema_recall": 0.5607476635514018,
+  "schema_reference_count": 107,
+  "schema_type_accuracy": 0.48333333333333334,
+  "scored_at": "2026-05-25T07:24:56.421018+00:00",
+  "scoring_format_version": "1.0.0",
+  "strategy": "b",
+  "version_slug": "v0_21_0",
+  "wall_clock_sec": 1372.1819725558162
+}

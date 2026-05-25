@@ -1,0 +1,40 @@
+{
+  "brittleness_detectable_fail_count": null,
+  "brittleness_pass_through_rate": null,
+  "brittleness_patch_cost_loc": null,
+  "brittleness_silent_fail_count": null,
+  "bump_distance": "v+major",
+  "cell_invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/research/mining-substrate-trial/findings/trial_runs/a/transformers/v5_9_0/invariants.proposed.yaml",
+  "cell_schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/research/mining-substrate-trial/findings/trial_runs/a/transformers/v5_9_0/schema.json",
+  "energy_wh": 0.009104824541713007,
+  "engine": "transformers",
+  "failure_modes": [
+    "detectable"
+  ],
+  "invariant_cell_count": 0,
+  "invariant_failure_mode": "detectable",
+  "invariant_intersection_count": 0,
+  "invariant_precision": 0.0,
+  "invariant_recall": 0.0,
+  "invariant_reference_count": 56,
+  "invariant_severity_accuracy": 0.0,
+  "observations": [
+    "strategy_a bumped: miner subprocess returncode=1; stderr_tail=Traceback (most recent call last):\n  File \"<string>\", line 7, in <module>\n  File \"/home/h.baker@hertie-school.lan/workspace/llenergymeasure/engine_versions/transformers/v4_57_3/producers/static_invariant_miner.py\", line 1462, in walk_transformers\n    import transformers.generation.configuration_utils as gen_mod  # type: ignore\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/trial_transformers_v5_9_0_venv/src/transformers/__init__.py\", line 30, in <module>\n    from . import dependency_versions_check\n  File \"/tmp/trial_transformers_v5_9_0_venv/src/transformers/dependency_versions_check.py\", line 16, in <module>\n    from .utils.versions import require_version, require_version_core\n  File \"/tmp/trial_transformers_v5_9_0_venv/src/transformers/utils/__init__.py\", line 76, in <module>\n    from .hub import (\n  File \"/tmp/trial_transformers_v5_9_0_venv/src/transformers/utils/hub.py\", line 29, in <module>\n    from huggingface_hub import (\nImportError: cannot import name 'is_offline_mode' from 'huggingface_hub' (/home/h.baker@hertie-school.lan/miniforge3/lib/python3.12/site-packages/huggingface_hub/__init__.py)\n",
+    "strategy_a bumped: failure_mode=miner_runtime_error",
+    "vu_rescore: reference=transformers union; ref_count=56, cell=0, intersect=0"
+  ],
+  "reference_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/validated_union/transformers__v4_57_3.yaml",
+  "schema_cell_count": 0,
+  "schema_failure_mode": "detectable",
+  "schema_intersection_count": 0,
+  "schema_precision": 0.0,
+  "schema_recall": 0.0,
+  "schema_reference_count": 112,
+  "schema_type_accuracy": 0.0,
+  "scored_at": "2026-05-25T15:18:49.707195+00:00",
+  "scoring_format_version": "1.0.0",
+  "scoring_reference": "validated_union",
+  "strategy": "a",
+  "version_slug": "v5_9_0",
+  "wall_clock_sec": 0.8121925517916679
+}
