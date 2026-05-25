@@ -1,0 +1,966 @@
+scoring_format_version: 1.0.0
+precision_spurious:
+- identity:
+  - $defs.BatchingType
+  - batching_type
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - $defs.BuildCacheConfig
+  - cache_root
+  kind: precision_spurious
+  reference_value: null
+  cell_value: object
+  note: cell field absent in reference
+- identity:
+  - $defs.BuildCacheConfig
+  - max_cache_storage_gb
+  kind: precision_spurious
+  reference_value: null
+  cell_value: number
+  note: cell field absent in reference
+- identity:
+  - $defs.BuildCacheConfig
+  - max_records
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.CapacitySchedulerPolicy
+  - capacity_scheduler_policy
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - $defs.ContextChunkingPolicy
+  - context_chunking_policy
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - $defs.DynamicBatchConfig
+  - dynamic_batch_moving_average_window
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.DynamicBatchConfig
+  - enable_batch_size_tuning
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - $defs.DynamicBatchConfig
+  - enable_max_num_tokens_tuning
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - $defs.EagleDecodingConfig
+  - dynamic_tree_max_topK
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.EagleDecodingConfig
+  - eagle3_one_model
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - $defs.EagleDecodingConfig
+  - eagle_choices
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - array
+    - 'null'
+  note: cell field absent in reference
+- identity:
+  - $defs.EagleDecodingConfig
+  - greedy_sampling
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - $defs.EagleDecodingConfig
+  - max_non_leaves_per_layer
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.EagleDecodingConfig
+  - num_eagle_layers
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.EagleDecodingConfig
+  - posterior_threshold
+  kind: precision_spurious
+  reference_value: null
+  cell_value: number
+  note: cell field absent in reference
+- identity:
+  - $defs.EagleDecodingConfig
+  - pytorch_weights_path
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - string
+  note: cell field absent in reference
+- identity:
+  - $defs.EagleDecodingConfig
+  - use_dynamic_tree
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - $defs.KvCacheConfig
+  - copy_on_partial_reuse
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - $defs.KvCacheConfig
+  - cross_kv_cache_fraction
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - number
+  note: cell field absent in reference
+- identity:
+  - $defs.KvCacheConfig
+  - enable_block_reuse
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - $defs.KvCacheConfig
+  - enable_partial_reuse
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - $defs.KvCacheConfig
+  - event_buffer_max_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.KvCacheConfig
+  - free_gpu_memory_fraction
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - number
+  note: cell field absent in reference
+- identity:
+  - $defs.KvCacheConfig
+  - host_cache_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: cell field absent in reference
+- identity:
+  - $defs.KvCacheConfig
+  - max_attention_window
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - array
+    - 'null'
+  note: cell field absent in reference
+- identity:
+  - $defs.KvCacheConfig
+  - max_tokens
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: cell field absent in reference
+- identity:
+  - $defs.KvCacheConfig
+  - onboard_blocks
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - $defs.KvCacheConfig
+  - secondary_offload_min_priority
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: cell field absent in reference
+- identity:
+  - $defs.KvCacheConfig
+  - sink_token_length
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: cell field absent in reference
+- identity:
+  - $defs.LookaheadDecodingConfig
+  - max_ngram_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.LookaheadDecodingConfig
+  - max_verification_set_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.LookaheadDecodingConfig
+  - max_window_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.MTPDecodingConfig
+  - num_nextn_predict_layers
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.MTPDecodingConfig
+  - relaxed_delta
+  kind: precision_spurious
+  reference_value: null
+  cell_value: number
+  note: cell field absent in reference
+- identity:
+  - $defs.MTPDecodingConfig
+  - relaxed_topk
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.MTPDecodingConfig
+  - use_relaxed_acceptance_for_thinking
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - $defs.MedusaDecodingConfig
+  - medusa_choices
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - array
+    - 'null'
+  note: cell field absent in reference
+- identity:
+  - $defs.MedusaDecodingConfig
+  - num_medusa_heads
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.NGramDecodingConfig
+  - is_keep_all
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - $defs.NGramDecodingConfig
+  - is_public_pool
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - $defs.NGramDecodingConfig
+  - is_use_oldest
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - $defs.NGramDecodingConfig
+  - max_matching_ngram_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.NGramDecodingConfig
+  - prompt_lookup_num_tokens
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.PeftCacheConfig
+  - device_cache_percent
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - number
+  note: cell field absent in reference
+- identity:
+  - $defs.PeftCacheConfig
+  - host_cache_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: cell field absent in reference
+- identity:
+  - $defs.PeftCacheConfig
+  - lora_prefetch_dir
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - string
+  note: cell field absent in reference
+- identity:
+  - $defs.PeftCacheConfig
+  - max_adapter_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.PeftCacheConfig
+  - max_pages_per_block_device
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.PeftCacheConfig
+  - max_pages_per_block_host
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.PeftCacheConfig
+  - num_copy_streams
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.PeftCacheConfig
+  - num_device_module_layer
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.PeftCacheConfig
+  - num_ensure_workers
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.PeftCacheConfig
+  - num_host_module_layer
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.PeftCacheConfig
+  - num_put_workers
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.PeftCacheConfig
+  - optimal_adapter_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.SchedulerConfig
+  - capacity_scheduler_policy
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - $defs.SchedulerConfig
+  - context_chunking_policy
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - string
+  note: cell field absent in reference
+- identity:
+  - $defs.SchedulerConfig
+  - dynamic_batch_config
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - calib_batch_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - calib_batches
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - calib_dataset
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - calib_max_seq_length
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - device
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - max_draft_len
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - mpi_session
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - random_seed
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - speculative_model
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+    - string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - tokenizer_max_seq_length
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - tensorrt_llm
+  - auto_parallel
+  - present
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_auto_parallel_world_size_sync
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - batching_type
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_batching_type_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - calib_batch_size
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_calib_batch_size_positive
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - calib_batches
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_calib_batches_positive
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - calib_dataset
+  - not_equal
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_calib_dataset_not_empty
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - calib_max_seq_length
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_calib_max_seq_length_positive
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - capacity_scheduler_policy
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_capacity_scheduler_policy_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - context_chunking_policy
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_context_chunking_policy_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - device
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_device_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - dtype
+  - type_is_not
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_dtype_not_bfloat16_on_pre_sm80_gpus
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - embedding_parallel_mode
+  - present
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_embedding_parallel_mode_conversion
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - enable_build_cache
+  - present
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_enable_build_cache_bool_conversion
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - enable_build_cache
+  - type_is_not
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_enable_build_cache_type_is_not
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - gpus_per_node
+  - present
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_gpus_per_node_not_none
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - lora_config
+  - present
+  - enable_lora
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_enable_lora_ignored_when_lora_config_provided_for_pytorch_backend
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - lora_config
+  - present
+  - lora_dir
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_both_lora_dir_and_lora_target_modules_empty
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - lora_config
+  - present
+  - max_cpu_loras
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_cpu_loras_ignored_when_lora_config_provided
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - lora_config
+  - present
+  - max_lora_rank
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_lora_rank_ignored_when_lora_config_provided
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - lora_config
+  - present
+  - max_loras
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_loras_ignored_when_lora_config_provided
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - max_batch_size
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_batch_size_gt_build_config_max_batch_size
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - max_batch_size
+  - not_equal
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_batch_size_not_equal_build_config_max_batch_size
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - max_beam_width
+  - not_equal
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_beam_width_not_equal_build_config_max_beam_width
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - max_input_len
+  - not_equal
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_input_len_not_equal_build_config_max_input_len
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - max_ngram_size
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_ngram_size_positive
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - max_ngram_size
+  - le
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_ngram_size_le_zero
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - max_num_tokens
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_num_tokens_gt_build_config_max_num_tokens
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - max_records
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_build_cache_max_records_gt_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - max_records
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_build_cache_max_records_lt_1
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - max_seq_len
+  - not_equal
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_seq_len_not_equal_build_config_max_seq_len
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - max_verification_set_size
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_verification_set_size_positive
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - max_verification_set_size
+  - le
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_verification_set_size_le_zero
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - max_window_size
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_window_size_positive
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - max_window_size
+  - le
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_max_window_size_le_zero
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - model
+  - type_is_not
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_model_not_str_or_path
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - quant_config
+  - present
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_quant_config_not_none
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - random_seed
+  - ge
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_random_seed_non_negative
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - speculative_config
+  - present
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_speculative_config_lookahead_decoding_max_draft_len_update
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - speculative_config
+  - type_is_not
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_llm_speculative_config_type_not_recognized
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - tensorrt_llm
+  - tokenizer_max_seq_length
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_tokenizer_max_seq_length_positive
+    severity: error
+  note: cell invariant absent in reference

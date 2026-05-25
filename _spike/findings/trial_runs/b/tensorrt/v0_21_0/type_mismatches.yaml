@@ -1,0 +1,309 @@
+scoring_format_version: 1.0.0
+type_mismatches:
+- identity:
+  - engine_params
+  - auto_parallel_world_size
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - backend
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - batching_type
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - build_config
+  kind: type_mismatch
+  reference_value: object
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - cache_transceiver_config
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: object
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - cp_config
+  kind: type_mismatch
+  reference_value:
+  - object
+  - 'null'
+  cell_value: object
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - decoding_config
+  kind: type_mismatch
+  reference_value: object
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - enable_build_cache
+  kind: type_mismatch
+  reference_value: object
+  cell_value:
+  - anyOf
+  - - boolean
+    - 'null'
+    - object
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - gpus_per_node
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - guided_decoding_backend
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - iter_stats_max_iterations
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - lora_config
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: object
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_batch_size
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_beam_width
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_input_len
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_lora_rank
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_num_tokens
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - max_seq_len
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - moe_cluster_parallel_size
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - moe_expert_parallel_size
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - moe_tensor_parallel_size
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - peft_cache_config
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: object
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - postprocess_tokenizer_dir
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - quant_config
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: object
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - reasoning_parser
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - request_stats_max_iterations
+  kind: type_mismatch
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: integer
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - revision
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - speculative_config
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+    - object
+    - object
+    - object
+    - object
+    - object
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - tokenizer
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+    - string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - tokenizer_revision
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value: string
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - workspace
+  kind: type_mismatch
+  reference_value:
+  - string
+  - 'null'
+  cell_value:
+  - anyOf
+  - - 'null'
+    - string
+  note: schema type spec divergence
