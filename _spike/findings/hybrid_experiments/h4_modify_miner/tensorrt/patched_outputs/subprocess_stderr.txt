@@ -1,0 +1,22 @@
+PATCHED_MINER_CRASH:TypeError:_value_satisfying() missing 1 required positional argument: 'field_type'
+Traceback (most recent call last):
+  File "<string>", line 109, in <module>
+  File "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/_spike/findings/hybrid_experiments/h4_modify_miner/tensorrt/patched_producer/static_invariant_miner.py", line 1512, in walk_tensorrt
+    _walk_method(
+  File "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/_spike/findings/hybrid_experiments/h4_modify_miner/tensorrt/patched_producer/static_invariant_miner.py", line 823, in _walk_method
+    return _walk_field_validator(method, emitter, native_type, method_name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/_spike/findings/hybrid_experiments/h4_modify_miner/tensorrt/patched_producer/static_invariant_miner.py", line 890, in _walk_field_validator
+    _walk_field_validator_stmt(stmt, target, sub_emitter)
+  File "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/_spike/findings/hybrid_experiments/h4_modify_miner/tensorrt/patched_producer/static_invariant_miner.py", line 918, in _walk_field_validator_stmt
+    emitter.emit(
+  File "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/_spike/findings/hybrid_experiments/h4_modify_miner/tensorrt/patched_producer/static_invariant_miner.py", line 563, in emit
+    kwargs_pos = self._synthesise_kwargs(preds, sense="positive")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/_spike/findings/hybrid_experiments/h4_modify_miner/tensorrt/patched_producer/static_invariant_miner.py", line 634, in _synthesise_kwargs
+    out.setdefault(p.field, _value_for(p, out))
+                            ^^^^^^^^^^^^^^^^^^
+  File "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/_spike/findings/hybrid_experiments/h4_modify_miner/tensorrt/patched_producer/static_invariant_miner.py", line 713, in _value_for
+    return _value_satisfying(p.op, p.rhs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _value_satisfying() missing 1 required positional argument: 'field_type'

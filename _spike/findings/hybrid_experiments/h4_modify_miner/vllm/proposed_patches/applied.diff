@@ -1,0 +1,14 @@
+--- engine_versions/vllm/v0_7_3/producers/static_invariant_miner.py	2026-05-25 13:35:21.303359351 +0200
++++ _spike/findings/hybrid_experiments/h4_modify_miner/vllm/patched_producer/static_invariant_miner.py	2026-05-25 13:58:46.420598427 +0200
+@@ -727,8 +727,9 @@
+             invariants.append(invariant)
+         descend(if_node.body, local)
+         for sub in if_node.orelse:
+-            if isinstance(sub, ast.If):
+-                _handle_if(sub, frame)
++            if isinstance(sub, (ast.If, ast.Raise)):
++                # descend into else branch with negated conditions
++                _handle_else(sub, frame, negated_conditions)
+             elif isinstance(sub, (ast.Assign, ast.Raise, ast.Expr)):
+                 continue
+ 

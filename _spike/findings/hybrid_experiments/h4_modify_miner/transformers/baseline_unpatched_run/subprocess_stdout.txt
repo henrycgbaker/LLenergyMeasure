@@ -1,0 +1,1 @@
+wrote 28 candidates to /home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/_spike/findings/hybrid_experiments/h4_modify_miner/transformers/baseline_unpatched_run/invariants.proposed.yaml

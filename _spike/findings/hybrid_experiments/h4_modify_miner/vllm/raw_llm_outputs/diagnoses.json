@@ -1,0 +1,20 @@
+[
+  {
+    "gap_id": "G-vllm-1",
+    "what_missed": "EngineArgs.__post_init__ normalisation patterns",
+    "why_structurally": "The walker only emits invariants from `if X: raise` patterns, but EngineArgs uses `if self.X is None: self.X = default` for validation.",
+    "proposed_fix_summary": "Extend the walker to emit normalisation patterns as `severity=dormant`."
+  },
+  {
+    "gap_id": "G-vllm-2",
+    "what_missed": "ModelConfig predicate aliases (local variables)",
+    "why_structurally": "The walker's `_self_attr` predicate extractor only matches `self.X`, not a local var that aliases `self.X`.",
+    "proposed_fix_summary": "Implement light alias tracking to detect `<local> = self.<field>.<method>()` or `<local> = self.<field>` and treat the local as a proxy for the field."
+  },
+  {
+    "gap_id": "G-vllm-3",
+    "what_missed": "CacheConfig._verify_cache_dtype elif/else chains",
+    "why_structurally": "The walker handles `if X: raise` patterns, but not `else:` branches in elif/else chains that contain a raise.",
+    "proposed_fix_summary": "Descend into the final `else:` branch with the negation of all preceding conditions and emit on detected raises."
+  }
+]

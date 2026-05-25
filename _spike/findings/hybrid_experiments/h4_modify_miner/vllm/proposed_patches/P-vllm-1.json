@@ -1,0 +1,8 @@
+{
+  "patch_id": "P-vllm-1",
+  "gap_id": "G-vllm-1",
+  "anchor_text": "\n        if isinstance(stmt, ast.If):\n            _handle_if(stmt, frame)\n",
+  "new_code": "\n        if isinstance(stmt, (ast.If, ast.Assign)):\n            _handle_assign_or_if(stmt, frame)\n",
+  "mode": "replace",
+  "scope_note": "mergeable"
+}

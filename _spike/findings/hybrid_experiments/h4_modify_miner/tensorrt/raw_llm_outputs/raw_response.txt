@@ -1,0 +1,26 @@
+{
+  "diagnoses": [
+    {
+      "gap_id": "G-trt-1",
+      "what_missed": "type-aware probe-value synthesis for 'present' predicates",
+      "why_structurally": "_value_satisfying returns a fixed value ('x') regardless of the field's declared type, which can produce invalid probes at runtime",
+      "proposed_fix_summary": "thread declared field type into Predicate dataclass and use it to pick a suitable probe value in _value_satisfying"
+    },
+    {
+      "gap_id": "G-trt-3",
+      "what_missed": "invariants from nested-config classes (SchedulerConfig, QuantConfig, KvCacheConfig)",
+      "why_structurally": "the walker doesn't recurse into these classes via class-level type references",
+      "proposed_fix_summary": "scan class body for fields annotated as <NestedConfig> | None and add those nested classes to the walk list with appropriate namespace prefixes (needs_broader_refactor)"
+    }
+  ],
+  "patches": [
+    {
+      "patch_id": "P-trt-1",
+      "gap_id": "G-trt-1",
+      "anchor_text": "_value_satisfying(op: str, rhs: Any) -> Any:\n    if op == \"present\":\n        return rhs if rhs is not True else \"x\"",
+      "new_code": "_value_satisfying(op: str, rhs: Any, field_type: type) -> Any:\n    if op == \"present\":\n        if field_type == int:\n            return 0\n        elif field_type == bool:\n            return True\n        elif field_type == str:\n            return \"x\"\n        elif field_type == list:\n            return []",
+      "mode": "replace",
+      "scope_note": "mergeable"
+    }
+  ]
+}

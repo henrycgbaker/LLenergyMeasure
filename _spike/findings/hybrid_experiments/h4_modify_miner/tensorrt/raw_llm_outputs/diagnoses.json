@@ -1,0 +1,14 @@
+[
+  {
+    "gap_id": "G-trt-1",
+    "what_missed": "type-aware probe-value synthesis for 'present' predicates",
+    "why_structurally": "_value_satisfying returns a fixed value ('x') regardless of the field's declared type, which can produce invalid probes at runtime",
+    "proposed_fix_summary": "thread declared field type into Predicate dataclass and use it to pick a suitable probe value in _value_satisfying"
+  },
+  {
+    "gap_id": "G-trt-3",
+    "what_missed": "invariants from nested-config classes (SchedulerConfig, QuantConfig, KvCacheConfig)",
+    "why_structurally": "the walker doesn't recurse into these classes via class-level type references",
+    "proposed_fix_summary": "scan class body for fields annotated as <NestedConfig> | None and add those nested classes to the walk list with appropriate namespace prefixes (needs_broader_refactor)"
+  }
+]

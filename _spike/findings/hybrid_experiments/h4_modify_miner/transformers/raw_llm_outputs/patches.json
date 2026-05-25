@@ -1,0 +1,10 @@
+[
+  {
+    "patch_id": "P-trf-1",
+    "gap_id": "G-trf-1",
+    "anchor_text": "from transformers import AutoConfig, AutoModel, AutoTokenizer, BitsAndBytesConfig\nfrom transformers.generation.configuration_utils import GenerationConfig\nfrom transformers.utils import logging, is_torch_available\nfrom huggingface_hub import HfApi",
+    "new_code": "try:\n    from transformers import AutoConfig, AutoModel, AutoTokenizer, BitsAndBytesConfig\nexcept ImportError:\n    class AutoConfig: pass\n    class AutoModel: pass\n    class AutoTokenizer: pass\n    class BitsAndBytesConfig: pass\n\ntry:\n    from transformers.generation.configuration_utils import GenerationConfig\nexcept ImportError:\n    class GenerationConfig: pass\n\ntry:\n    from transformers.utils import logging, is_torch_available\nexcept ImportError:\n    def logging(*args, **kwargs): pass\n    def is_torch_available(): return False\n\ntry:\n    from huggingface_hub import HfApi\nexcept ImportError:\n    class HfApi: pass",
+    "mode": "replace",
+    "scope_note": "mergeable"
+  }
+]

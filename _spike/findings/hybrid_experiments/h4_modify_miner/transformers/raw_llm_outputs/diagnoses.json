@@ -1,0 +1,8 @@
+[
+  {
+    "gap_id": "G-trf-1",
+    "what_missed": "defensive imports for version bumps",
+    "why_structurally": "The walker's import block hits hard ImportError on bumped transformers versions (v4_55_4 / v5_9_0) when symbols renamed in `tokenizers` or `huggingface_hub`. The crash IS the brittleness signal during the trial (Phase 3a.2 data) - but defensive `try ... except ImportError` would let the walker emit zero invariants gracefully instead of crashing the miner subprocess.",
+    "proposed_fix_summary": "Wrap the most-fragile imports in try/except blocks that fall back to lightweight stubs so the AST walk can still proceed against the bumped source."
+  }
+]

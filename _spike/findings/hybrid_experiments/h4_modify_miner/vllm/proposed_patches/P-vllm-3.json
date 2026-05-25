@@ -1,0 +1,8 @@
+{
+  "patch_id": "P-vllm-3",
+  "gap_id": "G-vllm-3",
+  "anchor_text": "\n        for sub in if_node.orelse:\n            if isinstance(sub, ast.If):\n                _handle_if(sub, frame)\n",
+  "new_code": "\n        for sub in if_node.orelse:\n            if isinstance(sub, (ast.If, ast.Raise)):\n                # descend into else branch with negated conditions\n                _handle_else(sub, frame, negated_conditions)\n",
+  "mode": "replace",
+  "scope_note": "mergeable"
+}

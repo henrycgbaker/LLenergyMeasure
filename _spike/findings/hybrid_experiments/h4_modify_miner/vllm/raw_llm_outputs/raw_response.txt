@@ -1,0 +1,48 @@
+{
+  "diagnoses": [
+    {
+      "gap_id": "G-vllm-1",
+      "what_missed": "EngineArgs.__post_init__ normalisation patterns",
+      "why_structurally": "The walker only emits invariants from `if X: raise` patterns, but EngineArgs uses `if self.X is None: self.X = default` for validation.",
+      "proposed_fix_summary": "Extend the walker to emit normalisation patterns as `severity=dormant`."
+    },
+    {
+      "gap_id": "G-vllm-2",
+      "what_missed": "ModelConfig predicate aliases (local variables)",
+      "why_structurally": "The walker's `_self_attr` predicate extractor only matches `self.X`, not a local var that aliases `self.X`.",
+      "proposed_fix_summary": "Implement light alias tracking to detect `<local> = self.<field>.<method>()` or `<local> = self.<field>` and treat the local as a proxy for the field."
+    },
+    {
+      "gap_id": "G-vllm-3",
+      "what_missed": "CacheConfig._verify_cache_dtype elif/else chains",
+      "why_structurally": "The walker handles `if X: raise` patterns, but not `else:` branches in elif/else chains that contain a raise.",
+      "proposed_fix_summary": "Descend into the final `else:` branch with the negation of all preceding conditions and emit on detected raises."
+    }
+  ],
+  "patches": [
+    {
+      "patch_id": "P-vllm-1",
+      "gap_id": "G-vllm-1",
+      "anchor_text": "\n        if isinstance(stmt, ast.If):\n            _handle_if(stmt, frame)\n",
+      "new_code": "\n        if isinstance(stmt, (ast.If, ast.Assign)):\n            _handle_assign_or_if(stmt, frame)\n",
+      "mode": "replace",
+      "scope_note": "mergeable"
+    },
+    {
+      "patch_id": "P-vllm-2",
+      "gap_id": "G-vllm-2",
+      "anchor_text": "\n        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == \"self\":\n            return node.attr\n",
+      "new_code": "\n        if isinstance(node, (ast.Attribute, ast.Assign)):\n            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == \"self\":\n                return node.attr\n            elif isinstance(node, ast.Assign):\n                # alias tracking logic here\n",
+      "mode": "replace",
+      "scope_note": "mergeable"
+    },
+    {
+      "patch_id": "P-vllm-3",
+      "gap_id": "G-vllm-3",
+      "anchor_text": "\n        for sub in if_node.orelse:\n            if isinstance(sub, ast.If):\n                _handle_if(sub, frame)\n",
+      "new_code": "\n        for sub in if_node.orelse:\n            if isinstance(sub, (ast.If, ast.Raise)):\n                # descend into else branch with negated conditions\n                _handle_else(sub, frame, negated_conditions)\n",
+      "mode": "replace",
+      "scope_note": "mergeable"
+    }
+  ]
+}

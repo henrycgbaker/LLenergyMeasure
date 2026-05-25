@@ -1,0 +1,21 @@
+--- engine_versions/tensorrt/v0_21_0/producers/static_invariant_miner.py	2026-05-25 13:35:21.295358911 +0200
++++ _spike/findings/hybrid_experiments/h4_modify_miner/tensorrt/patched_producer/static_invariant_miner.py	2026-05-25 14:00:12.489329615 +0200
+@@ -719,9 +719,16 @@
+     return 1
+ 
+ 
+-def _value_satisfying(op: str, rhs: Any) -> Any:
++def _value_satisfying(op: str, rhs: Any, field_type: type) -> Any:
+     if op == "present":
+-        return rhs if rhs is not True else "x"
++        if field_type == int:
++            return 0
++        elif field_type == bool:
++            return True
++        elif field_type == str:
++            return "x"
++        elif field_type == list:
++            return []
+     if op == "absent":
+         return None
+     if op == "type_is":

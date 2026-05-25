@@ -1,0 +1,14 @@
+[h4 subprocess] vllm walker: live _check_landmarks replaced with file-based resolver
+PATCHED_MINER_CRASH:NameError:name '_handle_else' is not defined
+Traceback (most recent call last):
+  File "<string>", line 109, in <module>
+  File "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/_spike/findings/hybrid_experiments/h4_modify_miner/vllm/patched_producer/static_invariant_miner.py", line 1044, in walk_vllm_static
+    _walk_function(
+  File "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/_spike/findings/hybrid_experiments/h4_modify_miner/vllm/patched_producer/static_invariant_miner.py", line 736, in _walk_function
+    descend(func.body, _Frame())
+  File "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/_spike/findings/hybrid_experiments/h4_modify_miner/vllm/patched_producer/static_invariant_miner.py", line 701, in descend
+    _handle_if(stmt, frame)
+  File "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/_spike/findings/hybrid_experiments/h4_modify_miner/vllm/patched_producer/static_invariant_miner.py", line 732, in _handle_if
+    _handle_else(sub, frame, negated_conditions)
+    ^^^^^^^^^^^^
+NameError: name '_handle_else' is not defined

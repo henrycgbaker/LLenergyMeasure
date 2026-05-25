@@ -1,0 +1,8 @@
+{
+  "patch_id": "P-vllm-2",
+  "gap_id": "G-vllm-2",
+  "anchor_text": "\n        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == \"self\":\n            return node.attr\n",
+  "new_code": "\n        if isinstance(node, (ast.Attribute, ast.Assign)):\n            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == \"self\":\n                return node.attr\n            elif isinstance(node, ast.Assign):\n                # alias tracking logic here\n",
+  "mode": "replace",
+  "scope_note": "mergeable"
+}
