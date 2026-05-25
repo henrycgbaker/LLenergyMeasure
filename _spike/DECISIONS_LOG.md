@@ -3389,3 +3389,87 @@ This is a 1-2 day Phase 4.0 task, not the multi-day rebuild I'd implied.
 
 The "deterministic validate / LLM extend-propose" shape is even more concretely achievable than I'd suggested. The deterministic validator is already production-grade across all 3 engines. The trial just needs the dispatch layer.
 
+## 2026-05-25: H7 agentic-loop result - synthesis blindness, not iteration ceiling
+
+H7 ran on transformers v4.57.3 + vllm v0.7.3. Built reusable harness
+(`_spike/scripts/strategies/agentic_tool_harness.py`, 959 LoC, 25
+passing tests). Tools: read_file, list_validators, run_miner,
+score_against, finalise. Budget: 30 tool calls / 30 min per cell.
+
+**Result: both cells hit max_calls budget with ZERO finalised invariants.**
+
+- Tool dispatch worked: 60 turns, 0 parse errors, sensible tool
+  selection (run_miner first, then read/list, then score_against).
+- vllm's LLM called score_against 6 times mid-loop - the agentic
+  primitive WAS used - but every payload contained `invariants: []`.
+- transformers' LLM got stuck at the end of its budget calling
+  `list_validators(GenerationConfig)` 9 times in a row.
+- Recall stayed at 0 across both cells' full budget; no plateau, no
+  convergence, no early finalise.
+
+**Significance**: confirms H4's "diagnose-vs-synthesise asymmetry" at
+the agentic-pattern level. The 70B-q4 model uses tools for EXPLORATION
+(passive read activity) but cannot bridge to SYNTHESIS (active emit
+activity). Closed-loop feedback does NOT shift the ceiling - it
+COLLAPSES the ceiling to zero because synthesis becomes optional and
+the model defers it.
+
+**Implication for Phase 4 production substrate at 70B-q4 scale**:
+agentic-loop patterns are NOT viable. Single-shot (b) FORCES synthesis
+by the prompt shape; agentic flexibility removes that pressure and the
+q4 model defaults to reading more. The harness is reusable
+infrastructure - if Phase 4 tries claude-opus / claude-sonnet-4.5 for
+agentic patterns, the substrate is ready.
+
+Cross-cell summary: `_spike/findings/hybrid_experiments/h7_agentic/h7_summary.md`.
+
+
+## 2026-05-25 E9 added: sequential methodical sweep variant
+
+User question: can we have LLM just read source code methodically and extract comprehensively, or is that already what's being done?
+
+Current state distinguished:
+- **Current (b) pipeline**: chunked-methodical with per-class decomposition. Misses cross-class invariants by construction (each chunk extraction is independent).
+- **H6 (not yet run)**: whole-file single-shot. Tests if chunking is bottleneck. Context-size-limited to transformers only.
+- **GAP**: there's a distinct variant - **E9 sequential methodical sweep** - where LLM reads file-by-file (or chunk-by-chunk) with CUMULATIVE CONTEXT, building up a picture. Each new chunk arrives WITH the running notes of previously-extracted invariants. LLM can cross-reference, deduplicate inline, surface cross-class patterns.
+
+E9 distinct from H6 because:
+- H6 is one-shot whole-file (fails on large source).
+- E9 is multi-turn with state; works for any source size; preserves cross-class signal that current (b) loses.
+
+E9 distinct from H7 (agentic-loop) because:
+- H7 has the LLM CHOOSE what to read next via tool calls (read_file).
+- E9 has a FIXED reading order; LLM doesn't choose; just accumulates extractions.
+- E9 is the "human-like methodical pass" pattern; H7 is the "exploratory agent" pattern.
+
+Adding E9 to the extend-propose variant catalogue.
+
+### Updated extend-propose variant catalogue (E1-E9)
+
+| ID | Variant | Tested? | Shape |
+|---|---|---|---|
+| E1 | LLM proposes; runtime gates per-entry | **H3 partial** | accept iff kwargs_pos fires AND kwargs_neg doesn't |
+| E2 | LLM proposes; schema-check then runtime | partial (H3 vllm/trt schema-only) | two-gate filter |
+| E3 | LLM proposes WITH (a)-context | **current d-ab** | guided extension |
+| E4 | LLM proposes from EVIDENCE excerpts + det verify | NOT TESTED | curator-from-evidence |
+| E5 | LLM proposes -> runtime rejects -> LLM revises | partial (H7) | iterative feedback |
+| E6 | LLM proposes WITHIN domain (here's all `__fields__`) | NOT TESTED | field-anchored; low hallucination risk |
+| E7 | Ensemble - N LLM extractions union'd + verified | NOT TESTED | majority-vote-style |
+| E8 | Chunked-LLM-proposes + merge + verify | **current (b)** | divide-and-conquer; independent per-chunk |
+| **E9** | **Sequential methodical sweep with cumulative context** | **NOT TESTED** | **file-by-file with running notes; catches cross-class** |
+
+### Next-batch composition update
+
+Originally planned: H5 (per-validator chunking) + H6 (no-chunking) as chunking ablations.
+
+Updated: **H5 + H6 + E9** as "comprehensive substrate-read variants". Each tests a different decomposition strategy:
+- H5: finer-grain chunking (per-validator-method); independent extractions.
+- H6: zero chunking; single-shot.
+- E9: state-building methodical sweep; cumulative.
+
+All three test the SUBSTRATE side of extend-propose (assuming deterministic-validate-subtract gate downstream). Substrate-side improvements would benefit any extend-propose variant.
+
+Plus the E4/E6/E7 extend-propose variants from prior log entry: those test the LLM-ROLE side of extend-propose.
+
+Both batches inform Phase 4's recommendation on which (extend-propose × substrate-decomposition) combination is the production target.
+
