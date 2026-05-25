@@ -1,0 +1,40 @@
+{
+  "gaps": [
+    {
+      "category": "normalisation-only",
+      "severity": "reduces-recall",
+      "example_field": "EngineArgs.__post_init__",
+      "structural_reason": "The walker only emits from if/raise patterns, but the source uses normalisation patterns without raises.",
+      "cross_engine_pattern": "yes-already-known",
+      "fix_estimate_loc": 50,
+      "mergeable_into_spike_refactor": "no"
+    },
+    {
+      "category": "local-var-alias",
+      "severity": "blocks-correctness",
+      "example_field": "ModelConfig._verify_quantization",
+      "structural_reason": "The walker can't tie local variable comparisons to field invariants without call-graph analysis.",
+      "cross_engine_pattern": "yes-already-known",
+      "fix_estimate_loc": 100,
+      "mergeable_into_spike_refactor": "no"
+    },
+    {
+      "category": "branch-descent",
+      "severity": "reduces-recall",
+      "example_field": "CacheConfig._verify_cache_dtype",
+      "structural_reason": "The walker only handles top-level if/raise patterns and doesn't descend into orelse branches.",
+      "cross_engine_pattern": "yes-already-known",
+      "fix_estimate_loc": 50,
+      "mergeable_into_spike_refactor": "no"
+    },
+    {
+      "category": "branch-descent",
+      "severity": "reduces-recall",
+      "example_field": "SamplingParams._verify_args",
+      "structural_reason": "The walker only handles top-level if/raise patterns and doesn't descend into nested branches.",
+      "cross_engine_pattern": "yes-new-here",
+      "fix_estimate_loc": 100,
+      "mergeable_into_spike_refactor": "no"
+    }
+  ]
+}

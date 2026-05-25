@@ -1,0 +1,207 @@
+[
+  {
+    "id": "transformers_beam_search_num_beams_eq_1",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_cache_choice_cache_implementation_not_in_allowlist",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_cache_choice_use_cache_eq_false",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_compile_config_type_compile_config_exceeds_zero",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_compile_config_type_compile_config_type_not_in_CompileConfig",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_dormant_early_stopping_set_true",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_dormant_epsilon_cutoff_ne_0_0",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_dormant_eta_cutoff_ne_0_0",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_early_stopping_type_early_stopping_exceeds_zero",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_early_stopping_type_early_stopping_not_in_allowlist",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_greedy_strips_epsilon_cutoff",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_greedy_strips_eta_cutoff",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_greedy_strips_min_p",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_greedy_strips_temperature",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_greedy_strips_top_k",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_greedy_strips_top_p",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_greedy_strips_typical_p",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_negative_pad_token_id",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_no_return_dict_strips_output_attentions",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_no_return_dict_strips_output_hidden_states",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_no_return_dict_strips_output_scores",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_num_return_vs_beams_num_beams_lt_num_return_sequences",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_output_token_ids_max_new_tokens_le_zero",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_output_token_ids_max_new_tokens_not_in_allowlist",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_output_token_ids_pad_token_id_not_in_allowlist",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_raises_bnb_4bit_quant_type_not_type_str",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_raises_bnb_4bit_use_double_quant_not_type_bool",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_raises_compile_config_not_type_compileconfig",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_raises_llm_int8_enable_fp32_cpu_offload_not_type_bool",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_raises_llm_int8_has_fp16_weight_not_type_bool",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_raises_llm_int8_skip_modules_not_type_list",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_raises_llm_int8_threshold_not_type_float",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_raises_load_in_4bit_not_type_bool",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_raises_load_in_8bit_not_type_bool",
+    "label": "UNCERTAIN",
+    "reason": ""
+  },
+  {
+    "id": "transformers_raises_num_beams_eq_1",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_single_beam_strips_early_stopping",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_single_beam_strips_length_penalty",
+    "label": "CONFIRM",
+    "reason": ""
+  },
+  {
+    "id": "transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig",
+    "label": "UNCERTAIN",
+    "reason": ""
+  }
+]

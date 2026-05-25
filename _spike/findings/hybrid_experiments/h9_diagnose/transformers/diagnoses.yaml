@@ -1,0 +1,9 @@
+gaps:
+- category: defensive-import
+  severity: blocks-correctness
+  example_field: transformers.bnb_4bit_quant_type
+  structural_reason: The walker crashes on bumped versions due to defensive imports.
+  cross_engine_pattern: yes-already-known
+  fix_estimate_loc: 10
+  mergeable_into_spike_refactor: 'no'
+diagnosed_at: '2026-05-25T14:30:44.964947'

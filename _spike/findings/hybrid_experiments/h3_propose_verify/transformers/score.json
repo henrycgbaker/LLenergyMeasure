@@ -1,0 +1,19 @@
+{
+  "pattern": "h3_propose_verify",
+  "engine": "transformers",
+  "version_slug": "v4_57_3",
+  "gate_kind": "runtime",
+  "wall_sec": 2.170365333557129,
+  "b_emitted_count": 51,
+  "verified_count": 39,
+  "dropped_count": 12,
+  "ref_count": 39,
+  "intersection_verified_count": 19,
+  "intersection_b_count": 22,
+  "recall_verified": 0.48717948717948717,
+  "precision_verified": 0.48717948717948717,
+  "recall_b_baseline": 0.5641025641025641,
+  "precision_b_baseline": 0.43137254901960786,
+  "precision_lift": 0.055806938159879305,
+  "recall_change": -0.07692307692307693
+}

@@ -1,0 +1,19 @@
+{
+  "pattern": "h2_validate",
+  "engine": "tensorrt",
+  "version_slug": "v0_21_0",
+  "wall_sec": 112.37351393699646,
+  "a_entry_count": 35,
+  "classifications_returned": 35,
+  "confirm_count": 27,
+  "suspect_spurious_count": 0,
+  "uncertain_count": 8,
+  "drop_rate": 0.0,
+  "filtered_entry_count": 35,
+  "recall_vs_active_ref": 1.0,
+  "precision_vs_active_ref": 1.0,
+  "severity_accuracy": 1.0,
+  "failure_mode": "FailureMode.NONE",
+  "intersection_count": 31,
+  "raw_responses_failure_modes": []
+}

@@ -1,0 +1,15 @@
+dropped:
+- id: vllm_n_must_be_1_for_greedy_sampling
+  drop_reason: no field key in match.fields
+- id: vllm_model_not_support_cuda_graph
+  drop_reason: field 'model_type' not in declared __fields__ of ['BeamSearchParams',
+    'CacheConfig', 'DecodingConfig', 'DeviceConfig', 'EngineArgs']...
+  field: model_type
+- id: vllm_enforce_eager_set_when_model_not_support_cuda_graph
+  drop_reason: field 'model_type' not in declared __fields__ of ['BeamSearchParams',
+    'CacheConfig', 'DecodingConfig', 'DeviceConfig', 'EngineArgs']...
+  field: model_type
+- id: vllm_use_ray_without_ray_available
+  drop_reason: field 'use_ray' not in declared __fields__ of ['BeamSearchParams',
+    'CacheConfig', 'DecodingConfig', 'DeviceConfig', 'EngineArgs']...
+  field: use_ray

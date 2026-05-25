@@ -1,0 +1,19 @@
+{
+  "pattern": "h2_validate",
+  "engine": "vllm",
+  "version_slug": "v0_7_3",
+  "wall_sec": 101.86094045639038,
+  "a_entry_count": 26,
+  "classifications_returned": 26,
+  "confirm_count": 23,
+  "suspect_spurious_count": 3,
+  "uncertain_count": 0,
+  "drop_rate": 0.11538461538461539,
+  "filtered_entry_count": 23,
+  "recall_vs_active_ref": 0.8846153846153846,
+  "precision_vs_active_ref": 1.0,
+  "severity_accuracy": 1.0,
+  "failure_mode": "FailureMode.NONE",
+  "intersection_count": 23,
+  "raw_responses_failure_modes": []
+}

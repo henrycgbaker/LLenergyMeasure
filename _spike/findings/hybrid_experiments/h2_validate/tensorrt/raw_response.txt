@@ -1,0 +1,179 @@
+{
+  "classifications": [
+    {
+      "id": "tensorrt__autodeployllmargs_mla_backend_in_1_values",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt__autodeployllmargs_model_factory_in_2_values",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_autodeploy_free_mem_ratio_out_of_range",
+      "label": "UNCERTAIN",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_basellmargs_load_format_in_2_values",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_basellmargs_tokenizer_mode_in_2_values",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_batching_type_in_2_values",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_build_cache_max_records_ge_1",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_calibconfig_device_in_2_values",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_quant_config_kv_cache_quant_algo_in_allowlist",
+      "label": "UNCERTAIN",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_quant_config_quant_algo_in_allowlist",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_raises_cuda_graph_max_batch_size_lt_0_cuda_graph_max_batch_size",
+      "label": "UNCERTAIN",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_raises_cuda_graph_max_batch_size_ne_0_cuda_graph_config",
+      "label": "UNCERTAIN",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_raises_dtype_eq_bfloat16_dtype",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_raises_enable_build_cache_not_type_buildcacheconfig_enable_build_cache",
+      "label": "UNCERTAIN",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_raises_max_batch_size_set_True_build_config_with_runtime_params",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_raises_max_ngram_size_le_0_positive_values",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_raises_max_num_tokens_set_True_build_config_with_runtime_params",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_raises_max_verification_set_size_le_0_positive_values",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_raises_max_window_size_le_0_positive_values",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_raises_model_not_type_model",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_raises_moe_load_balancer_type_str_moe_load_balancer",
+      "label": "UNCERTAIN",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_raises_speculative_config_set_True_speculative_config",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_torch_llm_load_format_invalid",
+      "label": "UNCERTAIN",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_warns_backend_in_lora_config_consistency",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_warns_build_config_set_True_model_format_misc",
+      "label": "UNCERTAIN",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_warns_lora_config_set_True_lora_config_consistency",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_warns_max_batch_size_set_True_set_runtime_knobs_from_build_config",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_warns_max_beam_width_set_True_build_config_with_runtime_params",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_warns_max_beam_width_set_True_set_runtime_knobs_from_build_config",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_warns_max_input_len_set_True_build_config_with_runtime_params",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_warns_max_input_len_set_True_set_runtime_knobs_from_build_config",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_warns_max_lora_rank_set_True_lora_config_consistency",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_warns_max_num_tokens_set_True_set_runtime_knobs_from_build_config",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_warns_max_seq_len_set_True_build_config_with_runtime_params",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "tensorrt_warns_max_seq_len_set_True_set_runtime_knobs_from_build_config",
+      "label": "CONFIRM",
+      "reason": ""
+    }
+  ]
+}

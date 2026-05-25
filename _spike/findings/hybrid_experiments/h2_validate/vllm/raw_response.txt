@@ -1,0 +1,134 @@
+{
+  "classifications": [
+    {
+      "id": "vllm_samplingparams_dormant_seed_eq_neg1",
+      "label": "SUSPECT-SPURIOUS",
+      "reason": "seed is not set to -1 in the source"
+    },
+    {
+      "id": "vllm_samplingparams_raises_best_of_lt_ref_n",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_samplingparams_raises_logprobs_lt_0",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_samplingparams_raises_max_tokens_lt_1",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_samplingparams_raises_min_tokens_gt_ref_max_tokens",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_samplingparams_raises_min_tokens_lt_0",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_samplingparams_raises_n_lt_1",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_samplingparams_raises_n_not_type_int",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_samplingparams_raises_prompt_logprobs_lt_0",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_samplingparams_raises_temperature_lt_0p0",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_samplingparams_raises_top_k_not_type_int",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_samplingparams_raises_truncate_prompt_tokens_lt_1",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_cacheconfig_raises_gpu_memory_utilization_gt_1p0",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_loraconfig_dormant_max_cpu_loras_unset",
+      "label": "SUSPECT-SPURIOUS",
+      "reason": "max_cpu_loras is not set to None in the source"
+    },
+    {
+      "id": "vllm_loraconfig_raises_max_cpu_loras_lt_ref_max_loras",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_loraconfig_raises_max_loras_lt_1",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_parallelconfig_raises_distributed_executor_backend_not_in_ray_mp_uni_external_launcher_none",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_promptadapterconfig_dormant_max_cpu_prompt_adapters_unset",
+      "label": "SUSPECT-SPURIOUS",
+      "reason": "max_cpu_prompt_adapters is not set to None in the source"
+    },
+    {
+      "id": "vllm_promptadapterconfig_raises_max_prompt_adapter_token_eq_0",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_promptadapterconfig_raises_max_prompt_adapters_lt_1",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_model_len",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_num_seqs",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_schedulerconfig_raises_max_num_partial_prefills_lt_1",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_schedulerconfig_raises_num_lookahead_slots_lt_0",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_schedulerconfig_raises_num_scheduler_steps_lt_1",
+      "label": "CONFIRM",
+      "reason": ""
+    },
+    {
+      "id": "vllm_tokenizerpoolconfig_raises_extra_config_not_type_dict",
+      "label": "CONFIRM",
+      "reason": ""
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+dropped:
+- id: transformers_generationconfig_num_return_sequences_must_be_positive
+  drop_reason: positive case did not trigger (no_op)
+- id: transformers_generationconfig_num_beam_groups_must_be_positive
+  drop_reason: positive case did not trigger (no_op)
+- id: transformers_generationconfig_diversity_penalty_must_be_non_negative
+  drop_reason: positive case did not trigger (no_op)
+- id: transformers_watermarking_config_not_none
+  drop_reason: positive case did not trigger (no_op)
+- id: transformers_num_beams_gt_zero
+  drop_reason: positive case did not trigger (no_op)
+- id: transformers_temperature_set_when_do_sample_true
+  drop_reason: positive case did not trigger (no_op)
+- id: transformers_top_p_set_when_do_sample_true
+  drop_reason: positive case did not trigger (no_op)
+- id: transformers_top_k_set_when_do_sample_true
+  drop_reason: positive case did not trigger (no_op)
+- id: transformers_min_length_set_when_do_sample_true
+  drop_reason: positive case did not trigger (no_op)
+- id: transformers_max_length_set_when_do_sample_true
+  drop_reason: positive case did not trigger (no_op)
+- id: transformers_cache_config_set_when_use_cache_false
+  drop_reason: positive case did not trigger (no_op)
+- id: transformers_return_legacy_cache_set_when_use_cache_false
+  drop_reason: positive case did not trigger (no_op)

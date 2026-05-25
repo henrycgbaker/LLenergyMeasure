@@ -1,0 +1,19 @@
+{
+  "pattern": "h3_propose_verify",
+  "engine": "vllm",
+  "version_slug": "v0_7_3",
+  "gate_kind": "schema_existence",
+  "wall_sec": 0.035259246826171875,
+  "b_emitted_count": 66,
+  "verified_count": 62,
+  "dropped_count": 4,
+  "ref_count": 26,
+  "intersection_verified_count": 10,
+  "intersection_b_count": 10,
+  "recall_verified": 0.38461538461538464,
+  "precision_verified": 0.16129032258064516,
+  "recall_b_baseline": 0.38461538461538464,
+  "precision_b_baseline": 0.15151515151515152,
+  "precision_lift": 0.009775171065493637,
+  "recall_change": 0.0
+}

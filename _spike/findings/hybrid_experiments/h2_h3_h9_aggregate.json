@@ -1,0 +1,26 @@
+[
+  {
+    "pattern": "h9_diagnose",
+    "engine": "transformers",
+    "version_slug": "v4_57_3",
+    "wall_sec": 29.722473621368408,
+    "diagnoses_count": 1,
+    "raw_failure_modes": []
+  },
+  {
+    "pattern": "h9_diagnose",
+    "engine": "vllm",
+    "version_slug": "v0_7_3",
+    "wall_sec": 55.407204389572144,
+    "diagnoses_count": 4,
+    "raw_failure_modes": []
+  },
+  {
+    "pattern": "h9_diagnose",
+    "engine": "tensorrt",
+    "version_slug": "v0_21_0",
+    "wall_sec": 37.91069316864014,
+    "diagnoses_count": 3,
+    "raw_failure_modes": []
+  }
+]

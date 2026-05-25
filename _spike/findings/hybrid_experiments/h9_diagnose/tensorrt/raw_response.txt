@@ -1,0 +1,31 @@
+{
+  "gaps": [
+    {
+      "category": "type-blindness",
+      "severity": "blocks-correctness",
+      "example_field": "tensorrt.max_batch_size",
+      "structural_reason": "The walker synthesises probe values without consulting the declared type, leading to incorrect probes for int-typed fields.",
+      "cross_engine_pattern": "yes-already-known",
+      "fix_estimate_loc": 50,
+      "mergeable_into_spike_refactor": "no"
+    },
+    {
+      "category": "nested-config",
+      "severity": "reduces-recall",
+      "example_field": "tensorrt.scheduler_config.capacity_scheduler_policy",
+      "structural_reason": "The walker doesn't recurse into Pydantic-validator-bearing nested classes via class-level type references.",
+      "cross_engine_pattern": "yes-already-known",
+      "fix_estimate_loc": 100,
+      "mergeable_into_spike_refactor": "no"
+    },
+    {
+      "category": "branch-descent",
+      "severity": "minor",
+      "example_field": "tensorrt.model_config.arbitrary_types_allowed",
+      "structural_reason": "The walker handles if/raise but not if/elif/else, not else-raise, or nested branches.",
+      "cross_engine_pattern": "yes-new-here",
+      "fix_estimate_loc": 20,
+      "mergeable_into_spike_refactor": "yes"
+    }
+  ]
+}
