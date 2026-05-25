@@ -1,0 +1,343 @@
+scoring_format_version: 1.0.0
+recall_misses:
+- identity:
+  - engine_params
+  - disable_logprobs_during_spec_decoding
+  kind: recall_miss
+  reference_value:
+  - boolean
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - ngram_prompt_lookup_max
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - ngram_prompt_lookup_min
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - num_speculative_tokens
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - spec_decoding_acceptance_method
+  kind: recall_miss
+  reference_value: string
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - speculative_disable_by_batch_size
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - speculative_disable_mqa_scorer
+  kind: recall_miss
+  reference_value:
+  - boolean
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - speculative_draft_tensor_parallel_size
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - speculative_max_model_len
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - speculative_model
+  kind: recall_miss
+  reference_value:
+  - string
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - speculative_model_quantization
+  kind: recall_miss
+  reference_value:
+  - string
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - typical_acceptance_sampler_posterior_alpha
+  kind: recall_miss
+  reference_value:
+  - number
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - typical_acceptance_sampler_posterior_threshold
+  kind: recall_miss
+  reference_value:
+  - number
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - _all_stop_token_ids
+  kind: recall_miss
+  reference_value: array
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - _real_n
+  kind: recall_miss
+  reference_value: null
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - guided_decoding
+  kind: recall_miss
+  reference_value: null
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - output_text_buffer_length
+  kind: recall_miss
+  reference_value: integer
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - vllm.engine
+  - distributed_executor_backend
+  - not_in
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_parallelconfig_raises_distributed_executor_backend_not_in_ray_mp_uni_external_launcher_none
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.engine
+  - gpu_memory_utilization
+  - gt
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_cacheconfig_raises_gpu_memory_utilization_gt_1p0
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.engine
+  - max_num_batched_tokens
+  - lt
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_num_seqs
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.engine
+  - max_num_batched_tokens
+  - lt
+  - enable_chunked_prefill
+  kind: recall_miss
+  reference_value:
+    id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_model_len
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.engine
+  - max_num_partial_prefills
+  - lt
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_schedulerconfig_raises_max_num_partial_prefills_lt_1
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.engine
+  - num_lookahead_slots
+  - lt
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_schedulerconfig_raises_num_lookahead_slots_lt_0
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.engine
+  - num_scheduler_steps
+  - lt
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_schedulerconfig_raises_num_scheduler_steps_lt_1
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.engine.lora
+  - max_cpu_loras
+  - lt
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_loraconfig_raises_max_cpu_loras_lt_ref_max_loras
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.engine.lora
+  - max_cpu_loras
+  - unknown
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_loraconfig_dormant_max_cpu_loras_unset
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.engine.lora
+  - max_loras
+  - lt
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_loraconfig_raises_max_loras_lt_1
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.engine.prompt_adapter
+  - max_cpu_prompt_adapters
+  - unknown
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_promptadapterconfig_dormant_max_cpu_prompt_adapters_unset
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.engine.prompt_adapter
+  - max_prompt_adapter_token
+  - exact
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_promptadapterconfig_raises_max_prompt_adapter_token_eq_0
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.engine.prompt_adapter
+  - max_prompt_adapters
+  - lt
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_promptadapterconfig_raises_max_prompt_adapters_lt_1
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.engine.tokenizer
+  - extra_config
+  - type_is_not
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_tokenizerpoolconfig_raises_extra_config_not_type_dict
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.sampling
+  - max_tokens
+  - present
+  - min_tokens
+  kind: recall_miss
+  reference_value:
+    id: vllm_samplingparams_raises_min_tokens_gt_ref_max_tokens
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.sampling
+  - n
+  - type_is_not
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_samplingparams_raises_n_not_type_int
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.sampling
+  - seed
+  - exact
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_samplingparams_dormant_seed_eq_neg1
+    severity: dormant
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - vllm.sampling
+  - top_k
+  - type_is_not
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: vllm_samplingparams_raises_top_k_not_type_int
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output

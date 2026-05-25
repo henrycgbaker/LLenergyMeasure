@@ -1,0 +1,115 @@
+schema_version: 1.0.0
+engine: vllm
+engine_version: 0.19.1
+mined_at: '2026-05-25T07:46:38.639539+00:00'
+miner: strategy_b_oss_llm_multipass
+invariants:
+- id: vllm_max_length_lt_min_length
+  engine: vllm
+  library: vllm
+  invariant_under_test: GenerationConfig.validate flags max_length < min_length
+  severity: error
+  native_type: vllm.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 123
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.max_length:
+        <: 1
+  kwargs_positive:
+    max_length: 10
+    min_length: 20
+  kwargs_negative:
+    max_length: 20
+    min_length: 10
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`max_length` ({self.max_length}) has to be greater or equal to
+    `min_length` ({self.min_length}).'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_temperature_set_when_do_sample_false
+  engine: vllm
+  library: vllm
+  invariant_under_test: GenerationConfig.validate flags temperature set when do_sample=False
+  severity: dormant
+  native_type: vllm.GenerationConfig
+  miner_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 145
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.do_sample: false
+  kwargs_positive:
+    do_sample: false
+    temperature: 0.5
+  kwargs_negative:
+    do_sample: true
+    temperature: 0.5
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`do_sample` is set to `False`. However, `{flag_name}` is set
+    to `{flag_value}` -- this flag is only used in sample-based generation modes.
+    You should set `do_sample=True` or unset `{flag_name}`.'
+  added_by: llm_miner
+  added_at: '2026-05-25'
+- id: vllm_top_p_set_when_do_sample_false
+  engine: vllm
+  library: vllm
+  invariant_under_test: GenerationConfig.validate flags top_p set when do_sample=False
+  severity: dormant
+  native_type: vllm.GenerationConfig
+  miner_source:
+    path: generation_config.py
+    method: validate
+    line_at_scan: 123
+  match:
+    engine: vllm
+    fields:
+      transformers.sampling.do_sample: false
+  kwargs_positive:
+    top_p: 0.9
+  kwargs_negative:
+    top_p: null
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: top_p must be set when do_sample=False
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'
+- id: vllm_pad_token_id_not_negative
+  engine: vllm
+  library: vllm
+  invariant_under_test: GenerationConfig.validate flags pad_token_id >= 0
+  severity: error
+  native_type: vllm.GenerationConfig
+  miner_source:
+    path: generation_config.py
+    method: validate
+    line_at_scan: 141
+  match:
+    engine: vllm
+    fields:
+      transformers.sampling.pad_token_id:
+        '>=': 0
+  kwargs_positive:
+    pad_token_id: 1
+  kwargs_negative:
+    pad_token_id: -1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: pad_token_id must be non-negative
+  added_by: llm_miner_pass3
+  added_at: '2026-05-25'

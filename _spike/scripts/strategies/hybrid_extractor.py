@@ -134,9 +134,7 @@ def run_d_ab_on_transformers_active(
     # surface for missed invariants per Bake-off D (8 silent misses
     # there). Send validate() in full + GenerationConfig.__init__ in
     # full + a one-line note on the other classes.
-    sources = (
-        get_active_sources() if source_root is None else get_sources_from_path(source_root)
-    )
+    sources = get_active_sources() if source_root is None else get_sources_from_path(source_root)
     source_summary = (
         "=== SOURCE: GenerationConfig.validate() ===\n"
         + sources.get("GenerationConfig.validate", "")
@@ -341,6 +339,7 @@ def _run_d_ab_generic(
     out_dir: Path,
     backend: LLMBackend | None = None,
     max_retries: int = 2,
+    source_root: Path | None = None,
 ) -> HybridOutputs:
     """Engine-agnostic hybrid (d-ab) driver.
 
@@ -349,6 +348,22 @@ def _run_d_ab_generic(
 
     For Phase 3a.1 scope: active version per engine; version_slug encodes
     the engine_versions/<engine>/<version_slug>/outputs/ location.
+
+    Phase 3a.2 bumped (vllm/tensorrt): the deterministic seed (a) is the
+    ACTIVE reference for the engine (we don't have bumped static-miner
+    output without a CUDA-bearing venv). The chunker reads BUMPED source
+    via ``source_root``; the merged invariants are the active (a) seed
+    plus any LLM extensions found in the bumped source.
+
+    Parameters
+    ----------
+    source_root : Path | None
+        Threaded through to the invariants_chunks factory. None = active
+        cell. Path = bumped-version cell (Phase 3a.2 vllm/tensorrt).
+    version_slug : str
+        Used to locate (a)'s reference output. For bumped cells, callers
+        pass the active version_slug (active reference is the deterministic
+        seed regardless of which bumped source the LLM sees).
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     transcripts_dir = out_dir / "raw_llm_transcripts"
@@ -376,7 +391,10 @@ def _run_d_ab_generic(
 
     # 2. Pull compact source summary from the engine's chunker (use the
     #    invariants chunks - that's the validate/post_init surface).
-    inv_chunks = invariants_chunks_fn()
+    if source_root is not None:
+        inv_chunks = invariants_chunks_fn(source_root=source_root)
+    else:
+        inv_chunks = invariants_chunks_fn()
     source_summary = _build_source_summary_from_chunks(inv_chunks, max_total_chars=22000)
 
     # 3. Compress (a)'s output if it's huge (vllm has 10 invariants, fits
@@ -518,8 +536,14 @@ def run_d_ab_on_vllm_active(
     engine_version: str = "0.7.3",
     backend: LLMBackend | None = None,
     max_retries: int = 2,
+    source_root: Path | None = None,
 ) -> HybridOutputs:
-    """Run hybrid (d-ab) on vllm active version (0.7.3)."""
+    """Run hybrid (d-ab) on vllm (active OR bumped version).
+
+    The deterministic seed (a) is always the active reference
+    (``v0_7_3``); ``source_root`` controls which version's source the
+    chunker reads for the LLM extension half.
+    """
     from _spike.scripts.strategies.vllm_chunker import invariants_chunks as vllm_inv_chunks
 
     return _run_d_ab_generic(
@@ -530,6 +554,7 @@ def run_d_ab_on_vllm_active(
         out_dir=out_dir,
         backend=backend,
         max_retries=max_retries,
+        source_root=source_root,
     )
 
 
@@ -539,8 +564,14 @@ def run_d_ab_on_tensorrt_active(
     engine_version: str = "0.21.0",
     backend: LLMBackend | None = None,
     max_retries: int = 2,
+    source_root: Path | None = None,
 ) -> HybridOutputs:
-    """Run hybrid (d-ab) on tensorrt_llm active version (0.21.0)."""
+    """Run hybrid (d-ab) on tensorrt_llm (active OR bumped version).
+
+    The deterministic seed (a) is always the active reference
+    (``v0_21_0``); ``source_root`` controls which version's source the
+    chunker reads for the LLM extension half.
+    """
     from _spike.scripts.strategies.tensorrt_chunker import (
         invariants_chunks as trt_inv_chunks,
     )
@@ -553,4 +584,5 @@ def run_d_ab_on_tensorrt_active(
         out_dir=out_dir,
         backend=backend,
         max_retries=max_retries,
+        source_root=source_root,
     )

@@ -1,0 +1,7 @@
+schema_version: 1.0.0
+engine: vllm
+engine_version: 0.6.6.post1
+reconciled_at: '2026-05-25T08:54:13.209626+00:00'
+added_by_llm_verifier: []
+flagged_spurious_in_deterministic: []
+missed_diagnoses: []

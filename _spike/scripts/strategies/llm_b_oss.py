@@ -671,6 +671,13 @@ def _invariant_identity(inv: dict[str, Any]) -> tuple[str, str, str, str]:
     primary_key = keys[0]
     primary_value = match_fields[primary_key]
     namespace, _, native_field = primary_key.rpartition(".")
+    # Phase 2.6 rubric fix: collapse `tensorrt_llm.<X>` -> `tensorrt.<X>` so the
+    # multipass dedup doesn't accidentally let the same logical invariant slip
+    # through twice under two prefix conventions.
+    if namespace == "tensorrt_llm":
+        namespace = "tensorrt"
+    elif namespace.startswith("tensorrt_llm."):
+        namespace = "tensorrt." + namespace[len("tensorrt_llm.") :]
     if not isinstance(primary_value, dict):
         kind = "exact"
     else:
@@ -863,6 +870,7 @@ def _run_b_generic(
     backend: LLMBackend | None = None,
     max_retries: int = 2,
     multipass: bool = False,
+    source_root: Path | None = None,
 ) -> StrategyBOutputs:
     """Engine-agnostic strategy (b) driver.
 
@@ -870,6 +878,13 @@ def _run_b_generic(
     (``schema_chunks_fn``, ``invariants_chunks_fn``) return the engine's
     chunked source; everything downstream (prompts, backend, parsing,
     merging) is shared with the transformers path.
+
+    Parameters
+    ----------
+    source_root : Path | None
+        Passed through to the chunker factory functions. None = active
+        cell (chunker uses its module-level default path). A Path =
+        bumped-version cell (Phase 3a.2 vllm/tensorrt).
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     transcripts_dir = out_dir / "raw_llm_transcripts"
@@ -878,8 +893,14 @@ def _run_b_generic(
     if backend is None:
         backend = OllamaBackend()  # default: container Ollama 11435 + llama3.1:70b
 
-    s_chunks = schema_chunks_fn()
-    i_chunks = invariants_chunks_fn()
+    # source_root threads through to per-engine chunker factories. When None,
+    # the chunker falls back to its module-level default (active cell).
+    if source_root is not None:
+        s_chunks = schema_chunks_fn(source_root=source_root)
+        i_chunks = invariants_chunks_fn(source_root=source_root)
+    else:
+        s_chunks = schema_chunks_fn()
+        i_chunks = invariants_chunks_fn()
 
     schema_envelope, schema_wall, schema_obs = extract_schema(
         backend=backend,
@@ -939,16 +960,25 @@ def run_b_on_vllm_active(
     backend: LLMBackend | None = None,
     max_retries: int = 2,
     multipass: bool = False,
+    source_root: Path | None = None,
 ) -> StrategyBOutputs:
-    """Run strategy (b) for vllm active version (0.7.3).
+    """Run strategy (b) for vllm (active OR bumped version).
 
-    Source is read from the pre-staged tree at /tmp/vllm-unpacked/vllm/
-    via ``vllm_chunker.{schema_chunks, invariants_chunks}``.
+    Source is read from the pre-staged tree at ``/tmp/vllm-unpacked/vllm/``
+    (active) or from ``source_root`` (bumped) via
+    ``vllm_chunker.{schema_chunks, invariants_chunks}``.
 
     Output layout matches ``run_b_on_transformers_active``:
     - ``out_dir/schema.json``
     - ``out_dir/invariants.proposed.yaml``
     - ``out_dir/raw_llm_transcripts/{schema,invariants}__<chunk>.md``
+
+    Parameters
+    ----------
+    source_root : Path | None
+        If None, sources via the chunker's default pre-staged path (active
+        v0.7.3). If provided, sources from this root (Phase 3a.2 bumped
+        cells; e.g. ``/tmp/trial_vllm_v0_9_2_venv/src/vllm/``).
     """
     from _spike.scripts.strategies.vllm_chunker import (
         invariants_chunks as vllm_inv_chunks,
@@ -966,6 +996,7 @@ def run_b_on_vllm_active(
         backend=backend,
         max_retries=max_retries,
         multipass=multipass,
+        source_root=source_root,
     )
 
 
@@ -976,14 +1007,22 @@ def run_b_on_tensorrt_active(
     backend: LLMBackend | None = None,
     max_retries: int = 2,
     multipass: bool = False,
+    source_root: Path | None = None,
 ) -> StrategyBOutputs:
-    """Run strategy (b) for tensorrt_llm active version (0.21.0).
+    """Run strategy (b) for tensorrt_llm (active OR bumped version).
 
     Source is read from the pre-staged tree at
-    /tmp/trt-llm-0.21.0/tensorrt_llm/ via
-    ``tensorrt_chunker.{schema_chunks, invariants_chunks}``.
+    ``/tmp/trt-llm-0.21.0/tensorrt_llm/`` (active) or from ``source_root``
+    (bumped) via ``tensorrt_chunker.{schema_chunks, invariants_chunks}``.
 
     Output layout matches ``run_b_on_transformers_active``.
+
+    Parameters
+    ----------
+    source_root : Path | None
+        If None, sources via the chunker's default pre-staged path (active
+        v0.21.0). If provided, sources from this root (Phase 3a.2 bumped
+        cells).
     """
     from _spike.scripts.strategies.tensorrt_chunker import (
         invariants_chunks as trt_inv_chunks,
@@ -1001,4 +1040,5 @@ def run_b_on_tensorrt_active(
         backend=backend,
         max_retries=max_retries,
         multipass=multipass,
+        source_root=source_root,
     )

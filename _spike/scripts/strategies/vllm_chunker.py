@@ -85,9 +85,20 @@ class ChunkSpec:
 # ---------------------------------------------------------------------------
 
 
-def _read_source(rel_path: str) -> str:
-    """Read a file under VLLM_SOURCE_ROOT."""
-    p = VLLM_SOURCE_ROOT / rel_path
+def _read_source(rel_path: str, source_root: Path | None = None) -> str:
+    """Read a file under the vllm source root.
+
+    Parameters
+    ----------
+    rel_path : str
+        Path relative to the vllm package root (e.g. ``"sampling_params.py"``).
+    source_root : Path | None
+        If provided, read from this root. If None, fall back to the module-
+        level ``VLLM_SOURCE_ROOT`` constant (the active v0.7.3 path). The
+        bumped-version path (Phase 3a.2) supplies a per-version root.
+    """
+    root = source_root if source_root is not None else VLLM_SOURCE_ROOT
+    p = root / rel_path
     if not p.exists():
         return ""
     return p.read_text()
@@ -165,20 +176,30 @@ def _extract_method_body(
     return "\n".join(out)
 
 
-def get_active_sources() -> dict[str, str]:
-    """Pull source text for the chunked units of vllm 0.7.3.
+def get_active_sources(source_root: Path | None = None) -> dict[str, str]:
+    """Pull source text for the chunked units of vllm.
+
+    Parameters
+    ----------
+    source_root : Path | None
+        If None, sources come from the pre-staged active v0.7.3 tree at
+        ``VLLM_SOURCE_ROOT`` (``/tmp/vllm-unpacked/vllm``). If provided, all
+        reads target this root - used by bumped-version cells (Phase 3a.2)
+        where the chunker reads from a source-only venv path like
+        ``/tmp/trial_vllm_v0_9_2_venv/src/vllm/``.
 
     Returns a dict keyed by canonical name. Empty string for missing
-    members.
+    members; ``_extraction_error`` marker for whole-root misses.
     """
     sources: dict[str, str] = {}
 
-    sampling_src = _read_source("sampling_params.py")
-    config_src = _read_source("config.py")
-    arg_utils_src = _read_source("engine/arg_utils.py")
+    sampling_src = _read_source("sampling_params.py", source_root=source_root)
+    config_src = _read_source("config.py", source_root=source_root)
+    arg_utils_src = _read_source("engine/arg_utils.py", source_root=source_root)
 
     if not sampling_src or not config_src or not arg_utils_src:
-        sources["_extraction_error"] = f"vllm source not found under {VLLM_SOURCE_ROOT}"
+        root = source_root if source_root is not None else VLLM_SOURCE_ROOT
+        sources["_extraction_error"] = f"vllm source not found under {root}"
         return sources
 
     sources["SamplingParams.class"] = _extract_class_body(
@@ -257,8 +278,8 @@ def get_active_sources() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def schema_chunks() -> list[ChunkSpec]:
-    """Return schema-extraction chunks for active vllm 0.7.3.
+def schema_chunks(source_root: Path | None = None) -> list[ChunkSpec]:
+    """Return schema-extraction chunks for vllm.
 
     Strategy:
     - 1 chunk per config dataclass (EngineArgs, SamplingParams,
@@ -271,8 +292,15 @@ def schema_chunks() -> list[ChunkSpec]:
     ``engine_params``. The reference's schema layout has all the
     config-class fields under ``engine_params`` (vllm config namespaces
     flatten there); SamplingParams alone gets ``sampling_params``.
+
+    Parameters
+    ----------
+    source_root : Path | None
+        If None, sources come from the pre-staged active tree at
+        ``VLLM_SOURCE_ROOT``. If provided, sources come from this root -
+        used for bumped-version cells (Phase 3a.2).
     """
-    sources = get_active_sources()
+    sources = get_active_sources(source_root=source_root)
     if "_extraction_error" in sources:
         return [
             ChunkSpec(
@@ -412,8 +440,8 @@ def schema_chunks() -> list[ChunkSpec]:
 # ---------------------------------------------------------------------------
 
 
-def invariants_chunks() -> list[ChunkSpec]:
-    """Return invariants-extraction chunks for active vllm 0.7.3.
+def invariants_chunks(source_root: Path | None = None) -> list[ChunkSpec]:
+    """Return invariants-extraction chunks for vllm.
 
     Strategy:
     - 1 chunk per validator method (most are 5-30 lines; well within
@@ -421,8 +449,17 @@ def invariants_chunks() -> list[ChunkSpec]:
     - Two combined chunks for the tight 'sampling' methods (SamplingParams
       _verify_args + _verify_greedy_sampling + __post_init__) to keep
       context unified.
+
+    Parameters
+    ----------
+    source_root : Path | None
+        If None, sources come from the pre-staged active tree at
+        ``VLLM_SOURCE_ROOT``. If provided, sources come from this root -
+        used for bumped-version cells (Phase 3a.2). The chunker AST-parses
+        files under this root; any missing-file or parse failure surfaces
+        as ``_extraction_error`` in the chunk list (the brittleness signal).
     """
-    sources = get_active_sources()
+    sources = get_active_sources(source_root=source_root)
     if "_extraction_error" in sources:
         return [
             ChunkSpec(
@@ -465,7 +502,7 @@ def invariants_chunks() -> list[ChunkSpec]:
 
     # GuidedDecodingParams __post_init__ (the mutual-exclusion check)
     gdp_post = _extract_method_body(
-        _read_source("sampling_params.py"),
+        _read_source("sampling_params.py", source_root=source_root),
         "GuidedDecodingParams",
         "__post_init__",
         max_lines=30,

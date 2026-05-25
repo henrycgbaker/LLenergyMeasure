@@ -1,0 +1,25 @@
+{
+  "discovered_at": "2026-05-25T07:32:17.237446+00:00",
+  "discovery_method": "strategy_b_oss_llm",
+  "engine": "vllm",
+  "engine_params": {},
+  "engine_version": "0.19.1",
+  "sampling_params": {
+    "max_length": {
+      "default": null,
+      "description": "Maximum length of the sequence",
+      "type": "integer"
+    },
+    "min_length": {
+      "default": 0,
+      "description": "Minimum length of the sequence",
+      "type": "integer"
+    },
+    "no_repeat_ngram_size": {
+      "default": null,
+      "description": "Size of n-grams to avoid repetition",
+      "type": "integer"
+    }
+  },
+  "schema_version": "2.0.0"
+}

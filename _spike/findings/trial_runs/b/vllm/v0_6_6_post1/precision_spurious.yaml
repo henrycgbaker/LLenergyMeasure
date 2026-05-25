@@ -1,0 +1,727 @@
+scoring_format_version: 1.0.0
+precision_spurious:
+- identity:
+  - $defs.GuidedDecodingParams
+  - guided_decoding
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+  note: cell field absent in reference
+- identity:
+  - current_platform
+  - is_cuda()
+  - exact
+  - cuda_device_count_stateless()
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_ray_not_available_for_multi_node_inference
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - engine_params
+  - bias_enabled
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - cache_dtype
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - delay_factor
+  kind: precision_spurious
+  reference_value: null
+  cell_value: number
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - encoder_cache_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - extra_config
+  kind: precision_spurious
+  reference_value: null
+  cell_value: object
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - is_attention_free
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - is_multimodal_model
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - max_cpu_prompt_adapters
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - max_num_encoder_input_tokens
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - placement_group
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - policy
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - pool_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - pool_type
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - object
+    - string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - prompt_adapter_dtype
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+    - string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - quantization_param_path
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - rank
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - runner_type
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - sd_worker_cls
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - send_delta_data
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - sliding_window
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - tokenizer_pool_config
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - worker_use_ray
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - boolean
+    - 'null'
+  note: cell field absent in reference
+- identity:
+  - vllm
+  - block_size
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_block_size_gt_32_cuda
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - cache_dtype
+  - exact
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_cache_dtype_is_auto
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - cache_dtype
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_cache_dtype_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - chunked_prefill_enabled
+  - exact
+  - max_num_batched_tokens
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_max_num_batched_tokens_lt_max_model_len
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - extra_config
+  - type_is_not
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_extra_config_not_dict
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - gpu_memory_utilization
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_gpu_memory_utilization_gt_1
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - is_multimodal_model
+  - exact
+  - max_num_batched_tokens
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_max_num_batched_tokens_geq_multimodal_model_max_num_batched_tokens
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - lora_extra_vocab_size
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_lora_extra_vocab_size_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - max_cpu_loras
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_max_cpu_loras_lt_max_loras
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - max_cpu_loras
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_max_cpu_loras_not_set_when_none
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - max_cpu_prompt_adapters
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_max_cpu_prompt_adapters_not_set_when_none
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - max_lora_rank
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_max_lora_rank_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - max_loras
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_max_loras_lt_1
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - max_num_batched_tokens
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_max_num_batched_tokens_lt_max_num_seqs
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - max_prompt_adapter_token
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_max_prompt_adapter_token_eq_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - max_prompt_adapters
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_max_prompt_adapters_lt_1
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - max_seq_len_to_capture
+  - present
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_max_seq_len_to_capture_set_when_none
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - num_lookahead_slots
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_num_lookahead_slots_lt_zero
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - num_scheduler_steps
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_num_scheduler_steps_lt_one
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - pool_type
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_pool_type_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - pool_type
+  - type_is_not
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_pool_type_isinstance_check
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - quantization
+  - exact
+  - load_in_8bit
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_cuda_graph_not_supported_on_bitsandbytes_8bit
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - quantization
+  - not_equal
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_quantization_method_mismatch
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - quantization
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_quantization_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - runner_type
+  - exact
+  - max_num_batched_tokens
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_max_num_batched_tokens_geq_pooling_model_max_num_batched_tokens
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - sliding_window
+  - present
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_prefix_caching_with_sliding_window
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - tokenizer_mode
+  - not_equal
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_tokenizer_mode_not_empty_string
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - tokenizer_mode
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_tokenizer_mode_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - tokenizer_mode
+  - present
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_tokenizer_mode_case_insensitive
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm
+  - tokenizer_mode
+  - type_is_not
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_tokenizer_mode_type_check
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.hf_config
+  - model_type
+  - exact
+  - enforce_eager
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_cuda_graph_not_supported_for_deepseek_v3
+    severity: warning
+  note: cell invariant absent in reference
+- identity:
+  - vllm.parallel
+  - distributed_executor_backend
+  - not_equal
+  - device_type
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_distributed_executor_backend_not_ray_on_tpu_hpu
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.parallel
+  - distributed_executor_backend
+  - not_equal
+  - world_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_distributed_executor_backend_not_none_when_world_size_greater_than_one
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.parallel
+  - distributed_executor_backend
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_distributed_executor_backend_not_in_allowlist
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.parallel
+  - ray_workers_use_nsight
+  - present
+  - use_ray
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_ray_workers_use_nsight_when_not_use_ray
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.parallel
+  - worker_use_ray
+  - exact
+  - distributed_executor_backend
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_worker_use_ray_with_distributed_executor_backend_not_ray
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.sampling
+  - best_of
+  - lt
+  - n
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_best_of_must_be_greater_than_or_equal_to_n
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.sampling
+  - best_of
+  - not_equal
+  - output_kind
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_best_of_must_equal_n_to_use_output_kind_delta
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.sampling
+  - frequency_penalty
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_frequency_penalty_must_be_in_range
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.sampling
+  - json
+  - present
+  - regex
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_guided_decoding_params_mutual_exclusion
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.sampling
+  - min_p
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_min_p_must_be_in_range
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.sampling
+  - min_tokens
+  - gt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_min_tokens_must_be_less_than_or_equal_to_max_tokens
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.sampling
+  - presence_penalty
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_presence_penalty_must_be_in_range
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.sampling
+  - repetition_penalty
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_repetition_penalty_must_be_in_range
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.sampling
+  - stop
+  - present
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_stop_cannot_contain_empty_string
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.sampling
+  - stop
+  - present
+  - detokenize
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_stop_strings_are_only_supported_when_detokenize_is_true
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.sampling
+  - top_k
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_top_k_must_be_in_range
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.sampling
+  - top_p
+  - not_in
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_top_p_must_be_in_range
+    severity: error
+  note: cell invariant absent in reference

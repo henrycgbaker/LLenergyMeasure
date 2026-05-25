@@ -1,0 +1,76 @@
+schema_version: 1.0.0
+engine: vllm
+engine_version: 0.9.2
+reconciled_at: '2026-05-25T08:49:40.327157+00:00'
+added_by_llm_verifier:
+- id: vllm_samplingparams_raises_temperature_lt_0p1
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'SamplingParams._verify_args: raises when temperature < 0.1'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 368
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.temperature:
+        <: 0.1
+  kwargs_positive:
+    temperature: -1.0
+  kwargs_negative:
+    temperature: 0.1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: temperature must be non-negative, got {temperature}.
+  references:
+  - sampling_params.py:368 (vllm.SamplingParams._verify_args)
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: vllm_loraconfig_raises_max_cpu_loras_lt_ref_max_loras
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'LoRAConfig.__post_init__: raises when max_cpu_loras present
+    True AND max_cpu_loras < @max_loras'
+  severity: error
+  native_type: vllm.config.LoRAConfig
+  miner_source:
+    path: config.py
+    method: __post_init__
+    line_at_scan: 2198
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.lora.max_cpu_loras:
+        present: true
+        <: '@max_loras'
+  kwargs_positive:
+    max_lora_rank: 8
+    max_loras: 2
+    max_cpu_loras: 1
+  kwargs_negative:
+    max_lora_rank: 8
+    max_loras: 1
+    max_cpu_loras: 2
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_cpu_loras ({self.max_cpu_loras}) must be >= max_loras ({self.max_loras})
+  references:
+  - config.py:2198 (vllm.config.LoRAConfig.__post_init__)
+  added_by: llm_verifier
+  flagged_for_review: true
+flagged_spurious_in_deterministic:
+- id: vllm_samplingparams_raises_max_tokens_lt_1
+  reason: The invariant is too restrictive, as max_tokens can be set to 0 for certain
+    use cases.
+missed_diagnoses:
+- id: vllm_samplingparams_raises_temperature_lt_0p1
+  why_missed: AST limitation, the deterministic miner missed this invariant because
+    it only checks for exact matches in the source code and does not account for implicit
+    comparisons.

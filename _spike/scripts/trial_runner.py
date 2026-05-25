@@ -260,6 +260,84 @@ for _vslug, _pyver, _bump in _TRANSFORMERS_BUMPED:
         )
     )
 
+# Phase 3a.2 - bumped-version cells for vllm (4 versions x 3 strategies = 12 cells).
+# Per Phase 1 version_lock: v-2 0.6.0, v-1 0.6.6.post1, v+1 0.9.2, v+major 0.19.1.
+_VLLM_BUMPED: list[tuple[str, str, str]] = [
+    ("v0_6_0", "0.6.0", "v-2"),
+    ("v0_6_6_post1", "0.6.6.post1", "v-1"),
+    ("v0_9_2", "0.9.2", "v+1"),
+    ("v0_19_1", "0.19.1", "v+major"),
+]
+for _vslug, _pyver, _bump in _VLLM_BUMPED:
+    _register(
+        CellSpec(
+            strategy="a",
+            engine="vllm",
+            version_slug=_vslug,
+            bump_distance=_bump,
+            pypi_version=_pyver,
+        )
+    )
+    _register(
+        CellSpec(
+            strategy="b",
+            engine="vllm",
+            version_slug=_vslug,
+            bump_distance=_bump,
+            pypi_version=_pyver,
+            prompt_template_ref="strategies/prompts.py",
+        )
+    )
+    _register(
+        CellSpec(
+            strategy="d-ab",
+            engine="vllm",
+            version_slug=_vslug,
+            bump_distance=_bump,
+            pypi_version=_pyver,
+            prompt_template_ref="strategies/prompts.py",
+        )
+    )
+
+# Phase 3a.2 - bumped-version cells for tensorrt (4 versions x 3 strategies = 12 cells).
+# Per Phase 1 version_lock: v-2 0.19.0, v-1 0.20.0, v+1 1.0.0, v+major 1.2.1.
+_TENSORRT_BUMPED: list[tuple[str, str, str]] = [
+    ("v0_19_0", "0.19.0", "v-2"),
+    ("v0_20_0", "0.20.0", "v-1"),
+    ("v1_0_0", "1.0.0", "v+1"),
+    ("v1_2_1", "1.2.1", "v+major"),
+]
+for _vslug, _pyver, _bump in _TENSORRT_BUMPED:
+    _register(
+        CellSpec(
+            strategy="a",
+            engine="tensorrt",
+            version_slug=_vslug,
+            bump_distance=_bump,
+            pypi_version=_pyver,
+        )
+    )
+    _register(
+        CellSpec(
+            strategy="b",
+            engine="tensorrt",
+            version_slug=_vslug,
+            bump_distance=_bump,
+            pypi_version=_pyver,
+            prompt_template_ref="strategies/prompts.py",
+        )
+    )
+    _register(
+        CellSpec(
+            strategy="d-ab",
+            engine="tensorrt",
+            version_slug=_vslug,
+            bump_distance=_bump,
+            pypi_version=_pyver,
+            prompt_template_ref="strategies/prompts.py",
+        )
+    )
+
 
 def resolve_cell_config(spec: CellSpec, *, lazy_build: bool = False) -> CellSpec:
     """Fill in ``venv_path`` (and any other runtime-resolved fields).
@@ -446,13 +524,162 @@ def run_strategy_a(spec: CellSpec) -> tuple[StrategyOutputPaths, list[str]]:
             schema_path=schema_path, invariants_path=invariants_path
         ), observations
 
-    # Bumped-version path (Phase 3a.2). For now, transformers only.
-    if spec.engine != "transformers":
-        raise NotImplementedError(
-            f"strategy (a) bumped for engine {spec.engine!r} is a separate work item "
-            "(Phase 3a.2.{spec.engine})."
+    # Bumped-version path (Phase 3a.2).
+    if spec.engine == "transformers":
+        return _run_strategy_a_transformers_bumped(spec)
+    if spec.engine in ("vllm", "tensorrt"):
+        return _run_strategy_a_engine_bumped(spec)
+    raise NotImplementedError(f"strategy (a) bumped for engine {spec.engine!r} is unhandled.")
+
+
+def _run_strategy_a_engine_bumped(
+    spec: CellSpec,
+) -> tuple[StrategyOutputPaths, list[str]]:
+    """Subprocess-invoke the active static miner against bumped vllm/tensorrt source.
+
+    Pattern mirrors ``_run_strategy_a_transformers_bumped``. Each engine has
+    its own active producer at
+    ``engine_versions/<engine>/v<active>/producers/static_invariant_miner.py``.
+    The runner subprocess-invokes that module with the bumped source's
+    location prepended to sys.path. The miner runs its AST walk; if a
+    landmark is missing (API rename) or import fails (signature change),
+    it raises ``MinerLandmarkMissingError`` (detectable) or generic
+    ImportError/AttributeError (also detectable via stderr).
+
+    Per trial brief: DO NOT fix the miner mid-trial. The crash IS the
+    brittleness signal. Wrap the subprocess and surface the failure as
+    ``failure_mode=detectable`` or ``infrastructure_missing`` (the latter
+    when source-only venv build itself fails, e.g. wheel download error).
+    """
+    import os
+    import subprocess
+
+    observations: list[str] = []
+    run_dir = spec.to_run_dir()
+    run_dir.mkdir(parents=True, exist_ok=True)
+    invariants_path = run_dir / "invariants.proposed.yaml"
+    schema_path = run_dir / "schema.json"
+
+    # 1. Resolve active version + producer module name per engine.
+    ACTIVE_SLUGS: dict[str, str] = {
+        "vllm": "v0_7_3",
+        "tensorrt": "v0_21_0",
+    }
+    WALKER_FN_NAMES: dict[str, str] = {
+        "vllm": "walk_vllm_static",
+        "tensorrt": "walk_tensorrt",
+    }
+    active_slug = ACTIVE_SLUGS[spec.engine]
+    walker_name = WALKER_FN_NAMES[spec.engine]
+
+    # 2. Build source-only venv (lazy)
+    try:
+        from _spike.scripts.venv_setup import ensure_source_only_venv
+
+        sv = ensure_source_only_venv(engine=spec.engine, version_slug=spec.version_slug)
+    except Exception as exc:
+        observations.append(
+            f"strategy_a bumped: source-only venv build failed: {type(exc).__name__}: {exc}"
         )
-    return _run_strategy_a_transformers_bumped(spec)
+        invariants_path.write_text("schema_version: 1.0.0\ninvariants: []\n")
+        schema_path.write_text("{}")
+        observations.append("strategy_a bumped: failure_mode=infrastructure_missing")
+        return (
+            StrategyOutputPaths(schema_path=schema_path, invariants_path=invariants_path),
+            observations,
+        )
+
+    py = "/home/h.baker@hertie-school.lan/miniforge3/bin/python3.12"
+    if not Path(py).exists():
+        py = sys.executable
+
+    # 3. Subprocess: prepend bumped source's PARENT to sys.path so
+    # `import <engine>` resolves to the bumped tree. The walker calls
+    # `_check_landmarks()` which imports the package - this is exactly
+    # where a bumped vllm/tensorrt is expected to fail (signature shift,
+    # module rename). DO NOT instrument to "make it work".
+    runner_src = f"""
+import sys, os, traceback
+sys.path = [p for p in sys.path if 'workspace/llenergymeasure/.venv' not in p]
+sys.path.insert(0, os.environ['SOURCE_ROOT_PARENT'])
+sys.path.insert(0, os.environ['PROJECT_ROOT'])
+try:
+    from engine_versions.{spec.engine}.{active_slug}.producers import static_invariant_miner as miner
+    result = miner.{walker_name}()
+    # walk_vllm_static returns (candidates, version); walk_tensorrt returns
+    # (candidates, version, rel_path). Normalise.
+    if len(result) == 2:
+        candidates, version = result
+        rel_path = None
+    else:
+        candidates, version, rel_path = result
+    if rel_path is None:
+        text = miner.emit_yaml(candidates, engine_version=version)
+    else:
+        text = miner.emit_yaml(candidates, engine_version=version, rel_path=rel_path)
+    with open(os.environ['OUT_PATH'], 'w') as f:
+        f.write(text)
+    print(f'wrote {{len(candidates)}} candidates to {{os.environ["OUT_PATH"]}}')
+except Exception as exc:
+    print(f'MINER_CRASH:{{type(exc).__name__}}:{{exc}}', file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    raise SystemExit(1)
+"""
+    env = os.environ.copy()
+    env["SOURCE_ROOT_PARENT"] = str(sv.source_dir.parent)
+    env["PROJECT_ROOT"] = str(_PROJECT_ROOT)
+    env["OUT_PATH"] = str(invariants_path)
+    try:
+        proc = subprocess.run(
+            [py, "-c", runner_src],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+    except subprocess.TimeoutExpired:
+        observations.append(
+            f"strategy_a bumped ({spec.engine}): miner subprocess timed out (>180s)"
+        )
+        invariants_path.write_text("schema_version: 1.0.0\ninvariants: []\n")
+        schema_path.write_text("{}")
+        observations.append(
+            "strategy_a bumped: failure_mode=miner_runtime_error;subreason=timeout"
+        )
+        return (
+            StrategyOutputPaths(schema_path=schema_path, invariants_path=invariants_path),
+            observations,
+        )
+
+    if proc.returncode != 0:
+        stderr_tail = proc.stderr[-2000:] if proc.stderr else "<empty>"
+        observations.append(
+            f"strategy_a bumped ({spec.engine}): miner subprocess returncode={proc.returncode}; "
+            f"stderr_tail={stderr_tail}"
+        )
+        invariants_path.write_text("schema_version: 1.0.0\ninvariants: []\n")
+        schema_path.write_text("{}")
+        observations.append("strategy_a bumped: failure_mode=detectable")
+        return (
+            StrategyOutputPaths(schema_path=schema_path, invariants_path=invariants_path),
+            observations,
+        )
+
+    # Success path: stdout has "wrote N candidates...".
+    observations.append(f"strategy_a bumped ({spec.engine}): stdout={proc.stdout.strip()}")
+    # Schema: copy active reference (no per-version schema discovery in
+    # bumped (a) - the miner only emits invariants).
+    active_schema = (
+        ENGINE_VERSIONS_ROOT / spec.engine / active_slug / "outputs" / "schema.discovered.json"
+    )
+    if active_schema.exists():
+        schema_path.write_text(active_schema.read_text())
+    else:
+        schema_path.write_text("{}")
+    return (
+        StrategyOutputPaths(schema_path=schema_path, invariants_path=invariants_path),
+        observations,
+    )
 
 
 def _run_strategy_a_transformers_bumped(
@@ -473,8 +700,7 @@ def _run_strategy_a_transformers_bumped(
         sv = ensure_source_only_venv(engine="transformers", version_slug=spec.version_slug)
     except Exception as exc:
         observations.append(
-            f"strategy_a bumped: source-only venv build failed: "
-            f"{type(exc).__name__}: {exc}"
+            f"strategy_a bumped: source-only venv build failed: {type(exc).__name__}: {exc}"
         )
         # Emit empty proposed.yaml so the scorer doesn't choke on missing file.
         invariants_path = run_dir / "invariants.proposed.yaml"
@@ -599,9 +825,7 @@ def run_strategy_b(spec: CellSpec) -> tuple[StrategyOutputPaths, list[str]]:
             # the chunker. Surface AST-extraction errors via observations.
             from _spike.scripts.venv_setup import ensure_source_only_venv
 
-            sv = ensure_source_only_venv(
-                engine="transformers", version_slug=spec.version_slug
-            )
+            sv = ensure_source_only_venv(engine="transformers", version_slug=spec.version_slug)
             source_root = sv.source_dir
         out = run_b_on_transformers_active(
             out_dir=run_dir,
@@ -611,28 +835,34 @@ def run_strategy_b(spec: CellSpec) -> tuple[StrategyOutputPaths, list[str]]:
             source_root=source_root,
         )
     elif spec.engine == "vllm":
+        # Phase 3a.2 vllm: lazy-build source-only venv and pass to chunker.
+        vllm_source_root: Path | None = None
         if spec.bump_distance != "active":
-            raise NotImplementedError(
-                f"strategy (b) for bumped vllm ({spec.bump_distance}) is "
-                "Phase 3a.2.vllm scope (separate work item)."
-            )
+            from _spike.scripts.venv_setup import ensure_source_only_venv
+
+            sv = ensure_source_only_venv(engine="vllm", version_slug=spec.version_slug)
+            vllm_source_root = sv.source_dir
         out = run_b_on_vllm_active(
             out_dir=run_dir,
             engine_version=spec.pypi_version or "0.7.3",
             backend=backend,
             multipass=True,
+            source_root=vllm_source_root,
         )
     elif spec.engine == "tensorrt":
+        # Phase 3a.2 tensorrt: lazy-build source-only venv and pass to chunker.
+        trt_source_root: Path | None = None
         if spec.bump_distance != "active":
-            raise NotImplementedError(
-                f"strategy (b) for bumped tensorrt ({spec.bump_distance}) is "
-                "Phase 3a.2.tensorrt scope (separate work item)."
-            )
+            from _spike.scripts.venv_setup import ensure_source_only_venv
+
+            sv = ensure_source_only_venv(engine="tensorrt", version_slug=spec.version_slug)
+            trt_source_root = sv.source_dir
         out = run_b_on_tensorrt_active(
             out_dir=run_dir,
             engine_version=spec.pypi_version or "0.21.0",
             backend=backend,
             multipass=True,
+            source_root=trt_source_root,
         )
     else:
         raise NotImplementedError(f"strategy (b) for engine {spec.engine!r} not implemented")
@@ -694,9 +924,7 @@ def run_strategy_d(spec: CellSpec) -> tuple[StrategyOutputPaths, list[str]]:
             if spec.bump_distance != "active":
                 from _spike.scripts.venv_setup import ensure_source_only_venv
 
-                sv = ensure_source_only_venv(
-                    engine="transformers", version_slug=spec.version_slug
-                )
+                sv = ensure_source_only_venv(engine="transformers", version_slug=spec.version_slug)
                 source_root = sv.source_dir
             out = run_d_ab_on_transformers_active(
                 out_dir=run_dir,
@@ -704,22 +932,29 @@ def run_strategy_d(spec: CellSpec) -> tuple[StrategyOutputPaths, list[str]]:
                 source_root=source_root,
             )
         elif spec.engine == "vllm":
+            # Phase 3a.2 vllm: source-only venv path threads through.
+            vllm_d_source_root: Path | None = None
             if spec.bump_distance != "active":
-                raise NotImplementedError(
-                    f"strategy (d-ab) for bumped vllm ({spec.bump_distance}) is "
-                    "Phase 3a.2.vllm scope (separate work item)."
-                )
+                from _spike.scripts.venv_setup import ensure_source_only_venv
+
+                sv = ensure_source_only_venv(engine="vllm", version_slug=spec.version_slug)
+                vllm_d_source_root = sv.source_dir
             out = run_d_ab_on_vllm_active(
-                out_dir=run_dir, engine_version=spec.pypi_version or "0.7.3"
+                out_dir=run_dir,
+                engine_version=spec.pypi_version or "0.7.3",
+                source_root=vllm_d_source_root,
             )
         elif spec.engine == "tensorrt":
+            trt_d_source_root: Path | None = None
             if spec.bump_distance != "active":
-                raise NotImplementedError(
-                    f"strategy (d-ab) for bumped tensorrt ({spec.bump_distance}) is "
-                    "Phase 3a.2.tensorrt scope (separate work item)."
-                )
+                from _spike.scripts.venv_setup import ensure_source_only_venv
+
+                sv = ensure_source_only_venv(engine="tensorrt", version_slug=spec.version_slug)
+                trt_d_source_root = sv.source_dir
             out = run_d_ab_on_tensorrt_active(
-                out_dir=run_dir, engine_version=spec.pypi_version or "0.21.0"
+                out_dir=run_dir,
+                engine_version=spec.pypi_version or "0.21.0",
+                source_root=trt_d_source_root,
             )
         else:
             raise NotImplementedError(f"strategy (d-ab) for engine {spec.engine!r} not implemented")

@@ -1,0 +1,38 @@
+{
+  "brittleness_detectable_fail_count": null,
+  "brittleness_pass_through_rate": null,
+  "brittleness_patch_cost_loc": null,
+  "brittleness_silent_fail_count": null,
+  "bump_distance": "v+major",
+  "cell_invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/_spike/findings/trial_runs/b/vllm/v0_19_1/invariants.proposed.yaml",
+  "cell_schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/_spike/findings/trial_runs/b/vllm/v0_19_1/schema.json",
+  "energy_wh": 41.07645981615252,
+  "engine": "vllm",
+  "failure_modes": [
+    "silent"
+  ],
+  "invariant_cell_count": 4,
+  "invariant_failure_mode": "silent",
+  "invariant_intersection_count": 0,
+  "invariant_precision": 0.0,
+  "invariant_recall": 0.0,
+  "invariant_reference_count": 26,
+  "invariant_severity_accuracy": 0.0,
+  "observations": [
+    "multipass summary: pass2_dropped=1, pass3_added=2, total_invariants=4",
+    "strategy_b: engine='vllm', schema_chunks=1, invariants_chunks=1, schema_wall=13.6s, invariants_wall=861.4s, multipass=True"
+  ],
+  "reference_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/engine_versions/vllm/v0_7_3/outputs/schema.discovered.json",
+  "schema_cell_count": 3,
+  "schema_failure_mode": "silent",
+  "schema_intersection_count": 0,
+  "schema_precision": 0.0,
+  "schema_recall": 0.0,
+  "schema_reference_count": 135,
+  "schema_type_accuracy": 0.0,
+  "scored_at": "2026-05-25T07:46:38.767673+00:00",
+  "scoring_format_version": "1.0.0",
+  "strategy": "b",
+  "version_slug": "v0_19_1",
+  "wall_clock_sec": 875.2904680110514
+}

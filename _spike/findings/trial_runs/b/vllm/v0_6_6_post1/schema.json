@@ -1,0 +1,596 @@
+{
+  "$defs": {
+    "GuidedDecodingParams": {
+      "properties": {
+        "guided_decoding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GuidedDecodingParams"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "type": "object"
+    }
+  },
+  "discovered_at": "2026-05-25T07:54:35.664668+00:00",
+  "discovery_method": "strategy_b_oss_llm",
+  "engine": "vllm",
+  "engine_params": {
+    "allowed_local_media_path": {
+      "default": "",
+      "type": "string"
+    },
+    "bias_enabled": {
+      "default": false,
+      "type": "boolean"
+    },
+    "block_size": {
+      "type": "integer"
+    },
+    "cache_dtype": {
+      "type": "string"
+    },
+    "code_revision": {
+      "default": null,
+      "type": "string"
+    },
+    "config_format": {
+      "enum": [
+        "AUTO"
+      ]
+    },
+    "cpu_offload_gb": {
+      "default": 0,
+      "type": "number"
+    },
+    "delay_factor": {
+      "default": 0.0,
+      "type": "number"
+    },
+    "disable_custom_all_reduce": {
+      "default": false,
+      "type": "boolean"
+    },
+    "disable_log_stats": {
+      "default": false,
+      "type": "boolean"
+    },
+    "disable_sliding_window": {
+      "default": false,
+      "type": "boolean"
+    },
+    "distributed_executor_backend": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Backend to use for distributed model workers."
+    },
+    "download_dir": {
+      "default": null,
+      "type": "string"
+    },
+    "dtype": {
+      "default": "auto",
+      "type": "string"
+    },
+    "enable_chunked_prefill": {
+      "default": false,
+      "type": "boolean"
+    },
+    "enable_prefix_caching": {
+      "default": false,
+      "type": "boolean"
+    },
+    "encoder_cache_size": {
+      "default": 16384,
+      "type": "integer"
+    },
+    "extra_config": {
+      "type": "object"
+    },
+    "fully_sharded_loras": {
+      "default": false,
+      "type": "boolean"
+    },
+    "gpu_memory_utilization": {
+      "type": "number"
+    },
+    "guided_decoding_backend": {
+      "default": "xgrammar",
+      "type": "string"
+    },
+    "is_attention_free": {
+      "default": false,
+      "type": "boolean"
+    },
+    "is_multimodal_model": {
+      "default": false,
+      "type": "boolean"
+    },
+    "kv_cache_dtype": {
+      "default": "auto",
+      "type": "string"
+    },
+    "load_format": {
+      "default": "auto",
+      "type": "string"
+    },
+    "long_lora_scaling_factors": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "lora_dtype": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "torch.dtype",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "lora_extra_vocab_size": {
+      "default": 256,
+      "type": "integer"
+    },
+    "max_cpu_loras": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "max_cpu_prompt_adapters": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "max_logprobs": {
+      "default": 20,
+      "type": "integer"
+    },
+    "max_lora_rank": {
+      "type": "integer"
+    },
+    "max_loras": {
+      "type": "integer"
+    },
+    "max_model_len": {
+      "default": 8192,
+      "type": "integer"
+    },
+    "max_num_batched_tokens": {
+      "default": null,
+      "type": "integer"
+    },
+    "max_num_encoder_input_tokens": {
+      "default": 16384,
+      "type": "integer"
+    },
+    "max_num_seqs": {
+      "default": 128,
+      "type": "integer"
+    },
+    "max_parallel_loading_workers": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Maximum number of multiple batches when load model sequentially."
+    },
+    "max_prompt_adapter_token": {
+      "type": "integer"
+    },
+    "max_prompt_adapters": {
+      "type": "integer"
+    },
+    "model": {
+      "type": "string"
+    },
+    "multi_step_stream_outputs": {
+      "default": false,
+      "type": "boolean"
+    },
+    "num_gpu_blocks_override": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "num_lookahead_slots": {
+      "default": 0,
+      "type": "integer"
+    },
+    "num_scheduler_steps": {
+      "default": 1,
+      "type": "integer"
+    },
+    "pipeline_parallel_size": {
+      "default": 1,
+      "description": "Number of pipeline parallel groups.",
+      "type": "integer"
+    },
+    "placement_group": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Ray distributed model workers placement group."
+    },
+    "policy": {
+      "default": "fcfs",
+      "type": "string"
+    },
+    "pool_size": {
+      "type": "integer"
+    },
+    "pool_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "BaseTokenizerGroup",
+          "type": "object"
+        }
+      ]
+    },
+    "preemption_mode": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "prompt_adapter_dtype": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "torch.dtype",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "quantization_param_path": {
+      "default": null,
+      "type": "string"
+    },
+    "rank": {
+      "default": 0,
+      "type": "integer"
+    },
+    "ray_workers_use_nsight": {
+      "default": false,
+      "type": "boolean"
+    },
+    "revision": {
+      "default": null,
+      "type": "string"
+    },
+    "runner_type": {
+      "default": "generate",
+      "type": "string"
+    },
+    "sd_worker_cls": {
+      "default": "auto",
+      "type": "string"
+    },
+    "seed": {
+      "default": 0,
+      "type": "integer"
+    },
+    "send_delta_data": {
+      "default": false,
+      "type": "boolean"
+    },
+    "served_model_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "skip_tokenizer_init": {
+      "default": false,
+      "type": "boolean"
+    },
+    "sliding_window": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "swap_space": {
+      "type": "number"
+    },
+    "task": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "enum": [
+            "draft"
+          ]
+        }
+      ]
+    },
+    "tensor_parallel_size": {
+      "default": 1,
+      "description": "Number of tensor parallel groups.",
+      "type": "integer"
+    },
+    "tokenizer": {
+      "type": "string"
+    },
+    "tokenizer_mode": {
+      "type": "string"
+    },
+    "tokenizer_pool_config": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Config for the tokenizer pool."
+    },
+    "trust_remote_code": {
+      "default": false,
+      "type": "boolean"
+    },
+    "use_v2_block_manager": {
+      "default": true,
+      "type": "boolean"
+    },
+    "worker_cls": {
+      "default": "auto",
+      "type": "string"
+    },
+    "worker_use_ray": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "engine_version": "0.6.6.post1",
+  "sampling_params": {
+    "allowed_token_ids": {
+      "default": null,
+      "items": {
+        "type": "integer"
+      },
+      "type": "array"
+    },
+    "bad_words": {
+      "default": null,
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "best_of": {
+      "default": null,
+      "type": "integer"
+    },
+    "detokenize": {
+      "default": true,
+      "type": "boolean"
+    },
+    "frequency_penalty": {
+      "default": 0.0,
+      "type": "number"
+    },
+    "ignore_eos": {
+      "default": false,
+      "type": "boolean"
+    },
+    "include_stop_str_in_output": {
+      "default": false,
+      "type": "boolean"
+    },
+    "logit_bias": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "logits_processors": {
+      "anyOf": [
+        {
+          "items": {},
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "logprobs": {
+      "default": null,
+      "type": "integer"
+    },
+    "max_tokens": {
+      "default": 16,
+      "type": "integer"
+    },
+    "min_p": {
+      "default": 0.0,
+      "type": "number"
+    },
+    "min_tokens": {
+      "default": 0,
+      "type": "integer"
+    },
+    "n": {
+      "default": 1,
+      "type": "integer"
+    },
+    "output_kind": {
+      "description": "RequestOutputKind"
+    },
+    "presence_penalty": {
+      "default": 0.0,
+      "type": "number"
+    },
+    "prompt_logprobs": {
+      "default": null,
+      "type": "integer"
+    },
+    "repetition_penalty": {
+      "default": 1.0,
+      "type": "number"
+    },
+    "seed": {
+      "default": null,
+      "type": "integer"
+    },
+    "skip_special_tokens": {
+      "default": true,
+      "type": "boolean"
+    },
+    "spaces_between_special_tokens": {
+      "default": true,
+      "type": "boolean"
+    },
+    "stop": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "stop_token_ids": {
+      "default": null,
+      "items": {
+        "type": "integer"
+      },
+      "type": "array"
+    },
+    "temperature": {
+      "default": 1.0,
+      "type": "number"
+    },
+    "top_k": {
+      "default": -1,
+      "type": "integer"
+    },
+    "top_p": {
+      "default": 1.0,
+      "type": "number"
+    },
+    "truncate_prompt_tokens": {
+      "default": null,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "schema_version": "2.0.0"
+}

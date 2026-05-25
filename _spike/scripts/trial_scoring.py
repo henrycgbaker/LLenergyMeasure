@@ -134,6 +134,61 @@ PREDICATE_KINDS = frozenset(
 
 
 # ---------------------------------------------------------------------------
+# Namespace canonicalisation (Phase 2.6 rubric fix)
+# ---------------------------------------------------------------------------
+#
+# Background: the b/tensorrt active cell scored 0.0% invariant_recall against
+# the canonical reference because the LLM emits identity tuples under
+# `tensorrt_llm.<field>` (the package name of the installed library) while
+# the reference catalogue (mined by the static walker) uses `tensorrt.<field>`
+# (the engine convention adopted for the trial). Same engine, same field,
+# same predicate -> two distinct identity tuples -> zero intersection.
+#
+# The fix collapses both forms to a single canonical namespace at identity-
+# extraction time, applied symmetrically on BOTH reference and cell sides.
+# Prompts stay locked (the LLM is not instructed about which form to emit);
+# the scoring rubric absorbs the convention drift.
+#
+# Per-engine policy:
+#   - transformers: namespaces already consistent (`transformers.*`); pass
+#     through unchanged.
+#   - vllm: namespaces already consistent (`vllm.*`); pass through unchanged.
+#   - tensorrt: collapse `tensorrt_llm.<X>` -> `tensorrt.<X>` (canonical).
+#     Other tensorrt-prefixed forms pass through unchanged.
+
+
+def canonicalise_namespace(ns: str, engine: str | None = None) -> str:
+    """Return the canonical form of an invariant/schema namespace.
+
+    Applied during identity extraction on BOTH reference and cell output so
+    a single semantic invariant produces a single identity tuple regardless
+    of which prefix convention the source happened to use.
+
+    Parameters
+    ----------
+    ns : str
+        The raw namespace prefix as extracted from the source data
+        (e.g. ``"tensorrt_llm"``, ``"tensorrt_llm.sampling"``, ``"vllm"``).
+    engine : str | None
+        Optional engine hint. When provided, the canonicalisation can be
+        scoped per-engine (we only collapse tensorrt_llm -> tensorrt for
+        the tensorrt engine). When omitted, the function applies a global
+        rule that infers engine from the namespace prefix - safe because
+        cross-engine collisions are impossible in practice (no engine uses
+        another engine's prefix).
+    """
+    if not isinstance(ns, str) or not ns:
+        return ns
+    # tensorrt: collapse tensorrt_llm[.X] -> tensorrt[.X]
+    if ns == "tensorrt_llm":
+        return "tensorrt"
+    if ns.startswith("tensorrt_llm."):
+        return "tensorrt." + ns[len("tensorrt_llm.") :]
+    # transformers + vllm: namespaces already consistent.
+    return ns
+
+
+# ---------------------------------------------------------------------------
 # Failure-mode taxonomy
 # ---------------------------------------------------------------------------
 
@@ -436,6 +491,12 @@ def invariant_identity(inv: dict[str, Any]) -> InvariantId:
     primary_key = keys[0]
     primary_value = match_fields[primary_key]
     namespace, _, native_field = primary_key.rpartition(".")
+    # Phase 2.6 rubric fix: canonicalise namespace before identity comparison
+    # so cross-engine convention drift (e.g. `tensorrt_llm.X` vs `tensorrt.X`)
+    # doesn't produce disjoint identity tuples. The engine hint comes from
+    # the invariant's match.engine slot when present.
+    engine_hint = (inv.get("match") or {}).get("engine") or inv.get("engine")
+    namespace = canonicalise_namespace(namespace, engine_hint)
     predicate_kind = _predicate_kind_for(primary_value)
     if len(keys) >= 2:
         secondary_key = keys[1]
@@ -689,7 +750,11 @@ def score_invariants(
     # Failure-mode classification
     failure_mode = FailureMode.NONE
     inv_list = cell_invariants.get("invariants") if isinstance(cell_invariants, dict) else None
-    if cell_invariants.get("error") or inv_list is None or (isinstance(inv_list, list) and len(inv_list) == 0):
+    if (
+        cell_invariants.get("error")
+        or inv_list is None
+        or (isinstance(inv_list, list) and len(inv_list) == 0)
+    ):
         failure_mode = FailureMode.DETECTABLE
     elif recall < config.silent_threshold:
         failure_mode = FailureMode.SILENT

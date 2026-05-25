@@ -1,0 +1,38 @@
+{
+  "brittleness_detectable_fail_count": null,
+  "brittleness_pass_through_rate": null,
+  "brittleness_patch_cost_loc": null,
+  "brittleness_silent_fail_count": null,
+  "bump_distance": "v+1",
+  "cell_invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/_spike/findings/trial_runs/a/vllm/v0_9_2/invariants.proposed.yaml",
+  "cell_schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/_spike/findings/trial_runs/a/vllm/v0_9_2/schema.json",
+  "energy_wh": 0.034337333436707126,
+  "engine": "vllm",
+  "failure_modes": [
+    "detectable"
+  ],
+  "invariant_cell_count": 0,
+  "invariant_failure_mode": "detectable",
+  "invariant_intersection_count": 0,
+  "invariant_precision": 0.0,
+  "invariant_recall": 0.0,
+  "invariant_reference_count": 26,
+  "invariant_severity_accuracy": 0.0,
+  "observations": [
+    "strategy_a bumped (vllm): miner subprocess returncode=1; stderr_tail=MINER_CRASH:MinerLandmarkMissingError:Miner landmark missing: vllm.sampling_params (module not importable: No module named 'msgspec')\nTraceback (most recent call last):\n  File \"/home/h.baker@hertie-school.lan/workspace/llenergymeasure/engine_versions/vllm/v0_7_3/producers/static_invariant_miner.py\", line 974, in _check_landmarks\n    module = __import__(target.module_path, fromlist=[target.class_name])\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/trial_vllm_v0_9_2_venv/src/vllm/sampling_params.py\", line 10, in <module>\n    import msgspec\nModuleNotFoundError: No module named 'msgspec'\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"<string>\", line 8, in <module>\n  File \"/home/h.baker@hertie-school.lan/workspace/llenergymeasure/engine_versions/vllm/v0_7_3/producers/static_invariant_miner.py\", line 1017, in walk_vllm_static\n    installed_version, abs_paths = _check_landmarks()\n                                   ^^^^^^^^^^^^^^^^^^\n  File \"/home/h.baker@hertie-school.lan/workspace/llenergymeasure/engine_versions/vllm/v0_7_3/producers/static_invariant_miner.py\", line 976, in _check_landmarks\n    raise MinerLandmarkMissingError(\nscripts.engine_producers._base.MinerLandmarkMissingError: Miner landmark missing: vllm.sampling_params (module not importable: No module named 'msgspec')\n",
+    "strategy_a bumped: failure_mode=detectable"
+  ],
+  "reference_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/engine_versions/vllm/v0_7_3/outputs/schema.discovered.json",
+  "schema_cell_count": 0,
+  "schema_failure_mode": "detectable",
+  "schema_intersection_count": 0,
+  "schema_precision": 0.0,
+  "schema_recall": 0.0,
+  "schema_reference_count": 135,
+  "schema_type_accuracy": 0.0,
+  "scored_at": "2026-05-25T07:31:43.941379+00:00",
+  "scoring_format_version": "1.0.0",
+  "strategy": "a",
+  "version_slug": "v0_9_2",
+  "wall_clock_sec": 2.9460806362330914
+}

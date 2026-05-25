@@ -3015,3 +3015,33 @@ When Phase 4 + 5 conclude, doc converts into:
 - Subset of the trial's PR-extraction if H4's patches make gaps trivially closable.
 
 In neither case do gaps become "accepted forever".
+
+
+## 2026-05-25 Phase 2.6 closure (namespace canonicalisation) + Phase 3a.2 vllm complete
+
+### Phase 2.6 (P26-1..4) all done
+
+- **P26-1**: `trial_scoring.canonicalise_namespace(ns, engine=None)` collapses `tensorrt_llm.X` -> `tensorrt.X` at identity-extraction time. Pass-through for transformers/vllm (already consistent). Applied in `invariant_identity()`. Inline copy in `llm_b_oss._invariant_identity` for multipass dedup symmetry. 2 new tests; all 18 pass.
+- **P26-2**: b/tensorrt active rescored: I_r 0.0% -> 25.8% (intersection 0 -> 8); failure_mode `silent` -> `none`. d-ab/tensorrt active unchanged (100% by construction). The remaining gap is REAL (cell finds different predicates + different fields than reference; e.g. cell has `max_records gt`, ref has `max_records lt`).
+- **P26-3**: vllm_chunker + tensorrt_chunker parametrised with `source_root: Path | None`. Mirrors transformers_chunker shape. All call sites updated; tests pass.
+- **P26-4**: trial_runner registers 8 bumped cells (4 vllm + 4 tensorrt). NotImplementedErrors lifted for run_strategy_b + run_strategy_d on vllm + tensorrt bumped. Added `_run_strategy_a_engine_bumped()` for (a) subprocess invocation against bumped source via PYTHONPATH override.
+
+### Phase 3a.2 vllm complete: 12 cells
+
+(a) cells: all 4 fail `detectable` with `ModuleNotFoundError: msgspec` - vllm has a hard import-time transitive dep on msgspec that the source-only venv pattern does not install. This is the (a) brittleness signal at the dependency-resolution level.
+
+(b) cells: 3 of 4 succeed at ~31-38% recall (v-2 / v-1 / v+1). v+major (0.19.1) silent-fails because vllm refactored `config.py` into `config/` subdirectory between 0.7.3 and 0.19; the chunker reads `config.py` which no longer exists. This is the chunker's file-layout-assumption brittleness; a more robust chunker would glob + AST-discover.
+
+(d-ab) cells: all 4 score 100% recall by construction (active seed is the reference). Extension counts: 0/0/2/0 across v-2/v-1/v+1/v+major. Only v+1 (0.9.2) yielded novel extensions; v+major was insulated from the chunker collapse because the active reference is included regardless.
+
+### Key v+major brittleness pattern
+
+vllm 0.19.1: `config.py` (single file) -> `config/` (subdirectory). The chunker's hardcoded `_read_source("config.py")` returns empty, producing `source_extraction_failed` chunks. (b) collapses to silent-fail. (d-ab) survives because it doesn't depend on chunker-extracted source for the deterministic seed.
+
+The lesson for Phase 3b: chunkers should be FILE-LAYOUT-AGNOSTIC. AST-discover the landmark classes by walking the package tree, not by hard-coded paths.
+
+### Trial state
+
+- 35 cells in `trial_matrix.md` (was 23 before this session): 11 active + 12 transformers-bumped + 12 vllm-bumped.
+- Branch `trial/mining-substrate-bakeoff` ready for tensorrt bumped (Phase 3a.2.tensorrt) - infrastructure complete.
+- Phase 3b hybrid catalogue not started (Tier 1 H4 is the highest-priority next item per `phase3b_hybrid_catalogue.md`).

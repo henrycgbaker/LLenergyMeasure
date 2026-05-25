@@ -1,0 +1,1153 @@
+{
+  "$defs": {
+    "GuidedDecodingParams": {
+      "properties": {
+        "guided_decoding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GuidedDecodingParams"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "type": "object"
+    }
+  },
+  "discovered_at": "2026-05-25T07:56:05.612803+00:00",
+  "discovery_method": "strategy_b_oss_llm",
+  "engine": "vllm",
+  "engine_params": {
+    "additional_config": {
+      "type": "object"
+    },
+    "allowed_local_media_path": {
+      "type": "string"
+    },
+    "backend": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Which engine will be used for guided decoding (JSON schema / regex etc) by default. With \"auto\", we will make opinionated choices based on request contents and what the backend libraries currently support, so the behavior is subject to change in each release."
+    },
+    "bias_enabled": {
+      "default": false,
+      "description": "Enable bias for LoRA adapters.",
+      "type": "boolean"
+    },
+    "block_size": {
+      "default": null,
+      "description": "Size of a contiguous cache block in number of tokens"
+    },
+    "cache_dtype": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Data type for kv cache storage"
+    },
+    "calculate_kv_scales": {
+      "default": false,
+      "type": "boolean"
+    },
+    "chunked_prefill_enabled": {
+      "type": "boolean"
+    },
+    "code_revision": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "collect_detailed_traces": {
+      "anyOf": [
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "compilation_config": {},
+    "config_format": {
+      "type": "string"
+    },
+    "cpu_kvcache_space_bytes": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "(CPU backend only) CPU key-value cache space"
+    },
+    "cpu_offload_gb": {
+      "default": 0,
+      "description": "The space in GiB to offload to CPU, per GPU",
+      "type": "number"
+    },
+    "cuda_graph_sizes": {
+      "default": [
+        512
+      ],
+      "items": {
+        "type": "integer"
+      },
+      "type": "array"
+    },
+    "data_parallel_address": {
+      "default": null,
+      "type": "string"
+    },
+    "data_parallel_backend": {
+      "default": "mp",
+      "description": "Backend to use for data parallel, either \"mp\" or \"ray\".",
+      "enum": [
+        "mp",
+        "ray"
+      ],
+      "type": "string"
+    },
+    "data_parallel_external_lb": {
+      "default": false,
+      "description": "Whether to use \"external\" DP LB mode. Applies only to online serving and when data_parallel_size > 0. Set implicitly when data_parallel_rank is provided explicitly to vllm serve.",
+      "type": "boolean"
+    },
+    "data_parallel_master_ip": {
+      "default": "127.0.0.1",
+      "description": "IP of the data parallel master.",
+      "type": "string"
+    },
+    "data_parallel_master_port": {
+      "default": 29500,
+      "description": "Port of the data parallel master.",
+      "type": "integer"
+    },
+    "data_parallel_rank": {
+      "default": 0,
+      "description": "Rank of the data parallel group.",
+      "type": "integer"
+    },
+    "data_parallel_rank_local": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Local rank of the data parallel group, set only in SPMD mode."
+    },
+    "data_parallel_rpc_port": {
+      "default": 29550,
+      "description": "Port for data parallel messaging.",
+      "type": "integer"
+    },
+    "data_parallel_size": {
+      "default": 1,
+      "description": "Number of data parallel groups. MoE layers will be sharded according to the product of the tensor parallel size and data parallel size.",
+      "type": "integer"
+    },
+    "data_parallel_size_local": {
+      "default": 1,
+      "description": "Number of local data parallel groups.",
+      "type": "integer"
+    },
+    "delay_factor": {
+      "default": 0.0,
+      "type": "number"
+    },
+    "device": {},
+    "disable_additional_properties": {
+      "default": false,
+      "description": "If `True`, the `guidance` backend will not use `additionalProperties` in the JSON schema. This is only supported for the `guidance` backend and is used to better align its behaviour with `outlines` and `xgrammar`.",
+      "type": "boolean"
+    },
+    "disable_any_whitespace": {
+      "default": false,
+      "description": "If `True`, the model will not generate any whitespace during guided decoding. This is only supported for xgrammar and guidance backends.",
+      "type": "boolean"
+    },
+    "disable_async_output_proc": {
+      "type": "boolean"
+    },
+    "disable_cascade_attn": {
+      "default": false,
+      "type": "boolean"
+    },
+    "disable_chunked_mm_input": {
+      "default": false,
+      "type": "boolean"
+    },
+    "disable_custom_all_reduce": {
+      "default": false,
+      "description": "Disable the custom all-reduce kernel and fall back to NCCL.",
+      "type": "boolean"
+    },
+    "disable_fallback": {
+      "default": false,
+      "description": "If `True`, vLLM will not fallback to a different backend on error.",
+      "type": "boolean"
+    },
+    "disable_hybrid_kv_cache_manager": {
+      "type": "boolean"
+    },
+    "disable_log_stats": {
+      "type": "boolean"
+    },
+    "disable_mm_preprocessor_cache": {
+      "type": "boolean"
+    },
+    "disable_sliding_window": {
+      "default": false,
+      "type": "boolean"
+    },
+    "distributed_executor_backend": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Backend to use for distributed model workers, either \"ray\" or \"mp\" (multiprocessing). If the product of pipeline_parallel_size and tensor_parallel_size is less than or equal to the number of GPUs available, \"mp\" will be used to keep processing on a single host. Otherwise, this will default to \"ray\" if Ray is installed and fail otherwise. Note that tpu and hpu only support Ray for distributed inference.",
+      "enum": [
+        "mp",
+        "ray"
+      ]
+    },
+    "download_dir": {
+      "default": null,
+      "type": "string"
+    },
+    "dtype": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object"
+        }
+      ],
+      "enum": [
+        "auto",
+        "half",
+        "float16",
+        "bfloat16",
+        "float",
+        "float32"
+      ]
+    },
+    "enable_chunked_prefill": {
+      "default": null,
+      "type": "boolean"
+    },
+    "enable_eplb": {
+      "default": false,
+      "description": "Enable expert parallelism load balancing for MoE layers.",
+      "type": "boolean"
+    },
+    "enable_expert_parallel": {
+      "default": false,
+      "description": "Use expert parallelism instead of tensor parallelism for MoE layers.",
+      "type": "boolean"
+    },
+    "enable_lora": {
+      "type": "boolean"
+    },
+    "enable_lora_bias": {
+      "type": "boolean"
+    },
+    "enable_multimodal_encoder_data_parallel": {
+      "default": false,
+      "description": "Use data parallelism instead of tensor parallelism for vision encoder. Only support LLama4 for now",
+      "type": "boolean"
+    },
+    "enable_prefix_caching": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Whether to enable prefix caching"
+    },
+    "enable_prompt_adapter": {
+      "type": "boolean"
+    },
+    "enable_prompt_embeds": {
+      "default": false,
+      "type": "boolean"
+    },
+    "enable_reasoning": {
+      "default": null,
+      "type": "boolean"
+    },
+    "enable_sleep_mode": {
+      "type": "boolean"
+    },
+    "encoder_cache_size": {
+      "type": "integer"
+    },
+    "enforce_eager": {
+      "default": false,
+      "type": "boolean"
+    },
+    "eplb_log_balancedness": {
+      "default": false,
+      "description": "Log the balancedness each step of expert parallelism. This is turned off by default since it will cause communication overhead.",
+      "type": "boolean"
+    },
+    "eplb_step_interval": {
+      "default": 3000,
+      "description": "Interval for rearranging experts in expert parallelism.",
+      "type": "integer"
+    },
+    "eplb_window_size": {
+      "default": 1000,
+      "description": "Window size for expert load recording.",
+      "type": "integer"
+    },
+    "extra_config": {
+      "default": {},
+      "description": "This parameter is deprecated and will be removed in a future release.",
+      "type": "object"
+    },
+    "fully_sharded_loras": {
+      "default": false,
+      "description": "By default, only half of the LoRA computation is sharded with tensor parallelism. Enabling this will use the fully sharded layers.",
+      "type": "boolean"
+    },
+    "generation_config": {
+      "type": "string"
+    },
+    "gpu_memory_utilization": {
+      "default": 0.9,
+      "type": "number"
+    },
+    "guided_decoding_backend": {},
+    "guided_decoding_disable_additional_properties": {
+      "type": "boolean"
+    },
+    "guided_decoding_disable_any_whitespace": {
+      "type": "boolean"
+    },
+    "guided_decoding_disable_fallback": {
+      "type": "boolean"
+    },
+    "hf_config_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "hf_overrides": {},
+    "hf_token": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "default": null
+    },
+    "ignore_patterns": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array"
+        }
+      ],
+      "default": null
+    },
+    "is_attention_free": {
+      "default": false,
+      "type": "boolean"
+    },
+    "is_multimodal_model": {
+      "default": false,
+      "type": "boolean"
+    },
+    "kv_cache_dtype": {},
+    "kv_events_config": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "kv_transfer_config": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "limit_mm_per_prompt": {
+      "type": "object"
+    },
+    "load_format": {
+      "type": "string"
+    },
+    "logits_processor_pattern": {
+      "default": null,
+      "type": "string"
+    },
+    "long_lora_scaling_factors": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Specify multiple scaling factors (which can be different from base model scaling factor - see eg. Long LoRA) to allow for multiple LoRA adapters trained with those scaling factors to be used at the same time."
+    },
+    "long_prefill_token_threshold": {
+      "default": 0,
+      "type": "integer"
+    },
+    "lora_dtype": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "torch.dtype",
+          "type": "object"
+        }
+      ],
+      "default": "auto",
+      "description": "Data type for LoRA. If auto, will default to base model dtype."
+    },
+    "lora_extra_vocab_size": {
+      "default": 256,
+      "description": "Maximum size of extra vocabulary that can be present in a LoRA adapter (added to the base model vocabulary).",
+      "type": "integer"
+    },
+    "max_cpu_loras": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Maximum number of LoRAs to store in CPU memory. Must be >= than `max_loras`."
+    },
+    "max_cpu_prompt_adapters": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Maximum number of PromptAdapters to store in CPU memory. Must be >= than `max_prompt_adapters`."
+    },
+    "max_logprobs": {
+      "type": "integer"
+    },
+    "max_long_partial_prefills": {
+      "default": 1,
+      "type": "integer"
+    },
+    "max_lora_rank": {
+      "default": 16,
+      "description": "Max LoRA rank.",
+      "type": "integer"
+    },
+    "max_loras": {
+      "default": 1,
+      "description": "Max number of LoRAs in a single batch.",
+      "type": "integer"
+    },
+    "max_model_len": {
+      "default": null,
+      "type": "integer"
+    },
+    "max_num_batched_tokens": {
+      "default": null,
+      "type": "integer"
+    },
+    "max_num_encoder_input_tokens": {
+      "type": "integer"
+    },
+    "max_num_partial_prefills": {
+      "default": 1,
+      "type": "integer"
+    },
+    "max_num_seqs": {
+      "default": null,
+      "type": "integer"
+    },
+    "max_parallel_loading_workers": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Maximum number of parallel loading workers when loading model sequentially in multiple batches. To avoid RAM OOM when using tensor parallel and large models."
+    },
+    "max_prompt_adapter_token": {
+      "default": 0,
+      "description": "Max number of PromptAdapters tokens.",
+      "type": "integer"
+    },
+    "max_prompt_adapters": {
+      "default": 1,
+      "description": "Max number of PromptAdapters in a batch.",
+      "type": "integer"
+    },
+    "max_seq_len_to_capture": {
+      "type": "integer"
+    },
+    "media_io_kwargs": {
+      "type": "object"
+    },
+    "mm_processor_kwargs": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "model": {
+      "type": "string"
+    },
+    "model_impl": {
+      "type": "string"
+    },
+    "model_loader_extra_config": {
+      "type": "object"
+    },
+    "multi_step_stream_outputs": {
+      "default": true,
+      "type": "boolean"
+    },
+    "num_gpu_blocks_override": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Number of GPU blocks to use"
+    },
+    "num_lookahead_slots": {
+      "default": 0,
+      "type": "integer"
+    },
+    "num_redundant_experts": {
+      "default": 0,
+      "description": "Number of redundant experts to use for expert parallelism.",
+      "type": "integer"
+    },
+    "num_scheduler_steps": {
+      "default": 1,
+      "type": "integer"
+    },
+    "otlp_traces_endpoint": {
+      "default": null,
+      "type": "string"
+    },
+    "override_attention_dtype": {
+      "type": "string"
+    },
+    "override_generation_config": {
+      "type": "object"
+    },
+    "override_neuron_config": {
+      "type": "object"
+    },
+    "override_pooler_config": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "pipeline_parallel_size": {
+      "default": 1,
+      "description": "Number of pipeline parallel groups.",
+      "type": "integer"
+    },
+    "placement_group": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "ray distributed model workers placement group."
+    },
+    "policy": {
+      "default": "fcfs",
+      "type": "string"
+    },
+    "pool_size": {
+      "default": 0,
+      "description": "This parameter is deprecated and will be removed in a future release.",
+      "type": "integer"
+    },
+    "pool_type": {
+      "default": "ray",
+      "description": "This parameter is deprecated and will be removed in a future release.",
+      "type": "string"
+    },
+    "preemption_mode": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "prefix_caching_hash_algo": {
+      "default": "builtin",
+      "enum": [
+        "builtin",
+        "sha256"
+      ],
+      "type": "string"
+    },
+    "prompt_adapter_dtype": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "torch.dtype",
+          "type": "object"
+        }
+      ],
+      "default": "auto",
+      "description": "Data type for PromptAdapter. If auto, will default to base model dtype."
+    },
+    "pt_load_map_location": {
+      "type": "string"
+    },
+    "qlora_adapter_name_or_path": {
+      "default": null,
+      "type": "string"
+    },
+    "quantization": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "rank": {
+      "default": 0,
+      "description": "Global rank in distributed setup.",
+      "type": "integer"
+    },
+    "ray_workers_use_nsight": {
+      "default": false,
+      "description": "Whether to profile Ray workers with nsight, see https://docs.ray.io/en/latest/ray-observability/user-guides/profiling.html#profiling-nsight-profiler.",
+      "type": "boolean"
+    },
+    "reasoning_backend": {
+      "default": "",
+      "description": "Select the reasoning parser depending on the model that you're using. This is used to parse the reasoning content into OpenAI API format.",
+      "type": "string"
+    },
+    "reasoning_parser": {
+      "type": "string"
+    },
+    "revision": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "rope_scaling": {
+      "type": "object"
+    },
+    "rope_theta": {
+      "default": null,
+      "type": "number"
+    },
+    "runner_type": {
+      "default": "generate",
+      "type": "string"
+    },
+    "scheduler_cls": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object"
+        }
+      ],
+      "default": "vllm.core.scheduler.Scheduler"
+    },
+    "scheduler_delay_factor": {
+      "type": "number"
+    },
+    "scheduling_policy": {},
+    "sd_worker_cls": {
+      "default": "auto",
+      "description": "The full name of the worker class to use for speculative decoding. If \"auto\", the worker class will be determined based on the platform.",
+      "type": "string"
+    },
+    "seed": {
+      "default": null,
+      "type": "integer"
+    },
+    "send_delta_data": {
+      "default": false,
+      "type": "boolean"
+    },
+    "served_model_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "show_hidden_metrics_for_version": {
+      "default": null,
+      "type": "string"
+    },
+    "skip_tokenizer_init": {
+      "default": false,
+      "type": "boolean"
+    },
+    "sliding_window": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "spec_target_max_model_len": {
+      "default": null,
+      "type": "integer"
+    },
+    "speculative_config": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "swap_space": {
+      "default": 4,
+      "type": "number"
+    },
+    "task": {
+      "enum": [
+        "auto",
+        "draft"
+      ]
+    },
+    "tensor_parallel_size": {
+      "default": 1,
+      "description": "Number of tensor parallel groups.",
+      "type": "integer"
+    },
+    "tokenizer": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "tokenizer_mode": {
+      "enum": [
+        "auto",
+        "slow",
+        "mistral",
+        "custom"
+      ]
+    },
+    "tokenizer_pool_config": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "This parameter is deprecated and will be removed in a future release. Please remove it from your configs"
+    },
+    "tokenizer_pool_extra_config": {
+      "type": "object"
+    },
+    "tokenizer_pool_size": {
+      "type": "integer"
+    },
+    "tokenizer_pool_type": {
+      "type": "string"
+    },
+    "tokenizer_revision": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "trust_remote_code": {
+      "default": false,
+      "type": "boolean"
+    },
+    "use_tqdm_on_load": {
+      "type": "boolean"
+    },
+    "use_v2_block_manager": {
+      "type": "boolean"
+    },
+    "worker_cls": {
+      "default": "auto",
+      "description": "The full name of the worker class to use. If \"auto\", the worker class will be determined based on the platform.",
+      "type": "string"
+    },
+    "worker_extension_cls": {
+      "default": "",
+      "description": "The full name of the worker extension class to use. The worker extension class is dynamically inherited by the worker class. This is used to inject new attributes and methods to the worker class for use in collective_rpc calls.",
+      "type": "string"
+    }
+  },
+  "engine_version": "0.9.2",
+  "sampling_params": {
+    "allowed_token_ids": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "bad_words": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "best_of": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "detokenize": {
+      "default": true,
+      "type": "boolean"
+    },
+    "extra_args": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "frequency_penalty": {
+      "default": 0.0,
+      "type": "number"
+    },
+    "ignore_eos": {
+      "default": false,
+      "type": "boolean"
+    },
+    "include_stop_str_in_output": {
+      "default": false,
+      "type": "boolean"
+    },
+    "logit_bias": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "logits_processors": {
+      "anyOf": [
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "logprobs": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "max_tokens": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": 16
+    },
+    "min_p": {
+      "default": 0.0,
+      "type": "number"
+    },
+    "min_tokens": {
+      "default": 0,
+      "type": "integer"
+    },
+    "n": {
+      "default": 1,
+      "type": "integer"
+    },
+    "output_kind": {
+      "description": "RequestOutputKind"
+    },
+    "presence_penalty": {
+      "default": 0.0,
+      "type": "number"
+    },
+    "prompt_logprobs": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "repetition_penalty": {
+      "default": 1.0,
+      "type": "number"
+    },
+    "seed": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "skip_special_tokens": {
+      "default": true,
+      "type": "boolean"
+    },
+    "spaces_between_special_tokens": {
+      "default": true,
+      "type": "boolean"
+    },
+    "stop": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "stop_token_ids": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "temperature": {
+      "default": 1.0,
+      "type": "number"
+    },
+    "top_k": {
+      "default": 0,
+      "type": "integer"
+    },
+    "top_p": {
+      "default": 1.0,
+      "type": "number"
+    },
+    "truncate_prompt_tokens": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "schema_version": "2.0.0"
+}

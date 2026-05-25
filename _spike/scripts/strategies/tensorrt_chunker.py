@@ -75,8 +75,20 @@ class ChunkSpec:
 # ---------------------------------------------------------------------------
 
 
-def _read_source(rel_path: str) -> str:
-    p = TENSORRT_SOURCE_ROOT / rel_path
+def _read_source(rel_path: str, source_root: Path | None = None) -> str:
+    """Read a file under the tensorrt source root.
+
+    Parameters
+    ----------
+    rel_path : str
+        Path relative to the tensorrt_llm package root.
+    source_root : Path | None
+        If provided, read from this root. If None, fall back to the
+        module-level ``TENSORRT_SOURCE_ROOT`` constant (the pre-staged
+        active v0.21.0 path).
+    """
+    root = source_root if source_root is not None else TENSORRT_SOURCE_ROOT
+    p = root / rel_path
     if not p.exists():
         return ""
     return p.read_text()
@@ -199,15 +211,26 @@ def _extract_enum_class(source: str, class_name: str) -> str:
     return _extract_class_with_validators(source, class_name, max_lines=30)
 
 
-def get_active_sources() -> dict[str, str]:
-    """Pull source text for the chunked units of tensorrt_llm 0.21.0."""
+def get_active_sources(source_root: Path | None = None) -> dict[str, str]:
+    """Pull source text for the chunked units of tensorrt_llm.
+
+    Parameters
+    ----------
+    source_root : Path | None
+        If None, sources come from the pre-staged active v0.21.0 tree at
+        ``TENSORRT_SOURCE_ROOT``. If provided, sources come from this root -
+        used by bumped-version cells (Phase 3a.2) where the chunker reads
+        from a source-only venv path like
+        ``/tmp/trial_tensorrt_v1_0_0_venv/src/tensorrt_llm/``.
+    """
     sources: dict[str, str] = {}
 
-    llm_args_src = _read_source("llmapi/llm_args.py")
-    build_cache_src = _read_source("llmapi/build_cache.py")
+    llm_args_src = _read_source("llmapi/llm_args.py", source_root=source_root)
+    build_cache_src = _read_source("llmapi/build_cache.py", source_root=source_root)
 
     if not llm_args_src or not build_cache_src:
-        sources["_extraction_error"] = f"tensorrt_llm source not found under {TENSORRT_SOURCE_ROOT}"
+        root = source_root if source_root is not None else TENSORRT_SOURCE_ROOT
+        sources["_extraction_error"] = f"tensorrt_llm source not found under {root}"
         return sources
 
     # Pydantic class definitions with their decorators
@@ -249,8 +272,8 @@ def get_active_sources() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def schema_chunks() -> list[ChunkSpec]:
-    """Return schema-extraction chunks for active tensorrt_llm 0.21.0.
+def schema_chunks(source_root: Path | None = None) -> list[ChunkSpec]:
+    """Return schema-extraction chunks for tensorrt_llm.
 
     Strategy:
     - 1 chunk per major Pydantic config class (BaseLlmArgs, TrtLlmArgs,
@@ -265,8 +288,15 @@ def schema_chunks() -> list[ChunkSpec]:
     ``engine_params``. SamplingParams equivalent exists on TrtLlmArgs
     via sampling_params (TRT has no separate SamplingParams class in the
     same shape).
+
+    Parameters
+    ----------
+    source_root : Path | None
+        If None, sources come from the pre-staged active tree at
+        ``TENSORRT_SOURCE_ROOT``. If provided, sources come from this root -
+        used for bumped-version cells (Phase 3a.2).
     """
-    sources = get_active_sources()
+    sources = get_active_sources(source_root=source_root)
     if "_extraction_error" in sources:
         return [
             ChunkSpec(
@@ -478,8 +508,8 @@ def schema_chunks() -> list[ChunkSpec]:
 # ---------------------------------------------------------------------------
 
 
-def invariants_chunks() -> list[ChunkSpec]:
-    """Return invariants-extraction chunks for active tensorrt_llm 0.21.0.
+def invariants_chunks(source_root: Path | None = None) -> list[ChunkSpec]:
+    """Return invariants-extraction chunks for tensorrt_llm.
 
     Strategy:
     - 1 chunk per CLASS that has @field_validator or @model_validator
@@ -494,8 +524,15 @@ def invariants_chunks() -> list[ChunkSpec]:
     Per Phase 2.5 spec: invariant chunks MUST include the validator
     decorators in the source text, otherwise the LLM can't tell what's
     a Pydantic validator vs a plain method.
+
+    Parameters
+    ----------
+    source_root : Path | None
+        If None, sources come from the pre-staged active tree at
+        ``TENSORRT_SOURCE_ROOT``. If provided, sources come from this root -
+        used for bumped-version cells (Phase 3a.2).
     """
-    sources = get_active_sources()
+    sources = get_active_sources(source_root=source_root)
     if "_extraction_error" in sources:
         return [
             ChunkSpec(
@@ -513,7 +550,7 @@ def invariants_chunks() -> list[ChunkSpec]:
     # is 700+ lines / 30k+ chars; full body would blow the chunk budget).
     # Send TWO chunks for BaseLlmArgs validators (split by line range) so
     # ALL 14 validators get coverage.
-    llm_args_src = _read_source("llmapi/llm_args.py")
+    llm_args_src = _read_source("llmapi/llm_args.py", source_root=source_root)
     base_validators_block = _extract_validators_block(llm_args_src, "BaseLlmArgs", max_chars=28000)
     # Split roughly in half
     half = len(base_validators_block) // 2

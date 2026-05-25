@@ -43,6 +43,7 @@ from _spike.scripts.trial_scoring import (  # noqa: E402
     ItemDiff,
     ScoringConfig,
     _predicate_kind_for,
+    canonicalise_namespace,
     invariant_identities,
     invariant_identity,
     normalise_severity,
@@ -247,6 +248,73 @@ def test_invariant_identities_on_reference(reference_invariants: dict) -> None:
     assert used_kinds.issubset(PREDICATE_KINDS), (
         f"unexpected predicate kinds in reference: {used_kinds - PREDICATE_KINDS}"
     )
+
+
+def test_canonicalise_namespace_collapses_tensorrt_llm_prefix() -> None:
+    """Phase 2.6 rubric fix: `tensorrt_llm.<X>` canonicalises to `tensorrt.<X>`.
+
+    transformers + vllm namespaces pass through unchanged.
+    """
+    # Bare-prefix canonicalisation
+    assert canonicalise_namespace("tensorrt_llm") == "tensorrt"
+    assert canonicalise_namespace("tensorrt_llm", engine="tensorrt") == "tensorrt"
+    # Dotted-prefix canonicalisation (the common form in match-field keys)
+    assert canonicalise_namespace("tensorrt_llm.sampling") == "tensorrt.sampling"
+    assert canonicalise_namespace("tensorrt_llm.SamplingParams") == "tensorrt.SamplingParams"
+    # Already-canonical tensorrt forms pass through
+    assert canonicalise_namespace("tensorrt") == "tensorrt"
+    assert canonicalise_namespace("tensorrt.sampling") == "tensorrt.sampling"
+    # transformers + vllm namespaces pass through unchanged
+    assert canonicalise_namespace("transformers") == "transformers"
+    assert canonicalise_namespace("transformers.sampling") == "transformers.sampling"
+    assert canonicalise_namespace("vllm") == "vllm"
+    assert canonicalise_namespace("vllm.sampling") == "vllm.sampling"
+    # Edge cases
+    assert canonicalise_namespace("") == ""
+    # Non-string input is returned unchanged (defensive)
+    assert canonicalise_namespace(None) is None  # type: ignore[arg-type]
+
+
+def test_invariant_identity_canonicalises_tensorrt_llm_namespace() -> None:
+    """Phase 2.6: an invariant emitted under `tensorrt_llm.<X>` produces the
+    SAME identity tuple as the same logical invariant emitted under
+    `tensorrt.<X>`.
+
+    This is the rubric-correction that lifted b/tensorrt's invariant_recall
+    from 0.0% (no intersection on 31 ref vs 39 cell items).
+    """
+    inv_llm_prefix = {
+        "id": "tensorrt_llm_model_not_str_or_path",
+        "severity": "error",
+        "match": {
+            "engine": "tensorrt",
+            "fields": {
+                "tensorrt_llm.SamplingParams.model": {
+                    "present": True,
+                    "type_is_not": ["str", "Path"],
+                },
+            },
+        },
+    }
+    inv_canonical_prefix = {
+        "id": "tensorrt_model_not_str_or_path",
+        "severity": "error",
+        "match": {
+            "engine": "tensorrt",
+            "fields": {
+                "tensorrt.SamplingParams.model": {
+                    "present": True,
+                    "type_is_not": ["str", "Path"],
+                },
+            },
+        },
+    }
+    # Identities collapse to a single canonical tuple
+    assert invariant_identity(inv_llm_prefix) == invariant_identity(inv_canonical_prefix)
+    # And the canonical form uses the `tensorrt.` namespace
+    expected = ("tensorrt.SamplingParams", "model", "type_is_not", "")
+    assert invariant_identity(inv_llm_prefix) == expected
+    assert invariant_identity(inv_canonical_prefix) == expected
 
 
 def test_predicate_kind_for_classification() -> None:

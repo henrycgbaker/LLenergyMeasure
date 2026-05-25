@@ -536,7 +536,7 @@ precision_spurious:
   cell_value: integer
   note: cell field absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - auto_parallel
   - present
   - ''
@@ -547,7 +547,7 @@ precision_spurious:
     severity: warning
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - batching_type
   - not_in
   - ''
@@ -558,7 +558,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - calib_batch_size
   - gt
   - ''
@@ -569,7 +569,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - calib_batches
   - gt
   - ''
@@ -580,7 +580,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - calib_dataset
   - not_equal
   - ''
@@ -591,7 +591,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - calib_max_seq_length
   - gt
   - ''
@@ -602,7 +602,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - capacity_scheduler_policy
   - not_in
   - ''
@@ -613,7 +613,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - context_chunking_policy
   - not_in
   - ''
@@ -624,7 +624,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - device
   - not_in
   - ''
@@ -635,7 +635,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - dtype
   - type_is_not
   - ''
@@ -646,7 +646,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - embedding_parallel_mode
   - present
   - ''
@@ -657,7 +657,7 @@ precision_spurious:
     severity: dormant
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - enable_build_cache
   - present
   - ''
@@ -668,18 +668,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
-  - enable_build_cache
-  - type_is_not
-  - ''
-  kind: precision_spurious
-  reference_value: null
-  cell_value:
-    id: tensorrt_enable_build_cache_type_is_not
-    severity: error
-  note: cell invariant absent in reference
-- identity:
-  - tensorrt_llm
+  - tensorrt
   - gpus_per_node
   - present
   - ''
@@ -690,7 +679,7 @@ precision_spurious:
     severity: dormant
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - lora_config
   - present
   - enable_lora
@@ -701,7 +690,7 @@ precision_spurious:
     severity: warning
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - lora_config
   - present
   - lora_dir
@@ -712,7 +701,7 @@ precision_spurious:
     severity: warning
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - lora_config
   - present
   - max_cpu_loras
@@ -723,18 +712,7 @@ precision_spurious:
     severity: warning
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
-  - lora_config
-  - present
-  - max_lora_rank
-  kind: precision_spurious
-  reference_value: null
-  cell_value:
-    id: tensorrt_llm_max_lora_rank_ignored_when_lora_config_provided
-    severity: warning
-  note: cell invariant absent in reference
-- identity:
-  - tensorrt_llm
+  - tensorrt
   - lora_config
   - present
   - max_loras
@@ -745,7 +723,7 @@ precision_spurious:
     severity: warning
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - max_batch_size
   - gt
   - ''
@@ -756,7 +734,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - max_batch_size
   - not_equal
   - ''
@@ -767,7 +745,7 @@ precision_spurious:
     severity: warning
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - max_beam_width
   - not_equal
   - ''
@@ -778,7 +756,7 @@ precision_spurious:
     severity: warning
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - max_input_len
   - not_equal
   - ''
@@ -789,7 +767,7 @@ precision_spurious:
     severity: warning
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - max_ngram_size
   - gt
   - ''
@@ -800,18 +778,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
-  - max_ngram_size
-  - le
-  - ''
-  kind: precision_spurious
-  reference_value: null
-  cell_value:
-    id: tensorrt_llm_max_ngram_size_le_zero
-    severity: error
-  note: cell invariant absent in reference
-- identity:
-  - tensorrt_llm
+  - tensorrt
   - max_num_tokens
   - gt
   - ''
@@ -822,7 +789,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - max_records
   - gt
   - ''
@@ -833,18 +800,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
-  - max_records
-  - lt
-  - ''
-  kind: precision_spurious
-  reference_value: null
-  cell_value:
-    id: tensorrt_build_cache_max_records_lt_1
-    severity: error
-  note: cell invariant absent in reference
-- identity:
-  - tensorrt_llm
+  - tensorrt
   - max_seq_len
   - not_equal
   - ''
@@ -855,7 +811,7 @@ precision_spurious:
     severity: warning
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - max_verification_set_size
   - gt
   - ''
@@ -866,18 +822,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
-  - max_verification_set_size
-  - le
-  - ''
-  kind: precision_spurious
-  reference_value: null
-  cell_value:
-    id: tensorrt_llm_max_verification_set_size_le_zero
-    severity: error
-  note: cell invariant absent in reference
-- identity:
-  - tensorrt_llm
+  - tensorrt
   - max_window_size
   - gt
   - ''
@@ -888,29 +833,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
-  - max_window_size
-  - le
-  - ''
-  kind: precision_spurious
-  reference_value: null
-  cell_value:
-    id: tensorrt_llm_max_window_size_le_zero
-    severity: error
-  note: cell invariant absent in reference
-- identity:
-  - tensorrt_llm
-  - model
-  - type_is_not
-  - ''
-  kind: precision_spurious
-  reference_value: null
-  cell_value:
-    id: tensorrt_llm_model_not_str_or_path
-    severity: error
-  note: cell invariant absent in reference
-- identity:
-  - tensorrt_llm
+  - tensorrt
   - quant_config
   - present
   - ''
@@ -921,7 +844,7 @@ precision_spurious:
     severity: dormant
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - random_seed
   - ge
   - ''
@@ -932,18 +855,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
-  - speculative_config
-  - present
-  - ''
-  kind: precision_spurious
-  reference_value: null
-  cell_value:
-    id: tensorrt_llm_speculative_config_lookahead_decoding_max_draft_len_update
-    severity: dormant
-  note: cell invariant absent in reference
-- identity:
-  - tensorrt_llm
+  - tensorrt
   - speculative_config
   - type_is_not
   - ''
@@ -954,7 +866,7 @@ precision_spurious:
     severity: error
   note: cell invariant absent in reference
 - identity:
-  - tensorrt_llm
+  - tensorrt
   - tokenizer_max_seq_length
   - gt
   - ''

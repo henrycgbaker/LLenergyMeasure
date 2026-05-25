@@ -1,0 +1,67 @@
+scoring_format_version: 1.0.0
+precision_spurious:
+- identity:
+  - sampling_params
+  - max_length
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - sampling_params
+  - min_length
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - sampling_params
+  - no_repeat_ngram_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - transformers.sampling
+  - do_sample
+  - exact
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_top_p_set_when_do_sample_false
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - transformers.sampling
+  - pad_token_id
+  - ge
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_pad_token_id_not_negative
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - vllm.sampling
+  - do_sample
+  - exact
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_temperature_set_when_do_sample_false
+    severity: dormant
+  note: cell invariant absent in reference
+- identity:
+  - vllm.sampling
+  - max_length
+  - lt
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: vllm_max_length_lt_min_length
+    severity: error
+  note: cell invariant absent in reference

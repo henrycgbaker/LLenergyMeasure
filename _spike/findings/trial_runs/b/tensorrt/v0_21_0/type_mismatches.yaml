@@ -307,3 +307,21 @@ type_mismatches:
   - - 'null'
     - string
   note: schema type spec divergence
+- identity:
+  - tensorrt
+  - lora_config
+  - present
+  - max_lora_rank
+  kind: severity_mismatch
+  reference_value: warn
+  cell_value: warning
+  note: severity divergence
+- identity:
+  - tensorrt
+  - speculative_config
+  - present
+  - ''
+  kind: severity_mismatch
+  reference_value: error
+  cell_value: dormant
+  note: severity divergence
