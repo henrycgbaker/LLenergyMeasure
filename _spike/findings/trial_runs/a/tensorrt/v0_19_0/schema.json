@@ -1,0 +1,905 @@
+{
+  "schema_version": "2.0.0",
+  "engine": "tensorrt",
+  "engine_version": "0.21.0",
+  "engine_commit_sha": null,
+  "image_ref": "llenergymeasure:tensorrt-0.21.0",
+  "base_image_ref": null,
+  "discovered_at": "2026-05-06T20:20:57+02:00",
+  "discovery_limitations": [
+    {
+      "section": "engine_params",
+      "fields": [
+        "build_config"
+      ],
+      "reason": "BuildConfig is not a Pydantic model; appears as Optional[object] in the schema"
+    },
+    {
+      "section": "sampling_params",
+      "fields": [],
+      "reason": "SamplingParams is a dataclass; no per-field descriptions"
+    }
+  ],
+  "engine_params": {
+    "model": {
+      "type": "string",
+      "default": null,
+      "description": "The path to the model checkpoint or the model name from the Hugging Face Hub.",
+      "deprecated": false
+    },
+    "tokenizer": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "The path to the tokenizer checkpoint or the tokenizer name from the Hugging Face Hub.",
+      "deprecated": false
+    },
+    "tokenizer_mode": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "slow"
+      ],
+      "default": "auto",
+      "description": "The mode to initialize the tokenizer.",
+      "deprecated": false
+    },
+    "skip_tokenizer_init": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether to skip the tokenizer initialization.",
+      "deprecated": false
+    },
+    "trust_remote_code": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether to trust the remote code.",
+      "deprecated": false
+    },
+    "tensor_parallel_size": {
+      "type": "integer",
+      "default": 1,
+      "description": "The tensor parallel size.",
+      "deprecated": false
+    },
+    "dtype": {
+      "type": "string",
+      "default": "auto",
+      "description": "The data type to use for the model.",
+      "deprecated": false
+    },
+    "revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "The revision to use for the model.",
+      "deprecated": false
+    },
+    "tokenizer_revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "The revision to use for the tokenizer.",
+      "deprecated": false
+    },
+    "pipeline_parallel_size": {
+      "type": "integer",
+      "default": 1,
+      "description": "The pipeline parallel size.",
+      "deprecated": false
+    },
+    "context_parallel_size": {
+      "type": "integer",
+      "default": 1,
+      "description": "The context parallel size.",
+      "deprecated": false
+    },
+    "gpus_per_node": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "The number of GPUs per node.",
+      "deprecated": false
+    },
+    "moe_cluster_parallel_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "The cluster parallel size for MoE models's expert weights.",
+      "deprecated": false
+    },
+    "moe_tensor_parallel_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "The tensor parallel size for MoE models's expert weights.",
+      "deprecated": false
+    },
+    "moe_expert_parallel_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "The expert parallel size for MoE models's expert weights.",
+      "deprecated": false
+    },
+    "enable_attention_dp": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable attention data parallel.",
+      "deprecated": false
+    },
+    "cp_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null,
+      "description": "Context parallel config.",
+      "deprecated": false
+    },
+    "load_format": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "dummy"
+      ],
+      "default": "auto",
+      "description": "The format to load the model.",
+      "deprecated": false
+    },
+    "enable_lora": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable LoRA.",
+      "deprecated": false
+    },
+    "max_lora_rank": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "The maximum LoRA rank.",
+      "deprecated": true
+    },
+    "max_loras": {
+      "type": "integer",
+      "default": 4,
+      "description": "The maximum number of LoRA.",
+      "deprecated": true
+    },
+    "max_cpu_loras": {
+      "type": "integer",
+      "default": 4,
+      "description": "The maximum number of LoRA on CPU.",
+      "deprecated": true
+    },
+    "lora_config": {
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "LoraConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "LoRA configuration for the model.",
+      "deprecated": false
+    },
+    "enable_prompt_adapter": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable prompt adapter.",
+      "deprecated": false
+    },
+    "max_prompt_adapter_token": {
+      "type": "integer",
+      "default": 0,
+      "description": "The maximum number of prompt adapter tokens.",
+      "deprecated": false
+    },
+    "quant_config": {
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "QuantConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Quantization config.",
+      "deprecated": false
+    },
+    "kv_cache_config": {
+      "type": "object",
+      "description": "KV cache config.",
+      "default": null,
+      "deprecated": false
+    },
+    "enable_chunked_prefill": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable chunked prefill.",
+      "deprecated": false
+    },
+    "guided_decoding_backend": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Guided decoding backend.",
+      "deprecated": false
+    },
+    "batched_logits_processor": {
+      "type": "object",
+      "description": "Batched logits processor.",
+      "default": null,
+      "deprecated": false
+    },
+    "iter_stats_max_iterations": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "The maximum number of iterations for iter stats.",
+      "deprecated": false
+    },
+    "request_stats_max_iterations": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "The maximum number of iterations for request stats.",
+      "deprecated": false
+    },
+    "peft_cache_config": {
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "PeftCacheConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "PEFT cache config.",
+      "deprecated": false
+    },
+    "scheduler_config": {
+      "type": "object",
+      "description": "Scheduler config.",
+      "default": null,
+      "deprecated": false
+    },
+    "cache_transceiver_config": {
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "CacheTransceiverConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Cache transceiver config.",
+      "deprecated": false
+    },
+    "speculative_config": {
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "LookaheadDecodingConfig"
+        },
+        {
+          "type": "object",
+          "description": "MedusaDecodingConfig"
+        },
+        {
+          "type": "object",
+          "description": "EagleDecodingConfig"
+        },
+        {
+          "type": "object",
+          "description": "MTPDecodingConfig"
+        },
+        {
+          "type": "object",
+          "description": "NGramDecodingConfig"
+        },
+        {
+          "type": "object",
+          "description": "DraftTargetDecodingConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Speculative decoding config.",
+      "deprecated": false
+    },
+    "batching_type": {
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "BatchingType"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Batching type.",
+      "deprecated": false
+    },
+    "normalize_log_probs": {
+      "type": "boolean",
+      "default": false,
+      "description": "Normalize log probabilities.",
+      "deprecated": false
+    },
+    "max_batch_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "The maximum batch size.",
+      "deprecated": false
+    },
+    "max_input_len": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "The maximum input length.",
+      "deprecated": false
+    },
+    "max_seq_len": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "The maximum sequence length.",
+      "deprecated": false
+    },
+    "max_beam_width": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "The maximum beam width.",
+      "deprecated": false
+    },
+    "max_num_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "The maximum number of tokens.",
+      "deprecated": false
+    },
+    "gather_generation_logits": {
+      "type": "boolean",
+      "default": false,
+      "description": "Gather generation logits.",
+      "deprecated": false
+    },
+    "num_postprocess_workers": {
+      "type": "integer",
+      "default": 0,
+      "description": "The number of processes used for postprocessing the generated tokens, including detokenization.",
+      "deprecated": false
+    },
+    "postprocess_tokenizer_dir": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "The path to the tokenizer directory for postprocessing.",
+      "deprecated": false
+    },
+    "reasoning_parser": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "The parser to separate reasoning content from output.",
+      "deprecated": false
+    },
+    "garbage_collection_gen0_threshold": {
+      "type": "integer",
+      "default": 20000,
+      "description": "Threshold for Python garbage collection of generation 0 objects.Lower values trigger more frequent garbage collection.",
+      "deprecated": false
+    },
+    "decoding_config": {
+      "type": "object",
+      "description": "The decoding config.",
+      "default": null,
+      "deprecated": true
+    },
+    "backend": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "The backend to use for this LLM instance.",
+      "deprecated": false
+    },
+    "auto_parallel": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable auto parallel mode.",
+      "deprecated": true
+    },
+    "auto_parallel_world_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "The world size for auto parallel mode.",
+      "deprecated": true
+    },
+    "enable_tqdm": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable tqdm for progress bar.",
+      "deprecated": false
+    },
+    "workspace": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "The workspace for the model.",
+      "deprecated": false
+    },
+    "enable_build_cache": {
+      "type": "object",
+      "description": "Enable build cache.",
+      "default": false,
+      "deprecated": false
+    },
+    "extended_runtime_perf_knob_config": {
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "ExtendedRuntimePerfKnobConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Extended runtime perf knob config.",
+      "deprecated": false
+    },
+    "calib_config": {
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "CalibConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Calibration config.",
+      "deprecated": false
+    },
+    "embedding_parallel_mode": {
+      "type": "string",
+      "default": "SHARDING_ALONG_VOCAB",
+      "description": "The embedding parallel mode.",
+      "deprecated": false
+    },
+    "fast_build": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable fast build.",
+      "deprecated": false
+    },
+    "build_config": {
+      "type": "object",
+      "description": "Build config.",
+      "default": null,
+      "deprecated": false
+    }
+  },
+  "sampling_params": {
+    "end_id": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "pad_id": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "max_tokens": {
+      "type": "integer",
+      "default": 32
+    },
+    "bad": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "bad_token_ids": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "stop": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "stop_token_ids": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "include_stop_str_in_output": {
+      "type": "boolean",
+      "default": false
+    },
+    "embedding_bias": {
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "Tensor"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "logits_processor": {
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "LogitsProcessor"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "LogitsProcessor"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "apply_batched_logits_processor": {
+      "type": "boolean",
+      "default": false
+    },
+    "n": {
+      "type": "integer",
+      "default": 1
+    },
+    "best_of": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "use_beam_search": {
+      "type": "boolean",
+      "default": false
+    },
+    "top_k": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "top_p": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "top_p_min": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "top_p_reset_ids": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "top_p_decay": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "seed": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "temperature": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "min_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "beam_search_diversity_rate": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "repetition_penalty": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "presence_penalty": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "frequency_penalty": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "length_penalty": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "early_stopping": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "no_repeat_ngram_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "min_p": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
+    },
+    "beam_width_array": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "logprobs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "prompt_logprobs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "return_context_logits": {
+      "type": "boolean",
+      "default": false
+    },
+    "return_generation_logits": {
+      "type": "boolean",
+      "default": false
+    },
+    "exclude_input_from_output": {
+      "type": "boolean",
+      "default": true
+    },
+    "return_encoder_output": {
+      "type": "boolean",
+      "default": false
+    },
+    "return_perf_metrics": {
+      "type": "boolean",
+      "default": false
+    },
+    "additional_model_outputs": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "AdditionalModelOutput"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "lookahead_config": {
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "LookaheadDecodingConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "guided_decoding": {
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "GuidedDecodingParams"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "ignore_eos": {
+      "type": "boolean",
+      "default": false
+    },
+    "detokenize": {
+      "type": "boolean",
+      "default": true
+    },
+    "add_special_tokens": {
+      "type": "boolean",
+      "default": true
+    },
+    "truncate_prompt_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "skip_special_tokens": {
+      "type": "boolean",
+      "default": true
+    },
+    "spaces_between_special_tokens": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}

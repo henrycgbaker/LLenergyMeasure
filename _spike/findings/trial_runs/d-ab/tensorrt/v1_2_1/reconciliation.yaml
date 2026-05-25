@@ -1,0 +1,45 @@
+schema_version: 1.0.0
+engine: tensorrt
+engine_version: 1.2.1
+reconciled_at: '2026-05-25T11:27:27.294764+00:00'
+added_by_llm_verifier:
+- id: tensorrt__calibconfig_device_not_in
+  field: tensorrt.device
+  predicate_kind: not_in
+  values:
+  - cuda
+  - cpu
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: tensorrt_lookaheaddecodingconfig_max_window_size_le_0
+  field: tensorrt.max_window_size
+  predicate_kind: <= 0
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: tensorrt_lookaheaddecodingconfig_max_ngram_size_le_0
+  field: tensorrt.max_ngram_size
+  predicate_kind: <= 0
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: tensorrt_lookaheaddecodingconfig_max_verification_set_size_le_0
+  field: tensorrt.max_verification_set_size
+  predicate_kind: <= 0
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+flagged_spurious_in_deterministic:
+- id: tensorrt_warns_backend_in_lora_config_consistency
+  reason: warning instead of error, and unclear why this is an invariant
+missed_diagnoses:
+- id: tensorrt__calibconfig_device_not_in
+  why_missed: Pydantic's Literal type was not recognized as a source of invariants
+- id: tensorrt_lookaheaddecodingconfig_max_window_size_le_0
+  why_missed: field_validator applied to multiple fields, but only one invariant was
+    emitted
+- id: tensorrt_lookaheaddecodingconfig_max_ngram_size_le_0
+  why_missed: same reason as above
+- id: tensorrt_lookaheaddecodingconfig_max_verification_set_size_le_0
+  why_missed: same reason as above

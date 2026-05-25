@@ -1,0 +1,35 @@
+scoring_format_version: 1.0.0
+precision_spurious:
+- identity:
+  - ''
+  - tensorrt_lookaheaddecodingconfig_max_ngram_size_le_0
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_lookaheaddecodingconfig_max_ngram_size_le_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - ''
+  - tensorrt_lookaheaddecodingconfig_max_verification_set_size_le_0
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_lookaheaddecodingconfig_max_verification_set_size_le_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - ''
+  - tensorrt_lookaheaddecodingconfig_max_window_size_le_0
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_lookaheaddecodingconfig_max_window_size_le_0
+    severity: error
+  note: cell invariant absent in reference

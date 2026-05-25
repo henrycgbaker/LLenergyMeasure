@@ -3086,3 +3086,76 @@ Both tasks queue for "next stopping point" = when Phase 3a.2 tensorrt agent (a92
 
 After both tasks land: launch Phase 3b H4 first (LLM-modifies-miner; user-prioritised dual-purpose pattern).
 
+
+## 2026-05-25 Phase 3a.2 tensorrt bumped cells complete - Phase 3a CLOSED
+
+All 12 tensorrt bumped cells landed (4 (a) + 4 (b) + 4 (d-ab)). Aggregate at `_spike/findings/trial_matrix.{md,csv}` now reports 47 cells. Per-cell + brittleness narrative in `_spike/findings/phase3a2_tensorrt_progress.md`. Cross-engine brittleness summary in `_spike/findings/phase3a_complete_summary.md`.
+
+### MINER_VERSION_BLIND artefact on (a) tensorrt bumped
+
+All 4 (a) bumped cells score 100% schema + 100% invariant recall. INVESTIGATION revealed this is NOT honest bumped-cell performance - it's a substrate-wiring artefact:
+
+- The trial_runner's `_run_strategy_a_engine_bumped()` subprocess sets `SOURCE_ROOT_PARENT` on PYTHONPATH so `import tensorrt_llm` resolves to bumped source.
+- BUT the tensorrt active walker (`engine_versions/tensorrt/v0_21_0/producers/static_invariant_miner.py::walk_tensorrt`) is PURE AST - it reads from `_DEFAULT_SOURCE_ROOT = /tmp/trt-llm-0.21.0/tensorrt_llm` and never `import`s the package. PYTHONPATH override is a no-op.
+- Result: bumped (a) cells re-extract the ACTIVE 0.21.0 source, emitting identical 31-invariant output (verified by byte-diff against the v0_21_0 reference yaml).
+
+Per trial discipline ("DO NOT fix the (a) miner if it crashes on bumps"), the result was NOT patched. Caveat appended to each (a) tensorrt bumped score JSON via observations field; failure_modes stays `none` because the runner did its job.
+
+Classified as brittleness class `MINER_VERSION_BLIND` - the tensorrt miner architecture cannot be steered to bumped source via the current dispatcher pattern. Same class as vllm's `msgspec` import brittleness; different symptom (false-positive 100% recall vs honest detectable crash). Phase 4 synthesis MUST de-weight these from aggregates.
+
+This is a third distinct (a) brittleness mode across engines:
+- transformers: walker imports class -> bumped lacks landmark -> `detectable` crash
+- vllm: walker imports package -> transitive `msgspec` dep -> `detectable` crash
+- tensorrt: walker is AST-only, hardcoded path -> bumped source never touched -> false 100%
+
+Phase 3b H4 (LLM-modifies-miner) is the natural fix path: subagent could propose `walk_tensorrt(source_root=path)` invocation patch.
+
+### (b) tensorrt brittleness modes
+
+Two distinct chunker brittleness behaviours surfaced:
+1. **v-2/v-1 (v0_19_0, v0_20_0)**: tensorrt source uses `class LlmArgs(BaseModel)` (combined). Chunker's hardcoded `BaseLlmArgs`/`TrtLlmArgs` extractors return empty source. LLM hallucinates 37 invariants from prior HuggingFace GenerationConfig knowledge (none of `temperature`/`top_k`/`do_sample`/`num_beams` exist in v0_19 source - verified by grep). Cell silently classified `silent` despite ~17% recall.
+2. **v+1/v+major (v1_0_0, v1_2_1)**: tensorrt source has `class BaseLlmArgs + class TrtLlmArgs`. Chunker works. Validator count is much larger (51 in v1_2_1 vs 25 in active), so LLM extracts new invariants the active reference doesn't have. Recall 19-23% (not silent).
+
+The hallucination mode on v-2/v-1 is the more INSIDIOUS failure - metrics look "kind of working" but content is mostly invented. Phase 4 must distinguish from honest low-recall cells.
+
+### (d-ab) tensorrt extension counts highest of three engines
+
+| engine | mean extension across 4 bumps |
+|---|---|
+| transformers | 0 |
+| vllm | 0.5 (only v+1 yielded extensions) |
+| tensorrt | 4.5 (3-8 per bump) |
+
+tensorrt's expanding validator surface (25 -> 32 -> 51 decorators across v0.21 -> v1.0 -> v1.2.1) feeds the LLM more novel patterns. v+1 (1.0.0) yields the biggest extension (8) - early-major restructuring.
+
+### Cross-engine (b) recall variation
+
+| engine | (b) mean recall |
+|---|---|
+| transformers | ~55% (range 44-59%) |
+| vllm | ~28% (range 0-39%; vllm v+major silent-fails) |
+| tensorrt | ~20% (range 16-26%; v0.x silent-hallucinate) |
+
+(b) tensorrt recall ceiling is LOWEST of three engines. Pydantic validator surface is denser + chunker emits only 7 invariant chunks (vs transformers 14, vllm 10).
+
+### Wall + energy
+
+(b) batch 2 (v1_0_0 + v1_2_1) took 38 min wall each in 2-way parallel (vs 28 min for batch 1 v0_19_0 + v0_20_0). The v1.x sources are 1.5-2.5x larger than v0.x; longer per-chunk LLM processing.
+
+### Files added/modified
+
+- `_spike/findings/phase3a2_tensorrt_progress.md` (new, ~200 lines) - tensorrt-specific progress
+- `_spike/findings/phase3a_complete_summary.md` (new, ~200 lines) - cross-engine summary
+- `_spike/findings/trial_scores/{a,b,d-ab}__tensorrt__{v0_19_0,v0_20_0,v1_0_0,v1_2_1}.json` (12 new score JSONs)
+- `_spike/findings/trial_runs/{a,b,d-ab}/tensorrt/v*` (run outputs)
+- `_spike/findings/trial_matrix.{md,csv}` (refreshed; 35 -> 47 cells)
+- `_spike/DECISIONS_LOG.md` (this entry)
+
+### Next phase
+
+Per prior user direction (`### Timing` in earlier entry), now is the stopping point for:
+1. Worktree migration (trial -> separate worktree).
+2. Spike design doc OQ on artefact storage.
+3. Phase 3b H4 launch.
+
+Phase 4 synthesis is queued AFTER Phase 3b cells land.

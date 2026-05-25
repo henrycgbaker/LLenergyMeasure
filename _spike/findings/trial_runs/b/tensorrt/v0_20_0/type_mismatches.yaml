@@ -1,0 +1,36 @@
+scoring_format_version: 1.0.0
+type_mismatches:
+- identity:
+  - engine_params
+  - build_config
+  kind: type_mismatch
+  reference_value: object
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - calib_config
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: null
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - enable_build_cache
+  kind: type_mismatch
+  reference_value: object
+  cell_value: boolean
+  note: schema type spec divergence
+- identity:
+  - engine_params
+  - extended_runtime_perf_knob_config
+  kind: type_mismatch
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: null
+  note: schema type spec divergence

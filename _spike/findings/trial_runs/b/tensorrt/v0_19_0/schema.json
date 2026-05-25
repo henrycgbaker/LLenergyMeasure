@@ -1,0 +1,551 @@
+{
+  "$defs": {
+    "BatchingType": {
+      "properties": {
+        "batching_type": {
+          "description": "Batching type",
+          "enum": [
+            "STATIC",
+            "INFLIGHT"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BuildCacheConfig": {
+      "properties": {
+        "cache_root": {
+          "description": "The root directory for the build cache.",
+          "type": "object"
+        },
+        "max_cache_storage_gb": {
+          "default": 256.0,
+          "description": "The maximum amount of storage (in GB) to use for the cache.",
+          "type": "number"
+        },
+        "max_records": {
+          "default": 10,
+          "description": "The maximum number of records to store in the cache.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "CalibConfig": {
+      "properties": {
+        "calib_batch_size": {
+          "default": 1,
+          "description": "The batch size that the calibration runs.",
+          "type": "integer"
+        },
+        "calib_batches": {
+          "default": 512,
+          "description": "The number of batches that the calibration runs.",
+          "type": "integer"
+        },
+        "calib_dataset": {
+          "default": "cnn_dailymail",
+          "description": "The name or local path of calibration dataset.",
+          "type": "string"
+        },
+        "calib_max_seq_length": {
+          "default": 512,
+          "description": "The maximum sequence length that the calibration runs.",
+          "type": "integer"
+        },
+        "device": {
+          "default": "cuda",
+          "description": "The device to run calibration.",
+          "enum": [
+            "cuda",
+            "cpu"
+          ],
+          "type": "string"
+        },
+        "random_seed": {
+          "default": 1234,
+          "description": "The random seed used for calibration.",
+          "type": "integer"
+        },
+        "tokenizer_max_seq_length": {
+          "default": 2048,
+          "description": "The maximum sequence length to initialize tokenizer for calibration.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "CapacitySchedulerPolicy": {
+      "properties": {
+        "capacity_scheduler_policy": {
+          "description": "Capacity scheduler policy",
+          "enum": [
+            "MAX_UTILIZATION",
+            "GUARANTEED_NO_EVICT",
+            "STATIC_BATCH"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ContextChunkingPolicy": {
+      "properties": {
+        "context_chunking_policy": {
+          "description": "Context chunking policy",
+          "enum": [
+            "FIRST_COME_FIRST_SERVED",
+            "EQUAL_PROGRESS"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "DynamicBatchConfig": {
+      "properties": {
+        "dynamic_batch_moving_average_window": {
+          "description": "The window size for moving average of input and output length which is used to calculate dynamic batch size and max num tokens",
+          "type": "integer"
+        },
+        "enable_batch_size_tuning": {
+          "description": "Controls if the batch size should be tuned dynamically",
+          "type": "boolean"
+        },
+        "enable_max_num_tokens_tuning": {
+          "description": "Controls if the max num tokens should be tuned dynamically",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "EagleDecodingConfig": {
+      "properties": {
+        "dynamic_tree_max_topK": {
+          "default": null,
+          "type": "integer"
+        },
+        "eagle_choices": {
+          "anyOf": [
+            {
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "greedy_sampling": {
+          "default": true,
+          "type": "boolean"
+        },
+        "max_non_leaves_per_layer": {
+          "default": null,
+          "type": "integer"
+        },
+        "num_eagle_layers": {
+          "default": null,
+          "type": "integer"
+        },
+        "posterior_threshold": {
+          "default": null,
+          "type": "number"
+        },
+        "pytorch_eagle_weights_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "use_dynamic_tree": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "KvCacheConfig": {
+      "properties": {
+        "copy_on_partial_reuse": {
+          "default": true,
+          "description": "Whether partially matched blocks that are in use can be reused after copying them.",
+          "type": "boolean"
+        },
+        "cross_kv_cache_fraction": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The fraction of the KV Cache memory should be reserved for cross attention. If set to p, self attention will use 1-p of KV Cache memory and cross attention will use p of KV Cache memory. Default is 50%. Should only be set when using encoder-decoder model."
+        },
+        "enable_block_reuse": {
+          "default": true,
+          "description": "Controls if KV cache blocks can be reused for different requests.",
+          "type": "boolean"
+        },
+        "enable_partial_reuse": {
+          "default": true,
+          "description": "Whether blocks that are only partially matched can be reused.",
+          "type": "boolean"
+        },
+        "event_buffer_max_size": {
+          "default": 0,
+          "description": "Maximum size of the event buffer. If set to 0, the event buffer will not be used.",
+          "type": "integer"
+        },
+        "free_gpu_memory_fraction": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The fraction of GPU memory fraction that should be allocated for the KV cache. Default is 90%. If both `max_tokens` and `free_gpu_memory_fraction` are specified, memory corresponding to the minimum will be used."
+        },
+        "host_cache_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Size of the host cache in bytes. If both `max_tokens` and `host_cache_size` are specified, memory corresponding to the minimum will be used."
+        },
+        "max_attention_window": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Size of the attention window for each sequence. Only the last tokens will be stored in the KV cache. If the number of elements in `max_attention_window` is less than the number of layers, `max_attention_window` will be repeated multiple times to the number of layers."
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The maximum number of tokens that should be stored in the KV cache. If both `max_tokens` and `free_gpu_memory_fraction` are specified, memory corresponding to the minimum will be used."
+        },
+        "onboard_blocks": {
+          "default": true,
+          "description": "Controls if blocks are onboarded.",
+          "type": "boolean"
+        },
+        "secondary_offload_min_priority": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only blocks with priority > mSecondaryOfflineMinPriority can be offloaded to secondary memory."
+        },
+        "sink_token_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Number of sink tokens (tokens to always keep in attention window)."
+        }
+      },
+      "type": "object"
+    },
+    "LookaheadDecodingConfig": {
+      "properties": {
+        "max_ngram_size": {
+          "description": "Number of tokens per NGram.",
+          "type": "integer"
+        },
+        "max_verification_set_size": {
+          "description": "Number of NGrams in verification branch per step.",
+          "type": "integer"
+        },
+        "max_window_size": {
+          "description": "Number of NGrams in lookahead branch per step.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "MTPDecodingConfig": {
+      "properties": {
+        "num_nextn_predict_layers": {
+          "default": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "MedusaDecodingConfig": {
+      "properties": {
+        "medusa_choices": {
+          "anyOf": [
+            {
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "num_medusa_heads": {
+          "default": null,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "PeftCacheConfig": {
+      "properties": {
+        "device_cache_percent": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "percent of memory after engine load to use for cache"
+        },
+        "host_cache_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "size in bytes to use for host cache"
+        },
+        "lora_prefetch_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "folder to store the LoRA weights we hope to load during engine initialization"
+        },
+        "max_adapter_size": {
+          "default": 64,
+          "description": "max supported adapter size. Used to compute minimum",
+          "type": "integer"
+        },
+        "max_pages_per_block_device": {
+          "default": 8,
+          "description": "Number of cache pages per allocation block (device)",
+          "type": "integer"
+        },
+        "max_pages_per_block_host": {
+          "default": 24,
+          "description": "Number of cache pages per allocation block (host)",
+          "type": "integer"
+        },
+        "num_copy_streams": {
+          "default": 1,
+          "description": "number of streams used to copy weights from host to device",
+          "type": "integer"
+        },
+        "num_device_module_layer": {
+          "default": 0,
+          "description": "number of max sized 1-layer 1-module sets of weights that can be stored in host cache",
+          "type": "integer"
+        },
+        "num_ensure_workers": {
+          "default": 1,
+          "description": "number of worker threads used to copy weights from host to device",
+          "type": "integer"
+        },
+        "num_host_module_layer": {
+          "default": 0,
+          "description": "number of max sized 1-layer 1-module adapterSize=1 sets of weights that can be stored in host cache",
+          "type": "integer"
+        },
+        "num_put_workers": {
+          "default": 1,
+          "description": "number of worker threads used to put weights into host cache",
+          "type": "integer"
+        },
+        "optimal_adapter_size": {
+          "default": 8,
+          "description": "optimal adapter size used to set page width",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "SchedulerConfig": {
+      "properties": {
+        "capacity_scheduler_policy": {
+          "description": "The capacity scheduler policy to use",
+          "enum": [
+            "GUARANTEED_NO_EVICT"
+          ],
+          "type": "string"
+        },
+        "context_chunking_policy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The context chunking policy to use"
+        },
+        "dynamic_batch_config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DynamicBatchConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The dynamic batch config to use"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "discovered_at": "2026-05-25T10:25:29.567324+00:00",
+  "discovery_method": "strategy_b_oss_llm",
+  "engine": "tensorrt",
+  "engine_params": {
+    "bad_words_ids": {
+      "default": null,
+      "description": "List of token ids that should not be generated",
+      "items": {
+        "type": "integer"
+      },
+      "type": "array"
+    },
+    "build_config": {
+      "default": null,
+      "description": "TRT build configuration"
+    },
+    "calib_config": {
+      "default": null,
+      "description": "TRT calibration configuration"
+    },
+    "do_sample": {
+      "default": true,
+      "description": "Whether to use sampling or greedy decoding",
+      "type": "boolean"
+    },
+    "early_stopping": {
+      "default": false,
+      "description": "Whether to stop generation once all beams have reached the end of their sequence",
+      "type": "boolean"
+    },
+    "enable_build_cache": {
+      "default": false,
+      "type": "boolean"
+    },
+    "extended_runtime_perf_knob_config": {
+      "default": null,
+      "description": "TRT extended runtime performance knob configuration"
+    },
+    "fast_build": {
+      "default": false,
+      "type": "boolean"
+    },
+    "max_draft_len": {
+      "default": null,
+      "description": "Maximum draft length",
+      "type": "integer"
+    },
+    "max_length": {
+      "default": null,
+      "description": "Maximum length of the generated sequence",
+      "type": "integer"
+    },
+    "max_new_tokens": {
+      "default": null,
+      "description": "Maximum number of tokens to generate",
+      "type": "integer"
+    },
+    "min_length": {
+      "default": null,
+      "description": "Minimum length of the generated sequence",
+      "type": "integer"
+    },
+    "no_repeat_ngram_size": {
+      "default": 0,
+      "description": "Size of the n-grams to avoid repetition",
+      "type": "integer"
+    },
+    "num_beams": {
+      "default": null,
+      "description": "Number of beams for beam search",
+      "type": "integer"
+    },
+    "speculative_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "PathLike",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "engine_version": "0.19.0",
+  "sampling_params": {},
+  "schema_version": "2.0.0"
+}

@@ -1,0 +1,90 @@
+scoring_format_version: 1.0.0
+precision_spurious:
+- identity:
+  - ''
+  - tensorrt__calibconfig_device_not_in
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt__calibconfig_device_not_in
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - ''
+  - tensorrt_batching_type_not_in
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_batching_type_not_in
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - ''
+  - tensorrt_build_cache_max_records_lt_1
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_build_cache_max_records_lt_1
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - ''
+  - tensorrt_capacity_scheduler_policy_not_in
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_capacity_scheduler_policy_not_in
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - ''
+  - tensorrt_context_chunking_policy_not_in
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_context_chunking_policy_not_in
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - ''
+  - tensorrt_lookaheaddecodingconfig_max_ngram_size_le_0
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_lookaheaddecodingconfig_max_ngram_size_le_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - ''
+  - tensorrt_lookaheaddecodingconfig_max_verification_set_size_le_0
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_lookaheaddecodingconfig_max_verification_set_size_le_0
+    severity: error
+  note: cell invariant absent in reference
+- identity:
+  - ''
+  - tensorrt_lookaheaddecodingconfig_max_window_size_le_0
+  - unknown
+  - ''
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+    id: tensorrt_lookaheaddecodingconfig_max_window_size_le_0
+    severity: error
+  note: cell invariant absent in reference

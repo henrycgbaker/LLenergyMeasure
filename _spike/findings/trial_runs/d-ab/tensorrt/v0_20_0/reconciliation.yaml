@@ -1,0 +1,34 @@
+schema_version: 1.0.0
+engine: tensorrt
+engine_version: 0.20.0
+reconciled_at: '2026-05-25T11:27:45.869157+00:00'
+added_by_llm_verifier:
+- id: tensorrt_lookaheaddecodingconfig_max_window_size_le_0
+  field: max_window_size
+  predicate_kind: le
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: tensorrt_lookaheaddecodingconfig_max_ngram_size_le_0
+  field: max_ngram_size
+  predicate_kind: le
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+- id: tensorrt_lookaheaddecodingconfig_max_verification_set_size_le_0
+  field: max_verification_set_size
+  predicate_kind: le
+  severity: error
+  added_by: llm_verifier
+  flagged_for_review: true
+flagged_spurious_in_deterministic:
+- id: tensorrt_torch_llm_load_format_invalid
+  reason: unclear what this invariant is checking, as the load_format field is not
+    defined in the provided source code.
+missed_diagnoses:
+- id: tensorrt_calibconfig_device_not_cuda_or_cpu
+  why_missed: The deterministic miner missed this invariant because it was defined
+    using a Literal type annotation, which is not explicitly checked by the miner.
+- id: tensorrt_batchingtype_not_static_or_inflight
+  why_missed: The deterministic miner missed this invariant because it was defined
+    using an StrEnum class, which is not explicitly checked by the miner.

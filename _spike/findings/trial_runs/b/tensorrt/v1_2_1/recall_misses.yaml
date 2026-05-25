@@ -1,0 +1,729 @@
+scoring_format_version: 1.0.0
+recall_misses:
+- identity:
+  - engine_params
+  - auto_parallel
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - auto_parallel_world_size
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - garbage_collection_gen0_threshold
+  kind: recall_miss
+  reference_value: integer
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - max_cpu_loras
+  kind: recall_miss
+  reference_value: integer
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - max_lora_rank
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - max_loras
+  kind: recall_miss
+  reference_value: integer
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - add_special_tokens
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - additional_model_outputs
+  kind: recall_miss
+  reference_value:
+  - anyOf
+  - - array
+    - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - apply_batched_logits_processor
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - bad
+  kind: recall_miss
+  reference_value:
+  - anyOf
+  - - array
+    - 'null'
+    - string
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - bad_token_ids
+  kind: recall_miss
+  reference_value:
+  - anyOf
+  - - array
+    - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - beam_search_diversity_rate
+  kind: recall_miss
+  reference_value:
+  - number
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - beam_width_array
+  kind: recall_miss
+  reference_value:
+  - anyOf
+  - - array
+    - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - best_of
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - detokenize
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - early_stopping
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - embedding_bias
+  kind: recall_miss
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - end_id
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - exclude_input_from_output
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - frequency_penalty
+  kind: recall_miss
+  reference_value:
+  - number
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - guided_decoding
+  kind: recall_miss
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - ignore_eos
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - include_stop_str_in_output
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - length_penalty
+  kind: recall_miss
+  reference_value:
+  - number
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - logits_processor
+  kind: recall_miss
+  reference_value:
+  - anyOf
+  - - array
+    - 'null'
+    - object
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - logprobs
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - lookahead_config
+  kind: recall_miss
+  reference_value:
+  - anyOf
+  - - 'null'
+    - object
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - max_tokens
+  kind: recall_miss
+  reference_value: integer
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - min_p
+  kind: recall_miss
+  reference_value:
+  - number
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - min_tokens
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - n
+  kind: recall_miss
+  reference_value: integer
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - no_repeat_ngram_size
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - pad_id
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - presence_penalty
+  kind: recall_miss
+  reference_value:
+  - number
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - prompt_logprobs
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - repetition_penalty
+  kind: recall_miss
+  reference_value:
+  - number
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - return_context_logits
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - return_encoder_output
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - return_generation_logits
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - return_perf_metrics
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - seed
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - skip_special_tokens
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - spaces_between_special_tokens
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - stop
+  kind: recall_miss
+  reference_value:
+  - anyOf
+  - - array
+    - 'null'
+    - string
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - stop_token_ids
+  kind: recall_miss
+  reference_value:
+  - anyOf
+  - - array
+    - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - temperature
+  kind: recall_miss
+  reference_value:
+  - number
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - top_k
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - top_p
+  kind: recall_miss
+  reference_value:
+  - number
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - top_p_decay
+  kind: recall_miss
+  reference_value:
+  - number
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - top_p_min
+  kind: recall_miss
+  reference_value:
+  - number
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - top_p_reset_ids
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - truncate_prompt_tokens
+  kind: recall_miss
+  reference_value:
+  - integer
+  - 'null'
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - use_beam_search
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - tensorrt
+  - backend
+  - exact
+  - build_config
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_warns_max_seq_len_set_True_set_runtime_knobs_from_build_config
+    severity: warn
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - backend
+  - not_in
+  - build_config
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_warns_build_config_set_True_model_format_misc
+    severity: warn
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - batching_type
+  - unknown
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_batching_type_in_2_values
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - cuda_graph_batch_sizes
+  - present
+  - cuda_graph_max_batch_size
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_raises_cuda_graph_max_batch_size_ne_0_cuda_graph_config
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - cuda_graph_max_batch_size
+  - lt
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_raises_cuda_graph_max_batch_size_lt_0_cuda_graph_max_batch_size
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - device
+  - unknown
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_calibconfig_device_in_2_values
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - enable_build_cache
+  - type_is_not
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_raises_enable_build_cache_not_type_buildcacheconfig_enable_build_cache
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - enable_lora
+  - present
+  - lora_config
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_warns_backend_in_lora_config_consistency
+    severity: warn
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - free_mem_ratio
+  - lt
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_autodeploy_free_mem_ratio_out_of_range
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - kv_cache_quant_algo
+  - unknown
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_quant_config_kv_cache_quant_algo_in_allowlist
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - load_format
+  - not_in
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_torch_llm_load_format_invalid
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - load_format
+  - unknown
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_basellmargs_load_format_in_2_values
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - lora_config
+  - present
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_warns_lora_config_set_True_lora_config_consistency
+    severity: warn
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - lora_config
+  - present
+  - max_lora_rank
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_warns_max_lora_rank_set_True_lora_config_consistency
+    severity: warn
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - max_batch_size
+  - present
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_raises_max_batch_size_set_True_build_config_with_runtime_params
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - max_beam_width
+  - present
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_warns_max_beam_width_set_True_build_config_with_runtime_params
+    severity: warn
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - max_input_len
+  - present
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_warns_max_input_len_set_True_build_config_with_runtime_params
+    severity: warn
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - max_num_tokens
+  - present
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_raises_max_num_tokens_set_True_build_config_with_runtime_params
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - max_seq_len
+  - present
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_warns_max_seq_len_set_True_build_config_with_runtime_params
+    severity: warn
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - mla_backend
+  - unknown
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt__autodeployllmargs_mla_backend_in_1_values
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - model_factory
+  - unknown
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt__autodeployllmargs_model_factory_in_2_values
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - moe_load_balancer
+  - unknown
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_raises_moe_load_balancer_type_str_moe_load_balancer
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - quant_algo
+  - unknown
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_quant_config_quant_algo_in_allowlist
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - speculative_config
+  - present
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_raises_speculative_config_set_True_speculative_config
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
+- identity:
+  - tensorrt
+  - tokenizer_mode
+  - unknown
+  - ''
+  kind: recall_miss
+  reference_value:
+    id: tensorrt_basellmargs_tokenizer_mode_in_2_values
+    severity: error
+  cell_value: null
+  note: reference invariant absent in cell output
