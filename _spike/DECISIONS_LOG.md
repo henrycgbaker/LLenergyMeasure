@@ -3159,3 +3159,46 @@ Per prior user direction (`### Timing` in earlier entry), now is the stopping po
 3. Phase 3b H4 launch.
 
 Phase 4 synthesis is queued AFTER Phase 3b cells land.
+
+## 2026-05-25 Phase 3a closure + worktree migration + spike OQ9 update
+
+### Phase 3a fully done
+
+47 cells total (11 active + 12 transformers bumped + 12 vllm bumped + 12 tensorrt bumped). Three distinct (a) brittleness modes emerged across engines:
+
+- **transformers**: landmark missing on extreme bumps (tokenizers / huggingface_hub API renames)
+- **vllm**: msgspec ImportError on ALL bumps (hard transitive dep; source-only venvs can't satisfy)
+- **tensorrt**: harness blind (walker hardcoded `_DEFAULT_SOURCE_ROOT`; PYTHONPATH override no-op; all 4 bumped cells re-extracted active reference). Phase 4 must DE-WEIGHT the 4 tensorrt (a)-bumped scores from per-engine aggregates.
+
+Cross-engine (b) recall ranges: transformers ~55% / vllm ~28% / tensorrt ~20%. Distinct profiles, distinct failure modes.
+
+**Critical NEW failure mode discovered: (b) tensorrt v0.x HALLUCINATION.** When chunker returned empty source (class-name mismatch v0.x `LlmArgs` vs v1.x `BaseLlmArgs + TrtLlmArgs`), the LLM didn't know it had empty input. It HALLUCINATED 30+ HuggingFace `GenerationConfig` fields (`temperature`, `top_k`, `do_sample`) that don't exist in tensorrt at all. Worse than empty output - confidently wrong. Decision-relevant: pure (b) needs hallucination detection (runtime validation against live library, or schema-existence check against `Model.__fields__`).
+
+Phase 3a closure commit `e1d05126`. Pushed.
+
+### Worktree migration
+
+Per user direction: trial branch moved to its own worktree to free main checkout for spike work.
+
+- Main checkout `/home/h.baker@hertie-school.lan/workspace/llenergymeasure` now on `spike/engine-knowledge-as-data` (tip `15f34240`).
+- Trial worktree at `/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial` on `trial/mining-substrate-bakeoff` (tip `e1d05126`).
+- Phase 3b + 4 + 5 agents launch from the trial worktree path going forward.
+- Container `trial-ollama` (port 11435) is docker-side; persists across cwd switches.
+- Source-only venvs at `/tmp/trial_<engine>_<slug>_venv/` persist similarly.
+
+### Spike design doc OQ9 update (LOCAL on spike checkout)
+
+Updated `.product/designs/engine-knowledge-as-data.md` § Open Question 9 with trial-driven framing additions:
+
+(A) Trial-side footprint forces the storage-strategy question earlier. Trial corpus alone is ~4.3 MB / ~95k LoC, doubling the original 1.5-3 MB / 30-archive estimate.
+
+(B) Upstream-image-digest pinning as a cleaner artefact-pin mechanism than git-tag pinning. Each engine's mined output keys against the upstream container image SHA (e.g. `vllm/vllm-openai@sha256:...`), not against llem's git tag. Replay + audit become "pull image at digest D" rather than "checkout llem tag T".
+
+Revisit deferred: (1) trial concludes; (2) trial implications land on spike (post-trial gap closure per `_spike/findings/post_trial_a_gap_closure.md`, Bake-off A refactor); (3) THEN revisit with concrete footprint data + clear consumer-fetch story.
+
+Note: `.product/` is gitignored. The update persists on disk in the spike checkout but is NOT committed to git. This is intentional per project's "local design space" pattern. Cross-reference from this tracked DECISIONS_LOG ensures the update is discoverable from the trial record.
+
+### Phase 3b launch readiness
+
+GREEN. Ready to launch hybrid patterns starting with H4 (LLM-modifies-miner) per user priority + epistemic framing. Container Ollama up; chunkers parametrised; bumped-cell dispatchers wired. The three brittleness modes give H4 plenty of substrate to propose patches against.
+
