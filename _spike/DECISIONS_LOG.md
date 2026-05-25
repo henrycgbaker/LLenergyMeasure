@@ -3361,3 +3361,31 @@ research/mining-substrate-trial/
 
 This is the IA the future migration agent should produce. NOT just a flat directory.
 
+
+## 2026-05-25 correction: validation IS implemented for all 3 engines
+
+User correctly pointed out I'd misstated the validation infrastructure state.
+
+**Truth**: `scripts/validate_invariants.py` is production-grade and supports all 3 engines via Docker containers. Phase 1 used it directly:
+- vllm Day 1: 26/26 both-confirmed in `vllm/vllm-openai:v0.7.3` container.
+- tensorrt Day 2: 11% both-confirmed / 63% positive-only / 37% neither in `nvcr.io/nvidia/tensorrt-llm/release` container.
+- transformers v4.57.3: extensive use; mature pass rates documented in `invariants.validated.yaml`.
+
+Makefile targets: `test-runtime-{transformers,vllm,tensorrt}`. Docker images: `llenergymeasure:{transformers-4.57.3,vllm-v0.7.3,...}` (per `phase1_version_lock.md`).
+
+**What's transformers-only**: the `_spike/scripts/trial_scoring.runtime_validate_invariants` IN-PROCESS WRAPPER. It imports the engine into the project venv to run validation cases; only transformers is installed there (vllm + tensorrt are intentionally container-only).
+
+### Corrected Phase 4.0 scope
+
+The validated-union builder is SMALLER than the earlier framing implied:
+
+- ~50-100 LoC wrapper that dispatches to `scripts/validate_invariants.py --engine X` inside the appropriate container per engine.
+- Reads each cell's emitted `invariants.proposed.yaml`; routes to the engine container; receives back `invariants.validated.yaml`; unions across strategies.
+- The HARD work is the dispatch logic + container invocation + envelope serialisation. The actual validation per cell is already production-grade.
+
+This is a 1-2 day Phase 4.0 task, not the multi-day rebuild I'd implied.
+
+### Implication for the architecture commitment
+
+The "deterministic validate / LLM extend-propose" shape is even more concretely achievable than I'd suggested. The deterministic validator is already production-grade across all 3 engines. The trial just needs the dispatch layer.
+
