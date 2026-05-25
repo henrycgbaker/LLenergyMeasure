@@ -575,6 +575,98 @@ def test_tensorrt_chunker_captures_pydantic_validators() -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# 8. Phase 4.0 - validated-union dispatcher + builder
+# ---------------------------------------------------------------------------
+
+
+def test_engine_version_image_returns_known_pinned_images() -> None:
+    """Per Phase 1 version-lock: the 5 active/v+major container cells map
+    to specific Docker images. The dispatcher's image registry is the
+    single locus of truth for those mappings."""
+    from _spike.scripts.trial_scoring import _engine_version_image
+
+    assert _engine_version_image("transformers", "v4_57_3") == "llenergymeasure:transformers-4.57.3"
+    assert _engine_version_image("vllm", "v0_7_3") == "llenergymeasure:vllm-v0.7.3"
+    assert _engine_version_image("tensorrt", "v1_2_1") == "nvcr.io/nvidia/tensorrt-llm/release:1.2.1"
+    # Off-active versions return None so the dispatcher can surface
+    # "no container image registered" rather than misclassify.
+    assert _engine_version_image("transformers", "v5_9_0") is None
+    assert _engine_version_image("vllm", "v0_6_0") is None
+    assert _engine_version_image("tensorrt", "v0_19_0") is None
+    # Unknown engine returns None.
+    assert _engine_version_image("nonsense", "vX") is None
+
+
+def test_case_dict_to_runtime_validation_passes_through_outcome() -> None:
+    """The dispatcher reads validate_invariants.py's envelope cases and
+    converts each to a RuntimeValidation. Both-confirmed entries surface
+    positive_confirmed=True AND negative_confirmed=True."""
+    from _spike.scripts.trial_scoring import _case_dict_to_runtime_validation
+
+    confirmed_case = {
+        "id": "demo_both_confirmed",
+        "outcome": "error",
+        "positive_confirmed": True,
+        "negative_confirmed": True,
+    }
+    rv = _case_dict_to_runtime_validation(confirmed_case)
+    assert rv.invariant_id == "demo_both_confirmed"
+    assert rv.positive_confirmed
+    assert rv.negative_confirmed
+    assert rv.observed_outcome == "error"
+    assert rv.error is None
+
+    partial_case = {
+        "id": "demo_positive_only",
+        "outcome": "error",
+        "positive_confirmed": True,
+        "negative_confirmed": False,
+    }
+    rv2 = _case_dict_to_runtime_validation(partial_case)
+    assert rv2.positive_confirmed
+    assert not rv2.negative_confirmed
+
+
+def test_validated_union_builder_handles_missing_strategy_outputs(tmp_path: Path) -> None:
+    """If a cell has zero strategy outputs to union, the builder writes
+    an empty envelope (not a crash). The downstream re-scorer detects
+    this and tags the cell as "no validated union available"."""
+    from _spike.scripts.trial_scoring import build_validated_union
+
+    out_path = tmp_path / "validated_union_empty.yaml"
+    # Engine 'nonsense' has no source templates that resolve.
+    result_path = build_validated_union(
+        engine="nonsense", version_slug="vX", out_path=out_path
+    )
+    assert result_path == out_path
+    assert out_path.exists()
+    envelope = yaml.safe_load(out_path.read_text())
+    assert envelope["engine"] == "nonsense"
+    assert envelope["invariants"] == []
+    assert envelope["contributors_by_identity"] == {}
+
+
+def test_collect_strategy_invariants_finds_canonical_active_cell() -> None:
+    """The collector walks per-strategy file templates and dedupes by
+    canonical 4-tuple identity. For the transformers v4_57_3 active cell,
+    it should find at least the canonical (a) reference."""
+    from _spike.scripts.trial_scoring import _collect_strategy_invariants
+
+    union = _collect_strategy_invariants("transformers", "v4_57_3")
+    # transformers v4_57_3 has (a) canonical + (b) + (d-ab) all populated
+    # plus a number of hybrid patterns; the union should be > 20 entries.
+    assert len(union) > 20, f"expected >20 dedup'd entries, got {len(union)}"
+    # Every entry's contributor list should be non-empty and contain only
+    # known strategy names.
+    known_strategies = {"a", "b", "d-ab", "h2", "h3", "h6", "e6", "e9"}
+    for ident, (inv, contribs) in union.items():
+        assert contribs, f"empty contributor list for {ident}"
+        assert all(c in known_strategies for c in contribs), (
+            f"unexpected contributor in {contribs} for {ident}"
+        )
+
+
 def test_write_diff_artefact_writes_stable_yaml(tmp_path: Path) -> None:
     """write_diff_artefact emits stable, deterministic YAML (sorted by
     identity tuple). Idempotent re-writes produce identical bytes."""

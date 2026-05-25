@@ -1195,6 +1195,513 @@ def _runtime_validate_one_transformers(
     )
 
 
+# ---------------------------------------------------------------------------
+# Phase 4.0 - per-engine runtime-validation dispatcher
+# ---------------------------------------------------------------------------
+#
+# Lifts ``runtime_validate_invariants`` from transformers-only (in-process)
+# to all three engines. The dispatch logic:
+#   - transformers: run ``scripts.validate_invariants`` in-process. The
+#     project venv has transformers installed so the engine's native types
+#     resolve without container overhead.
+#   - vllm: ``docker run`` the production validator inside
+#     ``llenergymeasure:vllm-v0.7.3`` (or v0_19_1 image per phase1 lock).
+#   - tensorrt: same shape with the nvidia entrypoint that ldconfig's
+#     CUDA + TRT library paths (without it, ``import tensorrt_llm`` fails
+#     with ``libnvonnxparser.so.10: cannot open shared object file``).
+#
+# The dispatcher reads the validated.yaml envelope that the container
+# produces and converts each case into a :class:`RuntimeValidation`. The
+# fully-confirmed set (``positive_confirmed AND negative_confirmed``) is
+# the slice that lands in the validated-union ground truth.
+
+
+# Mapping (engine, version_slug) -> Docker image. Active-version cells use
+# the production images already on disk per Phase 1 version-lock document.
+# Off-active version cells aren't in scope for Phase 4.0 runtime
+# validation (no per-version container image inventory exists for them);
+# the dispatcher returns a stub error for those cells and the union
+# builder falls back to the active-cell union for inheriting cells.
+_ENGINE_VERSION_IMAGE: dict[tuple[str, str], str] = {
+    ("transformers", "v4_57_3"): "llenergymeasure:transformers-4.57.3",
+    ("transformers", "v4_57_6"): "llenergymeasure:transformers-4.57.6",
+    ("vllm", "v0_7_3"): "llenergymeasure:vllm-v0.7.3",
+    ("vllm", "v0_19_1"): "vllm/vllm-openai:v0.19.1",
+    ("tensorrt", "v1_2_1"): "nvcr.io/nvidia/tensorrt-llm/release:1.2.1",
+}
+
+
+def _engine_version_image(engine: str, version_slug: str) -> str | None:
+    """Return the Docker image reference for (engine, version) or None."""
+    return _ENGINE_VERSION_IMAGE.get((engine, version_slug))
+
+
+def _case_dict_to_runtime_validation(case: dict[str, Any]) -> RuntimeValidation:
+    """Convert a validate_invariants.py case envelope dict to a RuntimeValidation."""
+    return RuntimeValidation(
+        invariant_id=str(case.get("id", "")),
+        positive_confirmed=bool(case.get("positive_confirmed", False)),
+        negative_confirmed=bool(case.get("negative_confirmed", False)),
+        observed_outcome=str(case.get("outcome", "")),
+        error=None
+        if case.get("outcome") != "error" or case.get("positive_confirmed")
+        else (
+            (case.get("observed_exception") or {}).get("message")
+            if isinstance(case.get("observed_exception"), dict)
+            else None
+        ),
+    )
+
+
+def runtime_validate_invariants_dispatch(
+    invariants_yaml: Path,
+    *,
+    engine: str,
+    version_slug: str,
+    work_dir: Path | None = None,
+    image_override: str | None = None,
+    timeout_sec: int = 600,
+) -> list[RuntimeValidation]:
+    """Run each invariant through the live library; dispatch per engine.
+
+    transformers: tries in-process first (if the project venv has
+    transformers installed); falls back to the container otherwise.
+
+    vllm + tensorrt: shell out to ``docker run`` against the engine's
+    canonical container image, mount the input YAML into a working dir,
+    run ``scripts/validate_invariants.py`` inside the container, read
+    back the validated envelope.
+
+    Returns one :class:`RuntimeValidation` per invariant. Cells whose
+    ``(engine, version_slug)`` has no recorded container image return a
+    list with one stub error entry per invariant so the caller can
+    distinguish "validation infra missing" from "validation said fail".
+    """
+    image = image_override or _engine_version_image(engine, version_slug)
+
+    if engine == "transformers":
+        # Prefer in-process path when the project venv has transformers.
+        # The trial worktree's venv may be lean; fall back to the
+        # container path so dispatch works regardless of venv state.
+        try:
+            import transformers  # type: ignore[import]  # noqa: F401
+
+            return _dispatch_transformers_inprocess(invariants_yaml)
+        except ImportError:
+            if image is None:
+                inv_data = yaml.safe_load(invariants_yaml.read_text()) or {}
+                return [
+                    RuntimeValidation(
+                        invariant_id=str(inv.get("id", "")) if isinstance(inv, dict) else "",
+                        error="transformers not in venv and no container image",
+                    )
+                    for inv in inv_data.get("invariants") or []
+                ]
+            return _dispatch_via_container(
+                invariants_yaml=invariants_yaml,
+                engine=engine,
+                image=image,
+                work_dir=work_dir,
+                timeout_sec=timeout_sec,
+            )
+
+    if image is None:
+        # No container image for this version - surface as infra error per
+        # invariant so the union builder can skip rather than misclassify.
+        inv_data = yaml.safe_load(invariants_yaml.read_text()) or {}
+        inv_list = inv_data.get("invariants") or []
+        return [
+            RuntimeValidation(
+                invariant_id=str(inv.get("id", "")) if isinstance(inv, dict) else "",
+                error=f"no container image registered for {engine}/{version_slug}",
+            )
+            for inv in inv_list
+        ]
+
+    if engine in {"vllm", "tensorrt"}:
+        return _dispatch_via_container(
+            invariants_yaml=invariants_yaml,
+            engine=engine,
+            image=image,
+            work_dir=work_dir,
+            timeout_sec=timeout_sec,
+        )
+
+    raise ValueError(f"Unknown engine {engine!r}; expected transformers / vllm / tensorrt.")
+
+
+def _dispatch_transformers_inprocess(invariants_yaml: Path) -> list[RuntimeValidation]:
+    """Run the production validator in-process for transformers.
+
+    Uses ``scripts.validate_invariants.validate_engine`` directly so we
+    inherit all the gate-soundness checks rather than the simplified
+    Phase 2.5 wrapper.
+    """
+    import tempfile
+
+    try:
+        from scripts.validate_invariants import (  # type: ignore[import]
+            ValidationEngineNotImportable,
+            validate_engine,
+        )
+    except ImportError as exc:
+        inv_data = yaml.safe_load(invariants_yaml.read_text()) or {}
+        return [
+            RuntimeValidation(
+                invariant_id=str(inv.get("id", "")) if isinstance(inv, dict) else "",
+                error=f"validation infra unavailable: {exc}",
+            )
+            for inv in inv_data.get("invariants") or []
+        ]
+
+    with tempfile.NamedTemporaryFile(
+        suffix=".validated.yaml", delete=False, mode="w"
+    ) as tmp:
+        out_path = Path(tmp.name)
+
+    try:
+        try:
+            envelope, _div = validate_engine(
+                engine="transformers",
+                corpus_path=invariants_yaml,
+                out_path=out_path,
+                gpu_mode="skip",
+                validation_commit="phase4_0_validated_union",
+            )
+        except ValidationEngineNotImportable as exc:
+            inv_data = yaml.safe_load(invariants_yaml.read_text()) or {}
+            return [
+                RuntimeValidation(
+                    invariant_id=str(inv.get("id", "")) if isinstance(inv, dict) else "",
+                    error=f"engine not importable: {exc}",
+                )
+                for inv in inv_data.get("invariants") or []
+            ]
+        return [_case_dict_to_runtime_validation(case) for case in envelope.get("cases", [])]
+    finally:
+        out_path.unlink(missing_ok=True)
+
+
+def _dispatch_via_container(
+    *,
+    invariants_yaml: Path,
+    engine: str,
+    image: str,
+    work_dir: Path | None,
+    timeout_sec: int,
+) -> list[RuntimeValidation]:
+    """Run validate_invariants.py inside the engine's Docker container.
+
+    Mounts a working dir with the input YAML; runs the production script;
+    reads back the validated envelope. The container needs the project's
+    ``scripts/`` tree visible (for ``validate_invariants.py`` itself) so
+    we mount the worktree's repo root at ``/repo``.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+
+    if shutil.which("docker") is None:
+        return [
+            RuntimeValidation(
+                invariant_id=str(inv.get("id", "")) if isinstance(inv, dict) else "",
+                error="docker binary missing in PATH",
+            )
+            for inv in (yaml.safe_load(invariants_yaml.read_text()) or {}).get("invariants") or []
+        ]
+
+    workspace = Path(tempfile.mkdtemp(prefix=f"phase4_0_vu_{engine}_"))
+    try:
+        # Stage the corpus inside the workspace so the container only needs
+        # one bind mount for read+write of the validation envelope.
+        corpus_in_workspace = workspace / "invariants.proposed.yaml"
+        out_in_workspace = workspace / "invariants.validated.yaml"
+        shutil.copy(invariants_yaml, corpus_in_workspace)
+
+        docker_cmd: list[str] = [
+            "docker",
+            "run",
+            "--rm",
+        ]
+        # Note: NOT passing --user. The trial worktree's host uid (e.g.
+        # 1722830498) isn't present in container /etc/passwd, which
+        # breaks torch / tensorrt_llm that call getpass.getuser(). The
+        # validate run is stateless inside the container; running as root
+        # is safe because we never touch the host fs aside from /work.
+        if engine == "tensorrt":
+            # tensorrt_llm imports fail without nvidia-smi access AND the
+            # nvidia entrypoint that ldconfig's the CUDA + TRT paths.
+            docker_cmd += ["--gpus", "all", "--entrypoint", "/opt/nvidia/nvidia_entrypoint.sh"]
+        else:
+            docker_cmd += ["--entrypoint", "bash"]
+
+        # Mount the repo for scripts/ + the workspace for I/O. Inside the
+        # container we cd into /repo so ``scripts/_invariant_validation_common``
+        # resolves on the sys.path inserted by validate_invariants.
+        docker_cmd += [
+            "-v",
+            f"{_PROJECT_ROOT}:/repo:ro",
+            "-v",
+            f"{workspace}:/work:rw",
+            "-w",
+            "/repo",
+            image,
+        ]
+        # Build the invocation. tensorrt uses /opt/nvidia/nvidia_entrypoint.sh
+        # which forwards its arguments to exec - so we pass `bash -c "..."`
+        # as separate argv tokens, not a single concatenated string.
+        validate_invocation = [
+            "python3",
+            "scripts/validate_invariants.py",
+            "--engine",
+            engine,
+            "--corpus",
+            "/work/invariants.proposed.yaml",
+            "--out",
+            "/work/invariants.validated.yaml",
+            "--image-ref",
+            image,
+            "--base-image-ref",
+            image,
+            "--validation-commit",
+            "phase4_0_validated_union",
+        ]
+        if engine == "tensorrt":
+            docker_cmd += ["bash", "-c", " ".join(validate_invocation)]
+        else:
+            docker_cmd += ["-c", " ".join(validate_invocation)]
+
+        completed = subprocess.run(
+            docker_cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            check=False,
+        )
+
+        if not out_in_workspace.exists():
+            # Container failed before writing the envelope; surface as
+            # infra error per invariant.
+            inv_data = yaml.safe_load(invariants_yaml.read_text()) or {}
+            err_msg = (
+                f"container validate run failed (exit={completed.returncode}); "
+                f"stderr={completed.stderr[-500:]!r}"
+            )
+            return [
+                RuntimeValidation(
+                    invariant_id=str(inv.get("id", "")) if isinstance(inv, dict) else "",
+                    error=err_msg,
+                )
+                for inv in inv_data.get("invariants") or []
+            ]
+
+        envelope = yaml.safe_load(out_in_workspace.read_text()) or {}
+        return [_case_dict_to_runtime_validation(case) for case in envelope.get("cases", [])]
+    finally:
+        # Best-effort cleanup; leave workspace on filesystem if rm fails
+        # so an operator can inspect what the container produced. The
+        # container runs as root so we may need a sudo-less workaround
+        # for files it wrote - shutil.rmtree handles file mode well.
+        try:
+            shutil.rmtree(workspace, ignore_errors=True)
+        except OSError:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Phase 4.0 - per-cell validated-union builder
+# ---------------------------------------------------------------------------
+#
+# Per the trial DECISIONS_LOG entry "treat the union of all discovered
+# across all methods as the upper bound": the corrected ground truth is
+# the UNION of all strategies' outputs per cell, filtered to entries that
+# pass runtime validation.
+#
+# The union builder pipes proposed invariants from each strategy through
+# the dispatcher, then keeps only entries where positive_confirmed AND
+# negative_confirmed (the corpus's own "both-confirmed" classification).
+
+
+# Per-strategy file globs - each strategy may file its output at one of
+# several conventional paths. The builder probes them in order and uses
+# the first match. Missing files are skipped (graceful handling for
+# strategies that didn't run a particular cell).
+_STRATEGY_SOURCE_TEMPLATES: list[tuple[str, str]] = [
+    ("a", "engine_versions/{engine}/{version_slug}/outputs/invariants.proposed.yaml"),
+    ("a", "_spike/findings/trial_runs/a/{engine}/{version_slug}/invariants.proposed.yaml"),
+    ("b", "_spike/findings/trial_runs/b/{engine}/{version_slug}/invariants.proposed.yaml"),
+    ("d-ab", "_spike/findings/trial_runs/d-ab/{engine}/{version_slug}/invariants.proposed.yaml"),
+    (
+        "h2",
+        "_spike/findings/hybrid_experiments/h2_validate/{engine}/{version_slug}/filtered_proposed.yaml",
+    ),
+    (
+        "h2",
+        "_spike/findings/hybrid_experiments/h2_validate/{engine}/filtered_proposed.yaml",
+    ),
+    (
+        "h3",
+        "_spike/findings/hybrid_experiments/h3_propose_verify/{engine}/{version_slug}/verified_invariants.yaml",
+    ),
+    (
+        "h3",
+        "_spike/findings/hybrid_experiments/h3_propose_verify/{engine}/verified_invariants.yaml",
+    ),
+    (
+        "h6",
+        "_spike/findings/hybrid_experiments/h6_no_chunk/{engine}/{version_slug}/invariants.proposed.yaml",
+    ),
+    (
+        "e6",
+        "_spike/findings/hybrid_experiments/e6_field_anchored/{engine}/{version_slug}/invariants.proposed.yaml",
+    ),
+    (
+        "e9",
+        "_spike/findings/hybrid_experiments/e9_sequential/{engine}/{version_slug}/invariants.proposed.yaml",
+    ),
+]
+
+
+def _collect_strategy_invariants(
+    engine: str, version_slug: str
+) -> dict[InvariantId, tuple[dict[str, Any], list[str]]]:
+    """Walk every strategy's output for this cell; dedupe by canonical identity.
+
+    Returns ``{identity -> (invariant_dict, [contributing_strategies])}``.
+    First-write-wins on identity collisions (later strategies that emit
+    the same canonical invariant just append their name to the
+    contributors list).
+    """
+    union: dict[InvariantId, tuple[dict[str, Any], list[str]]] = {}
+    for strategy, template in _STRATEGY_SOURCE_TEMPLATES:
+        path = _PROJECT_ROOT / template.format(engine=engine, version_slug=version_slug)
+        if not path.exists():
+            continue
+        try:
+            data = yaml.safe_load(path.read_text()) or {}
+        except yaml.YAMLError:
+            continue
+        for inv in data.get("invariants") or []:
+            if not isinstance(inv, dict):
+                continue
+            ident = invariant_identity(inv)
+            if ident in union:
+                # Append the contributing strategy to the existing record.
+                existing_inv, contribs = union[ident]
+                if strategy not in contribs:
+                    contribs.append(strategy)
+            else:
+                union[ident] = (inv, [strategy])
+    return union
+
+
+def build_validated_union(
+    *,
+    engine: str,
+    version_slug: str,
+    out_path: Path | None = None,
+    image_override: str | None = None,
+    timeout_sec: int = 1200,
+) -> Path:
+    """Build the per-cell validated union and write it to disk.
+
+    1. Collect proposed invariants from every strategy for this cell.
+    2. Dedupe via canonical 4-tuple identity matching.
+    3. Write a merged corpus to a temp file.
+    4. Runtime-validate via :func:`runtime_validate_invariants_dispatch`.
+    5. Keep entries where ``positive_confirmed AND negative_confirmed``.
+    6. Write the validated union to ``out_path`` (default
+       ``_spike/findings/validated_union/<engine>__<version_slug>.yaml``).
+
+    Returns the output path. Idempotent rebuild: the union file is
+    overwritten in place each call.
+    """
+    union_map = _collect_strategy_invariants(engine, version_slug)
+    if out_path is None:
+        out_path = (
+            _PROJECT_ROOT
+            / "_spike"
+            / "findings"
+            / "validated_union"
+            / f"{engine}__{version_slug}.yaml"
+        )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not union_map:
+        # No strategy output for this cell; write an empty envelope so the
+        # downstream re-scorer can detect the gap.
+        empty_envelope: dict[str, Any] = {
+            "schema_version": "1.0.0",
+            "engine": engine,
+            "engine_version_slug": version_slug,
+            "miner": "phase4_0_validated_union",
+            "contributors_by_identity": {},
+            "validation_errors_by_identity": {},
+            "invariants": [],
+        }
+        out_path.write_text(yaml.safe_dump(empty_envelope, sort_keys=False))
+        return out_path
+
+    # Stage the merged proposed corpus for the dispatcher.
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(
+        suffix=".proposed.yaml", delete=False, mode="w"
+    ) as tmp:
+        staged_path = Path(tmp.name)
+    try:
+        merged_invariants = [inv for inv, _contribs in union_map.values()]
+        staged_envelope = {
+            "schema_version": "1.0.0",
+            "engine": engine,
+            "engine_version_slug": version_slug,
+            "miner": "phase4_0_validated_union_input",
+            "invariants": merged_invariants,
+        }
+        staged_path.write_text(yaml.safe_dump(staged_envelope, sort_keys=False))
+
+        validations = runtime_validate_invariants_dispatch(
+            staged_path,
+            engine=engine,
+            version_slug=version_slug,
+            image_override=image_override,
+            timeout_sec=timeout_sec,
+        )
+    finally:
+        staged_path.unlink(missing_ok=True)
+
+    # Index by invariant ID so we can map validations back to identities.
+    by_id: dict[str, RuntimeValidation] = {rv.invariant_id: rv for rv in validations}
+
+    confirmed: list[dict[str, Any]] = []
+    contributors_by_identity: dict[str, list[str]] = {}
+    validation_errors_by_identity: dict[str, str] = {}
+    for ident, (inv, contribs) in union_map.items():
+        rv = by_id.get(str(inv.get("id", "")))
+        ident_str = "|".join(ident)
+        if rv is None:
+            validation_errors_by_identity[ident_str] = "no validation result returned"
+            continue
+        if rv.error:
+            validation_errors_by_identity[ident_str] = rv.error
+            continue
+        if rv.positive_confirmed and rv.negative_confirmed:
+            confirmed.append(inv)
+            contributors_by_identity[ident_str] = sorted(contribs)
+
+    envelope = {
+        "schema_version": "1.0.0",
+        "engine": engine,
+        "engine_version_slug": version_slug,
+        "miner": "phase4_0_validated_union",
+        "contributors_by_identity": contributors_by_identity,
+        "validation_errors_by_identity": validation_errors_by_identity,
+        "invariants": confirmed,
+    }
+    out_path.write_text(yaml.safe_dump(envelope, sort_keys=False, default_flow_style=False))
+    return out_path
+
+
 def write_diff_artefact(
     *,
     diffs: list[ItemDiff],
