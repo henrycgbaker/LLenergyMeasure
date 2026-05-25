@@ -3473,3 +3473,69 @@ Plus the E4/E6/E7 extend-propose variants from prior log entry: those test the L
 
 Both batches inform Phase 4's recommendation on which (extend-propose × substrate-decomposition) combination is the production target.
 
+
+## 2026-05-25 user direction: Phase 3c (when ANTHROPIC_API_KEY arrives)
+
+### Question this tests
+
+The trial's most decision-relevant finding so far is the LLM-ROLE split at 70B-q4:
+- Diagnose: robust (H4 + H9: 0 fabrications across 8 diagnoses)
+- Subtract: error-prone (H2: 3/3 vllm drops were false-drops)
+- Synth: weak (H4: 0/3 patches lifted recall, 2/3 crashed)
+- Extract: ceiling ~50-55% recall on transformers (single-shot or multi-pass)
+
+The OPEN QUESTION: is this split intrinsic to LLMs OR specific to llama3.1:70b at q4 quantisation?
+
+Implications differ:
+- If INTRINSIC: deterministic-validate-only architecture is robust across model sizes. Production commitment stands regardless of which LLM ships.
+- If 70B-q4-SPECIFIC: production might want Claude as the LLM substrate; the role-split-architecture is overdetermined.
+
+### Scope when key arrives
+
+**Phase 3c-1: backfill (c) cells for the 15-cell matrix.**
+- Existing (c) stub at `_spike/scripts/strategies/claude_extractor.py` reuses (b)'s prompts; activation = `uv add anthropic && export ANTHROPIC_API_KEY=...`.
+- Cells: 3 engines x 5 versions = 15 cells.
+- Cost estimate (Sonnet 4.6/4.7 pricing): ~$0.10-0.50/cell -> ~$5-8 total. Well under the $75 cap.
+- Output: 15 score JSONs prefixed `c__<engine>__<version>.json`.
+
+**Phase 3c-2: re-run KEY hybrid patterns with Claude.**
+Patterns where MODEL QUALITY is hypothesised to matter most:
+- **H4 (LLM modifies miner)**: does Claude produce valid patches where 70B-q4 hallucinated helpers / wrong anchors? Tests synth ceiling.
+- **H9 (LLM diagnoses)**: does Claude surface gaps 70B missed? Tests diagnose ceiling.
+- **H2 (LLM validates)**: does Claude false-drop less? Tests subtract reliability.
+- **(b) on tensorrt v0.x bumped (the HALLUCINATION cells)**: does Claude also hallucinate HF GenerationConfig when chunker returns empty? Tests if hallucination-on-empty-input is intrinsic to LLMs.
+- **H6 (no-chunking)**: Claude has 200k context; can run no-chunking on vllm + tensorrt source (where 70B-q4 32k couldn't fit).
+- **H7 (agentic loop)** if interesting outcome on llama3.1: does Claude use tools more effectively?
+
+Cost estimate: ~$10-20 for these focused patterns. Total Phase 3c: ~$20-30.
+
+**Phase 3c-3: (d-ac) hybrid variant.**
+- Per original plan: d-ab is (a) + OSS LLM; d-ac is (a) + Claude.
+- Run d-ac on the 3 active cells (cheap; ~$2).
+- Direct comparison: does the (a) baseline + Claude extension beat (a) baseline + OSS extension on the same cells?
+
+### Phase 3c output
+
+Adds rows to the per-strategy aggregates in `_spike/findings/trial_matrix.{md,csv}`:
+- `c` rows (15 cells per matrix).
+- `d-ac` rows (3 active cells).
+- Selected `c-h<N>` rows for the hybrid Claude variants.
+
+Phase 4 synthesis can then compare per-strategy aggregates with vs without Claude. The "model-quality axis" becomes a 4th dimension alongside pure / hybrid / brittleness.
+
+### When key arrives - activation steps
+
+1. `cd /home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial`
+2. `uv add anthropic` (adds to project deps).
+3. `export ANTHROPIC_API_KEY=...`.
+4. Test the stub: `uv run python -m _spike.scripts.strategies.claude_extractor` (smoke).
+5. Launch a Phase 3c opus subagent with the scope above.
+
+### Cost cap reminder
+
+$75 trial-wide per plan. Phase 3c estimated ~$25-35. Substantial headroom; document actual spend per cell as agent progresses.
+
+### Anthropic library best practice
+
+Stub uses prompt caching (cache_control: ephemeral on source blocks per Phase 2 design). On retries / multi-call cells, this saves 90% input tokens. Important for Phase 3c-2 hybrid patterns where the same source is re-read across passes.
+
