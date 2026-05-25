@@ -3565,3 +3565,127 @@ Stub uses prompt caching (cache_control: ephemeral on source blocks per Phase 2 
 
 Per-cell artefacts under `research/mining-substrate-trial/findings/hybrid_experiments/{h6_no_chunk,e6_field_anchored,e9_sequential}/`. Cross-pattern summary: `h6_e6_e9_batch_summary.md`. Aggregate: `h6_e6_e9_aggregate.json`. Per-cell scores also written to `research/mining-substrate-trial/findings/trial_scores/{h6,e6,e9}__<engine>__<version>.json` for aggregator pickup.
 
+
+## 2026-05-25 trial-progress digest at Phase 4 closure
+
+End-of-trial digest written at Phase 4 synthesis closure. Covers WHAT was done (chronological), WHAT was learned (organised by finding category), ALL decisions made (cited where each was decided), and WHAT remains (with current task numbers). Companion docs: `research/mining-substrate-trial/RESEARCH_WRITEUP.md` (polished standalone), `.planning/trial-handover-2026-05-25.md` (fresh-context resume).
+
+### What was done
+
+**Phase 0 (setup):** branch cut from `spike/engine-knowledge-as-data` tip `15f34240` to `trial/mining-substrate-bakeoff` 2026-05-25. 10 plan-level defaults accepted (full trial 3 engines x 5 versions; trial-first not refactor-first; both d-ab and d-ac variants; vllm + tensorrt mining lift as Phase 1; local llama3.1:70b + Claude API; minor + major bumps per engine; outputs feed `engine_versions/<e>/v*/outputs/`; deterministic-first hybrid shape; 8B vs 70B sub-probe in Phase 2; Claude key arrives mid-trial means c cells run when available). GPU quota verified at 4 A100-40GB via `--runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all` Path-1 invocation. Trial branches off spike, not main; src/ untouched throughout.
+
+**Phase 1 (5 days):**
+- Day 1 (vllm static_invariant_miner lift, opus subagent): 10 -> 26 invariants, 26/26 both-confirmed (100 percent pass) in `vllm/vllm-openai:v0.7.3` container. Report: `findings/phase1_vllm_miner_lift.md`. Decision-relevant finding: vllm 0.7.3's EngineArgs.__post_init__ has ZERO raises; all validation is normalisation patterns. Agent reallocated to LoRA/PromptAdapter/TokenizerPool/SamplingParams to hit headline; reported the structural gap (G-vllm-1 in post-trial backlog).
+- Day 2 (tensorrt static_invariant_miner lift, opus subagent): 3 -> 35 invariants. 11 percent both-confirmed / 63 percent positive-only / 37 percent neither validation split. Report: `findings/phase1_tensorrt_miner_lift.md`. Surfaced G-trt-1 (type-blind probe synthesis), G-trt-2 (DeprecationWarning poisoning), G-trt-3 (nested-config dispatch); decision: don't fix pre-trial.
+- Day 3 (PyPI probe + version lock, opus subagent): all 15 cells locked. Anomalies: transformers v+1 collapsed to patch-level (no 4.58.x ever released); tensorrt v+1 is early-major (no 0.22.x). Report: `findings/phase1_version_lock.md`.
+- Day 4 (reference set bootstrap): collapsed per Day 5 recommendation. Active-version references = the lifted Day 1 + Day 2 outputs; non-active references deferred. Phase 3 bumped cells score against active reference with documented caveats.
+- Day 5 (trial_runner + scoring harness, opus subagent): 3 scripts (`trial_runner.py` 614 LoC, `trial_scoring.py` 707 LoC, `trial_aggregate.py` 327 LoC) + 13/13 passing tests + design doc `findings/phase1_trial_runner_design.md`. Subagent rejected the plan's "reuse `scripts/validate_invariants.py`" recommendation with sound abstraction-confusion reasoning; reuse earmarked for Phase 4.0 dispatch.
+- Phase 1 commit `388fe79a`; pushed.
+
+**Phase 2 (LLM infrastructure, opus subagent, ~73 min):** Built (b) infrastructure end-to-end. `research/mining-substrate-trial/scripts/strategies/` (2570 LoC) includes `llm_extractor.py` (Ollama/Anthropic backends, JSON-mode + jsonschema retry, fence stripping, YAML salvage), `transformers_chunker.py` (chunking by class/method), `llm_b_oss.py` (executor), `prompts.py` (templates with few-shot), `hybrid_extractor.py` ((d-ab) scaffolding), `claude_extractor.py` (stub for Phase 3c). Container Ollama set up at port 11435 with `llama3.1:70b` (Q4_K_M) + `llama3.1:8b`, num_ctx=32768, keep_alive=30m. Calibration on transformers v4.57.3 across 3 prompt-iteration rounds: schema 83.0 percent (hit 75 percent target); invariants 60.7 percent (locked at round 3 per plan cap; rubric-fix later revealed honest baseline 41.0 percent). 8B vs 70B probe: 8B viable for schema only. Locked prompts at `findings/phase2_locked_prompts/`. Design doc: `findings/phase2_llm_infrastructure.md`. Commit `c0ab6cf3`.
+
+**Phase 2.5 (spec gaps closed, opus subagent):** Rubric fix: invariant identity 3-tuple -> 4-tuple `(namespace, native_field, predicate_kind, secondary_field)`. Effect: transformers reference 28 -> 39 identities (multi-field invariants now distinguished); (b) round-3 60.7 percent collapsed to honest 41.0 percent. Multi-pass refinement: extract -> verify -> extend pipeline. Pass-2 prompt at `phase2_locked_prompts/invariants_verify_prompt.md`; pass-3 at `invariants_extend_prompt.md`. Re-calibrated: schema 83.0 percent, invariants 53.8 percent (+12.8 pp over rubric-fix-only). vllm + tensorrt chunkers built; venv_setup.py lazy-builds source-only venvs at `/tmp/trial_<engine>_<slug>_venv/`.
+
+**Phase 2.6 (namespace canonicalisation + chunker parametrisation, opus subagent):** Diagnosed b/tensorrt active 0.0 percent recall as namespace mismatch (cell emits `tensorrt_llm.X`, reference uses `tensorrt.X`). Fix: `canonicalise_namespace(ns, engine)` collapses `tensorrt_llm.X` -> `tensorrt.X` at identity-extraction time. Applied symmetrically on cell + reference. Rescored b/tensorrt active 0.0 percent -> 25.8 percent without LLM re-extraction. Parametrised `vllm_chunker` + `tensorrt_chunker` with `source_root: Path | None`; trial_runner registers 8 bumped cells; `_run_strategy_a_engine_bumped` for (a) subprocess invocation against bumped source via PYTHONPATH override.
+
+**Phase 3a (47 pure-matrix cells):**
+- Phase 3a.1 (active matrix, 11 cells, opus subagent): 5 strategies x 3 engines = 11 records (`c/transformers/v4_57_3` skipped key_absent). Aggregate at `findings/phase3a1_active_matrix.md`. Critical mid-Phase finding: b/tensorrt namespace silent-failure -> Phase 2.6 patch.
+- Phase 3a.2 transformers (12 bumped, opus subagent): (a) detectable crashes at v-2 (4.55.4 tokenizers version constraint) and v+major (5.9.0 `is_offline_mode` rename); (a) partial at v-1 / v+1 (33.9 percent / 32.1 percent vu recall). (b) stable across all bumps (44-59 percent vu recall). (d-ab) 100 percent recall by construction; 0 extensions across all bumps. Report: `findings/phase3a2_progress_handoff.md`.
+- Phase 3a.2 vllm (12 bumped, opus subagent): (a) detectable crash all 4 bumps (msgspec ImportError - hard transitive dep). (b) recall 31-46 percent at v-2/v-1/v+1; SILENT-FAIL at v+major (vllm 0.19.1 restructured `config.py` -> `config/` subdir; chunker collapse). (d-ab) 100 percent by construction; 0/0/2/0 extensions. Report: `findings/phase3a2_vllm_progress.md`.
+- Phase 3a.2 tensorrt (12 bumped, opus subagent): (a) reported 100 percent recall + 100 percent precision on all 4 bumps - INVESTIGATION revealed MINER_VERSION_BLIND artefact (walker hardcoded `_DEFAULT_SOURCE_ROOT`; PYTHONPATH override no-op). Per discipline, NOT patched; observations annotate; Phase 4 de-weights. (b) HALLUCINATION on v-2/v-1 (chunker returned empty class bodies; LLM hallucinated 30+ HF GenerationConfig fields). (b) v+1/v+major worked at 19-22 percent recall. (d-ab) 100 percent by construction; 3-8 extensions per bump (highest of three engines). Report: `findings/phase3a2_tensorrt_progress.md`. Cross-engine summary: `findings/phase3a_complete_summary.md`. Phase 3a closure commit `e1d05126`.
+
+**Phase 3b (9 hybrid patterns):** Catalogue at `findings/phase3b_hybrid_catalogue.md`.
+- H1 (active-seed + LLM-extend, d-ab baseline): embedded in Phase 3a; 15 cells; 100 percent recall by construction.
+- H2 (LLM validates by subtracting): 3 engines; conservative prompt phrasing; drops 0/41 transformers, 3/26 vllm, 0/35 tensorrt; ALL THREE vllm drops were FALSE-DROPS (dormant-normalisation pattern misclassified). Report: `findings/hybrid_experiments/h2_validate/`.
+- H3 (LLM proposes; det runtime/schema gate): transformers runtime gate +5.6 pp precision / -7.7 pp recall; vllm + tensorrt schema-existence gate negligible lift (too weak to catch LLM's actual hallucination patterns). Recommendation: extend runtime to vllm/tensorrt via existing infrastructure.
+- H4 (LLM modifies miner): 3 engines; 6/6 diagnoses match `post_trial_a_gap_closure.md` inventory; 0/3 patches lifted recall; 2/3 crashed walker; 1/3 patches failed to find anchor. DUAL success criterion: trial-internal NEGATIVE; spike-refactor-input STRONGLY POSITIVE. Reports: `findings/hybrid_experiments/h4_modify_miner/{transformers,vllm,tensorrt}/h4_results.md` + cross-engine `h4_summary.md`.
+- H6 (no chunking; whole-source): transformers only (vllm/tensorrt source too large for 32k context). Invariant recall collapsed 0.564 -> 0.128 (-43.6 pp). Classic lost-in-the-middle. CHUNKING IS NOT THE BOTTLENECK; removing it HALVES recall.
+- H7 (agentic loop with tools, 30-call budget): both transformers + vllm cells hit max_calls with ZERO finalised invariants. Tool dispatch worked (0 parse errors, 60 turns); LLM used tools competently for EXPLORATION but never bridged to SYNTHESIS. score_against feedback (recall=0 six times) did not trigger strategy change. Synthesis-blindness manifests as ZERO output under agentic flexibility. Reusable harness at `_spike/scripts/strategies/agentic_tool_harness.py`. Report: `findings/hybrid_experiments/h7_agentic/h7_summary.md`.
+- H9 (LLM diagnoses, no output mutation): 3 engines; 8 diagnoses, 0 fabrications, 6/8 match H4's diagnoses + manually-curated inventory, 2/8 genuinely new. Cheapest pattern (~50s/cell). Report: `findings/hybrid_experiments/h9_diagnose/`.
+- E6 (field-anchored extension): transformers + vllm active. transformers neutral; vllm -7.7 pp (heuristic targeting bug fell back to untargeted 249-field anchor). Intended-use-case (catching tensorrt v0.x hallucination) UNTESTED; active cells don't have the empty-chunk failure.
+- E9 (sequential cumulative-context): transformers + vllm active. transformers -23.1 pp recall (dedup-pressure under-emit); vllm -3.8 pp. Cross-class invariants did NOT surface. Cross-class hypothesis OPEN for Phase 3c.
+- Cross-pattern batch summaries: `findings/hybrid_experiments/h2_h3_h9_batch_summary.md`, `findings/hybrid_experiments/h6_e6_e9_batch_summary.md`.
+
+**Phase 4.0 (validated-union builder + rescoring, opus subagent):** Built `research/mining-substrate-trial/scripts/run_phase4_0_union.py` dispatching to per-engine containers via `scripts/validate_invariants.py`. Per-cell union + runtime-validation produces validated_union.yaml. Phase 4.0 rescore matrix at `findings/trial_matrix_vu.{md,csv}`; per-cell summary at `findings/phase4_0_validated_union_summary.md`. Headline: (a) -6.2 pp recall, (b) +8.0 pp recall under validated union; (d-ab) 100 percent collapses to 77.6 percent; tensorrt-llm union is SMALLER than (a)'s output because 19/35 (a) entries fail runtime validation (G-trt-1 infra gap).
+
+**Phase 4.1 (synthesis):** Phase 4 synthesis document at `findings/empirical_trial_outcome.md` (5062 words). Sections: TL;DR; methodology recap; the information map (pure baselines, brittleness profile, hybrid landscape, LLM-role split, discovered failure modes); the decision space (5 architectures); recommendation (Architecture II + V); outstanding work; methodological meta-findings.
+
+**Worktree migration + spike OQ9 update (2026-05-25 user direction, post-Phase-3a closure):** Trial branch moved to dedicated worktree at `/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial`. Main checkout `/home/h.baker@hertie-school.lan/workspace/llenergymeasure` returned to `spike/engine-knowledge-as-data`. Spike OQ9 updated locally (gitignored `.product/`) on spike checkout to capture trial-driven framing additions: (A) trial-side footprint forces storage-strategy question earlier; (B) upstream-image-digest pinning as artefact-pin mechanism; (C) DEFERRED revisit until trial concludes + implications land on spike. Cross-referenced from this tracked DECISIONS_LOG so the update is discoverable.
+
+**Pattern #2 migration (post-Phase-4 user direction):** `_spike/` -> `research/mining-substrate-trial/` via `git mv`. Transitional symlink `_spike -> research/mining-substrate-trial` preserved for in-flight reference. Mass find-replace `_spike/` -> `research/mining-substrate-trial/` across the migrated corpus. Migration commit `000a790c`. Trial corpus is now git-tracked under `research/mining-substrate-trial/` per pattern #2 design.
+
+### Key findings catalogue (organised; not chronological)
+
+**1. The LLM-role split at 70B-q4.** Across H2 + H3 + H4 + H7 + H9 + (b) + (d-ab), a consistent split: LLMs are robust at diagnosis (H4+H9 8/8 fabrication-free), error-prone at subtraction (H2 3/3 false-drops on vllm), weak at synthesis-of-code (H4 0/3 patches lift recall; 2/3 crash), ceiling-bound at extraction (~50 percent transformers / 30 percent vllm / 16 percent tensorrt vu recall; no substrate-side variant lifts the ceiling), collapsing under agentic feedback (H7 0 finalised invariants on both cells). The most decision-relevant single finding. Drives the Architecture II commitment (subtract deterministic / extend LLM / synthesise-code human-with-LLM-scaffolding). Open question for Phase 3c: is the split intrinsic to LLMs or 70B-q4-specific?
+
+**2. The synthesis-pressure thesis.** Unifying mechanism across H6 (whole-source -> -43.6 pp), E9 (cumulative-context -> -23.1 pp transformers), H7 (agentic-loop -> 0 finalised): when prompt structure permits flexibility, the 70B-q4 model defaults to under-emit / shallow-scan / read-without-finalise. Per-class single-shot chunking works because the prompt structure FORCES synthesis per chunk. Production implication: keep synthesis-forcing prompts at 70B-q4. Open question for Claude scale.
+
+**3. Cross-engine (a) brittleness asymmetry (3 distinct modes).** transformers: landmark-missing on bump extremes (tokenizers / huggingface_hub API renames; `detectable` crash). vllm: dependency-import collapse on ALL bumps (`msgspec` transitive dep; `detectable` crash on all 4 bumps). tensorrt-llm: MINER_VERSION_BLIND silent re-extraction (hardcoded `_DEFAULT_SOURCE_ROOT`; PYTHONPATH override no-op; all 4 bumped cells report false 100 percent). Three engines, three distinct mechanisms, three different fixes (defensive imports / dep declarations / source_root indirection). Generalises: brittleness profile is engine-dependent even when substrate is uniform.
+
+**4. Hallucination failure mode (tensorrt v0.x b cells).** When chunker returns empty input (class-name mismatch v0.x `LlmArgs` vs v1.x `BaseLlmArgs`+`TrtLlmArgs`), the LLM did not realise it had empty input and HALLUCINATED 30+ HuggingFace GenerationConfig field names that don't exist in tensorrt at all. Recall reports 16 percent because HF field names happen to overlap with tensorrt conventions; cell count is ~37; metrics look "kind of working" but content is mostly invented. The most insidious failure mode discovered. Mitigation: schema-existence gate (catches fabricated field names) or runtime gate (catches false predicates too). Architecture II's runtime gate is the production mitigation.
+
+**5. Validated-union ground truth correction.** Methodological discovery: when comparing N strategies for the same artefact, no single strategy can serve as reference; the (a)-as-reference rubric biased every comparison toward (a). The validated-union ground truth (every strategy's invariants unioned + runtime-validated) is the principled fix. Effect: (a) -6.2 pp recall / -21.6 pp precision; (b) +8.0 pp recall / +6.6 pp precision; (d-ab) -22.4 pp recall / -20.0 pp precision (its 100 percent was by construction against (a)'s narrow output). Generalises to any future substrate comparison llem does.
+
+**6. Substrate-decomposition is NOT the (b) bottleneck.** Three substrate variants tested: H6 (no chunking), E6 (field-anchored), E9 (cumulative-context). All UNDERPERFORM the (b) baseline. The ~50-55 percent transformers recall ceiling is driven by LLM SYNTHESIS CAPACITY, not chunking. Production substrate at 70B-q4 stays per-class single-shot.
+
+**7. The 7-gap inventory for (a) deterministic mining.** Catalogued at `findings/post_trial_a_gap_closure.md`. Three vllm gaps (EngineArgs normalisation, ModelConfig local-var aliases, CacheConfig branch-descent). Three tensorrt gaps (type-blind probe synthesis, DeprecationWarning poisoning, nested-config dispatch). One transformers gap (defensive imports). H4 + H9 diagnoses provide design input for each. Total: ~500-1000 LoC across the 7 gaps. Closure mechanisms: H4-patches-as-PR (post-review) or spike-branch refactor (Bake-off A target).
+
+### All decisions made
+
+**Plan-level defaults (10) accepted 2026-05-25 trial-start ("2026-05-25 trial-start: branch cut, 10 defaults accepted, Phase 1 launched"):**
+
+1. Full trial (3 engines x 5 versions x 5 strategies) over scope-reduced single-engine.
+2. Trial first, refactor after; Bake-off A's ~1800 LoC target held pending outcome.
+3. Both d-ab and d-ac variants in scope.
+4. vllm + tensorrt mining lift to parity as Phase 1.
+5. Local `llama3.1:70b` + Claude API for LLM substrate work.
+6. Minor + major bumps per engine (v-2 / v-1 / active / v+1 / v+major).
+7. Trial outputs feed `engine_versions/<e>/v*/outputs/` (existing curation pipeline).
+8. Deterministic-first hybrid shape as default; other shapes noted as variants.
+9. 8B vs 70B sub-probe in Phase 2 calibration (not separate trial dimension).
+10. Strategy (c) cells run when ANTHROPIC_API_KEY arrives; Phase 4 synthesis from partial matrix; addendum on backfill.
+
+**User clarifications mid-trial:**
+- Subagent model = opus across the board ("2026-05-25 trial-start: ... Operator clarifications"). All sonnet subagents canceled and relaunched as opus with restart-aware prompts.
+- Container Ollama for (b) substrate (not host Ollama); port 11435 to avoid host 11434 collision.
+- Trial findings directory continues at `research/mining-substrate-trial/findings/` (post-migration; originally `_spike/findings/`).
+- Hybrid experiments at `research/mining-substrate-trial/findings/hybrid_experiments/<pattern>/`.
+
+**Architecture commitment ("2026-05-25 user direction: deterministic-validate + extend-propose variants"):** "We DEFINITELY want deterministic validation-subtraction. LLM only ever in the extend-propose phase." Empirical support across H2 (subtraction error-prone) + H3 (runtime gate works) + H4 (synthesis-of-code poor) + H9 (diagnosis robust). Convergent shape: LLM = diagnose + propose (extend-only); deterministic = validate (subtract).
+
+**Recommendation: Architecture II + V hybrid + curation (Phase 4 synthesis, `findings/empirical_trial_outcome.md` Section 5).** Defended against the alternatives (pure (a), pure (b), per-engine, curation-alone). Conditions for revisit named (Phase 3c Claude results; H7-with-Claude success; validated-union recall plateau < 80 percent).
+
+**Worktree migration ("2026-05-25 user direction: post-Phase-3a worktree + spike design Q"):** Trial branch moved to dedicated worktree at `/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial`; main checkout returned to `spike/engine-knowledge-as-data`.
+
+**Spike OQ9 update (same entry):** `.product/designs/engine-knowledge-as-data.md` § Open Question 9 updated LOCALLY on spike checkout with trial-driven framing (storage strategy: git-tracked vs GH-artefacts pinned against upstream container image SHAs). Cross-referenced from this tracked DECISIONS_LOG. `.product/` is gitignored; the update persists on disk in the spike checkout but is NOT committed to git.
+
+**Trial corpus tracked in git (post-decision):** Decision to git-track trial findings on the `trial/mining-substrate-bakeoff` branch (vs the original "exclude trial findings via `.git/info/exclude`" pattern). Pattern #2 (research/ namespace) executed at Phase 4 closure.
+
+**Pattern #2 migration to `research/mining-substrate-trial/` ("2026-05-25 deferred: pattern #2 migration"):** Trigger: after Phase 4 synthesis lands. Migration spec: directory rename + transitional symlink `_spike -> research/mining-substrate-trial` for ~1 week; mass find-replace of `_spike/` references; sparse-checkout opt-in; LFS for bulky raw artefacts (deferred; not needed yet). Migration commit `000a790c` executed 2026-05-25 post-Phase-4.
+
+**Phase 3c scope ("2026-05-25 user direction: Phase 3c"):** When ANTHROPIC_API_KEY arrives, Phase 3c-1 backfills (c) cells for 15-cell matrix; Phase 3c-2 re-runs KEY hybrid patterns with Claude (H4, H7, H6 on vllm/tensorrt source, E6 on bumped tensorrt empty-chunk case, E9 cumulative context); Phase 3c-3 (d-ac) on 3 active cells. Cost estimate ~$25-35 total. Output: 15 c-cells + 3 d-ac + selected c-h<N> rows added to trial matrix; Phase 4 addendum compares per-strategy aggregates with vs without Claude.
+
+### What remains
+
+Open task IDs from the trial workstream:
+
+- **Task 11: Phase 5 curation pipeline pilot on transformers.** Build reconciliation script producing validated union per cell; maintainer-review interface; H9-style LLM-diagnose pre-flag. Dogfood on transformers first (highest reference maturity, lowest brittleness surface). ~1-2 weeks scope. Architecture II + V instantiation. Contingent on no Phase 3c overturn of LLM-role split.
+
+- **Task 22: Phase 3c (Claude comparison) when ANTHROPIC_API_KEY arrives.** ~$20-35; ~1-2 days agent work. Activation: `cd /home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial && uv add anthropic && export ANTHROPIC_API_KEY=... && uv run python -m _spike.scripts.strategies.claude_extractor` (smoke). Phase 3c opus subagent runs the scope from "2026-05-25 user direction: Phase 3c" entry.
+
+- **Task 24 followup: post-trial (a) gap closure backlog.** Seven gaps catalogued in `findings/post_trial_a_gap_closure.md`. Close regardless of substrate choice. H4 + H9 diagnoses provide design input. ~500-1000 LoC across the 7 gaps. Mechanism: either (a) H4-patches-as-PR (post-review) where Tier A/B mergeable; (b) spike-branch refactor on Bake-off A target. Decision deferred to post-Phase-5.
+
+- **Spike-branch refactor (Bake-off A target).** ~1800 LoC accidental-complexity removal. H4's outputs feed cross-engine abstractions: `_NestedConfigWalker` mixin (G-trt-3, G-vllm CacheConfig analogue, transformers BNB); if/elif/else branch descent (G-vllm-3); local-var alias tracking (G-vllm-2). Lives on spike branch; not a trial workstream task.
+
+- **Research-paper IA restructure (deferred sub-task per "2026-05-25 user direction: deterministic-validate + extend-propose variants").** When pattern #2 migration is fully consolidated, restructure `research/mining-substrate-trial/` into the academic-paper IA: problem-statement / methodology / results / decision-space / recommendation / reproducibility / appendix. The corpus's components map cleanly; the restructure is editorial. Deferred to post-Phase-5 closure.
+
+- **OQ9 storage strategy revisit ("2026-05-25 user direction: post-Phase-3a worktree + spike design Q").** Revisit post-spike-refactor when artefact footprint stabilises. Not blocking. Architecture II doesn't constrain the answer; both git-tracked and GH-artefacts-pinned work.
+
+- **Trial PR extraction (post-trial workstream).** Spike commits chunk into reviewable PRs (PR-A/B/C/D/E per the existing pattern). Out of scope until Phase 5 + Bake-off A refactor land.
+
+### Pointer to companion deliverables
+
+- `RESEARCH_WRITEUP.md` (this commit's sibling): polished standalone ~9500-word research-quality write-up of the trial; abstract through 12-section meta-findings.
+- `.planning/trial-handover-2026-05-25.md` (this digest's companion): fresh-context entry doc with two paths forward (more research vs implementation), live infrastructure state, task status, and one-line start commands for either path.
+
+
