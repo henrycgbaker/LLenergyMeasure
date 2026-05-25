@@ -48,6 +48,7 @@ dev = [
     # Move 3 + the .product/research/datamodel-codegen-spike-2026-05-23.md
     # flag verification.
     "datamodel-code-generator==0.57.0",
+    "jsonschema>=4.26.0",
 ]
 
 [project.scripts]
