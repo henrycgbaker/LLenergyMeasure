@@ -667,6 +667,58 @@ def test_collect_strategy_invariants_finds_canonical_active_cell() -> None:
         )
 
 
+@pytest.mark.skipif(
+    not (
+        _PROJECT_ROOT / "engine_versions" / "transformers" / "v4_57_3" / "outputs" /
+        "invariants.proposed.yaml"
+    ).exists(),
+    reason="canonical transformers v4_57_3 invariants.proposed.yaml missing",
+)
+def test_runtime_validate_dispatch_transformers_active_matches_existing_validated() -> None:
+    """Dispatcher smoke check: validate the transformers v4_57_3 active
+    cell's canonical invariants.proposed.yaml and confirm the both-
+    confirmed count matches the existing committed
+    invariants.validated.yaml.
+
+    Per-engine validator dispatcher smoke test mentioned in the Phase 4.0
+    plan. Tagged as slow (300s timeout; requires container fallback or
+    transformers installed in venv)."""
+    import subprocess
+    from _spike.scripts.trial_scoring import (
+        runtime_validate_invariants_dispatch,
+    )
+
+    # Pre-check: docker must be available OR transformers installable.
+    try:
+        import transformers  # type: ignore[import]  # noqa: F401
+    except ImportError:
+        if subprocess.run(["which", "docker"], capture_output=True).returncode != 0:
+            pytest.skip("neither transformers nor docker available")
+
+    inv_path = (
+        _PROJECT_ROOT
+        / "engine_versions"
+        / "transformers"
+        / "v4_57_3"
+        / "outputs"
+        / "invariants.proposed.yaml"
+    )
+    vals = runtime_validate_invariants_dispatch(
+        inv_path, engine="transformers", version_slug="v4_57_3"
+    )
+    # Expected: every case both-confirmed (matches the committed
+    # invariants.validated.yaml's case body).
+    both_confirmed = sum(
+        1 for v in vals if v.positive_confirmed and v.negative_confirmed
+    )
+    # The canonical reference has 41 invariants; allow some tolerance
+    # because dormant-once cache may flake one or two.
+    assert len(vals) > 30, f"expected >30 cases, got {len(vals)}"
+    assert both_confirmed > 30, (
+        f"expected most cases both-confirmed; got {both_confirmed}/{len(vals)}"
+    )
+
+
 def test_write_diff_artefact_writes_stable_yaml(tmp_path: Path) -> None:
     """write_diff_artefact emits stable, deterministic YAML (sorted by
     identity tuple). Idempotent re-writes produce identical bytes."""

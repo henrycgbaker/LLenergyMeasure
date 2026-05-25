@@ -1,0 +1,40 @@
+{
+  "brittleness_detectable_fail_count": null,
+  "brittleness_pass_through_rate": null,
+  "brittleness_patch_cost_loc": null,
+  "brittleness_silent_fail_count": null,
+  "bump_distance": "v-2",
+  "cell_invariants_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/_spike/findings/trial_runs/a/transformers/v4_55_4/invariants.proposed.yaml",
+  "cell_schema_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure/_spike/findings/trial_runs/a/transformers/v4_55_4/schema.json",
+  "energy_wh": 0.08024096357513505,
+  "engine": "transformers",
+  "failure_modes": [
+    "detectable"
+  ],
+  "invariant_cell_count": 0,
+  "invariant_failure_mode": "detectable",
+  "invariant_intersection_count": 0,
+  "invariant_precision": 0.0,
+  "invariant_recall": 0.0,
+  "invariant_reference_count": 56,
+  "invariant_severity_accuracy": 0.0,
+  "observations": [
+    "strategy_a bumped: miner subprocess returncode=1; stderr_tail=Traceback (most recent call last):\n  File \"<string>\", line 7, in <module>\n  File \"/home/h.baker@hertie-school.lan/workspace/llenergymeasure/engine_versions/transformers/v4_57_3/producers/static_invariant_miner.py\", line 1462, in walk_transformers\n    import transformers.generation.configuration_utils as gen_mod  # type: ignore\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/trial_transformers_v4_55_4_venv/src/transformers/__init__.py\", line 27, in <module>\n    from . import dependency_versions_check\n  File \"/tmp/trial_transformers_v4_55_4_venv/src/transformers/dependency_versions_check.py\", line 57, in <module>\n    require_version_core(deps[pkg])\n  File \"/tmp/trial_transformers_v4_55_4_venv/src/transformers/utils/versions.py\", line 117, in require_version_core\n    return require_version(requirement, hint)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/trial_transformers_v4_55_4_venv/src/transformers/utils/versions.py\", line 111, in require_version\n    _compare_versions(op, got_ver, want_ver, requirement, pkg, hint)\n  File \"/tmp/trial_transformers_v4_55_4_venv/src/transformers/utils/versions.py\", line 44, in _compare_versions\n    raise ImportError(\nImportError: tokenizers>=0.21,<0.22 is required for a normal functioning of this module, but found tokenizers==0.22.2.\nTry: `pip install transformers -U` or `pip install -e '.[dev]'` if you're working with git main\n",
+    "strategy_a bumped: failure_mode=miner_runtime_error",
+    "vu_rescore: reference=transformers union; ref_count=56, cell=0, intersect=0"
+  ],
+  "reference_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/_spike/findings/validated_union/transformers__v4_57_3.yaml",
+  "schema_cell_count": 0,
+  "schema_failure_mode": "detectable",
+  "schema_intersection_count": 0,
+  "schema_precision": 0.0,
+  "schema_recall": 0.0,
+  "schema_reference_count": 112,
+  "schema_type_accuracy": 0.0,
+  "scored_at": "2026-05-25T15:18:48.993752+00:00",
+  "scoring_format_version": "1.0.0",
+  "scoring_reference": "validated_union",
+  "strategy": "a",
+  "version_slug": "v4_55_4",
+  "wall_clock_sec": 6.667551858350635
+}

@@ -1676,6 +1676,15 @@ def build_validated_union(
     confirmed: list[dict[str, Any]] = []
     contributors_by_identity: dict[str, list[str]] = {}
     validation_errors_by_identity: dict[str, str] = {}
+    # Partial validations: positive_confirmed XOR negative_confirmed
+    # (or neither, with no infra error). These are NOT in the union but
+    # are surfaced as a separate bucket so the summary doc can quantify
+    # what falls through. Per the trial framing, these entries failed
+    # the "both-confirmed" gate but aren't infrastructure failures - the
+    # static-mined kwargs probe didn't match the library's actual
+    # validation logic (one of the two cases triggered when neither
+    # should, or vice versa).
+    partial_validations_by_identity: dict[str, dict[str, Any]] = {}
     for ident, (inv, contribs) in union_map.items():
         rv = by_id.get(str(inv.get("id", "")))
         ident_str = "|".join(ident)
@@ -1688,6 +1697,14 @@ def build_validated_union(
         if rv.positive_confirmed and rv.negative_confirmed:
             confirmed.append(inv)
             contributors_by_identity[ident_str] = sorted(contribs)
+            continue
+        # Partial: one or both confirmations missing without infra error.
+        partial_validations_by_identity[ident_str] = {
+            "positive_confirmed": rv.positive_confirmed,
+            "negative_confirmed": rv.negative_confirmed,
+            "observed_outcome": rv.observed_outcome,
+            "contributors": sorted(contribs),
+        }
 
     envelope = {
         "schema_version": "1.0.0",
@@ -1696,6 +1713,7 @@ def build_validated_union(
         "miner": "phase4_0_validated_union",
         "contributors_by_identity": contributors_by_identity,
         "validation_errors_by_identity": validation_errors_by_identity,
+        "partial_validations_by_identity": partial_validations_by_identity,
         "invariants": confirmed,
     }
     out_path.write_text(yaml.safe_dump(envelope, sort_keys=False, default_flow_style=False))
