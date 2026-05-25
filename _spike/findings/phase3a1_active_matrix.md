@@ -77,7 +77,7 @@ For each engine, mean across strategies that ran (excludes c since it was skippe
 
 | engine | n (active) | S r mean | I r mean | wall mean | engine-specific notes |
 |---|---|---|---|---|---|
-| transformers | 5 (a, b, b_8b, c[skip], d-ab) | 56.7% (incl. c=0) / 73.8% (excl. c) | 58.4% (incl. c=0) / 73.0% (excl. c) | 332.1 / 416.4 | Most strategies ran; widest data |
+| transformers | 5 (a, b, b_8b, c[skip], d-ab) | 73.8% (incl. c=0) / 92.2% (excl. c) | 58.4% (incl. c=0) / 73.0% (excl. c) | 416.4 (incl. c) / 520.5 (excl. c) | Most strategies ran; widest data |
 | vllm | 3 (a, b, d-ab) | 99.0% | 79.5% | 616.0 | b had 14 inv chunks; d-ab extension=0 |
 | tensorrt | 3 (a, b, d-ab) | 85.4% | 66.7% | 526.6 | b: namespace-mismatch zeroed I recall; d-ab clean |
 
@@ -164,6 +164,64 @@ reference_path, cell_schema_path, cell_invariants_path
 Side artefacts per `<strategy>/<engine>/<version>/` directory: `recall_misses.yaml`, `precision_spurious.yaml`, `type_mismatches.yaml`.
 
 ---
+
+## Phase 3a.2 readiness
+
+Phase 3a.2 extends the matrix from the 11-cell active row to 12 bumped-version cells: 4 bump distances (`v-2`, `v-1`, `v+1`, `v+major`) x 3 engines, exercising the strategies that have an active baseline. The brittleness sub-metric placeholders (`brittleness_pass_through_rate`, `brittleness_silent_fail_count`, `brittleness_detectable_fail_count`, `brittleness_patch_cost_loc`) carry `null` across the active row by definition; 3a.2 is where they first take values.
+
+### Brittleness measurement plan
+
+For each bumped cell, the aggregator's `compute_brittleness` function (documented in `trial_scoring.py` lines 907-928) pairs the cell with its active-version sibling and computes:
+
+1. `brittleness_pass_through_rate`
+   - Definition: fraction of reference items the strategy STILL surfaces at the bump, normalised by what it surfaced correctly at the active version.
+   - Range: 0.0 (no carry-over - every reference item the strategy held at active is gone) to 1.0 (full carry-over).
+   - Computed against the BUMP's own reference catalogue (`engine_versions/<engine>/<vslug>/outputs/`), so it captures BOTH "library moved" and "strategy moved".
+   - Phase 3a.2 will report this per cell.
+
+2. `brittleness_silent_fail_count`
+   - Items present in both active-cell and bumped-cell output by identity tuple, but with materially different value: schema type mismatch; invariant predicate kind mismatch; invariant severity mismatch.
+   - These are the cases where `failure_modes` will NOT carry the `silent` tag (because top-level recall is non-zero) but the brittleness comparator detects degradation. Direct extension of the `silent` mode catalogued in record 6 (b/tensorrt) at the active row.
+
+3. `brittleness_detectable_fail_count`
+   - Items present at active but absent at bump (strategy stopped emitting them).
+   - For (a) cells: typically means an AST shape change broke the miner (signature change, attribute rename, decorator pattern shift).
+   - For (b)/(d-ab) LLM cells: typically means a renamed field/predicate no longer matches the source - the chunker found the file, the LLM read it, but identity tuple drifted.
+
+4. `brittleness_patch_cost_loc`
+   - Auto-computed for (a) cells via a git-style line delta of the miner-target files in the bumped library version vs the active version.
+   - Left `null` for (b)/(c)/(d) where patch cost is "prompt rewrites" rather than code; flagged for human estimation per the rubric.
+
+### 12-cell Phase 3a.2 plan
+
+For each `(engine, bump_distance)` pair, the strategies to exercise:
+
+| engine       | v-2     | v-1     | v+1     | v+major | strategies                |
+|--------------|---------|---------|---------|---------|---------------------------|
+| transformers | 4.55.4  | 4.56.2  | 4.57.6  | 5.9.0   | (a), (b), (d-ab); optional (b_8b) |
+| vllm         | 0.6.0   | 0.6.6.post1 | 0.9.2 | 0.19.1 | (a), (b), (d-ab)          |
+| tensorrt     | 0.19.0  | 0.20.0  | 1.0.0   | 1.2.1   | (a), (b), (d-ab)          |
+
+12 strategy-cells x 3 strategies = 36 cell runs minimum, plus optional (b_8b) probes (4 transformers cells = 4 extra), plus the c/d-ac column that fills in only after `ANTHROPIC_API_KEY` arrives.
+
+### Operational shape
+
+- Reference catalogues for each bumped cell live at `engine_versions/<engine>/<vslug>/outputs/`. Phase 1 Day 4 was scoped to construct these via the deterministic miner under each pinned library version (the source-only venvs at `/tmp/trial_<engine>_<vslug>_venv/`). Status check is the cold-path dependency for Phase 3a.2.
+- The strategy dispatchers (b)/(d-ab) on bumped cells require lazy-venv build (`lazy_build=True` in `resolve_cell_config` already wires this; `ensure_source_only_venv` builds the source-only venv on first hit). The wheel cache must be warm.
+- (a) on bumped cells runs through the existing per-engine miner pipeline against the pinned source tree.
+- The cell registry in `trial_runner.py` needs to be extended with 12 bumped entries per the version table above. The active-version structure is the template.
+
+### Pre-flight items before kicking off 3a.2
+
+- Confirm all 12 reference catalogues exist (4 bumps x 3 engines). Without these the scorer fails with `FileNotFoundError`.
+- Confirm source-only venvs are buildable for (b)/(d-ab) on each bumped version. An end-to-end probe on one bumped cell (e.g. `b/transformers/v4_55_4`) before the full sweep is prudent.
+- Decide whether to run (b_8b) on bumped vllm/tensorrt cells. The active probe is one data point on transformers; the brittleness question for 8B is "does the cost-quality gap widen or narrow at distance?" but each cell costs ~5-7 min wall + ~5 Wh.
+
+### Risks the active matrix flags for Phase 3a.2
+
+- **Tensorrt namespace mismatch (record 6) will repeat at bumped versions.** The (b) prompts use the chunker's `expected_namespaces` hint which is fixed; the reference catalogue's namespace convention is fixed. Until one side is reconciled (Phase 3b prompt iteration window), b/tensorrt cells will register `silent` on invariants at every bump distance.
+- **Pass2/pass3 parse-failure absorption is invisible to the metric.** The multipass policy retains pass1 output on retry exhaustion. At bumped versions, the failure rate on pass2/pass3 may rise (the LLM is grounding on changed source); the cell record will report `none` failure mode but the observations array will carry the audit trail. Phase 3a.2 should NOT treat absence of `silent`/`detectable` as evidence of clean run; check the observations.
+- **(d-ab) inherits (a)'s carry-over.** If (a) breaks at a bump (the miner cannot run against the changed source), (d-ab) inherits the breakage on schema and adds the LLM extension as the only invariant signal. The (d-ab) score at that bump becomes a measurement of the LLM extension's standalone quality. This is the one cell shape where (d-ab) and (b) converge in behaviour.
 
 ## Closure status
 

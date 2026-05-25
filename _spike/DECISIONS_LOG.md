@@ -2952,3 +2952,48 @@ H4 outputs feed:
 
 When trial concludes, spike branch picks these up; either merges directly or uses as design input for the refactor.
 
+
+## 2026-05-25 Phase 3a.1 complete + b/tensorrt namespace silent-failure
+
+### Phase 3a.1 closure
+
+All 11 score JSONs valid; aggregate at `_spike/findings/phase3a1_active_matrix.md` (241 lines). Commit `3aa7257e` on trial branch.
+
+### b/tensorrt result is a SILENT scoring failure, not a substrate failure
+
+`b__tensorrt__v0_21_0.json` reports:
+- Schema 56.1% recall / 46.5% precision
+- **Invariants 0.0% recall / 0.0% precision** (reference=31, cell=39, intersection=0)
+- Wall 1372s; failure_mode `none` BUT `silent`-classified by aggregator
+
+Critical: 0 intersection on 31 reference vs 39 emitted is not "the LLM extracted nothing useful". The observations field shows the LLM emitted invariants with IDs like `tensorrt_llm_enable_lora_ignored_when_lora_config_provided_for_pytorch_backend`.
+
+The reference uses canonical namespace `tensorrt.<field>`. The LLM (correctly mirroring what's in the source) uses `tensorrt_llm.<field>`. Two distinct identity tuples for what is semantically the same invariant. ZERO match.
+
+### This is a scoring rubric gap, not a substrate finding
+
+Per matrix discipline: prompts are LOCKED at Phase 2 closure. We cannot iterate the prompt to instruct "use `tensorrt.` not `tensorrt_llm.`".
+
+But the SCORING RUBRIC is fair game (Phase 2.5 already added the 4-tuple identity fix). A namespace-canonicalisation rule in the identity extraction is the principled fix:
+
+- Treat `tensorrt_llm.<X>` as canonically equivalent to `tensorrt.<X>` (same engine, same field, just package-prefix vs namespace-prefix).
+- Implement as a `canonicalise_namespace(ns: str, engine: str) -> str` helper in `trial_scoring.py`.
+- Apply at identity-tuple extraction time for BOTH reference AND cell output.
+- Re-score b/tensorrt + d-ab/tensorrt; this likely lifts b/tensorrt invariants recall from 0% to ~40-60% (matches the ~31 of 39 emitted with namespace-canonical match).
+
+### This pattern will REPEAT on every tensorrt bumped cell
+
+Without the canonicalisation, every tensorrt (b)/(d-ab) cell will silent-fail on invariants. The brittleness signal for tensorrt becomes "everything 0%" which is meaningless.
+
+### Decision: queue Phase 2.6 fix BEFORE Phase 3a.2 tensorrt cells run
+
+- Phase 3a.2 transformers (in flight via agent a87032e8d562ceebe) doesn't need the fix; transformers namespace is consistent.
+- Phase 3a.2 vllm: also OK; vllm uses `vllm.` consistently.
+- Phase 3a.2 tensorrt: WILL silent-fail without the canonicalisation fix.
+
+Plan: after current Phase 3a.2 transformers agent completes, launch a Phase 2.6 patch (namespace canonicalisation in `trial_scoring.py`), then re-score b/tensorrt and d-ab/tensorrt active cells, THEN launch Phase 3a.2 vllm + tensorrt.
+
+### Other adjacent observations from Phase 3a.1 aggregate
+
+- Pass2/pass3 chunk-local parse failures silently absorbed by multipass (b) policy + by (a)-baseline fallback on (d-ab). The d-ab/vllm cell scored 100% recall WITH a parse-failed extension. Audit trail in observations array, NOT in failure_modes. Phase 3a.2 reporting must inspect both.
+- (b_8b) data point: ~14.6x energy and ~4x wall savings for ~3 pp schema and ~21 pp invariant recall drop vs full 70B. Confirms 8B viable for schema substitute, not full (b). v-bump probe of 8B is an open question worth one cell in Phase 3a.2.
