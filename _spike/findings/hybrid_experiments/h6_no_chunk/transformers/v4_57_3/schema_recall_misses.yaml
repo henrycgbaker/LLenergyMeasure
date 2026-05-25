@@ -1,0 +1,198 @@
+scoring_format_version: 1.0.0
+recall_misses:
+- identity:
+  - engine_params
+  - attn_implementation
+  kind: recall_miss
+  reference_value: string
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - code_revision
+  kind: recall_miss
+  reference_value: string
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - from_flax
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - from_tf
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - output_loading_info
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - proxies
+  kind: recall_miss
+  reference_value: object
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - state_dict
+  kind: recall_miss
+  reference_value: object
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - engine_params
+  - trust_remote_code
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - _from_model_config
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - assistant_confidence_threshold
+  kind: recall_miss
+  reference_value: number
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - assistant_early_exit
+  kind: recall_miss
+  reference_value: null
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - assistant_lookbehind
+  kind: recall_miss
+  reference_value: integer
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - compile_config
+  kind: recall_miss
+  reference_value: null
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - constraints
+  kind: recall_miss
+  reference_value: null
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - disable_compile
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - diversity_penalty
+  kind: recall_miss
+  reference_value: number
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - dola_layers
+  kind: recall_miss
+  reference_value: null
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - force_words_ids
+  kind: recall_miss
+  reference_value: null
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - is_assistant
+  kind: recall_miss
+  reference_value: boolean
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - low_memory
+  kind: recall_miss
+  reference_value: null
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - max_matching_ngram_size
+  kind: recall_miss
+  reference_value: null
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - num_assistant_tokens
+  kind: recall_miss
+  reference_value: integer
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - num_assistant_tokens_schedule
+  kind: recall_miss
+  reference_value: string
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - num_beam_groups
+  kind: recall_miss
+  reference_value: integer
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - penalty_alpha
+  kind: recall_miss
+  reference_value: null
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - prompt_lookup_num_tokens
+  kind: recall_miss
+  reference_value: null
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - target_lookbehind
+  kind: recall_miss
+  reference_value: integer
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - transformers_version
+  kind: recall_miss
+  reference_value: string
+  cell_value: null
+  note: reference field absent in cell output

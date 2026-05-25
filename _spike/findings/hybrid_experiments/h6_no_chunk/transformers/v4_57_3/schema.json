@@ -1,0 +1,733 @@
+{
+  "$defs": {
+    "CompileConfig": {
+      "properties": {
+        "backend": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "description": "Callable",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "inductor"
+        },
+        "dynamic": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "fullgraph": {
+          "default": false,
+          "type": "boolean"
+        },
+        "mode": {
+          "default": "reduce-overhead",
+          "type": "string"
+        },
+        "options": {
+          "anyOf": [
+            {
+              "description": "dict",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "type": "object"
+    },
+    "WatermarkingConfig": {
+      "properties": {
+        "bias": {
+          "default": 2.0,
+          "type": "number"
+        },
+        "context_width": {
+          "default": 1,
+          "type": "integer"
+        },
+        "greenlist_ratio": {
+          "default": 0.25,
+          "type": "number"
+        },
+        "hashing_key": {
+          "default": 15485863,
+          "type": "integer"
+        },
+        "seeding_scheme": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "lefthash",
+          "enum": [
+            "lefthash",
+            "selfhash"
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  "discovered_at": "2026-05-25T13:22:20.338949+00:00",
+  "discovery_method": "h6_whole_file_no_chunking",
+  "engine": "transformers",
+  "engine_params": {
+    "bnb_4bit_compute_dtype": {
+      "description": "torch.dtype or str"
+    },
+    "bnb_4bit_quant_storage": {
+      "description": "torch.dtype or str"
+    },
+    "bnb_4bit_quant_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "fp4"
+    },
+    "bnb_4bit_use_double_quant": {
+      "default": false,
+      "type": "boolean"
+    },
+    "cache_dir": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "PathLike",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "config": {
+      "anyOf": [
+        {
+          "description": "PretrainedConfig",
+          "type": "object"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "description": "PathLike",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "device_map": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "dict[str, Union[int, str, torch.device]]",
+          "type": "object"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "description": "torch.device",
+          "type": "object"
+        }
+      ],
+      "default": null
+    },
+    "device_mesh": {
+      "type": "object"
+    },
+    "dtype": {
+      "description": "torch.dtype or str"
+    },
+    "force_download": {
+      "default": false,
+      "type": "boolean"
+    },
+    "ignore_mismatched_sizes": {
+      "default": false,
+      "type": "boolean"
+    },
+    "llm_int8_enable_fp32_cpu_offload": {
+      "default": false,
+      "type": "boolean"
+    },
+    "llm_int8_has_fp16_weight": {
+      "default": false,
+      "type": "boolean"
+    },
+    "llm_int8_skip_modules": {
+      "anyOf": [
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "llm_int8_threshold": {
+      "default": 6.0,
+      "type": "number"
+    },
+    "load_in_4bit": {
+      "default": false,
+      "type": "boolean"
+    },
+    "load_in_8bit": {
+      "default": false,
+      "type": "boolean"
+    },
+    "local_files_only": {
+      "default": false,
+      "type": "boolean"
+    },
+    "max_memory": {
+      "type": "object"
+    },
+    "offload_buffers": {
+      "default": false,
+      "type": "boolean"
+    },
+    "offload_folder": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "PathLike",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "pretrained_model_name_or_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "description": "PathLike",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "quantization_config": {
+      "anyOf": [
+        {
+          "description": "QuantizationConfigMixin",
+          "type": "object"
+        },
+        {
+          "description": "Dict",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "revision": {
+      "default": "main",
+      "type": "string"
+    },
+    "subfolder": {
+      "default": "",
+      "type": "string"
+    },
+    "token": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "tp_plan": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "tp_size": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "use_safetensors": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "variant": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "weights_only": {
+      "default": true,
+      "type": "boolean"
+    }
+  },
+  "engine_version": "4.57.3",
+  "sampling_params": {
+    "bad_words_ids": {
+      "anyOf": [
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "begin_suppress_tokens": {
+      "anyOf": [
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "bos_token_id": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "cache_config": {
+      "anyOf": [
+        {
+          "description": "dict",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "cache_implementation": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "enum": [
+        "dynamic",
+        "static",
+        "offloaded",
+        "offloaded_static",
+        "quantized"
+      ]
+    },
+    "decoder_start_token_id": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "do_sample": {
+      "default": false,
+      "type": "boolean"
+    },
+    "early_stopping": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "default": false
+    },
+    "encoder_no_repeat_ngram_size": {
+      "default": 0,
+      "type": "integer"
+    },
+    "encoder_repetition_penalty": {
+      "default": 1.0,
+      "type": "number"
+    },
+    "eos_token_id": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "epsilon_cutoff": {
+      "default": 0.0,
+      "type": "number"
+    },
+    "eta_cutoff": {
+      "default": 0.0,
+      "type": "number"
+    },
+    "exponential_decay_length_penalty": {
+      "anyOf": [
+        {
+          "description": "tuple(int, float)",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "forced_bos_token_id": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "forced_eos_token_id": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "guidance_scale": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "length_penalty": {
+      "default": 1.0,
+      "type": "number"
+    },
+    "max_length": {
+      "default": 20,
+      "type": "integer"
+    },
+    "max_new_tokens": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "max_time": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "min_length": {
+      "default": 0,
+      "type": "integer"
+    },
+    "min_new_tokens": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "min_p": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "no_repeat_ngram_size": {
+      "default": 0,
+      "type": "integer"
+    },
+    "num_beams": {
+      "default": 1,
+      "type": "integer"
+    },
+    "num_return_sequences": {
+      "default": 1,
+      "type": "integer"
+    },
+    "output_attentions": {
+      "default": false,
+      "type": "boolean"
+    },
+    "output_hidden_states": {
+      "default": false,
+      "type": "boolean"
+    },
+    "output_logits": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "output_scores": {
+      "default": false,
+      "type": "boolean"
+    },
+    "pad_token_id": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "prefill_chunk_size": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "remove_invalid_values": {
+      "default": false,
+      "type": "boolean"
+    },
+    "renormalize_logits": {
+      "default": false,
+      "type": "boolean"
+    },
+    "repetition_penalty": {
+      "default": 1.0,
+      "type": "number"
+    },
+    "return_dict_in_generate": {
+      "default": false,
+      "type": "boolean"
+    },
+    "return_legacy_cache": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": true
+    },
+    "sequence_bias": {
+      "anyOf": [
+        {
+          "description": "dict[tuple[int], float]",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "stop_strings": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "suppress_tokens": {
+      "anyOf": [
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "temperature": {
+      "default": 1.0,
+      "type": "number"
+    },
+    "token_healing": {
+      "default": false,
+      "type": "boolean"
+    },
+    "top_k": {
+      "default": 50,
+      "type": "integer"
+    },
+    "top_p": {
+      "default": 1.0,
+      "type": "number"
+    },
+    "typical_p": {
+      "default": 1.0,
+      "type": "number"
+    },
+    "use_cache": {
+      "default": true,
+      "type": "boolean"
+    },
+    "watermarking_config": {
+      "anyOf": [
+        {
+          "description": "BaseWatermarkingConfig",
+          "type": "object"
+        },
+        {
+          "description": "dict",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "schema_version": "2.0.0"
+}

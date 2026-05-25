@@ -1,0 +1,185 @@
+scoring_format_version: 1.0.0
+precision_spurious:
+- identity:
+  - $defs.GuidedDecodingParams
+  - guided_decoding
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - bias_enabled
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - cache_dtype
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - delay_factor
+  kind: precision_spurious
+  reference_value: null
+  cell_value: number
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - encoder_cache_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - extra_config
+  kind: precision_spurious
+  reference_value: null
+  cell_value: object
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - is_attention_free
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - is_multimodal_model
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - max_cpu_prompt_adapters
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - max_num_encoder_input_tokens
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - placement_group
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - policy
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - pool_size
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - pool_type
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - object
+    - string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - prompt_adapter_dtype
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+    - string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - rank
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - runner_type
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - sd_worker_cls
+  kind: precision_spurious
+  reference_value: null
+  cell_value: string
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - send_delta_data
+  kind: precision_spurious
+  reference_value: null
+  cell_value: boolean
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - sliding_window
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - integer
+    - 'null'
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - spec_target_max_model_len
+  kind: precision_spurious
+  reference_value: null
+  cell_value: null
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - tokenizer_pool_config
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - object
+  note: cell field absent in reference
+- identity:
+  - engine_params
+  - use_async_output_proc
+  kind: precision_spurious
+  reference_value: null
+  cell_value: null
+  note: cell field absent in reference

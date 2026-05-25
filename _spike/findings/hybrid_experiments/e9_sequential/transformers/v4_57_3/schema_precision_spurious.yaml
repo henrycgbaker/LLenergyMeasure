@@ -1,0 +1,9 @@
+scoring_format_version: 1.0.0
+precision_spurious:
+- identity:
+  - engine_params
+  - key_mapping
+  kind: precision_spurious
+  reference_value: null
+  cell_value: object
+  note: cell field absent in reference

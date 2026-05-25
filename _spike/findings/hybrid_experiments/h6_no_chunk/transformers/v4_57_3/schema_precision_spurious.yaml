@@ -1,0 +1,40 @@
+scoring_format_version: 1.0.0
+precision_spurious:
+- identity:
+  - $defs.WatermarkingConfig
+  - bias
+  kind: precision_spurious
+  reference_value: null
+  cell_value: number
+  note: cell field absent in reference
+- identity:
+  - $defs.WatermarkingConfig
+  - context_width
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.WatermarkingConfig
+  - greenlist_ratio
+  kind: precision_spurious
+  reference_value: null
+  cell_value: number
+  note: cell field absent in reference
+- identity:
+  - $defs.WatermarkingConfig
+  - hashing_key
+  kind: precision_spurious
+  reference_value: null
+  cell_value: integer
+  note: cell field absent in reference
+- identity:
+  - $defs.WatermarkingConfig
+  - seeding_scheme
+  kind: precision_spurious
+  reference_value: null
+  cell_value:
+  - anyOf
+  - - 'null'
+    - string
+  note: cell field absent in reference
