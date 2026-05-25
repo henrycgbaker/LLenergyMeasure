@@ -1,0 +1,30 @@
+scoring_format_version: 1.0.0
+recall_misses:
+- identity:
+  - sampling_params
+  - _all_stop_token_ids
+  kind: recall_miss
+  reference_value: array
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - _real_n
+  kind: recall_miss
+  reference_value: null
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - guided_decoding
+  kind: recall_miss
+  reference_value: null
+  cell_value: null
+  note: reference field absent in cell output
+- identity:
+  - sampling_params
+  - output_text_buffer_length
+  kind: recall_miss
+  reference_value: integer
+  cell_value: null
+  note: reference field absent in cell output

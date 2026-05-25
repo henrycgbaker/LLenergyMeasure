@@ -3,7 +3,7 @@
 - chunk_description: vllm.ModelConfig dataclass (model-side engine_params)
 - expected_namespaces: ['engine_params']
 - attempts: 1
-- elapsed_sec: 52.53
+- elapsed_sec: 52.35
 - failure_modes: []
 - schema_errors: []
 - parsed: yes

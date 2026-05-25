@@ -3,7 +3,7 @@
 - chunk_description: vllm.SamplingParams msgspec.Struct fields + GuidedDecodingParams companion
 - expected_namespaces: ['sampling_params', '$defs.GuidedDecodingParams']
 - attempts: 1
-- elapsed_sec: 76.61
+- elapsed_sec: 76.65
 - failure_modes: []
 - schema_errors: []
 - parsed: yes

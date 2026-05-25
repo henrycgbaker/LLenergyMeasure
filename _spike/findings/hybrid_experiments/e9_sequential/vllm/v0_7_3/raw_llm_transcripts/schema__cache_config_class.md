@@ -3,7 +3,7 @@
 - chunk_description: vllm.CacheConfig dataclass (KV cache engine_params)
 - expected_namespaces: ['engine_params']
 - attempts: 1
-- elapsed_sec: 25.63
+- elapsed_sec: 25.61
 - failure_modes: []
 - schema_errors: []
 - parsed: yes

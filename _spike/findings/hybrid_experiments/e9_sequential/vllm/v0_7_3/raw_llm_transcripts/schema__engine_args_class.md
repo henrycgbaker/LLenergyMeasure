@@ -3,7 +3,7 @@
 - chunk_description: vllm.EngineArgs dataclass (CLI args -> engine_params)
 - expected_namespaces: ['engine_params']
 - attempts: 1
-- elapsed_sec: 231.89
+- elapsed_sec: 231.81
 - failure_modes: []
 - schema_errors: []
 - parsed: yes

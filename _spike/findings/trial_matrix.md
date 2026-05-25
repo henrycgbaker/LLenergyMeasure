@@ -1,8 +1,8 @@
 # Empirical trial matrix
 
-_generated at 2026-05-25T11:29:11.839420+00:00_
+_generated at 2026-05-25T14:46:07.642363+00:00_
 
-_score files aggregated: 47_
+_score files aggregated: 51_
 
 ## Per-cell matrix
 
@@ -55,6 +55,10 @@ _score files aggregated: 47_
 | d-ab | vllm | v0_6_6_post1 | v-1 | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 417.3 | 24.52 | none |
 | d-ab | vllm | v0_7_3 | active | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 433.6 | 19.38 | none |
 | d-ab | vllm | v0_9_2 | v+1 | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 144.4 | 8.48 | none |
+| e6 | transformers | v4_57_3 | active | 83.0% | 98.9% | 56.4% | 38.6% | 90.9% | 1256.0 | 0.00 | none |
+| e6 | vllm | v0_7_3 | active | 97.0% | 85.1% | 30.8% | 17.4% | 100.0% | 1048.5 | 0.00 | none |
+| e9 | transformers | v4_57_3 | active | 83.0% | 98.9% | 33.3% | 40.6% | 92.3% | 901.8 | 0.00 | none |
+| h6 | transformers | v4_57_3 | active | 75.0% | 94.4% | 12.8% | 31.2% | 60.0% | 526.4 | 0.00 | none;silent |
 
 ## Per-strategy aggregates
 
@@ -65,14 +69,17 @@ _score files aggregated: 47_
 | b_8b | 1 | 85.7% | 85.7% | 35.7% | 35.7% | 412.6 | 4.93 | 0 |
 | c | 1 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0 | 0.00 | 0 |
 | d-ab | 15 | 100.0% | 100.0% | 100.0% | 100.0% | 254.8 | 12.96 | 0 |
+| e6 | 2 | 90.0% | 90.0% | 43.6% | 43.6% | 1152.3 | 0.00 | 0 |
+| e9 | 1 | 83.0% | 83.0% | 33.3% | 33.3% | 901.8 | 0.00 | 0 |
+| h6 | 1 | 75.0% | 75.0% | 12.8% | 12.8% | 526.4 | 0.00 | 0 |
 
 ## Per-engine aggregates
 
 | engine | cells | schema_recall_mean | inv_recall_mean | wall_mean_s |
 |---|---|---|---|---|
 | tensorrt | 15 | 77.9% | 73.3% | 643.9 |
-| transformers | 17 | 76.9% | 59.1% | 1758.3 |
-| vllm | 15 | 61.2% | 49.2% | 1058.9 |
+| transformers | 20 | 77.5% | 55.4% | 1628.8 |
+| vllm | 16 | 63.4% | 48.1% | 1058.3 |
 
 ## Per-bump-distance aggregates
 
@@ -80,7 +87,7 @@ _score files aggregated: 47_
 |---|---|---|---|---|
 | v-2 | 9 | 63.2% | 56.6% | - |
 | v-1 | 9 | 72.1% | 62.0% | - |
-| active | 11 | 83.8% | 68.8% | - |
+| active | 15 | 84.0% | 59.3% | - |
 | v+1 | 9 | 80.3% | 61.8% | - |
 | v+major | 9 | 59.1% | 51.4% | - |
 
@@ -343,3 +350,59 @@ scripts.engine_producers._base.MinerLandmarkMissingError: Miner landmark missing
 - strategy_d_ab on vllm: extension=0, flagged_spurious=0, merged_total=26, elapsed=416.9s
 - strategy_d_ab on vllm: extension=0, flagged_spurious=0, merged_total=26, elapsed=433.2s
 - strategy_d_ab on vllm: extension=2, flagged_spurious=1, merged_total=28, elapsed=143.9s
+
+### strategy e6
+
+- pattern=e6 engine=transformers schema_wall=497.5s invariants_wall=758.0s total_wall=1256.0s
+- e6_field_anchor: 3 classes, 82 declared fields
+- invariants chunk 'generation_config_init_invariants': emitted 21 unique; anchor_classes=['GenerationConfig']
+- invariants chunk 'bitsandbytes_config_invariants': emitted 12 unique; anchor_classes=['BitsAndBytesConfig']
+- invariants chunk 'validate_section_00_1._Validation_of_individual_attributes': emitted 8 unique; anchor_classes=['GenerationConfig']
+- invariants chunk 'validate_section_01_1.1._Decoding_attributes': emitted 1 unique; anchor_classes=['GenerationConfig']
+- invariants chunk 'validate_section_02_1.2._Cache_attributes': emitted 1 unique; anchor_classes=['GenerationConfig']
+- invariants chunk 'validate_section_03_1.3._Performance_attributes': emitted 1 unique; anchor_classes=['GenerationConfig']
+- invariants chunk 'validate_section_04_1.4._Watermarking_attributes': emitted 1 unique; anchor_classes=['GenerationConfig']
+- invariants chunk 'validate_section_05_2._Validation_of_attribute_combinations': emitted 2 unique; anchor_classes=['GenerationConfig']
+- invariants chunk 'validate_section_06_2.1._detect_sampling_only_parameterization_when_not_in_sampl': emitted 5 unique; anchor_classes=['GenerationConfig']
+- invariants chunk 'validate_section_07_2.2._detect_beam_only_parameterization_when_not_in_beam_mode': emitted 1 unique; anchor_classes=['GenerationConfig']
+- invariants chunk 'validate_section_08_2.4._check_num_return_sequences': emitted 1 unique; anchor_classes=['GenerationConfig']
+- invariants chunk 'validate_section_09_2.5._check_cache_related_arguments': emitted 1 unique; anchor_classes=['GenerationConfig']
+- invariants chunk 'validate_section_10_2.6._other_incorrect_combinations': emitted 1 unique; anchor_classes=['GenerationConfig']
+- invariants chunk 'validate_section_11_3._Check_common_issue_passing_generate_arguments_inside_the_': emitted 1 unique; anchor_classes=['GenerationConfig']
+- pattern=e6 engine=vllm schema_wall=516.9s invariants_wall=531.2s total_wall=1048.5s
+- e6_field_anchor: 15 classes, 249 declared fields
+- invariants chunk 'sampling_params_invariants': emitted 18 unique; anchor_classes=['ModelConfig', 'CacheConfig', 'ParallelConfig', 'SchedulerConfig', 'EngineArgs', 'LoRAConfig', 'DeviceConfig', 'DecodingConfig', 'ObservabilityConfig', 'LoadConfig', 'PromptAdapterConfig', 'TokenizerPoolConfig', 'SamplingParams', 'BeamSearchParams', 'GuidedDecodingParams']
+- invariants chunk 'guided_decoding_params_invariants': emitted 1 unique; anchor_classes=['ModelConfig', 'CacheConfig', 'ParallelConfig', 'SchedulerConfig', 'EngineArgs', 'LoRAConfig', 'DeviceConfig', 'DecodingConfig', 'ObservabilityConfig', 'LoadConfig', 'PromptAdapterConfig', 'TokenizerPoolConfig', 'SamplingParams', 'BeamSearchParams', 'GuidedDecodingParams']
+- invariants chunk 'model_config_verify_tokenizer_mode': emitted 1 unique; anchor_classes=['ModelConfig', 'CacheConfig', 'ParallelConfig', 'SchedulerConfig', 'EngineArgs', 'LoRAConfig', 'DeviceConfig', 'DecodingConfig', 'ObservabilityConfig', 'LoadConfig', 'PromptAdapterConfig', 'TokenizerPoolConfig', 'SamplingParams', 'BeamSearchParams', 'GuidedDecodingParams']
+- invariants chunk 'model_config_verify_quantization': emitted 2 unique; anchor_classes=['ModelConfig', 'CacheConfig', 'ParallelConfig', 'SchedulerConfig', 'EngineArgs', 'LoRAConfig', 'DeviceConfig', 'DecodingConfig', 'ObservabilityConfig', 'LoadConfig', 'PromptAdapterConfig', 'TokenizerPoolConfig', 'SamplingParams', 'BeamSearchParams', 'GuidedDecodingParams']
+- invariants chunk 'model_config_verify_cuda_graph': emitted 1 unique; anchor_classes=['ModelConfig', 'CacheConfig', 'ParallelConfig', 'SchedulerConfig', 'EngineArgs', 'LoRAConfig', 'DeviceConfig', 'DecodingConfig', 'ObservabilityConfig', 'LoadConfig', 'PromptAdapterConfig', 'TokenizerPoolConfig', 'SamplingParams', 'BeamSearchParams', 'GuidedDecodingParams']
+- invariants chunk 'model_config_verify_bnb_config': emitted 1 unique; anchor_classes=['ModelConfig', 'CacheConfig', 'ParallelConfig', 'SchedulerConfig', 'EngineArgs', 'LoRAConfig', 'DeviceConfig', 'DecodingConfig', 'ObservabilityConfig', 'LoadConfig', 'PromptAdapterConfig', 'TokenizerPoolConfig', 'SamplingParams', 'BeamSearchParams', 'GuidedDecodingParams']
+- invariants chunk 'cache_config_invariants': emitted 3 unique; anchor_classes=['ModelConfig', 'CacheConfig', 'ParallelConfig', 'SchedulerConfig', 'EngineArgs', 'LoRAConfig', 'DeviceConfig', 'DecodingConfig', 'ObservabilityConfig', 'LoadConfig', 'PromptAdapterConfig', 'TokenizerPoolConfig', 'SamplingParams', 'BeamSearchParams', 'GuidedDecodingParams']
+- invariants chunk 'scheduler_config_invariants': emitted 8 unique; anchor_classes=['ModelConfig', 'CacheConfig', 'ParallelConfig', 'SchedulerConfig', 'EngineArgs', 'LoRAConfig', 'DeviceConfig', 'DecodingConfig', 'ObservabilityConfig', 'LoadConfig', 'PromptAdapterConfig', 'TokenizerPoolConfig', 'SamplingParams', 'BeamSearchParams', 'GuidedDecodingParams']
+- invariants chunk 'parallel_config_invariants': emitted 3 unique; anchor_classes=['ModelConfig', 'CacheConfig', 'ParallelConfig', 'SchedulerConfig', 'EngineArgs', 'LoRAConfig', 'DeviceConfig', 'DecodingConfig', 'ObservabilityConfig', 'LoadConfig', 'PromptAdapterConfig', 'TokenizerPoolConfig', 'SamplingParams', 'BeamSearchParams', 'GuidedDecodingParams']
+- invariants chunk 'lora_prompt_adapter_invariants': emitted 8 unique; anchor_classes=['ModelConfig', 'CacheConfig', 'ParallelConfig', 'SchedulerConfig', 'EngineArgs', 'LoRAConfig', 'DeviceConfig', 'DecodingConfig', 'ObservabilityConfig', 'LoadConfig', 'PromptAdapterConfig', 'TokenizerPoolConfig', 'SamplingParams', 'BeamSearchParams', 'GuidedDecodingParams']
+
+### strategy e9
+
+- pattern=e9 engine=transformers schema_wall=497.4s invariants_wall=403.9s total_wall=901.8s
+- invariants chunk 'generation_config_init_invariants': emitted 0 unique (cumulative total so far: 0)
+- invariants chunk 'bitsandbytes_config_invariants': emitted 12 unique (cumulative total so far: 12)
+- invariants chunk 'validate_section_00_1._Validation_of_individual_attributes': emitted 1 unique (cumulative total so far: 13)
+- invariants chunk 'validate_section_01_1.1._Decoding_attributes': emitted 3 unique (cumulative total so far: 16)
+- invariants chunk 'validate_section_02_1.2._Cache_attributes': emitted 1 unique (cumulative total so far: 17)
+- invariants chunk 'validate_section_03_1.3._Performance_attributes': emitted 1 unique (cumulative total so far: 18)
+- invariants chunk 'validate_section_04_1.4._Watermarking_attributes': emitted 0 unique (cumulative total so far: 18)
+- invariants chunk 'validate_section_05_2._Validation_of_attribute_combinations': emitted 6 unique (cumulative total so far: 24)
+- invariants chunk 'validate_section_06_2.1._detect_sampling_only_parameterization_when_not_in_sampl': emitted 1 unique (cumulative total so far: 25)
+- invariants chunk 'validate_section_07_2.2._detect_beam_only_parameterization_when_not_in_beam_mode': emitted 1 unique (cumulative total so far: 26)
+- invariants chunk 'validate_section_08_2.4._check_num_return_sequences': emitted 1 unique (cumulative total so far: 27)
+- invariants chunk 'validate_section_09_2.5._check_cache_related_arguments': emitted 3 unique (cumulative total so far: 30)
+- invariants chunk 'validate_section_10_2.6._other_incorrect_combinations': emitted 1 unique (cumulative total so far: 31)
+- invariants chunk 'validate_section_11_3._Check_common_issue_passing_generate_arguments_inside_the_': emitted 1 unique (cumulative total so far: 32)
+
+### strategy h6
+
+- pattern=h6 engine=transformers schema_wall=257.4s invariants_wall=268.8s total_wall=526.4s
+- h6_schema_source_chars=46594
+- h6_invariants_source_chars=33440
+- h6 invariants: emitted 16 unique entries
