@@ -3539,3 +3539,29 @@ $75 trial-wide per plan. Phase 3c estimated ~$25-35. Substantial headroom; docum
 
 Stub uses prompt caching (cache_control: ephemeral on source blocks per Phase 2 design). On retries / multi-call cells, this saves 90% input tokens. Important for Phase 3c-2 hybrid patterns where the same source is re-read across passes.
 
+
+## 2026-05-25 H6/E6/E9 substrate-decomposition batch: ceiling NOT chunking-driven
+
+5-cell batch ran end-to-end:
+- H6 (no-chunking) transformers: schema r/p=0.75/0.94, inv r/p=0.128/0.31, wall 526s.
+- E6 (field-anchored) transformers: schema 0.83/0.99, inv 0.564/0.386, wall 1256s.
+- E6 (field-anchored) vllm: schema 0.97/0.85, inv 0.308/0.174, wall 1049s.
+- E9 (cumulative context) transformers: schema 0.83/0.99, inv 0.333/0.406, wall 902s.
+- E9 (cumulative context) vllm: schema 0.97/0.85, inv 0.346/0.191, wall 1026s.
+
+**Headline finding**: ALL THREE substrate variants UNDERPERFORM the (b) baseline at 70B-q4. Recall deltas from baseline: H6 -43.6pp; E6 TF 0pp / vllm -7.7pp; E9 TF -23.1pp / vllm -3.8pp. Chunking is NOT the bottleneck driving the (b) ceiling. The bottleneck is LLM SYNTHESIS CAPACITY.
+
+**Mechanism convergent across H6/E9**: when given more freedom (whole-source, cumulative-dedup), the 70B-q4 model defaults to under-emit. Per-class single-shot per chunk FORCES synthesis by the prompt structure; any variant that adds flexibility relaxes that pressure and recall drops. Same pattern as H7 agentic-loop collapse.
+
+**E6 on transformers** (with targeted field-anchor) was NEUTRAL: same recall, slightly worse precision. The field-anchor neither helped nor hurt on calibrated active cells.
+
+**E6 on vllm** (with untargeted field-anchor due to chunk-name / class-name case mismatch) was negative. The heuristic flaw means E6 vllm tested "noisy anchor" not "targeted anchor"; the latter remains untested on vllm. Honest caveat in batch_summary.
+
+**E6 hypothesis (would catch tensorrt v0.x HF GenerationConfig hallucination) IS UNTESTED.** Active cells don't have the empty-chunk failure mode that triggered the hallucination. Need to rerun E6 on bumped tensorrt cell for that test. Out of scope for this batch.
+
+**Recommendation:** STOP additional Phase 3b substrate ablations at 70B-q4. Proceed to Phase 4 synthesis with current 9-pattern landscape OR pause for ANTHROPIC_API_KEY arrival (Phase 3c). E6 + E9 should be REVISITED in Phase 3c (Claude) where:
+- E6 + bumped tensorrt cell tests the hallucination-prevention hypothesis directly.
+- E9 cumulative context might ACTUALLY work as designed at Claude's stronger-synthesis scale.
+
+Per-cell artefacts under `_spike/findings/hybrid_experiments/{h6_no_chunk,e6_field_anchored,e9_sequential}/`. Cross-pattern summary: `h6_e6_e9_batch_summary.md`. Aggregate: `h6_e6_e9_aggregate.json`. Per-cell scores also written to `_spike/findings/trial_scores/{h6,e6,e9}__<engine>__<version>.json` for aggregator pickup.
+

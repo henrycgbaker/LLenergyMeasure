@@ -127,14 +127,29 @@ seeing growing running notes, becomes too cautious about "is this new?"
 and skips emitting borderline cases that the prompt's locked-mode
 single-shot would have happily emitted.
 
-**vLLM result:** TBD (running).
+**vLLM result:** recall 0.346 vs 0.385 baseline (-3.8pp); precision
+0.191 vs 0.152 (+3.9pp). 47 entries vs 66 baseline. The vllm cell
+followed a different pattern from transformers: chunk 1
+(`sampling_params_invariants`) emitted 20 (vs ~7-12 typical at
+baseline), and subsequent chunks accumulated normally (1-8 per chunk).
+Total cumulative 47. The cross-class hypothesis: the LLM had 47
+invariants in running notes by the final chunks, but the per-chunk
+emission did not show signs of having LEVERAGED that history to find
+cross-class constraints (e.g. `max_num_batched_tokens >= max_num_seqs`
+was not surfaced as a cross-class invariant in any chunk despite
+SchedulerConfig being a multi-field validator).
 
 **Conclusion:** cumulative context did NOT surface the hoped-for
-cross-class invariants. The LLM's response was to be MORE conservative,
-not MORE thorough. This is consistent with H7's "70B-q4 prefers
-under-emit over over-emit when given choice". E9 is the "human-like
-methodical pass with state" pattern; the model interpreted state as
-constraint, not as accumulating knowledge to leverage.
+cross-class invariants. On transformers the dedup-pressure caused
+under-emit (-23pp recall). On vllm the effect was milder (-3.8pp) but
+still negative; the LLM emitted normally on early chunks but did not
+use accumulated history to find cross-class patterns. **The pattern
+that would FORCE cross-class reasoning (an EXPLICIT prompt step "now
+list cross-class invariants you can see across the running notes")
+was not part of E9's design** - we used the locked extract prompt and
+ADDED dedup pressure. To test the cross-class hypothesis properly,
+E9-2 would need a final reconciliation step after all chunks, with an
+explicit cross-class prompt. That is out of scope for this batch.
 
 ## Cross-variant insights
 
@@ -145,7 +160,7 @@ constraint, not as accumulating knowledge to leverage.
 | (b) baseline | 0.564 | 0.385 | per-class chunks; single-shot per chunk | reference |
 | H6 no-chunk | 0.128 | n/a (ctx limit) | one big call; whole-source | -43.6pp recall |
 | E6 field-anchor | 0.564 | 0.308 | per-chunk + declared __fields__ preamble | TF neutral; vllm worse |
-| E9 cumulative | 0.333 | TBD | per-chunk + prior-extraction notes | TF -23pp recall |
+| E9 cumulative | 0.333 | 0.346 | per-chunk + prior-extraction notes | TF -23pp / vllm -3.8pp |
 
 **The bottleneck is NOT chunking.** Per-class chunking is doing the
 right thing at 70B-q4 scale: the per-chunk synthesis pressure prevents
@@ -175,6 +190,26 @@ which depends on synthesis.
 got `silent` (recall < threshold, no envelope-marker error). All other
 cells passed (`none`). H6 is the only cell where the failure mode is
 detectable from the score alone.
+
+**Honest caveat on E6 vllm:** my chunk-to-class targeting heuristic
+substring-matches `cls.lower() in chunk_name.lower()`. For transformers
+this works (`generation_config_init_invariants` contains
+`generationconfig` after lowercase). For vllm it fails because chunk
+names use snake_case (`sampling_params_invariants`) while class names
+are CamelCase (`SamplingParams`), so "samplingparams" does NOT appear
+in the chunk name. Result: vllm E6 fell back to "all 15 classes" for
+EVERY chunk, giving the LLM a 249-field anchor list per chunk. The vllm
+E6 result therefore tests "field-anchoring with UNTARGETED 249-field
+anchor" rather than "field-anchoring with targeted N-field anchor".
+For a fair test of E6 on vllm, the heuristic needs a snake-to-camel
+mapping (`sampling_params` -> `SamplingParams`). I left this as
+observed-but-not-fixed because (a) the test ran end-to-end and
+produced a comparable score; (b) the lesson "untargeted anchor is
+neutral-to-harmful" is itself useful evidence; (c) re-running with
+fixed heuristic would consume another ~17 min of LLM time the trial
+budget could spend on Phase 3c. For Phase 4 production, IF E6 is
+adopted as a defence against bumped-cell hallucination, the
+heuristic must be fixed first.
 
 ## Implications for Phase 4 synthesis
 
