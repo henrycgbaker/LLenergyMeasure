@@ -3202,3 +3202,162 @@ Note: `.product/` is gitignored. The update persists on disk in the spike checko
 
 GREEN. Ready to launch hybrid patterns starting with H4 (LLM-modifies-miner) per user priority + epistemic framing. Container Ollama up; chunkers parametrised; bumped-cell dispatchers wired. The three brittleness modes give H4 plenty of substrate to propose patches against.
 
+
+## 2026-05-25 deferred: pattern #2 migration (research/ dir + sparse-checkout + LFS)
+
+User direction: at an appropriate point, migrate the trial corpus to the
+"in-repo with dedicated top-level dir + sparse-checkout / LFS" pattern.
+
+### Trigger criteria
+
+Two natural inflection points; default to the later one to avoid breaking
+in-flight agent runs:
+
+1. **After Phase 3b completes** (~5-10 hybrid patterns landed). Bulk-add
+   rate slows; reasonable mid-trial pause.
+2. **After Phase 4 synthesis** (RECOMMENDED). Trial concluded; one clean
+   migration; no path-rewrites mid-execution.
+
+Pick (2) unless repo footprint hits a concrete problem before then (e.g.
+clone time > 60s, git status > 10s, GitHub web UI slow on file browse).
+
+### Migration spec
+
+1. **Directory rename + path rewrite**:
+   - `_spike/` -> `research/mining-substrate-trial/`
+   - Mass find-replace `_spike/` -> `research/mining-substrate-trial/` in
+     all Python files, Markdown, YAML config files.
+   - Keep a transitional symlink `_spike` -> `research/mining-substrate-trial`
+     for ~1 week so any local checkouts on stale state still resolve. Drop
+     the symlink after the cutover commit settles.
+
+2. **Sparse-checkout setup**:
+   - Add `.git/info/sparse-checkout` template + a `scripts/setup-research-optin.sh`
+     helper that runs `git sparse-checkout set --no-cone` for casual cloners
+     who want to skip `research/`.
+   - DO NOT make sparse-checkout the default for fresh clones (would
+     break the trial branch's natural state). Make it an OPT-IN for users
+     who don't need the research corpus.
+   - Document in `research/README.md`.
+
+3. **LFS for bulky raw artefacts** (defer to Phase 5 if it isn't needed yet):
+   - Candidates: `research/*/findings/trial_runs/*/raw_llm_transcripts/*`,
+     any large model output dirs, per-cell raw extraction dumps.
+   - `.gitattributes`:
+     `research/*/findings/trial_runs/*/raw_llm_transcripts/* filter=lfs diff=lfs merge=lfs -text`
+   - Requires GitHub repo to have LFS enabled. Adds operational cost.
+   - **Start without LFS**; add only if `git clone` becomes painful or
+     `git push` hits size limits (~100MB per file warns at 50MB).
+
+4. **CI exclusions**:
+   - Update `.github/workflows/*.yml` to add `paths-ignore: ['research/**']`
+     on workflows that shouldn't run on research-only changes (CI gating,
+     production-test workflows). Keep separate `research-validate.yml` if
+     there's a desire to lint research scripts.
+   - Update Ruff / lint configs to exclude `research/` from default lints
+     (research code is exploratory; not held to production-format standards).
+   - Update `pre-commit` hook configs similarly.
+
+5. **README at top level + research/**:
+   - Top-level README: 1 paragraph "research/ holds research-track work;
+     opt out via `bash scripts/setup-research-optin.sh`".
+   - `research/README.md`: catalogue of trials (the mining-substrate one
+     is first); each trial gets a sub-README explaining contents +
+     reproducibility instructions + lifecycle status (active / archived).
+
+6. **Verify post-migration**:
+   - `make ci` still passes (research/ excluded from production gates).
+   - `git clone` of a fresh checkout works with research/ included by default.
+   - `bash scripts/setup-research-optin.sh` produces a checkout without research/ (size verified shrunk).
+   - All in-tree references to `_spike/` resolve (either via the symlink or via the rewrite).
+
+7. **Archive trigger**:
+   - Once trial is concluded + write-up in `docs/research/mining-substrate-trial/`,
+     consider TAG-AND-ARCHIVE: tag the trial branch (e.g.
+     `v-trial-2026-05-25-mining-substrate`) and delete the branch.
+     The research/ directory survives in main branch; the working branch
+     gets archived.
+
+### Scope estimate
+
+~2-4 hours of focused work (path rewrites are mechanical; CI updates need
+care; LFS opt-in is the variable).
+
+### Cross-references
+
+- This DECISIONS_LOG entry is the deferred task.
+- The trial-resume-prompt.md gets an addendum so future context surfaces this work item alongside the Phase 4 + 5 plan.
+- Once executed, this entry can be marked DONE.
+
+## 2026-05-25 user direction: deterministic-validate + extend-propose variants
+
+### Architecture commitment converging
+
+User: "We DEFINITELY want deterministic validation-subtraction. LLM only ever in the extend-propose phase."
+
+Empirical trial support (consistent across multiple patterns):
+- H2 (LLM subtracts): 3/26 false-drops on vllm (LLM misreads dormant-normalisation as spurious). Subtraction is not a robust LLM role at 70B-q4.
+- H3 (LLM proposes + runtime gates): clean trade - recall -7.7pp / precision +5.6pp on transformers. The gate WORKS. The trade is what you'd expect from removing false positives.
+- H4 (LLM modifies miner): 0/3 patches lifted recall; 2/3 crashed. Synthesis-of-code is not robust either.
+- H9 (LLM diagnoses): 0 fabrications across 8 diagnoses; cross-correlation with H4 perfect. Diagnosis is robust.
+
+Convergent shape: **LLM = diagnose + propose (extend-only); deterministic = validate (subtract).**
+
+### Machinery audit
+
+- `scripts/validate_invariants.py` - runs each invariant through the live library; supports `--engine` per-engine routing. Already production-grade.
+- `scripts/_invariant_validation_common.py` - case-classification + run_case + diff helpers.
+- `_spike/scripts/trial_scoring.runtime_validate_invariants` - Phase 2.5 wrapper; transformers-only currently.
+- **Extension needed for Phase 4.0 ground-truth builder**: lift `runtime_validate_invariants` to vllm + tensorrt (via their containers). ~1-2 days work; not novel architecture.
+- **Schema side (Phase 2.6 queue)**: `runtime_validate_schema` (Layer A: `Config(**{field: plausible_value})` doesn't raise + `field in Model.__fields__`). Not yet implemented. Spec in `post_trial_a_gap_closure.md` adjacent docs.
+
+### Extend-propose variant space (the "many options" to explore)
+
+The "extend-propose" relationship has many shapes. Map of what we've tested vs what's open:
+
+| ID | Variant | Tested? | Shape |
+|---|---|---|---|
+| E1 | LLM proposes; runtime gates per-entry | **H3** (partial - tf only runtime; vllm/trt schema-existence) | accept iff kwargs_pos fires AND kwargs_neg doesn't |
+| E2 | LLM proposes; deterministic schema-check (`field in __fields__`) then runtime | partial (H3 vllm/trt) | two-gate filter |
+| E3 | LLM proposes WITH structured (a)-context: "here's what (a) found; propose what's MISSING" | **current d-ab** | guided extension |
+| E4 | LLM proposes from EVIDENCE excerpts + deterministic verify | NOT TESTED | LLM-as-curator-from-evidence; closer to research papers' workflow |
+| E5 | LLM proposes -> runtime rejects -> LLM revises (bounded iter) | partial (H7) | iterative feedback |
+| E6 | LLM proposes WITHIN domain (here's all `__fields__`; propose invariants on these) | NOT TESTED | field-anchored; reduces hallucination risk |
+| E7 | Ensemble - N LLM extractions union'd then verified | NOT TESTED | majority-vote-style; tests redundancy lift |
+| E8 | Chunked-LLM-proposes; deterministic merge across chunks; verify | **current (b)** | divide-and-conquer; what most extractions are |
+
+**Open variants worth a Phase 3b focused batch**: E4, E6, E7. Plus H5+H6 chunking ablations (substrate-side ceiling).
+
+### Implication for Phase 4.0 ground-truth builder
+
+When we build the validated-union per cell, it BECOMES the empirical "what does this engine actually need by way of invariants?" Every (b)/(d)/(c) cell's output runs through the deterministic gate; the union of all VALIDATED entries across strategies = the cell's empirical truth. (a)'s output is one input among several; equal weight in the union (validated entries count regardless of source).
+
+### Research/ migration write-up framing
+
+User: "when we move this into top level research/ namespace, we should later write this up properly as problem statement - what we wanted to find out, etc."
+
+DEFERRED to Phase 4 closure (per pattern #2 migration spec). When that lands, `research/mining-substrate-trial/` should follow research-paper IA:
+
+```
+research/mining-substrate-trial/
+  README.md                          # 1-2 page overview + how to reproduce
+  problem-statement.md               # what we wanted to find out (substrate question)
+  methodology.md                     # 3-axis framing (pure / hybrid / brittleness); rubric; epistemic discipline
+  results/
+    matrix.md                        # the 47-cell + hybrid-pattern aggregate
+    brittleness-profile.md           # per-strategy x per-bump-distance
+    hybrid-landscape.md              # ~8-12 patterns explored + findings
+  decision-space.md                  # 3-5 viable constructed strategies
+  recommendation.md                  # chosen substrate + defended trade-offs
+  reproducibility/
+    locked-prompts/                  # the exact prompts used
+    scoring-harness/                 # the trial_scoring + chunkers
+    container-setup.md               # Ollama config; GPU access pattern
+  appendix/
+    full-decisions-log.md            # DECISIONS_LOG narrative
+    failure-modes-catalogue.md       # silent / hallucination / detectable failure types
+    post-trial-gap-closure.md        # the (a) gap commitment backlog
+```
+
+This is the IA the future migration agent should produce. NOT just a flat directory.
+
