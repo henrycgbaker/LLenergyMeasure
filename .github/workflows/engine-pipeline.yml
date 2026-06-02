@@ -124,7 +124,7 @@ jobs:
             fi
           fi
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         if: github.event_name == 'pull_request'
         id: changes
         with:
@@ -442,7 +442,7 @@ jobs:
     steps:
       - name: Mint llem-ci-bot App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -455,7 +455,7 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Download all writeback artefacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: '{invariants,schemas}-writeback-*'
           merge-multiple: true
