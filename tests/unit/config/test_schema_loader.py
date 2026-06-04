@@ -175,14 +175,12 @@ def test_discovered_schema_has_expected_shape(engine: str) -> None:
     for name, spec in schema.engine_params.items():
         assert isinstance(spec, dict), f"{engine}.engine_params[{name}] is not a dict"
         assert _has_shape(spec), (
-            f"{engine}.engine_params[{name}] has none of "
-            f"{_ACCEPTABLE_KEYS}: {spec!r}"
+            f"{engine}.engine_params[{name}] has none of {_ACCEPTABLE_KEYS}: {spec!r}"
         )
     for name, spec in schema.sampling_params.items():
         assert isinstance(spec, dict), f"{engine}.sampling_params[{name}] is not a dict"
         assert _has_shape(spec), (
-            f"{engine}.sampling_params[{name}] has none of "
-            f"{_ACCEPTABLE_KEYS}: {spec!r}"
+            f"{engine}.sampling_params[{name}] has none of {_ACCEPTABLE_KEYS}: {spec!r}"
         )
 
 

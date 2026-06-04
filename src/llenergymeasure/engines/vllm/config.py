@@ -10,14 +10,14 @@ from pydantic import BaseModel, ConfigDict
 
 class EngineParams(BaseModel):
     model_config = ConfigDict(
-        extra='allow',
+        extra="allow",
         use_attribute_docstrings=True,
     )
     gpu_memory_utilization: float | None = 0.9
     swap_space: float | None = 4
     cpu_offload_gb: float | None = 0
     block_size: int | None = None
-    kv_cache_dtype: str | None = 'auto'
+    kv_cache_dtype: str | None = "auto"
     enforce_eager: bool | None = None
     enable_chunked_prefill: bool | None = None
     max_num_seqs: int | None = None
@@ -28,7 +28,7 @@ class EngineParams(BaseModel):
     pipeline_parallel_size: int | None = 1
     distributed_executor_backend: str | dict[str, Any] | None = None
     enable_prefix_caching: bool | None = None
-    dtype: str | None = 'auto'
+    dtype: str | None = "auto"
     quantization: str | None = None
     speculative_model: str | None = None
     num_speculative_tokens: int | None = None
@@ -36,7 +36,7 @@ class EngineParams(BaseModel):
 
 class SamplingParams(BaseModel):
     model_config = ConfigDict(
-        extra='allow',
+        extra="allow",
         use_attribute_docstrings=True,
     )
     temperature: float | None = 1.0
@@ -53,7 +53,7 @@ class SamplingParams(BaseModel):
 
 class Config(BaseModel):
     model_config = ConfigDict(
-        extra='allow',
+        extra="allow",
         use_attribute_docstrings=True,
     )
     engine_params: EngineParams | None = None

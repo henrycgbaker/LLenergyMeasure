@@ -14,22 +14,22 @@ class CompileConfig(BaseModel):
     )
     fullgraph: bool | None = False
     dynamic: bool | None = None
-    backend: str | dict[str, Any] | None = 'inductor'
-    mode: str | None = 'reduce-overhead'
+    backend: str | dict[str, Any] | None = "inductor"
+    mode: str | None = "reduce-overhead"
     options: dict[str, Any] | None = None
 
 
 class EngineParams(BaseModel):
     model_config = ConfigDict(
-        extra='allow',
+        extra="allow",
         use_attribute_docstrings=True,
     )
     dtype: Annotated[
         str | None,
         Field(
             json_schema_extra={
-                'x-source': 'kwargs_docstring',
-                'x-source-ref': 'transformers.PreTrainedModel.from_pretrained.__doc__',
+                "x-source": "kwargs_docstring",
+                "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__",
             }
         ),
     ] = None
@@ -37,8 +37,8 @@ class EngineParams(BaseModel):
         str | None,
         Field(
             json_schema_extra={
-                'x-source': 'kwargs_docstring',
-                'x-source-ref': 'transformers.PreTrainedModel.from_pretrained.__doc__',
+                "x-source": "kwargs_docstring",
+                "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__",
             }
         ),
     ] = None
@@ -46,8 +46,8 @@ class EngineParams(BaseModel):
         str | None,
         Field(
             json_schema_extra={
-                'x-source': 'kwargs_docstring',
-                'x-source-ref': 'transformers.PreTrainedModel.from_pretrained.__doc__',
+                "x-source": "kwargs_docstring",
+                "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__",
             }
         ),
     ] = None
@@ -55,8 +55,8 @@ class EngineParams(BaseModel):
         dict[str, Any] | None,
         Field(
             json_schema_extra={
-                'x-source': 'kwargs_docstring',
-                'x-source-ref': 'transformers.PreTrainedModel.from_pretrained.__doc__',
+                "x-source": "kwargs_docstring",
+                "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__",
             }
         ),
     ] = None
@@ -64,8 +64,8 @@ class EngineParams(BaseModel):
         str | None,
         Field(
             json_schema_extra={
-                'x-source': 'kwargs_docstring',
-                'x-source-ref': 'transformers.PreTrainedModel.from_pretrained.__doc__',
+                "x-source": "kwargs_docstring",
+                "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__",
             }
         ),
     ] = None
@@ -74,9 +74,9 @@ class EngineParams(BaseModel):
         Field(
             ge=1,
             json_schema_extra={
-                'x-source': 'kwargs_docstring',
-                'x-source-ref': 'transformers.PreTrainedModel.from_pretrained.__doc__',
-                'x-narrowing-applied': 'from_pretrained docstring (L167 of modeling_utils.py) claims\n`str`; actual code path at L326/L330 uses it as int via\ndevice_mesh.size() / torch.distributed.get_world_size().\nWalker faithfully reflects the docstring; this overlay corrects\nthe type to match runtime usage.',
+                "x-source": "kwargs_docstring",
+                "x-source-ref": "transformers.PreTrainedModel.from_pretrained.__doc__",
+                "x-narrowing-applied": "from_pretrained docstring (L167 of modeling_utils.py) claims\n`str`; actual code path at L326/L330 uses it as int via\ndevice_mesh.size() / torch.distributed.get_world_size().\nWalker faithfully reflects the docstring; this overlay corrects\nthe type to match runtime usage.",
             },
         ),
     ] = None
@@ -84,8 +84,8 @@ class EngineParams(BaseModel):
         bool | None,
         Field(
             json_schema_extra={
-                'x-source': 'kwargs_docstring',
-                'x-source-ref': 'transformers.BitsAndBytesConfig.__doc__',
+                "x-source": "kwargs_docstring",
+                "x-source-ref": "transformers.BitsAndBytesConfig.__doc__",
             }
         ),
     ] = False
@@ -93,8 +93,8 @@ class EngineParams(BaseModel):
         bool | None,
         Field(
             json_schema_extra={
-                'x-source': 'kwargs_docstring',
-                'x-source-ref': 'transformers.BitsAndBytesConfig.__doc__',
+                "x-source": "kwargs_docstring",
+                "x-source-ref": "transformers.BitsAndBytesConfig.__doc__",
             }
         ),
     ] = False
@@ -102,11 +102,11 @@ class EngineParams(BaseModel):
         Any | None,
         Field(
             json_schema_extra={
-                'x-source': 'kwargs_docstring',
-                'x-source-ref': 'transformers.BitsAndBytesConfig.__doc__',
+                "x-source": "kwargs_docstring",
+                "x-source-ref": "transformers.BitsAndBytesConfig.__doc__",
             }
         ),
-    ] = 'torch.float32'
+    ] = "torch.float32"
     """
     Upstream type: torch.dtype
     """
@@ -114,17 +114,17 @@ class EngineParams(BaseModel):
         str | None,
         Field(
             json_schema_extra={
-                'x-source': 'kwargs_docstring',
-                'x-source-ref': 'transformers.BitsAndBytesConfig.__doc__',
+                "x-source": "kwargs_docstring",
+                "x-source-ref": "transformers.BitsAndBytesConfig.__doc__",
             }
         ),
-    ] = 'fp4'
+    ] = "fp4"
     bnb_4bit_use_double_quant: Annotated[
         bool | None,
         Field(
             json_schema_extra={
-                'x-source': 'kwargs_docstring',
-                'x-source-ref': 'transformers.BitsAndBytesConfig.__doc__',
+                "x-source": "kwargs_docstring",
+                "x-source-ref": "transformers.BitsAndBytesConfig.__doc__",
             }
         ),
     ] = False
@@ -132,28 +132,28 @@ class EngineParams(BaseModel):
 
 class SamplingParams(BaseModel):
     model_config = ConfigDict(
-        extra='allow',
+        extra="allow",
         use_attribute_docstrings=True,
     )
     cache_implementation: Annotated[
         Literal[
-            'static',
-            'offloaded_static',
-            'sliding_window',
-            'hybrid',
-            'hybrid_chunked',
-            'offloaded_hybrid',
-            'offloaded_hybrid_chunked',
-            'dynamic',
-            'dynamic_full',
-            'offloaded',
-            'quantized',
+            "static",
+            "offloaded_static",
+            "sliding_window",
+            "hybrid",
+            "hybrid_chunked",
+            "offloaded_hybrid",
+            "offloaded_hybrid_chunked",
+            "dynamic",
+            "dynamic_full",
+            "offloaded",
+            "quantized",
         ]
         | None,
         Field(
             json_schema_extra={
-                'x-source': 'module_validation_collection',
-                'x-source-ref': 'transformers.generation.configuration_utils.ALL_CACHE_IMPLEMENTATIONS',
+                "x-source": "module_validation_collection",
+                "x-source-ref": "transformers.generation.configuration_utils.ALL_CACHE_IMPLEMENTATIONS",
             }
         ),
     ] = None
@@ -182,7 +182,7 @@ class SamplingParams(BaseModel):
         Field(
             gt=0.0,
             json_schema_extra={
-                'x-narrowing-applied': "Multiplicative penalty; <=0 breaks logits ranking. Engine\ndoesn't validate."
+                "x-narrowing-applied": "Multiplicative penalty; <=0 breaks logits ranking. Engine\ndoesn't validate."
             },
         ),
     ] = 1.0
@@ -191,7 +191,7 @@ class SamplingParams(BaseModel):
         Field(
             ge=0.0,
             json_schema_extra={
-                'x-narrowing-applied': 'Engine accepts t<0 but produces NaN in softmax. Refuse at\nconfig-time rather than let inference produce garbage.'
+                "x-narrowing-applied": "Engine accepts t<0 but produces NaN in softmax. Refuse at\nconfig-time rather than let inference produce garbage."
             },
         ),
     ] = 1.0
@@ -200,7 +200,7 @@ class SamplingParams(BaseModel):
         Field(
             ge=0,
             json_schema_extra={
-                'x-narrowing-applied': 'Cardinality; negative k has no meaning. 0 means greedy (handled\nby HF).'
+                "x-narrowing-applied": "Cardinality; negative k has no meaning. 0 means greedy (handled\nby HF)."
             },
         ),
     ] = 50
@@ -209,7 +209,7 @@ class SamplingParams(BaseModel):
         Field(
             ge=0.0,
             json_schema_extra={
-                'x-narrowing-applied': "Probability mass; <0 or >1 has no meaning. Engine doesn't\nvalidate; we refuse at config-time."
+                "x-narrowing-applied": "Probability mass; <0 or >1 has no meaning. Engine doesn't\nvalidate; we refuse at config-time."
             },
             le=1.0,
         ),
@@ -220,7 +220,7 @@ class SamplingParams(BaseModel):
 
 class Config(BaseModel):
     model_config = ConfigDict(
-        extra='allow',
+        extra="allow",
         use_attribute_docstrings=True,
     )
     engine_params: EngineParams | None = None

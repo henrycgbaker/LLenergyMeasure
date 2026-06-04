@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 class EngineParams(BaseModel):
     model_config = ConfigDict(
-        extra='allow',
+        extra="allow",
         use_attribute_docstrings=True,
     )
     max_batch_size: int | None = None
@@ -37,7 +37,7 @@ class EngineParams(BaseModel):
     """
     The maximum number of tokens.
     """
-    dtype: str | None = 'auto'
+    dtype: str | None = "auto"
     """
     The data type to use for the model.
     """
@@ -65,7 +65,7 @@ class EngineParams(BaseModel):
 
 class SamplingParams(BaseModel):
     model_config = ConfigDict(
-        extra='allow',
+        extra="allow",
         use_attribute_docstrings=True,
     )
     temperature: float | None = None
@@ -80,7 +80,7 @@ class SamplingParams(BaseModel):
 
 class Config(BaseModel):
     model_config = ConfigDict(
-        extra='allow',
+        extra="allow",
         use_attribute_docstrings=True,
     )
     engine_params: EngineParams | None = None
