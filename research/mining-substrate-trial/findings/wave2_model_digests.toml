@@ -1,0 +1,151 @@
+# Wave 2 model pins (cost-frontier rewrite).
+#
+# Per WAVE2_PROTOCOL section 5 discipline F: all Wave 2 model references
+# pin by sha256 digest, not by floating tag. This file is the single
+# source of truth for which model bytes ran which cell.
+#
+# Models grouped by tier:
+#   - Tier A small models (W2f sweep; 1xA100 each)
+#   - Tier B medium models (Wave 1 baseline + similar scale)
+#   - Tier C benchmark models (full 4xA100 footprint; ceiling-finding)
+#
+# Workflow:
+# 1. Pull model via `ollama pull <tag>` on the trial host.
+# 2. Resolve digest: `ollama show <tag> --modelfile | head -1` produces
+#    `FROM <ref>@sha256:<digest>`. Copy the digest.
+# 3. Update the matching `digest_sha256` field below.
+# 4. The wave2 runner verifies the served model's digest against this
+#    file before running any cell; mismatches halt the run.
+#
+# tree-sitter version is pinned here too because the a_treesitter
+# substrate's query results depend on grammar version.
+
+[meta]
+protocol_version = "wave2-2.0-cost-frontier"
+authored = "2026-06-04"
+schema_version = "1"
+
+# -----------------------------------------------------------------------
+# Tier A small models (Wave 2f sweep). Each fits on 1xA100-40G.
+# Goal: find the smallest model that gives CI-acceptable coverage.
+# -----------------------------------------------------------------------
+
+[models.qwen-coder-7b-fp16]
+ollama_tag = "qwen2.5-coder:7b-instruct-fp16"
+hf_repo = "Qwen/Qwen2.5-Coder-7B-Instruct"
+quantization = "fp16"
+context_window = 32768
+expected_vram_gb = 15
+tier = "A"
+digest_sha256 = ""
+pulled_at = ""
+
+[models.deepseek-coder-v2-lite]
+ollama_tag = "deepseek-coder-v2:16b-lite-instruct-q4_K_M"
+hf_repo = "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct"
+quantization = "q4_K_M"
+context_window = 32768
+expected_vram_gb = 10
+tier = "A"
+digest_sha256 = ""
+pulled_at = ""
+
+[models.phi4-14b-fp16]
+ollama_tag = "phi4:14b-instruct-fp16"
+hf_repo = "microsoft/Phi-4"
+quantization = "fp16"
+context_window = 16384
+expected_vram_gb = 28
+tier = "B"  # context-window-limited may bump to B
+digest_sha256 = ""
+pulled_at = ""
+
+[models.llama31-8b-fp16]
+ollama_tag = "llama3.1:8b-instruct-fp16"
+hf_repo = "meta-llama/Llama-3.1-8B-Instruct"
+quantization = "fp16"
+context_window = 32768
+expected_vram_gb = 16
+tier = "A"
+digest_sha256 = ""
+pulled_at = ""
+
+# Wave 1 baseline (Tier B retained for cross-wave comparison).
+[models.llama31-70b-q4-wave1-baseline]
+ollama_tag = "llama3.1:70b"
+hf_repo = "meta-llama/Llama-3.1-70B-Instruct"
+quantization = "q4_K_M"
+context_window = 32768
+expected_vram_gb = 52
+tier = "C"
+digest_sha256 = ""
+pulled_at = "2026-05-15"
+
+# -----------------------------------------------------------------------
+# Tier C big-LLM ceiling benchmark (Wave 2C). Full 4xA100 footprint.
+# Run on transformers + vllm active only.
+# -----------------------------------------------------------------------
+
+[models.llama33-70b-fp16]
+ollama_tag = "llama3.3:70b-instruct-fp16"
+hf_repo = "meta-llama/Llama-3.3-70B-Instruct"
+quantization = "fp16"
+context_window = 32768
+expected_vram_gb = 140
+tier = "C"
+digest_sha256 = ""
+pulled_at = ""
+
+[models.qwen-coder-32b-fp16]
+ollama_tag = "qwen2.5-coder:32b-instruct-fp16"
+hf_repo = "Qwen/Qwen2.5-Coder-32B-Instruct"
+quantization = "fp16"
+context_window = 32768
+expected_vram_gb = 64
+tier = "C"
+digest_sha256 = ""
+pulled_at = ""
+
+[models.deepseek-coder-v2-q4]
+ollama_tag = "deepseek-coder-v2:236b-instruct-q4_K_M"
+hf_repo = "deepseek-ai/DeepSeek-Coder-V2-Instruct"
+quantization = "q4_K_M"
+context_window = 32768
+expected_vram_gb = 120
+tier = "C"
+digest_sha256 = ""
+pulled_at = ""
+
+[models.mixtral-8x22b-q4]
+ollama_tag = "mixtral:8x22b-instruct-q4_K_M"
+hf_repo = "mistralai/Mixtral-8x22B-Instruct-v0.1"
+quantization = "q4_K_M"
+context_window = 32768
+expected_vram_gb = 80
+tier = "C"
+digest_sha256 = ""
+pulled_at = ""
+
+[grammar_pins]
+tree_sitter = "0.23.0"
+tree_sitter_python = "0.23.6"
+
+[engine_container_pins.transformers_v4_57_3]
+image = "llenergymeasure:transformers-4.57.3"
+digest_sha256 = ""  # TODO: docker inspect after build
+
+[engine_container_pins.vllm_v0_7_3]
+image = "vllm/vllm-openai:v0.7.3"
+digest_sha256 = ""  # TODO: docker inspect after pull
+
+[engine_container_pins.tensorrt_v0_21_0]
+image = "nvcr.io/nvidia/tensorrt-llm/release:0.21.0"
+digest_sha256 = ""  # TODO: docker inspect after pull
+
+[engine_container_pins.sglang_active]
+image = "lmsysorg/sglang:latest"  # TODO: pin to specific tag in 2e vendoring
+digest_sha256 = ""
+
+[engine_container_pins.lmdeploy_active]
+image = "openmmlab/lmdeploy:latest"  # TODO: pin to specific tag in 2e vendoring
+digest_sha256 = ""
