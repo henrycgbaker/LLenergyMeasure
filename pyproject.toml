@@ -49,6 +49,8 @@ dev = [
     # flag verification.
     "datamodel-code-generator==0.57.0",
     "jsonschema>=4.26.0",
+    "tree-sitter==0.23.0",
+    "tree-sitter-python==0.23.6",
 ]
 
 [project.scripts]

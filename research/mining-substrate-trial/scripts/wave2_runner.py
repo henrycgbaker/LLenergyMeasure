@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import inspect
 import json
 import sys
 import time
@@ -148,6 +149,24 @@ def _version_slug(version: str) -> str:
     return f"v{cleaned}"
 
 
+def _resolve_engine_source_root(engine: str, version_slug: str) -> Path | None:
+    """Locate the unpacked engine source, if available.
+
+    Returns the canonical /tmp/trial_<engine>_<version_slug>_venv/src/<engine>/
+    path when venv_setup has materialised it; None otherwise. Strategies
+    that need source (a_treesitter, b_stub_bench, b_tree_bench) accept
+    this kwarg; the runner filters it out for strategies that don't.
+    """
+    candidates = [
+        Path(f"/tmp/trial_{engine}_{version_slug}_venv/src/{engine}"),
+        Path(f"/tmp/{engine}-unpacked/{engine}"),
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    return None
+
+
 def _reference_paths(engine: str, version_slug: str) -> tuple[Path, Path]:
     """Resolve canonical reference schema + invariants paths for a cell."""
     outputs_dir = ENGINE_VERSIONS_ROOT / engine / version_slug / "outputs"
@@ -179,9 +198,20 @@ def run_one(
     run_cell = _resolve_run_cell(entry)
     extras = extra_kwargs or {}
 
+    # Auto-resolve common per-strategy kwargs from the cell context.
+    # Strategies declare which they accept via run_cell's signature;
+    # we filter against that so unsupported kwargs don't TypeError.
+    auto_kwargs = {
+        "engine_source_root": _resolve_engine_source_root(engine, version_slug),
+    }
+    sig_params = inspect.signature(run_cell).parameters
+    forwarded = {
+        k: v for k, v in {**auto_kwargs, **extras}.items() if k in sig_params and v is not None
+    }
+
     t0 = time.perf_counter()
     try:
-        output: CellOutput = run_cell(engine=engine, version=version, **extras)
+        output: CellOutput = run_cell(engine=engine, version=version, **forwarded)
     except NotImplementedError as exc:
         return _emit_deferred_record(
             strategy_id=strategy_id,
