@@ -1,0 +1,7 @@
+{
+  "status": "deferred",
+  "strategy_id": "w2-a-treesitter",
+  "engine": "vllm",
+  "version_slug": "v0_7_3",
+  "reason": "wave2 a_treesitter: dispatch + query execution + invariant clustering. Scaffolded; not yet implemented."
+}

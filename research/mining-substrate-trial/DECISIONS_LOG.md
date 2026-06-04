@@ -3689,3 +3689,326 @@ Open task IDs from the trial workstream:
 - `.planning/trial-handover-2026-05-25.md` (this digest's companion): fresh-context entry doc with two paths forward (more research vs implementation), live infrastructure state, task status, and one-line start commands for either path.
 
 
+
+---
+
+# WAVE 2 — opened 2026-06-04 (cost-frontier-then-workflow-frontier reframe)
+
+Wave 2 is a follow-on round of empirical research to determine the cheapest CI-affordable workflow for keeping engine-config catalogues current as upstream engines bump. Validation of catalogues is treated as solved (the existing on-main `validate_invariants.py` runtime gate is the SSOT). The open question is proposal: what mechanism cheapest produces the catalogue updates that the gate accepts.
+
+## 2026-06-04 — protocol locked under cost-frontier framing
+
+Authored `WAVE2_PROTOCOL.md`. Sub-questions: (1) is pure-deterministic the way; (2) is pure-LLM the way; (3) is a cheap hybrid the way; (4) what's the ceiling at unlimited cost.
+
+Strategy space scaffolded under `scripts/strategies/wave2/`: a_pydantic_native (vllm framework reflection), a_runtime_trace (monkey-patch + perturbation), a_treesitter (universal AST query walker, initially stub), h11_self_consistency (k-vote on small LLM), h15_closed_loop (det extract -> runtime gate -> LLM re-emit), b_modelsweep (parameterised model), b_stub_bench / b_tree_bench (single-cell substrate-shape probes). wave2_runner.py dispatches via a registry + inspect-signature kwarg filter.
+
+Tier classification: A = CI-affordable (<60 s / <1 Wh), B = CI-tolerable (1-15 min / 1-20 Wh), C = benchmark-only.
+
+Heavy multi-call hybrids dropped entirely: h10 critic-loop, h12 ensemble, h13 tree-of-thought, h14 reflective, h16 temp sweep, h17 iterative patch. Pure-LLM substrate variants requiring expensive preprocessing (b-doc, b-rag) dropped entirely.
+
+Smoke test executed against the scaffolding. wave2_runner correctly emits deferred / crashed / scored records. End-to-end score_cell integration not exercised because no Tier A strategy can complete without engine fully importable.
+
+Operational gotcha surfaced: post-commit `llem-sync-full` hook clobbered my commits because it inherited GIT_DIR from the trial worktree and committed to my branch instead of the shadow repo. Fixed by adding `unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE` near the top of `~/.local/bin/llem-sync-full`. Verified.
+
+## 2026-06-05 — first reframe: LLM-role split + two-task split surfaced as gaps
+
+User flagged: Wave 1's central finding (LLMs propose, deterministic systems validate / subtract) wasn't first-class in Wave 2's protocol. 5 of 7 LLM-touching cells in Wave 2 had no downstream gate.
+
+User also flagged: schema discovery and invariant mining are STRUCTURALLY DIFFERENT TASKS and should be measured independently. Wave 2 was conflating them via a single cost-frontier.
+
+Concrete impact: each cell should emit per-task artefacts and get scored independently against each reference. Some strategies become task-mono (a_pydantic_native is schema-only; a_runtime_trace is invariants-only). The success criterion splits into two per-task frontiers; the recommended production architecture composes the per-task winners.
+
+Decision queued (not locked): rewrite WAVE2_PROTOCOL.md section 1 to make task an explicit axis; section 3 strategy table tagged by task; section 7 success criteria per-task.
+
+Tree-sitter probe agent spawned in background to empirically measure a_treesitter's quality on BOTH tasks independently across transformers + vllm active. Iterative query refinement; ~3-5 rounds; deliverable `findings/wave2_treesitter_probe.md`. Pending.
+
+## 2026-06-05 — second reframe: workflow-first, not substrate-first
+
+User flagged: substrate quality at active version is not the real production metric. The real metric is **per-bump update cost in CI**. The drift tool on main is partly tautological: it can detect disappearance of known landmarks but not addition of new validator surface (confirmed by PR #649 removing the additive-direction probe). The producer-vendoring-per-version + LANDMARKS architecture is fragile and the human cost of new vendored producers (#638-#642 etc.) is the actual pain point Wave 2 should reduce.
+
+Decision space reorganised. Detection step (D1 landmark / D2 AST diff / D3 LLM diff / D4 behavioural diff / D5 skip-detect-and-always-re-extract) x extraction step (E1 hand-cut producer / E2 universal substrate / E3 LLM extracts / E4 LLM patches producer / E5 maintainer curates). Sensible products yield 5-6 workflow candidates: W-A status quo, W-B pure universal, W-C pure LLM, W-D LLM-patches, W-E universal floor + LLM extends, W-F LLM diagnoses + maintainer authorises.
+
+Each workflow gets measured per task per engine per bump-pair: 5 workflows x 2 engines x 2 bump-pairs ~= 20 cells. Each cell instrumented with per-task post-gate recall + per-task hallucination rate (gate rejections) + wall-sec + estimated $ + binary "self-update successful Y/N" (workflow produces a usable new producer + catalogue without human).
+
+Cells run on real recent bump pairs: transformers v4.57.3 -> v5.3.0 and vllm v0.7.3 -> v0.16.0. Both involve significant source-shape change so workflows get stressed.
+
+User confirmed: drift tool can stay but needs a self-updating mechanism (the LANDMARKS list should grow automatically when new surface is detected). LLM-as-maintainer-and-gater is in scope (potentially via LangGraph state-machine harness for multi-step `detect -> propose -> validate -> retry-or-finalise` chains).
+
+Decision queued: rewrite WAVE2_PROTOCOL.md around workflow comparison as the headline. Substrate measurements demoted to "inputs to workflows". Cell count drops from ~40 to ~20. Add a "self-update success" binary as a first-class score field.
+
+## Open questions (carry forward to next session)
+
+1. **LangGraph vs lighter harness**: do we add LangGraph as a dep to express W-D / W-F multi-step workflows, or build a minimal state-machine harness inside `strategies/wave2/`? Tradeoff: LangGraph is well-tested but adds a heavy dep; minimal harness keeps wave2 self-contained but reinvents node/edge plumbing.
+2. **LLM scale anchor for workflow cells**: small-LLM-for-CI (Qwen-Coder-7B fp16) is the realistic production case; big-LLM (Llama-3.3-70B / Claude when key arrives) is benchmark. Run each workflow at BOTH scales (4x cell count) or just at the small scale (with a 1-2 cell big-LLM benchmark per workflow)?
+3. **Brittleness axis**: run each workflow on (active -> v+1) only [hands-tied to real recent bumps; 2 engines x 1 bump-pair x 5 workflows = 10 cells], OR also on (v-1 -> active) where ground truth is known [doubles to 20 cells]?
+4. **Tree-sitter probe outcome**: when it returns, does its per-task verdict change which substrate slots into W-B and W-E?
+5. **Drift tool retirement vs. self-update**: if W-B (universal substrate + always-re-extract) works for both tasks, drift tool can retire entirely; if W-D (LLM-patches-producer) works, drift tool needs to GROW (add LANDMARKS when new surface is found). Which path does the empirical evidence end up favouring?
+
+## 2026-06-05 — tree-sitter probe results (empirical)
+
+Subagent implemented full tree-sitter walker in `scripts/strategies/wave2/a_treesitter.py` and probed both tasks on transformers v4.57.3 + vllm v0.7.3 with iterative query refinement. Deliverable: `findings/wave2_treesitter_probe.md`.
+
+Numbers (validated-union reference):
+- transformers schema: 81% recall / 92% precision / 0.12 s wall.
+- transformers invariants: 48% recall / 59% precision / 0.07 s wall.
+- vllm schema: 98.5% recall / 100% precision / 0.015 s wall.
+- vllm invariants: 56% recall / 19% precision / 0.13 s wall.
+
+Wall-clock is sub-second per engine per task. CI-affordable by orders of magnitude.
+
+Empirical verdicts:
+- **Task 1 (schema): tree-sitter is production-viable.** vllm essentially solved with the bare typed-field query. transformers gap is `from_pretrained(**kwargs)` Sphinx docstring fields — needs a one-time docstring lifter to close.
+- **Task 2 (invariants): tree-sitter is NOT viable standalone.** ~30% of misses need semantic resolution (self.foo.bar, loop variables, parameter aliases) that syntax-only walking cannot do. Tree-sitter is a complement to LLM extraction, not a replacement.
+
+Findings that affect later strategy choice:
+- vllm schema is so cheap via tree-sitter (15 ms, 100% precision) that `a_pydantic_native` (which needs full vllm import + CUDA stack) is probably DOMINATED on cost. Tree-sitter wins on cost AND on engine-portability.
+- The walker-up-the-tree pattern (climb enclosing if-chain to attach cross-field context) captured 6 of 12 transformers cross-field invariants. Likely lifts H4-style walker recall if backported into hand-written producers.
+
+Workflow-shape implications:
+- W-B (universal substrate, always re-extract) wins the schema task. Per-bump cost = re-parse milliseconds. Drift tool retires for schema.
+- W-E (universal substrate floor + LLM extends) is the leading candidate for invariants. Tree-sitter at sub-200ms gives ~50% floor; small LLM fills the semantic-resolution gap.
+- W-D (LLM patches producer code) loses some of its motivation: the "producer" becomes just the query set, which barely needs patching because queries are largely engine-agnostic.
+
+Open question this raises: does the docstring-lifter close transformers schema recall to 95+%? If yes, schema task is genuinely solved on universal substrate; if no, schema task needs LLM-extends too (effectively making both tasks shaped the same way).
+
+
+## 2026-06-05 — ground truth round commissioned
+
+User insight: existing validated-union reference is itself probably incomplete. Wave 1 measured strategies against (a)'s baseline plus other strategies' contributions; nothing in that workflow guaranteed completeness in the absolute sense. Recent work suggests entire libraries / config areas have been silently omitted from LLEM coverage (the user's own observation: "we recently found out that some of these engines have libs and config areas we hadn't previously been including").
+
+Decision: commission a max-effort Opus subagent round to establish proper per-engine ground truth. The deliverable is a strong reference catalogue per (engine, version) that all Wave 1 + Wave 2 cells can re-score against.
+
+### Per-engine terminology taxonomy (canonical map)
+
+Each engine has its own naming. The cross-engine semantic categories are the union; the engine-specific class names below are what the ground-truth agents must enumerate exhaustively.
+
+| Semantic category | transformers | vllm | tensorrt-llm |
+|---|---|---|---|
+| Model load | `from_pretrained(**kwargs)` | `EngineArgs` | `LlmArgs` / `TrtLlmArgs` |
+| Sampling | `GenerationConfig` | `SamplingParams` + `BeamSearchParams` | `SamplingParams` + spec-decode configs |
+| Quantization | 8 per-quantizer configs (`BitsAndBytesConfig`, `AwqConfig`, `GPTQConfig`, `HqqConfig`, `EetqConfig`, `QuantoConfig`, `AqlmConfig`, `QuarkConfig`, `FbgemmFp8Config`) | `quantization` field + per-impl | `QuantConfig` + `CalibConfig` |
+| KV cache | `CacheConfig` (v5+) | `CacheConfig` | `KvCacheConfig` |
+| Parallelism | `device_map` + accelerate | `ParallelConfig` | implicit in `LlmArgs` |
+| Compile / build | `CompileConfig` (v5+) | implicit | `BuildConfig` + `BuildCacheConfig` |
+| Scheduler | n/a | `SchedulerConfig` | `SchedulerConfig` |
+| Speculative decode | n/a | `SpeculativeConfig` | `LookaheadConfig` / `MedusaConfig` / `EagleConfig` |
+| Structured / guided | `WatermarkingConfig` (adjacent) | `GuidedDecodingParams` / `StructuredOutputsConfig` | n/a |
+| Env var surface | `TRANSFORMERS_*` env vars | `vllm.envs` module | `TLLM_*` env vars |
+| Plugin / backend | `attn_implementation` | `attention_backend` env | `PluginConfig` |
+| Adapters | adapter configs via HF Hub | `LoRAConfig` / `PromptAdapterConfig` | `LoraConfig` / `PromptAdapterConfig` |
+
+High-confidence suspected coverage gaps in LLEM today:
+- Env var surface across all 3 engines (entire entry-point category likely missing)
+- Speculative decoding configs (vllm `SpeculativeConfig`, tensorrt Lookahead/Medusa/Eagle)
+- Per-quantizer fan-out in transformers (likely only `BitsAndBytesConfig` covered well, 7 others partial)
+- Guided/structured output (vllm `GuidedDecodingParams`)
+- transformers v5+ `CacheConfig` and `CompileConfig`
+- tensorrt `CalibConfig`, `BuildCacheConfig`, `PluginConfig`
+- vllm `BeamSearchParams` (separate, mode-exclusive class)
+
+### Agent round config (locked 2026-06-05)
+
+- **6 agents in parallel**, max-effort Opus.
+- **Per-agent budget**: ~60 min wall, ~150k tokens. ~$3-5 per agent, ~$15-25 total.
+- **Version pairs (same engine, two versions each)**:
+  - transformers v4.57.3 and v5.6.2
+  - vllm v0.7.3 and v0.19.1
+  - tensorrt-llm v0.21.0 and v1.2.1
+- **Scope**: core engine + peer libraries that LLEM users actually set (bitsandbytes, accelerate quant configs, per-engine subconfigs). Exclude wrapper libraries (optimum, vllm-tpu, etc.).
+- **Validation**: agent claim + source citation only. No runtime validation in this round (the existing on-main `validate_invariants.py` runtime gate remains the dispositive SSOT; ground truth here is the claim catalogue).
+- **Output per agent**:
+  - `findings/ground_truth/<engine>/v<X_Y_Z>/schema_ground_truth.json` (canonical envelope shape; drop-in re-scorable)
+  - `findings/ground_truth/<engine>/v<X_Y_Z>/invariants_ground_truth.yaml` (canonical envelope shape)
+  - `findings/ground_truth/<engine>/v<X_Y_Z>/methodology.md` (sources consulted, decisions made, confidence by section)
+  - `findings/ground_truth/<engine>/v<X_Y_Z>/delta.md` (explicit list of additions vs current `engine_versions/<engine>/v<X_Y_Z>/outputs/`)
+- **Primary deliverable**: the delta report. That's where the value lies — "what did we miss".
+
+
+## 2026-06-05 (relaunch) — ground truth round split into 2 batches at xhigh effort
+
+First attempt at the parallel-6 spawn failed when the runtime exited mid-launch; no partial output reached disk. Relaunch discipline:
+
+- **Two batches of 3 agents** (not all 6 in parallel). Batch 1 = old versions (transformers v4.57.3 + vllm v0.7.3 + tensorrt v0.21.0). Batch 2 = new versions (transformers v5.6.2 + vllm v0.19.1 + tensorrt v1.2.1). Batch 1 must close before Batch 2 launches; we learn from Batch 1 (any taxonomy / quality issues) and refine Batch 2's brief if needed.
+- **Effort level: xhigh** — soft token cap ~150k per agent; iterate as many rounds as needed for thoroughness; no rush on wall-clock. Lower than unbounded "max" but higher than "high" (which would cap at ~100k).
+- **Output paths unchanged** from earlier log entry; canonical envelope shape + methodology.md + delta.md per (engine, version).
+- **Primary deliverable**: delta.md (what we missed vs existing baseline). The canonical envelope artefacts let us re-score Wave 1 + Wave 2 cells.
+
+
+## 2026-06-05 (afternoon) — scope reframed as info-generation; primitives inventory locked
+
+User direction: "this is research -> engineering and design will happen after research, so research should cover info to inform all that we would want to know". Wave 2's deliverable is COMPREHENSIVE CHARACTERISATION OF THE DECISION LANDSCAPE, not a workflow recommendation. The eventual production workflow gets designed in a downstream engineering exercise consuming the evidence base Wave 2 builds.
+
+Wrote `WAVE2_SCOPE.md` (the production constraints the eventual workflow satisfies) and `WAVE2_PRIMITIVES.md` (the 8-axis inventory: substrate, LLM role, assembly, model scale, call shape, task, engine, version situation, plus the per-cell + per-axis characterisation deliverables).
+
+### Defaults locked on the 5 open questions
+
+In absence of specific user direction, taking sensible defaults on the 5 open questions surfaced this session. Documented so downstream sessions know where decisions stand:
+
+1. **Task 2 vs Task 3 (invariants vs invalid-configs)**: default to SINGLE task ("invariants covers invalid-config detection because invariants ARE the invalid-set boundary"). Re-evaluate if evidence shows the two task shapes have meaningfully different primitive winners.
+
+2. **Primitives axes**: characterise ALL 8 listed axes. Trim only if early-cell evidence shows an axis is uninformative.
+
+3. **"Self-updating" definition**: measure BOTH (a) workflow runs end-to-end with no human input on bump AND (b) workflow auto-opens a PR for human review on bump. Both are valid production targets; per-cell records which the workflow achieved.
+
+4. **Handoff doc structure**: WAVE2_SCOPE.md + WAVE2_PRIMITIVES.md + WAVE2_PROTOCOL.md (to-be-rewritten) + DECISIONS_LOG.md + findings/ tree + WAVE2_NEXT_SESSION.md (to be written when ground truth lands). Next session uses /goal against this disk state.
+
+5. **Wave 1 re-scoring against ground truth**: re-score Wave 1 cells against GT once GT lands AND retain validated-union score for cross-Wave comparison. Cheap; just re-run the scorer with new reference path.
+
+### What's in flight right now
+
+- Batch 1 (3 ground-truth Opus agents) running: transformers v4.57.3 + vllm v0.7.3 + tensorrt v0.21.0. Soft cap ~150k tokens each, xhigh effort.
+- Batch 2 (transformers v5.6.2 + vllm v0.19.1 + tensorrt v1.2.1) HELD until batch 1 closes. Will refine batch 2 brief based on any taxonomy / quality issues batch 1 surfaces.
+
+### Out of scope for Wave 2 (confirmed)
+
+LangGraph dep, SGLang/LMDeploy vendoring, Claude/GPT API runs, statistical inference, behavioural validation, property-based test generation, SMT/Z3 targets. All Wave 3 candidates if needed.
+
+
+## 2026-06-05 — first ground-truth result: vllm v0.7.3
+
+Batch 1 agent for vllm v0.7.3 reported. Ground truth artefacts at `findings/ground_truth/vllm/v0_7_3/` (schema_ground_truth.json 92 KB, invariants_ground_truth.yaml 62 KB, methodology.md, delta.md).
+
+### Headline numbers
+
+| Category | Baseline | GT | Delta |
+|---|---|---|---|
+| Fields total | unknown | 358 | (big) |
+| Invariants | 26 | 86 | +60 |
+| `vllm.envs` env vars | 0 | 87 | +87 |
+
+### High-value additions
+
+1. **`vllm.envs` entire surface (+87)** — runtime control variables invisible to current LLEM. `VLLM_USE_V1` switches the engine path; `VLLM_ATTENTION_BACKEND` changes kernel dispatch; `VLLM_ALLOW_LONG_MAX_MODEL_LEN` gates a raise. Two source-vs-stub discrepancies flagged: `VLLM_CUDA_MEM_ALIGN_KV_CACHE` and `VLLM_USE_HPU_CONTIGUOUS_CACHE_FETCH` read `VLLM_CONTIGUOUS_PA` (pure footgun).
+
+2. **Silent-normalisation invariants at `VllmConfig` level** — caller declares one thing, engine runs another. MLA models silently disable prefix_caching + chunked_prefill; LoRA silently disables torch.compile; cpu_offload silently disables torch.compile. Hardest bug class: invisible.
+
+3. **Whole missing config classes** — SpeculativeConfig (10 invariants), KVTransferConfig, DecodingConfig, ObservabilityConfig, CompilationConfig. None in baseline.
+
+### Low-confidence sections (likely-need-followup)
+
+- **Quantization sub-config tree** (AWQ / GPTQ / FP8 / ...) not enumerated; `quantization` field treated opaque. Probably needs a targeted followup agent.
+- **Per-platform `check_and_update_config`** under `vllm/platforms/*` not walked; some invariants reference them as gate conditions.
+- **Env-gated invariants** have placeholder kwargs; runner needs to inject platform/env context.
+
+### Implications for Wave 1 / Wave 2 scoring
+
+- Validated-union reference on vllm was covering roughly **30% of reality**.
+- Tree-sitter probe's reported "98.5% recall on vllm schema" was vs an incomplete reference; real recall against GT will be substantially lower.
+- All Wave 1 strategy comparisons need re-scoring once GT is complete across engines.
+- Cost-recall frontier shifts: substrates that "looked good" against partial reference may be catching only a slice.
+
+### Process note
+
+The vllm result confirms the user's intuition about partial coverage. Strong signal to commit to the ground-truth round across all 3 engines x 2 versions and re-score everything.
+
+
+## 2026-06-05 — second ground-truth result: transformers v4.57.3
+
+Batch 1 agent for transformers v4.57.3 reported. Artefacts at `findings/ground_truth/transformers/v4_57_3/`.
+
+### Headline numbers
+
+| Category | Baseline | GT | Multiplier |
+|---|---|---|---|
+| Fields | unknown | 168 top-level + 22 $defs | (big) |
+| Invariants | 37 | 142 | 3.8x |
+| Env vars | 0 | 38 | +38 |
+
+### High-value additions
+
+1. **`HF_HUB_OFFLINE` import-time binding gotcha** — `_is_offline_mode` bound at `transformers.utils.hub:81` import; setting `TRANSFORMERS_OFFLINE` after import is silent no-op. Many LLEM users pin this in Dockerfiles assuming it works. Pure-mining can't catch this; needs a corpus-level env-var pass.
+2. **9 generate-only kwargs rejected by `GenerationConfig.validate`** (`configuration_utils.py:653-668`) — baseline has zero despite 2-line AST walk being sufficient. Mechanical gap in existing miner.
+3. **18 quantization-config classes** beyond BitsAndBytes — GPTQ/AWQ are highest-traffic on HF; missing bits-allowlist gate means `GPTQConfig(bits=5)` slips through config validation.
+
+### Low-confidence sections flagged
+
+- `TorchAoConfig` (dynamic torchao version dep)
+- `CompressedTensorsConfig` / `QuarkConfig` (legacy vs modern dual surface)
+- `attn_implementation` enum (dynamic `ALL_ATTENTION_FUNCTIONS` registry + HF kernel-hub repo specs — needs runtime introspection to fully enumerate)
+
+### Cross-engine meta-finding (2 of 3 in)
+
+| Engine | Baseline | GT | Coverage |
+|---|---|---|---|
+| vllm v0.7.3 | 26 | 86 | 30% |
+| transformers v4.57.3 | 37 | 142 | 26% |
+
+Both engines: zero env-var coverage in baseline. The pattern is consistent: existing producers covered "core" config classes (EngineArgs, GenerationConfig, main subconfigs) but missed env vars, per-quantizer fan-out, long-tail config classes, and silent-normalisation invariants at aggregator level.
+
+
+## 2026-06-05 — third ground-truth result + batch 1 synthesis
+
+Batch 1 closed. All 3 engines have v_old GT artefacts under `findings/ground_truth/<engine>/v<v>/`.
+
+### tensorrt v0.21.0 headline
+
+| Category | Baseline | GT | Delta |
+|---|---|---|---|
+| Fields | 107 | 357 | +250 |
+| Invariants | 35 | 75 | +40 |
+| Env vars | 0 | 44 | +44 |
+
+Misses: PluginConfig (43 fields + Blackwell SM-100 killswitches), 5/6 speculative-decode subclasses (Medusa / Eagle / NGram / DraftTarget / MTP), BuildConfig expansion (27 fields vs baseline opaque), TorchLlmArgs entire PyTorch path (21 fields), CalibConfig (6/7 fields), TLLM_*/TRTLLM_* env vars (44).
+
+Low confidence: LookaheadDecodingConfig defaults resolved C++-side at class-load, TRTLLM_DG_* JIT env vars partial, 17/19 C++ pybind classes out-of-scope (reviewer judgement).
+
+### Cross-engine synthesis (n=3, batch 1)
+
+| Engine | Inv baseline → GT | Mult | Env vars |
+|---|---|---|---|
+| vllm v0.7.3 | 26 → 86 | 3.3x | 0 → 87 |
+| transformers v4.57.3 | 37 → 142 | 3.8x | 0 → 38 |
+| tensorrt v0.21.0 | 35 → 75 | 2.1x | 0 → 44 |
+| **TOTAL** | **98 → 303** | **3.1x** | **0 → 169** |
+
+**Universal patterns (n=3):**
+
+- Env vars 0% baseline coverage everywhere.
+- Per-quantizer / per-decoder fan-out near-0% baseline coverage.
+- Long-tail config classes near-0% baseline coverage.
+- Silent-normalisation invariants at aggregator level near-0% baseline coverage.
+- Mechanical gaps within "covered" surfaces (e.g. 9 generate-only kwargs in transformers GenerationConfig.validate is a 2-line walk baseline missed).
+
+### Implications for downstream
+
+1. All Wave 1 strategy comparisons need re-scoring against GT.
+2. Production workflow must include env vars as first-class category (none of LLEM's existing pipelines handle this).
+3. Dynamic registries + C++ pybind boundaries limit static substrate ceiling; force runtime introspection or LLM-with-runtime-knowledge approaches for some entries.
+
+### Decision: batch 2 brief refinements before launch
+
+Threading 5 refinements into batch 2 agent briefs (transformers v5.6.2, vllm v0.19.1, tensorrt v1.2.1):
+
+1. Explicit "include the categories batch 1 found missing" enumeration per engine.
+2. Mechanical-gap probe (look for 2-line-walk validators baseline missed).
+3. Per-platform / per-backend code paths (vllm platforms/*, tensorrt TorchLlmArgs).
+4. Built-in version delta: each batch-2 agent reads the batch-1 GT for its engine and reports what changed.
+5. C++ pybind scope decision for tensorrt v1.2.1 (out-of-scope in v0.21.0 but document the call).
+
+
+## 2026-06-05 (late) — user answers + GT-as-minimum + improved-det-tools question
+
+User answered the 5 open questions:
+
+1. **Invariant mining vs invalid config mining**: single task. Invariants ARE the invalid-set boundary; mining invariants = mining invalid-set boundary. Invariants are the MAIN focus.
+2. **Primitives axes**: yes, characterise all 8. Agentic/tool-use IS in scope at higher model scales (Wave 1's collapse was at 70B-q4; needs retesting with bigger / better-tooled models).
+3. **Self-updating definition (CLARIFIED)**: the existing workflow is brittle + tautological + can't-know-what-it-doesn't-know + needs maintainer input. LLMs should solve all of those via active exploration / extension, decision & review capacities, tuning the det tool if needed. CRITICAL: robustness must be to DYNAMIC CHANGES in underlying engines — we're not optimising workflow for ONE snapshot, we want a workflow that ACCOUNTS FOR underlying changes and CAN RESPOND to them.
+4. **Handoff doc structure**: confirmed.
+5. **Re-scoring against GT**: defer until Wave 2 cells run, then re-score everything once with the richer GT.
+
+### GT-as-minimum-set policy
+
+Treat ground truth as a MINIMUM SET, not a ceiling. As we encounter more configurations in the wild (across engines, versions, edge cases), the GT artefacts can grow. Add to existing `findings/ground_truth/<engine>/<v>/` files; don't reset.
+
+### Improved-deterministic-tools question
+
+User asked: "now that we have ground truths, can we design better deterministic tools than the ones we already had?"
+
+Strong yes signal from the batch-1 delta pattern. Most of the gaps batch 1 found are MECHANICAL, not fundamental. They were missed because the existing producers used hand-curated class lists and didn't probe several universally-present patterns. A richer deterministic primitive set could close roughly 60-80% of the baseline gap CHEAPLY without any LLM call.
+
+Sketching the proposal at `findings/wave2_improved_det_primitives.md` (this commit's sibling). Key insight: with better det primitives, the LLM's role SHRINKS to the genuinely-hard residual (dynamic registries, C++ pybind, semantic resolution of self.foo.bar). Cost frontier shifts substantially.
+
+### Batch 2 launch schedule
+
+Per user: launch at 3am (roughly 2 hrs from this writing). Batch 2 prompts authored now as ready-to-fire artefacts at `findings/wave2_batch2_prompts.md`. Refinements per earlier synthesis baked in.
+

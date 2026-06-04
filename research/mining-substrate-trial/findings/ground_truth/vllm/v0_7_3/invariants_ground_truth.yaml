@@ -1,0 +1,1343 @@
+schema_version: ground_truth/1.0.0
+engine: vllm
+engine_version: 0.7.3
+engine_git_tag: v0.7.3
+venv_src_root: /tmp/trial_vllm_v0_7_3_venv/src/vllm
+established_at: '2026-06-05'
+established_by: human-supervised LLM, vllm 0.7.3 source-walk
+methodology_ref: research/mining-substrate-trial/findings/ground_truth/vllm/v0_7_3/methodology.md
+
+scope_notes:
+- Invariants here are constraints that vLLM 0.7.3 enforces at config / params construction time
+  (raise ValueError, raise TypeError, warn-and-clamp, silently normalise).
+- Each entry cites the file:line:qualname pair where the predicate lives.
+- Severity vocabulary (matches baseline) - error, warning, dormant, deprecated.
+- Outcome vocabulary - error, warning_emit, dormant_silent, deprecation_warning.
+- kwargs_positive triggers the predicate; kwargs_negative is the minimally-different control.
+
+predicate_kind_legend:
+  lt: <
+  le: <=
+  gt: '>'
+  ge: '>='
+  eq: ==
+  ne: '!='
+  in: in_set
+  not_in: not_in_set
+  type_check: isinstance check
+  cross_field_lt: x < @other
+  cross_field_gt: x > @other
+  mutually_exclusive: at-most-one-of fields may be set
+
+invariants:
+
+# ============================================================================
+# SamplingParams - baseline already covers most of these. Listed here for
+# delta-traceability and to add the ones the baseline missed.
+# ============================================================================
+
+- id: vllm_samplingparams_raises_n_not_type_int
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: type_check
+  native_field: n
+  predicate_value: int
+  message_template: 'n must be an int, but is of type {type(n)}'
+  kwargs_positive: {n: 'str'}
+  kwargs_negative: {n: 1}
+  source: {file: vllm/sampling_params.py, line: 353, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+
+- id: vllm_samplingparams_raises_n_lt_1
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: lt
+  native_field: n
+  predicate_value: 1
+  message_template: 'n must be at least 1, got {n}.'
+  kwargs_positive: {n: 0}
+  kwargs_negative: {n: 1}
+  source: {file: vllm/sampling_params.py, line: 356, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+
+- id: vllm_samplingparams_raises_presence_penalty_out_of_range
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: not_in_range_inclusive
+  native_field: presence_penalty
+  predicate_value: [-2.0, 2.0]
+  message_template: 'presence_penalty must be in [-2, 2], got {presence_penalty}.'
+  kwargs_positive: {presence_penalty: 2.1}
+  kwargs_negative: {presence_penalty: 2.0}
+  source: {file: vllm/sampling_params.py, line: 358, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP - presence_penalty range constraint never proposed/validated.
+
+- id: vllm_samplingparams_raises_frequency_penalty_out_of_range
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: not_in_range_inclusive
+  native_field: frequency_penalty
+  predicate_value: [-2.0, 2.0]
+  message_template: 'frequency_penalty must be in [-2, 2], got {frequency_penalty}.'
+  kwargs_positive: {frequency_penalty: -2.5}
+  kwargs_negative: {frequency_penalty: -2.0}
+  source: {file: vllm/sampling_params.py, line: 361, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_samplingparams_raises_repetition_penalty_out_of_range
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: not_in_range_half_open
+  native_field: repetition_penalty
+  predicate_value: '(0, 2]'
+  message_template: 'repetition_penalty must be in (0, 2], got {repetition_penalty}.'
+  kwargs_positive: {repetition_penalty: 0.0}
+  kwargs_negative: {repetition_penalty: 0.5}
+  source: {file: vllm/sampling_params.py, line: 364, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP - repetition_penalty range never proposed/validated.
+
+- id: vllm_samplingparams_raises_temperature_lt_0p0
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: lt
+  native_field: temperature
+  predicate_value: 0.0
+  message_template: 'temperature must be non-negative, got {temperature}.'
+  kwargs_positive: {temperature: -1.0}
+  kwargs_negative: {temperature: 0.0}
+  source: {file: vllm/sampling_params.py, line: 367, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+
+- id: vllm_samplingparams_warning_temperature_clamped_to_min
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.SamplingParams
+  predicate_kind: in_open_range
+  native_field: temperature
+  predicate_value: '(0.0, 1e-2)'
+  message_template: 'temperature %s is less than %s, which may cause numerical errors nan or inf in tensors. We have maxed it out to %s.'
+  kwargs_positive: {temperature: 0.001}
+  kwargs_negative: {temperature: 0.011}
+  silent_normalisation:
+    field: temperature
+    declared: 0.001
+    observed: 0.01
+  source: {file: vllm/sampling_params.py, line: 303, qualname: 'SamplingParams.__post_init__'}
+  in_baseline: false
+  delta_note: BASELINE GAP - the only WARNING+clamp invariant on SamplingParams; behavioural-change not exception.
+
+- id: vllm_samplingparams_raises_top_p_out_of_range
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: not_in_range_half_open
+  native_field: top_p
+  predicate_value: '(0, 1]'
+  message_template: 'top_p must be in (0, 1], got {top_p}.'
+  kwargs_positive: {top_p: 0.0}
+  kwargs_negative: {top_p: 0.5}
+  source: {file: vllm/sampling_params.py, line: 370, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP - top_p range never proposed/validated.
+
+- id: vllm_samplingparams_raises_top_k_value_out_of_range
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: lt_or_eq
+  native_field: top_k
+  predicate_value: 'top_k < -1 or top_k == 0'
+  message_template: 'top_k must be -1 (disable), or at least 1, got {top_k}.'
+  kwargs_positive: {top_k: 0}
+  kwargs_negative: {top_k: -1}
+  source: {file: vllm/sampling_params.py, line: 372, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP - the ValueError variant (top_k=0) distinct from baseline-covered top_k_not_type_int TypeError.
+
+- id: vllm_samplingparams_raises_top_k_not_type_int
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: type_check
+  native_field: top_k
+  predicate_value: int
+  message_template: 'top_k must be an integer, got {type(top_k).__name__}'
+  kwargs_positive: {top_k: 1.0}
+  kwargs_negative: {top_k: 1}
+  source: {file: vllm/sampling_params.py, line: 375, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+
+- id: vllm_samplingparams_raises_min_p_out_of_range
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: not_in_range_inclusive
+  native_field: min_p
+  predicate_value: [0.0, 1.0]
+  message_template: 'min_p must be in [0, 1], got {min_p}.'
+  kwargs_positive: {min_p: 1.5}
+  kwargs_negative: {min_p: 0.5}
+  source: {file: vllm/sampling_params.py, line: 378, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_samplingparams_raises_max_tokens_lt_1
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: lt
+  native_field: max_tokens
+  predicate_value: 1
+  message_template: 'max_tokens must be at least 1, got {max_tokens}.'
+  kwargs_positive: {max_tokens: 0}
+  kwargs_negative: {max_tokens: 1}
+  source: {file: vllm/sampling_params.py, line: 381, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+
+- id: vllm_samplingparams_raises_min_tokens_lt_0
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: lt
+  native_field: min_tokens
+  predicate_value: 0
+  message_template: 'min_tokens must be greater than or equal to 0, got {min_tokens}.'
+  kwargs_positive: {min_tokens: -1}
+  kwargs_negative: {min_tokens: 0}
+  source: {file: vllm/sampling_params.py, line: 384, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+
+- id: vllm_samplingparams_raises_min_tokens_gt_ref_max_tokens
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: cross_field_gt
+  native_field: min_tokens
+  predicate_value: '@max_tokens'
+  message_template: 'min_tokens must be less than or equal to max_tokens={max_tokens}, got {min_tokens}.'
+  kwargs_positive: {max_tokens: 1, min_tokens: 2}
+  kwargs_negative: {max_tokens: 1, min_tokens: 1}
+  source: {file: vllm/sampling_params.py, line: 387, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+
+- id: vllm_samplingparams_raises_logprobs_lt_0
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: lt
+  native_field: logprobs
+  predicate_value: 0
+  message_template: 'logprobs must be non-negative, got {logprobs}.'
+  kwargs_positive: {logprobs: -1}
+  kwargs_negative: {logprobs: 0}
+  source: {file: vllm/sampling_params.py, line: 391, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+
+- id: vllm_samplingparams_raises_prompt_logprobs_lt_0
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: lt
+  native_field: prompt_logprobs
+  predicate_value: 0
+  message_template: 'prompt_logprobs must be non-negative, got {prompt_logprobs}.'
+  kwargs_positive: {prompt_logprobs: -1}
+  kwargs_negative: {prompt_logprobs: 0}
+  source: {file: vllm/sampling_params.py, line: 394, qualname: 'SamplingParams._verify_args'}
+  in_baseline: true
+
+- id: vllm_samplingparams_raises_truncate_prompt_tokens_lt_1
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: lt
+  native_field: truncate_prompt_tokens
+  predicate_value: 1
+  message_template: 'truncate_prompt_tokens must be >= 1, got {truncate_prompt_tokens}'
+  kwargs_positive: {truncate_prompt_tokens: 0}
+  kwargs_negative: {truncate_prompt_tokens: 1}
+  source: {file: vllm/sampling_params.py, line: 397, qualname: 'SamplingParams._verify_args'}
+  also_enforced_at:
+    note: also enforced declaratively via msgspec.Meta(ge=1) on the field definition; msgspec would raise a ValidationError before _verify_args fires on direct construction
+    source: {file: vllm/sampling_params.py, line: 200}
+  in_baseline: true
+
+- id: vllm_samplingparams_raises_stop_contains_empty_string
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: any_falsy_in_list
+  native_field: stop
+  predicate_value: 'any(not s for s in stop)'
+  message_template: 'stop cannot contain an empty string.'
+  kwargs_positive: {stop: ['']}
+  kwargs_negative: {stop: ['STOP']}
+  source: {file: vllm/sampling_params.py, line: 402, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP - empty-string-in-stop rejection.
+
+- id: vllm_samplingparams_raises_stop_requires_detokenize
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: cross_field_combo
+  native_field: stop
+  predicate_value: 'stop non-empty AND detokenize is False'
+  message_template: 'stop strings are only supported when detokenize is True. Set detokenize=True to use stop.'
+  kwargs_positive: {stop: ['STOP'], detokenize: false}
+  kwargs_negative: {stop: ['STOP'], detokenize: true}
+  source: {file: vllm/sampling_params.py, line: 404, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP - cross-field constraint (stop requires detokenize).
+
+- id: vllm_samplingparams_raises_delta_output_kind_requires_best_of_eq_n
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: cross_field_combo
+  native_field: output_kind
+  predicate_value: 'output_kind == DELTA AND best_of != _real_n'
+  message_template: 'best_of must equal n to use output_kind=DELTA'
+  kwargs_positive: {n: 1, best_of: 2, output_kind: 1}
+  kwargs_negative: {n: 2, best_of: 2, output_kind: 1}
+  source: {file: vllm/sampling_params.py, line: 408, qualname: 'SamplingParams._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP - output_kind/best_of cross-constraint never proposed.
+
+- id: vllm_samplingparams_raises_greedy_requires_n_eq_1
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: cross_field_combo
+  native_field: n
+  predicate_value: 'temperature < 1e-5 AND n > 1'
+  message_template: 'n must be 1 when using greedy sampling, got {n}.'
+  kwargs_positive: {temperature: 0.0, n: 2}
+  kwargs_negative: {temperature: 0.0, n: 1}
+  source: {file: vllm/sampling_params.py, line: 412, qualname: 'SamplingParams._verify_greedy_sampling'}
+  in_baseline: false
+  delta_note: BASELINE GAP - greedy-sampling-requires-n=1 cross-constraint never proposed.
+
+- id: vllm_samplingparams_raises_best_of_lt_ref_n
+  severity: error
+  outcome: error
+  native_type: vllm.SamplingParams
+  predicate_kind: cross_field_lt
+  native_field: best_of
+  predicate_value: '@n'
+  message_template: 'best_of must be greater than or equal to n, got n={n} and best_of={best_of}.'
+  kwargs_positive: {best_of: 1, n: 2}
+  kwargs_negative: {best_of: 2, n: 2}
+  source: {file: vllm/sampling_params.py, line: 295, qualname: 'SamplingParams.__post_init__'}
+  in_baseline: true
+
+- id: vllm_samplingparams_dormant_seed_eq_neg1
+  severity: dormant
+  outcome: dormant_silent
+  emission_channel: none
+  native_type: vllm.SamplingParams
+  predicate_kind: eq
+  native_field: seed
+  predicate_value: -1
+  silent_normalisation:
+    field: seed
+    declared: -1
+    observed: null
+  kwargs_positive: {seed: -1}
+  kwargs_negative: {seed: 0}
+  source: {file: vllm/sampling_params.py, line: 310, qualname: 'SamplingParams.__post_init__'}
+  in_baseline: true
+
+# ============================================================================
+# GuidedDecodingParams - BASELINE GAP (entire struct missing)
+# ============================================================================
+
+- id: vllm_guideddecodingparams_raises_multiple_modes_set
+  severity: error
+  outcome: error
+  native_type: vllm.sampling_params.GuidedDecodingParams
+  predicate_kind: mutually_exclusive
+  native_field: '[json, regex, choice, grammar, json_object]'
+  predicate_value: 'sum(present) > 1'
+  message_template: 'You can only use one kind of guided decoding but multiple are specified: {self.__dict__}'
+  kwargs_positive: {json: '{"type":"object"}', regex: '\d+'}
+  kwargs_negative: {json: '{"type":"object"}'}
+  source: {file: vllm/sampling_params.py, line: 67, qualname: 'GuidedDecodingParams.__post_init__'}
+  in_baseline: false
+  delta_note: BASELINE GAP - the only invariant on GuidedDecodingParams (mutual-exclusion of constraint modes).
+
+# ============================================================================
+# CacheConfig - baseline has one (gpu_memory_utilization)
+# ============================================================================
+
+- id: vllm_cacheconfig_raises_gpu_memory_utilization_gt_1p0
+  severity: error
+  outcome: error
+  native_type: vllm.config.CacheConfig
+  predicate_kind: gt
+  native_field: gpu_memory_utilization
+  predicate_value: 1.0
+  message_template: 'GPU memory utilization must be less than 1.0. Got {gpu_memory_utilization}.'
+  kwargs_positive: {gpu_memory_utilization: 1.1, block_size: 16, swap_space: 4, cache_dtype: auto}
+  kwargs_negative: {gpu_memory_utilization: 0.9, block_size: 16, swap_space: 4, cache_dtype: auto}
+  source: {file: vllm/config.py, line: 1087, qualname: 'CacheConfig._verify_args'}
+  in_baseline: true
+
+- id: vllm_cacheconfig_raises_unknown_cache_dtype
+  severity: error
+  outcome: error
+  native_type: vllm.config.CacheConfig
+  predicate_kind: not_in
+  native_field: cache_dtype
+  predicate_value: ['auto', 'fp8', 'fp8_e4m3', 'fp8_e5m2']
+  message_template: 'Unknown kv cache dtype: {cache_dtype}'
+  kwargs_positive: {cache_dtype: invalid_dtype, block_size: 16, swap_space: 4, gpu_memory_utilization: 0.5}
+  kwargs_negative: {cache_dtype: auto, block_size: 16, swap_space: 4, gpu_memory_utilization: 0.5}
+  source: {file: vllm/config.py, line: 1092, qualname: 'CacheConfig._verify_cache_dtype'}
+  in_baseline: false
+  delta_note: BASELINE GAP - cache_dtype enum constraint never proposed.
+
+- id: vllm_cacheconfig_raises_prefix_caching_with_sliding_window
+  severity: error
+  outcome: error
+  exception_type: NotImplementedError
+  native_type: vllm.config.CacheConfig
+  predicate_kind: cross_field_combo
+  native_field: enable_prefix_caching
+  predicate_value: 'enable_prefix_caching is True AND sliding_window is not None'
+  message_template: 'Prefix caching is not supported with sliding window. Run with --disable-sliding-window to use prefix caching.'
+  kwargs_positive: {enable_prefix_caching: true, sliding_window: 1024, block_size: 16, swap_space: 4, gpu_memory_utilization: 0.5, cache_dtype: auto}
+  kwargs_negative: {enable_prefix_caching: true, sliding_window: null, block_size: 16, swap_space: 4, gpu_memory_utilization: 0.5, cache_dtype: auto}
+  source: {file: vllm/config.py, line: 1108, qualname: 'CacheConfig._verify_prefix_caching'}
+  in_baseline: false
+  delta_note: BASELINE GAP - cross-field NotImplementedError (prefix_caching + sliding_window).
+
+- id: vllm_cacheconfig_raises_swap_space_too_large
+  severity: error
+  outcome: error
+  native_type: vllm.config.CacheConfig
+  predicate_kind: gt_fraction_of_host_memory
+  native_field: swap_space
+  predicate_value: 'cpu_memory_usage > 0.7 * total_cpu_memory'
+  message_template: 'Too large swap space. {cpu_memory_usage:.2f} GiB out of the {total_cpu_memory:.2f} GiB total CPU memory is allocated for the swap space.'
+  kwargs_positive: {swap_space: 10000}
+  kwargs_negative: {swap_space: 4}
+  source: {file: vllm/config.py, line: 1126, qualname: 'CacheConfig.verify_with_parallel_config'}
+  in_baseline: false
+  delta_note: BASELINE GAP - host-resource-dependent invariant; mining substrates often skip these because they require platform context. The 40-70% band also emits a warning_emit.
+
+# ============================================================================
+# LoRAConfig - baseline covers 3 (max_loras<1, max_cpu_loras dormant, max_cpu_loras<max_loras)
+# ============================================================================
+
+- id: vllm_loraconfig_raises_max_loras_lt_1
+  severity: error
+  outcome: error
+  native_type: vllm.config.LoRAConfig
+  predicate_kind: lt
+  native_field: max_loras
+  predicate_value: 1
+  message_template: 'max_loras ({max_loras}) must be >= 1.'
+  kwargs_positive: {max_lora_rank: 16, max_loras: 0}
+  kwargs_negative: {max_lora_rank: 16, max_loras: 1}
+  source: {file: vllm/config.py, line: 2194, qualname: 'LoRAConfig.__post_init__'}
+  in_baseline: true
+
+- id: vllm_loraconfig_dormant_max_cpu_loras_unset
+  severity: dormant
+  outcome: dormant_silent
+  emission_channel: none
+  native_type: vllm.config.LoRAConfig
+  predicate_kind: is_none
+  native_field: max_cpu_loras
+  predicate_value: null
+  silent_normalisation:
+    field: max_cpu_loras
+    declared: null
+    observed: '@max_loras'
+  kwargs_positive: {max_lora_rank: 16, max_loras: 1, max_cpu_loras: null}
+  kwargs_negative: {max_lora_rank: 16, max_loras: 1, max_cpu_loras: 1}
+  source: {file: vllm/config.py, line: 2196, qualname: 'LoRAConfig.__post_init__'}
+  in_baseline: true
+
+- id: vllm_loraconfig_raises_max_cpu_loras_lt_ref_max_loras
+  severity: error
+  outcome: error
+  native_type: vllm.config.LoRAConfig
+  predicate_kind: cross_field_lt
+  native_field: max_cpu_loras
+  predicate_value: '@max_loras'
+  message_template: 'max_cpu_loras ({max_cpu_loras}) must be >= max_loras ({max_loras})'
+  kwargs_positive: {max_lora_rank: 16, max_loras: 2, max_cpu_loras: 1}
+  kwargs_negative: {max_lora_rank: 16, max_loras: 2, max_cpu_loras: 2}
+  source: {file: vllm/config.py, line: 2198, qualname: 'LoRAConfig.__post_init__'}
+  in_baseline: true
+
+- id: vllm_loraconfig_raises_max_lora_rank_not_in_allowed_set
+  severity: error
+  outcome: error
+  native_type: vllm.config.LoRAConfig
+  predicate_kind: not_in
+  native_field: max_lora_rank
+  predicate_value: [8, 16, 32, 64, 128, 256]
+  message_template: 'max_lora_rank ({max_lora_rank}) must be one of (8, 16, 32, 64, 128, 256).'
+  kwargs_positive: {max_lora_rank: 15, max_loras: 1}
+  kwargs_negative: {max_lora_rank: 16, max_loras: 1}
+  source: {file: vllm/config.py, line: 2186, qualname: 'LoRAConfig.__post_init__'}
+  in_baseline: false
+  delta_note: BASELINE GAP - max_lora_rank enum constraint never proposed.
+
+- id: vllm_loraconfig_raises_lora_extra_vocab_size_not_in_allowed_set
+  severity: error
+  outcome: error
+  native_type: vllm.config.LoRAConfig
+  predicate_kind: not_in
+  native_field: lora_extra_vocab_size
+  predicate_value: [0, 256, 512]
+  message_template: 'lora_extra_vocab_size ({lora_extra_vocab_size}) must be one of (0, 256, 512).'
+  kwargs_positive: {max_lora_rank: 16, max_loras: 1, lora_extra_vocab_size: 128}
+  kwargs_negative: {max_lora_rank: 16, max_loras: 1, lora_extra_vocab_size: 256}
+  source: {file: vllm/config.py, line: 2190, qualname: 'LoRAConfig.__post_init__'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_loraconfig_raises_cpu_offload_with_lora
+  severity: error
+  outcome: error
+  native_type: vllm.config.LoRAConfig
+  predicate_kind: cross_config_combo
+  native_field: cache_config.cpu_offload_gb
+  predicate_value: 'cache_config.cpu_offload_gb > 0'
+  message_template: 'CPU offload is not supported with LoRA yet.'
+  kwargs_positive: {cache_config_cpu_offload_gb: 1.0}
+  kwargs_negative: {cache_config_cpu_offload_gb: 0.0}
+  source: {file: vllm/config.py, line: 2205, qualname: 'LoRAConfig.verify_with_cache_config'}
+  in_baseline: false
+  delta_note: BASELINE GAP - cross-config invariant (LoRA vs CacheConfig).
+
+# ============================================================================
+# PromptAdapterConfig - baseline covers 3 of 3
+# ============================================================================
+
+- id: vllm_promptadapterconfig_raises_max_prompt_adapters_lt_1
+  severity: error
+  outcome: error
+  native_type: vllm.config.PromptAdapterConfig
+  predicate_kind: lt
+  native_field: max_prompt_adapters
+  predicate_value: 1
+  message_template: 'max_prompt_adapters ({max_prompt_adapters}) must be >= 1.'
+  kwargs_positive: {max_prompt_adapters: 0, max_prompt_adapter_token: 1}
+  kwargs_negative: {max_prompt_adapters: 1, max_prompt_adapter_token: 1}
+  source: {file: vllm/config.py, line: 2255, qualname: 'PromptAdapterConfig.__post_init__'}
+  in_baseline: true
+
+- id: vllm_promptadapterconfig_raises_max_prompt_adapter_token_eq_0
+  severity: error
+  outcome: error
+  native_type: vllm.config.PromptAdapterConfig
+  predicate_kind: eq
+  native_field: max_prompt_adapter_token
+  predicate_value: 0
+  message_template: 'max_prompt_adapter_token must be set.'
+  kwargs_positive: {max_prompt_adapters: 1, max_prompt_adapter_token: 0}
+  kwargs_negative: {max_prompt_adapters: 1, max_prompt_adapter_token: 1}
+  source: {file: vllm/config.py, line: 2258, qualname: 'PromptAdapterConfig.__post_init__'}
+  in_baseline: true
+
+- id: vllm_promptadapterconfig_dormant_max_cpu_prompt_adapters_unset
+  severity: dormant
+  outcome: dormant_silent
+  emission_channel: none
+  native_type: vllm.config.PromptAdapterConfig
+  predicate_kind: is_none
+  native_field: max_cpu_prompt_adapters
+  predicate_value: null
+  silent_normalisation:
+    field: max_cpu_prompt_adapters
+    declared: null
+    observed: '@max_prompt_adapters'
+  kwargs_positive: {max_prompt_adapters: 1, max_prompt_adapter_token: 1, max_cpu_prompt_adapters: null}
+  kwargs_negative: {max_prompt_adapters: 1, max_prompt_adapter_token: 1, max_cpu_prompt_adapters: 1}
+  source: {file: vllm/config.py, line: 2260, qualname: 'PromptAdapterConfig.__post_init__'}
+  in_baseline: true
+
+# ============================================================================
+# ParallelConfig
+# ============================================================================
+
+- id: vllm_parallelconfig_raises_distributed_executor_backend_not_in_allowed_set
+  severity: error
+  outcome: error
+  native_type: vllm.config.ParallelConfig
+  predicate_kind: not_in
+  native_field: distributed_executor_backend
+  predicate_value: ['ray', 'mp', 'uni', 'external_launcher', null]
+  message_template: "Unrecognized distributed executor backend {distributed_executor_backend}. Supported values are 'ray', 'mp' 'uni', 'external_launcher' or custom ExecutorBase subclass."
+  kwargs_positive: {distributed_executor_backend: __vllm_static_synth__}
+  kwargs_negative: {distributed_executor_backend: mp}
+  source: {file: vllm/config.py, line: 1400, qualname: 'ParallelConfig._verify_args'}
+  in_baseline: true
+
+- id: vllm_parallelconfig_raises_nsight_without_ray
+  severity: error
+  outcome: error
+  native_type: vllm.config.ParallelConfig
+  predicate_kind: cross_field_combo
+  native_field: ray_workers_use_nsight
+  predicate_value: 'ray_workers_use_nsight=True AND not use_ray'
+  message_template: 'Unable to use nsight profiling unless workers run with Ray.'
+  kwargs_positive: {ray_workers_use_nsight: true, distributed_executor_backend: mp}
+  kwargs_negative: {ray_workers_use_nsight: true, distributed_executor_backend: ray}
+  source: {file: vllm/config.py, line: 1418, qualname: 'ParallelConfig._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP - nsight-requires-ray cross-constraint never proposed.
+
+# ============================================================================
+# SchedulerConfig - baseline covers 5
+# ============================================================================
+
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_model_len
+  severity: error
+  outcome: error
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: cross_field_combo
+  native_field: max_num_batched_tokens
+  predicate_value: 'max_num_batched_tokens < max_model_len AND not chunked_prefill_enabled'
+  message_template: 'max_num_batched_tokens ({max_num_batched_tokens}) is smaller than max_model_len ({max_model_len}). This effectively limits the maximum sequence length to max_num_batched_tokens and makes vLLM reject longer sequences. Please increase max_num_batched_tokens or decrease max_model_len.'
+  kwargs_positive: {max_num_batched_tokens: 100, max_model_len: 200, enable_chunked_prefill: false}
+  kwargs_negative: {max_num_batched_tokens: 200, max_model_len: 200, enable_chunked_prefill: false}
+  source: {file: vllm/config.py, line: 1574, qualname: 'SchedulerConfig._verify_args'}
+  in_baseline: true
+
+- id: vllm_schedulerconfig_raises_max_num_batched_tokens_lt_ref_max_num_seqs
+  severity: error
+  outcome: error
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: cross_field_lt
+  native_field: max_num_batched_tokens
+  predicate_value: '@max_num_seqs'
+  message_template: 'max_num_batched_tokens ({max_num_batched_tokens}) must be greater than or equal to max_num_seqs ({max_num_seqs}).'
+  kwargs_positive: {max_num_batched_tokens: 1, max_num_seqs: 2}
+  kwargs_negative: {max_num_batched_tokens: 2, max_num_seqs: 2}
+  source: {file: vllm/config.py, line: 1585, qualname: 'SchedulerConfig._verify_args'}
+  in_baseline: true
+
+- id: vllm_schedulerconfig_raises_num_lookahead_slots_lt_0
+  severity: error
+  outcome: error
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: lt
+  native_field: num_lookahead_slots
+  predicate_value: 0
+  message_template: 'num_lookahead_slots ({num_lookahead_slots}) must be greater than or equal to 0.'
+  kwargs_positive: {num_lookahead_slots: -1}
+  kwargs_negative: {num_lookahead_slots: 0}
+  source: {file: vllm/config.py, line: 1591, qualname: 'SchedulerConfig._verify_args'}
+  in_baseline: true
+
+- id: vllm_schedulerconfig_raises_num_scheduler_steps_lt_1
+  severity: error
+  outcome: error
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: lt
+  native_field: num_scheduler_steps
+  predicate_value: 1
+  message_template: 'num_scheduler_steps ({num_scheduler_steps}) must be greater than or equal to 1.'
+  kwargs_positive: {num_scheduler_steps: 0}
+  kwargs_negative: {num_scheduler_steps: 1}
+  source: {file: vllm/config.py, line: 1597, qualname: 'SchedulerConfig._verify_args'}
+  in_baseline: true
+
+- id: vllm_schedulerconfig_raises_max_num_partial_prefills_lt_1
+  severity: error
+  outcome: error
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: lt
+  native_field: max_num_partial_prefills
+  predicate_value: 1
+  message_template: 'max_num_partial_prefills ({max_num_partial_prefills}) must be greater than or equal to 1.'
+  kwargs_positive: {max_num_partial_prefills: 0}
+  kwargs_negative: {max_num_partial_prefills: 1}
+  source: {file: vllm/config.py, line: 1603, qualname: 'SchedulerConfig._verify_args'}
+  in_baseline: true
+
+- id: vllm_schedulerconfig_raises_partial_prefills_requires_chunked_prefill
+  severity: error
+  outcome: error
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: cross_field_combo
+  native_field: max_num_partial_prefills
+  predicate_value: 'max_num_partial_prefills > 1 AND not chunked_prefill_enabled'
+  message_template: 'Chunked prefill must be enabled to set max_num_partial_prefills > 1.'
+  kwargs_positive: {max_num_partial_prefills: 2, enable_chunked_prefill: false}
+  kwargs_negative: {max_num_partial_prefills: 2, enable_chunked_prefill: true}
+  source: {file: vllm/config.py, line: 1608, qualname: 'SchedulerConfig._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP - cross-field constraint (max_num_partial_prefills > 1 requires chunked_prefill).
+
+- id: vllm_schedulerconfig_raises_long_prefill_token_threshold_gt_ref_max_model_len
+  severity: error
+  outcome: error
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: cross_field_gt
+  native_field: long_prefill_token_threshold
+  predicate_value: '@max_model_len (only checked when max_num_partial_prefills > 1)'
+  message_template: 'long_prefill_token_threshold ({long_prefill_token_threshold}) cannot be greater than the max_model_len ({max_model_len}).'
+  kwargs_positive: {max_num_partial_prefills: 2, long_prefill_token_threshold: 99999, max_model_len: 1024, enable_chunked_prefill: true}
+  kwargs_negative: {max_num_partial_prefills: 2, long_prefill_token_threshold: 100, max_model_len: 1024, enable_chunked_prefill: true}
+  source: {file: vllm/config.py, line: 1612, qualname: 'SchedulerConfig._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_schedulerconfig_raises_max_long_partial_prefills_out_of_range
+  severity: error
+  outcome: error
+  native_type: vllm.config.SchedulerConfig
+  predicate_kind: cross_field_combo
+  native_field: max_long_partial_prefills
+  predicate_value: 'max_long_partial_prefills < 1 OR max_long_partial_prefills > max_num_partial_prefills'
+  message_template: 'max_long_partial_prefills ({max_long_partial_prefills}) must be greater than or equal to 1 and less than or equal to max_num_partial_prefills ({max_num_partial_prefills}).'
+  kwargs_positive: {max_num_partial_prefills: 2, max_long_partial_prefills: 3, enable_chunked_prefill: true}
+  kwargs_negative: {max_num_partial_prefills: 2, max_long_partial_prefills: 2, enable_chunked_prefill: true}
+  source: {file: vllm/config.py, line: 1618, qualname: 'SchedulerConfig._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP - cross-field range constraint never proposed.
+
+# ============================================================================
+# TokenizerPoolConfig - baseline covers 1 (extra_config not dict)
+# ============================================================================
+
+- id: vllm_tokenizerpoolconfig_raises_unknown_pool_type
+  severity: error
+  outcome: error
+  native_type: vllm.config.TokenizerPoolConfig
+  predicate_kind: not_in
+  native_field: pool_type
+  predicate_value: "{'ray'} or any subclass of BaseTokenizerGroup"
+  message_template: 'Unknown pool type: {pool_type}'
+  kwargs_positive: {pool_size: 1, pool_type: invalid_pool, extra_config: {}}
+  kwargs_negative: {pool_size: 1, pool_type: ray, extra_config: {}}
+  source: {file: vllm/config.py, line: 1166, qualname: 'TokenizerPoolConfig.__post_init__'}
+  in_baseline: false
+  delta_note: BASELINE GAP - the pool_type-must-be-ray-or-subclass invariant; baseline only covers extra_config-must-be-dict.
+
+- id: vllm_tokenizerpoolconfig_raises_extra_config_not_type_dict
+  severity: error
+  outcome: error
+  native_type: vllm.config.TokenizerPoolConfig
+  predicate_kind: type_check
+  native_field: extra_config
+  predicate_value: dict
+  message_template: 'extra_config must be a dictionary.'
+  kwargs_positive: {pool_size: 1, pool_type: ray, extra_config: not_a_dict}
+  kwargs_negative: {pool_size: 1, pool_type: ray, extra_config: {}}
+  source: {file: vllm/config.py, line: 1169, qualname: 'TokenizerPoolConfig.__post_init__'}
+  in_baseline: true
+
+# ============================================================================
+# ModelConfig
+# ============================================================================
+
+- id: vllm_modelconfig_raises_unknown_tokenizer_mode
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: not_in
+  native_field: tokenizer_mode
+  predicate_value: ['auto', 'slow', 'mistral', 'custom']
+  message_template: "Unknown tokenizer mode: {tokenizer_mode}. Must be either 'auto', 'slow', 'mistral' or 'custom'."
+  kwargs_positive: {tokenizer_mode: invalid_mode}
+  kwargs_negative: {tokenizer_mode: auto}
+  source: {file: vllm/config.py, line: 471, qualname: 'ModelConfig._verify_tokenizer_mode'}
+  in_baseline: false
+  delta_note: BASELINE GAP - tokenizer_mode enum constraint never proposed.
+
+- id: vllm_modelconfig_raises_unknown_quantization_method
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: not_in
+  native_field: quantization
+  predicate_value: '@QUANTIZATION_METHODS'
+  message_template: 'Unknown quantization method: {quantization}. Must be one of {supported_quantization}.'
+  kwargs_positive: {quantization: invalid_quant}
+  kwargs_negative: {quantization: null}
+  source: {file: vllm/config.py, line: 620, qualname: 'ModelConfig._verify_quantization'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_modelconfig_raises_quantization_method_mismatch
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_field_combo
+  native_field: quantization
+  predicate_value: 'self.quantization != hf_config.quantization_config.quant_method (both set, both non-null)'
+  message_template: 'Quantization method specified in the model config ({quant_method}) does not match the quantization method specified in the `quantization` argument ({self.quantization}).'
+  kwargs_positive: 'quantization=awq with model whose hf_config.quantization_config.quant_method=gptq'
+  kwargs_negative: 'quantization=awq with model whose hf_config.quantization_config.quant_method=awq'
+  source: {file: vllm/config.py, line: 613, qualname: 'ModelConfig._verify_quantization'}
+  in_baseline: false
+  delta_note: BASELINE GAP - hf-config-vs-user cross-source invariant.
+
+- id: vllm_modelconfig_warning_quantization_not_optimized
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.config.ModelConfig
+  predicate_kind: not_in
+  native_field: quantization
+  predicate_value: '@optimized_quantization_methods (fp8, marlin, modelopt, gptq_marlin_24, gptq_marlin, awq_marlin, fbgemm_fp8, compressed_tensors, compressed-tensors, experts_int8, quark)'
+  message_template: '{quantization} quantization is not fully optimized yet. The speed can be slower than non-quantized models.'
+  kwargs_positive: {quantization: awq}
+  kwargs_negative: {quantization: awq_marlin}
+  source: {file: vllm/config.py, line: 628, qualname: 'ModelConfig._verify_quantization'}
+  in_baseline: false
+  delta_note: BASELINE GAP - quantization-perf warning is observable behaviour change.
+
+- id: vllm_modelconfig_warning_cuda_graph_disabled_for_mllama
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_field_combo
+  native_field: hf_config.model_type
+  predicate_value: "model_type == 'mllama' AND not enforce_eager"
+  message_template: 'CUDA graph is not supported for {model_type} yet, fallback to the eager mode.'
+  silent_normalisation:
+    field: enforce_eager
+    declared: false
+    observed: true
+  kwargs_positive: {model: mllama_path, enforce_eager: false}
+  kwargs_negative: {model: mllama_path, enforce_eager: true}
+  source: {file: vllm/config.py, line: 640, qualname: 'ModelConfig._verify_cuda_graph'}
+  in_baseline: false
+  delta_note: BASELINE GAP - model-type-driven silent normalisation of enforce_eager.
+
+- id: vllm_modelconfig_warning_cuda_graph_disabled_for_bnb_8bit
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_field_combo
+  native_field: quantization
+  predicate_value: "quantization=='bitsandbytes' AND hf_config.quantization_config.load_in_8bit AND not enforce_eager"
+  message_template: 'CUDA graph is not supported on BitAndBytes 8bit yet, fallback to the eager mode.'
+  silent_normalisation:
+    field: enforce_eager
+    declared: false
+    observed: true
+  kwargs_positive: {quantization: bitsandbytes, model: 'load_in_8bit_model', enforce_eager: false}
+  kwargs_negative: {quantization: bitsandbytes, model: 'load_in_8bit_model', enforce_eager: true}
+  source: {file: vllm/config.py, line: 658, qualname: 'ModelConfig._verify_bnb_config'}
+  in_baseline: false
+  delta_note: BASELINE GAP - quantization+enforce_eager silent normalisation.
+
+- id: vllm_modelconfig_raises_sleep_mode_non_cuda
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_field_combo
+  native_field: enable_sleep_mode
+  predicate_value: 'enable_sleep_mode=True AND not current_platform.is_cuda()'
+  message_template: 'Sleep mode is only supported on CUDA devices.'
+  kwargs_positive: {enable_sleep_mode: true}
+  kwargs_negative: {enable_sleep_mode: false}
+  source: {file: vllm/config.py, line: 301, qualname: 'ModelConfig.__init__'}
+  in_baseline: false
+  delta_note: BASELINE GAP - platform-gated invariant.
+
+- id: vllm_modelconfig_raises_attention_head_div_tensor_parallel
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_config_combo
+  native_field: num_attention_heads
+  predicate_value: 'num_attention_heads % tensor_parallel_size != 0'
+  message_template: 'Total number of attention heads ({total_num_attention_heads}) must be divisible by tensor parallel size ({tensor_parallel_size}).'
+  kwargs_positive: {tensor_parallel_size: 3, model: 'llama-with-32-heads'}
+  kwargs_negative: {tensor_parallel_size: 4, model: 'llama-with-32-heads'}
+  source: {file: vllm/config.py, line: 716, qualname: 'ModelConfig.verify_with_parallel_config'}
+  in_baseline: false
+  delta_note: BASELINE GAP - cross-config divisibility invariant.
+
+- id: vllm_modelconfig_raises_pipeline_parallel_unsupported_model
+  severity: error
+  outcome: error
+  exception_type: NotImplementedError
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_config_combo
+  native_field: pipeline_parallel_size
+  predicate_value: 'pipeline_parallel_size > 1 AND not ModelRegistry.is_pp_supported_model(architectures)'
+  message_template: 'Pipeline parallelism is not supported for this model. Supported models implement the `SupportsPP` interface.'
+  kwargs_positive: {pipeline_parallel_size: 2, model: 'unsupported-pp-model'}
+  kwargs_negative: {pipeline_parallel_size: 1, model: 'any-model'}
+  source: {file: vllm/config.py, line: 726, qualname: 'ModelConfig.verify_with_parallel_config'}
+  in_baseline: false
+  delta_note: BASELINE GAP - cross-config NotImplementedError.
+
+- id: vllm_modelconfig_raises_max_model_len_exceeds_derived
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_field_gt
+  native_field: max_model_len
+  predicate_value: '@derived_max_model_len (gated by VLLM_ALLOW_LONG_MAX_MODEL_LEN env var)'
+  message_template: 'User-specified max_model_len ({max_model_len}) is greater than the derived max_model_len ({max_len_key}={derived_max_model_len} or model_max_length={model_max_length} in model''s config.json). This may lead to incorrect model outputs or CUDA errors. To allow overriding this maximum, set the env var VLLM_ALLOW_LONG_MAX_MODEL_LEN=1'
+  kwargs_positive: {max_model_len: 999999, env_VLLM_ALLOW_LONG_MAX_MODEL_LEN: '0'}
+  kwargs_negative: {max_model_len: 999999, env_VLLM_ALLOW_LONG_MAX_MODEL_LEN: '1'}
+  source: {file: vllm/config.py, line: 2576, qualname: '_get_and_verify_max_len'}
+  in_baseline: false
+  delta_note: BASELINE GAP - env-var-gated invariant (VLLM_ALLOW_LONG_MAX_MODEL_LEN).
+
+- id: vllm_modelconfig_raises_unknown_dtype
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: not_in
+  native_field: dtype
+  predicate_value: '@_STR_DTYPE_TO_TORCH_DTYPE (half, float16, float, float32, bfloat16) + auto'
+  message_template: 'Unknown dtype: {dtype}'
+  kwargs_positive: {dtype: int8}
+  kwargs_negative: {dtype: float16}
+  source: {file: vllm/config.py, line: 2429, qualname: '_get_and_verify_dtype'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_modelconfig_deprecation_rope_scaling
+  severity: deprecated
+  outcome: deprecation_warning
+  emission_channel: warnings.DeprecationWarning
+  native_type: vllm.config.ModelConfig
+  predicate_kind: is_not_none
+  native_field: rope_scaling
+  predicate_value: 'rope_scaling is not None'
+  message_template: '`--rope-scaling` will be removed in a future release. Please instead use `--hf-overrides ''{rope_scaling!r}''`'
+  kwargs_positive: {rope_scaling: {rope_type: linear, factor: 2.0}}
+  kwargs_negative: {rope_scaling: null}
+  source: {file: vllm/config.py, line: 274, qualname: 'ModelConfig.__init__'}
+  in_baseline: false
+  delta_note: BASELINE GAP - DeprecationWarning is its own outcome class; baseline severity vocab includes deprecated but no rope_* entry.
+
+- id: vllm_modelconfig_deprecation_rope_theta
+  severity: deprecated
+  outcome: deprecation_warning
+  emission_channel: warnings.DeprecationWarning
+  native_type: vllm.config.ModelConfig
+  predicate_kind: is_not_none
+  native_field: rope_theta
+  predicate_value: 'rope_theta is not None'
+  message_template: '`--rope-theta` will be removed in a future release. Please instead use `--hf-overrides ''{rope_theta!r}''`'
+  kwargs_positive: {rope_theta: 10000.0}
+  kwargs_negative: {rope_theta: null}
+  source: {file: vllm/config.py, line: 280, qualname: 'ModelConfig.__init__'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_modelconfig_raises_limit_mm_per_prompt_for_non_multimodal
+  severity: error
+  outcome: error
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_field_combo
+  native_field: limit_mm_per_prompt
+  predicate_value: 'limit_mm_per_prompt is set AND model is not multimodal'
+  message_template: '`limit_mm_per_prompt` is only supported for multimodal models.'
+  kwargs_positive: {model: 'text-only-model', limit_mm_per_prompt: {image: 1}}
+  kwargs_negative: {model: 'text-only-model', limit_mm_per_prompt: null}
+  source: {file: vllm/config.py, line: 431, qualname: 'ModelConfig._init_multimodal_config'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+# ============================================================================
+# SpeculativeConfig
+# ============================================================================
+
+- id: vllm_speculativeconfig_raises_num_speculative_tokens_le_0
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: le
+  native_field: num_speculative_tokens
+  predicate_value: 0
+  message_template: 'Expected num_speculative_tokens to be greater than zero ({num_speculative_tokens}).'
+  kwargs_positive: {num_speculative_tokens: 0}
+  kwargs_negative: {num_speculative_tokens: 1}
+  source: {file: vllm/config.py, line: 2098, qualname: 'SpeculativeConfig._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP - SpeculativeConfig entirely missing from baseline.
+
+- id: vllm_speculativeconfig_raises_unknown_acceptance_method
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: not_in
+  native_field: draft_token_acceptance_method
+  predicate_value: ['rejection_sampler', 'typical_acceptance_sampler']
+  message_template: 'Expected draft_token_acceptance_method to be either rejection_sampler or typical_acceptance_sampler. Instead it is {draft_token_acceptance_method}'
+  kwargs_positive: {draft_token_acceptance_method: invalid_method}
+  kwargs_negative: {draft_token_acceptance_method: rejection_sampler}
+  source: {file: vllm/config.py, line: 2112, qualname: 'SpeculativeConfig._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_speculativeconfig_raises_typical_threshold_or_alpha_lt_0
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: lt_either
+  native_field: '[typical_acceptance_sampler_posterior_threshold, typical_acceptance_sampler_posterior_alpha]'
+  predicate_value: 0
+  message_template: 'Expected typical_acceptance_sampler_posterior_threshold and typical_acceptance_sampler_posterior_alpha to be > 0. Instead found typical_acceptance_sampler_posterior_threshold = {threshold} and typical_acceptance_sampler_posterior_alpha = {alpha}'
+  kwargs_positive: {typical_acceptance_sampler_posterior_threshold: -0.1, typical_acceptance_sampler_posterior_alpha: 0.3}
+  kwargs_negative: {typical_acceptance_sampler_posterior_threshold: 0.09, typical_acceptance_sampler_posterior_alpha: 0.3}
+  source: {file: vllm/config.py, line: 2120, qualname: 'SpeculativeConfig._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_speculativeconfig_raises_ngram_prompt_lookup_max_lt_1
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: lt
+  native_field: ngram_prompt_lookup_max
+  predicate_value: 1
+  message_template: 'ngram_prompt_lookup_max={ngram_prompt_lookup_max} must be > 0'
+  kwargs_positive: {speculative_model: '[ngram]', ngram_prompt_lookup_max: 0}
+  kwargs_negative: {speculative_model: '[ngram]', ngram_prompt_lookup_max: 5}
+  source: {file: vllm/config.py, line: 1823, qualname: 'SpeculativeConfig.maybe_create_spec_config'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_speculativeconfig_raises_ngram_prompt_lookup_min_lt_1
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: lt
+  native_field: ngram_prompt_lookup_min
+  predicate_value: 1
+  message_template: 'ngram_prompt_lookup_min={ngram_prompt_lookup_min} must be > 0'
+  kwargs_positive: {speculative_model: '[ngram]', ngram_prompt_lookup_min: 0, ngram_prompt_lookup_max: 5}
+  kwargs_negative: {speculative_model: '[ngram]', ngram_prompt_lookup_min: 1, ngram_prompt_lookup_max: 5}
+  source: {file: vllm/config.py, line: 1825, qualname: 'SpeculativeConfig.maybe_create_spec_config'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_speculativeconfig_raises_ngram_prompt_lookup_min_gt_max
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: cross_field_gt
+  native_field: ngram_prompt_lookup_min
+  predicate_value: '@ngram_prompt_lookup_max'
+  message_template: 'ngram_prompt_lookup_min={ngram_prompt_lookup_min} cannot be larger than ngram_prompt_lookup_max={ngram_prompt_lookup_max}'
+  kwargs_positive: {speculative_model: '[ngram]', ngram_prompt_lookup_min: 10, ngram_prompt_lookup_max: 5}
+  kwargs_negative: {speculative_model: '[ngram]', ngram_prompt_lookup_min: 1, ngram_prompt_lookup_max: 5}
+  source: {file: vllm/config.py, line: 1827, qualname: 'SpeculativeConfig.maybe_create_spec_config'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_speculativeconfig_raises_speculative_max_model_len_gt_draft_or_target
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: cross_field_gt
+  native_field: speculative_max_model_len
+  predicate_value: '@draft_max_model_len or @target_max_model_len'
+  message_template: 'speculative_max_model_len={speculative_max_model_len} cannot be larger than draft_max_model_len={draft_max_model_len}'
+  kwargs_positive: {speculative_max_model_len: 999999}
+  kwargs_negative: {speculative_max_model_len: 1024}
+  source: {file: vllm/config.py, line: 1959, qualname: 'SpeculativeConfig._maybe_override_draft_max_model_len'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_speculativeconfig_raises_draft_tp_not_1_or_target_tp
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: not_in
+  native_field: speculative_draft_tensor_parallel_size
+  predicate_value: '[1, @target_tensor_parallel_size]'
+  message_template: 'speculative_draft_tensor_parallel_size={speculative_draft_tensor_parallel_size} cannot be other value than 1 or target model tensor_parallel_size'
+  kwargs_positive: {speculative_draft_tensor_parallel_size: 3, tensor_parallel_size: 2}
+  kwargs_negative: {speculative_draft_tensor_parallel_size: 1, tensor_parallel_size: 2}
+  source: {file: vllm/config.py, line: 1997, qualname: 'SpeculativeConfig._verify_and_get_draft_model_tensor_parallel_size'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_speculativeconfig_raises_num_speculative_tokens_exceeds_n_predict
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: cross_field_gt
+  native_field: num_speculative_tokens
+  predicate_value: '@draft_hf_config.n_predict'
+  message_template: 'This speculative model supports a maximum of num_speculative_tokens={n_predict}, but num_speculative_tokens={num_speculative_tokens} was provided.'
+  kwargs_positive: {speculative_model: 'mtp-with-n-predict-3', num_speculative_tokens: 5}
+  kwargs_negative: {speculative_model: 'mtp-with-n-predict-3', num_speculative_tokens: 3}
+  source: {file: vllm/config.py, line: 1884, qualname: 'SpeculativeConfig.maybe_create_spec_config'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_speculativeconfig_raises_missing_num_speculative_tokens
+  severity: error
+  outcome: error
+  native_type: vllm.config.SpeculativeConfig
+  predicate_kind: is_none
+  native_field: num_speculative_tokens
+  predicate_value: null
+  message_template: 'num_speculative_tokens must be provided with speculative_model unless the draft model config contains an n_predict parameter.'
+  kwargs_positive: {speculative_model: 'model-without-n-predict', num_speculative_tokens: null}
+  kwargs_negative: {speculative_model: 'model-without-n-predict', num_speculative_tokens: 1}
+  source: {file: vllm/config.py, line: 1909, qualname: 'SpeculativeConfig.maybe_create_spec_config'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+# ============================================================================
+# DecodingConfig
+# ============================================================================
+
+- id: vllm_decodingconfig_raises_unknown_guided_decoding_backend
+  severity: error
+  outcome: error
+  native_type: vllm.config.DecodingConfig
+  predicate_kind: not_in
+  native_field: guided_decoding_backend
+  predicate_value: ['outlines', 'lm-format-enforcer', 'xgrammar']
+  message_template: "Invalid guided_decoding_backend '{backend}, must be one of {valid_guided_backends}"
+  kwargs_positive: {guided_decoding_backend: invalid_backend}
+  kwargs_negative: {guided_decoding_backend: xgrammar}
+  source: {file: vllm/config.py, line: 2635, qualname: 'DecodingConfig.__post_init__'}
+  in_baseline: false
+  delta_note: BASELINE GAP - DecodingConfig entirely missing from baseline.
+
+# ============================================================================
+# ObservabilityConfig
+# ============================================================================
+
+- id: vllm_observabilityconfig_raises_otlp_without_opentelemetry
+  severity: error
+  outcome: error
+  native_type: vllm.config.ObservabilityConfig
+  predicate_kind: cross_runtime_combo
+  native_field: otlp_traces_endpoint
+  predicate_value: 'otlp_traces_endpoint is set AND opentelemetry import fails'
+  message_template: "OpenTelemetry is not available. Unable to configure 'otlp_traces_endpoint'. Ensure OpenTelemetry packages are installed. Original error:\n{otel_import_error_traceback}"
+  kwargs_positive: {otlp_traces_endpoint: 'http://collector:4317', env_no_opentelemetry: true}
+  kwargs_negative: {otlp_traces_endpoint: null}
+  source: {file: vllm/config.py, line: 2672, qualname: 'ObservabilityConfig.__post_init__'}
+  in_baseline: false
+  delta_note: BASELINE GAP - import-time invariant; ObservabilityConfig missing from baseline.
+
+# ============================================================================
+# KVTransferConfig - BASELINE GAP entire class
+# ============================================================================
+
+- id: vllm_kvtransferconfig_raises_unknown_kv_role
+  severity: error
+  outcome: error
+  native_type: vllm.config.KVTransferConfig
+  predicate_kind: not_in
+  native_field: kv_role
+  predicate_value: ['kv_producer', 'kv_consumer', 'kv_both', null]
+  message_template: 'Unsupported kv_role: {kv_role}. Supported roles are `kv_producer`, `kv_consumer`, and `kv_both`'
+  kwargs_positive: {kv_role: invalid_role}
+  kwargs_negative: {kv_role: kv_producer, kv_connector: PyNcclConnector}
+  source: {file: vllm/config.py, line: 2737, qualname: 'KVTransferConfig.model_post_init'}
+  in_baseline: false
+  delta_note: BASELINE GAP - KVTransferConfig entirely missing.
+
+- id: vllm_kvtransferconfig_raises_connector_without_role
+  severity: error
+  outcome: error
+  native_type: vllm.config.KVTransferConfig
+  predicate_kind: cross_field_combo
+  native_field: kv_role
+  predicate_value: 'kv_connector is not None AND kv_role is None'
+  message_template: 'Please specify kv_disagg_role when kv_connector is set, supported roles are `kv_producer`, `kv_consumer`, and `kv_both`'
+  kwargs_positive: {kv_connector: PyNcclConnector, kv_role: null}
+  kwargs_negative: {kv_connector: PyNcclConnector, kv_role: kv_producer}
+  source: {file: vllm/config.py, line: 2745, qualname: 'KVTransferConfig.model_post_init'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+# ============================================================================
+# CompilationConfig
+# ============================================================================
+
+- id: vllm_compilationconfig_assertion_custom_ops_none_and_all
+  severity: error
+  outcome: error
+  exception_type: AssertionError
+  native_type: vllm.config.CompilationConfig
+  predicate_kind: cross_field_combo
+  native_field: custom_ops
+  predicate_value: "custom_ops.count('none') + custom_ops.count('all') > 1"
+  message_template: "Can only specify 'none' or 'all'"
+  kwargs_positive: {custom_ops: ['none', 'all']}
+  kwargs_negative: {custom_ops: ['none']}
+  source: {file: vllm/config.py, line: 2985, qualname: 'CompilationConfig.model_post_init'}
+  in_baseline: false
+  delta_note: BASELINE GAP - AssertionError variant (rare in vllm config) on CompilationConfig.
+
+- id: vllm_compilationconfig_warning_fusion_without_reshape
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning_once
+  native_type: vllm.config.CompilationConfig.PassConfig
+  predicate_kind: cross_field_combo
+  native_field: enable_fusion
+  predicate_value: 'enable_fusion=True AND enable_reshape=False'
+  message_template: 'Fusion enabled but reshape elimination disabled. RMSNorm + quant (fp8) fusion might not work'
+  kwargs_positive: {enable_fusion: true, enable_reshape: false}
+  kwargs_negative: {enable_fusion: true, enable_reshape: true}
+  source: {file: vllm/config.py, line: 2909, qualname: 'CompilationConfig.PassConfig.model_post_init'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+# ============================================================================
+# VllmConfig (top-level cross-config silent normalisations)
+# ============================================================================
+
+- id: vllm_vllmconfig_warning_mla_disables_chunked_prefill_and_prefix_cache
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.info
+  native_type: vllm.config.VllmConfig
+  predicate_kind: model_property_check
+  native_field: model_config.use_mla
+  predicate_value: 'model_config.use_mla'
+  message_template: 'MLA is enabled; forcing chunked prefill and prefix caching to be disabled.'
+  silent_normalisation:
+    fields: [scheduler_config.enable_chunked_prefill, scheduler_config.chunked_prefill_enabled, cache_config.enable_prefix_caching]
+    declared: true
+    observed: false
+  kwargs_positive: {model: deepseek_v2_path, enable_chunked_prefill: true, enable_prefix_caching: true}
+  kwargs_negative: {model: deepseek_v2_path, enable_chunked_prefill: false, enable_prefix_caching: false}
+  source: {file: vllm/config.py, line: 3328, qualname: 'VllmConfig.__post_init__'}
+  in_baseline: false
+  delta_note: BASELINE GAP - top-level cross-subconfig silent override.
+
+- id: vllm_vllmconfig_warning_cpu_offload_disables_compile
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.config.VllmConfig
+  predicate_kind: cross_subconfig_combo
+  native_field: compilation_config.level
+  predicate_value: 'cache_config.cpu_offload_gb > 0 AND compilation_config.level != NO_COMPILATION'
+  message_template: 'CPU offload is not supported with `torch.compile` yet. Disabling `torch.compile`.'
+  silent_normalisation:
+    field: compilation_config.level
+    declared: '!=0'
+    observed: 0
+  kwargs_positive: {cpu_offload_gb: 1.0, compilation_config_level: 3}
+  kwargs_negative: {cpu_offload_gb: 0.0, compilation_config_level: 3}
+  source: {file: vllm/config.py, line: 3311, qualname: 'VllmConfig.__post_init__'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_vllmconfig_warning_lora_disables_compile
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.config.VllmConfig
+  predicate_kind: cross_subconfig_combo
+  native_field: compilation_config.level
+  predicate_value: 'lora_config is not None AND compilation_config.level != NO_COMPILATION'
+  message_template: 'LoRA is not supported with `torch.compile` yet. Disabling `torch.compile`.'
+  silent_normalisation:
+    field: compilation_config.level
+    declared: '!=0'
+    observed: 0
+  kwargs_positive: {enable_lora: true, compilation_config_level: 3}
+  kwargs_negative: {enable_lora: false, compilation_config_level: 3}
+  source: {file: vllm/config.py, line: 3319, qualname: 'VllmConfig.__post_init__'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_modelconfig_warning_async_output_proc_disabled_with_pipeline_parallel
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_config_combo
+  native_field: use_async_output_proc
+  predicate_value: 'parallel_config.pipeline_parallel_size > 1'
+  message_template: 'Async output processing can not be enabled with pipeline parallel'
+  silent_normalisation:
+    field: use_async_output_proc
+    declared: true
+    observed: false
+  kwargs_positive: {pipeline_parallel_size: 2, disable_async_output_proc: false}
+  kwargs_negative: {pipeline_parallel_size: 1, disable_async_output_proc: false}
+  source: {file: vllm/config.py, line: 675, qualname: 'ModelConfig.verify_async_output_proc'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_modelconfig_warning_async_output_proc_disabled_with_spec_decode
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.config.ModelConfig
+  predicate_kind: cross_config_combo
+  native_field: use_async_output_proc
+  predicate_value: 'speculative_config is not None'
+  message_template: 'Async output processing is not supported with speculative decoding currently.'
+  silent_normalisation:
+    field: use_async_output_proc
+    declared: true
+    observed: false
+  kwargs_positive: {speculative_model: 'draft-model', disable_async_output_proc: false}
+  kwargs_negative: {speculative_model: null, disable_async_output_proc: false}
+  source: {file: vllm/config.py, line: 705, qualname: 'ModelConfig.verify_async_output_proc'}
+  in_baseline: false
+  delta_note: BASELINE GAP.
+
+- id: vllm_modelconfig_warning_async_output_proc_disabled_with_ray_spmd
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.warning
+  native_type: vllm.config.ModelConfig
+  predicate_kind: env_var_combo
+  native_field: use_async_output_proc
+  predicate_value: 'envs.VLLM_USE_RAY_SPMD_WORKER==True'
+  message_template: 'Async output processing can not be enabled with ray spmd'
+  silent_normalisation:
+    field: use_async_output_proc
+    declared: true
+    observed: false
+  kwargs_positive: {env_VLLM_USE_RAY_SPMD_WORKER: '1', disable_async_output_proc: false}
+  kwargs_negative: {env_VLLM_USE_RAY_SPMD_WORKER: '0', disable_async_output_proc: false}
+  source: {file: vllm/config.py, line: 691, qualname: 'ModelConfig.verify_async_output_proc'}
+  in_baseline: false
+  delta_note: BASELINE GAP - env-var-gated invariant.
+
+- id: vllm_parallelconfig_warning_rocm_disables_custom_all_reduce
+  severity: warning
+  outcome: warning_emit
+  emission_channel: logger.info
+  native_type: vllm.config.ParallelConfig
+  predicate_kind: platform_combo
+  native_field: disable_custom_all_reduce
+  predicate_value: 'current_platform.is_rocm()'
+  message_template: 'Disabled the custom all-reduce kernel because it is not supported on AMD GPUs.'
+  silent_normalisation:
+    field: disable_custom_all_reduce
+    declared: false
+    observed: true
+  kwargs_positive: {platform: rocm, disable_custom_all_reduce: false}
+  kwargs_negative: {platform: cuda, disable_custom_all_reduce: false}
+  source: {file: vllm/config.py, line: 1413, qualname: 'ParallelConfig._verify_args'}
+  in_baseline: false
+  delta_note: BASELINE GAP - platform-gated silent normalisation.

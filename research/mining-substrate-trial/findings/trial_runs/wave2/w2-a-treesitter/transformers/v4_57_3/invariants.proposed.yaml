@@ -1,0 +1,756 @@
+schema_version: 1.0.0
+engine: transformers
+engine_version: 4.57.3
+mined_at: '2026-06-04T22:01:06.319219+00:00'
+invariants:
+- id: transformers_generationconfig_validate_early_stopping_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `early_stopping` (not_in)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 543
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.early_stopping:
+        present: true
+        not_in: []
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_max_new_tokens_le
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `max_new_tokens` (le)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 545
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.max_new_tokens:
+        <=: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_pad_token_id_lt
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `pad_token_id` (lt)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 547
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.pad_token_id:
+        <: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_cache_implementation_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `cache_implementation` (not_in)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 554
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.cache_implementation:
+        present: true
+        not_in: []
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_compile_config_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `compile_config` (type_is_not)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 560
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.compile_config:
+        type_is_not: ''
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_do_sample_exact_temperature
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 576
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+      transformers.sampling.temperature: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_temperature_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `temperature` (not_equal)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 576
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.temperature:
+        not_equal: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_do_sample_exact_top_p
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 580
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+      transformers.sampling.top_p: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_top_p_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `top_p` (not_equal)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 580
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.top_p:
+        not_equal: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_do_sample_exact_min_p
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 582
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+      transformers.sampling.min_p: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_min_p_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `min_p` (present)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 582
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.min_p:
+        present: true
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_do_sample_exact_typical_p
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 584
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+      transformers.sampling.typical_p: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_typical_p_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `typical_p` (not_equal)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 584
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.typical_p:
+        not_equal: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_do_sample_exact_top_k
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 588
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+      transformers.sampling.top_k: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_top_k_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `top_k` (not_equal)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 588
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.top_k:
+        not_equal: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_do_sample_exact_epsilon_cutoff
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 590
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+      transformers.sampling.epsilon_cutoff: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_epsilon_cutoff_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `epsilon_cutoff` (not_equal)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 590
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.epsilon_cutoff:
+        not_equal: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_do_sample_exact_eta_cutoff
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 594
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+      transformers.sampling.eta_cutoff: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_eta_cutoff_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `eta_cutoff` (not_equal)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 594
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.eta_cutoff:
+        not_equal: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_num_beams_exact_early_stopping
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_beams` (exact)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 605
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 0
+      transformers.sampling.early_stopping: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_early_stopping_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `early_stopping` (present)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 605
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.early_stopping:
+        present: true
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_num_beams_exact_length_penalty
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_beams` (exact)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 609
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_beams: 0
+      transformers.sampling.length_penalty: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_length_penalty_not_equal
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `length_penalty` (not_equal)
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 609
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.length_penalty:
+        not_equal: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_num_return_sequences_not_equal_do_sample
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `num_return_sequences` (not_equal)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 617
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.num_return_sequences:
+        not_equal: 0
+      transformers.sampling.do_sample:
+        not_equal: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_do_sample_exact
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `do_sample` (exact)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 617
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.do_sample: 0
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_validate_strict_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.validate flags `strict` (present)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 683
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.strict:
+        present: true
+  added_by: wave2_a_treesitter
+- id: transformers_generationconfig_from_pretrained_token_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: GenerationConfig.from_pretrained flags `token` (present)
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: from_pretrained
+    line_at_scan: 878
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.token:
+        present: true
+  added_by: wave2_a_treesitter
+- id: transformers_watermarkingconfig_validate_seeding_scheme_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: WatermarkingConfig.validate flags `seeding_scheme` (not_in)
+  severity: error
+  native_type: transformers.WatermarkingConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1302
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.seeding_scheme:
+        present: true
+        not_in: []
+  added_by: wave2_a_treesitter
+- id: transformers_watermarkingconfig_validate_greenlist_ratio_le
+  engine: transformers
+  library: transformers
+  invariant_under_test: WatermarkingConfig.validate flags `greenlist_ratio` (le)
+  severity: error
+  native_type: transformers.WatermarkingConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1310
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.greenlist_ratio:
+        <=: 0
+  added_by: wave2_a_treesitter
+- id: transformers_watermarkingconfig_validate_context_width_ge
+  engine: transformers
+  library: transformers
+  invariant_under_test: WatermarkingConfig.validate flags `context_width` (ge)
+  severity: error
+  native_type: transformers.WatermarkingConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1318
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.context_width:
+        '>=': 0
+  added_by: wave2_a_treesitter
+- id: transformers_synthidtextwatermarkingconfig_validate_sampling_table_size_gt
+  engine: transformers
+  library: transformers
+  invariant_under_test: SynthIDTextWatermarkingConfig.validate flags `sampling_table_size`
+    (gt)
+  severity: error
+  native_type: transformers.SynthIDTextWatermarkingConfig
+  miner_source:
+    path: generation/configuration_utils.py
+    method: validate
+    line_at_scan: 1407
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.sampling_table_size:
+        '>': 0
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig___init___bnb_4bit_compute_dtype_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.__init__ type-guards `bnb_4bit_compute_dtype`
+    via elif-chain
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: __init__
+    line_at_scan: 485
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_compute_dtype:
+        present: true
+        type_is_not: ''
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig___init___bnb_4bit_quant_storage_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.__init__ type-guards `bnb_4bit_quant_storage`
+    via elif-chain
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: __init__
+    line_at_scan: 494
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_quant_storage:
+        present: true
+        type_is_not: ''
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig___init___load_in_4bit_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.__init__ flags `load_in_4bit` (present)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: __init__
+    line_at_scan: 473
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_4bit:
+        present: true
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig___init___load_in_8bit_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.__init__ flags `load_in_8bit` (present)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: __init__
+    line_at_scan: 473
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_8bit:
+        present: true
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig___init___bnb_4bit_quant_storage_not_in
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.__init__ flags `bnb_4bit_quant_storage`
+    (not_in)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: __init__
+    line_at_scan: 497
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_quant_storage:
+        present: true
+        not_in: []
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig_load_in_4bit_value_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.load_in_4bit flags `value` (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: load_in_4bit
+    line_at_scan: 518
+  match:
+    engine: transformers
+    fields:
+      transformers.value:
+        type_is_not: ''
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig_post_init_load_in_4bit_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `load_in_4bit` (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 542
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_4bit:
+        type_is_not: ''
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig_post_init_load_in_8bit_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `load_in_8bit` (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 545
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_8bit:
+        type_is_not: ''
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig_post_init_llm_int8_threshold_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `llm_int8_threshold` (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 548
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_threshold:
+        type_is_not: ''
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig_post_init_llm_int8_skip_modules_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `llm_int8_skip_modules`
+    (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 551
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_skip_modules:
+        type_is_not: ''
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig_post_init_llm_int8_enable_fp32_cpu_offload_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `llm_int8_enable_fp32_cpu_offload`
+    (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 553
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_enable_fp32_cpu_offload:
+        type_is_not: ''
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig_post_init_llm_int8_has_fp16_weight_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `llm_int8_has_fp16_weight`
+    (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 556
+  match:
+    engine: transformers
+    fields:
+      transformers.llm_int8_has_fp16_weight:
+        type_is_not: ''
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig_post_init_bnb_4bit_quant_type_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `bnb_4bit_quant_type` (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 562
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_quant_type:
+        type_is_not: ''
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig_post_init_bnb_4bit_use_double_quant_type_is_not
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `bnb_4bit_use_double_quant`
+    (type_is_not)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 565
+  match:
+    engine: transformers
+    fields:
+      transformers.bnb_4bit_use_double_quant:
+        type_is_not: ''
+  added_by: wave2_a_treesitter
+- id: transformers_bitsandbytesconfig_post_init_load_in_4bit_ge
+  engine: transformers
+  library: transformers
+  invariant_under_test: BitsAndBytesConfig.post_init flags `load_in_4bit` (ge)
+  severity: error
+  native_type: transformers.BitsAndBytesConfig
+  miner_source:
+    path: utils/quantization_config.py
+    method: post_init
+    line_at_scan: 568
+  match:
+    engine: transformers
+    fields:
+      transformers.load_in_4bit:
+        '>=': 0
+  added_by: wave2_a_treesitter
