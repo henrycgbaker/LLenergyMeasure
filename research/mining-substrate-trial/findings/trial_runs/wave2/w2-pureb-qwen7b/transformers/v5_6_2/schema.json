@@ -1,0 +1,937 @@
+{
+  "schema_version": "2.0.0",
+  "engine": "transformers",
+  "engine_version": "5.6.2",
+  "discovered_at": "2026-06-05T01:35:55.902152+00:00",
+  "engine_params": {
+    "config_class": {
+      "type": {
+        "description": "Upstream type: type[PreTrainedConfig] | None | None"
+      },
+      "default": null
+    },
+    "base_model_prefix": {
+      "type": "string",
+      "default": ""
+    },
+    "model_tags": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "main_input_name": {
+      "type": "string",
+      "default": "input_ids"
+    },
+    "input_modalities": {
+      "type": {
+        "description": "Upstream type: str | list[str]"
+      },
+      "default": "text"
+    },
+    "supports_gradient_checkpointing": {
+      "type": "boolean",
+      "default": false
+    },
+    "config": {
+      "type": {
+        "description": "Upstream type: PreTrainedConfig | str | os.PathLike | None | None"
+      },
+      "default": null
+    },
+    "pretrained_model_name_or_path": {
+      "type": {
+        "description": "Upstream type: str | os.PathLike | None | None"
+      }
+    },
+    "cache_dir": {
+      "type": {
+        "description": "Upstream type: str | os.PathLike | None | None"
+      },
+      "default": null
+    },
+    "ignore_mismatched_sizes": {
+      "type": "boolean",
+      "default": false
+    },
+    "force_download": {
+      "type": "boolean",
+      "default": false
+    },
+    "local_files_only": {
+      "type": "boolean",
+      "default": false
+    },
+    "token": {
+      "type": {
+        "description": "Upstream type: str | bool | None | None"
+      },
+      "default": null
+    },
+    "revision": {
+      "type": "string",
+      "default": "main"
+    },
+    "use_safetensors": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "weights_only": {
+      "type": "boolean",
+      "default": true
+    },
+    "fusion_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "disable_mmap": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    }
+  },
+  "sampling_params": {
+    "extra_output_flags": {
+      "default": "(\"output_attentions\", \"output_hidden_states\", \"output_scores\", \"output_logits\")"
+    },
+    "max_length": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "max_new_tokens": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "min_length": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "min_new_tokens": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "early_stopping": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "max_time": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "stop_strings": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "do_sample": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "num_beams": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "use_cache": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "cache_implementation": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "cache_config": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "temperature": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "top_k": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "top_p": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "min_p": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "top_h": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "typical_p": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "epsilon_cutoff": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "eta_cutoff": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "repetition_penalty": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "encoder_repetition_penalty": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "length_penalty": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "no_repeat_ngram_size": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "bad_words_ids": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "renormalize_logits": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "forced_bos_token_id": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "forced_eos_token_id": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "remove_invalid_values": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "exponential_decay_length_penalty": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "suppress_tokens": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "begin_suppress_tokens": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "sequence_bias": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "token_healing": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "guidance_scale": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "watermarking_config": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "num_return_sequences": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "output_attentions": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "output_hidden_states": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "output_scores": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "output_logits": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "return_dict_in_generate": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "pad_token_id": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "bos_token_id": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "eos_token_id": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "encoder_no_repeat_ngram_size": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "decoder_start_token_id": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "is_assistant": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "num_assistant_tokens": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "num_assistant_tokens_schedule": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "assistant_confidence_threshold": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "prompt_lookup_num_tokens": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "max_matching_ngram_size": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "assistant_early_exit": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "assistant_lookbehind": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "target_lookbehind": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "compile_config": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "disable_compile": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "continuous_batching_config": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "low_memory": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "penalty_alpha": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "dola_layers": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "diversity_penalty": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "num_beam_groups": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "constraints": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "force_words_ids": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "prefill_chunk_size": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "_commit_hash": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "_from_model_config": {
+      "x-source": "kwargs_pop",
+      "default": null
+    },
+    "transformers_version": {
+      "x-source": "kwargs_pop",
+      "default": null
+    }
+  },
+  "$defs": {
+    "GenerationConfig": {
+      "type": "object",
+      "properties": {
+        "extra_output_flags": {
+          "default": "(\"output_attentions\", \"output_hidden_states\", \"output_scores\", \"output_logits\")"
+        },
+        "max_length": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "max_new_tokens": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "min_length": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "min_new_tokens": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "early_stopping": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "max_time": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "stop_strings": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "do_sample": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "num_beams": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "use_cache": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "cache_implementation": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "cache_config": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "temperature": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "top_k": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "top_p": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "min_p": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "top_h": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "typical_p": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "epsilon_cutoff": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "eta_cutoff": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "repetition_penalty": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "encoder_repetition_penalty": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "length_penalty": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "no_repeat_ngram_size": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "bad_words_ids": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "renormalize_logits": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "forced_bos_token_id": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "forced_eos_token_id": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "remove_invalid_values": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "exponential_decay_length_penalty": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "suppress_tokens": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "begin_suppress_tokens": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "sequence_bias": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "token_healing": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "guidance_scale": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "watermarking_config": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "num_return_sequences": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "output_attentions": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "output_hidden_states": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "output_scores": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "output_logits": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "return_dict_in_generate": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "pad_token_id": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "bos_token_id": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "eos_token_id": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "encoder_no_repeat_ngram_size": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "decoder_start_token_id": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "is_assistant": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "num_assistant_tokens": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "num_assistant_tokens_schedule": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "assistant_confidence_threshold": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "prompt_lookup_num_tokens": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "max_matching_ngram_size": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "assistant_early_exit": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "assistant_lookbehind": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "target_lookbehind": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "compile_config": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "disable_compile": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "continuous_batching_config": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "low_memory": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "penalty_alpha": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "dola_layers": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "diversity_penalty": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "num_beam_groups": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "constraints": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "force_words_ids": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "prefill_chunk_size": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "_commit_hash": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "_from_model_config": {
+          "x-source": "kwargs_pop",
+          "default": null
+        },
+        "transformers_version": {
+          "x-source": "kwargs_pop",
+          "default": null
+        }
+      }
+    },
+    "WatermarkingConfig": {
+      "type": "object",
+      "properties": {
+        "greenlist_ratio": {
+          "type": "number",
+          "default": 0.25
+        },
+        "bias": {
+          "type": "number",
+          "default": 2.0
+        },
+        "hashing_key": {
+          "type": "integer",
+          "default": 15485863
+        },
+        "seeding_scheme": {
+          "type": "string",
+          "default": "lefthash"
+        },
+        "context_width": {
+          "type": "integer",
+          "default": 1
+        }
+      }
+    },
+    "SynthIDTextWatermarkingConfig": {
+      "type": "object",
+      "properties": {
+        "ngram_len": {
+          "type": "integer"
+        },
+        "keys": {
+          "type": "array"
+        },
+        "context_history_size": {
+          "type": "integer",
+          "default": 1024
+        },
+        "sampling_table_seed": {
+          "type": "integer",
+          "default": 0
+        },
+        "sampling_table_size": {
+          "type": "integer",
+          "default": "2**16"
+        },
+        "skip_first_ngram_calls": {
+          "type": "boolean",
+          "default": false
+        },
+        "debug_mode": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "CompileConfig": {
+      "type": "object",
+      "properties": {
+        "fullgraph": {
+          "type": "boolean",
+          "default": false
+        },
+        "dynamic": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "backend": {
+          "type": {
+            "description": "Upstream type: str | Callable"
+          },
+          "default": "inductor"
+        },
+        "mode": {
+          "type": "string",
+          "default": "reduce-overhead"
+        },
+        "options": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    },
+    "ContinuousBatchingConfig": {
+      "type": "object",
+      "properties": {
+        "block_size": {
+          "type": "integer",
+          "default": 256
+        },
+        "num_blocks": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "max_batch_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "max_memory_percent": {
+          "type": "number",
+          "default": 0.8
+        },
+        "max_blocks_per_request": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": 0
+        },
+        "allow_block_sharing": {
+          "type": "boolean",
+          "default": true
+        },
+        "use_async_batching": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "use_cuda_graph": {
+          "type": {
+            "description": "Upstream type: bool | tuple[bool, bool] | None | None"
+          },
+          "default": null
+        },
+        "q_padding_interval_size": {
+          "type": "integer",
+          "default": 0
+        },
+        "kv_padding_interval_size": {
+          "type": "integer",
+          "default": 0
+        },
+        "max_cached_graphs": {
+          "type": "integer",
+          "default": 0
+        },
+        "varlen_compile_config": {
+          "type": {
+            "description": "Upstream type: CompileConfig | None | None"
+          },
+          "default": null
+        },
+        "decode_compile_config": {
+          "type": {
+            "description": "Upstream type: CompileConfig | None | None"
+          },
+          "default": null
+        },
+        "use_default_compile_configs": {
+          "type": "boolean",
+          "default": false
+        },
+        "scheduler_type": {
+          "type": "string",
+          "default": "fifo"
+        },
+        "return_logprobs": {
+          "type": "boolean",
+          "default": false
+        },
+        "max_queue_size": {
+          "type": "integer",
+          "default": 0
+        },
+        "per_request_processors": {
+          "type": "boolean",
+          "default": false
+        },
+        "drop_unsupported_processors": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    }
+  },
+  "engine_envs": {
+    "_count": 17,
+    "HF_MODULES_CACHE": {
+      "name": "HF_MODULES_CACHE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "SM_FRAMEWORK_PARAMS": {
+      "name": "SM_FRAMEWORK_PARAMS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "TRAINING_JOB_ARN": {
+      "name": "TRAINING_JOB_ARN",
+      "x-source": "os.getenv/environ.get"
+    },
+    "SM_FRAMEWORK_MODULE": {
+      "name": "SM_FRAMEWORK_MODULE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "AWS_REGION": {
+      "name": "AWS_REGION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "SM_NUM_GPUS": {
+      "name": "SM_NUM_GPUS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "SM_NUM_CPUS": {
+      "name": "SM_NUM_CPUS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "TRANSFORMERS_IS_CI": {
+      "name": "TRANSFORMERS_IS_CI",
+      "x-source": "os.getenv/environ.get"
+    },
+    "ECS_CONTAINER_METADATA_URI": {
+      "name": "ECS_CONTAINER_METADATA_URI",
+      "x-source": "os.environ[...]"
+    },
+    "TORCHELASTIC_RUN_ID": {
+      "name": "TORCHELASTIC_RUN_ID",
+      "x-source": "os.getenv/environ.get"
+    },
+    "ACCELERATE_MIXED_PRECISION": {
+      "name": "ACCELERATE_MIXED_PRECISION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "ACCELERATE_USE_DEEPSPEED": {
+      "name": "ACCELERATE_USE_DEEPSPEED",
+      "x-source": "os.getenv/environ.get"
+    },
+    "ACCELERATE_USE_CPU": {
+      "name": "ACCELERATE_USE_CPU",
+      "x-source": "os.getenv/environ.get"
+    },
+    "ACCELERATE_TORCH_DEVICE": {
+      "name": "ACCELERATE_TORCH_DEVICE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "ACCELERATE_DYNAMO_BACKEND": {
+      "name": "ACCELERATE_DYNAMO_BACKEND",
+      "x-source": "os.environ[...]"
+    },
+    "ACCELERATE_DYNAMO_MODE": {
+      "name": "ACCELERATE_DYNAMO_MODE",
+      "x-source": "os.environ[...]"
+    },
+    "FSDP_CPU_RAM_EFFICIENT_LOADING": {
+      "name": "FSDP_CPU_RAM_EFFICIENT_LOADING",
+      "x-source": "os.environ[...]"
+    }
+  }
+}

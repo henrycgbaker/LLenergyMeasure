@@ -1,0 +1,252 @@
+```yaml
+invariants:
+- id: tensorrt_parallelconfig_devices_length_error
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: len(devices) != self.world_size
+  severity: error
+  native_type: tensorrt._ParallelConfig
+  miner_source:
+    path: llm_args.py
+    method: devices
+    line_at_scan: 10
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._ParallelConfig.devices: {present: true}
+      tensorrt._ParallelConfig.world_size: {present: true}
+  added_by: llm_pure_b
+
+- id: tensorrt_parallelconfig_world_size_auto_parallel_error
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: self.auto_parallel and (self.tp_size > 1 or self.pp_size > 1 or self.cp_size > 1)
+  severity: error
+  native_type: tensorrt._ParallelConfig
+  miner_source:
+    path: llm_args.py
+    method: world_size
+    line_at_scan: 20
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._ParallelConfig.auto_parallel: {present: true}
+      tensorrt._ParallelConfig.tp_size: {present: true}
+      tensorrt._ParallelConfig.pp_size: {present: true}
+      tensorrt._ParallelConfig.cp_size: {present: true}
+  added_by: llm_pure_b
+
+- id: tensorrt_parallelconfig_world_size_non_auto_parallel_error
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: not self.auto_parallel and self._world_size > 1
+  severity: error
+  native_type: tensorrt._ParallelConfig
+  miner_source:
+    path: llm_args.py
+    method: world_size
+    line_at_scan: 30
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._ParallelConfig.auto_parallel: {present: true}
+      tensorrt._ParallelConfig._world_size: {present: true}
+  added_by: llm_pure_b
+
+- id: tensorrt_decodingbaseconfig_invalid_decoding_type
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: config_class is None
+  severity: error
+  native_type: tensorrt.DecodingBaseConfig
+  miner_source:
+    path: llm_args.py
+    method: from_dict
+    line_at_scan: 40
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.DecodingBaseConfig.decoding_type: {present: true}
+  added_by: llm_pure_b
+
+- id: tensorrt_modelwrapper_model_not_provided_error
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: not self.model
+  severity: error
+  native_type: tensorrt._ModelWrapper
+  miner_source:
+    path: llm_args.py
+    method: __post_init__
+    line_at_scan: 50
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._ModelWrapper.model: {present: true}
+  added_by: llm_pure_b
+
+- id: tensorrt_modelwrapper_model_type_error
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: not isinstance(self.model, (str, Path))
+  severity: error
+  native_type: tensorrt._ModelWrapper
+  miner_source:
+    path: llm_args.py
+    method: validate_model
+    line_at_scan: 60
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._ModelWrapper.model: {present: true}
+  added_by: llm_pure_b
+
+- id: tensorrt_base_llmargs_build_config_max_batch_size_error
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: self.max_batch_size > self.build_config.max_batch_size
+  severity: error
+  native_type  : tensorrt.BaseLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 70
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.BaseLlmArgs.max_batch_size: {present: true}
+      tensorrt.BaseLlmArgs.build_config: {present: true, type_is_not: [None]}
+  added_by: llm_pure_b
+
+- id: tensorrt_base_llmargs_build_config_max_num_tokens_error
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: self.max_num_tokens > self.build_config.max_num_tokens
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 80
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.BaseLlmArgs.max_num_tokens: {present: true}
+      tensorrt.BaseLlmArgs.build_config: {present: true, type_is_not: [None]}
+  added_by: llm_pure_b
+
+- id: tensorrt_base_llmargs_max_seq_len_overridden_warning
+  engine  : tensorrt
+  library: tensorrt
+  invariant_under_test: self.max_seq_len != self.build_config.max_seq_len
+  severity: warning
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 90
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.BaseLlmArgs.max_seq_len: {present: true}
+      tensorrt.BaseLlmArgs.build_config: {present: true, type_is
+
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: tensorrt_parallel_config_consistency
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: tp_size, pp_size, cp_size consistency with engine's mapping
+  severity: error
+  native_type: tensorrt.BaseLlmArgs._load_config_from_engine
+  miner_source:
+    path: llm_args.py
+    method: _load_config_from_engine
+    line_at_scan: 10
+  match:
+    tensorrt.BaseLlmArgs.parallel_config: {present: true}
+    tensorrt.EngineConfig.mapping: {present: true}
+  added_by: llm_pure_b
+
+- id: tensorrt_parallel_config_consistency_ckpt
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: tp_size, pp_size, cp_size consistency with checkpoint's mapping
+  severity: error
+  native_type: tensorrt.BaseLlmArgs._load_config_from_ckpt
+  miner_source:
+    path: llm_args.py
+    method: _load_config_from_ckpt
+    line_at_scan: 30
+  match:
+    tensorrt.BaseLlmArgs.parallel_config: {present: true}
+    tensorrt.PretrainedConfig.mapping: {present: true}
+  added_by: llm_pure_b
+
+- id: tensorrt_build_cache_config_validation
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: enable_build_cache is a valid BuildCacheConfig
+  severity: error
+  native_type: tensorrt.TrtLlmArgs.validate_enable_build_cache
+  miner_source:
+    path: llm_args.py
+    method: validate_enable_build_cache
+    line_at_scan: 50
+  match:
+    tensorrt.TrtLlmArgs.enable_build_cache: {present: true}
+  added_by: llm_pure_b
+
+- id: tensorrt_load_format_validation
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: load_format is a valid LoadFormat
+  severity: error
+  native_type: tensorrt.TorchLlmArgs.convert_load_format
+  miner_source:
+    path: llm_args.py
+    method: convert_load_format
+    line_at_scan: 70
+  match:
+    tensorrt.LoadFormat: {present: true}
+  added_by: llm_pure_b
+
+- id: tensorrt_moe_load_balancer_validation
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: moe_load_balancer is a valid file or MoeLoadBalancerConfig
+  severity: error
+  native_type: tensorrt.TorchLlmArgs.validate_moe_load_balancer
+  miner_source:
+    path: llm_args.py
+    method: validate_moe_load_balancer
+    line_at_scan: 90
+  match:
+    tensorrt.TorchLlmArgs.moe_load_balancer: {present: true}
+  added_by: llm_pure_b
+
+- id: tensorrt_cuda_graph_max_batch_size_non_negative
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: cuda_graph_max_batch_size is non-negative
+  severity: error
+  native_type: tensorrt.TorchLlmArgs.validate_cuda_graph_max_batch_size
+  miner_source:
+    path: llm_args.py
+    method: validate_cuda_graph_max_batch_size
+    line_at_scan: 110
+  match:
+    tensorrt.TorchLlmArgs.cuda_graph_max_batch_size: {present: true}
+  added_by: llm_pure_b
+
+- id: tensorrt_free_mem_ratio_range
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: free_mem_ratio is between 0.0 and 1.0
+  severity: error
+  native_type: tensorrt._AutoDeployLlmArgs.validate_free0
+```

@@ -1,0 +1,334 @@
+schema_version: 1.0.0
+engine: transformers
+engine_version: 4.57.3
+invariants:
+- id: quantization_config_auto_round_not_supported
+  engine: transformers
+  library: transformers
+  invariant_under_test: quant_method not in ['gptqv1', 'awq', 'auto-round']
+  severity: error
+  native_type: transformers.quantization.AutoRoundConfig
+  miner_source:
+    path: quantization_config.py
+    method: from_dict.from_dict
+    line_at_scan: 10
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.AutoRoundConfig.quant_method:
+        not_in:
+        - gptqv1
+        - awq
+        - auto-round
+  added_by: llm_pure_b
+- id: quantization_config_gptq_meta_not_supported
+  engine: transformers
+  library: transformers
+  invariant_under_test: quant_method == 'gptq' and 'meta' in config_dict
+  severity: error
+  native_type: transformers.quantization.AutoRoundConfig
+  miner_source:
+    path: quantization_config.py
+    method: from_dict.from_dict
+    line_at_scan: 15
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.AutoRoundConfig.quant_method: gptq
+      transformers.quantization.AutoRoundConfig.meta:
+        present: true
+  added_by: llm_pure_b
+- id: hqq_config_deprecated_keys
+  engine: transformers
+  library: transformers
+  invariant_under_test: deprecated_key in kwargs
+  severity: warning
+  native_type: transformers.quantization.HqqConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 30
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.HqqConfig.deprecated_key:
+        present: true
+  added_by: llm_pure_b
+- id: hqq_config_axis_invalid_value
+  engine: transformers
+  library: transformers
+  invariant_under_test: axis not in [0, 1]
+  severity: error
+  native_type: transformers.quantization.HqqConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 35
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.HqqConfig.axis:
+        <: 0
+        '>': 1
+  added_by: llm_pure_b
+- id: bits_and_bytes_config_load_in_4bit_load_in_8bit_conflict
+  engine: transformers
+  library: transformers
+  invariant_under_test: load_in_4bit and load_in_8bit
+  severity: error
+  native_type: transformers.quantization.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 50
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.BitsAndBytesConfig.load_in_4bit:
+        present: true
+      transformers.quantization.BitsAndBytesConfig.load_in_8bit:
+        present: true
+  added_by: llm_pure_b
+- id: bits_and_bytes_config_bnb_4bit_compute_dtype_invalid_type
+  engine: transformers
+  library: transformers
+  invariant_under_test: not isinstance(bnb_4bit_compute_dtype, (str, torch.dtype))
+  severity: error
+  native_type: transformers.quantization.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 60
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.BitsAndBytesConfig.bnb_4bit_compute_dtype:
+        type_is_not:
+        - str
+        - torch.dtype
+  added_by: llm_pure_b
+- id: bits_and_bytes_config_bnb_4bit_quant_storage_invalid_value
+  engine: transformers
+  library: transformers
+  invariant_under_test: not isinstance(bnb_4bit_quant_storage, (str, torch.dtype))
+  severity: error
+  native_type: transformers.quantization.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 70
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.BitsAndBytesConfig.bnb_4bit_quant_storage:
+        type_is_not:
+        - str
+        - torch.dtype
+  added_by: llm_pure_b
+- id: gptq_config_bits_invalid_value
+  engine: transformers
+  library: transformers
+  invariant_under_test: bits not in [2, 3, 4, 8]
+  severity: error
+  native_type: transformers.quantization.GPTQConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 90
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.GPTQConfig.bits:
+        not_in:
+        - 2
+        - 3
+        - 4
+        - 8
+  added_by: llm_pure_b
+- id: gptq_config_group_size_invalid_value
+  engine: transformers
+  library: transformers
+  invariant_under_test: group_size <= 0 and group_size != -1
+  severity: error
+  native_type: transformers.quantization.GPTQConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 95
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.GPTQConfig.group_size:
+        <=: 0
+        '!=': -1
+  added_by: llm_pure_b
+- id: gptq_config_damp_percent_invalid_range
+  engine: transformers
+  library: transformers
+  invariant_under_test: not (0 < damp_percent < 1)
+  severity: error
+  native_type: transformers.quantization.GPTQConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 100
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.GPTQConfig.damp_percent:
+        <: 0
+        '>': 1
+  added_by: llm_pure_b
+- id: gptq_config_dataset_deprecated_values
+  engine: transformers
+  library: transformers
+  invariant_under_test: dataset in ['ptb', 'ptb-new']
+  severity: error
+  native_typerd: transformers.quantization.GPTQConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 105
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.GPTQConfig.dataset:
+        present: true
+        not_in:
+        - ptb
+        - ptb-new
+  added_by: llm_pure_b
+- id: awq_config_backend_not_supported
+  engine: transformers
+  library: transformers
+  invariant_under_test: backend not in [AwqBackendPackingMethod.AUTOAWQ, AwqBackendPackingMethod.LLMAWQ]
+  severity: error
+  native_type: transformers.quantization.AwqConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init.post_init
+    line_at_scan: 120
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.AwqConfig.backend:
+        not_in:
+        - AwqBackendPackingMethod.AUTOAWQ
+        - AwqBackendPackingMethod.LLMAWQ
+  added_by: llm_pure_b
+- id: awq_config_version_not_supported
+  engine: transformers
+  library: transformers
+  invariant_under_test: version not in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV,
+    AWQLinearVersion.EXLLAMA, AWQLinearVersion.IPEX]
+  severity: error
+  native_type: transformers.quantization.AwqConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init.post_init
+    line_at_scan: 125
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.AwqConfig.version:
+        not_in:
+        - AWQLinearVersion.GEMM
+        - AWQLinearVersion.GEMV
+        - AWQLinearVersion.EXLLAMA
+        - AWQLinearVersion.IPEX
+  added_by: llm_pure_b
+- id: transformers.modeling_utils_dtype_not_in_enum
+  engine: transformers
+  library: transformers
+  invariant_under_test: isinstance(dtype, str) and dtype not in ['auto', 'float16',
+    'bfloat16', 'float32', 'float64', 'complex64', 'complex128']
+  severity: error
+  native_type: transformers.modeling_utils._get_dtype
+  miner_source:
+    path: modeling_utils.py
+    method: _get_dtype
+    line_at_scan: 20
+  match:
+    engine: transformers
+    fields:
+      transformers.modeling_utils._get_dtype.dtype:
+        not_in:
+        - auto
+        - float16
+        - bfloat16
+        - float32
+        - float64
+        - complex64
+        - complex128
+  added_by: llm_pure_b
+- id: transformers.modeling_utils_device_map_not_str_or_dict
+  engine: transformers
+  library: transformers
+  invariant_under_test: isinstance(device_map, str) or isinstance(device_map, dict)
+  severity: error
+  native_type: transformers.modeling_utils._get_device_map
+  miner_source:
+    path: modeling_utils.py
+    method: _get_device_map
+    line_at_scan: 30
+  match:
+    engine: transformers
+    fields:
+      transformers.modeling_utils._get_device_map.device_map:
+        type_is_not:
+        - str
+        - dict
+  added_by: llm_pure_b
+- id: transformers.modeling_utils_dtype_not_torch_dtype
+  engine: transformers
+  library: transformers
+  invariant_under_test: isinstance(dtype, torch.dtype)
+  severity: error
+  native_type: transformers.modeling_utils._get_device_map
+  miner_source:
+    path: modeling_utils.py
+    method: _get_device_map
+    line_at_scan: 35
+  match:
+    engine: transformers
+    fields:
+      transformers.modeling_utils._get_device_map.dtype:
+        type_is_not:
+        - torch.dtype
+  added_by: llm_pure_b
+- id: transformers.modeling_utils_max_memory_not_dict_or_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: isinstance(max_memory, dict) or max_memory is None
+  severity: error
+  native_type: transformers.modeling_utils._get_device_map
+  miner_source:
+    path: modeling_utils.py
+    method: _get_device_map
+    line_at_scan: 40
+  match:
+    engine: transformers
+    fields:
+      transformers.modeling_utils._get_device_map.max_memory:
+        type_is_not:
+        - dict
+        - None
+  added_by: llm_pure_b
+- id: transformers.modeling_utils_device_map_deprecated
+  engine: transformers
+  library: transformers
+  invariant_under_test: device_map is None or isinstance(device_map, str)
+  severity: warning
+  native_type: transformers.modeling_utils.get_extended_attention_mask
+  miner_source:
+    path: modeling_utils.py
+    method: get_extended_attention_mask
+    line_at_scan: 55
+  match:
+    engine: transformers
+    fields:
+      transformers.modeling_utils.get_extended_attention_mask.device_map:
+        present: true
+        not_in:
+        - dict
+  added_by: llm_pure_b

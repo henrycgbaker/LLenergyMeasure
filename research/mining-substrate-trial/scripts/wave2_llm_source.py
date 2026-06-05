@@ -84,7 +84,7 @@ def validator_bodies(path: Path) -> list[tuple[str, str]]:
     return out
 
 
-def chunk_validator_source(files: list[Path], *, max_chars: int = 48_000) -> list[str]:
+def chunk_validator_source(files: list[Path], *, max_chars: int = 22_000) -> list[str]:
     """Greedily pack validator bodies (across the given files, in order) into
     chunks of <= max_chars. ~48k chars ~= 12-16k tokens of source, leaving
     room for the floor catalogue + prompt within a 32k window.
@@ -95,7 +95,7 @@ def chunk_validator_source(files: list[Path], *, max_chars: int = 48_000) -> lis
             continue
         rel = f.name
         for qual, seg in validator_bodies(f):
-            header = f"# ===== {rel} :: {qual} =====\n"
+            header = f"# ===== file={rel}  qualname={qual} =====\n"
             bodies.append((rel, header + seg))
 
     chunks: list[str] = []

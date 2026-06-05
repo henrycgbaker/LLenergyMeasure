@@ -1,0 +1,2044 @@
+{
+  "schema_version": "2.0.0",
+  "engine": "vllm",
+  "engine_version": "0.19.1",
+  "discovered_at": "2026-06-05T01:35:57.424867+00:00",
+  "engine_params": {
+    "model": {
+      "type": "string",
+      "default": "ModelConfig.model"
+    },
+    "enable_return_routed_experts": {
+      "type": "boolean",
+      "default": "ModelConfig.enable_return_routed_experts"
+    },
+    "model_weights": {
+      "type": "string",
+      "default": "ModelConfig.model_weights"
+    },
+    "served_model_name": {
+      "type": {
+        "description": "Upstream type: str | list[str] | None | None"
+      },
+      "default": "ModelConfig.served_model_name"
+    },
+    "tokenizer": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "ModelConfig.tokenizer"
+    },
+    "hf_config_path": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "ModelConfig.hf_config_path"
+    },
+    "runner": {
+      "type": {
+        "description": "Upstream type: RunnerOption"
+      },
+      "default": "ModelConfig.runner"
+    },
+    "convert": {
+      "type": {
+        "description": "Upstream type: ConvertOption"
+      },
+      "default": "ModelConfig.convert"
+    },
+    "skip_tokenizer_init": {
+      "type": "boolean",
+      "default": "ModelConfig.skip_tokenizer_init"
+    },
+    "enable_prompt_embeds": {
+      "type": "boolean",
+      "default": "ModelConfig.enable_prompt_embeds"
+    },
+    "tokenizer_mode": {
+      "type": {
+        "description": "Upstream type: TokenizerMode | str"
+      },
+      "default": "ModelConfig.tokenizer_mode"
+    },
+    "trust_remote_code": {
+      "type": "boolean",
+      "default": "ModelConfig.trust_remote_code"
+    },
+    "allowed_local_media_path": {
+      "type": "string",
+      "default": "ModelConfig.allowed_local_media_path"
+    },
+    "allowed_media_domains": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": "ModelConfig.allowed_media_domains"
+    },
+    "download_dir": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "LoadConfig.download_dir"
+    },
+    "safetensors_load_strategy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "LoadConfig.safetensors_load_strategy"
+    },
+    "load_format": {
+      "type": {
+        "description": "Upstream type: str | LoadFormats"
+      },
+      "default": "LoadConfig.load_format"
+    },
+    "config_format": {
+      "type": "string",
+      "default": "ModelConfig.config_format"
+    },
+    "dtype": {
+      "type": {
+        "description": "Upstream type: ModelDType"
+      },
+      "default": "ModelConfig.dtype"
+    },
+    "kv_cache_dtype": {
+      "type": {
+        "description": "Upstream type: CacheDType"
+      },
+      "default": "CacheConfig.cache_dtype"
+    },
+    "seed": {
+      "type": "integer",
+      "default": "ModelConfig.seed"
+    },
+    "max_model_len": {
+      "type": "integer",
+      "default": "ModelConfig.max_model_len"
+    },
+    "cudagraph_capture_sizes": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": "(\n        CompilationConfig.cudagraph_capture_sizes\n    )"
+    },
+    "max_cudagraph_capture_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "get_field(\n        CompilationConfig, \"max_cudagraph_capture_size\"\n    )"
+    },
+    "distributed_executor_backend": {
+      "type": {
+        "description": "Upstream type: (\n        str | DistributedExecutorBackend | type[Executor] | None\n    ) | None"
+      },
+      "default": "ParallelConfig.distributed_executor_backend"
+    },
+    "pipeline_parallel_size": {
+      "type": "integer",
+      "default": "ParallelConfig.pipeline_parallel_size"
+    },
+    "master_addr": {
+      "type": "string",
+      "default": "ParallelConfig.master_addr"
+    },
+    "master_port": {
+      "type": "integer",
+      "default": "ParallelConfig.master_port"
+    },
+    "nnodes": {
+      "type": "integer",
+      "default": "ParallelConfig.nnodes"
+    },
+    "node_rank": {
+      "type": "integer",
+      "default": "ParallelConfig.node_rank"
+    },
+    "distributed_timeout_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "ParallelConfig.distributed_timeout_seconds"
+    },
+    "tensor_parallel_size": {
+      "type": "integer",
+      "default": "ParallelConfig.tensor_parallel_size"
+    },
+    "prefill_context_parallel_size": {
+      "type": "integer",
+      "default": "ParallelConfig.prefill_context_parallel_size"
+    },
+    "decode_context_parallel_size": {
+      "type": "integer",
+      "default": "ParallelConfig.decode_context_parallel_size"
+    },
+    "dcp_comm_backend": {
+      "type": {
+        "description": "Upstream type: DCPCommBackend"
+      },
+      "default": "ParallelConfig.dcp_comm_backend"
+    },
+    "dcp_kv_cache_interleave_size": {
+      "type": "integer",
+      "default": "ParallelConfig.dcp_kv_cache_interleave_size"
+    },
+    "cp_kv_cache_interleave_size": {
+      "type": "integer",
+      "default": "ParallelConfig.cp_kv_cache_interleave_size"
+    },
+    "data_parallel_size": {
+      "type": "integer",
+      "default": "ParallelConfig.data_parallel_size"
+    },
+    "data_parallel_rank": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "data_parallel_start_rank": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "data_parallel_size_local": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "data_parallel_address": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "data_parallel_rpc_port": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "data_parallel_hybrid_lb": {
+      "type": "boolean",
+      "default": false
+    },
+    "data_parallel_external_lb": {
+      "type": "boolean",
+      "default": false
+    },
+    "data_parallel_backend": {
+      "type": {
+        "description": "Upstream type: DataParallelBackend"
+      },
+      "default": "ParallelConfig.data_parallel_backend"
+    },
+    "enable_expert_parallel": {
+      "type": "boolean",
+      "default": "ParallelConfig.enable_expert_parallel"
+    },
+    "enable_ep_weight_filter": {
+      "type": "boolean",
+      "default": "ParallelConfig.enable_ep_weight_filter"
+    },
+    "moe_backend": {
+      "type": {
+        "description": "Upstream type: MoEBackend"
+      },
+      "default": "KernelConfig.moe_backend"
+    },
+    "all2all_backend": {
+      "type": {
+        "description": "Upstream type: All2AllBackend"
+      },
+      "default": "ParallelConfig.all2all_backend"
+    },
+    "enable_elastic_ep": {
+      "type": "boolean",
+      "default": "ParallelConfig.enable_elastic_ep"
+    },
+    "enable_dbo": {
+      "type": "boolean",
+      "default": "ParallelConfig.enable_dbo"
+    },
+    "ubatch_size": {
+      "type": "integer",
+      "default": "ParallelConfig.ubatch_size"
+    },
+    "dbo_decode_token_threshold": {
+      "type": "integer",
+      "default": "ParallelConfig.dbo_decode_token_threshold"
+    },
+    "dbo_prefill_token_threshold": {
+      "type": "integer",
+      "default": "ParallelConfig.dbo_prefill_token_threshold"
+    },
+    "disable_nccl_for_dp_synchronization": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": "(\n        ParallelConfig.disable_nccl_for_dp_synchronization\n    )"
+    },
+    "eplb_config": {
+      "type": {
+        "description": "Upstream type: EPLBConfig"
+      },
+      "default": "get_field(ParallelConfig, \"eplb_config\")"
+    },
+    "enable_eplb": {
+      "type": "boolean",
+      "default": "ParallelConfig.enable_eplb"
+    },
+    "expert_placement_strategy": {
+      "type": {
+        "description": "Upstream type: ExpertPlacementStrategy"
+      },
+      "default": "(\n        ParallelConfig.expert_placement_strategy\n    )"
+    },
+    "max_parallel_loading_workers": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "(\n        ParallelConfig.max_parallel_loading_workers\n    )"
+    },
+    "block_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "enable_prefix_caching": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "prefix_caching_hash_algo": {
+      "type": {
+        "description": "Upstream type: PrefixCachingHashAlgo"
+      },
+      "default": "(\n        CacheConfig.prefix_caching_hash_algo\n    )"
+    },
+    "disable_sliding_window": {
+      "type": "boolean",
+      "default": "ModelConfig.disable_sliding_window"
+    },
+    "disable_cascade_attn": {
+      "type": "boolean",
+      "default": "ModelConfig.disable_cascade_attn"
+    },
+    "offload_backend": {
+      "type": "string",
+      "default": "OffloadConfig.offload_backend"
+    },
+    "cpu_offload_gb": {
+      "type": "number",
+      "default": "UVAOffloadConfig.cpu_offload_gb"
+    },
+    "cpu_offload_params": {
+      "type": "array",
+      "default": "get_field(UVAOffloadConfig, \"cpu_offload_params\")"
+    },
+    "offload_group_size": {
+      "type": "integer",
+      "default": "PrefetchOffloadConfig.offload_group_size"
+    },
+    "offload_num_in_group": {
+      "type": "integer",
+      "default": "PrefetchOffloadConfig.offload_num_in_group"
+    },
+    "offload_prefetch_step": {
+      "type": "integer",
+      "default": "PrefetchOffloadConfig.offload_prefetch_step"
+    },
+    "offload_params": {
+      "type": "array",
+      "default": "get_field(PrefetchOffloadConfig, \"offload_params\")"
+    },
+    "gpu_memory_utilization": {
+      "type": "number",
+      "default": "CacheConfig.gpu_memory_utilization"
+    },
+    "kv_cache_memory_bytes": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "CacheConfig.kv_cache_memory_bytes"
+    },
+    "max_num_batched_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "max_num_partial_prefills": {
+      "type": "integer",
+      "default": "SchedulerConfig.max_num_partial_prefills"
+    },
+    "max_long_partial_prefills": {
+      "type": "integer",
+      "default": "SchedulerConfig.max_long_partial_prefills"
+    },
+    "long_prefill_token_threshold": {
+      "type": "integer",
+      "default": "SchedulerConfig.long_prefill_token_threshold"
+    },
+    "max_num_seqs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "max_logprobs": {
+      "type": "integer",
+      "default": "ModelConfig.max_logprobs"
+    },
+    "logprobs_mode": {
+      "type": {
+        "description": "Upstream type: LogprobsMode"
+      },
+      "default": "ModelConfig.logprobs_mode"
+    },
+    "disable_log_stats": {
+      "type": "boolean",
+      "default": false
+    },
+    "aggregate_engine_logging": {
+      "type": "boolean",
+      "default": false
+    },
+    "revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "ModelConfig.revision"
+    },
+    "code_revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "ModelConfig.code_revision"
+    },
+    "hf_token": {
+      "type": {
+        "description": "Upstream type: bool | str | None | None"
+      },
+      "default": "ModelConfig.hf_token"
+    },
+    "hf_overrides": {
+      "type": {
+        "description": "Upstream type: HfOverrides"
+      },
+      "default": "get_field(ModelConfig, \"hf_overrides\")"
+    },
+    "tokenizer_revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "ModelConfig.tokenizer_revision"
+    },
+    "quantization": {
+      "type": {
+        "description": "Upstream type: QuantizationMethods | str | None | None"
+      },
+      "default": "ModelConfig.quantization"
+    },
+    "allow_deprecated_quantization": {
+      "type": "boolean",
+      "default": "ModelConfig.allow_deprecated_quantization"
+    },
+    "enforce_eager": {
+      "type": "boolean",
+      "default": "ModelConfig.enforce_eager"
+    },
+    "disable_custom_all_reduce": {
+      "type": "boolean",
+      "default": "ParallelConfig.disable_custom_all_reduce"
+    },
+    "language_model_only": {
+      "type": "boolean",
+      "default": "MultiModalConfig.language_model_only"
+    },
+    "limit_mm_per_prompt": {
+      "type": "object",
+      "default": "get_field(\n        MultiModalConfig, \"limit_per_prompt\"\n    )"
+    },
+    "enable_mm_embeds": {
+      "type": "boolean",
+      "default": "MultiModalConfig.enable_mm_embeds"
+    },
+    "interleave_mm_strings": {
+      "type": "boolean",
+      "default": "MultiModalConfig.interleave_mm_strings"
+    },
+    "media_io_kwargs": {
+      "type": "object",
+      "default": "get_field(\n        MultiModalConfig, \"media_io_kwargs\"\n    )"
+    },
+    "mm_processor_kwargs": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": "MultiModalConfig.mm_processor_kwargs"
+    },
+    "mm_processor_cache_gb": {
+      "type": "number",
+      "default": "MultiModalConfig.mm_processor_cache_gb"
+    },
+    "mm_processor_cache_type": {
+      "type": {
+        "description": "Upstream type: MMCacheType | None | None"
+      },
+      "default": "(\n        MultiModalConfig.mm_processor_cache_type\n    )"
+    },
+    "mm_shm_cache_max_object_size_mb": {
+      "type": "integer",
+      "default": "(\n        MultiModalConfig.mm_shm_cache_max_object_size_mb\n    )"
+    },
+    "mm_encoder_only": {
+      "type": "boolean",
+      "default": "MultiModalConfig.mm_encoder_only"
+    },
+    "mm_encoder_tp_mode": {
+      "type": {
+        "description": "Upstream type: MMEncoderTPMode"
+      },
+      "default": "MultiModalConfig.mm_encoder_tp_mode"
+    },
+    "mm_encoder_attn_backend": {
+      "type": {
+        "description": "Upstream type: AttentionBackendEnum | str | None | None"
+      },
+      "default": "(\n        MultiModalConfig.mm_encoder_attn_backend\n    )"
+    },
+    "io_processor_plugin": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "renderer_num_workers": {
+      "type": "integer",
+      "default": 1
+    },
+    "skip_mm_profiling": {
+      "type": "boolean",
+      "default": "MultiModalConfig.skip_mm_profiling"
+    },
+    "video_pruning_rate": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": "MultiModalConfig.video_pruning_rate"
+    },
+    "mm_tensor_ipc": {
+      "type": {
+        "description": "Upstream type: MMTensorIPC"
+      },
+      "default": "MultiModalConfig.mm_tensor_ipc"
+    },
+    "enable_lora": {
+      "type": "boolean",
+      "default": false
+    },
+    "max_loras": {
+      "type": "integer",
+      "default": "LoRAConfig.max_loras"
+    },
+    "max_lora_rank": {
+      "type": {
+        "description": "Upstream type: MaxLoRARanks"
+      },
+      "default": "LoRAConfig.max_lora_rank"
+    },
+    "default_mm_loras": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": "LoRAConfig.default_mm_loras"
+    },
+    "fully_sharded_loras": {
+      "type": "boolean",
+      "default": "LoRAConfig.fully_sharded_loras"
+    },
+    "max_cpu_loras": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "LoRAConfig.max_cpu_loras"
+    },
+    "lora_dtype": {
+      "type": {
+        "description": "Upstream type: str | torch.dtype | None | None"
+      },
+      "default": "LoRAConfig.lora_dtype"
+    },
+    "lora_target_modules": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": "LoRAConfig.target_modules"
+    },
+    "enable_tower_connector_lora": {
+      "type": "boolean",
+      "default": "LoRAConfig.enable_tower_connector_lora"
+    },
+    "specialize_active_lora": {
+      "type": "boolean",
+      "default": "LoRAConfig.specialize_active_lora"
+    },
+    "ray_workers_use_nsight": {
+      "type": "boolean",
+      "default": "ParallelConfig.ray_workers_use_nsight"
+    },
+    "num_gpu_blocks_override": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "CacheConfig.num_gpu_blocks_override"
+    },
+    "model_loader_extra_config": {
+      "type": "object",
+      "default": "get_field(LoadConfig, \"model_loader_extra_config\")"
+    },
+    "ignore_patterns": {
+      "type": {
+        "description": "Upstream type: str | list[str]"
+      },
+      "default": "get_field(LoadConfig, \"ignore_patterns\")"
+    },
+    "enable_chunked_prefill": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "disable_chunked_mm_input": {
+      "type": "boolean",
+      "default": "SchedulerConfig.disable_chunked_mm_input"
+    },
+    "scheduler_reserve_full_isl": {
+      "type": "boolean",
+      "default": "SchedulerConfig.scheduler_reserve_full_isl"
+    },
+    "disable_hybrid_kv_cache_manager": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": "(\n        SchedulerConfig.disable_hybrid_kv_cache_manager\n    )"
+    },
+    "structured_outputs_config": {
+      "type": {
+        "description": "Upstream type: StructuredOutputsConfig"
+      },
+      "default": "get_field(\n        VllmConfig, \"structured_outputs_config\"\n    )"
+    },
+    "reasoning_parser": {
+      "type": "string",
+      "default": "StructuredOutputsConfig.reasoning_parser"
+    },
+    "reasoning_parser_plugin": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "speculative_config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "show_hidden_metrics_for_version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "(\n        ObservabilityConfig.show_hidden_metrics_for_version\n    )"
+    },
+    "otlp_traces_endpoint": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "ObservabilityConfig.otlp_traces_endpoint"
+    },
+    "collect_detailed_traces": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": "(\n        ObservabilityConfig.collect_detailed_traces\n    )"
+    },
+    "kv_cache_metrics": {
+      "type": "boolean",
+      "default": "ObservabilityConfig.kv_cache_metrics"
+    },
+    "kv_cache_metrics_sample": {
+      "type": "number",
+      "default": "get_field(\n        ObservabilityConfig, \"kv_cache_metrics_sample\"\n    )"
+    },
+    "cudagraph_metrics": {
+      "type": "boolean",
+      "default": "ObservabilityConfig.cudagraph_metrics"
+    },
+    "enable_layerwise_nvtx_tracing": {
+      "type": "boolean",
+      "default": "(\n        ObservabilityConfig.enable_layerwise_nvtx_tracing\n    )"
+    },
+    "enable_mfu_metrics": {
+      "type": "boolean",
+      "default": "ObservabilityConfig.enable_mfu_metrics"
+    },
+    "enable_logging_iteration_details": {
+      "type": "boolean",
+      "default": "(\n        ObservabilityConfig.enable_logging_iteration_details\n    )"
+    },
+    "enable_mm_processor_stats": {
+      "type": "boolean",
+      "default": "ObservabilityConfig.enable_mm_processor_stats"
+    },
+    "scheduling_policy": {
+      "type": {
+        "description": "Upstream type: SchedulerPolicy"
+      },
+      "default": "SchedulerConfig.policy"
+    },
+    "scheduler_cls": {
+      "type": {
+        "description": "Upstream type: str | type[object] | None | None"
+      },
+      "default": "SchedulerConfig.scheduler_cls"
+    },
+    "pooler_config": {
+      "type": {
+        "description": "Upstream type: PoolerConfig | None | None"
+      },
+      "default": "ModelConfig.pooler_config"
+    },
+    "compilation_config": {
+      "type": {
+        "description": "Upstream type: CompilationConfig"
+      },
+      "default": "get_field(VllmConfig, \"compilation_config\")"
+    },
+    "attention_config": {
+      "type": {
+        "description": "Upstream type: AttentionConfig"
+      },
+      "default": "get_field(VllmConfig, \"attention_config\")"
+    },
+    "kernel_config": {
+      "type": {
+        "description": "Upstream type: KernelConfig"
+      },
+      "default": "get_field(VllmConfig, \"kernel_config\")"
+    },
+    "enable_flashinfer_autotune": {
+      "type": "boolean",
+      "default": "get_field(\n        KernelConfig, \"enable_flashinfer_autotune\"\n    )"
+    },
+    "worker_cls": {
+      "type": "string",
+      "default": "ParallelConfig.worker_cls"
+    },
+    "worker_extension_cls": {
+      "type": "string",
+      "default": "ParallelConfig.worker_extension_cls"
+    },
+    "profiler_config": {
+      "type": {
+        "description": "Upstream type: ProfilerConfig"
+      },
+      "default": "get_field(VllmConfig, \"profiler_config\")"
+    },
+    "kv_transfer_config": {
+      "type": {
+        "description": "Upstream type: KVTransferConfig | None | None"
+      },
+      "default": null
+    },
+    "kv_events_config": {
+      "type": {
+        "description": "Upstream type: KVEventsConfig | None | None"
+      },
+      "default": null
+    },
+    "ec_transfer_config": {
+      "type": {
+        "description": "Upstream type: ECTransferConfig | None | None"
+      },
+      "default": null
+    },
+    "reasoning_config": {
+      "type": {
+        "description": "Upstream type: ReasoningConfig"
+      },
+      "default": "get_field(VllmConfig, \"reasoning_config\")"
+    },
+    "generation_config": {
+      "type": "string",
+      "default": "ModelConfig.generation_config"
+    },
+    "enable_sleep_mode": {
+      "type": "boolean",
+      "default": "ModelConfig.enable_sleep_mode"
+    },
+    "override_generation_config": {
+      "type": "object",
+      "default": "get_field(\n        ModelConfig, \"override_generation_config\"\n    )"
+    },
+    "model_impl": {
+      "type": "string",
+      "default": "ModelConfig.model_impl"
+    },
+    "override_attention_dtype": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "ModelConfig.override_attention_dtype"
+    },
+    "attention_backend": {
+      "type": {
+        "description": "Upstream type: AttentionBackendEnum | None | None"
+      },
+      "default": "AttentionConfig.backend"
+    },
+    "calculate_kv_scales": {
+      "type": "boolean",
+      "default": "CacheConfig.calculate_kv_scales"
+    },
+    "kv_cache_dtype_skip_layers": {
+      "type": "array",
+      "default": "get_field(\n        CacheConfig, \"kv_cache_dtype_skip_layers\"\n    )"
+    },
+    "mamba_cache_dtype": {
+      "type": {
+        "description": "Upstream type: MambaDType"
+      },
+      "default": "CacheConfig.mamba_cache_dtype"
+    },
+    "mamba_ssm_cache_dtype": {
+      "type": {
+        "description": "Upstream type: MambaDType"
+      },
+      "default": "CacheConfig.mamba_ssm_cache_dtype"
+    },
+    "mamba_block_size": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": "get_field(CacheConfig, \"mamba_block_size\")"
+    },
+    "mamba_cache_mode": {
+      "type": {
+        "description": "Upstream type: MambaCacheMode"
+      },
+      "default": "CacheConfig.mamba_cache_mode"
+    },
+    "additional_config": {
+      "type": "object",
+      "default": "get_field(VllmConfig, \"additional_config\")"
+    },
+    "use_tqdm_on_load": {
+      "type": "boolean",
+      "default": "LoadConfig.use_tqdm_on_load"
+    },
+    "pt_load_map_location": {
+      "type": {
+        "description": "Upstream type: str | dict[str, str]"
+      },
+      "default": "LoadConfig.pt_load_map_location"
+    },
+    "logits_processors": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": "(\n        ModelConfig.logits_processors\n    )"
+    },
+    "async_scheduling": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": "SchedulerConfig.async_scheduling"
+    },
+    "stream_interval": {
+      "type": "integer",
+      "default": "SchedulerConfig.stream_interval"
+    },
+    "kv_sharing_fast_prefill": {
+      "type": "boolean",
+      "default": "CacheConfig.kv_sharing_fast_prefill"
+    },
+    "optimization_level": {
+      "type": {
+        "description": "Upstream type: OptimizationLevel"
+      },
+      "default": "VllmConfig.optimization_level"
+    },
+    "performance_mode": {
+      "type": {
+        "description": "Upstream type: PerformanceMode"
+      },
+      "default": "VllmConfig.performance_mode"
+    },
+    "kv_offloading_size": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": "CacheConfig.kv_offloading_size"
+    },
+    "kv_offloading_backend": {
+      "type": {
+        "description": "Upstream type: KVOffloadingBackend"
+      },
+      "default": "CacheConfig.kv_offloading_backend"
+    },
+    "tokens_only": {
+      "type": "boolean",
+      "default": false
+    },
+    "shutdown_timeout": {
+      "type": "integer",
+      "default": 0
+    },
+    "weight_transfer_config": {
+      "type": {
+        "description": "Upstream type: WeightTransferConfig | None | None"
+      },
+      "default": "get_field(\n        VllmConfig,\n        \"weight_transfer_config\",\n    )"
+    },
+    "fail_on_environ_validation": {
+      "type": "boolean",
+      "default": false
+    },
+    "gdn_prefill_backend": {
+      "type": {
+        "description": "Upstream type: Literal[\"flashinfer\", \"triton\"] | None | None"
+      },
+      "default": null
+    }
+  },
+  "sampling_params": {
+    "n": {
+      "type": "integer",
+      "default": 1
+    },
+    "presence_penalty": {
+      "type": "number",
+      "default": 0.0
+    },
+    "frequency_penalty": {
+      "type": "number",
+      "default": 0.0
+    },
+    "repetition_penalty": {
+      "type": "number",
+      "default": 1.0
+    },
+    "temperature": {
+      "type": "number",
+      "default": 1.0
+    },
+    "top_p": {
+      "type": "number",
+      "default": 1.0
+    },
+    "top_k": {
+      "type": "integer",
+      "default": 0
+    },
+    "min_p": {
+      "type": "number",
+      "default": 0.0
+    },
+    "seed": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "stop": {
+      "type": {
+        "description": "Upstream type: str | list[str] | None | None"
+      },
+      "default": null
+    },
+    "stop_token_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "ignore_eos": {
+      "type": "boolean",
+      "default": false
+    },
+    "max_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": 16
+    },
+    "min_tokens": {
+      "type": "integer",
+      "default": 0
+    },
+    "logprobs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "prompt_logprobs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "flat_logprobs": {
+      "type": "boolean",
+      "default": false
+    },
+    "detokenize": {
+      "type": "boolean",
+      "default": true
+    },
+    "skip_special_tokens": {
+      "type": "boolean",
+      "default": true
+    },
+    "spaces_between_special_tokens": {
+      "type": "boolean",
+      "default": true
+    },
+    "include_stop_str_in_output": {
+      "type": "boolean",
+      "default": false
+    },
+    "output_kind": {
+      "type": {
+        "description": "Upstream type: RequestOutputKind"
+      },
+      "default": "RequestOutputKind.CUMULATIVE"
+    },
+    "skip_clone": {
+      "type": "boolean",
+      "default": false
+    },
+    "output_text_buffer_length": {
+      "type": "integer",
+      "default": 0
+    },
+    "structured_outputs": {
+      "type": {
+        "description": "Upstream type: StructuredOutputsParams | None | None"
+      },
+      "default": null
+    },
+    "logit_bias": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "allowed_token_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "extra_args": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "bad_words": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "skip_reading_prefix_cache": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "thinking_token_budget": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "repetition_detection": {
+      "type": {
+        "description": "Upstream type: RepetitionDetectionParams | None | None"
+      },
+      "default": null
+    }
+  },
+  "engine_envs": {
+    "_count": 227,
+    "XDG_CACHE_HOME": {
+      "name": "XDG_CACHE_HOME",
+      "x-source": "os.getenv/environ.get"
+    },
+    "XDG_CONFIG_HOME": {
+      "name": "XDG_CONFIG_HOME",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DISABLE_COMPILE_CACHE": {
+      "name": "VLLM_DISABLE_COMPILE_CACHE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_BATCH_INVARIANT": {
+      "name": "VLLM_BATCH_INVARIANT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_AOT_COMPILE": {
+      "name": "VLLM_USE_AOT_COMPILE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_MEGA_AOT_ARTIFACT": {
+      "name": "VLLM_USE_MEGA_AOT_ARTIFACT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_PORT": {
+      "name": "VLLM_PORT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_TARGET_DEVICE": {
+      "name": "VLLM_TARGET_DEVICE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MAIN_CUDA_VERSION": {
+      "name": "VLLM_MAIN_CUDA_VERSION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "MAX_JOBS": {
+      "name": "MAX_JOBS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "NVCC_THREADS": {
+      "name": "NVCC_THREADS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_PRECOMPILED": {
+      "name": "VLLM_USE_PRECOMPILED",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_PRECOMPILED_WHEEL_LOCATION": {
+      "name": "VLLM_PRECOMPILED_WHEEL_LOCATION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_SKIP_PRECOMPILED_VERSION_SUFFIX": {
+      "name": "VLLM_SKIP_PRECOMPILED_VERSION_SUFFIX",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DOCKER_BUILD_CONTEXT": {
+      "name": "VLLM_DOCKER_BUILD_CONTEXT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VERBOSE": {
+      "name": "VERBOSE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CONFIG_ROOT": {
+      "name": "VLLM_CONFIG_ROOT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CACHE_ROOT": {
+      "name": "VLLM_CACHE_ROOT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_HOST_IP": {
+      "name": "VLLM_HOST_IP",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_RPC_BASE_PATH": {
+      "name": "VLLM_RPC_BASE_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_MODELSCOPE": {
+      "name": "VLLM_USE_MODELSCOPE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_RINGBUFFER_WARNING_INTERVAL": {
+      "name": "VLLM_RINGBUFFER_WARNING_INTERVAL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "CUDA_HOME": {
+      "name": "CUDA_HOME",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_NCCL_SO_PATH": {
+      "name": "VLLM_NCCL_SO_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "LD_LIBRARY_PATH": {
+      "name": "LD_LIBRARY_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_SLEEP_MEM_CHUNK_SIZE": {
+      "name": "VLLM_ROCM_SLEEP_MEM_CHUNK_SIZE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_STANDALONE_COMPILE": {
+      "name": "VLLM_USE_STANDALONE_COMPILE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ENABLE_PREGRAD_PASSES": {
+      "name": "VLLM_ENABLE_PREGRAD_PASSES",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_PATTERN_MATCH_DEBUG": {
+      "name": "VLLM_PATTERN_MATCH_DEBUG",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DEBUG_DUMP_PATH": {
+      "name": "VLLM_DEBUG_DUMP_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_BYTECODE_HOOK": {
+      "name": "VLLM_USE_BYTECODE_HOOK",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_FORCE_AOT_LOAD": {
+      "name": "VLLM_FORCE_AOT_LOAD",
+      "x-source": "os.getenv/environ.get"
+    },
+    "LOCAL_RANK": {
+      "name": "LOCAL_RANK",
+      "x-source": "os.getenv/environ.get"
+    },
+    "CUDA_VISIBLE_DEVICES": {
+      "name": "CUDA_VISIBLE_DEVICES",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ENGINE_ITERATION_TIMEOUT_S": {
+      "name": "VLLM_ENGINE_ITERATION_TIMEOUT_S",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ENGINE_READY_TIMEOUT_S": {
+      "name": "VLLM_ENGINE_READY_TIMEOUT_S",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_API_KEY": {
+      "name": "VLLM_API_KEY",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DEBUG_LOG_API_SERVER_RESPONSE": {
+      "name": "VLLM_DEBUG_LOG_API_SERVER_RESPONSE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "S3_ACCESS_KEY_ID": {
+      "name": "S3_ACCESS_KEY_ID",
+      "x-source": "os.getenv/environ.get"
+    },
+    "S3_SECRET_ACCESS_KEY": {
+      "name": "S3_SECRET_ACCESS_KEY",
+      "x-source": "os.getenv/environ.get"
+    },
+    "S3_ENDPOINT_URL": {
+      "name": "S3_ENDPOINT_URL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USAGE_STATS_SERVER": {
+      "name": "VLLM_USAGE_STATS_SERVER",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_NO_USAGE_STATS": {
+      "name": "VLLM_NO_USAGE_STATS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DO_NOT_TRACK": {
+      "name": "VLLM_DO_NOT_TRACK",
+      "x-source": "os.getenv/environ.get"
+    },
+    "DO_NOT_TRACK": {
+      "name": "DO_NOT_TRACK",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USAGE_SOURCE": {
+      "name": "VLLM_USAGE_SOURCE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CONFIGURE_LOGGING": {
+      "name": "VLLM_CONFIGURE_LOGGING",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LOGGING_CONFIG_PATH": {
+      "name": "VLLM_LOGGING_CONFIG_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LOGGING_LEVEL": {
+      "name": "VLLM_LOGGING_LEVEL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LOGGING_STREAM": {
+      "name": "VLLM_LOGGING_STREAM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LOGGING_PREFIX": {
+      "name": "VLLM_LOGGING_PREFIX",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LOGGING_COLOR": {
+      "name": "VLLM_LOGGING_COLOR",
+      "x-source": "os.getenv/environ.get"
+    },
+    "NO_COLOR": {
+      "name": "NO_COLOR",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LOG_STATS_INTERVAL": {
+      "name": "VLLM_LOG_STATS_INTERVAL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_TRACE_FUNCTION": {
+      "name": "VLLM_TRACE_FUNCTION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_PP_LAYER_PARTITION": {
+      "name": "VLLM_PP_LAYER_PARTITION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CPU_KVCACHE_SPACE": {
+      "name": "VLLM_CPU_KVCACHE_SPACE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CPU_OMP_THREADS_BIND": {
+      "name": "VLLM_CPU_OMP_THREADS_BIND",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CPU_NUM_OF_RESERVED_CPU": {
+      "name": "VLLM_CPU_NUM_OF_RESERVED_CPU",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CPU_SGL_KERNEL": {
+      "name": "VLLM_CPU_SGL_KERNEL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ZENTORCH_WEIGHT_PREPACK": {
+      "name": "VLLM_ZENTORCH_WEIGHT_PREPACK",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_RAY_COMPILED_DAG_OVERLAP_COMM": {
+      "name": "VLLM_USE_RAY_COMPILED_DAG_OVERLAP_COMM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_RAY_WRAPPED_PP_COMM": {
+      "name": "VLLM_USE_RAY_WRAPPED_PP_COMM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ASSETS_CACHE": {
+      "name": "VLLM_ASSETS_CACHE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ASSETS_CACHE_MODEL_CLEAN": {
+      "name": "VLLM_ASSETS_CACHE_MODEL_CLEAN",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_IMAGE_FETCH_TIMEOUT": {
+      "name": "VLLM_IMAGE_FETCH_TIMEOUT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_VIDEO_FETCH_TIMEOUT": {
+      "name": "VLLM_VIDEO_FETCH_TIMEOUT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_AUDIO_FETCH_TIMEOUT": {
+      "name": "VLLM_AUDIO_FETCH_TIMEOUT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MEDIA_FETCH_MAX_RETRIES": {
+      "name": "VLLM_MEDIA_FETCH_MAX_RETRIES",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MEDIA_URL_ALLOW_REDIRECTS": {
+      "name": "VLLM_MEDIA_URL_ALLOW_REDIRECTS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MEDIA_LOADING_THREAD_COUNT": {
+      "name": "VLLM_MEDIA_LOADING_THREAD_COUNT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MAX_AUDIO_CLIP_FILESIZE_MB": {
+      "name": "VLLM_MAX_AUDIO_CLIP_FILESIZE_MB",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_VIDEO_LOADER_BACKEND": {
+      "name": "VLLM_VIDEO_LOADER_BACKEND",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MEDIA_CONNECTOR": {
+      "name": "VLLM_MEDIA_CONNECTOR",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_XLA_CACHE_PATH": {
+      "name": "VLLM_XLA_CACHE_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_XLA_CHECK_RECOMPILATION": {
+      "name": "VLLM_XLA_CHECK_RECOMPILATION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_XLA_USE_SPMD": {
+      "name": "VLLM_XLA_USE_SPMD",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_SPARSE_INDEXER_MAX_LOGITS_MB": {
+      "name": "VLLM_SPARSE_INDEXER_MAX_LOGITS_MB",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_KEEP_ALIVE_ON_ENGINE_DEATH": {
+      "name": "VLLM_KEEP_ALIVE_ON_ENGINE_DEATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ALLOW_LONG_MAX_MODEL_LEN": {
+      "name": "VLLM_ALLOW_LONG_MAX_MODEL_LEN",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_TEST_FORCE_FP8_MARLIN": {
+      "name": "VLLM_TEST_FORCE_FP8_MARLIN",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_TEST_FORCE_LOAD_FORMAT": {
+      "name": "VLLM_TEST_FORCE_LOAD_FORMAT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_RPC_TIMEOUT": {
+      "name": "VLLM_RPC_TIMEOUT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_HTTP_TIMEOUT_KEEP_ALIVE": {
+      "name": "VLLM_HTTP_TIMEOUT_KEEP_ALIVE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MAX_N_SEQUENCES": {
+      "name": "VLLM_MAX_N_SEQUENCES",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LORA_RESOLVER_CACHE_DIR": {
+      "name": "VLLM_LORA_RESOLVER_CACHE_DIR",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LORA_RESOLVER_HF_REPO_LIST": {
+      "name": "VLLM_LORA_RESOLVER_HF_REPO_LIST",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_TRITON_AWQ": {
+      "name": "VLLM_USE_TRITON_AWQ",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ALLOW_RUNTIME_LORA_UPDATING": {
+      "name": "VLLM_ALLOW_RUNTIME_LORA_UPDATING",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_SKIP_P2P_CHECK": {
+      "name": "VLLM_SKIP_P2P_CHECK",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ENABLE_FLA_PACKED_RECURRENT_DECODE": {
+      "name": "VLLM_ENABLE_FLA_PACKED_RECURRENT_DECODE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DISABLE_PYNCCL": {
+      "name": "VLLM_DISABLE_PYNCCL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_OINK_OPS": {
+      "name": "VLLM_USE_OINK_OPS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_AITER": {
+      "name": "VLLM_ROCM_USE_AITER",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_AITER_PAGED_ATTN": {
+      "name": "VLLM_ROCM_USE_AITER_PAGED_ATTN",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_AITER_LINEAR": {
+      "name": "VLLM_ROCM_USE_AITER_LINEAR",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_AITER_MOE": {
+      "name": "VLLM_ROCM_USE_AITER_MOE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_AITER_RMSNORM": {
+      "name": "VLLM_ROCM_USE_AITER_RMSNORM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_AITER_MLA": {
+      "name": "VLLM_ROCM_USE_AITER_MLA",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_AITER_MHA": {
+      "name": "VLLM_ROCM_USE_AITER_MHA",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_AITER_FP4_ASM_GEMM": {
+      "name": "VLLM_ROCM_USE_AITER_FP4_ASM_GEMM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_AITER_TRITON_ROPE": {
+      "name": "VLLM_ROCM_USE_AITER_TRITON_ROPE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_AITER_FP8BMM": {
+      "name": "VLLM_ROCM_USE_AITER_FP8BMM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_AITER_FP4BMM": {
+      "name": "VLLM_ROCM_USE_AITER_FP4BMM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION": {
+      "name": "VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS": {
+      "name": "VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_AITER_TRITON_GEMM": {
+      "name": "VLLM_ROCM_USE_AITER_TRITON_GEMM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_USE_SKINNY_GEMM": {
+      "name": "VLLM_ROCM_USE_SKINNY_GEMM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_FP8_PADDING": {
+      "name": "VLLM_ROCM_FP8_PADDING",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_MOE_PADDING": {
+      "name": "VLLM_ROCM_MOE_PADDING",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT": {
+      "name": "VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16": {
+      "name": "VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB": {
+      "name": "VLLM_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB",
+      "x-source": "os.getenv/environ.get"
+    },
+    "Q_SCALE_CONSTANT": {
+      "name": "Q_SCALE_CONSTANT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "K_SCALE_CONSTANT": {
+      "name": "K_SCALE_CONSTANT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "V_SCALE_CONSTANT": {
+      "name": "V_SCALE_CONSTANT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ENABLE_V1_MULTIPROCESSING": {
+      "name": "VLLM_ENABLE_V1_MULTIPROCESSING",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LOG_BATCHSIZE_INTERVAL": {
+      "name": "VLLM_LOG_BATCHSIZE_INTERVAL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_SERVER_DEV_MODE": {
+      "name": "VLLM_SERVER_DEV_MODE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_V1_OUTPUT_PROC_CHUNK_SIZE": {
+      "name": "VLLM_V1_OUTPUT_PROC_CHUNK_SIZE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MLA_DISABLE": {
+      "name": "VLLM_MLA_DISABLE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_RAY_PER_WORKER_GPUS": {
+      "name": "VLLM_RAY_PER_WORKER_GPUS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_RAY_BUNDLE_INDICES": {
+      "name": "VLLM_RAY_BUNDLE_INDICES",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CUDART_SO_PATH": {
+      "name": "VLLM_CUDART_SO_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DP_RANK": {
+      "name": "VLLM_DP_RANK",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DP_RANK_LOCAL": {
+      "name": "VLLM_DP_RANK_LOCAL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DP_SIZE": {
+      "name": "VLLM_DP_SIZE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DP_MASTER_IP": {
+      "name": "VLLM_DP_MASTER_IP",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DP_MASTER_PORT": {
+      "name": "VLLM_DP_MASTER_PORT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MOE_DP_CHUNK_SIZE": {
+      "name": "VLLM_MOE_DP_CHUNK_SIZE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ENABLE_MOE_DP_CHUNK": {
+      "name": "VLLM_ENABLE_MOE_DP_CHUNK",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_RANDOMIZE_DP_DUMMY_INPUTS": {
+      "name": "VLLM_RANDOMIZE_DP_DUMMY_INPUTS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_RAY_DP_PACK_STRATEGY": {
+      "name": "VLLM_RAY_DP_PACK_STRATEGY",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY": {
+      "name": "VLLM_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_RAY_EXTRA_ENV_VARS_TO_COPY": {
+      "name": "VLLM_RAY_EXTRA_ENV_VARS_TO_COPY",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CI_USE_S3": {
+      "name": "VLLM_CI_USE_S3",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MODEL_REDIRECT_PATH": {
+      "name": "VLLM_MODEL_REDIRECT_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MARLIN_USE_ATOMIC_ADD": {
+      "name": "VLLM_MARLIN_USE_ATOMIC_ADD",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MXFP4_USE_MARLIN": {
+      "name": "VLLM_MXFP4_USE_MARLIN",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DEEPEPLL_NVFP4_DISPATCH": {
+      "name": "VLLM_DEEPEPLL_NVFP4_DISPATCH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_V1_USE_OUTLINES_CACHE": {
+      "name": "VLLM_V1_USE_OUTLINES_CACHE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_TPU_MOST_MODEL_LEN": {
+      "name": "VLLM_TPU_MOST_MODEL_LEN",
+      "x-source": "os.getenv/environ.get"
+    },
+    "JAX_PLATFORMS": {
+      "name": "JAX_PLATFORMS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_DEEP_GEMM": {
+      "name": "VLLM_USE_DEEP_GEMM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MOE_USE_DEEP_GEMM": {
+      "name": "VLLM_MOE_USE_DEEP_GEMM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_DEEP_GEMM_E8M0": {
+      "name": "VLLM_USE_DEEP_GEMM_E8M0",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_DEEP_GEMM_TMA_ALIGNED_SCALES": {
+      "name": "VLLM_USE_DEEP_GEMM_TMA_ALIGNED_SCALES",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_FUSED_MOE_GROUPED_TOPK": {
+      "name": "VLLM_USE_FUSED_MOE_GROUPED_TOPK",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_BLOCKSCALE_FP8_GEMM_FLASHINFER": {
+      "name": "VLLM_BLOCKSCALE_FP8_GEMM_FLASHINFER",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_FLASHINFER_MOE_FP16": {
+      "name": "VLLM_USE_FLASHINFER_MOE_FP16",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_FLASHINFER_MOE_FP8": {
+      "name": "VLLM_USE_FLASHINFER_MOE_FP8",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_FLASHINFER_MOE_FP4": {
+      "name": "VLLM_USE_FLASHINFER_MOE_FP4",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_FLASHINFER_MOE_INT4": {
+      "name": "VLLM_USE_FLASHINFER_MOE_INT4",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8": {
+      "name": "VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8_CUTLASS": {
+      "name": "VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8_CUTLASS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_FLASHINFER_MOE_MXFP4_BF16": {
+      "name": "VLLM_USE_FLASHINFER_MOE_MXFP4_BF16",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_XGRAMMAR_CACHE_MB": {
+      "name": "VLLM_XGRAMMAR_CACHE_MB",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MSGPACK_ZERO_COPY_THRESHOLD": {
+      "name": "VLLM_MSGPACK_ZERO_COPY_THRESHOLD",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ALLOW_INSECURE_SERIALIZATION": {
+      "name": "VLLM_ALLOW_INSECURE_SERIALIZATION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DISABLE_REQUEST_ID_RANDOMIZATION": {
+      "name": "VLLM_DISABLE_REQUEST_ID_RANDOMIZATION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_NIXL_SIDE_CHANNEL_HOST": {
+      "name": "VLLM_NIXL_SIDE_CHANNEL_HOST",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_NIXL_SIDE_CHANNEL_PORT": {
+      "name": "VLLM_NIXL_SIDE_CHANNEL_PORT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MOONCAKE_BOOTSTRAP_PORT": {
+      "name": "VLLM_MOONCAKE_BOOTSTRAP_PORT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_FLASHINFER_WORKSPACE_BUFFER_SIZE": {
+      "name": "VLLM_FLASHINFER_WORKSPACE_BUFFER_SIZE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE": {
+      "name": "VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_FLASHINFER_ALLREDUCE_FUSION_THRESHOLDS_MB": {
+      "name": "VLLM_FLASHINFER_ALLREDUCE_FUSION_THRESHOLDS_MB",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MOE_ROUTING_SIMULATION_STRATEGY": {
+      "name": "VLLM_MOE_ROUTING_SIMULATION_STRATEGY",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_TOOL_PARSE_REGEX_TIMEOUT_SECONDS": {
+      "name": "VLLM_TOOL_PARSE_REGEX_TIMEOUT_SECONDS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MQ_MAX_CHUNK_BYTES_MB": {
+      "name": "VLLM_MQ_MAX_CHUNK_BYTES_MB",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": {
+      "name": "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_COMPUTE_NANS_IN_LOGITS": {
+      "name": "VLLM_COMPUTE_NANS_IN_LOGITS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_NVFP4_CT_EMULATIONS": {
+      "name": "VLLM_USE_NVFP4_CT_EMULATIONS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_NIXL_ABORT_REQUEST_TIMEOUT": {
+      "name": "VLLM_NIXL_ABORT_REQUEST_TIMEOUT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MORIIO_CONNECTOR_READ_MODE": {
+      "name": "VLLM_MORIIO_CONNECTOR_READ_MODE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MORIIO_QP_PER_TRANSFER": {
+      "name": "VLLM_MORIIO_QP_PER_TRANSFER",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MORIIO_POST_BATCH_SIZE": {
+      "name": "VLLM_MORIIO_POST_BATCH_SIZE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MORIIO_NUM_WORKERS": {
+      "name": "VLLM_MORIIO_NUM_WORKERS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MOONCAKE_ABORT_REQUEST_TIMEOUT": {
+      "name": "VLLM_MOONCAKE_ABORT_REQUEST_TIMEOUT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_HAS_FLASHINFER_CUBIN": {
+      "name": "VLLM_HAS_FLASHINFER_CUBIN",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ENABLE_CUDAGRAPH_GC": {
+      "name": "VLLM_ENABLE_CUDAGRAPH_GC",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LOOPBACK_IP": {
+      "name": "VLLM_LOOPBACK_IP",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_PROCESS_NAME_PREFIX": {
+      "name": "VLLM_PROCESS_NAME_PREFIX",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ALLOW_CHUNKED_LOCAL_ATTN_WITH_HYBRID_KV_CACHE": {
+      "name": "VLLM_ALLOW_CHUNKED_LOCAL_ATTN_WITH_HYBRID_KV_CACHE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ENABLE_RESPONSES_API_STORE": {
+      "name": "VLLM_ENABLE_RESPONSES_API_STORE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ROCM_FP8_MFMA_PAGE_ATTN": {
+      "name": "VLLM_ROCM_FP8_MFMA_PAGE_ATTN",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ALLREDUCE_USE_SYMM_MEM": {
+      "name": "VLLM_ALLREDUCE_USE_SYMM_MEM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ALLREDUCE_USE_FLASHINFER": {
+      "name": "VLLM_ALLREDUCE_USE_FLASHINFER",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_EXPERIMENTAL_PARSER_CONTEXT": {
+      "name": "VLLM_USE_EXPERIMENTAL_PARSER_CONTEXT",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_TUNED_CONFIG_FOLDER": {
+      "name": "VLLM_TUNED_CONFIG_FOLDER",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS": {
+      "name": "VLLM_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_SYSTEM_START_DATE": {
+      "name": "VLLM_SYSTEM_START_DATE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_TOOL_JSON_ERROR_AUTOMATIC_RETRY": {
+      "name": "VLLM_TOOL_JSON_ERROR_AUTOMATIC_RETRY",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CUSTOM_SCOPES_FOR_PROFILING": {
+      "name": "VLLM_CUSTOM_SCOPES_FOR_PROFILING",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_NVTX_SCOPES_FOR_PROFILING": {
+      "name": "VLLM_NVTX_SCOPES_FOR_PROFILING",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_KV_EVENTS_USE_INT_BLOCK_HASHES": {
+      "name": "VLLM_KV_EVENTS_USE_INT_BLOCK_HASHES",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DEEPEP_BUFFER_SIZE_MB": {
+      "name": "VLLM_DEEPEP_BUFFER_SIZE_MB",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DEEPEP_HIGH_THROUGHPUT_FORCE_INTRA_NODE": {
+      "name": "VLLM_DEEPEP_HIGH_THROUGHPUT_FORCE_INTRA_NODE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DEEPEP_LOW_LATENCY_USE_MNNVL": {
+      "name": "VLLM_DEEPEP_LOW_LATENCY_USE_MNNVL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DBO_COMM_SMS": {
+      "name": "VLLM_DBO_COMM_SMS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ENABLE_INDUCTOR_MAX_AUTOTUNE": {
+      "name": "VLLM_ENABLE_INDUCTOR_MAX_AUTOTUNE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ENABLE_INDUCTOR_COORDINATE_DESCENT_TUNING": {
+      "name": "VLLM_ENABLE_INDUCTOR_COORDINATE_DESCENT_TUNING",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_NCCL_SYMM_MEM": {
+      "name": "VLLM_USE_NCCL_SYMM_MEM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_NCCL_INCLUDE_PATH": {
+      "name": "VLLM_NCCL_INCLUDE_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_FBGEMM": {
+      "name": "VLLM_USE_FBGEMM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_GC_DEBUG": {
+      "name": "VLLM_GC_DEBUG",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DEBUG_WORKSPACE": {
+      "name": "VLLM_DEBUG_WORKSPACE",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DISABLE_SHARED_EXPERTS_STREAM": {
+      "name": "VLLM_DISABLE_SHARED_EXPERTS_STREAM",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD": {
+      "name": "VLLM_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_V2_MODEL_RUNNER": {
+      "name": "VLLM_USE_V2_MODEL_RUNNER",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LOG_MODEL_INSPECTION": {
+      "name": "VLLM_LOG_MODEL_INSPECTION",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DEBUG_MFU_METRICS": {
+      "name": "VLLM_DEBUG_MFU_METRICS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY": {
+      "name": "VLLM_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_WEIGHT_OFFLOADING_DISABLE_UVA": {
+      "name": "VLLM_WEIGHT_OFFLOADING_DISABLE_UVA",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_DISABLE_LOG_LOGO": {
+      "name": "VLLM_DISABLE_LOG_LOGO",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_LORA_DISABLE_PDL": {
+      "name": "VLLM_LORA_DISABLE_PDL",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ENABLE_CUDA_COMPATIBILITY": {
+      "name": "VLLM_ENABLE_CUDA_COMPATIBILITY",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_CUDA_COMPATIBILITY_PATH": {
+      "name": "VLLM_CUDA_COMPATIBILITY_PATH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ELASTIC_EP_SCALE_UP_LAUNCH": {
+      "name": "VLLM_ELASTIC_EP_SCALE_UP_LAUNCH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_ELASTIC_EP_DRAIN_REQUESTS": {
+      "name": "VLLM_ELASTIC_EP_DRAIN_REQUESTS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS": {
+      "name": "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_NIXL_EP_MAX_NUM_RANKS": {
+      "name": "VLLM_NIXL_EP_MAX_NUM_RANKS",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_XPU_ENABLE_XPU_GRAPH": {
+      "name": "VLLM_XPU_ENABLE_XPU_GRAPH",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_SIMPLE_KV_OFFLOAD": {
+      "name": "VLLM_USE_SIMPLE_KV_OFFLOAD",
+      "x-source": "os.getenv/environ.get"
+    },
+    "VLLM_USE_FLASHINFER_SAMPLER": {
+      "name": "VLLM_USE_FLASHINFER_SAMPLER",
+      "x-source": "os.environ[...]"
+    },
+    "VLLM_PLUGINS": {
+      "name": "VLLM_PLUGINS",
+      "x-source": "os.environ[...]"
+    },
+    "VLLM_DISABLED_KERNELS": {
+      "name": "VLLM_DISABLED_KERNELS",
+      "x-source": "os.environ[...]"
+    },
+    "VLLM_TPU_BUCKET_PADDING_GAP": {
+      "name": "VLLM_TPU_BUCKET_PADDING_GAP",
+      "x-source": "os.environ[...]"
+    }
+  }
+}

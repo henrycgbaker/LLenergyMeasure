@@ -4125,3 +4125,45 @@ Ran `scripts/run_substrate_matrix.py`: 3 substrates x 6 (engine,version) cells, 
 - pydantic-native (framework-reflection) registry supports only vllm; and it imports the engine at runtime -> crashed (vllm v0.7.3, engine not in project venv) / deferred (v0.19.1). Framework-reflection needs a per-version importable engine = per-version GPU container; DEFERRED (infra-bound, not a substrate-quality result). 6 cells unscored.
 - So the version-correct static-substrate comparison this session rests on tree-sitter (4 cells) + improved-det (6 cells). Sufficient for the substrate-frontier + bump-survivability deliverables; framework-reflection / runtime-trace / behavioural-fuzz deferred to a GPU-container run.
 
+## 2026-06-05 ~05:00 CEST - Wave 2.2/2.4 LLM cells (W-G extend + pure-b + model-scale)
+
+The registered LLM strategies (w2-h15/h11/b-bench) are STUBS ("LLM dispatch deferred"), so wired a minimal direct Ollama dispatch (qwen2.5-coder-7b + llama-8b + phi4-14b on the single A100; the w2-h* stubs untouched). Two dispatch fixes mattered: a num_predict cap (uncapped runaway generation blew 20+ min/chunk) and a truncation-tolerant per-entry YAML parser. ~34 min LLM wall for 5 W-G + 5 pure-b cells + a 3-model scale sweep. Outputs: `findings/wave2_llm_cells.json`, run dirs `findings/trial_runs/wave2/{w2-wg-qwen7b,w2-pureb-qwen7b,w2-wg-llama8b,w2-wg-phi14b}/`, prompts `findings/wave2_locked_prompts/`.
+
+Tolerant inv recall vs GT:
+
+| cell | floor | +LLM (W-G qwen7b) | delta | pure-b |
+|---|---|---|---|---|
+| vllm v0.7.3 | 0.513 | 0.513 | +0.000 | 0.118 |
+| transformers v4.57.3 | 0.404 | 0.447 | +0.044 | 0.088 |
+| vllm v0.19.1 | 0.147 | 0.176 | +0.029 | 0.103 |
+| transformers v5.6.2 | 0.416 | 0.426 | +0.010 | 0.050 |
+| tensorrt v0.21.0 | 0.270 | 0.286 | +0.016 | 0.016 |
+
+Model scale (vllm v0.7.3): floor 0.513 / 7b 0.513 / 8b 0.566 / 14b 0.566.
+
+Findings: (1) W-G extend mean +0.020 recall, precision DROPS every cell (~2 prec pts lost per recall pt). (2) pure-b 4x-30x BELOW floor - the Wave-1 ~50% ceiling does not survive to 7B. (3) model-scale knee ~8B, shallow; no gradient in 7-14B; 14B->70B unmeasured (single-GPU cap). (4) hallucination proxy 0.87-1.0; transformers true gate functional but prompts omitted kwargs_pos/neg so it infra-errored on ALL runs (not LLM-specific); vllm/tensorrt gates deferred (containers). HEADLINE: at <=14B OSS scale the LLM is a weak extender + non-viable standalone miner; the recall ceiling lives in the SUBSTRATE. The LLM belongs in GATE/DIAGNOSE roles, never primary. This REVISES the a-priori W-G optimism (see wave2_workflow_comparison.md).
+
+## 2026-06-05 ~05:10 CEST - Wave 2 closed (partial coverage)
+
+Per WAVE2_PROTOCOL section 4, all five acceptance criteria are on disk:
+1. Ground truth complete: 3 engines x 2 versions, each schema+invariants+methodology+delta+version_delta.
+2. Wave 1 re-scored vs GT: `findings/wave1_rescored_against_gt.md`.
+3. The 8 per-axis synthesis deliverables: `findings/wave2_{substrate_frontier,substrate_complementarity,bump_survivability,failure_mode_catalogue,assembly_ladder,model_scale_curve,llm_role_matrix,workflow_comparison}.md`.
+4. `WAVE2_RESEARCH_OUTCOMES.md` - consolidated output for the engineering session.
+5. This entry.
+
+Headline findings (full detail in WAVE2_RESEARCH_OUTCOMES.md):
+- improved-det (new 7-primitive substrate) is the dominant cheap floor (~2x tree-sitter, subsumes it); deterministic ceiling ~0.40-0.51 inv recall vs GT; schema far easier than invariants.
+- Four convergent cross-engine bump patterns; the actionable one: imperative `raise` -> declarative pydantic `Field` is sinking source-walker recall (vllm bump cliff 0.51->0.15). A declarative-`Field` "Primitive 8" is the top engineering item.
+- bump-survivability is engine-specific (vllm collapses, tensorrt rises, transformers flat); landmark/citation pinning (W-A) fails all bumps; static floor not bump-robust alone.
+- At <=14B OSS scale the LLM is a weak extender + non-viable miner; relegate it to gate/diagnose roles; defer LLM-as-extractor to frontier scale.
+
+DEFERRED (for the user's return / Wave 3), all itemised in WAVE2_RESEARCH_OUTCOMES.md Section 8 and the per-deliverable "deferred" sections:
+- Substrates: framework-reflection, runtime-trace, behavioural-fuzz, pyright-stubs, sphinx-xml, rag-over-source (need per-version GPU containers / out of GPU-free scope). framework-reflection is the highest-value deferred cell.
+- The declarative-`Field` Primitive 8 (designed, not built) + re-measuring the vllm cliff.
+- Large/frontier models: 32B+/70B+ (single-GPU 40GB cap; 2xA100/80GB via `container deploy` is tty-gated), Claude/GPT API (out of scope this wave).
+- Live runtime-validate gate for vllm/tensorrt LLM cells (need per-engine containers) + kwargs-bearing prompts for the transformers gate.
+- bump-UPDATE cells (the true self-update binary: auto-propose a producer/catalogue patch that passes the gate without human edit).
+
+INFRA NOTES for the user: host CUDA blocked -> all GPU work in containers; raw docker caps at 1 of 4 A100s (ds01.slice/MIG); `container deploy` offers up to 2 full GPUs but is tty-gated (needs a pty wrapper to drive non-interactively). Ollama left running (`trial-ollama`, port 11435, 4 small models pulled). venv_setup.py patched for transformers v5_6_2.
+

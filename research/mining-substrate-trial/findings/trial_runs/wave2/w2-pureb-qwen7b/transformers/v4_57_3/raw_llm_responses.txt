@@ -1,0 +1,1991 @@
+```yaml
+invariants:
+- id: transformers_generationconfig_early_stopping_type_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: `early_stopping` must be a boolean or 'never', but is {self.early_stopping}.
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: __init__
+    line_at_scan: 30
+  match:
+    transformers.early_stopping: {present: true, type_is_not: [bool, str]}
+- id: transformers_generationconfig_max_new_tokens_gt_0_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: `max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: __init__
+    line_at_scan: 35
+  match:
+    transformers.max_new_tokens: {present: true, gt: 0}
+- id: transformers_generationconfig_pad_token_id_gt_0_warning
+  engine: transformers
+  library: transformers
+  invariant_under_test: `pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch generating, if there is padding. Please set `pad_token_id` explicitly as `model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation.
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: __init__
+    line_at_scan: 40
+  match:
+    transformers.pad_token_id: {present: true, lt: 0}
+- id: transformers_generationconfig_cache_implementation_in_list_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: Invalid `cache_implementation` ({self.cache_implementation}). Choose one of: {ALL_CACHE_IMPLEMENTATIONS}.
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: __init__
+    line_at_scan: 45
+  match:
+    transformers.cache_implementation: {present: true, not_in: ALL_CACHE_IMPLEMENTATIONS}
+- id: transformers_generationconfig_compile_config_instance_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: You provided `compile_config` as an instance of {type(self.compile_config)}, but it must be an instance of `CompileConfig`.
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: __init__
+    line_at_scan: 50
+  match:
+    transformers.compile_config: {present: true, type_is_not: [CompileConfig]}
+- id: transformers_generationconfig_do_sample_false_temperature_warning
+  engine: transformers
+  library: transformers
+  invariant_under_test: `do_sample` is set to `False`. However, `temperature` is set to `{flag_value}` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`.
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 105
+  match:
+    transformers.do_sample: {present: true, not_equal: True}
+    transformers.temperature: {present: true, gt: 1.0}
+- id: transformers_generationconfig_do_sample_false_top_p_warning
+  engine: transformers
+  library: transformers
+  invariant_under_test: `do0_sample` is set to `False`. However, `top_p` is set to `{flag_value}` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at0_scan: 110
+  match:
+    transformers.do_sample: {present: true, not_equal: True}
+    transformers.top_p: {present: true, gt: 1.0}
+- id: transformers_generationconfig_do_sample_false_min_p_warning
+  engine: transformers
+  library: transformers
+  invariant_under_test: `do_sample` is set to `False`. However, `min_p` is set to `{flag_value}` -- this flag is only used in sample-based generation modes. You should set `do0
+
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers_generationconfig_save_pretrained_path_check
+  engine: transformers
+  library: transformers
+  invariant_under_test: "if os.path.isfile(save_directory): raise AssertionError(f'Provided path ({save_directory}) should be a directory, not a file')"
+  severity: error
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: save_pretrained
+    line_at_scan: 102
+  match:
+    transformers: 
+      GenerationConfig.save_pretrained.save_directory: {present: true, type_is_not: [os.PathLike]}
+- id: transformers_generationconfig_from_pretrained_token_deprecation
+  engine: transformers
+  library: transformers
+  invariant_under_test: "if use_auth_token is not None: warnings.warn(...); if token is not None: raise ValueError(...)"
+  severity: warning
+  native_type: transformers.GenerationConfig
+  miner_source:
+    path: configuration_utils.py
+    method: from_pretrained
+    line_at_scan: 163
+  match:
+    transformers: 
+      GenerationConfig.from_pretrained.use_auth_token: {present: true}
+- id: transformers_generationconfig_validate_seeding_scheme
+  engine: transformers
+  library: transformers
+  invariant_under_test: "if self.seeding_scheme not in ['selfhash', 'lefthash']: raise ValueError(...)"
+  severity: error
+  native_type: transformers.WatermarkingConfig
+  miner_source:
+    path: configuration_utils.py
+    method: validate
+    line_at_scan: 120
+  match:
+    transformers.sampling: 
+      WatermarkingConfig.validate.seeding_scheme: {present: true, not_in: ['selfhash', 'lefthash']}
+- id: transformers_generationconfig_validate_greenlist_ratio
+  engine: transformers
+  library: transformers
+  invariant_under_test: "if not 0.0 <= self.greenlist_ratio <= 1.0: raise ValueError(...)"
+  severity: error
+  native_type: transformers.WatermarkingConfig
+  miner
+
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: quantization_config_auto_round_not_supported
+  engine: transformers
+  library: transformers
+  invariant_under_test: "quant_method not in ['gptqv1', 'awq', 'auto-round']"
+  severity: error
+  native_type: transformers.quantization.AutoRoundConfig
+  miner_source:
+    path: quantization_config.py
+    method: from_dict.from_dict
+    line_at_scan: 10
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.AutoRoundConfig.quant_method: {not_in: ['gptqv1', 'awq', 'auto-round']}
+- id: quantization_config_gptq_meta_not_supported
+  engine: transformers
+  library: transformers
+  invariant_under_test: "quant_method == 'gptq' and 'meta' in config_dict"
+  severity: error
+  native_type: transformers.quantization.AutoRoundConfig
+  miner_source:
+    path: quantization_config.py
+    method: from_dict.from_dict
+    line_at_scan: 15
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.AutoRoundConfig.quant_method: 'gptq'
+      transformers.quantization.AutoRoundConfig.meta: {present: true}
+- id: quantization_config_awq_version_not_supported
+  engine: transformers
+  library: transformers
+  invariant_under_test: "quant_method == 'awq' and config_dict.get('version', 'gemm') != 'gemm'"
+  severity: error
+  native_type: transformers.quantization.AutoRoundConfig
+  miner_source:
+    path: quantization_config.py
+    method: from_dict.from_dict
+    line_at_scan: 20
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.AutoRoundConfig.quant_method: 'awq'
+      transformers.quantization.AutoRoundConfig.version: {present: true, not_equal: 'gemm'}
+- id: hqq_config_deprecated_keys
+  engine: transformers
+  library: transformers
+  invariant_under_test: "deprecated_key in kwargs"
+  severity: warning
+  native_type: transformers.quantization.HqqConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 30
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.HqqConfig.deprecated_key: {present: true}
+- id: hqq_config_axis_invalid_value
+  engine: transformers
+  library: transformers
+  invariant_under_test: "axis not in [0, 1]"
+  severity: error
+  native_type: transformers.quantization.HqqConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 35
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.HqqConfig.axis: {'<': 0, '>': 1}
+- id: bits_and_bytes_config_load_in_4bit_load_in_8bit_conflict
+  engine: transformers
+  library: transformers
+  invariant_under_test: "load_in_4bit and load_in_8bit"
+  severity: error
+  native_type: transformers.quantization.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 50
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.BitsAndBytesConfig.load_in_4bit: {present: true}
+      transformers.quantization.BitsAndBytesConfig.load_in_8bit: {present: true}
+- id: bits_and_bytes_config_bnb_4bit_compute_dtype_invalid_type
+  engine: transformers
+  library: transformers
+  invariant_under_test: "not isinstance(bnb_4bit_compute_dtype, (str, torch.dtype))"
+  severity: error
+  native_type: transformers.quantization.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 60
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.BitsAndBytesConfig.bnb_4bit_compute_dtype: {type_is_not: [str, torch.dtype]}
+- id: bits_and_bytes_config_bnb_4bit_quant_storage_invalid_value
+  engine: transformers
+  library: transformers
+  invariant_under_test: "not isinstance(bnb_4bit_quant_storage, (str, torch.dtype))"
+  severity: error
+  native_type: transformers.quantization.BitsAndBytesConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 70
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.BitsAndBytesConfig.bnb_4bit_quant_storage: {type_is_not: [str, torch.dtype]}
+- id: gptq_config_bits_invalid_value
+  engine: transformers
+  library: transformers
+  invariant_under_test: "bits not in [2, 3, 4, 8]"
+  severity: error
+  native_type: transformers.quantization.GPTQConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 90
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.GPTQConfig.bits: {not_in: [2, 3, 4, 8]}
+- id: gptq_config_group_size_invalid_value
+  engine: transformers
+  library: transformers
+  invariant_under_test: "group_size <= 0 and group_size != -1"
+  severity: error
+  native_type: transformers.quantization.GPTQConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 95
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.GPTQConfig.group_size: {'<=': 0, '!=': -1}
+- id: gptq_config_damp_percent_invalid_range
+  engine: transformers
+  library: transformers
+  invariant_under_test: "not (0 < damp_percent < 1)"
+  severity: error
+  native_type: transformers.quantization.GPTQConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 100
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.GPTQConfig.damp_percent: {'<': 0, '>': 1}
+- id: gptq_config_dataset_deprecated_values
+  engine: transformers
+  library: transformers
+  invariant_under_test: "dataset in ['ptb', 'ptb-new']"
+  severity: error
+  native_typerd: transformers.quantization.GPTQConfig
+  miner_source:
+    path: quantization_config.py
+    method: __init__.__init__
+    line_at_scan: 105
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.GPTQConfig.dataset: {present: true, not_in: ['ptb', 'ptb-new']}
+- id: awq_config_backend_not_supported
+  engine: transformers
+  library: transformers
+  invariant_under_test: "backend not in [AwqBackendPackingMethod.AUTOAWQ, AwqBackendPackingMethod.LLMAWQ]"
+  severity: error
+  native_type: transformers.quantization.AwqConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init.post_init
+    line_at_scan: 120
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.AwqConfig.backend: {not_in: [AwqBackendPackingMethod.AUTOAWQ, AwqBackendPackingMethod.LLMAWQ]}
+- id: awq_config_version_not_supported
+  engine: transformers
+  library: transformers
+  invariant_under_test: "version not in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA, AWQLinearVersion.IPEX]"
+  severity: error
+  native_type: transformers.quantization.AwqConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init.post_init
+    line_at_scan: 125
+  match:
+    engine: transformers
+    fields:
+      transformers.quantization.AwqConfig.version: {not_in: [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA, AWQLinearVersion.IPEX]}
+- id: awq_config_llmaqw_backend_requirements
+  engine: transformers
+  library: transformers
+  invariant_under_test: "backend == AwqBackendPackingMethod.LLMAWQ and not (torch.cuda.is_available() or torch.xpu.is_available())"
+  severity: error
+  native_type: transformers.quantization.AwqConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init.post
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers_quantizationconfig_accepted_weights_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if self.weights not in accepted_weights:
+  severity: error
+  native_type: transformers.QuantoConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 10
+  match:
+    transformers.QuantoConfig.weights: {present: true, not_in: ['float8', 'int8', 'int4', 'int2']}
+- id: transformers_quantizationconfig_accepted_activations_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if self.activations not in accepted_activations:
+  severity: error
+  native_type: transformers.QuantoConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 14
+  match:
+    transformers.QuantoConfig.activations: {present: true, not_in: [None, 'int8', 'float8']}
+- id: transformers_eetqconfig_accepted_weights_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if self.weights not in accepted_weights:
+  severity: error
+  native_type: transformers.EetqConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 20
+  match:
+    transformers.EetqConfig.weights: {present: true, not_in: ['int8']}
+- id: transformers_compressedtensorsconfig_bits_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if self.bits not in [2, 3, 4]:
+  severity: error
+  native_type: transformers.HiggsConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 105
+  match:
+    transformers.HiggsConfig.bits: {present: true, not_in: [2, 3, 4]}
+- id: transformers_higgsconfig_p_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if self.p not in [1, 2]:
+  severity: error
+  native_type: transformers.HiggsConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 109
+  match:
+    transformers.HiggsConfig.p: {present: true, not_in: [1, 2]}
+- id: transformers_higgsconfig_group_size_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if self.group_size not in [64, 128, 256]:
+  severity: error
+  native_type: transformers.HiggsConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 113
+  match:
+    transformers.HiggsConfig.group_size: {present: true, not_in: [64, 128, 256]}
+- id: transformers_higgsconfig_hadamard_size_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if self.hadamard_size % self.group_size != 0:
+  severity: error
+  native_type: transformers.HiggsConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 117
+  match:
+    transformers.HiggsConfig.hadamard_size: {present: true, not_equal: {transformers.HiggsConfig.group_size: lambda x: x}}
+- id: transformers_fpquantconfig_forward_dtype_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if self.forward_dtype == "mxfp4":
+  severity: error
+  native_type: transformers.FPQuantConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 125
+  match:
+    transformers.FPQuantConfig.forward_dtype: {present: true, not_equal: 'mxfp4'}
+- id: transformers_fpquantconfig_forward_method_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if self.forward_dtype == "mxfp4":
+  severity: error
+  native_type: transformers.FPQuantConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 129
+  match:
+    transformers.FPQuantConfig.forward_method: {present: true, not_in: ['abs_max', 'quest']}
+- id: transformers_fpquantconfig_hadamard_group_size_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if self.forward_dtype == "mxfp4":
+  severity: error
+  native_type: transformers.FPQuantConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 133
+  match:
+    transformers.FPQuantConfig.hadamard_group_size: {present: true, not_in: [32, 64, 128]}
+- id: transformers_fpquantconfig_backward_dtype_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if self.backward_dtype != "bf16":
+  severity: error
+  native_type: transformers.FPQuantConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 137
+  match:
+    transformers.FPQuantConfig.backward_dtype: {present: true, not_equal: 'bf16'}
+- id: transformers_fpquantconfig_transform_init_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if self.transform_init not in ["hadamard", "identity", "gsr"]:
+  severity: error
+  native_type  : transformers.FPQuantConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 141
+  match:
+    transformers.FPQuantConfig.transform_init: {present: true, not_in: ['hadamard', 'identity', 'gsr']}
+- id: transformers_torchaocconfig_quant_type_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if isinstance(self.quant_type, str):
+  severity: error
+  native_type: transformers.TorchAoConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 153
+  match:
+    transformers.TorchAoConfig.quant_type: {present: true, type_is_not: ['str', 'AOBaseConfig']}
+- id: transformers_torchaocconfig_quant_type_kwargs_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if isinstance(self.quant_type, str):
+  severity: error
+  native_type: transformers.TorchAoConfig
+  miner_source:
+    path: quantization_config.py
+    method: post_init
+    line_at_scan: 157
+  match:
+    transformers.TorchAoConfig.quant_type_kwargs: {present: true}
+- id: transformers_torchaocconfig_layout_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if torch.cuda.is_available() and is_torchao_available():
+  severity: error
+  native_type: transformers.TorchAoConfig
+  miner_source:
+    path: quantization_config.py
+    method: get_apply_tensor_subclass
+    line_at_scan: 203
+  match:
+    transformers.TorchAoConfig.quant_type: {present: true, not_equal: 'int4_weight_only'}
+- id: transformers_torchaocconfig_layout_version_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if torch.cuda.is_available() and is_torchao_available():
+  severity: error
+  native_type: transformers.TorchAoConfig
+  miner_source:
+    path: quantization_config.py
+    method: get_apply_tensor_subclass
+    line_at_scan: 207
+  match:
+    transformers.TorchAoConfig.quant_type: {present: true, not_equal: 'int4_weight_only'}
+- id: transformers_torchaocconfig_layout_xpu_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: if torch.cuda.is_available() and is_torchao_available():
+  severity: error
+  native_type: transformers.TorchAoConfig
+  miner_source:
+    path: quantization_config.py
+    method: get_apply_tensor_subclass
+    line_at
+
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers_load_sharded_checkpoint_no_index_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: "if not index_present and not safe_index_present:"
+  severity: error
+  native_type: transformers.modeling_utils.load_sharded_checkpoint
+  miner_source:
+    path: modeling_utils.py
+    method: load_sharded_checkpoint
+    line_at_scan: 18
+  match:
+    transformers.modeling_utils.load_sharded_checkpoint.index_present: {present: true, not_in: [True]}
+    transformers.modeling_utils.load_sharded_checkpoint.safe_index_present: {present: true, not_in: [True]}
+  added_by: llm_pure_b
+
+- id: transformers_load_state_dict_safetensors_metadata_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: "if metadata is not None and metadata.get('format') not in ['pt', 'tf', 'flax', 'mlx']:"
+  severity: error
+  native_type  : transformers.modeling_utils.load_state_dict
+  miner_source:
+    path: modeling_utils.py
+    method: load_state_dict
+    line_at_scan: 40
+  match:
+    transformers.modeling_utils.load_state_dict.metadata: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_load_state_dict_torch_load_safe_check_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: "if weights_only:"
+  severity: error
+  native_type: transformers.modeling_utils.load_state_dict
+  miner_source:
+    path: modeling_utils.py
+    method: load_state_dict
+    line_at_scan: 50
+  match:
+    transformers.modeling_utils.load_state_dict.weights_only: {present: true, not_in: [False]}
+  added_by: llm_pure_b
+
+- id: transformers_load_state_dict_torch_load_safe_check_dormant
+  engine: transformers
+  library: transformers
+  invariant_under_test: "if is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0:"
+  severity: dormant
+  native_type: transformers.modeling_utils.load_state_dict
+  miner_source:
+    path: modeling_utils.py
+    method: load_state_dict
+    line_at_scan: 58
+  match:
+    transformers.modeling_utils.load_state_dict.is_deepspeed: {present: true, not_in: [False]}
+    transformers.modeling_utils.load_state_dict.distributed_enabled: {present: true, not_in: [False]}
+    transformers.modeling_utils.load_state_dict.get_rank: {present: true, gt: 0}
+  added_by: llm_pure_b
+
+- id: transformers_load_state_dict_torch_load_safe_check_dormant_2
+  engine: transformers
+  library: transformers
+  invariant_under_test: "if is_fsdp_enabled() and not is_local_dist_rank_0():"
+  severity: dormant
+  native_type: transformers.modeling_utils.load_state_dict
+  miner_source:
+    path: modeling_utils.py
+    method: load_state_dict
+    line_at_scan: 62
+  match:
+    transformers.modeling_utils.load_state_dict.is_fsdp_enabled: {present: true, not_in: [False]}
+    transformers.modeling_utils.load_state_dict.get_local_rank: {present: true, lt: 0}
+  added_by: llm_pure_b
+
+- id: transformers_load_state_dict_torch_load_safe_check_dormant_3
+  engine: transformers
+  library: transformers
+  invariant_under_test: "if is_quantized:"
+  severity: dormant
+  native_type: transformers.modeling_utils.load_state_dict
+  miner_source:
+    path: modeling_utils.py
+    method: load_state_dict
+    line_at_scan: 68
+  match:
+    transformers.modeling_utils.load_state_dict.is_quantized: {present: true, not_in: [False]}
+  added_by: llm_pure_b
+
+- id: transformers_load_state_dict_torch_load_safe_check_dormant_4
+  engine: transformers
+  library: transformers
+  invariant_under_test: "if map_location is None:"
+  severity: dormant
+  native_type: transformers.modeling_utils.load_state_dict
+  miner_source:
+    path: modeling_utils.py
+    method: load_state_dict
+    line_at0_scan: 72
+  match:
+    transformers.modeling_utils.load_state_dict.map_location: {present: true, not_in: [None]}
+  added_by: llm_pure_b
+
+- id: transformers_load_state_dict_torch_load_safe_check_dormant_5
+  engine: transformers
+  library: transformers
+  invariant_under_test: "if isinstance(checkpoint_file, str) and map_location != 'meta' and is_zipfile(checkpoint_file):"
+  severity: dormant
+  native_type: transformers.modeling_utils.load_state_dict
+  miner_source:
+    path: modeling_utils.py
+    method: load_state_dict
+    line_at_scan: 76
+  match:
+    transformers.modeling_utils.load_state_dict.checkpoint_file: {present: true, type_is_not: [None]}
+    transformers.modeling_utils.load_state_dict.map_location: {present: true, not_in: ['meta']}
+    transformers.modeling_utils.load_state_dict.is_zipfile: {present: true, not_in: [False]}
+  added_by: llm_pure_b
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers__get_resolved_checkpoint_files_pretrained_model_name_or_path_not_none_gguf_file_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'pretrained_model_name_or_path is not None and gguf_file is None'
+  severity: error
+  native_type: transformers.utils.hub._get_resolved_checkpoint_files
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resolved_checkpoint_files
+    line_at_scan: 10
+  match:
+    transformers.pretrained_model_name_or_path: {present: true}
+    transformers.gguf_file: {present: false}
+  added_by: llm_pure_b
+
+- id: transformers__get_resolved_checkpoint_files_pretrained_model_name_or_path_not_none_gguf_file_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'pretrained_model_name_or_path is not None and gguf_file is not None'
+  severity: error
+  native_type: transformers.utils.hub._get_resolved_checkpoint_files
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resolved_checkpoint_files
+    line_at_scan: 10
+  match:
+    transformers.pretrained_model_name_or_path: {present: true}
+    transformers.gguf_file: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers__get_resolved_checkpoint_files_pretrained_model_name_or_path_none_gguf_file_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'pretrained_model_name_or_path is None and gguf_file is not None'
+  severity: error
+  native_type: transformers.utils.hub._get_resolved_checkpoint_files
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resolved_checkpoint_files
+    line_at_scan: 10
+  match:
+    transformers.pretrained_model_name_or_path: {present: false}
+    transformers.gguf_file: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers__get_resolved_checkpoint_files_pretrained_model_name_or_path_not_local_gguf_file_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'not is_local and gguf_file is not None'
+  severity: error
+  native_type: transformers.utils.hub._get_resolved_checkpoint_files
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resolved_checkpoint_files
+    line_at_scan: 10
+  match:
+    transformers.is_local: {present: true, not_equal: true}
+    transformers.gguf_file: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers__get_resolved_checkpoint_files_pretrained_model_name_or_path_local_gguf_file_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'is_local and gguf_file is not None'
+  severity: error
+  native_type: transformers.utils.hub._get_resolved_checkpoint_files
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resolved_checkpoint_files
+    line_at_scan: 10
+  match:
+    transformers.is_local: {present: true}
+    transformers.gguf_file: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers__get_resolved_checkpoint_files_pretrained_model_name_or_path_not_local_gguf_file_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'not is_local and gguf_file is None'
+  severity: error
+  native_type  : transformers.utils.hub._get_resolved_checkpoint_files
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resolved_checkpoint_files
+    line_at_scan: 10
+  match:
+    transformers.is_local: {present: true, not_equal: true}
+    transformers.gguf_file: {present: false}
+  added_by: llm_pure_b
+
+- id: transformers__get_resolved_checkpoint_files_pretrained_model_name_or_path_local_gguf_file_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'is_local and gguf_file is None'
+  severity: error
+  native_type: transformers.utils.hub._get_resolved0_checkpoint_files
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resolved_checkpoint_files
+    line_at_scan: 10
+  match:
+    transformers.is_local: {present: true}
+    transformers.gguf_file: {present: false}
+  added_by: llm_pure_b
+
+- id: transformers__get_resolved_checkpoint_files_pretrained_model_name_or_path_not_local_gguf_file_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'not is_local and gguf_file is not None'
+  severity: error
+  native_type: transformers.utils.hub._get_resolved_checkpoint_files
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resolved_checkpoint_files
+    line_at_scan: 10
+  match:
+    transformers.is_local: {present: true, not_equal: true}
+    transformers.gguf_file: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers__get_resolved_checkpoint_files_pretrained_model_name_or_path_local_gguf_file_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'is_local and gguf_file is not None'
+  severity: error
+  native_type: transformers.utils.hub._get_resolved_checkpoint_files
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resolved_checkpoint_files
+    line_at_scan: 10
+  match:
+    transformers.is_local: {present: true}
+    transformers.gguf_file: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers__get_resolved_checkpoint_files_pretrained_model_name_or_path_not_local_gguf_file_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'not is_local and gguf_file is None'
+  severity: error
+  native_type: transformers.utils.hub._get_resolved_checkpoint_files
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resolved_checkpoint_files
+    line_at_scan: 10
+  match:
+    transformers.is_local: {present: true, not_equal: true}
+    transformers.gguf_file: {present: false}
+  added_by: llm_pure_b
+
+- id: transformers__get_resolved_checkpoint_files_pretrained_model_name_or_path_local_gguf_file_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'is_local and gguf_file is None'
+  severity: error
+  native_type: transformers.utils.hub._get_resolved_checkpoint_files
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resolved_checkpoint_files
+    line_at_scan: 10
+  match:
+    transformers.is_local: {present: true}
+    transformers.gguf_file: {present: false}
+  added_by: llm_pure_b
+
+- id: transformers__get_resolved_checkpoint_files_pretrained_model_name_or_path_not_local_gguf_file_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'not is_local and gguf_file is not None'
+  severity: error
+  native_type: transformers.utils.hub._get_resolved_checkpoint_files
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resolved_checkpoint_files
+    line_at_scan: 10
+  match:
+    transformers.is_local: {present: true, not_equal: true}
+    transformers.gguf_file: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers__get_resolved_checkpoint_files_pretrained_model_name_or_path_local_gguf_file_present
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'is_local and gguf_file is not None'
+  severity: error
+  native_type: transformers.utils.hub._get_resolved_checkpoint_files
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resolved_checkpoint_files
+    line_at_scan: 10
+  match:
+    transformers.is_local: {present: true}
+    transformers.gguf_file: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers__get_resolved_checkpoint_files_pretrained_model_name_or_path_not_local_gguf_file_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'not is_local and gguf_file is None'
+  severity: error
+  native_type: transformers.utils.hub._get_resolved_checkpoint_files
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resolved
+
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers.modeling_utils_dtype_not_in_enum
+  engine: transformers
+  library: transformers
+  invariant_under_test: "isinstance(dtype, str) and dtype not in ['auto', 'float16', 'bfloat16', 'float32', 'float64', 'complex64', 'complex128']"
+  severity: error
+  native_type: transformers.modeling_utils._get_dtype
+  miner_source:
+    path: modeling_utils.py
+    method: _get_dtype
+    line_at_scan: 20
+  match:
+    engine: transformers
+    fields:
+      transformers.modeling_utils._get_dtype.dtype: {not_in: ['auto', 'float16', 'bfloat16', 'float32', 'float64', 'complex64', 'complex128']}
+- id: transformers.modeling_utils_device_map_not_str_or_dict
+  engine: transformers
+  library: transformers
+  invariant_under_test: "isinstance(device_map, str) or isinstance(device_map, dict)"
+  severity: error
+  native_type: transformers.modeling_utils._get_device_map
+  miner_source:
+    path: modeling_utils.py
+    method: _get_device_map
+    line_at_scan: 30
+  match:
+    engine: transformers
+    fields:
+      transformers.modeling_utils._get_device_map.device_map: {type_is_not: [str, dict]}
+- id: transformers.modeling_utils_dtype_not_torch_dtype
+  engine: transformers
+  library: transformers
+  invariant_under_test: "isinstance(dtype, torch.dtype)"
+  severity: error
+  native_type: transformers.modeling_utils._get_device_map
+  miner_source:
+    path: modeling_utils.py
+    method: _get_device_map
+    line_at_scan: 35
+  match:
+    engine: transformers
+    fields:
+      transformers.modeling_utils._get_device_map.dtype: {type_is_not: [torch.dtype]}
+- id: transformers.modeling_utils_max_memory_not_dict_or_none
+  engine: transformers
+  library: transformers
+  invariant_under_test: "isinstance(max_memory, dict) or max_memory is None"
+  severity: error
+  native_type: transformers.modeling_utils._get_device_map
+  miner_source:
+    path: modeling_utils.py
+    method: _get_device_map
+    line_at_scan: 40
+  match:
+    engine: transformers
+    fields:
+      transformers.modeling_utils._get_device_map.max_memory: {type_is_not: [dict, None]}
+- id: transformers.modeling_utils_dtype_not_in_enum_get_extended_attention_mask
+  engine: transformers
+  library: transformers
+  invariant_under_test: "isinstance(dtype, str) and dtype not in ['auto', 'float16', 'bfloat16', 'float32', 'float64', 'complex64', 'complex128']"
+  severity: error
+  native_type: transformers.modeling_utils.get_extended_attention_mask
+  miner_source:
+    path: modeling_utils.py
+    method: get_extended_attention_mask
+    line_at_scan: 50
+  match:
+    engine: transformers
+    fields:
+      transformers.modeling_utils.get_extended_attention_mask.dtype: {not_in: ['auto', 'float16', 'bfloat16', 'float32', 'float64', 'complex64', 'complex128']}
+- id: transformers.modeling_utils_device_map_deprecated
+  engine: transformers
+  library: transformers
+  invariant_under_test: "device_map is None or isinstance(device_map, str)"
+  severity: warning
+  native_type: transformers.modeling_utils.get_extended_attention_mask
+  miner_source:
+    path: modeling_utils.py
+    method: get_extended_attention_mask
+    line_at_scan: 55
+  match:
+    engine: transformers
+    fields:
+      transformers.modeling_utils.get_extended_attention_mask.device_map: {present: true, not_in: [dict]}
+- id: transformers.modeling_utils_dtype_deprecated
+  engine: transformers
+  library: transformers
+  invariant_under_test: "dtype is None or isinstance(dtype, torch.dtype)"
+  severity: warning
+  native_type: transformers.modeling_utils.get_extended_attention_mask
+  miner_source:
+    path: modeling_utils.py
+    method: get_extended_attention_mask
+    line_at_scan: 60
+  match:
+    engine: transformers
+    fields:
+      transformers.modeling_utils.get_extended_attention_mask.dtype: {present: true, type_is_not: [torch.dtype]}
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers_pretrainedconfig_type_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: isinstance(config, PretrainedConfig)
+  severity: error
+  native_type: transformers.PreTrainedModel.__init__
+  miner_source:
+    path: modeling_utils.py
+    method: __init__
+    line_at_scan: 10
+  match:
+    transformers.PreTrainedModel.__init__: {config: {present: true, type_is_not: [PretrainedConfig]}}
+  added_by: llm_pure_b
+
+- id: transformers_keep_in_fp32_modules_value_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: module in unique_module_names
+  severity: error
+  native_type: transformers.PreTrainedModel.post_init
+  miner_source:
+    path: modeling_utils.py
+    method: post_init
+    line_at_scan: 130
+  match:
+    transformers.PreTrainedModel.post_init: {self._keep_in_fp32_modules: {present: true, not_in: []}}
+  added_by: llm_pure_b
+
+- id: transformers_keep_in_fp32_modules_strict_value_error
+  engine  : transformers
+  library : transformers
+  invariant_under_test: module in unique_module_names
+  severity: error
+  native_type: transformers.PreTrainedModel.post_init
+  miner_source:
+    path: modeling_utils.py
+    method: post_init
+    line_at_scan: 140
+  match:
+    transformers.PreTrainedModel.post_init: {self._keep_in_fp32_modules_strict: {present: true, not_in: []}}
+  added_by: llm_pure_b
+
+- id: transformers_tp_plan_parallel_style_value_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: parallel_style in ALL_PARALLEL_STYLES
+  severity: error
+  native_type: transformers.PreTrainedModel.tp_plan
+  miner_source:
+    path: modeling_utils.py
+    method: tp_plan
+    line_at_scan: 50
+  match:
+    transformers.PreTrainedModel.tp_plan: {parallel_style: {present: true, not_in: []}}
+  added_by: llm_pure_b
+
+- id: transformers_set_default_dtype_value_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: dtype.is_floating_point
+  severity: error
+  native_type: transformers.PreTrainedModel._set_default_dtype
+  miner_source:
+    path: modeling_utils.py
+    method: _set_default_dtype
+    line_at_scan: 20
+  match:
+    transformers.PreTrainedModel._set_default_dtype: {dtype: {present: true, type_is_not: [torch.dtype]}}
+  added_by: llm_pure_b
+
+- id: transformers_generate_warning
+  engine: transformers
+  library: transformers
+  invariant_under_test: "prepare_inputs_for_generation" in str(cls.__bases__)
+  severity: warning
+  native_type: transformers.PreTrainedModel.can_generate
+  miner_source:
+    path: modeling_utils.py
+    method: can_generate
+    line_at_scan: 30
+  match:
+    transformers.PreTrainedModel.can_generate: {prepare_inputs_for_generation: {present: true}}
+  added_by: llm_pure_b
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers_flash_attn_2_not_installed_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: not is_flash_attn_2_available()
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _flash_attn_2_can_dispatch
+    line_at_scan: 103
+  match:
+    transformers.PreTrainedModel._supports_flash_attn: {present: true}
+    transformers.PreTrainedModel._supports_flash_attn_2: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_flash_attn_3_not_installed_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: not is_flash_attn_3_available()
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _flash_attn_3_can_dispatch
+    line_at_scan: 103
+  match:
+    transformers.PreTrainedModel._supports_flash_attn: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_sdpa_not_supported_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: not self._supports_sdpa
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _sdpa_can_dispatch
+    line_at_scan: 30
+  added_by: llm_pure_b
+
+- id: transformers_flex_attn_not_supported_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: not self._supports_flex_attn
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _flex_attn_can_dispatch
+    line_at_scan: 30
+  added_by: llm_pure_b
+
+- id: transformers_flash_attn_2_version_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: flash_attention_version < version.parse("2.1.0")
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _flash_attn_2_can_dispatch
+    line_at_scan: 134
+  match:
+    transformers.PreTrainedModel._supports_flash_attn: {present: true}
+    transformers.PreTrainedModel._supports_flash_attn_2: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_flash_attn_3_version_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: flash_attention_version < version.parse("2.0.4")
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _flash_attn_3_can_dispatch
+    line_at_scan: 156
+  match:
+    transformers.PreTrainedModel._supports_flash_attn: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_alibi_not_supported_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: getattr(self.config, "alibi", False) or getattr(self.config, "use_alibi", False)
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _flash_attn_3_can_dispatch
+    line_at_scan: 170
+  added_by: llm_pure_b
+
+- id: transformers_attention_dropout_not_supported_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: self.config.attention_dropout > 0
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _flash_attn_3_can_dispatch
+    line_at_scan: 174
+  added_by: llm_pure_b
+
+- id: transformers_model_not_on_gpu_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: len(param_devices) == 1 and param_devices[0].type == "cpu"
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _flash_attn_2_can_dispatch
+    line_at_scan: 187
+  added_by: llm_pure_b
+
+- id: transformers_model_not_on_gpu_error_flex_attn
+  engine: transformers
+  library: transformers
+  invariant_under_test: len(param_devices) == 1 and param_devices[0].type == "cpu"
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _flex_attn_can_dispatch
+    line_at_scan: 92
+  added_by: llm_pure_b
+
+- id: transformers_model_not_on_gpu_error_sdpa
+  engine: transformers
+  library: transformers
+  invariant_under_test: len(param_devices) == 1 and param_devices[0].type == "cpu"
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _sdpa_can_dispatch
+    line_at_scan: 48
+  added_by: llm_pure_b
+
+- id: transformers_model_not_on_gpu_error_flash_attn_3
+  engine: transformers
+  library: transformers
+  invariant_under_test: len(param_devices) == 1 and param_devices[0].type == "cpu"
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _flash_attn_3_can_dispatch
+    line_at_scan: 187
+  added_by: llm_pure_b
+
+- id: transformers_model_not_on_gpu_error_sdpa_fallback
+  engine: transformers
+  library: transformers
+  invariant_under_test: len(param_devices) == 1 and param_devices[0].type == "cpu"
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _check_and_adjust_attn_implementation
+    line_at_scan: 63
+  added_by: llm_pure_b
+
+- id: transformers_model_not_on_gpu_error_flash_attn_2_fallback
+  engine: transformers
+  library: transformers
+  invariant_under_test: len(param_devices) == 1 and param_devices[0].type == "cpu"
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _check_and_adjust_attn_implementation
+    line_at_scan: 79
+  added_by: llm_pure_b
+
+- id: transformers_model_not_on_gpu_error_flash_attn_3_fallback
+  engine: transformers
+  library: transformers
+  invariant_under_test: len(param_devices) == 1 and param_devices[0].type == "cpu"
+  severity: error
+  native_type  : transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _check_and_adjust_attn_implementation
+    line_at_scan: 95
+  added_by: llm_pure_b
+
+- id: transformers_model_not_on_gpu_error_flex_attn_fallback
+  engine: transformers
+  library: transformers
+  invariant_under_test: len(param_devices) == 1 and param_devices[0].type == "cpu"
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _check_and_adjust_attn_implementation
+    line_at_scan: 111
+  added_by: llm_pure_b
+
+- id: transformers_model_not_on_gpu_error_sdpa_fallback
+  engine: transformers
+  library: transformers
+  invariant_under_test: len(param_devices) == 1 and param_devices[0].type == "cpu"
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _check_and_adjust_attn_implementation
+    line_at_scan: 63
+  added_by: llm_pure_b
+
+- id: transformers_model_not_on_gpu_error_flash_attn_2_fallback
+  engine: transformers
+  library: transformers
+  invariant_under_test: len(param_devices) == 1 and param_devices[0].type == "cpu"
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _check_and_adjust_attn_implementation
+    line_at_scan: 79
+  added_by: llm_pure_b
+
+- id: transformers_model_not_on_gpu_error_flash_attn_3_fallback
+  engine: transformers
+  library: transformers
+  invariant_under_test: len(param_devices) == 1 and param_devices[0].type == "cpu"
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _check_and_adjust_attn_implementation
+    line_at
+
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers_pretrainedmodel_set_attn_implementation_value_not_in_enum_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if requested_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():'
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: set_attn_implementation
+    line_at_scan: 107
+  match:
+    transformers: {transformers.PreTrainedModel._attn_implementation_internal: {present: true, not_in: ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys()}}
+  added_by: llm_pure_b
+
+- id: transformers_pretrainedmodel_get_decoder_value_not_in_enum_dormant
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if submodule.config._attn_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():'
+  severity: dormant
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _get_no_split_modules
+    line_at_scan: 107
+  match:
+    transformers: {transformers.PreTrainedModel._no_split_modules: {present: true, not_in: ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys()}}
+  added_by: llm_pure_b
+
+- id: transformers_pretrainedmodel_resize_token_embeddings_value_not_in_enum_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if new_num_tokens <= 0:'
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _resize_token_embeddings
+    line_at_scan: 107
+  match:
+    transformers: {transformers.PreTrainedModel._resize_token_embeddings.new_num_tokens: {'<': 0}}
+  added_by: llm_pure_b
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers_pretrainedmodel_get_resized_embeddings_old_embeddings_type_check
+  engine: transformers
+  library: transformers
+  invariant_under_test: isinstance(old_embeddings, nn.Embedding)
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resized_embeddings
+    line_at_scan: 104
+  match:
+    transformers.nn.Embedding: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_pretrainedmodel_get_resized_lm_head_old_lm_head_type_check
+  engine: transformers
+  library: transformers
+  invariant_under_test: isinstance(old_lm_head, nn.Linear)
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _get_resized_lm_head
+    line_at_scan: 184
+  match:
+    transformers.nn.Linear: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_pretrainedmodel_gradient_checkpointing_enable_support_check
+  engine: transformers
+  library: transformers
+  invariant_under_test: self.supports_gradient_checkpointing
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: gradient_checkpointing_enable
+    line_at_scan: 209
+  match:
+    transformers.PreTrainedModel.supports_gradient_checkpointing: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_pretrainedmodel_set_gradient_checkpointing_support_check
+  engine: transformers
+  library: transformers
+  invariant_under_test: hasattr(module, "gradient_checkpointing")
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _set_gradient_checkpointing
+    line_at_scan: 234
+  match:
+    transformers.nn.Module.gradient_checkpointing: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_pretrainedmodel_set_gradient_checkpointing_enable_check
+  engine: transformers
+  library: transformers
+  invariant_under_test: enable
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _set_gradient_checkpointing
+    line_at_scan: 235
+  match:
+    transformers._set_gradient_checkpointing.enable: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_pretrainedmodel_set_gradient_checkpointing_func_check
+  engine: transformers
+  library: transformers
+  invariant_under_test: isinstance(gradient_checkpointing_func, Callable)
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _set_gradient_checkpointing
+    line_at_scan: 236
+  match:
+    builtins.Callable: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_pretrainedmodel_set_gradient_checkpointing_old_format_check
+  engine: transformers
+  library: transformers
+  invariant_under_test: "value" in inspect.signature(self._set_gradient_checkpointing).parameters
+  severity: dormant
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: gradient_checkpointing_enable
+    line_at_scan: 215
+  match:
+    inspect.Signature.parameters.value: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_pretrainedmodel_set_gradient_checkpointing_old_format_warning
+  engine: transformers
+  library: transformers
+  invariant_under_test: "value" in inspect.signature(self._set_gradient_checkpointing).parameters
+  severity: warning
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: gradient_checkpointing_enable
+    line_at_scan: 215
+  match:
+    inspect.Signature.parameters.value: {present: true}
+  added_by: llm_pure_b
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers.gradient_checkpointing_disable.supports_gradient_checkpointing_not_set_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if not self.supports_gradient_checkpointing:'
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: gradient_checkpointing_disable
+    line_at_scan: 10
+  match:
+    transformers.PreTrainedModel.supports_gradient_checkpointing: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers.gradient_checkpointing_disable._set_gradient_checkpointing_old_format_warning
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if not _is_using_old_format:'
+  severity: warning
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: gradient_checkpointing_disable
+    line_at_scan: 14
+  match:
+    transformers.PreTrainedModel._set_gradient_checkpointing_old_format: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers.gradient_checkpointing_disable.gradient_checkpointing_kwargs_dormant
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if not _is_using_old_format:'
+  severity: dormant
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: gradient
+
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers_save_pretrained_path_is_directory
+  engine: transformers
+  library: transformers
+  invariant_under_test: "os.path.isfile(save_directory)"
+  severity: error
+  native_type: transformers.PreTrainedModel.save_pretrained
+  miner_source:
+    path: modeling_utils.py
+    method: save_pretrained
+    line_at_scan: 107
+  match:
+    transformers.save_pretrained: {present: true, not_in: [False]}
+  added_by: llm_pure_b
+
+- id: transformers_save_pretrained_token_and_use_auth_token_mutually_exclusive
+  engine: transformers
+  library: transformers
+  invariant_under_test: "token is not None and use_auth_token is not None"
+  severity: error
+  native_type: transformers.PreTrainedModel.save_pretrained
+  miner_source:
+    path: modeling_utils.py
+    method: save_pretrained
+    line_at_scan: 120
+  match:
+    transformers.save_pretrained: {present: true, not_in: [False]}
+  added_by: llm_pure_b
+
+- id: transformers_save_pretrained_max_shard_size_positive
+  engine: transformers
+  library: transformers
+  invariant_under_test: "max_shard_size <= 0"
+  severity: error
+  native_type: transformers.PreTrainedModel.save_pretrained
+  miner_source:
+    path: modeling_utils.py
+    method: save_pretrained
+    line_at_scan: 138
+  match:
+    transformers.save_pretrained: {present: true, gt: 0}
+  added_by: llm_pure_b
+
+- id: transformers_save_pretrained_safe_serialization_type
+  engine: transformers
+  library: transformers
+  invariant_under_test: "not isinstance(safe_serialization, bool)"
+  severity: error
+  native_type  : transformers.PreTrainedModel.save_pretrained
+  miner_source:
+    path: modeling_utils.py
+    method: save_pretrained
+    line_at_scan: 140
+  match:
+    transformers.save_pretrained: {present: true, type_is_not: [bool]}
+  added_by: llm_pure_b
+
+- id: transformers_save_pretrained_variant_string
+  engine: transformers
+  library: transformers
+  invariant_under_test: "variant is not None and not isinstance(variant, str)"
+  severity: error
+  native_type: transformers.PreTrainedModel.save_pretrained
+  miner_source:
+    path: modeling_utils.py
+    method: save_pretrained
+    line_at_scan: 142
+  match:
+    transformers.save_pretrained: {present: true, type_is_not: [str]}
+  added_by: llm_pure_b
+
+- id: transformers_save_pretrained_token_string_or_bool
+  engine: transformers
+  library: transformers
+  invariant_under_test: "token is not None and not isinstance(token, (str, bool))"
+  severity: error
+  native_type: transformers.PreTrainedModel.save_pretrained
+  miner_source:
+    path: modeling_utils.py
+    method: save_pretrained
+    line_at
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers_pretrainedmodel_push_to_hub_tags_not_in_model_tags
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if tag not in tags:'
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: push_to_hub
+    line_at_scan: 10
+  match:
+    transformers.model_tags: {present: true}
+    transformers.tags_kwargs: {present: true}
+- id: transformers_pretrainedmodel_cuda_quantization_method_hqq_no_args
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if len(args) > 0:'
+  severity: error
+  native_type  : transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: cuda
+    line_at_scan: 32
+  match:
+    transformers.quantization_method: {present: true, not_equal: 'QuantizationMethod.HQQ'}
+- id: transformers_pretrainedmodel_cuda_quantization_method_bnb_is_loaded_in_8bit
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if getattr(self, "is_loaded_in_8bit", False):'
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: cuda
+    line_at_scan: 37
+  match:
+    transformers.quantization_method: {present: true, not_equal: 'QuantizationMethod.BITS_AND_BYTES'}
+- id: transformers_pretrainedmodel_cuda_quantization_method_bnb_bitsandbytes_version
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):'
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: cuda
+    line_at_scan: 41
+  match:
+    transformers.quantization_method: {present: true, not_equal: 'QuantizationMethod.BITS_AND_BYTES'}
+- id: transformers_pretrainedmodel_to_quantization_method_hqq_no_args
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if "device" in kwargs:'
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: to
+    line_at_scan: 60
+  match:
+    transformers.quantization_method: {present: true, not_equal: 'QuantizationMethod.HQQ'}
+- id: transformers_pretrainedmodel_to_quantization_method_quark_no_args
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if "dtype" in kwargs:'
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: to
+    line_at_scan: 65
+  match:
+    transformers.quantization_method: {present: true, not_equal: 'QuantizationMethod.QUARK'}
+- id: transformers_pretrainedmodel_to_quantization_method_bnb_is_loaded_in_8bit
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if getattr(self, "is_loaded_in_8bit", False):'
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: to
+    line_at_scan: 70
+  match:
+    transformers.quantization_method: {present: true, not_equal: 'QuantizationMethod.BITS_AND_BYTES'}
+- id: transformers_pretrainedmodel_to_quantization_method_bnb_bitsandbytes_version
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):'
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: to
+    line_at_scan: 74
+  match:
+    transformers.quantization_method: {present: true, not_equal: 'QuantizationMethod.BITS_AND_BYTES'}
+- id: transformers_pretrainedmodel_to_quantization_method_gptq_no_args
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if "dtype" in kwargs:'
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: to
+    line_at_scan: 79
+  match:
+    transformers.quantization_method: {present: true, not_equal: 'QuantizationMethod.GPTQ'}
+- id: transformers_pretrainedmodel_half_is_quantized
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if getattr(self, "is_quantized", False):'
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: half
+    line_at_scan: 10
+  match:
+    transformers.is_quantized: {present: true}
+- id: transformers_pretrainedmodel_float_is_quantized
+  engine: transformers
+  library: transformers
+  invariant_under_test: 'if getattr(self, "is_quantized", False):'
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: float
+    line_at_scan: 10
+  match:
+    transformers.is_quantized: {present: true}
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers_pretrainedmodel_from_pretrained_state_dict_and_path_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: "`state_dict` cannot be passed together with a model name or a `gguf_file`. Use one of the two loading strategies."
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: from_pretrained
+    line_at_scan: 130
+  match:
+    transformers: {state_dict: {present: true}, pretrained_model_name_or_path: {present: true, not_in: [None]}, gguf_file: {present: true, not_in: [None]}}
+  added_by: llm_pure_b
+
+- id: transformers_pretrainedmodel_from_pretrained_tp_plan_and_device_map_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: from_pretrained
+    line_at_scan: 140
+  match:
+    transformers: {tp_plan: {present: true}, device_map: {present: true}}
+  added_by: llm_pure_b
+
+- id: transformers_pretrainedmodel_from_pretrained_tp_size_and_no_tp_plan_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: "tp_plan has to be set when tp_size is passed."
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: from_pretrained
+    line_at_scan: 135
+  match:
+    transformers: {tp_size: {present: true}, tp_plan: {present: false}}
+  added_by: llm_pure_b
+
+- id: transformers_pretrainedmodel_from_pretrained_tp_plan_not_auto_error
+  engine: transformers
+  library: transformers
+  invariant_under_test: "tp_plan supports 'auto' only for now but got {tp_plan}."
+  severity: error
+  native_type尽请等待，我正在为您生成答案。
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers_pretrainedmodel_register_for_auto_class_invalid_auto_class
+  engine: transformers
+  library: transformers
+  invariant_under_test: isinstance(auto_class, str)
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: register_for_auto_class
+    line_at_scan: 102
+  match:
+    transformers.PreTrainedModel._auto_class: {present: true}
+  added_by: llm_pure_b
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: transformers_modeling_utils_pretrainedmodel_warn_if_padding_and_no_attention_mask
+  engine: transformers
+  library: transformers
+  invariant_under_test: "Checks if input_ids contain padding and no attention mask is provided."
+  severity: warning
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: warn_if_padding_and_no_attention_mask
+    line_at_scan: 10
+  match:
+    transformers.PreTrainedModel.config.pad_token_id: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_modeling_utils_pretrainedmodel_loss_function
+  engine: transformers
+  library: transformers
+  invariant_under_test: "Checks if the loss_type is recognized and sets a default if not."
+  severity: warning
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: loss_function
+    line_at_scan: 25
+  match:
+    transformers.PreTrainedModel.loss_type: {present: true, not_in: [None]}
+  added_by: llm_pure_b
+
+- id: transformers_modeling_utils_pretrainedmodel_kernelize
+  engine: transformers
+  library: transformers
+  invariant_under_test: "Checks if kernels are available before using them."
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: kernelize
+    line_at_scan: 35
+  match:
+    transformers.modeling_utils.is_kernels_available: {present: true, not_equal: True}
+  added_by: llm_pure_b
+
+- id: transformers_modeling_utils_pretrainedmodel_use_kernels
+  engine: transformers
+  library: transformers
+  invariant_under_test: "Checks if kernels are available before using them."
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: use_kernels
+    line_at_scan: 45
+  match:
+    transformers.modeling_utils.is_kernels_available: {present: true, not_equal: True}
+  added_by: llm_pure_b
+
+- id: transformers_modeling_utils_pretrainedmodel_initialize_missing_keys
+  engine: transformers
+  library: transformers
+  invariant_under_test: "Checks if the model is already initialized before re-initializing."
+  severity: warning
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: _initialize_missing_keys
+    line_at_scan: 55
+  match:
+    transformers.PreTrainedModel._is_hf_initialized: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_modeling_utils_pretrainedmodel_get_parameter_or_buffer
+  engine: transformers
+  library: transformers
+  invariant_under_test: "Checks if the target parameter or buffer exists."
+  severity: error
+  native_type: transformers.PreTrainedModel
+  miner_source:
+    path: modeling_utils.py
+    method: get_parameter_or_buffer
+    line_at_scan: 65
+  match:
+    transformers.PreTrainedModel.get_parameter_or_buffer: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_modeling_utils_unwrap_model
+  engine: transformers
+  library: transformers
+  invariant_under_test: "Checks if the recursive parameter is valid."
+  severity: error
+  native_type: None
+  miner_source:
+    path: modeling_utils.py
+    method: unwrap_model
+    line_at_scan: 75
+  match:
+    transformers.modeling_utils.is_accelerate_available: {present: true, not_equal: True}
+    transformers.modeling_utils.unwrap_model.recursive: {present: true, type_is_not: [bool]}
+  added_by: llm_pure_b
+
+- id: transformers_modeling_utils_is_accelerator_device
+  engine: transformers
+  library: transformers
+  invariant_under_test: "Checks if the device is an accelerator."
+  severity: error
+  native_type: None
+  miner_source:
+    path: modeling_utils.py
+    method: is_accelerator_device
+    line_at_scan: 85
+  match:
+    transformers.modeling_utils.is_accelerator_device: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_modeling_utils_caching_allocator_warmup
+  engine: transformers
+  library: transformers
+  invariant_under_test: "Checks if the device is an accelerator."
+  severity: error
+  native_type: None
+  miner_source:
+    path: modeling_utils.py
+    method: caching_allocator_warmup
+    line_at_scan: 95
+  match:
+    transformers.modeling_utils.is_accelerator_device: {present: true}
+  added_by: llm_pure_b
+
+- id: transformers_modeling_utils_get_disk_only_shard_files
+  engine  : transformers
+  library : transformers
+  invariant_under_test: "Checks if the weight_map is not empty."
+  severity  : error
+  native_type : None
+  miner_source:
+    path      : modeling_utils.py
+    method    : get_disk_only_shard_files
+    line_at_scan: 105
+  match:
+    transformers.modeling_utils.get_disk_only_shard_files.weight_map: {present: true, not_equal: {}}
+  added_by: llm_pure_b
+```

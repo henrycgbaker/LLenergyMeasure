@@ -1,0 +1,616 @@
+```yaml
+invariants:
+- id: vllm_samplingparams__post_init__guide_count_gt_1
+  engine: vllm.sampling
+  library: vllm
+  invariant_under_test: "If guide_count is greater than 1, raise ValueError."
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 20
+  match:
+    engine: vllm.sampling
+    fields:
+      vllm.sampling.GuideDecodingParams.guide_count: {'>': 1}
+  added_by: llm_wg_extend
+
+- id: vllm_samplingparams__post_init__best_of_not_equal_0
+  engine: vllm.sampling
+  library: vllm
+  invariant_under_test: "If best_of is not equal to 0, raise ValueError."
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 35
+  match:
+    engine: vllm.sampling
+    fields:
+      vllm.sampling.SamplingParams.best_of: {not_equal: 0}
+  added_by: llm_wg_extend
+
+- id: vllm_samplingparams__post_init__temperature_gt_0
+  engine: vllm.sampling
+  library: vllm
+  invariant_under_test: "If temperature is greater than 0, raise ValueError."
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 45
+  match:
+    engine: vllm.sampling
+    fields:
+      vllm.sampling.SamplingParams.temperature: {'>': 0}
+  added_by: llm_wg_extend
+
+- id: vllm_samplingparams__post_init__stop_token_ids_not_empty
+  engine: vllm.sampling
+  library: vllm
+  invariant_under_test: "If stop_token_ids is not empty, raise ValueError."
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 60
+  match:
+    engine: vllm.sampling
+    fields:
+      vllm.sampling.SamplingParams.stop_token_ids: {present: true}
+  added_by: llm_wg_extend
+
+- id: vllm_samplingparams__post_init__bad_words_not_empty
+  engine: vllm.sampling
+  library: vllm
+  invariant_under_test: "If bad_words is not empty, raise ValueError."
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: __post_init__
+    line_at_scan: 65
+  match:
+    engine: vllm.sampling
+    fields:
+      vllm.sampling.SamplingParams.bad_words: {present: true}
+  added_by: llm_wg_extend
+
+- id: vllm_samplingparams__verify_args_n_gt_0
+  engine: vllm.sampling
+  library: vllm
+  invariant_under_test: "If n is greater than 0, raise ValueError."
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 120
+  match:
+    engine: vllm.sampling
+    fields:
+      vllm.sampling.SamplingParams.n: {'>': 0}
+  added_by: llm_wg_extend
+
+- id: vllm_samplingparams__verify_args_presence_penalty_in_range
+  engine: vllm.sampling
+  library: vllm
+  invariant_under_test: "If presence_penalty is in the range [-2, 2], raise ValueError."
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at_scan: 130
+  match:
+    engine: vllm.sampling
+    fields:
+      vllm.sampling.SamplingParams.presence_penalty: {'>=': -2.0, '<=': 2.0}
+  added_by: llm_wg_extend
+
+- id: vllm_samplingparams__verify_args_frequency_penalty_in_range
+  engine: vllm.sampling
+  library: vllm
+  invariant_under_test: "If frequency_penalty is in the range [-2, 2], raise ValueError."
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _verify_args
+    line_at
+
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: vllm_modelconfig__verify_quantization_quant_method_not_in
+  engine: vllm
+  library: vllm
+  invariant_under_test: "Quantization method must be one of the supported methods."
+  severity: error
+  native_type: vllm.engine.ModelConfig
+  miner_source:
+    path: config.py
+    method: _verify_quantization
+    line_at_scan: 15
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.ModelConfig.quantization: {present: true, not_in: [fp8, marlin, modelopt, gptq_marlin_24, gptq_marlin, awq_marlin, fbgemm_fp8, compressed_tensors, compressed-tensors, experts_int8, quark]}
+  added_by: llm_wg_extend
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: vllm_schedulerconfig__verify_args_max_num_batched_tokens_lt_max_model_len
+  engine: vllm
+  library: vllm
+  invariant_under_test: max_num_batched_tokens must be greater than or equal to max_model_len
+  severity: error
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: config.py
+    method: _verify_args
+    line_at_scan: 30
+  match:
+    engine: vllm
+    fields:
+      vllm.schedulerconfig.max_num_batched_tokens: {'<': vllm.schedulerconfig.max_model_len}
+- id: vllm_schedulerconfig__verify_args_max_num_batched_tokens_lt_max_num_seqs
+  engine: vllm
+  library: vllm
+  invariant_under_test: max_num_batched_tokens must be greater than or equal to max_num_seqs
+  severity: error
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: config.py
+    method: _verify_args
+    line_at_scan: 35
+  match:
+    engine: vllm
+    fields:
+      vllm.schedulerconfig.max_num_batched_tokens: {'<': vllm.schedulerconfig.max_num_seqs}
+- id: vllm_schedulerconfig__verify_args_num_lookahead_slots_lt
+  engine: vllm
+  library: vllm
+  invariant_under_test: num_lookahead_slots must be greater than or equal to 0
+  severity: error
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: config.py
+    method: _verify_args
+    line_at_scan: 40
+  match:
+    engine: vllm
+    fields:
+      vllm.schedulerconfig.num_lookahead_slots: {'<': 0}
+- id: vllm_schedulerconfig__verify_args_num_scheduler_steps_lt
+  engine: vllm
+  library: vllm
+  invariant_under_test: num_scheduler_steps must be greater than or equal to 1
+  severity: error
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: config.py
+    method: _verify_args
+    line_at_scan: 45
+  match:
+    engine: vllm
+    fields:
+      vllm.schedulerconfig.num_scheduler_steps: {'<': 1}
+- id: vllm_schedulerconfig__verify_args_max_num_partial_prefills_lt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: max_num_partial_prefills must be greater than or equal to 1
+  severity: error
+  native_type  vllm.SchedulerConfig
+  miner_source:
+    path: config.py
+    method: _verify_args
+    line_at_scan: 50
+  match:
+    engine: vllm
+    fields:
+      vllm.schedulerconfig.max_num_partial_prefills: {'<': 1}
+- id: vllm_schedulerconfig__verify_args_max_long_partial_prefills_lt_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: max_long_partial_prefills must be greater than or equal to 1
+  severity: error
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: config.py
+    method: _verify_args
+    line_at_scan: 55
+  match:
+    engine: vllm
+    fields:
+      vllm.schedulerconfig.max_long_partial_prefills: {'<': 1}
+- id: vllm_schedulerconfig__verify_args_max_long_partial_prefills_gt_max_num_partial_prefills
+  engine: vllm
+  library: vllm
+  invariant_under_test: max_long_partial_prefills must be less than or equal to max_num_partial_prefills
+  severity: error
+  native_type: vllm.SchedulerConfig
+  miner_source:
+    path: config.py
+    method: _verify_args
+    line_at_scan: 60
+  match:
+    engine: vllm
+    fields:
+      vllm.schedulerconfig.max_long_partial_prefills: {'>': vllm.schedulerconfig.max_num_partial_prefills}
+- id: vllm_deviceconfig__verify_device_type_in_auto
+  engine: vllm
+  library: vllm
+  invariant_under_test: device type must be inferred if set to 'auto'
+  severity: error
+  native_type: vllm.DeviceConfig
+  miner
+
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: vllm_speculativeconfig_num_speculative_tokens_gt_zero
+  engine: vllm
+  library: vllm
+  invariant_under_test: "Expected num_speculative_tokens to be greater than zero"
+  severity: error
+  native_type: vllm.engine.SpeculativeConfig
+  miner_source:
+    path: config.py
+    method: _verify_args
+    line_at_scan: 12
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.speculative_config.num_speculative_tokens: {'>': 0}
+  added_by: llm_wg_extend
+
+- id: vllm_loraconfig_max_loras_gt_zero
+  engine: vllm
+  library: vllm
+  invariant_under_test: "max_loras must be >= 1"
+  severity: error
+  native_type: vllm.engine.LoRAConfig
+  miner_source:
+    path: config.py
+    method: __post_init__
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.lora_config.max_loras: {'>': 0}
+  added_by: llm_wg_extend
+
+- id: vllm_promptadapterconfig_max_cpu_prompt_adapters_gt_zero
+  engine: vllm
+  library: vllm
+  invariant_under_test: "max_cpu_prompt_adapters must be >= 1"
+  severity: error
+  native_type  : vllm.engine.PromptAdapterConfig
+  miner_source:
+    path: config.py
+    method: __post_init__
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.prompt_adapter_config.max_cpu_prompt_adapters: {'>': 0}
+  added_by: llm_wg_extend
+
+- id: vllm_decodingconfig_backend_not_in_valid_values
+  engine: vllm
+  library: vllm
+  invariant_under_test: "Invalid guided_decoding_backend"
+  severity: error
+  native_type: vllm.engine.DecodingConfig
+  miner_source:
+    path: config.py
+    method: __post_init__
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.decoding_config.backend: {not_in: ['outlines', 'lm-format-enforcer', 'xgrammar']}
+  added_by: llm_wg_extend
+
+- id: vllm_observabilityconfig_otlp_traces_endpoint_with_no_otel_available
+  engine: vllm
+  library: vllm
+  invariant_under_test: "OpenTelemetry is not available"
+  severity: error
+  native_type: vllm.engine.ObservabilityConfig
+  miner_source:
+    path: config.py
+    method: __post_init__
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.observability_config.otlp_traces_endpoint: {present: true}
+  added_by: llm_wg_extend
+
+- id: vllm_kvtransferconfig_kv_role_not_in_valid_values
+  engine: vllm
+  library: vllm
+  invariant_under_test: "Unsupported kv_role"
+  severity: error
+  native_type: vllm.engine.KVTransferConfig
+  miner_source:
+    path: config.py
+    method: model_post_init
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.kv_transfer_config.kv_role: {not_in: ['kv_producer', 'kv_consumer', 'kv_both']}
+  added_by: llm_wg_extend
+
+- id: vllm_compilationconfig_enable_reshape_and_fusion_conflict
+  engine: vllm
+  library: vllm
+  invariant_under_test: "Fusion enabled but reshape elimination disabled"
+  severity: warning
+  native_type: vllm.engine.CompilationConfig
+  miner_source:
+    path: config.py
+    method: model_post_init
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.enable_reshape: false
+      vllm.engine.compilation_config.enable_fusion: true
+  added_by: llm_wg_extend
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: vllm_engine_compilationconfig_model_post_init_count_none_le
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'count_none + count_all <= 1'
+  severity: error
+  native_type: vllm.CompilationConfig
+  miner_source:
+    path: config.py
+    method: model_post_init
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.count_none: {'<=': 1}
+- id: vllm_engine_compilationconfig_model_post_init_splitting_ops_not_in_v1
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'if self.splitting_ops is None and envs.VLLM_USE_V1: self.splitting_ops = ["vllm.unified_attention", "vllm.unified_attention_with_output"]'
+  severity: error
+  native_type: vllm.CompilationConfig
+  miner_source:
+    path: config.py
+    method: model_post_init
+    line_at_scan: 25
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.splitting_ops: {present: true, not_in: []}
+- id: vllm_engine_compilationconfig_model_post_init_inductor_passes_callable
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'if not isinstance(v, str): assert callable(v), f"pass {k} should be callable or a qualified name"'
+  severity: error
+  native_type: vllm.CompilationConfig
+  miner_source:
+    path: config.py
+    method: model_post_init
+    line_at_scan: 35
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.inductor_passes: {present: true}
+- id: vllm_engine_compilationconfig_model_post_init_inductor_compile_config_callable
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'self.inductor_compile_config[k] = func if isinstance(func, InductorPass) else CallableInductorPass(func)'
+  severity: error
+  native_type  : vllm.CompilationConfig
+  miner_source:
+    path: config.py
+    method: model_post_init
+    line_at_scan: 42
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.inductor_compile_config: {present: true}
+- id: vllm_engine_compilationconfig_model_post_init_enabled_custom_ops_counter
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'self.enabled_custom_ops = Counter()'
+  severity: dormant
+  native_type: vllm.CompilationConfig
+  miner_source:
+    path: config.py
+    method: model_post_init
+    line_at_scan: 48
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.enabled_custom_ops: {present: true}
+- id: vllm_engine_compilationconfig_model_post_init_disabled_custom_ops_counter
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'self.disabled_custom_ops = Counter()'
+  severity: dormant
+  native_type: vllm.CompilationConfig
+  miner_source:
+    path: config.py
+    method: model_post_init
+    line_at_scan: 49
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.disabled_custom_ops: {present: true}
+- id: vllm_engine_compilationconfig_model_post_init_traced_files_set
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'self.traced_files = set()'
+  severity: dormant
+  native_type: vllm.CompilationConfig
+  miner_source:
+    path: config.py
+    method: model_post_init
+    line_at_scan: 50
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.traced_files: {present: true}
+- id: vllm_engine_compilationconfig_model_post_init_static_forward_context_dict
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'self.static_forward_context = {}'
+  severity: dormant
+  native_type: vllm.CompilationConfig
+  miner_source:
+    path: config.py
+    method: model_post_init
+    line_at_scan: 51
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.static_forward_context: {present: true}
+- id: vllm_engine_compilationconfig_model_post_init_compilation_time_float
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'self.compilation_time = 0.0'
+  severity: dormant
+  native_type: vllm.CompilationConfig
+  miner_source:
+    path: config.py
+    method: model_post_init
+    line_at_scan: 52
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.compilation_time: {present: true}
+- id: vllm_engine_compilationconfig_level_no_compilation_value_error
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'if self.level == CompilationLevel.NO_COMPILATION: raise ValueError("No compilation level is set.")'
+  severity: error
+  native_type: vllm.CompilationConfig
+  miner_source:
+    path: config.py
+    method: init_backend
+    line_at_scan: 60
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.level: {present: true, not_equal: CompilationLevel.NO_COMPILATION}
+- id: vllm_engine_compilationconfig_level_dynamo_as_is_or_once_backend_eager
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'if self.backend == "": return "eager"'
+  severity: error
+  native_type: vllm.CompilationConfig
+  miner_source:
+    path: config.py
+    method: init_backend
+    line_at_scan: 65
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.backend: {present: true, not_equal: ""} 
+- id: vllm_engine_compilationconfig_level_piecewise_vllmbackend
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'return VllmBackend(vllm_config)'
+  severity: error
+  native_type: vllm.CompilationConfig
+  miner_source:
+    path: config.py
+    method: init_backend
+    line_at_scan: 70
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.level: {present: true, not_equal: CompilationLevel.PIECEWISE}
+- id: vllm_engine_compilationconfig_cudagraph_capture_sizes_set
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'self.cudagraph_capture_sizes = list(set(self.cudagraph_capture_sizes))'
+  severity: error
+  native_type: vllm.CompilationConfig
+  miner_source:
+    path: config.py
+    method: init_with_cudagraph_sizes
+    line_at_scan: 75
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.cudagraph_capture_sizes: {present: true}
+- id: vllm_engine_compilationconfig_compile_sizes_set
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'self.compile_sizes = list(set(self.compile_sizes))'
+  severity: error
+  native_type: vllm.CompilationConfig
+  miner
+
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: vllm_engine_bitsandbytes_quantization_load_format_consistency
+  engine: vllm
+  library: vllm
+  invariant_under_test: Ensures that bitsandbytes quantization and QLoRA adapter only support 'bitsandbytes' load format.
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: create_engine_config
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.quantization: {present: true, not_in: ['bitsandbytes']}
+      vllm.engine.load_format: {present: true, not_equal: 'bitsandbytes'}
+- id: vllm_engine_bitsandbytes_load_format_quantization_consistency
+  engine: vllm
+  library: vllm
+  invariant_under_test: Ensures that bitsandbytes load format and QLoRA adapter only support 'bitsandbytes' quantization.
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: create_engine_config
+    line_at_scan: 25
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.load_format: {present: true, not_in: ['bitsandbytes']}
+      vllm.engine.quantization: {present: true, not_equal: 'bitsandbytes'}
+- id: vllm_engine_enable_chunked_prefill_long_context_warning
+  engine: vllm
+  library: vllm
+  invariant_under_test: Logs a warning if chunked prefill is enabled by default for models with max_model_len > 32K.
+  severity: warning
+  native_type: vllm.EngineArgs
+  miner
+```

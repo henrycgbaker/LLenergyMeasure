@@ -1,0 +1,426 @@
+```yaml
+invariants:
+- id: tensorrt_parallelconfig_devices_length_eq_world_size
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: "devices list length should be equal to world_size"
+  severity: error
+  native_type: tensorrt._ParallelConfig
+  miner_source:
+    path: llm_args.py
+    method: devices
+    line_at_scan: 20
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._ParallelConfig.devices: {present: true}
+      tensorrt._ParallelConfig.world_size: {present: true}
+  added_by: llm_wg_extend
+
+- id: tensorrt_parallelconfig_world_size_gt_1_not_auto_parallel
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: "world_size > 1 is only supported in auto parallel mode"
+  severity: error
+  native_type: tensorrt._ParallelConfig
+  miner_source:
+    path: llm_args.py
+    method: world_size
+    line_at_scan: 35
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._ParallelConfig.world_size: {present: true}
+      tensorrt._ParallelConfig.auto_parallel: {not_equal: True}
+  added_by: llm_wg_extend
+
+- id: tensorrt_parallelconfig_world_size_not_gt_1_auto_parallel
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: "world_size > 1 is not supported in auto parallel mode"
+  severity: error
+  native_type: tensorrt._ParallelConfig
+  miner_source:
+    path: llm_args.py
+    method: world_size
+    line_at_scan: 40
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._ParallelConfig.world_size: {present: true}
+      tensorrt._ParallelConfig.auto_parallel: {equal: True}
+      tensorrt._ParallelConfig.world_size: {'>': 1}
+  added_by: llm_wg_extend
+
+- id: tensorrt_modelwrapper_model_is_str_or_path
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: "model should be provided as a string or Path"
+  severity: error
+  native_type: tensorrt._ModelWrapper
+  miner_source:
+    path: llm_args.py
+    method: __post_init__
+    line_at_scan: 105
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._ModelWrapper.model: {present: true}
+  added_by: llm_wg_extend
+
+- id: tensorrt_modelwrapper_model_dir_exists_and_is_dir
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: "model directory should exist and be a directory"
+  severity: error
+  native_type: tensorrt._ModelWrapper
+  miner_source:
+    path: llm_args.py
+    method: __post_init__
+    line_at_scan: 108
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt._ModelWrapper.model: {present: true}
+  added_by: llm_wg_extend
+
+- id: tensorrt_modelwrapper_model_name_is_str_or_none
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: "model name should be a string or None"
+  severity: error
+  native_type: tensorrt._ModelWrapper
+  miner
+```
+
+===CHUNK===
+
+```yaml
+invariants:
+- id: tensorrt_parallel_config_consistency_tp_size
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: tp_size consistency between parallel_config and engine mapping
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: _load_config_from_engine
+    line_at_scan: 10
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.parallel_config.tp_size: {present: true}
+      tensorrt._pretrained_config.mapping.tp_size: {present: true}
+  added_by: llm_wg_extend
+
+- id: tensorrt_parallel_config_consistency_pp_size
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: pp_size consistency between parallel_config and engine mapping
+  severity: error
+  native_type  : tensorrt.BaseLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: _load_config_from_engine
+    line_at_scan: 13
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.parallel_config.pp_size: {present: true}
+      tensorrt._pretrained_config.mapping.pp_size: {present: true}
+  added_by: llm_wg_extend
+
+- id: tensorrt_parallel_config_consistency_cp_size
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: cp_size consistency between parallel_config and engine mapping
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: _load_config_from_engine
+    line_at_scan: 16
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.parallel_config.cp_size: {present: true}
+      tensorrt._pretrained_config.mapping.cp_size: {present: true}
+  added_by: llm_wg_extend
+
+- id: tensorrt_parallel_config_auto_parallel_world_size
+  engine: tensorrt
+  library: tensorrt
+  invariant_under_test: world_size consistency in auto parallel mode
+  severity: error
+  native_type: tensorrt.BaseLlmArgs
+  miner_source:
+    path: llm_args.py
+    method: _load_config_from_ckpt
+    line_at0_scan: 25
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.parallel_config.auto_parallel: {present: true}
+      tensorrt._pretrained_config.mapping.world_size: {present: true, not_equal: 1}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_best_of_gt_n
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: best_of must be greater than n in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 10
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.best_of: {present: true}
+      tensorrt.SamplingParams.n: {present: true, not_equal: 0}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_truncate_prompt_tokens_gt_1
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: truncate_prompt_tokens must be greater than 1 in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 20
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.truncate_prompt_tokens: {present: true, not_equal: 0}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_num_guides_gt_1
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: Only one guide can be used for a request in SamplingParams
+  severity: error
+  native_type: tensorrt.GuidedDecodingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 10
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.GuidedDecodingParams.num_guides: {present: true, not_equal: 0}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_best_of_not_less_than_n
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: best_of cannot be less than n in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 15
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.best_of: {present: true}
+      tensorrt.SamplingParams.n: {present: true, not_equal: 0}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_guided_decoding_json_object
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: guided_decoding must be a JSON object in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 25
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.guided_decoding.json_object: {present: true}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_guided_decoding_json_schema
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: guided_decoding must be a JSON schema in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 30
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.guided_decoding.json_schema: {present: true}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_guided_decoding_regex
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: guided_decoding must be a regex in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 35
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.guided_decoding.regex: {present: true}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_guided_decoding_grammar
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: guided_decoding must be a grammar in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 40
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.guided_decoding.grammar: {present: true}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_guided_decoding_structural_tag
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: guided_decoding must be a structural tag in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 45
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.guided_decoding.structural_tag: {present: true}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_guided_decoding_none
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: guided_decoding must be None in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 50
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.guided_decoding: {present: true, not_equal: None}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_guided_decoding_json_schema_dict
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: guided_decoding JSON schema must be a dictionary in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 55
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.guided_decoding.json_schema: {present: true, type_is_not: [dict]}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_guided_decoding_json_schema_str
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: guided_decoding JSON schema must be a string in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 60
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.guided_decoding.json_schema: {present: true, type_is_not: [str]}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_guided_decoding_regex_str
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: guided_decoding regex must be a string in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at0_scan: 65
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.guided_decoding.regex: {present: true, type_is_not: [str]}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_guided_decoding_grammar_str
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: guided_decoding grammar must be a string in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 70
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.guided_decoding.grammar: {present: true, type_is_not: [str]}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_guided_decoding_structural_tag_str
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: guided_decoding structural tag must be a string in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 75
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.guided_decoding.structural_tag: {present: true, type_is_not: [str]}
+  added_by: llm_wg_extend
+
+- id: tensorrt_sampling_params_guided_decoding_json_schema_valid
+  engine: tensorrt.sampling
+  library: tensorrt
+  invariant_under_test: guided_decoding JSON schema must be valid in SamplingParams
+  severity: error
+  native_type: tensorrt.SamplingParams
+  miner_source:
+    path: sampling_params.py
+    method: _validate
+    line_at_scan: 80
+  match:
+    engine: tensorrt.sampling
+    fields:
+      tensorrt.SamplingParams.guided_decoding.json_schema: {present: true}
+  added
+
+```

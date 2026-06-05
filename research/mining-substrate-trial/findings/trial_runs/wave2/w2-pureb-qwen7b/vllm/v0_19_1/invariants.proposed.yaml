@@ -1,0 +1,718 @@
+schema_version: 1.0.0
+engine: vllm
+engine_version: 0.19.1
+invariants:
+- id: vllm_engine_model_config_validate_tokenizer
+  engine: vllm
+  library: vllm
+  invariant_under_test: isinstance(self.tokenizer, str)
+  severity: error
+  native_type: vllm.ModelConfig
+  miner_source:
+    path: model.py
+    method: validate_model_config_after
+    line_at_scan: 130
+  match:
+    engine: vllm
+    fields:
+      vllm.ModelConfig.tokenizer:
+        present: true
+        type_is_not:
+        - str
+  added_by: llm_pure_b
+- id: vllm_engine_model_config_validate_max_model_len
+  engine: vllm
+  library: vllm
+  invariant_under_test: isinstance(self.max_model_len, int)
+  severity: error
+  native_type: vllm.ModelConfig
+  miner_source:
+    path: model.py
+    method: validate_model_config_after
+    line_at_scan: 135
+  match:
+    engine: vllm
+    fields:
+      vllm.ModelConfig.max_model_len:
+        present: true
+        type_is_not:
+        - int
+  added_by: llm_pure_b
+- id: vllm_parallel_distributed_executor_backend_external_launcher_world_size
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'self.distributed_executor_backend == "external_launcher":
+    self.world_size *= self.data_parallel_size'
+  severity: error
+  native_type: vllm.engine.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: __post_init__
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.ParallelConfig.distributed_executor_backend: external_launcher
+  added_by: llm_pure_b
+- id: vllm_parallel_enable_elastic_ep_enable_eplb
+  engine: vllm
+  library: vllm
+  invariant_under_test: 'self.enable_elastic_ep and not self.enable_eplb: raise ValueError("Elastic
+    EP is only supported with enable_eplb=True.")'
+  severity: error
+  native_type: vllm.engine.ParallelConfig
+  miner_source:
+    path: parallel.py
+    method: __post_init__
+    line_at_scan: 25
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.ParallelConfig.enable_elastic_ep: true
+      vllm.engine.ParallelConfig.enable_eplb: false
+  added_by: llm_pure_b
+- id: vllm_engine_speculative_config_method_deprecated
+  engine: vllm
+  library: vllm
+  invariant_under_test: if self.method in get_args(MTPModelTypes) and self.method
+    != "mtp"
+  severity: warning
+  native_type: vllm.engine.SpeculativeConfig
+  miner_source:
+    path: speculative.py
+    method: __post_init__
+    line_at_scan: 18
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.SpeculativeConfig.method:
+        present: true
+        not_in:
+        - mtp
+  added_by: llm_pure_b
+- id: vllm_engine_speculative_config_num_speculative_tokens_positive
+  engine: vllm
+  library: vllm
+  invariant_under_test: if self.num_speculative_tokens <= 0
+  severity: error
+  native_type: vllm.engine.SpeculativeConfig
+  miner_source:
+    path: speculative.py
+    method: __post_init__
+    line_at_scan: 37
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.SpeculativeConfig.num_speculative_tokens:
+        present: true
+        gt: 0
+  added_by: llm_pure_b
+- id: vllm_engine_speculative_config_suffix_decoding_max_tree_depth_positive
+  engine: vllm
+  library: vllm
+  invariant_under_test: if self.suffix_decoding_max_tree_depth < 1
+  severity: error
+  native_type: vllm.engine.SpeculativeConfig
+  miner_source:
+    path: speculative.py
+    method: _validate_suffix_decoding
+    line_at_scan: 20
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.SpeculativeConfig.suffix_decoding_max_tree_depth:
+        present: true
+        gt: 0
+  added_by: llm_pure_b
+- id: vllm_engine_speculative_config_suffix_decoding_max_cached_requests_non_negative
+  engine: vllm
+  library: vllm
+  invariant_under_test: if self.suffix_decoding_max_cached_requests < 0
+  severity: error
+  native_type: vllm.engine.SpeculativeConfig
+  miner_source:
+    path: speculative.py
+    method: _validate_suffix_decoding
+    line_at_scan: 23
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.SpeculativeConfig.suffix_decoding_max_cached_requests:
+        present: true
+        gt: -1
+  added_by: llm_pure_b
+- id: vllm_engine_quantization_capability_check
+  engine: vllm
+  library: vllm
+  invariant_under_test: The quantization method is supported for the current GPU.
+  severity: error
+  native_type: vllm.ModelConfig
+  miner_source:
+    path: vllm.py
+    method: _get_quantization_config
+    line_at_scan: 105
+  match:
+    engine: vllm
+    fields:
+      vllm.ModelConfig.quantization:
+        present: true
+      vllm.ModelConfig.dtype:
+        present: true
+  added_by: llm_pure_b
+- id: vllm_engine_parallel_config_tensor_parallel_size_not_multiple_of_2
+  engine: vllm
+  library: vllm
+  invariant_under_test: self.parallel_config.tensor_parallel_size % 2 == 0
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: vllm.py
+    method: update_sizes_for_sequence_parallelism
+    line_at_scan: 31
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.parallel_config.tensor_parallel_size:
+        '%': 2
+  added_by: llm_pure_b
+- id: vllm_engine_scheduler_config_max_num_scheduled_tokens_not_greater_than_max_num_batched_tokens
+  engine: vllm
+  library: vllm
+  invariant_under_test: self.scheduler_config.max_num_scheduled_tokens <= self.scheduler_config.max_num_batched_tokens
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: vllm.py
+    method: _set_max_num_scheduled_tokens
+    line_at_scan: 105
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.scheduler_config.max_num_scheduled_tokens:
+        <=: vllm.engine.scheduler_config.max_num_batched_tokens
+  added_by: llm_pure_b
+- id: vllm_engine_compilation_config_max_cudagraph_capture_size_not_greater_than_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: self.compilation_config.max_cudagraph_capture_size >= 1
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: vllm.py
+    method: _set_cudagraph_sizes
+    line_at_scan: 205
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.max_cudagraph_capture_size:
+        '>=': 1
+  added_by: llm_pure_b
+- id: vllm_engine_compilation_config_cudagraph_capture_sizes_not_empty
+  engine: vllm
+  library: vllm
+  invariant_under_test: len(self.compilation_config.cudagraph_capture_sizes) > 0
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: vllm.py
+    method: _set_cudagraph_sizes
+    line_at_scan: 213
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compilation_config.cudagraph_capture_sizes:
+        present: true
+        not_equal: []
+  added_by: llm_pure_b
+- id: vllm_engine_cache_config_block_size_not_less_than_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: self.cache_config.block_size >= 1
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: vllm.py
+    method: validate_block_size
+    line_at_scan: 45
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.cache_config.block_size:
+        '>=': 1
+  added_by: llm_pure_b
+- id: vllm_engine_cache_config_mamba_block_size_not_greater_than_max_model_len
+  engine: vllm
+  library: vllm
+  invariant_under_test: self.cache_config.mamba_block_size <= self.model_config.max_model_len
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: vllm.py
+    method: validate_mamba_block_size
+    line_at_scan: 53
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.cache_config.mamba_block_size:
+        <=: vllm.engine.model_config.max_model_len
+  added_by: llm_pure_b
+- id: vllm_engine_scheduler_config_max_num_batched_tokens_not_less_than_1
+  engine: vllm
+  library: vllm
+  invariant_under_test: self.scheduler_config.max_num_batched_tokens >= 1
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: vllm.py
+    method: validate_block_size
+    line_at_scan: 59
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.scheduler_config.max_num_batched_tokens:
+        '>=': 1
+  added_by: llm_pure_b
+- id: vllm_engine_scheduler_config_long_prefill_token_threshold_not_less_than_block_size
+  engine: vllm
+  library: vllm
+  invariant_under_test: self.scheduler_config.long_prefill_token_threshold >= self.cache_config.block_size
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: vllm.py
+    method: validate_block_size
+    line_at_scan: 65
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.scheduler_config.long_prefill_token_threshold:
+        '>=': vllm.engine.cache_config.block_size
+  added_by: llm_pure_b
+- id: vllm_engine_cache_config_mamba_cache_mode_not_align_when_block_size_greater_than_max_num_batched_tokens
+  engine: vllm
+  library: vllm
+  invariant_under_test: self.cache_config.mamba_cache_mode != "align" or self.cache_config.block_size
+    <= self.scheduler_config.max_num_batched_tokens
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: vllm.py
+    method: validate_block_size
+    line_at_scan: 71
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.cache_config.mamba_cache_mode:
+        present: true
+        not_equal: align
+      vllm.engine.cache_config.block_size:
+        <=: vllm.engine.scheduler_config.max_num_batched_tokens
+  added_by: llm_pure_b
+- id: vllm_engine_parallel_config_cp_kv_cache_interleave_size_not_greater_than_block_size
+  engine: vllm
+  library: vllm
+  invariant_under_test: self.parallel_config.cp_kv_cache_interleave_size <= self.cache_config.block_size
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: vllm.py
+    method: validate_block_size
+    line_at_scan: 77
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.parallel_config.cp_kv_cache_interleave_size:
+        <=: vllm.engine.cache_config.block_size
+  added_by: llm_pure_b
+- id: vllm_engine_set_current_vllm_config_check_compile_not_in_enum
+  engine: vllm
+  library: vllm
+  invariant_under_test: check_compile not in {True, False}
+  severity: error
+  native_type: vllm.engine.set_current_vllm_config
+  miner_source:
+    path: vllm.py
+    method: set_current_vllm_config
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.set_current_vllm_config.check_compile:
+        present: true
+        not_in:
+        - true
+        - false
+  added_by: llm_pure_b
+- id: vllm_engine_set_current_vllm_config_prefix_type_is_not
+  engine: vllm
+  library: vllm
+  invariant_under_test: prefix is None or isinstance(prefix, str)
+  severity: error
+  native_type: vllm.engine.set_current_vllm_config
+  miner_source:
+    path: vllm.py
+    method: set_current_vllm_config
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.set_current_vllm_config.prefix:
+        present: true
+        type_is_not:
+        - None
+        - str
+  added_by: llm_pure_b
+- id: vllm_engine_get_current_vllm_config_current_vllm_config_present
+  engine: vllm
+  library: vllm
+  invariant_under_test: _current_vllm_config is not None
+  severity: error
+  native_type: vllm.engine.get_current_vllm_config
+  miner_source:
+    path: vllm.py
+    method: get_current_vllm_config
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.get_current_vllm_config._current_vllm_config:
+        present: true
+  added_by: llm_pure_b
+- id: vllm_engine_get_layers_from_vllm_config_layer_names_type_is_not
+  engine: vllm
+  library: vllm
+  invariant_under_test: layer_names is None or isinstance(layer_names, list)
+  severity: error
+  native_type: vllm.engine.get_layers_from_vllm_config
+  miner_source:
+    path: vllm.py
+    method: get_layers_from_vllm_config
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.get_layers_from_vllm_config.layer_names:
+        present: true
+        type_is_not:
+        - None
+        - list
+  added_by: llm_pure_b
+- id: vllm_engine_get_layers_from_vllm_config_layer_type_type_is_not
+  engine: vllm
+  library: vllm
+  invariant_under_test: isinstance(layer_type, type)
+  severity: error
+  native_type: vllm.engine.get_layers_from_vllm_config
+  miner_source:
+    path: vllm.py
+    method: get_layers_from_vllm_config
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.get_layers_from_vllm_config.layer_type:
+        present: true
+        type_is_not:
+        - type
+  added_by: llm_pure_b
+- id: vllm_engine_arg_utils_parse_type_return_type_type_is_not
+  engine: vllm
+  library: vllm
+  invariant_under_test: callable(return_type)
+  severity: error
+  native_type: vllm.engine.arg_utils.parse_type
+  miner_source:
+    path: arg_utils.py
+    method: parse_type
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.arg_utils.parse_type.return_type:
+        present: true
+        type_is_not:
+        - callable
+  added_by: llm_pure_b
+- id: vllm_engine_arg_utils_literal_to_kwargs_type_hints_type_is_not
+  engine: vllm
+  library: vllm
+  invariant_under_test: isinstance(type_hints, set)
+  severity: error
+  native_type: vllm.engine.arg_utils.literal_to_kwargs
+  miner_source:
+    path: arg_utils.py
+    method: literal_to_kwargs
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.arg_utils.literal_to_kwargs.type_hints:
+        present: true
+        type_is_not:
+        - set
+  added_by: llm_pure_b
+- id: vllm_engine_arg_utils_get_type_hints_type_hint_type_is_not
+  engine: vllm
+  library: vllm
+  invariant_under_test: isinstance(type_hint, TypeHint)
+  severity: error
+  native_type: vllm.engine.arg_utils.get_type_hints
+  miner_source:
+    path: arg_utils.py
+    method: get_type_hints
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.arg_utils.get_type_hints.type_hint:
+        present: true
+        type_is_not:
+        - TypeHint
+  added_by: llm_pure_b
+- id: vllm_engine_arg_utils_engineargs_post_init_compilation_config_type_is_not
+  engine: vllm
+  library: vllm
+  invariant_under_test: isinstance(compilation_config, (CompilationConfig, dict))
+  severity: error
+  native_type: vllm.engine.arg_utils.EngineArgs.__post_init__
+  miner_source:
+    path: arg_utils.py
+    method: EngineArgs.__post_init__
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.arg_utils.EngineArgs.__post_init__.compilation_config:
+        present: true
+        type_is_not:
+        - CompilationConfig
+        - dict
+  added_by: llm_pure_b
+- id: engine_args_model_type_is_not
+  engine: vllm
+  library: vllm
+  invariant_under_test: isinstance(model, str)
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: add_cli_args
+    line_at_scan: 100
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.ModelConfig.model:
+        present: true
+        type_is_not:
+        - str
+  added_by: llm_pure_b
+- id: engine_args_hf_token_type_is_not
+  engine: vllm
+  library: vllm
+  invariant_under_test: isinstance(hf_token, str) or hf_token is None
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: add_cli_args
+    line_at_scan: 120
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.ModelConfig.hf_token:
+        present: true
+        type_is_not:
+        - str
+        - None
+  added_by: llm_pure_b
+- id: engine_args_max_model_len_gt_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: max_model_len > 0
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: add_cli_args
+    line_at_scan: 130
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.ModelConfig.max_model_len:
+        present: true
+        gt: 0
+  added_by: llm_pure_b
+- id: engine_args_pipeline_parallel_size_gt_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: pipeline_parallel_size > 0
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: add_cli_args
+    line_at_scan: 150
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.ParallelConfig.pipeline_parallel_size:
+        present: true
+        gt: 0
+  added_by: llm_pure_b
+- id: engine_args_data_parallel_size_gt_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: data_parallel_size > 0
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: add_cli_args
+    line_at_scan: 170
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.ParallelConfig.data_parallel_size:
+        present: true
+        gt: 0
+  added_by: llm_pure_b
+- id: engine_args_block_size_gt_0
+  engine: vllm
+  library: vllm
+  invariant_under_test: block_size > 0
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: add_cli_args
+    line_at_scan: 190
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.CacheConfig.block_size:
+        present: true
+        gt: 0
+  added_by: llm_pure_b
+- id: vllm_engine_data_parallel_hybrid_lb_headless
+  engine: vllm
+  library: vllm
+  invariant_under_test: assert not headless or not self.data_parallel_hybrid_lb
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: create_engine_config
+    line_at_scan: 150
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.EngineArgs.data_parallel_hybrid_lb:
+        present: true
+      vllm.engine.EngineArgs.headless:
+        present: true
+  added_by: llm_pure_b
+- id: engine_args_check_feature_supported_concurrent_partial_prefill
+  engine: vllm
+  library: vllm
+  invariant_under_test: self.max_num_partial_prefills != SchedulerConfig.max_num_partial_prefills
+    or self.max_long_partial_prefills != SchedulerConfig.max_long_partial_prefills
+  severity: error
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: _check_feature_supported._check_feature_supported
+    line_at_scan: 10
+  match:
+    engine: vllm
+    fields:
+      vllm.EngineArgs.max_num_partial_prefills:
+        present: true
+        not_equal: SchedulerConfig.max_num_partial_prefills
+      vllm.EngineArgs.max_long_partial_prefills:
+        present: true
+        not_equal: SchedulerConfig.max_long_partial_prefills
+  added_by: llm_pure_b
+- id: engine_args_set_default_chunked_prefill_and_prefix_caching_args_warning
+  engine: vllm
+  library: vllm
+  invariant_under_test: model_config.runner_type == "generate" and not self.enable_chunked_prefill
+    and default_chunked_prefill
+  severity: warning
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: _set_default_chunked_prefill_and_prefix_caching_args._set_default_chunked_prefill_and_prefix_caching_args
+    line_at_scan: 35
+  match:
+    engine: vllm
+    fields:
+      vllm.EngineArgs.enable_chunked_prefill:
+        present: true
+        not_equal: true
+      vllm.ModelConfig.runner_type:
+        present: true
+        equal: generate
+  added_by: llm_pure_b
+- id: engine_args_set_default_chunked_prefill_and_prefix_caching_args_warning_2
+  engine: vllm
+  library: vllm
+  invariant_under_test: model_config.runner_type == "pooling" and self.enable_chunked0_prefill
+    and not default_chunked_prefill
+  severity: warning
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: _set_default_chunked_prefill_and_prefix_caching_args._set_default_chunked_prefill_and_prefix_caching_args
+    line_at_scan: 40
+  match:
+    engine: vllm
+    fields:
+      vllm.EngineArgs.enable0_chunked_prefill:
+        present: true
+        not_equal: true
+      vllm.ModelConfig.runner_type:
+        present: true
+        equal: pooling
+  added_by: llm_pure_b
+- id: engine_args_set_default_chunked_prefill_and_prefix_caching_args_warning_3
+  engine: vllm
+  library: vllm
+  invariant_under_test: model_config.runner_type == "pooling" and self.enable0_prefix_caching
+    and not default0_prefix_caching
+  severity: warning
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: _set_default_chunked_prefill_and_prefix_caching_args._set_default_chunked_prefill_and_prefix_caching_args
+    line_at_scan: 50
+  match:
+    engine: vllm
+    fields:
+      vllm.EngineArgs.enable00_prefix_caching:
+        present: true
+        not_equal: true
+      vllm.ModelConfig.runner_type:
+        present: true
+        equal: pooling
+  added_by: llm_pure_b
+- id: engine_args_set_default_chunked_prefill_and_prefix_caching_args_dormant
+  engine: vllm
+  library: vllm
+  invariant_under_test: current_platform.is_cpu() and current_platform.get_cpu_architecture()
+    in (CpuArchEnum.RISCV,)
+  severity: dormant
+  native_type: vllm.EngineArgs
+  miner_source:
+    path: arg_utils.py
+    method: _set_default_chunked_prefill_and_prefix_caching_args._set0_default_chunked_prefill_and0_prefix_caching_args
+    line_at_scan: 65
+  match:
+    engine: vllm
+    fields:
+      vllm.EngineArgs.enable000_chunked_prefill:
+        present: true
+        not_equal: true
+      vllm.EngineArgs.enable000_prefix_caching:
+        present: true
+        not_equal: true
+  added_by: llm_pure_b

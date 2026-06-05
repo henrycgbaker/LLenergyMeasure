@@ -1,0 +1,604 @@
+{
+  "floor_only": [
+    {
+      "engine": "vllm",
+      "version_slug": "v0_7_3",
+      "run_label": "floor_only",
+      "tolerant": {
+        "inv_recall": 0.5132,
+        "inv_precision": 0.4382,
+        "inv_ref_n": 76,
+        "inv_cell_n": 89,
+        "inv_int_n": 39
+      },
+      "strict": {
+        "inv_recall": 0.475,
+        "inv_precision": 0.38
+      }
+    },
+    {
+      "engine": "transformers",
+      "version_slug": "v4_57_3",
+      "run_label": "floor_only",
+      "tolerant": {
+        "inv_recall": 0.4035,
+        "inv_precision": 0.6301,
+        "inv_ref_n": 114,
+        "inv_cell_n": 73,
+        "inv_int_n": 46
+      },
+      "strict": {
+        "inv_recall": 0.0252,
+        "inv_precision": 0.0268
+      }
+    },
+    {
+      "engine": "vllm",
+      "version_slug": "v0_19_1",
+      "run_label": "floor_only",
+      "tolerant": {
+        "inv_recall": 0.1471,
+        "inv_precision": 0.2857,
+        "inv_ref_n": 68,
+        "inv_cell_n": 35,
+        "inv_int_n": 10
+      },
+      "strict": {
+        "inv_recall": 0.1408,
+        "inv_precision": 0.2222
+      }
+    },
+    {
+      "engine": "transformers",
+      "version_slug": "v5_6_2",
+      "run_label": "floor_only",
+      "tolerant": {
+        "inv_recall": 0.4158,
+        "inv_precision": 0.6087,
+        "inv_ref_n": 101,
+        "inv_cell_n": 69,
+        "inv_int_n": 42
+      },
+      "strict": {
+        "inv_recall": 0.0283,
+        "inv_precision": 0.033
+      }
+    },
+    {
+      "engine": "tensorrt",
+      "version_slug": "v0_21_0",
+      "run_label": "floor_only",
+      "tolerant": {
+        "inv_recall": 0.2698,
+        "inv_precision": 0.3953,
+        "inv_ref_n": 63,
+        "inv_cell_n": 43,
+        "inv_int_n": 17
+      },
+      "strict": {
+        "inv_recall": 0.2131,
+        "inv_precision": 0.2549
+      }
+    }
+  ],
+  "wg_extend": [
+    {
+      "engine": "vllm",
+      "version_slug": "v0_7_3",
+      "run_label": "w2-wg-qwen7b",
+      "model": "qwen2.5-coder:7b-instruct-fp16",
+      "model_digest": "9bff1b5c46f86f50",
+      "mode": "wg_extend",
+      "n_chunks": 6,
+      "n_llm_proposed_raw": 36,
+      "n_llm_proposed_deduped": 13,
+      "n_merged": 113,
+      "wall_sec": 80.8,
+      "tolerant": {
+        "inv_recall": 0.5132,
+        "inv_precision": 0.3824,
+        "inv_ref_n": 76,
+        "inv_cell_n": 102,
+        "inv_int_n": 39,
+        "schema_recall": 0.9718,
+        "schema_precision": 0.9539
+      },
+      "strict": {
+        "inv_recall": 0.475,
+        "inv_precision": 0.3363
+      },
+      "hallucination_proxy": {
+        "n_llm_keys": 13,
+        "n_not_in_gt": 13,
+        "rate": 1.0,
+        "note": "PROXY: (leaf,bucket) not in GT / total LLM keys. NOT a runtime-validate gate."
+      },
+      "out_inv_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-wg-qwen7b/vllm/v0_7_3/invariants.proposed.yaml"
+    },
+    {
+      "engine": "transformers",
+      "version_slug": "v4_57_3",
+      "run_label": "w2-wg-qwen7b",
+      "model": "qwen2.5-coder:7b-instruct-fp16",
+      "model_digest": "9bff1b5c46f86f50",
+      "mode": "wg_extend",
+      "n_chunks": 17,
+      "n_llm_proposed_raw": 70,
+      "n_llm_proposed_deduped": 37,
+      "n_merged": 149,
+      "wall_sec": 227.6,
+      "tolerant": {
+        "inv_recall": 0.4474,
+        "inv_precision": 0.4636,
+        "inv_ref_n": 114,
+        "inv_cell_n": 110,
+        "inv_int_n": 51,
+        "schema_recall": 0.374,
+        "schema_precision": 0.9109
+      },
+      "strict": {
+        "inv_recall": 0.0252,
+        "inv_precision": 0.0201
+      },
+      "hallucination_proxy": {
+        "n_llm_keys": 37,
+        "n_not_in_gt": 32,
+        "rate": 0.8649,
+        "note": "PROXY: (leaf,bucket) not in GT / total LLM keys. NOT a runtime-validate gate."
+      },
+      "out_inv_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-wg-qwen7b/transformers/v4_57_3/invariants.proposed.yaml"
+    },
+    {
+      "engine": "vllm",
+      "version_slug": "v0_19_1",
+      "run_label": "w2-wg-qwen7b",
+      "model": "qwen2.5-coder:7b-instruct-fp16",
+      "model_digest": "9bff1b5c46f86f50",
+      "mode": "wg_extend",
+      "n_chunks": 14,
+      "n_llm_proposed_raw": 79,
+      "n_llm_proposed_deduped": 43,
+      "n_merged": 88,
+      "wall_sec": 221.6,
+      "tolerant": {
+        "inv_recall": 0.1765,
+        "inv_precision": 0.1538,
+        "inv_ref_n": 68,
+        "inv_cell_n": 78,
+        "inv_int_n": 12,
+        "schema_recall": 0.5194,
+        "schema_precision": 1.0
+      },
+      "strict": {
+        "inv_recall": 0.1408,
+        "inv_precision": 0.1136
+      },
+      "hallucination_proxy": {
+        "n_llm_keys": 43,
+        "n_not_in_gt": 41,
+        "rate": 0.9535,
+        "note": "PROXY: (leaf,bucket) not in GT / total LLM keys. NOT a runtime-validate gate."
+      },
+      "out_inv_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-wg-qwen7b/vllm/v0_19_1/invariants.proposed.yaml"
+    },
+    {
+      "engine": "transformers",
+      "version_slug": "v5_6_2",
+      "run_label": "w2-wg-qwen7b",
+      "model": "qwen2.5-coder:7b-instruct-fp16",
+      "model_digest": "9bff1b5c46f86f50",
+      "mode": "wg_extend",
+      "n_chunks": 14,
+      "n_llm_proposed_raw": 41,
+      "n_llm_proposed_deduped": 23,
+      "n_merged": 114,
+      "wall_sec": 183.1,
+      "tolerant": {
+        "inv_recall": 0.4257,
+        "inv_precision": 0.4674,
+        "inv_ref_n": 101,
+        "inv_cell_n": 92,
+        "inv_int_n": 43,
+        "schema_recall": 0.428,
+        "schema_precision": 0.928
+      },
+      "strict": {
+        "inv_recall": 0.0283,
+        "inv_precision": 0.0263
+      },
+      "hallucination_proxy": {
+        "n_llm_keys": 23,
+        "n_not_in_gt": 22,
+        "rate": 0.9565,
+        "note": "PROXY: (leaf,bucket) not in GT / total LLM keys. NOT a runtime-validate gate."
+      },
+      "out_inv_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-wg-qwen7b/transformers/v5_6_2/invariants.proposed.yaml"
+    },
+    {
+      "engine": "tensorrt",
+      "version_slug": "v0_21_0",
+      "run_label": "w2-wg-qwen7b",
+      "model": "qwen2.5-coder:7b-instruct-fp16",
+      "model_digest": "9bff1b5c46f86f50",
+      "mode": "wg_extend",
+      "n_chunks": 2,
+      "n_llm_proposed_raw": 24,
+      "n_llm_proposed_deduped": 20,
+      "n_merged": 71,
+      "wall_sec": 50.1,
+      "tolerant": {
+        "inv_recall": 0.2857,
+        "inv_precision": 0.2857,
+        "inv_ref_n": 63,
+        "inv_cell_n": 63,
+        "inv_int_n": 18,
+        "schema_recall": 0.6354,
+        "schema_precision": 0.9514
+      },
+      "strict": {
+        "inv_recall": 0.2131,
+        "inv_precision": 0.1831
+      },
+      "hallucination_proxy": {
+        "n_llm_keys": 20,
+        "n_not_in_gt": 19,
+        "rate": 0.95,
+        "note": "PROXY: (leaf,bucket) not in GT / total LLM keys. NOT a runtime-validate gate."
+      },
+      "out_inv_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-wg-qwen7b/tensorrt/v0_21_0/invariants.proposed.yaml"
+    }
+  ],
+  "pure_b": [
+    {
+      "engine": "vllm",
+      "version_slug": "v0_7_3",
+      "run_label": "w2-pureb-qwen7b",
+      "model": "qwen2.5-coder:7b-instruct-fp16",
+      "model_digest": "9bff1b5c46f86f50",
+      "mode": "pure_b",
+      "n_chunks": 6,
+      "n_llm_proposed_raw": 31,
+      "n_llm_proposed_deduped": 22,
+      "n_merged": 22,
+      "wall_sec": 86.9,
+      "tolerant": {
+        "inv_recall": 0.1184,
+        "inv_precision": 0.4091,
+        "inv_ref_n": 76,
+        "inv_cell_n": 22,
+        "inv_int_n": 9,
+        "schema_recall": 0.9718,
+        "schema_precision": 0.9539
+      },
+      "strict": {
+        "inv_recall": 0.0,
+        "inv_precision": 0.0
+      },
+      "hallucination_proxy": {
+        "n_llm_keys": 22,
+        "n_not_in_gt": 13,
+        "rate": 0.5909,
+        "note": "PROXY: (leaf,bucket) not in GT / total LLM keys. NOT a runtime-validate gate."
+      },
+      "out_inv_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-pureb-qwen7b/vllm/v0_7_3/invariants.proposed.yaml"
+    },
+    {
+      "engine": "transformers",
+      "version_slug": "v4_57_3",
+      "run_label": "w2-pureb-qwen7b",
+      "model": "qwen2.5-coder:7b-instruct-fp16",
+      "model_digest": "9bff1b5c46f86f50",
+      "mode": "pure_b",
+      "n_chunks": 17,
+      "n_llm_proposed_raw": 21,
+      "n_llm_proposed_deduped": 18,
+      "n_merged": 18,
+      "wall_sec": 248.0,
+      "tolerant": {
+        "inv_recall": 0.0877,
+        "inv_precision": 0.5556,
+        "inv_ref_n": 114,
+        "inv_cell_n": 18,
+        "inv_int_n": 10,
+        "schema_recall": 0.374,
+        "schema_precision": 0.9109
+      },
+      "strict": {
+        "inv_recall": 0.0,
+        "inv_precision": 0.0
+      },
+      "hallucination_proxy": {
+        "n_llm_keys": 18,
+        "n_not_in_gt": 8,
+        "rate": 0.4444,
+        "note": "PROXY: (leaf,bucket) not in GT / total LLM keys. NOT a runtime-validate gate."
+      },
+      "out_inv_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-pureb-qwen7b/transformers/v4_57_3/invariants.proposed.yaml"
+    },
+    {
+      "engine": "vllm",
+      "version_slug": "v0_19_1",
+      "run_label": "w2-pureb-qwen7b",
+      "model": "qwen2.5-coder:7b-instruct-fp16",
+      "model_digest": "9bff1b5c46f86f50",
+      "mode": "pure_b",
+      "n_chunks": 14,
+      "n_llm_proposed_raw": 46,
+      "n_llm_proposed_deduped": 40,
+      "n_merged": 40,
+      "wall_sec": 149.6,
+      "tolerant": {
+        "inv_recall": 0.1029,
+        "inv_precision": 0.175,
+        "inv_ref_n": 68,
+        "inv_cell_n": 40,
+        "inv_int_n": 7,
+        "schema_recall": 0.5194,
+        "schema_precision": 1.0
+      },
+      "strict": {
+        "inv_recall": 0.0,
+        "inv_precision": 0.0
+      },
+      "hallucination_proxy": {
+        "n_llm_keys": 40,
+        "n_not_in_gt": 33,
+        "rate": 0.825,
+        "note": "PROXY: (leaf,bucket) not in GT / total LLM keys. NOT a runtime-validate gate."
+      },
+      "out_inv_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-pureb-qwen7b/vllm/v0_19_1/invariants.proposed.yaml"
+    },
+    {
+      "engine": "tensorrt",
+      "version_slug": "v0_21_0",
+      "run_label": "w2-pureb-qwen7b",
+      "model": "qwen2.5-coder:7b-instruct-fp16",
+      "model_digest": "9bff1b5c46f86f50",
+      "mode": "pure_b",
+      "n_chunks": 2,
+      "n_llm_proposed_raw": 8,
+      "n_llm_proposed_deduped": 6,
+      "n_merged": 6,
+      "wall_sec": 30.1,
+      "tolerant": {
+        "inv_recall": 0.0159,
+        "inv_precision": 0.1667,
+        "inv_ref_n": 63,
+        "inv_cell_n": 6,
+        "inv_int_n": 1,
+        "schema_recall": 0.6354,
+        "schema_precision": 0.9514
+      },
+      "strict": {
+        "inv_recall": 0.0,
+        "inv_precision": 0.0
+      },
+      "hallucination_proxy": {
+        "n_llm_keys": 6,
+        "n_not_in_gt": 5,
+        "rate": 0.8333,
+        "note": "PROXY: (leaf,bucket) not in GT / total LLM keys. NOT a runtime-validate gate."
+      },
+      "out_inv_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-pureb-qwen7b/tensorrt/v0_21_0/invariants.proposed.yaml"
+    },
+    {
+      "engine": "transformers",
+      "version_slug": "v5_6_2",
+      "run_label": "w2-pureb-qwen7b",
+      "model": "qwen2.5-coder:7b-instruct-fp16",
+      "model_digest": "9bff1b5c46f86f50",
+      "mode": "pure_b",
+      "n_chunks": 14,
+      "n_llm_proposed_raw": 23,
+      "n_llm_proposed_deduped": 16,
+      "n_merged": 16,
+      "wall_sec": 166.8,
+      "tolerant": {
+        "inv_recall": 0.0495,
+        "inv_precision": 0.3125,
+        "inv_ref_n": 101,
+        "inv_cell_n": 16,
+        "inv_int_n": 5,
+        "schema_recall": 0.428,
+        "schema_precision": 0.928
+      },
+      "strict": {
+        "inv_recall": 0.0,
+        "inv_precision": 0.0
+      },
+      "hallucination_proxy": {
+        "n_llm_keys": 16,
+        "n_not_in_gt": 11,
+        "rate": 0.6875,
+        "note": "PROXY: (leaf,bucket) not in GT / total LLM keys. NOT a runtime-validate gate."
+      },
+      "out_inv_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-pureb-qwen7b/transformers/v5_6_2/invariants.proposed.yaml"
+    }
+  ],
+  "model_scale": [
+    {
+      "engine": "vllm",
+      "version_slug": "v0_7_3",
+      "run_label": "w2-wg-llama8b",
+      "model": "llama3.1:8b-instruct-fp16",
+      "model_digest": "4aacac4194543ff7",
+      "mode": "wg_extend",
+      "n_chunks": 6,
+      "n_llm_proposed_raw": 172,
+      "n_llm_proposed_deduped": 37,
+      "n_merged": 137,
+      "wall_sec": 354.6,
+      "tolerant": {
+        "inv_recall": 0.5658,
+        "inv_precision": 0.3413,
+        "inv_ref_n": 76,
+        "inv_cell_n": 126,
+        "inv_int_n": 43,
+        "schema_recall": 0.9718,
+        "schema_precision": 0.9539
+      },
+      "strict": {
+        "inv_recall": 0.475,
+        "inv_precision": 0.2774
+      },
+      "hallucination_proxy": {
+        "n_llm_keys": 37,
+        "n_not_in_gt": 33,
+        "rate": 0.8919,
+        "note": "PROXY: (leaf,bucket) not in GT / total LLM keys. NOT a runtime-validate gate."
+      },
+      "out_inv_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-wg-llama8b/vllm/v0_7_3/invariants.proposed.yaml"
+    },
+    {
+      "engine": "vllm",
+      "version_slug": "v0_7_3",
+      "run_label": "w2-wg-phi14b",
+      "model": "phi4:14b-fp16",
+      "model_digest": "227695f919b50126",
+      "mode": "wg_extend",
+      "n_chunks": 6,
+      "n_llm_proposed_raw": 75,
+      "n_llm_proposed_deduped": 38,
+      "n_merged": 138,
+      "wall_sec": 260.4,
+      "tolerant": {
+        "inv_recall": 0.5658,
+        "inv_precision": 0.3386,
+        "inv_ref_n": 76,
+        "inv_cell_n": 127,
+        "inv_int_n": 43,
+        "schema_recall": 0.9718,
+        "schema_precision": 0.9539
+      },
+      "strict": {
+        "inv_recall": 0.5125,
+        "inv_precision": 0.2971
+      },
+      "hallucination_proxy": {
+        "n_llm_keys": 38,
+        "n_not_in_gt": 34,
+        "rate": 0.8947,
+        "note": "PROXY: (leaf,bucket) not in GT / total LLM keys. NOT a runtime-validate gate."
+      },
+      "out_inv_path": "/home/h.baker@hertie-school.lan/workspace/llenergymeasure-trial/research/mining-substrate-trial/findings/trial_runs/wave2/w2-wg-phi14b/vllm/v0_7_3/invariants.proposed.yaml"
+    }
+  ],
+  "comparison_table": [
+    {
+      "engine": "vllm",
+      "version": "v0_7_3",
+      "floor_inv_recall": 0.5132,
+      "floor_inv_precision": 0.4382,
+      "wg_inv_recall": 0.5132,
+      "wg_inv_precision": 0.3824,
+      "wg_delta_recall": 0.0,
+      "wg_n_llm": 13,
+      "wg_wall_sec": 80.8,
+      "wg_halluc_proxy": 1.0,
+      "pureb_inv_recall": 0.1184,
+      "pureb_inv_precision": 0.4091,
+      "pureb_n_llm": 22,
+      "pureb_wall_sec": 86.9,
+      "pureb_halluc_proxy": 0.5909
+    },
+    {
+      "engine": "transformers",
+      "version": "v4_57_3",
+      "floor_inv_recall": 0.4035,
+      "floor_inv_precision": 0.6301,
+      "wg_inv_recall": 0.4474,
+      "wg_inv_precision": 0.4636,
+      "wg_delta_recall": 0.0439,
+      "wg_n_llm": 37,
+      "wg_wall_sec": 227.6,
+      "wg_halluc_proxy": 0.8649,
+      "pureb_inv_recall": 0.0877,
+      "pureb_inv_precision": 0.5556,
+      "pureb_n_llm": 18,
+      "pureb_wall_sec": 248.0,
+      "pureb_halluc_proxy": 0.4444
+    },
+    {
+      "engine": "vllm",
+      "version": "v0_19_1",
+      "floor_inv_recall": 0.1471,
+      "floor_inv_precision": 0.2857,
+      "wg_inv_recall": 0.1765,
+      "wg_inv_precision": 0.1538,
+      "wg_delta_recall": 0.0294,
+      "wg_n_llm": 43,
+      "wg_wall_sec": 221.6,
+      "wg_halluc_proxy": 0.9535,
+      "pureb_inv_recall": 0.1029,
+      "pureb_inv_precision": 0.175,
+      "pureb_n_llm": 40,
+      "pureb_wall_sec": 149.6,
+      "pureb_halluc_proxy": 0.825
+    },
+    {
+      "engine": "transformers",
+      "version": "v5_6_2",
+      "floor_inv_recall": 0.4158,
+      "floor_inv_precision": 0.6087,
+      "wg_inv_recall": 0.4257,
+      "wg_inv_precision": 0.4674,
+      "wg_delta_recall": 0.0099,
+      "wg_n_llm": 23,
+      "wg_wall_sec": 183.1,
+      "wg_halluc_proxy": 0.9565,
+      "pureb_inv_recall": 0.0495,
+      "pureb_inv_precision": 0.3125,
+      "pureb_n_llm": 16,
+      "pureb_wall_sec": 166.8,
+      "pureb_halluc_proxy": 0.6875
+    },
+    {
+      "engine": "tensorrt",
+      "version": "v0_21_0",
+      "floor_inv_recall": 0.2698,
+      "floor_inv_precision": 0.3953,
+      "wg_inv_recall": 0.2857,
+      "wg_inv_precision": 0.2857,
+      "wg_delta_recall": 0.0159,
+      "wg_n_llm": 20,
+      "wg_wall_sec": 50.1,
+      "wg_halluc_proxy": 0.95,
+      "pureb_inv_recall": 0.0159,
+      "pureb_inv_precision": 0.1667,
+      "pureb_n_llm": 6,
+      "pureb_wall_sec": 30.1,
+      "pureb_halluc_proxy": 0.8333
+    }
+  ],
+  "model_scale_sweep_vllm_v0_7_3": [
+    {
+      "model": "floor(det-only)",
+      "inv_recall": 0.5132,
+      "n_llm": 0,
+      "wall_sec": 0
+    },
+    {
+      "model": "qwen2.5-coder:7b",
+      "inv_recall": 0.5132,
+      "n_llm": 13,
+      "wall_sec": 80.8
+    },
+    {
+      "model": "llama3.1:8b-instruct-fp16",
+      "inv_recall": 0.5658,
+      "n_llm": 37,
+      "wall_sec": 354.6
+    },
+    {
+      "model": "phi4:14b-fp16",
+      "inv_recall": 0.5658,
+      "n_llm": 38,
+      "wall_sec": 260.4
+    }
+  ],
+  "true_gate": {
+    "transformers_inprocess": "available (project venv has transformers 4.57.3; validator imports and constructs live GenerationConfig). BUT all wave2 cell + floor invariants lack kwargs_positive/kwargs_negative replay fields (omitted from the token-economical prompts), so runtime_validate returns infra_err per entry. Gate is functional (baseline catalogue WITH kwargs replays live warnings) but cannot score these specific catalogues without re-emitting replay kwargs.",
+    "vllm": "deferred (needs per-engine container; not run)",
+    "tensorrt": "deferred (needs per-engine container; not run)"
+  }
+}
